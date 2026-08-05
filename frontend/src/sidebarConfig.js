@@ -22,7 +22,7 @@ import {
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, LayoutGrid,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
-  Gavel, Inbox, FileBarChart, Radar, Wallet, PhoneCall,
+  Gavel, Inbox, FileBarChart, Radar, Wallet, PhoneCall, Landmark,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -431,6 +431,14 @@ export const SIDEBAR_GROUPS = {
   investor: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      // Surfaced for investors on the same terms as the founder and exploring
+      // navs — byte-identical item at the same index 1 of Home, so the program
+      // reads the same way in every profile. /spinout-lab is authOnly in
+      // App.jsx, not role-guarded, so an investor lands on the overview rather
+      // than being bounced; the overview swaps its founder Apply CTA for the LP
+      // one (SpinoutLabPage's investorView) because POST /spinout-lab/apply
+      // hard-403s any role outside founder/exploring.
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/products', icon: Package, label: 'Products' },
     ]},
     // Task — investor sidebar restructured around the investment lifecycle IA:
@@ -461,6 +469,11 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'funds', label: 'Funds', items: [
       { to: '/funds', icon: Wallet, label: 'Fund Management' },
+      // Spin-Out Fund I LP participation. Sits in Funds (not Home) because it
+      // is a Fund Ops tab and belongs with the other fund surfaces; requirement
+      // was that the workspace be reachable from the nav, not only from a hero
+      // CTA inside the page.
+      { to: '/funds/lp-workspace', icon: Landmark, label: 'LP Workspace' },
       { to: '/lp-reports', icon: UserCircle, label: 'LP Management' },
       { to: '/funds/performance', icon: Activity, label: 'Performance' },
       { to: '/funds/accounting', icon: Scale, label: 'Accounting' },
