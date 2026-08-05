@@ -8,7 +8,10 @@ export default defineConfig({
   // Transpile dev-served source AND pre-bundled deps down to es2020 so older
   // Safari doesn't hit a silent parse error (blank white page). Dev-only
   // concern: prod builds already target lower via build defaults.
-  esbuild: { target: 'es2020' },
+  // Vite 8 (rolldown) uses oxc — the legacy `esbuild` key is silently
+  // IGNORED ("oxc options will be used and esbuild options will be ignored"),
+  // which re-broke the Safari blank page. Set the target on `oxc` instead.
+  oxc: { target: 'es2020' },
   resolve: {
     alias: {
       '@assets': path.resolve(__dirname, '../attached_assets'),
