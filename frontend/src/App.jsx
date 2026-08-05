@@ -1626,6 +1626,9 @@ function AppInner() {
       <Route path="/funds" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       <Route path="/funds/capital-calls" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       <Route path="/lp-portal" element={guard(['admin', 'investor'], <LPPortalPage />)} />
+      {/* Spin-Out Fund I LP participation workspace — a Fund Ops tab, so it
+          renders inside the same investor shell as the other fund surfaces. */}
+      <Route path="/funds/lp-workspace" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
       <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
       {/* Task #19 — the founder sidebar no longer surfaces "Founder Portal"

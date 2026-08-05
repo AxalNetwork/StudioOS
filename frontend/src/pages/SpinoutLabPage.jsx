@@ -624,6 +624,30 @@ export function CohortTrackerSection() {
   );
 }
 
+// LP-facing counterpart to ApplyCtaSection. An investor browsing the program
+// is a prospective source of capital, not a cohort applicant, so the call to
+// action points at the LP workspace instead of the founder application.
+export function LpCtaSection() {
+  return (
+    <section className="rounded-[20px] p-10 text-center relative overflow-hidden text-white" style={{ background: 'radial-gradient(900px 300px at 85% 120%,rgba(196,181,253,.35),transparent 60%),linear-gradient(115deg,#5b21b6,#7c3aed)' }}>
+      <h2 className="m-0 text-[32px] font-black tracking-[-.03em]">Back the graduates.</h2>
+      <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]">
+        Axal VC Spin-Out Fund I invests exclusively in Lab graduates — underwritten by 28 days of
+        observed execution data, not a pitch.
+      </p>
+      <div className="flex gap-3 justify-center flex-wrap">
+        <Link to="/funds/lp-workspace" data-testid="link-lp-workspace" className="h-11 px-5.5 rounded-[11px] bg-white dark:bg-gray-100 text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white transition-colors">
+          Open LP Workspace <span className="text-[16px]" aria-hidden="true">→</span>
+        </Link>
+        <a href={LAB_CONTACT_HREF} className="h-11 px-5.5 rounded-[11px] border border-white/40 bg-transparent text-white text-[14px] font-semibold flex items-center hover:bg-white/10 transition-colors">
+          Talk to the GP
+        </a>
+      </div>
+      <p className="mt-6 text-[12px] text-[#c4b5fd]">Participation is limited to accredited investors and reviewed individually.</p>
+    </section>
+  );
+}
+
 export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
   // Resolve the currently-open cohort client-side (mirrors Worker math).
   // Deadline = 7 days before the 1st of the cohort month at 23:59:59 ET.
@@ -719,7 +743,7 @@ export function CongratulationsScreen({ cohort, onStart, starting, startError })
 // browsable) and shows the "All weeks unlocked · N days remaining" badge
 // from the workspace design handoff. Founders never receive this prop, so
 // real locking rules are untouched.
-export function Dashboard({ state, previewAllUnlocked = false }) {
+export function Dashboard({ state, previewAllUnlocked = false, investorView = false }) {
   const week = Math.max(1, Math.min(4, state.week || 1));
   const completedKeys = new Set((state.milestones || []).map((m) => m.key));
   const isIncorporated = completedKeys.has("incorporation_completed");
@@ -869,8 +893,13 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
         {/* GRADUATE COMPANIES */}
         <GraduatesSection />
 
-        {/* APPLICATION CTA */}
-        <ApplyCtaSection applyHref="/spinout-lab/apply" />
+        {/* APPLICATION CTA — investors get the LP route, not the founder one.
+            POST /spinout-lab/apply hard-403s any role outside founder/exploring
+            (spinout_lab.ts), so showing "Apply Now" to an investor arriving from
+            their own sidebar would be a dead end. */}
+        {investorView
+          ? <LpCtaSection />
+          : <ApplyCtaSection applyHref="/spinout-lab/apply" />}
 
       </main>
     </div>
@@ -989,6 +1018,7 @@ export default function SpinoutLabPage() {
   }
 
   // Everyone else (not applied / application pending) sees the program
-  // overview with the Apply CTA.
-  return <Dashboard state={state || {}} />;
+  // overview with the Apply CTA — except investors, whose route into the
+  // program is the LP fund, not a cohort application.
+  return <Dashboard state={state || {}} investorView={user?.role === 'investor'} />;
 }
