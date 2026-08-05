@@ -52,6 +52,16 @@ test('every allowlisted key resolves to a real string leaf on the deck data', ()
       'string',
       `${key} must be a string leaf on SpinoutDeckData — the allowlist has drifted from the shape`,
     );
+    // `setPath` resolves an allowlisted key through a pre-split `section.field`
+    // Map rather than walking a chain, so it can never index the deck data with
+    // a string taken from its own argument. That is only sound while every key
+    // is exactly two segments. A three-level key would silently stop applying;
+    // fail here instead.
+    assert.equal(
+      key.split('.').length,
+      2,
+      `${key}: allowlist keys must be exactly section.field — setPath does not walk deeper chains`,
+    );
   }
 });
 
@@ -111,19 +121,31 @@ test('overrides never un-DRAFT a deck that is only part-way through the program'
 });
 
 test('unknown, structured and prototype-polluting keys are rejected, not silently dropped', () => {
-  const { overrides, rejected } = sanitizeSpinoutOverrides({
-    'cover.thesis': 'ok',
-    'validation.stages_json': '[["Interviewed",99]]',
-    'cover.nope': 'x',
-    // COMPUTED key on purpose. Written as a plain `__proto__: 'x'` this is the
-    // object-literal prototype SETTER, not an own property — and a string is
-    // not a valid prototype, so the engine discards it and the sanitizer never
-    // sees the key at all. The computed form creates a real own property, which
-    // is what `JSON.parse` on a hostile request body produces and therefore
-    // what this test needs to hand over.
-    ['__proto__']: 'x',
-    'constructor.prototype.polluted': 'x',
-  });
+  // Built by JSON.parse, exactly as the route builds it (`await c.req.json()`),
+  // rather than as an object literal. That is not a stylistic choice:
+  //
+  //   - `{ __proto__: 'x' }` is the prototype SETTER, not an own property, and
+  //     a string is not a valid prototype — the engine discards it, so the
+  //     sanitizer would never receive the key and the test would assert nothing.
+  //   - `{ ['__proto__']: 'x' }` does create an own property, but reads to a
+  //     static analyser as a prototype write all the same.
+  //
+  // JSON.parse produces the genuine own property with no `__proto__` write in
+  // the source at all — and it is the literal shape a hostile request body
+  // arrives in, which makes it the most faithful fixture of the three.
+  const hostileBody = JSON.parse(
+    '{"cover.thesis":"ok",' +
+      '"validation.stages_json":"[[\\"Interviewed\\",99]]",' +
+      '"cover.nope":"x",' +
+      '"__proto__":"x",' +
+      '"constructor.prototype.polluted":"x"}',
+  );
+  assert.ok(
+    Object.prototype.hasOwnProperty.call(hostileBody, '__proto__'),
+    'fixture sanity: the payload must really carry an own __proto__ key',
+  );
+
+  const { overrides, rejected } = sanitizeSpinoutOverrides(hostileBody);
   assert.deepEqual(Object.keys(overrides), ['cover.thesis']);
   assert.ok(rejected.includes('validation.stages_json'), 'chart data is not overridable');
   assert.ok(rejected.includes('cover.nope'));

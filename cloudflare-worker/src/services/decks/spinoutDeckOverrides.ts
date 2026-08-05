@@ -110,24 +110,46 @@ export function sanitizeSpinoutOverrides(
 }
 
 /**
- * Write `value` at a dotted path inside `obj`, cloning each object along the
- * way so the caller's bundle is never mutated. Returns false when the path
- * does not resolve to an existing string leaf — a guard against a stale
- * allowlist entry silently growing a junk key on the deck data.
+ * Pre-split allowlist: dotted key -> its `[section, field]` segments.
+ *
+ * This exists so `setPath` never writes a property name that came from its
+ * `path` ARGUMENT. The argument is used only as a lookup key into this Map,
+ * built once from the `SPINOUT_OVERRIDABLE_KEYS` literal; the strings that
+ * actually index into the deck data come out of that constant. A caller who
+ * skips the allowlist — or an attacker who reaches this function directly with
+ * `__proto__.x` — gets `undefined` from the Map and is refused before anything
+ * is indexed, so there is no path-traversal to guard against rather than a
+ * guard to keep correct.
+ *
+ * Every allowlisted key is exactly two segments (`section.field`), which is why
+ * this needs no walk down a chain. `spinoutDeckOverrides.test.ts` asserts that
+ * invariant, so adding a three-level key fails the suite loudly instead of
+ * silently becoming a no-op override.
+ */
+const OVERRIDABLE_PATH_SEGMENTS: ReadonlyMap<string, readonly [string, string]> = new Map(
+  SPINOUT_OVERRIDABLE_KEYS.flatMap((key) => {
+    const parts = key.split('.');
+    return parts.length === 2 ? [[key, [parts[0], parts[1]] as const] as const] : [];
+  }),
+);
+
+/**
+ * Write `value` at an allowlisted dotted path inside `root`, shallow-cloning
+ * the section on the way so the caller's bundle is never mutated. Returns false
+ * when the path is not allowlisted, or does not resolve to an existing string
+ * leaf — the latter catching a stale allowlist entry that would otherwise grow
+ * a junk key on the deck data.
  */
 function setPath(root: Record<string, any>, path: string, value: string): boolean {
-  const parts = path.split('.');
-  if (parts.some((p) => p === '__proto__' || p === 'prototype' || p === 'constructor')) return false;
-  let cursor: any = root;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const next = cursor[parts[i]];
-    if (!next || typeof next !== 'object' || Array.isArray(next)) return false;
-    cursor[parts[i]] = { ...next };
-    cursor = cursor[parts[i]];
-  }
-  const leaf = parts[parts.length - 1];
-  if (typeof cursor[leaf] !== 'string') return false;
-  cursor[leaf] = value;
+  const segments = OVERRIDABLE_PATH_SEGMENTS.get(path);
+  if (!segments) return false;
+  const [section, field] = segments;
+
+  const current = root[section];
+  if (!current || typeof current !== 'object' || Array.isArray(current)) return false;
+  if (typeof current[field] !== 'string') return false;
+
+  root[section] = { ...current, [field]: value };
   return true;
 }
 
