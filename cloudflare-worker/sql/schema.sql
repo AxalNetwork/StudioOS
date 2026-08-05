@@ -504,6 +504,9 @@ CREATE TABLE IF NOT EXISTS tickets (
     -- pull-sync, and detail hydration.
     github_labels TEXT,
     github_assignees TEXT,
+    -- Stale-event guard: the issue's updated_at as of the last applied
+    -- inbound webhook event; older deliveries are dropped.
+    github_updated_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
