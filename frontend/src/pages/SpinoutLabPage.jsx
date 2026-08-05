@@ -895,8 +895,16 @@ export function Dashboard({ state, previewAllUnlocked = false, investorView = fa
 
         {/* APPLICATION CTA — investors get the LP route, not the founder one.
             POST /spinout-lab/apply hard-403s any role outside founder/exploring
-            (spinout_lab.ts), so showing "Apply Now" to an investor arriving from
-            their own sidebar would be a dead end. */}
+            (spinout_lab.ts), so showing "Apply Now" to an investor would be a
+            dead end.
+
+            An investor's own /spinout-lab now resolves to the LP & Investor
+            Workspace before this page is ever mounted (see the route in
+            App.jsx), so in normal navigation this branch does not fire. It
+            stays because the rule it encodes — never offer a cohort
+            application to someone whose role the apply endpoint refuses — is a
+            property of THIS page, and should hold for anything that renders it
+            directly rather than depending on the router getting it right. */}
         {investorView
           ? <LpCtaSection />
           : <ApplyCtaSection applyHref="/spinout-lab/apply" />}

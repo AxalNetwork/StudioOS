@@ -7,6 +7,10 @@ import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
 import ViewModeContext from './contexts/ViewModeContext';
+// Single source of truth for "which role is this session browsing as". The
+// shell picks the sidebar from it and the router picks route elements from it;
+// when those two disagree the nav offers one thing and the route serves another.
+import { resolveActiveRole } from './lib/activeRole';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
 import SafeMount from './components/SafeMount';
 import CookieConsent from './components/CookieConsent';
@@ -92,6 +96,10 @@ const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCa
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
+// The LP/investor Spin-Out Lab. A separate lazy import (rather than reaching
+// it through FundOpsWorkspace) so /spinout-lab can serve it directly without
+// pulling the whole Fund Ops shell — and so a founder never downloads it.
+const SpinoutLabLpWorkspacePage = lazy(() => import('./pages/SpinoutLabLpWorkspacePage'));
 const SpinoutLabStartupPage = lazy(() => import('./pages/SpinoutLabStartupPage'));
 const SpinoutLabDiscoveryPage = lazy(() => import('./pages/SpinoutLabDiscoveryPage'));
 const SpinoutLabMarketPage = lazy(() => import('./pages/SpinoutLabMarketPage'));
@@ -699,7 +707,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     }
   }, []);
   const isAdmin = (realUser || user)?.role === 'admin';
-  const activeRole = isImpersonating ? user?.role : (isAdmin ? viewMode : user?.role);
+  const activeRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
@@ -1347,16 +1355,51 @@ function AppInner() {
   // Task #9 — authoring is open to any authenticated user (no role gate).
   const authOnly = (component) => <RequireAuth {...authProps}>{component}</RequireAuth>;
 
+  // The role the session is browsing as. Same helper the shell uses to pick the
+  // sidebar (ProtectedLayout), so the nav and the routes cannot disagree about
+  // who the viewer is — which is exactly how an admin previewing Investor View
+  // ended up with an "Investor View" chip above the FOUNDER Spin-Out Lab.
+  const effectiveRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
+
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
 <RouteErrorBoundary>
 <Routes>
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/studio'} replace /> : <LandingPage />} />
-      {/* /spinout-lab doubles as a public marketing page (logged out) and the
-          founder Lab workspace (logged in). Logged-in visitors get the normal
-          app shell — sidebar and all — like every other authenticated page;
-          logged-out visitors get the bare marketing surface. */}
-      <Route path="/spinout-lab" element={user ? authOnly(<SpinoutLabPage />) : <SpinoutLabPage />} />
+      {/* /spinout-lab is THREE surfaces behind one path, because "Spin-Out Lab"
+          means something different depending on who is asking:
+
+            - logged out            → the public marketing page
+            - investor / LP         → the LP & INVESTOR WORKSPACE. An LP's
+                                      relationship with the Lab is the FUND:
+                                      thesis, key terms, participation tiers,
+                                      underwriting data on the cohort, the
+                                      reporting archive and commitment-gated
+                                      allocation. It is not the 4-week founder
+                                      program, and showing them the founder
+                                      program was a straight IA bug — they got
+                                      a week timeline and an Apply CTA for a
+                                      cohort application that POST
+                                      /spinout-lab/apply hard-403s for their
+                                      role.
+            - everyone else         → the founder Lab (marketing → application
+                                      → the 4-week workspace, per enrollment)
+
+          Branched at the ROUTE, not inside SpinoutLabPage, for two reasons:
+          SpinoutLabPage loads founder-scoped Lab state on mount, so an investor
+          would fire a request that is not theirs to make; and both pages are
+          lazy, so an investor never downloads the founder chunk (or vice
+          versa). Logged-in visitors get the normal app shell either way. */}
+      <Route
+        path="/spinout-lab"
+        element={
+          user
+            ? authOnly(effectiveRole === 'investor'
+                ? <SpinoutLabLpWorkspacePage />
+                : <SpinoutLabPage />)
+            : <SpinoutLabPage />
+        }
+      />
       {/* Lab tool page — the founder's company record (design: workspace tool
           pages). labRoles admits the active lab member's own role; admins can
           open it for support. */}
