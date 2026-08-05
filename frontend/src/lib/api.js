@@ -3277,6 +3277,14 @@ export const spinoutLab = {
   // LP & Investor Workspace. Blocks carry `available`; the workspace falls
   // back to its operator-maintained model when a block is not.
   fundMetrics: () => request('/spinout-lab/fund-metrics'),
+  // LP request-for-access. `lpApplication()` returns { application } (null when
+  // the caller has never applied); `submitLpApplication(body)` upserts the
+  // caller's own row and returns the stored result. An application is an
+  // expression of interest, NOT an entitlement — it moves the workspace's
+  // access ladder from 'visitor' to 'pending', and 'pending' unlocks nothing.
+  lpApplication: () => request('/spinout-lab/lp-application'),
+  submitLpApplication: (body) =>
+    request('/spinout-lab/lp-application', { method: 'POST', body: JSON.stringify(body) }),
 };
 
 // Task #39 — Event engine. `events` covers the authenticated host/attendee

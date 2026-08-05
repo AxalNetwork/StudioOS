@@ -216,3 +216,50 @@ test('the LP workspace renders standalone, not only embedded', () => {
   assert.match(lp, /if \(embedded\) \{\s*\n\s*return loading \? <LpSkeleton \/> : body;/);
   assert.match(lp, /<WorkspaceHeader/);
 });
+
+/* -------------------------------- live studio metrics + the apply flow */
+
+const workspace = read('pages/SpinoutLabLpWorkspacePage.jsx');
+const api = read('lib/api.js');
+
+test('each studio-proof tile falls back independently, not the whole page at once', () => {
+  // /fund-metrics can measure some figures and not others (a null percentage
+  // there means "no denominator"), so the page picks per TILE. An all-or-
+  // nothing merge would either hide live numbers it has or print fallbacks as
+  // though they were measured.
+  assert.match(salesPage, /const pick = \(liveValue, format, staticTile\)/);
+  const picks = salesPage.match(/pick\(liveProgram\?\./g) || [];
+  assert.equal(picks.length, 5, `the five previously-static tiles are now live-capable (found ${picks.length})`);
+});
+
+test('the studio-proof caption counts live tiles rather than claiming all or none', () => {
+  assert.match(salesPage, /const liveTiles = proofStudio\.filter\(\(t\) => t\.live\)\.length/);
+  assert.match(salesPage, /data-testid="text-studio-provenance"/);
+});
+
+test('the LP application posts for real — no dead-end copy left', () => {
+  assert.match(api, /submitLpApplication: \(body\) =>/);
+  assert.match(api, /request\('\/spinout-lab\/lp-application', \{ method: 'POST'/);
+  assert.match(workspace, /<LpApplicationForm/);
+  assert.match(workspace, /spinoutLab\.submitLpApplication\(/);
+  // The old admission that the form was unwired must be gone with it.
+  assert.doesNotMatch(workspace, /no LP-application\s*\n?\s*\/\/?\s*endpoint exists yet/);
+  assert.doesNotMatch(workspace, /is not wired/);
+});
+
+test('the form stays hidden when the application status could not be read', () => {
+  // "Could not tell" is not "never applied" — showing a fresh form to someone
+  // who already applied invites a duplicate submission.
+  assert.match(workspace, /applicationLoaded/);
+  assert.match(workspace, /if \(!loaded\) \{/);
+});
+
+test('accreditation gates submission on the client too', () => {
+  assert.match(workspace, /disabled=\{busy \|\| !accredited\}/,
+    'the submit button is disabled until Rule 501 is certified');
+});
+
+test('the access ladder reads the application, and the workspace feeds it one', () => {
+  assert.match(workspace, /lpAccessState\(portal, application\)/);
+  assert.match(workspace, /spinoutLab\.lpApplication\(\)/);
+});

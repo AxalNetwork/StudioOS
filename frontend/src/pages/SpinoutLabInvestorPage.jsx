@@ -154,12 +154,29 @@ export default function SpinoutLabInvestorPage() {
     { k: 'Deployed by the fund', v: money.m(M.investedK), tone: 'violet', note: `${M.positions.length} positions held` },
   ];
 
+  // Studio throughput, tile by tile. Each takes the live value when
+  // /fund-metrics reports one and falls back to the operator-maintained figure
+  // in spinoutInvestorContent.js otherwise — per TILE, not per page, because
+  // the endpoint can measure some of these and not others (a null percentage
+  // there means "no denominator", never 0%). `liveNote` records which side a
+  // tile landed on so the caption below can count them honestly.
+  const pick = (liveValue, format, staticTile) => (liveValue != null
+    ? { ...staticTile, v: format(liveValue), live: true }
+    : { ...staticTile, live: false });
+  const staticBy = Object.fromEntries(PROOF_STUDIO_STATIC.map((t) => [t.key, t]));
+  const pctFmt = (n) => `${n}%`;
+
   const proofStudio = [
-    { key: 'graduates', k: 'Graduates to date', v: String(P.graduates), tone: 'ink', note: 'Cohorts 1–3 complete' },
-    { key: 'on_time', k: 'Incorporated on time', v: P.onTimeIncorpPct != null ? `${P.onTimeIncorpPct}%` : '—', tone: 'green', note: 'Inside the 28-day window' },
-    { key: 'alumni', k: 'Alumni follow-on', v: P.alumniRaisedM != null ? `$${P.alumniRaisedM.toFixed(1)}M` : '—', tone: 'green', note: 'Raised externally post-program' },
-    ...PROOF_STUDIO_STATIC,
+    { key: 'graduates', k: 'Graduates to date', v: String(P.graduates), tone: 'ink', note: 'Across completed cohorts', live: !!liveProgram },
+    pick(liveProgram?.incorporation_pct, pctFmt, staticBy.incorporation_rate),
+    { key: 'on_time', k: 'Incorporated on time', v: P.onTimeIncorpPct != null ? `${P.onTimeIncorpPct}%` : '—', tone: 'green', note: 'Inside the 28-day window', live: !!liveProgram && P.onTimeIncorpPct != null },
+    pick(liveProgram?.verified_discovery_pct, pctFmt, staticBy.verified_discovery),
+    pick(liveProgram?.revenue_proof_pct, pctFmt, staticBy.revenue_proof),
+    { key: 'alumni', k: 'Alumni follow-on', v: P.alumniRaisedM != null ? `$${P.alumniRaisedM.toFixed(1)}M` : '—', tone: 'green', note: 'Raised externally post-program', live: !!liveProgram && P.alumniRaisedM != null },
+    pick(liveProgram?.formation_velocity_days, (n) => `${n} days`, staticBy.formation_velocity),
+    pick(liveProgram?.graduation_to_investment_pct, pctFmt, staticBy.graduation_investment),
   ];
+  const liveTiles = proofStudio.filter((t) => t.live).length;
 
   return (
     <div className="mx-auto max-w-[1240px] px-5 sm:px-8 pb-20" data-testid="spinout-investor-page">
@@ -338,6 +355,15 @@ export default function SpinoutLabInvestorPage() {
             </div>
           ))}
         </div>
+        {/* Per-tile provenance. The page never claims more measurement than it
+            has: a tile is live only when the endpoint returned a value for it. */}
+        <p className="m-0 mt-3 text-[11px] text-gray-400 dark:text-gray-500" data-testid="text-studio-provenance">
+          {liveTiles === proofStudio.length
+            ? 'All figures are live from platform records.'
+            : liveTiles > 0
+              ? `${liveTiles} of ${proofStudio.length} figures are live from platform records; the rest are operator-maintained until the platform can measure them.`
+              : 'Figures are operator-maintained; live platform metrics substitute automatically as they become measurable.'}
+        </p>
         <div className={`${CARD} mt-5 flex flex-wrap items-center gap-3.5 px-5 py-4`}>
           <span className="min-w-[260px] flex-1 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
             Fund-level position — committed, called, deployed, portfolio marks, MOIC, and reserve — is maintained in the LP workspace and the quarterly reporting archive.

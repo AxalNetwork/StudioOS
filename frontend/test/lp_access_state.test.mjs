@@ -80,3 +80,64 @@ test('malformed or hostile payloads degrade down the ladder, never up', () => {
   assert.equal(lpAccessState({ performance: [{ commitment: 1e9 }] }).state, 'voting',
     'performance rows alone still count as holdings — matches the worker DTO');
 });
+
+/* ------------------------------------------------ LP applications (#4) */
+//
+// An applicant AUTHORS their own application row, so the security of the whole
+// flow rests on that row granting nothing. These cases exist to keep it that
+// way: an application may move a viewer from 'visitor' to 'pending' and no
+// further, and 'pending' is rank 0 exactly like 'visitor'.
+
+const app = (status) => ({ status });
+
+test('a pending application moves visitor → pending, and unlocks NOTHING', () => {
+  const r = lpAccessState(null, app('pending'));
+  assert.equal(r.state, 'pending');
+  assert.equal(r.applicationStatus, 'pending');
+  assert.equal(lpHasReports(r.state), false, 'no reporting archive');
+  assert.equal(lpAllocationOpen(r.state), false, 'no allocation rights');
+});
+
+test('an applicant cannot climb the ladder by writing their own status', () => {
+  // The POST route hard-codes status='pending', but defence in depth: even a
+  // row that claims to be approved must not unlock the archive, because the
+  // archive is keyed to a fund holding the applicant does not have.
+  for (const claimed of ['approved', 'committed', 'voting', 'admin', 'ADMIN']) {
+    const r = lpAccessState(null, app(claimed));
+    assert.ok(
+      r.state === 'pending' || r.state === 'visitor',
+      `status "${claimed}" resolved to ${r.state}`,
+    );
+    assert.equal(lpHasReports(r.state), false, `status "${claimed}" must not unlock reports`);
+    assert.equal(lpAllocationOpen(r.state), false, `status "${claimed}" must not unlock allocation`);
+  }
+});
+
+test('a declined or withdrawn application returns the viewer to visitor', () => {
+  for (const status of ['declined', 'withdrawn']) {
+    assert.equal(lpAccessState(null, app(status)).state, 'visitor', status);
+  }
+});
+
+test('a real holding always outranks an application', () => {
+  // Someone with a countersigned LPA whose stale application row still reads
+  // 'pending' is an approved LP, not an applicant.
+  const r = lpAccessState(lp(0, true), app('pending'));
+  assert.equal(r.state, 'approved');
+  assert.equal(lpHasReports(r.state), true);
+
+  const voting = lpAccessState(lp(ALLOC_THRESHOLD_K * 1000), app('declined'));
+  assert.equal(voting.state, 'voting', 'a declined application cannot demote a committed LP');
+});
+
+test('a malformed application is ignored, never promoted', () => {
+  for (const bad of [undefined, null, {}, { status: null }, { status: 42 }, 'pending', []]) {
+    assert.equal(lpAccessState(null, bad).state, 'visitor', JSON.stringify(bad));
+  }
+});
+
+test('the no-application call signature still works unchanged', () => {
+  // Every existing caller passes one argument.
+  assert.equal(lpAccessState(null).state, 'visitor');
+  assert.equal(lpAccessState(lp(0, true)).state, 'approved');
+});
