@@ -134,6 +134,7 @@ export function PitchDeckShareModal({ open, url, busy, expiryHours, onExpiryChan
 
         <div className="px-6 py-5 flex flex-col gap-5">
           <div className="flex gap-4 items-center">
+            {/* dark-mode-exempt: a QR code needs a white quiet zone to scan. */}
             <div className="flex-none w-24 h-24 rounded-xl border border-gray-200 dark:border-gray-700 bg-white p-2 flex items-center justify-center">
               {qr
                 ? <img src={qr} alt="QR code for the deck share link" className="w-full h-full" />

@@ -262,7 +262,10 @@ portal.patch('/office-hours-guidance', async (c) => {
     // so mapping a client-supplied array of arbitrary length and only then
     // slicing to 5 would let an authenticated partner force unbounded work.
     // Slice a little wider than the cap so blank rows can still be dropped.
-    const bringRaw = Array.isArray(body.bring) ? body.bring.slice(0, G_BRING_MAX * 4) : [];
+    // Annotated: `body` is `any`, so without this the array stays `any[]` and
+    // the `x is string` predicate below has an implicitly-typed parameter
+    // (TS7006 under noImplicitAny).
+    const bringRaw: unknown[] = Array.isArray(body.bring) ? body.bring.slice(0, G_BRING_MAX * 4) : [];
     const bring = bringRaw
       .map((x: unknown) => normText(x, G_MAX.bring_item))
       .filter((x): x is string => !!x)

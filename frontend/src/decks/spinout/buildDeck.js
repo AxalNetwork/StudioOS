@@ -172,7 +172,13 @@ function validation(pres, data, notes) {
 
   s.addText(d.funnelLabel, { x: ML, y: 3.75, w: 11, h: 0.3, margin: 0, fontFace: F.head,
     fontSize: 10, bold: true, charSpacing: 2, color: C.muted });
-  const maxV = Math.max(...d.stages.map(s2 => s2[1])), fx = 3.05, maxW = 7.7;
+  // A project with no logged interviews now ships an EMPTY funnel rather than a
+  // fabricated one-interview bar (spinoutDeckData.ts). `Math.max()` of nothing
+  // is -Infinity, which would turn every bar width into NaN, so fall back to 1
+  // — with no stages to draw it is never used, and it keeps the divisor safe if
+  // a future caller passes all-zero stages.
+  const maxV = d.stages.length ? Math.max(...d.stages.map(s2 => s2[1])) || 1 : 1;
+  const fx = 3.05, maxW = 7.7;
   const trans = [55, 40, 28, 16, 0];
   let fy = 4.2;
   d.stages.forEach((st, i) => {

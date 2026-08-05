@@ -274,6 +274,8 @@ export default function LogInterviewModal({ open, interview, onClose, onSave }) 
           </div>
 
           <label className="sm:col-span-2 flex items-center gap-2 text-[12.5px] text-gray-700 dark:text-gray-200 cursor-pointer">
+            {/* dark-mode-exempt: native checkbox border; the browser draws its
+                own dark-scheme control and a dark: override fights it. */}
             <input type="checkbox" checked={featured} onChange={(e) => setFeatured(e.target.checked)}
               data-testid="checkbox-featured" className="rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
             Deck-eligible — allow this quote on the Problem slide

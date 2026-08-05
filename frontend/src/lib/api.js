@@ -1667,6 +1667,18 @@ export const api = {
   // returns ONLY { gaps, draft, program_day } (skips the heavy DATA + NOTES
   // payload) so the deck page can show what's still missing BEFORE export.
   spinoutDeckPreview: (projectId) => request(`/projects/${projectId}/spinout-deck?preview=1`, { method: 'POST', body: '{}' }),
+  // Deck-level MANUAL OVERRIDES. These edit the deck only — they do NOT rewrite
+  // the founder's canonical module data (which is what the slide editor used to
+  // do). Resolution at render time is override > module data > derived
+  // placeholder. Returns { overrides, overridable_keys }.
+  spinoutDeckOverrides: (projectId) => request(`/projects/${projectId}/spinout-deck/overrides`),
+  // Send a key with an empty string (or list it in `remove`) to REVERT it back
+  // to the module value; there is no separate delete call.
+  saveSpinoutDeckOverrides: (projectId, overrides, remove = []) =>
+    request(`/projects/${projectId}/spinout-deck/overrides`, {
+      method: 'PUT',
+      body: JSON.stringify({ overrides, remove }),
+    }),
   // Task #2 — server-side export, format ∈ {pdf, pptx}. PNG cover was
   // removed end-to-end (PDF + PPTX are both driven by Cloudflare Browser
   // Rendering against the live SPA print template).

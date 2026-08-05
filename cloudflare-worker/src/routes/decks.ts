@@ -20,6 +20,7 @@ import { formatUseOfFundsText } from '../util/useOfFunds';
 // that don't fit the project/financials/captable source shape.
 import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides, buildAxalSpinoutCoverage } from '../services/decks/axalSpinoutDemoDay';
 import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
+import { applySpinoutOverrides, loadSpinoutDeckOverrides } from '../services/decks/spinoutDeckOverrides';
 import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed, fetchLandingPageForProject, applyBrandKitToSlides } from '../services/decks/branding';
 import { type RenderableDeck } from '../services/decks/render';
@@ -734,8 +735,12 @@ async function bakeSpinoutFields(env: Env, row: any): Promise<Record<string, str
   }
   if (ownerUserId == null) return null;
   try {
-    const bundle = await assembleSpinoutDeckData(env, ownerUserId, projectId);
-    return bundle.fields || null;
+    const base = await assembleSpinoutDeckData(env, ownerUserId, projectId);
+    // Same override layer as POST /projects/:id/spinout-deck. Without it the
+    // shared / printed deck would silently revert every manual edit back to the
+    // module text — the founder would see one deck on screen and send another.
+    const overrides = await loadSpinoutDeckOverrides(env, projectId);
+    return applySpinoutOverrides(base, overrides).fields || null;
   } catch (e) {
     console.error('[decks] spinout fields bake failed:', (e as Error).message);
     return null;

@@ -928,9 +928,26 @@ export async function fillAxalSpinoutDemoDay(
   const painThemes = (await computePainThemes(env, projectId, interviewsList)).slice(0, 6);
 
   // ------ Task #14: ratings distribution + revenue proof --------------
-  const ratings = interviewsList
-    .map((it) => (it.validation_rating == null ? null : Number(it.validation_rating)))
-    .filter((n): n is number => n != null && isFinite(n) && n >= 0 && n <= 5);
+  // A 6-BUCKET HISTOGRAM indexed by rating, not a per-interview list: the
+  // declared type is "0–5 distribution of founder validation_rating values"
+  // (see SpinoutDemoDayData.validation.ratings) and the deck mapper reads it
+  // that way — `ratedN` sums the buckets to get the number of rated
+  // interviews, and `fitN = ratings[4] + ratings[5]` counts the 4★ and 5★ ones
+  // (spinoutDeckData.ts:297-298).
+  //
+  // This used to emit the flat list `[5,4,5,3]`. Consumed as a histogram that
+  // made `ratedN` the SUM OF THE SCORES (17 "rated interviews" from 4), and
+  // `fitN` the ratings of interviews #5 and #6 read as 4★/5★ counts — so a
+  // project with fewer than six rated interviews always reported ZERO
+  // solution-fit, and the funnel's conversion percentage was meaningless.
+  // Every founder's Validation slide carried those numbers to investors.
+  const ratings = [0, 0, 0, 0, 0, 0];
+  for (const it of interviewsList) {
+    if (it.validation_rating == null) continue;
+    const n = Number(it.validation_rating);
+    if (!isFinite(n) || n < 0 || n > 5) continue;
+    ratings[Math.round(n)] += 1;
+  }
 
   // Task #2 — structured revenue proof. Founder edits the four fields
   // (total_revenue, mrr, paying_customers, first_payment_date) +
@@ -1101,9 +1118,14 @@ export async function fillAxalSpinoutDemoDay(
     cover: {
       eyebrow: 'Axal VC · 28-Day Spin-Out Lab · Demo Day',
       headline: orDash(p.tagline) !== DASH ? String(p.tagline) : `${projectName} — Demo Day`,
-      sub: orDash(p.vision) !== DASH
-        ? String(p.vision)
-        : 'A pre-incorporation thesis, sharpened across 28 days of Discovery, OKRs, Scoring and Cap-Table prep.',
+      // EMPTY when the founder has not written a vision — never a canned
+      // sentence. The deck mapper uses this as a thesis source, and an
+      // unconditional literal here made `thesisSrc` always truthy, so the
+      // "add a one-line thesis" gap could never fire and a project with no
+      // tagline and no vision exported as NOT-draft with filler as its thesis
+      // (spinoutDeckData.ts:258-260). The cover slide supplies its own display
+      // fallback; absence has to stay visible to the gap logic.
+      sub: orDash(p.vision) !== DASH ? String(p.vision) : '',
       location: `Presented ${presentedOn} · Axal Network`,
       activity_log: activityLog,
     },

@@ -74,11 +74,22 @@ async function loadDigest({ sendNotificationEmail, periodKey, ensureMarketIntelS
 
   // Inject the stubs + return the exports map. `crypto` is available
   // as a Node global (Node 20+), so the HMAC code path runs unchanged.
+  // Every import digest.ts makes must be injected here by name — the source is
+  // string-extracted with its imports stripped, so a call to anything not in
+  // this list is a ReferenceError at run time, not a load error. When digest.ts
+  // gains an import, add it here. `stripTrailingSlashes` is the real
+  // implementation from util/url.ts (three lines, no deps) rather than a stub,
+  // so the URL the digest actually builds is the URL under test.
+  const stripTrailingSlashes = (s) => {
+    let i = s.length;
+    while (i > 0 && s.charCodeAt(i - 1) === 47 /* '/' */) i--;
+    return i === s.length ? s : s.slice(0, i);
+  };
   const factory = new Function(
-    'sendNotificationEmail', 'periodKey', 'ensureMarketIntelSchema',
+    'sendNotificationEmail', 'periodKey', 'ensureMarketIntelSchema', 'stripTrailingSlashes',
     `${outputText}; return __mod;`,
   );
-  return factory(sendNotificationEmail, periodKey, ensureMarketIntelSchema);
+  return factory(sendNotificationEmail, periodKey, ensureMarketIntelSchema, stripTrailingSlashes);
 }
 
 /* ------------------------------------------------------------------ */
