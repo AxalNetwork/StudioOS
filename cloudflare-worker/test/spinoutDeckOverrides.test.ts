@@ -115,13 +115,21 @@ test('unknown, structured and prototype-polluting keys are rejected, not silentl
     'cover.thesis': 'ok',
     'validation.stages_json': '[["Interviewed",99]]',
     'cover.nope': 'x',
-    __proto__: 'x',
+    // COMPUTED key on purpose. Written as a plain `__proto__: 'x'` this is the
+    // object-literal prototype SETTER, not an own property — and a string is
+    // not a valid prototype, so the engine discards it and the sanitizer never
+    // sees the key at all. The computed form creates a real own property, which
+    // is what `JSON.parse` on a hostile request body produces and therefore
+    // what this test needs to hand over.
+    ['__proto__']: 'x',
     'constructor.prototype.polluted': 'x',
   });
   assert.deepEqual(Object.keys(overrides), ['cover.thesis']);
   assert.ok(rejected.includes('validation.stages_json'), 'chart data is not overridable');
   assert.ok(rejected.includes('cover.nope'));
+  assert.ok(rejected.includes('__proto__'), 'the __proto__ key must actually reach the sanitizer and be refused');
   assert.equal(({} as any).polluted, undefined, 'no prototype pollution');
+  assert.equal(Object.getPrototypeOf(overrides), null, 'the returned map has a null prototype');
   assert.equal(isOverridableKey('validation.stages'), false);
   assert.equal(isOverridableKey('cover.thesis'), true);
 });
