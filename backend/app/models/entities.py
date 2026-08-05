@@ -87,6 +87,14 @@ class TicketPriority(str, Enum):
     URGENT = "urgent"
 
 
+class TicketType(str, Enum):
+    """Task #9 — first-class ticket type, mirrored to GitHub labels
+    bug/feature/task by the production Worker sync."""
+    BUG = "bug"
+    FEATURE = "feature"
+    TASK = "task"
+
+
 class DealStatus(str, Enum):
     APPLIED = "applied"
     SCORED = "scored"
@@ -937,6 +945,7 @@ class Ticket(SQLModel, table=True):
     description: Optional[str] = None
     priority: TicketPriority = TicketPriority.MEDIUM
     status: TicketStatus = TicketStatus.OPEN
+    type: Optional[str] = Field(default="task")
     submitted_by: Optional[str] = None
     assigned_to: Optional[str] = None
     user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)

@@ -22,10 +22,40 @@ function ModernSelect({ value, onChange, children, ...props }) {
   );
 }
 
+// Task #9 — type chip colors (bug/feature/task first-class field).
+const TYPE_COLORS = {
+  bug: 'bg-red-100 text-red-700',
+  feature: 'bg-violet-100 text-violet-700',
+  task: 'bg-gray-200 text-gray-700',
+};
+
 function TicketDetail({ ticketId, onBack }) {
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [comment, setComment] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [commentError, setCommentError] = useState(null);
+
+  const postComment = async () => {
+    const body = comment.trim();
+    if (!body) return;
+    setPosting(true);
+    setCommentError(null);
+    try {
+      const res = await api.commentTicket(ticketId, body);
+      if (res?.github_sync_status === 'dev-stub') {
+        setCommentError(res.message || 'Comments sync to GitHub in production only.');
+      } else {
+        setComment('');
+        load();
+      }
+    } catch (e) {
+      setCommentError(e?.message || 'Could not post your comment.');
+    } finally {
+      setPosting(false);
+    }
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -78,7 +108,25 @@ function TicketDetail({ ticketId, onBack }) {
             <div className="flex items-center gap-3 mt-2">
               <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityColors[ticket.priority]}`}>{ticket.priority}</span>
               <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[ticket.status]}`}>{ticket.status?.replace('_', ' ')}</span>
+              {ticket.type && <span className={`text-[10px] px-2 py-0.5 rounded-full ${TYPE_COLORS[ticket.type] || TYPE_COLORS.task}`}>{ticket.type}</span>}
             </div>
+            {(() => {
+              // Task #9 — GitHub labels/assignees snapshots (JSON strings from the worker).
+              let labels = []; let assignees = [];
+              try { labels = ticket.github_labels ? JSON.parse(ticket.github_labels) : []; } catch { /* ignore */ }
+              try { assignees = ticket.github_assignees ? JSON.parse(ticket.github_assignees) : []; } catch { /* ignore */ }
+              if (labels.length === 0 && assignees.length === 0) return null;
+              return (
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  {labels.map(l => (
+                    <span key={l} className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-400">{l}</span>
+                  ))}
+                  {assignees.map(a => (
+                    <span key={a} className="text-[10px] px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">@{a}</span>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
           <div className="flex items-center gap-2">
             <button onClick={load} className="p-2 text-gray-400 hover:text-violet-600 transition-colors" title="Refresh">
@@ -144,6 +192,33 @@ function TicketDetail({ ticketId, onBack }) {
             ))}
           </div>
         )}
+
+        {/* Task #9 — comment composer. Comments are GitHub-canonical: this
+            posts to the linked issue via the worker and re-hydrates. */}
+        {ticket.github_issue_number ? (
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+            <textarea
+              value={comment}
+              onChange={e => setComment(e.target.value)}
+              rows={3}
+              placeholder="Write a comment... (synced to the GitHub issue)"
+              disabled={posting}
+              className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 resize-vertical focus:border-violet-500 focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
+            />
+            {commentError && <p className="text-xs text-red-600 mt-1">{commentError}</p>}
+            <button
+              onClick={postComment}
+              disabled={posting || !comment.trim()}
+              className="mt-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm text-white font-medium transition-colors disabled:opacity-50"
+            >
+              {posting ? 'Posting...' : 'Post comment'}
+            </button>
+          </div>
+        ) : (
+          <p className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-400 dark:border-gray-800">
+            Commenting unlocks once this ticket is linked to a GitHub issue.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -155,7 +230,7 @@ export default function TicketsPage() {
   const [, setSyncing] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState(null);
-  const [form, setForm] = useState({ title: '', description: '', priority: 'medium' });
+  const [form, setForm] = useState({ title: '', description: '', priority: 'medium', type: 'task' });
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
@@ -194,7 +269,7 @@ export default function TicketsPage() {
     try {
       await api.createTicket(form);
       setShowForm(false);
-      setForm({ title: '', description: '', priority: 'medium' });
+      setForm({ title: '', description: '', priority: 'medium', type: 'task' });
       load();
     } catch (e) { alert(e.message); }
     finally { setSubmitting(false); }
@@ -245,14 +320,24 @@ export default function TicketsPage() {
                 placeholder="Brief description of the issue"
                 className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100" />
             </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1 font-medium">Priority</label>
-              <ModernSelect value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </ModernSelect>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1 font-medium">Priority</label>
+                <ModernSelect value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </ModernSelect>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1 font-medium">Type</label>
+                <ModernSelect value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+                  <option value="task">Task</option>
+                  <option value="bug">Bug</option>
+                  <option value="feature">Feature</option>
+                </ModernSelect>
+              </div>
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs text-gray-600 mb-1">Description</label>
@@ -301,8 +386,9 @@ export default function TicketsPage() {
                       {t.description && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{t.description}</div>}
                     </div>
                     {isAdmin && <div className="px-5 py-3 hidden md:block text-gray-600 truncate">{t.submitted_by || '—'}</div>}
-                    <div className="px-5 py-3">
+                    <div className="px-5 py-3 flex items-center gap-1">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityColors[t.priority]}`}>{t.priority}</span>
+                      {t.type && t.type !== 'task' && <span className={`text-[10px] px-2 py-0.5 rounded-full ${TYPE_COLORS[t.type] || TYPE_COLORS.task}`}>{t.type}</span>}
                     </div>
                     <div className="px-5 py-3">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColors[t.status]}`}>{t.status?.replace('_', ' ')}</span>

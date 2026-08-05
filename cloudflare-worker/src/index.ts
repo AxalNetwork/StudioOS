@@ -393,6 +393,12 @@ app.get('/api/health', (c) =>
       durable_pipeline: !!(c.env as any).PIPELINE_ROOM,
       durable_onboarding: !!(c.env as any).ONBOARDING_CHAT,
     },
+    // Task #9 — ticket↔GitHub sync config presence (flags only, no values).
+    github_sync: {
+      token: !!c.env.GITHUB_ACCESS_TOKEN,
+      repo: !!(c.env.GITHUB_REPO_OWNER && c.env.GITHUB_REPO_NAME),
+      webhook_secret: !!c.env.GITHUB_WEBHOOK_SECRET,
+    },
   }),
 );
 

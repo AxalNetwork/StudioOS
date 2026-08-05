@@ -178,9 +178,10 @@ class DocumentCreate(BaseModel):
 
 
 class TicketCreate(BaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = None
-    priority: str = "medium"
+    priority: str = Field("medium", pattern="^(low|medium|high|urgent)$")
+    type: str = Field("task", pattern="^(bug|feature|task)$")
     project_id: Optional[int] = None
 
 

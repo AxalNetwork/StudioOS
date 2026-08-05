@@ -740,6 +740,9 @@ export const api = {
   getTicket: (id) => request(`/tickets/${id}`),
   updateTicket: (id, data) => request(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   syncTickets: () => request('/tickets/sync', { method: 'POST' }),
+  // Task #9 — GitHub-canonical ticket comments + admin sync-mapping debug.
+  commentTicket: (id, body) => request(`/tickets/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
+  getTicketMapping: (id) => request(`/tickets/${id}/mapping`),
 
   // Task #82 — `scope='mine'` narrows the funnel to deals the investor has a
   // relationship with (dealroom member / introduced / converted watchlist).

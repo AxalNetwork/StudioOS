@@ -9,6 +9,24 @@ from datetime import datetime
 
 router = APIRouter(prefix="/tickets", tags=["Support"])
 
+_type_column_ensured = False
+
+
+def _ensure_type_column(session: Session):
+    """Task #9 dev parity — the prod Worker adds tickets.type at runtime;
+    mirror that here so create_all-provisioned dev DBs pick it up without a
+    migration (same in-route ensure pattern as brand.py)."""
+    global _type_column_ensured
+    if _type_column_ensured:
+        return
+    try:
+        from sqlalchemy import text
+        session.exec(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'task'"))
+        session.commit()
+    except Exception:
+        session.rollback()
+    _type_column_ensured = True
+
 
 @router.get("")
 @router.get("/")
@@ -35,10 +53,12 @@ async def create_ticket(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    _ensure_type_column(session)
     ticket = Ticket(
         title=data.title,
         description=data.description,
         priority=data.priority,
+        type=data.type,
         submitted_by=user.name or user.email,
         user_id=user.id,
         project_id=data.project_id,
@@ -88,6 +108,48 @@ def sync_tickets(
         stmt = stmt.where(Ticket.user_id == user.id)
     tickets = session.exec(stmt).all()
     return {"tickets": tickets, "synced": 0}
+
+
+@router.post("/{ticket_id}/comments")
+def comment_ticket(
+    ticket_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Task #9 dev parity — comments are GitHub-canonical and only the prod
+    Worker can post them. Explicit dev stub (no silent success)."""
+    ticket = session.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if user.role != UserRole.ADMIN and ticket.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only comment on your own tickets")
+    return {"ok": False, "github_sync_status": "dev-stub",
+            "message": "Comments post to GitHub in production only."}
+
+
+@router.get("/{ticket_id}/mapping")
+def ticket_mapping(
+    ticket_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Task #9 dev parity — mapping/debug endpoint (admin only)."""
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    ticket = session.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return {
+        "ticket_id": ticket.id,
+        "github_issue_number": ticket.github_issue_number,
+        "github_issue_url": ticket.github_issue_url,
+        "status": str(ticket.status),
+        "priority": str(ticket.priority),
+        "type": getattr(ticket, "type", "task"),
+        "github_labels": [],
+        "github_assignees": [],
+        "last_sync_events": [],
+    }
 
 
 @router.get("/{ticket_id}")
