@@ -883,11 +883,36 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   }
   return (
     <div className="mx-auto max-w-7xl p-6">
+      {/* Titled as the design titles it — "Spin-Out Lab ·" leads, because this
+          page IS an LP's Spin-Out Lab. Standalone at /spinout-lab there is no
+          Fund Ops tab strip overhead to say where you are, and an LP who
+          clicked "Spin-Out Lab" needs to see that word to know they landed
+          right. Inside Fund Ops the tab strip already says it, so the embedded
+          arm above renders no header at all. */}
       <WorkspaceHeader
         icon={Landmark}
-        title="LP &amp; Investor Workspace"
+        title="Spin-Out Lab &middot; LP &amp; Investor Workspace"
         description="Curated capital participation in Axal VC Spin-Out Fund I — thesis, key terms, underwriting data, reporting, and commitment-gated allocation."
       />
+      {/* Standing, stated up front — as the design does. The same fact appears
+          under "Participation rights" further down, but an LP arriving here
+          from their own sidebar should not have to scroll to learn whether they
+          are a visitor or a $250K LP: it decides what the rest of the page will
+          even show them. Rendered only when the position has loaded, so it can
+          never flash a lower standing than the viewer actually holds. */}
+      {!loading && (
+        <div className="-mt-4 mb-6 flex flex-wrap items-center gap-2.5" data-testid="lp-standing">
+          <Chip tone={chipTone}>{chipText}</Chip>
+          {derived.commitmentK > 0 && (
+            <span className={`text-[12px] font-semibold text-gray-600 dark:text-gray-300 ${MONO}`}>
+              {commitLabel} committed
+            </span>
+          )}
+          {user?.name && (
+            <span className="text-[12px] text-gray-500 dark:text-gray-400">{user.name}</span>
+          )}
+        </div>
+      )}
       {loading ? <LpSkeleton /> : body}
     </div>
   );

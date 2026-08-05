@@ -22,7 +22,7 @@ import {
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, LayoutGrid,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
-  Gavel, Inbox, FileBarChart, Radar, Wallet, PhoneCall, Landmark,
+  Gavel, Inbox, FileBarChart, Radar, Wallet, PhoneCall,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -431,13 +431,13 @@ export const SIDEBAR_GROUPS = {
   investor: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      // Surfaced for investors on the same terms as the founder and exploring
-      // navs — byte-identical item at the same index 1 of Home, so the program
-      // reads the same way in every profile. /spinout-lab is authOnly in
-      // App.jsx, not role-guarded, so an investor lands on the overview rather
-      // than being bounced; the overview swaps its founder Apply CTA for the LP
-      // one (SpinoutLabPage's investorView) because POST /spinout-lab/apply
-      // hard-403s any role outside founder/exploring.
+      // Same item at the same index as the founder and exploring navs, so the
+      // program reads the same way in every profile — but it does NOT resolve
+      // to the same page. App.jsx serves /spinout-lab by the role being browsed
+      // as: an investor gets the LP & Investor Workspace (fund thesis, terms,
+      // participation tiers, cohort underwriting data, reporting, allocation),
+      // everyone else gets the founder program. An LP's relationship with the
+      // Lab is the fund, not the 4-week curriculum.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/products', icon: Package, label: 'Products' },
     ]},
@@ -469,11 +469,14 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'funds', label: 'Funds', items: [
       { to: '/funds', icon: Wallet, label: 'Fund Management' },
-      // Spin-Out Fund I LP participation. Sits in Funds (not Home) because it
-      // is a Fund Ops tab and belongs with the other fund surfaces; requirement
-      // was that the workspace be reachable from the nav, not only from a hero
-      // CTA inside the page.
-      { to: '/funds/lp-workspace', icon: Landmark, label: 'LP Workspace' },
+      // NOTE: no 'LP Workspace' item here any more. It used to live in Funds
+      // because Home's "Spin-Out Lab" pointed at the founder program, so the LP
+      // workspace needed a nav home of its own. Home's entry now resolves to
+      // this very page for investors, and two nav items opening identical
+      // content — one of them named after the fund ops shell it happens to be
+      // embedded in — is the confusion, not the fix. The /funds/lp-workspace
+      // ROUTE stays registered and is still a tab inside Fund Ops, so deep
+      // links and the tab strip are unaffected.
       { to: '/lp-reports', icon: UserCircle, label: 'LP Management' },
       { to: '/funds/performance', icon: Activity, label: 'Performance' },
       { to: '/funds/accounting', icon: Scale, label: 'Accounting' },
