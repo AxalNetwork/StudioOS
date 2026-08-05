@@ -162,6 +162,15 @@ export function quarterlyReportModel({
   const calledToDate = allCalls
     .filter((c) => onOrBefore(callDate(c), p.end))
     .reduce((s, c) => s + num(c.amount), 0);
+  // Rendered on the capital account as "Capital called this quarter". Do NOT
+  // delete this as an unused variable: CodeQL alert 4584 said exactly that, and
+  // it was true of the commit the alert was raised against — the value was
+  // computed and dropped. It has been used since 01f8996, and an autofix
+  // applying that stale alert on top removed the declaration while the use
+  // remained, which took quarterlyReportModel() down with a ReferenceError.
+  const calledThisPeriod = allCalls
+    .filter((c) => within(callDate(c), p.start, p.end))
+    .reduce((s, c) => s + num(c.amount), 0);
   const paidToDate = allCalls
     .filter((c) => onOrBefore(paidDate(c), p.end))
     .reduce((s, c) => s + num(c.amount), 0);
