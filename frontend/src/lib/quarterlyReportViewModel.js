@@ -162,9 +162,6 @@ export function quarterlyReportModel({
   const calledToDate = allCalls
     .filter((c) => onOrBefore(callDate(c), p.end))
     .reduce((s, c) => s + num(c.amount), 0);
-  const calledThisPeriod = allCalls
-    .filter((c) => within(callDate(c), p.start, p.end))
-    .reduce((s, c) => s + num(c.amount), 0);
   const paidToDate = allCalls
     .filter((c) => onOrBefore(paidDate(c), p.end))
     .reduce((s, c) => s + num(c.amount), 0);
