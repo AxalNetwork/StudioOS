@@ -24,7 +24,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import {
-  ensureTicketSyncSchema, recordSyncEvent, sha256Hex,
+  ensureTicketSyncSchema, recordSyncEvent, releaseSyncEvent, sha256Hex,
   mapGithubStatusToLocal, parseLabelsFromGithub, hasSyncMarker,
 } from '../services/githubSync';
 
@@ -103,12 +103,16 @@ github.post('/webhook', async (c) => {
   await ensureTicketSyncSchema(c.env);
 
   // Idempotency — GitHub redelivers on timeouts; dedupe by delivery GUID.
+  // Claim-then-release: the GUID is claimed up front, and RELEASED in the
+  // catch below if the ticket mutation fails, so a GitHub retry of the same
+  // delivery is reprocessed instead of being swallowed as a duplicate.
   const delivery = c.req.header('X-GitHub-Delivery') || null;
-  if (delivery) {
+  const deliveryKey = delivery ? `gh:${delivery}` : null;
+  if (deliveryKey) {
     const firstSeen = await recordSyncEvent(c.env, {
       issueNumber,
       direction: 'inbound',
-      eventKey: `gh:${delivery}`,
+      eventKey: deliveryKey,
       payloadHash: await sha256Hex(`${event}:${action}:${issueNumber}`),
     });
     if (!firstSeen) {
@@ -118,7 +122,7 @@ github.post('/webhook', async (c) => {
 
   const sql = getSQL(c.env);
   try {
-    const rows = await sql`SELECT id, status, priority, type, user_id, title FROM tickets WHERE github_issue_number = ${issueNumber}`;
+    const rows = await sql`SELECT id, status, priority, type, user_id, title, github_updated_at FROM tickets WHERE github_issue_number = ${issueNumber}`;
     if (rows.length === 0) {
       await sql.end();
       return c.json({ ok: true, ignored: 'no_matching_ticket', issue: issueNumber });
@@ -148,8 +152,14 @@ github.post('/webhook', async (c) => {
     }
 
     // `issues` events — compute the full desired local state from the issue
-    // payload (absolute writes, so redeliveries and out-of-order events are
-    // safe) and apply whatever changed.
+    // payload and apply it as an absolute write. Out-of-order protection:
+    // drop deliveries whose issue.updated_at is older than the last applied
+    // one, so a delayed stale event can't revert newer state.
+    const issueUpdatedAt: string | null = issue.updated_at || null;
+    if (issueUpdatedAt && ticket.github_updated_at && issueUpdatedAt < ticket.github_updated_at) {
+      await sql.end();
+      return c.json({ ok: true, ignored: 'stale_event', issue: issueNumber });
+    }
     const newStatus = mapGithubStatusToLocal(issue.state, issue.state_reason);
     const parsed = parseLabelsFromGithub(issue.labels);
     const labelsSnap = JSON.stringify(parsed.names);
@@ -158,7 +168,7 @@ github.post('/webhook', async (c) => {
     const newType = parsed.type || ticket.type || 'task';
 
     const changed = newStatus !== ticket.status || newPriority !== ticket.priority || newType !== ticket.type;
-    await sql`UPDATE tickets SET status = ${newStatus}, priority = ${newPriority}, type = ${newType}, github_labels = ${labelsSnap}, github_assignees = ${assigneesSnap}, updated_at = datetime('now') WHERE id = ${ticket.id}`;
+    await sql`UPDATE tickets SET status = ${newStatus}, priority = ${newPriority}, type = ${newType}, github_labels = ${labelsSnap}, github_assignees = ${assigneesSnap}, github_updated_at = ${issueUpdatedAt}, updated_at = datetime('now') WHERE id = ${ticket.id}`;
 
     // Notify the owner on meaningful state flips they didn't cause.
     if (changed && newStatus !== ticket.status) {
@@ -182,6 +192,9 @@ github.post('/webhook', async (c) => {
     return c.json({ ok: true, updated: changed, ticket_id: ticket.id, status: newStatus, priority: newPriority, type: newType });
   } catch (e: any) {
     try { await sql.end(); } catch { /* noop */ }
+    // Release the delivery claim so GitHub's retry of this delivery is
+    // reprocessed rather than dropped as a duplicate.
+    if (deliveryKey) await releaseSyncEvent(c.env, deliveryKey);
     return c.json({ error: 'db_error', detail: String(e?.message || e).slice(0, 200) }, 500);
   }
 });

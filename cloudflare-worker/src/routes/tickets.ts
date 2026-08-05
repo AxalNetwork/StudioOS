@@ -298,11 +298,15 @@ tickets.put('/:id{[0-9]+}', async (c) => {
 
   const [updated] = await sql`SELECT * FROM tickets WHERE id = ${id}`;
 
-  // Outbound GitHub mirror — best-effort, explicit status in response.
-  let githubSyncStatus: string = 'not_linked';
+  // Outbound GitHub mirror — best-effort, explicit status in response:
+  //   not_linked      → ticket has no GitHub issue
+  //   not_configured  → linked, but GitHub creds absent in this env
+  //   synced/partial  → all/some mirror calls succeeded (errors listed)
+  let githubSyncStatus: string = updated.github_issue_number
+    ? (githubConfigured(c.env) ? 'synced' : 'not_configured')
+    : 'not_linked';
   const ghErrors: string[] = [];
   if (updated.github_issue_number && githubConfigured(c.env)) {
-    githubSyncStatus = 'synced';
     if (data.status && data.status !== before.status) {
       const gh = mapLocalStatusToGithub(data.status);
       const res = await updateIssue(c.env, updated.github_issue_number, gh.state === 'closed'
@@ -315,24 +319,33 @@ tickets.put('/:id{[0-9]+}', async (c) => {
       });
     }
     if ((data.priority && data.priority !== before.priority) || (data.type && data.type !== before.type)) {
-      // Preserve unmanaged labels from the snapshot; swap only ours.
-      const prev = parseLabelsFromGithub(updated.github_labels ? JSON.parse(updated.github_labels) : []);
-      const managed = labelsForTicket({ type: updated.type, priority: updated.priority, categories: prev.categories });
-      const unmanaged = prev.names.filter((n) => {
-        const low = n.toLowerCase();
-        return !/^priority:\s*(low|medium|high|urgent)$/.test(low)
-          && !['bug', 'feature', 'task'].includes(low)
-          && !['audit', 'beta-readiness', 'tracking'].includes(low)
-          && low !== 'support-ticket';
-      });
-      const res = await setLabels(c.env, updated.github_issue_number, [...managed, ...unmanaged]);
-      if (res.ok) {
-        await sql`UPDATE tickets SET github_labels = ${JSON.stringify([...managed, ...unmanaged])} WHERE id = ${id}`;
-        await recordSyncEvent(c.env, {
-          ticketId: id, issueNumber: updated.github_issue_number, direction: 'outbound',
-          eventKey: `out:labels:${id}:${Date.now()}`,
+      // Swap only OUR managed labels; preserve everything else. Read the
+      // issue's CURRENT labels from GitHub (not the local snapshot) so a
+      // concurrent human label change isn't clobbered, and persist only the
+      // set GitHub confirms back.
+      const live = await fetchIssue(c.env, updated.github_issue_number);
+      if (!live.ok) {
+        githubSyncStatus = 'partial'; ghErrors.push(`labels: could not read current issue (${live.error})`);
+      } else {
+        const prev = parseLabelsFromGithub(live.data?.labels || []);
+        const managed = labelsForTicket({ type: updated.type, priority: updated.priority, categories: prev.categories });
+        const unmanaged = prev.names.filter((n) => {
+          const low = n.toLowerCase();
+          return !/^priority:\s*(low|medium|high|urgent)$/.test(low)
+            && !['bug', 'feature', 'task'].includes(low)
+            && !['audit', 'beta-readiness', 'tracking'].includes(low)
+            && low !== 'support-ticket';
         });
-      } else { githubSyncStatus = 'partial'; ghErrors.push(`labels: ${res.error}`); }
+        const res = await setLabels(c.env, updated.github_issue_number, [...managed, ...unmanaged]);
+        if (res.ok) {
+          const confirmed = (Array.isArray(res.data) ? res.data : []).map((l: any) => l?.name).filter(Boolean);
+          await sql`UPDATE tickets SET github_labels = ${JSON.stringify(confirmed.length ? confirmed : [...managed, ...unmanaged])} WHERE id = ${id}`;
+          await recordSyncEvent(c.env, {
+            ticketId: id, issueNumber: updated.github_issue_number, direction: 'outbound',
+            eventKey: `out:labels:${id}:${Date.now()}`,
+          });
+        } else { githubSyncStatus = 'partial'; ghErrors.push(`labels: ${res.error}`); }
+      }
     }
     if (data.assigned_to && data.assigned_to !== before.assigned_to) {
       const login = assigneeLoginFor(c.env, data.assigned_to);
@@ -346,6 +359,7 @@ tickets.put('/:id{[0-9]+}', async (c) => {
           });
         } else { githubSyncStatus = 'partial'; ghErrors.push(`assignees: ${res.error}`); }
       } else {
+        githubSyncStatus = 'partial';
         ghErrors.push('assignees: no GitHub login mapped for this assignee (set ADMIN_GITHUB_LOGINS)');
       }
     }

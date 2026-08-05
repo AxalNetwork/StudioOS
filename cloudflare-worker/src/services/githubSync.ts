@@ -201,6 +201,9 @@ export async function ensureTicketSyncSchema(env: Env): Promise<void> {
     `ALTER TABLE tickets ADD COLUMN type TEXT NOT NULL DEFAULT 'task'`,
     `ALTER TABLE tickets ADD COLUMN github_labels TEXT`,
     `ALTER TABLE tickets ADD COLUMN github_assignees TEXT`,
+    // Stale-event guard: the issue's updated_at as of the last applied
+    // inbound event; older deliveries are dropped instead of reverting state.
+    `ALTER TABLE tickets ADD COLUMN github_updated_at TEXT`,
   ];
   for (const stmt of alters) {
     try { await db.prepare(stmt).run(); } catch { /* column exists */ }
@@ -238,6 +241,20 @@ export async function recordSyncEvent(env: Env, args: {
     // here because reprocessing a delivery is idempotent (status/labels are
     // absolute writes, not increments).
     return true;
+  }
+}
+
+/**
+ * Release a previously claimed sync event so a webhook redelivery can be
+ * reprocessed after a mid-handler failure (claim-then-release pattern:
+ * the delivery GUID is claimed up front for dedup, and released if the
+ * ticket mutation fails so GitHub's retry isn't swallowed as a duplicate).
+ */
+export async function releaseSyncEvent(env: Env, eventKey: string): Promise<void> {
+  try {
+    await env.DB.prepare(`DELETE FROM ticket_sync_events WHERE event_key = ?`).bind(eventKey).run();
+  } catch (e) {
+    console.warn('[githubSync] releaseSyncEvent failed', (e as Error).message);
   }
 }
 

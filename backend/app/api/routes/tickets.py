@@ -19,12 +19,19 @@ def _ensure_type_column(session: Session):
     global _type_column_ensured
     if _type_column_ensured:
         return
-    try:
-        from sqlalchemy import text
-        session.exec(text("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'task'"))
-        session.commit()
-    except Exception:
-        session.rollback()
+    from sqlalchemy import text
+    # Postgres path first; SQLite (no IF NOT EXISTS) falls back to a plain
+    # ADD COLUMN whose duplicate-column error is the signal it already exists.
+    for stmt in (
+        "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'task'",
+        "ALTER TABLE tickets ADD COLUMN type TEXT DEFAULT 'task'",
+    ):
+        try:
+            session.exec(text(stmt))
+            session.commit()
+            break
+        except Exception:
+            session.rollback()
     _type_column_ensured = True
 
 
