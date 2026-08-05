@@ -212,6 +212,12 @@ export function quarterlyReportModel({
     row('Commitment', usd(commitment), 'record', { strong: true }),
     row('Capital called to date', usd(calledToDate), 'record'),
     row('Unfunded commitment', usd(unfunded), 'record'),
+    // Called and contributed are different facts, and the period rows sit
+    // together so the difference is legible: a notice raised in June and settled
+    // in July is called in this quarter and contributed in the next. Without the
+    // first line, an LP who has not yet wired a June call reads "Contributed
+    // this quarter $0" with nothing on the statement explaining it.
+    row('Capital called this quarter', usd(calledThisPeriod), 'record'),
     row('Contributed this quarter', usd(contributedThisPeriod), 'record'),
     row('Paid-in capital', usd(investedAmount), 'record'),
     row('Allocated portfolio value', usd(allocPortfolio), 'allocated'),

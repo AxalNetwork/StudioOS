@@ -156,6 +156,18 @@ test('contributions are the calls PAID inside the period, not merely called', ()
   const vm = quarterlyReportModel({ payload: unpaid, fundSlug: 'spinout-fund-i', period: Q2, issuedAt: ISSUED_AT });
   assert.equal(line(vm, 'Contributed this quarter').v, '$0');
   assert.equal(line(vm, 'Capital called to date').v, '$87,500', 'still called, just not paid');
+  // The line that makes that $0 legible instead of alarming.
+  assert.equal(line(vm, 'Capital called this quarter').v, '$54,688');
+});
+
+test('a call noticed in-period but settled after it splits across the two period lines', () => {
+  const straddle = payload();
+  straddle.capital_calls = [
+    { limited_partner_id: 7, amount: 40_000, due_date: '2026-06-25', paid_date: '2026-07-03', status: 'paid' },
+  ];
+  const vm = quarterlyReportModel({ payload: straddle, fundSlug: 'spinout-fund-i', period: Q2, issuedAt: ISSUED_AT });
+  assert.equal(line(vm, 'Capital called this quarter').v, '$40,000', 'called in June');
+  assert.equal(line(vm, 'Contributed this quarter').v, '$0', 'settled in July, so not a Q2 contribution');
 });
 
 test('distributions are counted as of the period end', () => {
