@@ -30,7 +30,7 @@
     (function () {
       try {
         var isDev = !!document.querySelector('script[src="/@vite/client"]') ||
-                    /[?&](localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
+                    /(localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
                     window.location.port === '5000';
         if (!isDev || !('serviceWorker' in navigator)) return;
         navigator.serviceWorker.getRegistrations().then(function (regs) {
@@ -64,7 +64,7 @@
     (function () {
       try {
         var isDev = !!document.querySelector('script[src="/@vite/client"]') ||
-                    /[?&](localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
+                    /(localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
                     window.location.port === '5000';
         if (isDev) return;
         var REBOOT_KEY = 'axal:boot-reboot';
