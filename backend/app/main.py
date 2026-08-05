@@ -923,6 +923,12 @@ def dashboard_stats(user=Depends(get_current_user)):
     }
 
 
+# Dev-only stubs for Worker-only surfaces (/api/articles, /api/public/events).
+# Registered last among API routes so real routes always win; this whole
+# module only ever runs in the local dev server, never in production.
+from backend.app.api.routes import dev_stubs as _dev_stubs  # noqa: E402
+app.include_router(_dev_stubs.router, prefix="/api")
+
 # ---------------------------------------------------------------------------
 # Static SPA fallback (last so /api routes win)
 # ---------------------------------------------------------------------------
