@@ -922,6 +922,7 @@ projects.post('/:projectId/spinout-deck', async (c) => {
   if (c.req.query('preview') === '1') {
     return c.json({
       gaps: bundle.gaps,
+      gap_sections: bundle.gapSections,
       draft: bundle.draft,
       program_day: bundle.programDay,
       overridden_keys: bundle.overriddenKeys,
@@ -931,6 +932,11 @@ projects.post('/:projectId/spinout-deck', async (c) => {
     data: bundle.data,
     notes: bundle.notes,
     gaps: bundle.gaps,
+    // Which SLIDE each gap belongs to. The Pitch Deck Builder derives per-slide
+    // readiness from this, not from counting entries in `fields` — `fields`
+    // omits empty scalars, so a slide rendering template fallback content is
+    // indistinguishable there from one the founder actually filled in.
+    gap_sections: bundle.gapSections,
     draft: bundle.draft,
     program_day: bundle.programDay,
     fields: bundle.fields,

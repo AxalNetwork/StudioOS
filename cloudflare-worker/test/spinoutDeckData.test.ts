@@ -409,3 +409,64 @@ test('captable readiness checklist stays tied to holders, not sim_segments', () 
   // …yet the donut already shows the simulator segments.
   assert.deepEqual(data.captable.segments, [['Founders', 100]], 'donut uses sim_segments');
 });
+
+/* ============================================================================
+ *  gapSections — the Pitch Deck Builder's readiness contract.
+ *
+ *  The builder cannot derive per-slide readiness from `fields`:
+ *  flattenSpinoutDeckData omits empty scalars, so a slide rendering FALLBACK
+ *  figures is indistinguishable there from one the founder filled in, and an
+ *  all-empty project yields a field map with zero empty entries. It reads the
+ *  gaps instead, keyed by slide. These tests keep that key honest — a typo in a
+ *  section name would silently mark a slide permanently "ready".
+ * ========================================================================== */
+
+const DECK_SECTIONS = new Set([
+  'cover', 'problem', 'validation', 'market', 'solution',
+  'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal',
+]);
+
+test('every gap names a real deck section, index-aligned with gaps', () => {
+  for (const src of [makePartialSrc(), makeFullSrc()]) {
+    const { gaps, gapSections, gapFields } = mapToSpinoutDeckData(src);
+    assert.ok(Array.isArray(gapSections), 'gapSections is always emitted');
+    assert.equal(gapSections!.length, gaps.length, 'index-aligned with gaps');
+    assert.equal(gapFields!.length, gaps.length, 'and so is gapFields');
+    gapSections!.forEach((s, i) => {
+      assert.ok(
+        s && DECK_SECTIONS.has(s),
+        `gap ${i} ("${gaps[i]}") has section "${s}", which is not a deck section`,
+      );
+    });
+  }
+});
+
+test('a gap tagged with a field derives its section from that field', () => {
+  const { gaps, gapFields, gapSections } = mapToSpinoutDeckData(makePartialSrc());
+  gapFields!.forEach((f, i) => {
+    if (!f) return;
+    assert.equal(
+      gapSections![i], f.split('.')[0],
+      `gap "${gaps[i]}" is about ${f} but is filed under ${gapSections![i]}`,
+    );
+  });
+});
+
+test('an empty project raises a gap for EVERY slide — none may look complete', () => {
+  // The reported failure mode: a founder who has done nothing opens the builder
+  // and every slide reads "Data populated from your work". A slide is only
+  // "ready" when it has no gaps, so an untouched project must leave no slide
+  // ungapped.
+  const empty = { meta: { days_remaining: 12 } } as unknown as SpinoutDemoDayData;
+  const { gapSections } = mapToSpinoutDeckData(empty);
+  const covered = new Set(gapSections!.filter(Boolean) as string[]);
+  for (const section of DECK_SECTIONS) {
+    assert.ok(covered.has(section), `${section}: an empty project must raise a gap for it`);
+  }
+});
+
+test('a fully-completed project raises no gaps at all, so every slide is ready', () => {
+  const { gaps, gapSections } = mapToSpinoutDeckData(makeFullSrc());
+  assert.deepEqual(gaps, [], `expected zero gaps, got: ${JSON.stringify(gaps)}`);
+  assert.deepEqual(gapSections, []);
+});
