@@ -636,7 +636,7 @@ export function LpCtaSection() {
         observed execution data, not a pitch.
       </p>
       <div className="flex gap-3 justify-center flex-wrap">
-        <Link to="/funds/lp-workspace" data-testid="link-lp-workspace" className="h-11 px-5.5 rounded-[11px] bg-white dark:bg-gray-100 text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white transition-colors">
+        <Link to="/spinout-lab/investor-workspace" data-testid="link-lp-workspace" className="h-11 px-5.5 rounded-[11px] bg-white dark:bg-gray-100 text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white transition-colors">
           Open LP Workspace <span className="text-[16px]" aria-hidden="true">→</span>
         </Link>
         <a href={LAB_CONTACT_HREF} className="h-11 px-5.5 rounded-[11px] border border-white/40 bg-transparent text-white text-[14px] font-semibold flex items-center hover:bg-white/10 transition-colors">

@@ -2,11 +2,19 @@
  * "Spin-Out Lab" means two different products depending on who is asking.
  *
  * For a founder it is the 4-week program: apply, get accepted, work the week
- * timeline. For an LP it is the FUND — thesis, key terms, participation tiers,
- * underwriting data on the cohort, the reporting archive, and commitment-gated
- * allocation. Both live at /spinout-lab, and the investor profile was serving
- * the founder one: a week timeline and an "Apply Now" CTA for a cohort
- * application that POST /spinout-lab/apply hard-403s for an investor.
+ * timeline. For an LP it is the FUND, reached as a two-step journey:
+ *
+ *   /spinout-lab                     → SpinoutLabInvestorPage, the Fund I
+ *                                      conviction/sales page (what founders do
+ *                                      inside the Lab, the operating stack,
+ *                                      the underwriting edge, studio proof)
+ *   /spinout-lab/investor-workspace  → Spin-Out Lab · LP & Investor Workspace
+ *                                      (fund terms, raise status, tiers,
+ *                                      reporting, allocation, apply)
+ *
+ * The investor profile originally served the FOUNDER page at /spinout-lab: a
+ * week timeline and an "Apply Now" CTA for a cohort application that POST
+ * /spinout-lab/apply hard-403s for an investor.
  *
  * The routing fix is only as good as the role it branches on, so most of this
  * file is about that. `resolveActiveRole` is the shared answer to "who is
@@ -89,11 +97,19 @@ test('no role is invented for an admin who has not picked a view', () => {
 
 /* ------------------------------------------------------------- the route */
 
-test('/spinout-lab serves the LP workspace to investors and the founder page to everyone else', () => {
+test('/spinout-lab serves the investor sales page to investors and the founder page to everyone else', () => {
   assert.match(
     app,
-    /path="\/spinout-lab"[\s\S]{0,400}effectiveRole === 'investor'[\s\S]{0,120}<SpinoutLabLpWorkspacePage \/>[\s\S]{0,80}<SpinoutLabPage \/>/,
+    /path="\/spinout-lab"[\s\S]{0,400}effectiveRole === 'investor'[\s\S]{0,120}<SpinoutLabInvestorPage \/>[\s\S]{0,80}<SpinoutLabPage \/>/,
     'the /spinout-lab route must branch on the active role',
+  );
+});
+
+test('the LP workspace is a first-class, role-gated route under /spinout-lab', () => {
+  assert.match(
+    app,
+    /path="\/spinout-lab\/investor-workspace" element=\{guard\(\['admin', 'investor'\], <SpinoutLabLpWorkspacePage \/>\)\}/,
+    'the deeper second step must be routed and gated to investors/admins',
   );
 });
 
@@ -105,8 +121,46 @@ test('a logged-out visitor still gets the public marketing page', () => {
   );
 });
 
-test('the LP workspace is lazily imported, so a founder never downloads it', () => {
+test('both investor pages are lazily imported, so a founder never downloads them', () => {
+  assert.match(app, /const SpinoutLabInvestorPage = lazy\(\(\) => import\('\.\/pages\/SpinoutLabInvestorPage'\)\)/);
   assert.match(app, /const SpinoutLabLpWorkspacePage = lazy\(\(\) => import\('\.\/pages\/SpinoutLabLpWorkspacePage'\)\)/);
+});
+
+/* -------------------------------------------------------- the sales page */
+
+const salesPage = read('pages/SpinoutLabInvestorPage.jsx');
+const content = read('lib/spinoutInvestorContent.js');
+
+test('every sales-page CTA routes into the LP workspace — the CTA flow is real', () => {
+  assert.match(
+    salesPage,
+    /export const LP_WORKSPACE_PATH = '\/spinout-lab\/investor-workspace'/,
+    'one exported destination constant, not scattered strings',
+  );
+  const links = salesPage.match(/to=\{LP_WORKSPACE_PATH\}/g) || [];
+  assert.ok(links.length >= 4, `hero, fund-position, workspace and request-access CTAs all point at the workspace (found ${links.length})`);
+  assert.doesNotMatch(salesPage, /to="\/funds\/lp-workspace"/, 'the investor journey stays in the /spinout-lab namespace');
+});
+
+test('sales-page claims are centralized, and shared figures come from the fund model', () => {
+  assert.match(salesPage, /from '\.\.\/lib\/spinoutInvestorContent'/, 'the page renders the content module, not inline copy');
+  assert.match(content, /import \{ FUND, PROGRAM, THESIS \} from '\.\/spinoutFundModel'/,
+    'numbers also stated by the workspace/brief must come from the single fund model');
+  assert.match(content, /headline: THESIS\.headline/, 'the hero headline is the shared thesis sentence');
+});
+
+test('the cohort snapshot is captioned as an illustrative composite, not live readings', () => {
+  // No endpoint reports per-company cohort telemetry to investors. Rendering
+  // the design's six named "live readings" without provenance would be a fake
+  // claim on an LP-facing page — the caption is required, not decorative.
+  assert.match(content, /provenance:\s*'Illustrative composite/);
+  assert.match(salesPage, /\{COHORT_SNAPSHOT\.provenance\}/, 'the page must render the provenance caption verbatim');
+});
+
+test('the sales page overlays live fund metrics with the workspace fallback semantics', () => {
+  assert.match(salesPage, /spinoutLab\.fundMetrics\(\)/, 'live program/raise figures come from the real endpoint');
+  assert.match(salesPage, /live\?\.program\?\.available \? live\.program : null/,
+    'a block is used only when it answers available — a failed fetch falls back to the operator-maintained model');
 });
 
 /* ------------------------------------------- shell and router cannot drift */
@@ -133,7 +187,7 @@ test('both the shell and the router resolve the active role through the shared h
 test('the investor Home nav keeps its Spin-Out Lab entry', () => {
   // Same item, same place as the founder and exploring navs — it just resolves
   // to the LP product now. Removing it would hide the fund from LPs entirely.
-  assert.match(sidebar, /investor: \[[\s\S]{0,1200}to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab'/);
+  assert.match(sidebar, /investor: \[[\s\S]{0,1600}to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab'/);
 });
 
 test('the duplicate LP Workspace nav item is gone, but its route is not', () => {

@@ -434,11 +434,13 @@ export const SIDEBAR_GROUPS = {
       // Same item at the same index as the founder and exploring navs, so the
       // program reads the same way in every profile — but it does NOT resolve
       // to the same page. App.jsx serves /spinout-lab by the role being browsed
-      // as: an investor gets the LP & Investor Workspace (fund thesis, terms,
-      // participation tiers, cohort underwriting data, reporting, allocation),
-      // everyone else gets the founder program. An LP's relationship with the
-      // Lab is the fund, not the 4-week curriculum.
-      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+      // as: an investor gets the Fund I sales page (SpinoutLabInvestorPage —
+      // what founders do inside the Lab, the operating stack, the underwriting
+      // edge, studio proof), whose CTAs route into the deeper
+      // /spinout-lab/investor-workspace (fund terms, raise status, reporting,
+      // allocation, apply). Everyone else gets the founder program. An LP's
+      // relationship with the Lab is the fund, not the 4-week curriculum.
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: ['/spinout-lab', '/spinout-lab/investor-workspace'] },
       { to: '/products', icon: Package, label: 'Products' },
     ]},
     // Task — investor sidebar restructured around the investment lifecycle IA:
@@ -469,14 +471,12 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'funds', label: 'Funds', items: [
       { to: '/funds', icon: Wallet, label: 'Fund Management' },
-      // NOTE: no 'LP Workspace' item here any more. It used to live in Funds
-      // because Home's "Spin-Out Lab" pointed at the founder program, so the LP
-      // workspace needed a nav home of its own. Home's entry now resolves to
-      // this very page for investors, and two nav items opening identical
-      // content — one of them named after the fund ops shell it happens to be
-      // embedded in — is the confusion, not the fix. The /funds/lp-workspace
-      // ROUTE stays registered and is still a tab inside Fund Ops, so deep
-      // links and the tab strip are unaffected.
+      // NOTE: no 'LP Workspace' item here — the investor journey to it runs
+      // Home → Spin-Out Lab (sales page) → its CTAs →
+      // /spinout-lab/investor-workspace, and a second nav item opening the
+      // same content under a fund-ops name is the confusion, not the fix. The
+      // /funds/lp-workspace ROUTE stays registered and is still a tab inside
+      // Fund Ops, so deep links and the tab strip are unaffected.
       { to: '/lp-reports', icon: UserCircle, label: 'LP Management' },
       { to: '/funds/performance', icon: Activity, label: 'Performance' },
       { to: '/funds/accounting', icon: Scale, label: 'Accounting' },
