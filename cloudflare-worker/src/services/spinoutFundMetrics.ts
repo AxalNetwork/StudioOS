@@ -16,6 +16,19 @@ export type GraduateTimingRow = {
   completed_at: string | null;
   started_at: string | null;
   total_funding: number | null;
+  /**
+   * Per-graduate evidence columns for the studio-throughput tiles. All
+   * OPTIONAL: an older query that does not select them leaves every derived
+   * percentage null (a data gap), never 0 (a program failure). See
+   * summarizeGraduates for how each is read.
+   */
+  interview_count?: number | null;
+  revenue?: number | null;
+  mrr?: number | null;
+  paying_customers?: number | null;
+  paid_pilot_status?: string | null;
+  /** 1 when the fund holds a portfolio position in this graduate's company. */
+  backed?: number | null;
 };
 
 export type LpCommitmentRow = {
@@ -36,7 +49,37 @@ export type ProgramSummary = {
   on_time_pct: number | null;
   /** Total dollars raised by graduates' companies; null when none recorded. */
   alumni_raised: number | null;
+
+  /* ---- studio-throughput tiles (the LP sales page's proof strip) --------
+   *
+   * EVERY percentage below is null when its denominator or its evidence
+   * column is unavailable, and the SPA renders null as its operator-
+   * maintained figure with a provenance caption. That asymmetry is
+   * deliberate and load-bearing: these numbers sit on a page that asks an LP
+   * for capital, so "we cannot measure this" must never render as a number,
+   * and a missing column must never render as 0%.
+   */
+
+  /** Founders who ever started the Lab (the incorporation-rate denominator). */
+  entrants: number | null;
+  /** Graduates ÷ entrants, 0–100. Null when the entrant count is unknown. */
+  incorporation_pct: number | null;
+  /** Graduates with >= VERIFIED_DISCOVERY_MIN logged interviews, 0–100. */
+  verified_discovery_pct: number | null;
+  /** Graduates with recorded revenue, paying customers or a paid pilot, 0–100. */
+  revenue_proof_pct: number | null;
+  /** Median days from Lab start to incorporation across measurable graduates. */
+  formation_velocity_days: number | null;
+  /** Graduates the fund holds a portfolio position in, 0–100. */
+  graduation_to_investment_pct: number | null;
 };
+
+/**
+ * The week-1 discovery bar: five structured interviews. Same threshold the
+ * program itself gates on (`interview_5_logged` in the milestone catalog), so
+ * "verified discovery" on the LP page means exactly what it means to a founder.
+ */
+export const VERIFIED_DISCOVERY_MIN = 5;
 
 export type FundRaiseSummary = {
   committed: number;
@@ -73,12 +116,22 @@ export function median(values: number[]): number | null {
 export function summarizeGraduates(
   rows: GraduateTimingRow[],
   sprintDays = 28,
+  entrants: number | null = null,
 ): ProgramSummary {
   const seen = new Set<number>();
   let graduates = 0;
   let measurable = 0;
   let onTime = 0;
   let raised = 0;
+  const durations: number[] = [];
+
+  // Evidence counters carry their own denominators. A column the query did
+  // not select leaves `x.seen` at 0, so the percentage stays null instead of
+  // reading as 0% — an unselected column is a data gap, not a failing program.
+  const discovery = { seen: 0, hit: 0 };
+  const revenue = { seen: 0, hit: 0 };
+  const backed = { seen: 0, hit: 0 };
+
   for (const r of rows) {
     if (seen.has(r.user_id)) continue;
     seen.add(r.user_id);
@@ -89,14 +142,64 @@ export function summarizeGraduates(
     const done = parseTs(r.completed_at);
     if (start !== null && done !== null && done >= start) {
       measurable += 1;
-      if (done - start <= sprintDays * 86_400_000) onTime += 1;
+      const elapsed = done - start;
+      durations.push(elapsed / 86_400_000);
+      if (elapsed <= sprintDays * 86_400_000) onTime += 1;
+    }
+
+    if (r.interview_count != null) {
+      discovery.seen += 1;
+      if (Number(r.interview_count) >= VERIFIED_DISCOVERY_MIN) discovery.hit += 1;
+    }
+    // Revenue proof is a disjunction because the product records it four ways
+    // (Stripe-synced total, MRR, paying customers, or an explicitly set pilot
+    // status). `paid_pilot_status` alone is enough to say "seen": a founder who
+    // set it to 'pre_revenue' has answered the question, and answering "no"
+    // must count in the denominator or the percentage only ever surveys
+    // companies that already have revenue.
+    const status = String(r.paid_pilot_status ?? '').trim().toLowerCase();
+    const hasRevenueSignal = r.revenue != null || r.mrr != null
+      || r.paying_customers != null || status !== '';
+    if (hasRevenueSignal) {
+      revenue.seen += 1;
+      const proven = Number(r.revenue ?? 0) > 0
+        || Number(r.mrr ?? 0) > 0
+        || Number(r.paying_customers ?? 0) > 0
+        || status === 'paid' || status === 'pilot_paid';
+      if (proven) revenue.hit += 1;
+    }
+    if (r.backed != null) {
+      backed.seen += 1;
+      if (Number(r.backed) > 0) backed.hit += 1;
     }
   }
+
+  const pct = (hit: number, of: number): number | null =>
+    of > 0 ? Math.round((hit / of) * 100) : null;
+
+  // Incorporation rate is graduates ÷ ENTRANTS, never graduates ÷ graduates:
+  // a graduate is *defined* by the incorporation milestone, so the latter is
+  // 100% by construction and would be a meaningless number on an LP page.
+  // A cohort cannot produce more graduates than entrants; if the counts say
+  // otherwise the entrant query is wrong, and reporting >100% would be worse
+  // than reporting nothing.
+  const incorporation_pct = entrants != null && entrants > 0 && graduates <= entrants
+    ? Math.round((graduates / entrants) * 100)
+    : null;
+
+  const medianDays = median(durations);
+
   return {
     available: true,
     graduates,
-    on_time_pct: measurable > 0 ? Math.round((onTime / measurable) * 100) : null,
+    on_time_pct: pct(onTime, measurable),
     alumni_raised: raised > 0 ? raised : null,
+    entrants,
+    incorporation_pct,
+    verified_discovery_pct: pct(discovery.hit, discovery.seen),
+    revenue_proof_pct: pct(revenue.hit, revenue.seen),
+    formation_velocity_days: medianDays != null ? Math.round(medianDays) : null,
+    graduation_to_investment_pct: pct(backed.hit, backed.seen),
   };
 }
 

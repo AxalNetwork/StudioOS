@@ -763,18 +763,46 @@ spinoutLab.get('/fund-metrics', async (c) => {
 
   let program: import('../services/spinoutFundMetrics').ProgramSummary = {
     available: false, graduates: 0, on_time_pct: null, alumni_raised: null,
+    entrants: null, incorporation_pct: null, verified_discovery_pct: null,
+    revenue_proof_pct: null, formation_velocity_days: null,
+    graduation_to_investment_pct: null,
   };
   try {
+    // One row per graduate (a founder with the week-4 incorporation
+    // milestone), carrying the evidence each studio-throughput tile needs.
+    // Correlated subqueries rather than joins: a founder with 18 interviews
+    // and 3 portfolio positions must stay ONE row, or every aggregate would
+    // be multiplied by the fan-out. `ORDER BY p.id` keeps the first project
+    // per user deterministic, matching GET /stats.
     const res = await c.env.DB.prepare(
       `SELECT m.user_id, m.completed_at, u.spinout_lab_started_at AS started_at,
-              p.total_funding
+              p.total_funding, p.revenue, p.mrr, p.paying_customers,
+              p.paid_pilot_status,
+              (SELECT COUNT(*) FROM discovery_interviews di
+                WHERE di.project_id = p.id) AS interview_count,
+              (SELECT COUNT(*) FROM portfolio_positions pp
+                WHERE pp.project_id = p.id) AS backed
        FROM spinout_lab_milestones m
        JOIN users u ON u.id = m.user_id
        LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
        WHERE m.milestone_key = 'incorporation_completed'
        ORDER BY m.user_id ASC, p.id ASC`,
     ).all<import('../services/spinoutFundMetrics').GraduateTimingRow>();
-    program = summarizeGraduates(res.results ?? [], SPRINT_DAYS);
+
+    // The incorporation-rate DENOMINATOR: everyone who ever started the Lab.
+    // Counted separately (not derivable from the graduate rows) and left null
+    // on failure, so the rate degrades to "unmeasured" rather than to a
+    // fabricated 100%.
+    let entrants: number | null = null;
+    try {
+      const e = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM users WHERE spinout_lab_started_at IS NOT NULL`,
+      ).first<{ n: number }>();
+      const n = Number(e?.n ?? NaN);
+      if (Number.isFinite(n)) entrants = n;
+    } catch { /* column predates the Lab migrations */ }
+
+    program = summarizeGraduates(res.results ?? [], SPRINT_DAYS, entrants);
   } catch { /* tables predate the Lab migrations */ }
 
   // The fund this workspace reports on — resolved by slug, not name, for the
@@ -819,6 +847,130 @@ spinoutLab.get('/fund-metrics', async (c) => {
   } catch { /* fund tables absent or pre-slug */ }
 
   return c.json({ ok: true, program, fund });
+});
+
+// ---------------------------------------------------------------------------
+// LP applications — the Spin-Out Fund I request-for-access flow.
+//
+// The workspace's application step used to be a dead end: no endpoint, so the
+// page routed applicants through support and said so. These two routes are
+// that endpoint.
+//
+// SECURITY MODEL. An application is an expression of interest, NOT an
+// entitlement. Nothing reads this table to decide what a viewer may see — the
+// access ladder derives from `limited_partners` rows via lpAccessState(), and a
+// submitted application only moves a viewer from 'visitor' to 'pending', which
+// unlocks nothing at all. That is what makes it safe for the applicant to be
+// the author of their own row: the worst a hostile submitter achieves is
+// telling the GP they are interested. Every read and write below is scoped to
+// `user.id` — no route here returns anyone else's application.
+// ---------------------------------------------------------------------------
+
+const LP_FUND_SLUG = 'spinout-fund-i';
+
+/** Self-heal on a cold isolate (migration 165 is the canonical DDL). */
+let _lpAppSchemaReady = false;
+async function ensureLpApplicationsSchema(env: Env): Promise<void> {
+  if (_lpAppSchemaReady) return;
+  await env.DB.exec(
+    'CREATE TABLE IF NOT EXISTS lp_applications ('
+    + 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+    + 'user_id INTEGER NOT NULL, '
+    + "fund_slug TEXT NOT NULL DEFAULT 'spinout-fund-i', "
+    + 'investor_type TEXT NOT NULL, '
+    + 'target_commitment REAL, '
+    + "preference_areas TEXT NOT NULL DEFAULT '[]', "
+    + 'accredited INTEGER NOT NULL DEFAULT 0, '
+    + 'note TEXT, '
+    + "status TEXT NOT NULL DEFAULT 'pending', "
+    + 'reviewed_by INTEGER, '
+    + 'reviewed_at TEXT, '
+    + 'review_note TEXT, '
+    + "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+    + "updated_at TEXT NOT NULL DEFAULT (datetime('now'))"
+    + ')',
+  );
+  await env.DB.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_lp_applications_user_fund '
+    + 'ON lp_applications(user_id, fund_slug)',
+  );
+  _lpAppSchemaReady = true;
+}
+
+// GET /lp-application — the caller's own application, or null.
+spinoutLab.get('/lp-application', async (c) => {
+  const user = await requireAuth(c);
+  const { presentLpApplication } = await import('../services/lpApplications');
+  try {
+    await ensureLpApplicationsSchema(c.env);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM lp_applications WHERE user_id = ? AND fund_slug = ?',
+    ).bind(user.id, LP_FUND_SLUG).first<any>();
+    return c.json({ ok: true, application: presentLpApplication(row) });
+  } catch {
+    // A store that cannot be read must not read as "never applied" — that
+    // would invite a duplicate submission and show the form to someone who
+    // already used it. Say so instead.
+    return c.json({ error: 'Could not load your application status.' }, 503);
+  }
+});
+
+// POST /lp-application — submit or update the caller's own application.
+//
+// Upsert on (user_id, fund_slug): re-submitting edits the existing row rather
+// than stacking duplicates in the GP's queue. An application already APPROVED
+// or DECLINED is not re-openable by the applicant — that is the GP's decision
+// to revisit, so a resubmission after review is refused with a 409 rather than
+// silently resetting the row to pending.
+spinoutLab.post('/lp-application', async (c) => {
+  const user = await requireAuth(c);
+  const { validateLpApplication, presentLpApplication } = await import('../services/lpApplications');
+
+  let body: unknown = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+  const parsed = validateLpApplication(body);
+  if (!parsed.ok) {
+    return c.json({ error: parsed.errors.join(' '), errors: parsed.errors }, 400);
+  }
+
+  try {
+    await ensureLpApplicationsSchema(c.env);
+    const existing = await c.env.DB.prepare(
+      'SELECT status FROM lp_applications WHERE user_id = ? AND fund_slug = ?',
+    ).bind(user.id, LP_FUND_SLUG).first<{ status: string }>();
+    if (existing && (existing.status === 'approved' || existing.status === 'declined')) {
+      return c.json({
+        error: `Your application has already been ${existing.status}. Contact the fund team to revisit it.`,
+        status: existing.status,
+      }, 409);
+    }
+
+    const v = parsed.value;
+    await c.env.DB.prepare(
+      'INSERT INTO lp_applications '
+      + '(user_id, fund_slug, investor_type, target_commitment, preference_areas, accredited, note, status, updated_at) '
+      + "VALUES (?, ?, ?, ?, ?, 1, ?, 'pending', datetime('now')) "
+      + 'ON CONFLICT(user_id, fund_slug) DO UPDATE SET '
+      + 'investor_type = excluded.investor_type, '
+      + 'target_commitment = excluded.target_commitment, '
+      + 'preference_areas = excluded.preference_areas, '
+      + 'accredited = excluded.accredited, '
+      + 'note = excluded.note, '
+      + "status = 'pending', "
+      + "updated_at = datetime('now')",
+    ).bind(
+      user.id, LP_FUND_SLUG, v.investor_type, v.target_commitment,
+      JSON.stringify(v.preference_areas), v.note,
+    ).run();
+
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM lp_applications WHERE user_id = ? AND fund_slug = ?',
+    ).bind(user.id, LP_FUND_SLUG).first<any>();
+    return c.json({ ok: true, application: presentLpApplication(row) });
+  } catch (e) {
+    console.error('[spinout-lab] lp-application submit failed:', (e as Error).message);
+    return c.json({ error: 'Could not submit your application. Please try again.' }, 500);
+  }
 });
 
 export default spinoutLab;

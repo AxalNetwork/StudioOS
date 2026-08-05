@@ -338,20 +338,50 @@ export const LP_STATES = ['visitor', 'pending', 'approved', 'committed', 'voting
 export const LP_STATE_RANK = { visitor: 0, pending: 0, approved: 1, committed: 2, voting: 3 };
 
 /**
- * Derive the LP access state from a GET /api/funds/lp-portal payload.
+ * Derive the LP access state from a GET /api/funds/lp-portal payload, plus the
+ * caller's own LP application if they have one.
  *
  * Deliberately conservative: anything it cannot positively establish degrades
  * DOWN the ladder, never up. A malformed payload yields 'visitor', which shows
  * the public thesis and nothing gated.
  *
+ * WHY AN APPLICATION IS SAFE TO READ HERE. The applicant authors their own
+ * application row, so it must never be able to unlock anything — and it does
+ * not. A pending application moves the ladder from 'visitor' to 'pending'
+ * ONLY, and 'pending' is rank 0 exactly like 'visitor': lpHasReports() and
+ * lpAllocationOpen() are both false for it. Everything above 'pending' still
+ * requires `limited_partners` rows the GP wrote. The application changes what
+ * the page SAYS to the applicant, never what it SHOWS them.
+ *
+ * A holding always wins over an application: someone with a countersigned LPA
+ * whose old application row still reads 'pending' is an approved LP, not an
+ * applicant.
+ *
  * @param {object|null} portal  the raw DTO: { lp_holdings, performance, ... }
- * @returns {{ state: string, commitmentK: number, lpaSigned: boolean, holdings: number }}
+ * @param {object|null} application  the caller's own row from
+ *   GET /api/spinout-lab/lp-application, or null
+ * @returns {{ state: string, commitmentK: number, lpaSigned: boolean,
+ *   holdings: number, applicationStatus: string|null }}
  */
-export function lpAccessState(portal) {
+export function lpAccessState(portal, application = null) {
   const rows = Array.isArray(portal?.performance) ? portal.performance : [];
   const holdings = Array.isArray(portal?.lp_holdings) ? portal.lp_holdings.length : rows.length;
+  const applicationStatus = typeof application?.status === 'string' ? application.status : null;
 
-  if (!holdings) return { state: 'visitor', commitmentK: 0, lpaSigned: false, holdings: 0 };
+  if (!holdings) {
+    // An application can raise the ladder to 'pending' and NO FURTHER — not
+    // even when the GP has marked it approved. An approved applicant with no
+    // `limited_partners` row yet is mid-onboarding, and the reporting archive
+    // that 'approved' would unlock is keyed to a holding they do not have. The
+    // page tells them apart with `applicationStatus` (a display concern);
+    // the ladder stays keyed to what the GP actually wrote into the fund.
+    // Declined or withdrawn returns the viewer to 'visitor' — the state that
+    // shows the thesis and the form again.
+    const state = applicationStatus === 'pending' || applicationStatus === 'approved'
+      ? 'pending'
+      : 'visitor';
+    return { state, commitmentK: 0, lpaSigned: false, holdings: 0, applicationStatus };
+  }
 
   // `commitment` is dollars in the worker DTO (funds.ts:61); the design's whole
   // threshold vocabulary is $K, so convert once here rather than at each site.
@@ -371,7 +401,7 @@ export function lpAccessState(portal) {
   else if (lpaSigned) state = 'approved';
   else state = 'pending';
 
-  return { state, commitmentK, lpaSigned, holdings };
+  return { state, commitmentK, lpaSigned, holdings, applicationStatus };
 }
 
 /** Full reporting archive + package unlock. Mirrors the design's `hasReports`. */
