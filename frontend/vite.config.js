@@ -21,6 +21,10 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
+    // Keep pre-bundled deps at es2020 so Safari doesn't hit a parse error
+    // on newer syntax in third-party packages (Vite 8 uses Rolldown for
+    // optimizeDeps; esbuildOptions is deprecated, use rolldownOptions).
+    rolldownOptions: { output: { format: 'es' } },
     include: [
       'react',
       'react-dom',
