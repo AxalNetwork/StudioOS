@@ -64,6 +64,11 @@ export function createPdfStub() {
   const calls = [];
   let maxY = 0;
   let maxX = 0;
+  // Multi-page documents draw their footers in a second pass over pages that
+  // already exist, so the stub tracks which page each mark landed on the same
+  // way jsPDF does: addPage appends and selects, setPage selects.
+  let pageCount = 1;
+  let page = 1;
 
   const touch = (x, y) => {
     if (Number.isFinite(x) && x > maxX) maxX = x;
@@ -79,8 +84,13 @@ export function createPdfStub() {
   const doc = {
     get maxY() { return maxY; },
     get maxX() { return maxX; },
+    get pageCount() { return pageCount; },
+    get currentPage() { return page; },
     calls,
     state,
+
+    addPage() { pageCount += 1; page = pageCount; calls.push({ op: 'addPage', page }); return doc; },
+    setPage(n) { page = n; return doc; },
 
     setFont(font, style) { state.font = font; state.style = style || 'normal'; },
     setFontSize(size) { state.size = size; },
@@ -92,9 +102,9 @@ export function createPdfStub() {
     setLineDashPattern() {},
     setProperties() {},
 
-    rect(x, y, w, h) { calls.push({ op: 'rect', x, y, w, h }); touch(x + w, y + h); },
-    roundedRect(x, y, w, h) { calls.push({ op: 'rrect', x, y, w, h }); touch(x + w, y + h); },
-    line(x1, y1, x2, y2) { calls.push({ op: 'line', x1, y1, x2, y2 }); touch(Math.max(x1, x2), Math.max(y1, y2)); },
+    rect(x, y, w, h) { calls.push({ op: 'rect', page, x, y, w, h }); touch(x + w, y + h); },
+    roundedRect(x, y, w, h) { calls.push({ op: 'rrect', page, x, y, w, h }); touch(x + w, y + h); },
+    line(x1, y1, x2, y2) { calls.push({ op: 'line', page, x1, y1, x2, y2 }); touch(Math.max(x1, x2), Math.max(y1, y2)); },
 
     getTextWidth(str) { return measure(str); },
 
@@ -123,7 +133,7 @@ export function createPdfStub() {
       const height = lines.length * state.size * lh;
       const width = Math.max(...lines.map((l) => measure(l)));
       const left = options.align === 'right' ? x - width : options.align === 'center' ? x - width / 2 : x;
-      calls.push({ op: 'text', text: lines.join(' '), x, y, left, width, height, size: state.size, align: options.align });
+      calls.push({ op: 'text', page, text: lines.join(' '), x, y, left, width, height, size: state.size, align: options.align });
       // jsPDF's 'top' baseline puts y at the top of the first line; everything
       // this document draws uses it.
       touch(left + width, y + height);
