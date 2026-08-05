@@ -96,9 +96,11 @@ const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCa
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
-// The LP/investor Spin-Out Lab. A separate lazy import (rather than reaching
-// it through FundOpsWorkspace) so /spinout-lab can serve it directly without
-// pulling the whole Fund Ops shell — and so a founder never downloads it.
+// The investor journey's two pages. Separate lazy imports (rather than reaching
+// the workspace through FundOpsWorkspace) so /spinout-lab and
+// /spinout-lab/investor-workspace serve them directly without pulling the whole
+// Fund Ops shell — and so a founder never downloads either chunk.
+const SpinoutLabInvestorPage = lazy(() => import('./pages/SpinoutLabInvestorPage'));
 const SpinoutLabLpWorkspacePage = lazy(() => import('./pages/SpinoutLabLpWorkspacePage'));
 const SpinoutLabStartupPage = lazy(() => import('./pages/SpinoutLabStartupPage'));
 const SpinoutLabDiscoveryPage = lazy(() => import('./pages/SpinoutLabDiscoveryPage'));
@@ -1370,36 +1372,46 @@ function AppInner() {
           means something different depending on who is asking:
 
             - logged out            → the public marketing page
-            - investor / LP         → the LP & INVESTOR WORKSPACE. An LP's
-                                      relationship with the Lab is the FUND:
-                                      thesis, key terms, participation tiers,
-                                      underwriting data on the cohort, the
-                                      reporting archive and commitment-gated
-                                      allocation. It is not the 4-week founder
-                                      program, and showing them the founder
-                                      program was a straight IA bug — they got
-                                      a week timeline and an Apply CTA for a
-                                      cohort application that POST
-                                      /spinout-lab/apply hard-403s for their
-                                      role.
+            - investor / LP         → the FUND-I SALES PAGE (SpinoutLabInvestorPage):
+                                      the conviction step. What founders do
+                                      inside the Lab, the operating stack, why
+                                      the model matters in an AI-native
+                                      environment, Axal's underwriting edge,
+                                      and the studio proof — every CTA routes
+                                      into the deeper LP & Investor Workspace
+                                      below, where the fund terms, raise
+                                      status, reporting and the application
+                                      flow live. An LP's relationship with the
+                                      Lab is the fund, not the 4-week founder
+                                      curriculum.
             - everyone else         → the founder Lab (marketing → application
                                       → the 4-week workspace, per enrollment)
 
           Branched at the ROUTE, not inside SpinoutLabPage, for two reasons:
           SpinoutLabPage loads founder-scoped Lab state on mount, so an investor
-          would fire a request that is not theirs to make; and both pages are
-          lazy, so an investor never downloads the founder chunk (or vice
+          would fire a request that is not theirs to make; and all three pages
+          are lazy, so an investor never downloads the founder chunk (or vice
           versa). Logged-in visitors get the normal app shell either way. */}
       <Route
         path="/spinout-lab"
         element={
           user
             ? authOnly(effectiveRole === 'investor'
-                ? <SpinoutLabLpWorkspacePage />
+                ? <SpinoutLabInvestorPage />
                 : <SpinoutLabPage />)
             : <SpinoutLabPage />
         }
       />
+      {/* Spin-Out Lab · LP & Investor Workspace — the DEEPER second step of the
+          investor journey (fund overview, terms, tiers, underwriting data,
+          reporting archive, allocation, and the apply / request-access flow).
+          First-class route under /spinout-lab so the journey stays in one
+          namespace: /spinout-lab → /spinout-lab/investor-workspace. The same
+          component is also a Fund Ops tab at /funds/lp-workspace (embedded
+          there, standalone here) — one component behind both routes, so the
+          two surfaces cannot drift. Role-gated like the Fund Ops route: this
+          content is for investors and admins only. */}
+      <Route path="/spinout-lab/investor-workspace" element={guard(['admin', 'investor'], <SpinoutLabLpWorkspacePage />)} />
       {/* Lab tool page — the founder's company record (design: workspace tool
           pages). labRoles admits the active lab member's own role; admins can
           open it for support. */}
