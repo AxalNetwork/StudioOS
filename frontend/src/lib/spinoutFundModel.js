@@ -72,6 +72,18 @@ export const FUND = {
 export const ALLOC_THRESHOLD_K = FUND.allocThresholdK;
 
 /**
+ * The `vc_funds.slug` this workspace reports on (migration 163).
+ *
+ * A slug and not a name: an admin can rename a fund at any moment, and a
+ * display-name match would then silently pick the wrong fund — or none — for
+ * every LP statement. Set it on the fund record with
+ * `PATCH /api/funds/:id { "slug": "spinout-fund-i" }`. Until it is set, a viewer
+ * holding exactly one fund still resolves; a viewer holding several does not,
+ * and the workspace says so rather than guessing whose letterhead to use.
+ */
+export const SPINOUT_FUND_SLUG = 'spinout-fund-i';
+
+/**
  * Program-level track record shown in the workspace hero and repeated on the
  * fund brief.
  *
@@ -194,6 +206,55 @@ export const COHORT_4 = [
 export function allocationCandidates() {
   return COHORT_4.filter((c) => c.ic !== 'Track').map((c) => ({ ...c }));
 }
+
+/**
+ * Fund-level fees and expenses, in $M. Operator-maintained like the rest of this
+ * module — there is no ledger endpoint — and used by the quarterly report to
+ * allocate a share of fund-level costs to each LP's capital account. Without
+ * them the account would show a gross portfolio share as if it were NAV.
+ */
+export const FUND_COSTS = {
+  mgmtFeePeriodM: 0.034,
+  mgmtFeeInceptM: 0.129,
+  opexPeriodM: 0.011,
+  opexInceptM: 0.048,
+  carryAccruedM: 0,
+  feeOffsetsM: 0,
+};
+
+/** Fund NAV progression since inception. The final row is derived, not stored. */
+export const FUND_PROGRESSION = [
+  { q: 'Q3 2025', calledM: 0.35, navM: 0.35, dpi: '0.00×', irr: '—' },
+  { q: 'Q4 2025', calledM: 0.90, navM: 0.94, dpi: '0.00×', irr: '+4.4%' },
+  { q: 'Q1 2026', calledM: 1.60, navM: 1.82, dpi: '0.00×', irr: '+11.2%' },
+  // navM omitted on purpose: the current quarter is computed from the position
+  // list so the terminal row always ties to the portfolio table.
+  { q: 'Q2 2026', calledM: 2.40, dpi: '0.00×', irr: '+18.6%', current: true },
+];
+
+/** Cohort throughput. `code` joins to the position list's `cohort`. */
+export const COHORT_HISTORY = [
+  { name: 'Cohort 1', code: 'C1', started: 'Sep 2025', graduated: '9 of 10', readiness: 55 },
+  { name: 'Cohort 2', code: 'C2', started: 'Jan 2026', graduated: '10 of 11', readiness: 58 },
+  { name: 'Cohort 3', code: 'C3', started: 'Apr 2026', graduated: '8 of 9', readiness: 64 },
+  { name: 'Cohort 4', code: 'C4', started: 'Jul 2026', graduated: 'In program', readiness: 41, inProgram: true },
+];
+
+/** Sector exposure, as stated by the GP. Percentages are of portfolio value. */
+export const SECTOR_EXPOSURE = [
+  { label: 'B2B SaaS / workflow', pct: 38 },
+  { label: 'Data & infrastructure', pct: 24 },
+  { label: 'Deep tech / materials', pct: 19 },
+  { label: 'Health & clinical', pct: 11 },
+  { label: 'Climate', pct: 8 },
+];
+
+/** Cumulative deployment by quarter, in $M. The opening bar absorbs the residual
+ *  so the series always pins to the position list's total invested. */
+export const DEPLOYMENT_BY_QUARTER = [
+  { q: 'Q4 25', m: 0.31 },
+  { q: 'Q1 26', m: 0.46 },
+];
 
 /**
  * Governance and service providers named on the fund brief.

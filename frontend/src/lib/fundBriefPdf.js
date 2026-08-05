@@ -4,12 +4,11 @@
 // graduationCertificatePdf.js / scoringReportPdf.js: no html2canvas, so the
 // download is sharp at any zoom, small enough to email, and prints correctly.
 //
-// GEOMETRY. The design (`Fund Brief OnePager.dc.html`) is authored on a letter
-// page box, which at 96dpi is 816 × 1056 CSS px; letter at 72dpi is 612 × 792
-// pt. Every length in that file therefore maps to points by ×0.75, so this
-// module works in the design's own px throughout and converts once, at the
-// drawing call (`pt()`). Design numbers can be transcribed here verbatim and
-// compared against the source by eye.
+// GEOMETRY lives in lib/pdfBoard.js, shared with the quarterly report: the
+// design is authored on a letter page box (816 × 1056 CSS px at 96dpi), letter
+// at 72dpi is 612 × 792 pt, so every length maps to points by ×0.75. This module
+// works in the design's own px throughout and converts at the drawing call.
+// Design numbers can be transcribed here verbatim and compared by eye.
 //
 // DELIBERATELY NOT REPRODUCED from the export, each for the same reason the
 // certificate PDF gives — a raster would defeat a vector document:
@@ -21,21 +20,15 @@
 // Fonts fall back to the PDF core faces: Helvetica for Inter, Courier for the
 // tabular Roboto Mono figures.
 import { fundBriefModel, fundBriefFilename } from './fundBriefViewModel.js';
+import { BOARD, board } from './pdfBoard.js';
 
-const BOARD_W = 816;
-const BOARD_H = 1056;
+const BOARD_W = BOARD.w;
+const BOARD_H = BOARD.h;
 const PAD = 42;
 const COL_GAP = 26;
 const COL_W = (BOARD_W - PAD * 2 - COL_GAP) / 2; // 353
 const RIGHT_X = PAD + COL_W + COL_GAP;           // 421
 const RIGHT_EDGE = BOARD_W - PAD;                // 774
-
-const pt = (px) => px * 0.75;
-
-const hex = (h) => {
-  const s = h.replace('#', '');
-  return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];
-};
 
 const C = {
   ink: '#18181b',
@@ -57,70 +50,6 @@ const C = {
   mast: ['#140c26', '#1c1236', '#26164a'],
 };
 
-/** Thin wrapper giving jsPDF a design-px vocabulary. */
-function board(doc) {
-  const setFill = (h) => { const [r, g, b] = hex(h); doc.setFillColor(r, g, b); };
-  const setDraw = (h) => { const [r, g, b] = hex(h); doc.setDrawColor(r, g, b); };
-  const setText = (h) => { const [r, g, b] = hex(h); doc.setTextColor(r, g, b); };
-  const spacing = (n) => { if (typeof doc.setCharSpace === 'function') doc.setCharSpace(pt(n || 0)); };
-
-  const font = ({ size = 11, style = 'normal', mono = false }) => {
-    doc.setFont(mono ? 'courier' : 'helvetica', style);
-    doc.setFontSize(pt(size));
-  };
-
-  const api = {
-    rect(x, y, w, h, fill) { setFill(fill); doc.rect(pt(x), pt(y), pt(w), pt(h), 'F'); },
-
-    rrect(x, y, w, h, r, { fill, stroke, lineWidth = 1 } = {}) {
-      if (fill) setFill(fill);
-      if (stroke) { setDraw(stroke); doc.setLineWidth(pt(lineWidth)); }
-      const mode = fill && stroke ? 'FD' : fill ? 'F' : 'S';
-      doc.roundedRect(pt(x), pt(y), pt(w), pt(h), pt(r), pt(r), mode);
-    },
-
-    hline(x1, x2, y, color, width = 1) {
-      setDraw(color);
-      doc.setLineWidth(pt(width));
-      doc.line(pt(x1), pt(y), pt(x2), pt(y));
-    },
-
-    /** Dotted rule — jsPDF has setLineDashPattern; fall back to solid-faint. */
-    dotted(x1, x2, y, color) {
-      setDraw(color);
-      doc.setLineWidth(pt(1));
-      if (typeof doc.setLineDashPattern === 'function') {
-        doc.setLineDashPattern([pt(1), pt(2)], 0);
-        doc.line(pt(x1), pt(y), pt(x2), pt(y));
-        doc.setLineDashPattern([], 0);
-      } else {
-        doc.line(pt(x1), pt(y), pt(x2), pt(y));
-      }
-    },
-
-    width(str, opts = {}) { font(opts); return doc.getTextWidth(String(str)) / 0.75; },
-
-    wrap(str, maxW, opts = {}) { font(opts); return doc.splitTextToSize(String(str), pt(maxW)); },
-
-    /**
-     * Draw text with `y` as the TOP of the first line (jsPDF's 'top' baseline),
-     * which is how the design's boxes are specified. Returns the y the text
-     * block ends at, so callers can flow.
-     */
-    text(str, x, y, opts = {}) {
-      const { size = 11, color = C.ink, align = 'left', lineHeight = 1.25, ls = 0, maxW } = opts;
-      font(opts);
-      setText(color);
-      spacing(ls);
-      const lines = maxW ? doc.splitTextToSize(String(str), pt(maxW)) : [String(str)];
-      doc.text(lines, pt(x), pt(y), { align, baseline: 'top', lineHeightFactor: lineHeight });
-      spacing(0);
-      return y + lines.length * size * lineHeight;
-    },
-  };
-  return api;
-}
-
 /**
  * Section heading: violet uppercase label over a 1.5px violet rule, as used
  * down both columns of the design. Returns the y content should start at.
@@ -135,7 +64,7 @@ function sectionLabel(b, x, w, y, label, right) {
 
 /* ------------------------------------------------------------------ masthead */
 
-function drawMasthead(b, doc, m) {
+function drawMasthead(b, m) {
   // The band has to be painted before the text sits on it, and it has to stop
   // exactly where the masthead ends — a fixed height would either clip the
   // thesis or leave a dark stripe running down behind the body. So measure the
@@ -161,22 +90,8 @@ function drawMasthead(b, doc, m) {
   const thesisBottom = thesisTop + lines(m.thesis, THESIS_W, { size: 13 }) * 13 * 1.6;
   const height = thesisBottom + 22;
 
-  // Horizontal gradient in slices (jsPDF has no gradient primitive). 100deg in
-  // the export is close enough to horizontal at this aspect ratio.
-  const SLICES = 96;
-  const stops = C.mast.map(hex);
-  for (let i = 0; i < SLICES; i++) {
-    const t = i / (SLICES - 1);
-    const [a, bb, k] = t < 0.42
-      ? [stops[0], stops[1], t / 0.42]
-      : [stops[1], stops[2], (t - 0.42) / 0.58];
-    const mix = a.map((v, j) => Math.round(v + (bb[j] - v) * k));
-    doc.setFillColor(mix[0], mix[1], mix[2]);
-    // +1px overlap so slice seams never show as hairlines at high zoom, clamped
-    // at the last slice so the band does not bleed past the trimmed page.
-    const sx = (i * BOARD_W) / SLICES;
-    doc.rect(pt(sx), 0, pt(Math.min(BOARD_W / SLICES + 1, BOARD_W - sx)), pt(height), 'F');
-  }
+  // 100deg in the export is close enough to horizontal at this aspect ratio.
+  b.gradientBand(0, 0, BOARD_W, height, C.mast, 0.42);
 
   // --- monogram + wordmark
   b.rrect(PAD, 22, 26, 26, 7, { fill: '#7c3aed' });
@@ -377,7 +292,7 @@ export function renderFundBrief(doc, vm) {
   // transparent, which some viewers render dark.
   b.rect(0, 0, BOARD_W, BOARD_H, C.white);
 
-  let y = drawMasthead(b, doc, vm.meta);
+  let y = drawMasthead(b, vm.meta);
   y = drawRaiseStrip(b, vm.raise, y);
 
   const bodyTop = y + 14;

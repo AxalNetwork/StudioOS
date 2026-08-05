@@ -18,6 +18,24 @@ export interface VcFund {
   fund_size_cents: number;
   carried_interest: number;
   management_fee: number;
+  // GP of record + service providers (migration 163). Every one is nullable and
+  // stays NULL until the GP sets it; LP-facing documents render an unset value
+  // as "not recorded" rather than inventing a name. `gp_name`/`gp_title`/
+  // `gp_entity` are the strings as they appear ON THE DOCUMENT, which is not
+  // necessarily the linked account's profile — a report is signed in a legal
+  // capacity, and the duty usually sits with the management entity.
+  gp_user_id: number | null;
+  gp_name: string | null;
+  gp_title: string | null;
+  gp_email: string | null;
+  gp_entity: string | null;
+  fund_admin: string | null;
+  auditor: string | null;
+  legal_counsel: string | null;
+  custodian: string | null;
+  valuation_policy: string | null;
+  /** Stable handle (e.g. 'spinout-fund-i') so code never matches on a display name. */
+  slug: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -42,6 +60,11 @@ export interface LimitedPartner {
 const FUND_PATCHABLE = new Set([
   'name', 'vintage_year', 'total_commitment', 'deployed_capital', 'lp_count', 'status',
   'lpa_doc_id', 'fund_size_cents', 'carried_interest', 'management_fee',
+  // Migration 163 — set by the GP through PATCH /api/funds/:id. These are what
+  // an LP-facing document states about who stands behind its numbers, so they
+  // are admin-writable and never derived.
+  'gp_user_id', 'gp_name', 'gp_title', 'gp_email', 'gp_entity',
+  'fund_admin', 'auditor', 'legal_counsel', 'custodian', 'valuation_policy', 'slug',
 ]);
 const LP_PATCHABLE = new Set([
   'commitment_amount', 'invested_amount', 'returns', 'status',
@@ -52,6 +75,10 @@ const LP_PATCHABLE = new Set([
 export const Funds = {
   async getById(env: Env, id: number) {
     return env.DB.prepare(`SELECT * FROM vc_funds WHERE id = ?`).bind(id).first<VcFund>();
+  },
+  /** Resolve by the stable handle (migration 163), never by display name. */
+  async bySlug(env: Env, slug: string) {
+    return env.DB.prepare(`SELECT * FROM vc_funds WHERE slug = ?`).bind(slug).first<VcFund>();
   },
   async list(env: Env, status?: string) {
     if (status) {
@@ -105,15 +132,29 @@ export const LPs = {
     return env.DB.prepare(`SELECT * FROM limited_partners WHERE id = ?`).bind(id).first<LimitedPartner>();
   },
   async listByFund(env: Env, fundId: number) {
+    // COALESCE, not `u.email, u.name`: limited_partners carries its OWN name and
+    // email (operator-entered when an LP has no platform account yet), and
+    // `lp.*` already selects them. Selecting the users columns under the same
+    // bare names made the later duplicate win, so every LP row with a NULL
+    // user_id came back with name/email NULL — exactly the unlinked LPs whose
+    // only identity IS the operator-entered pair. The account's values still
+    // take precedence when the row is linked.
     return env.DB.prepare(
-      `SELECT lp.*, u.email, u.name FROM limited_partners lp
-       LEFT JOIN users u ON u.id = lp.user_id
-       WHERE lp.fund_id = ? ORDER BY lp.commitment_amount DESC`
+      `SELECT lp.*,
+              COALESCE(u.email, lp.email) AS email,
+              COALESCE(u.name,  lp.name)  AS name,
+              u.id AS account_user_id
+         FROM limited_partners lp
+         LEFT JOIN users u ON u.id = lp.user_id
+        WHERE lp.fund_id = ? ORDER BY lp.commitment_amount DESC`
     ).bind(fundId).all();
   },
   async listByUser(env: Env, userId: number) {
     return env.DB.prepare(
-      `SELECT lp.*, f.name AS fund_name, f.status AS fund_status, f.carried_interest, f.management_fee
+      `SELECT lp.*, f.name AS fund_name, f.status AS fund_status, f.carried_interest, f.management_fee,
+              f.slug AS fund_slug, f.vintage_year AS fund_vintage,
+              f.gp_name, f.gp_title, f.gp_email, f.gp_entity,
+              f.fund_admin, f.auditor, f.legal_counsel, f.custodian, f.valuation_policy
        FROM limited_partners lp JOIN vc_funds f ON f.id = lp.fund_id
        WHERE lp.user_id = ? ORDER BY lp.created_at DESC`
     ).bind(userId).all();

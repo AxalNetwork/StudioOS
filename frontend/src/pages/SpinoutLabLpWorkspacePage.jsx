@@ -34,8 +34,11 @@ import { api } from '../lib/api';
 import {
   fundModel, money, lpAccessState, lpHasReports, lpAllocationOpen,
   ALLOC_THRESHOLD_K, LP_STATES, FUND, PROGRAM, THESIS, fundTerms,
-  TIERS, TIER_RIGHTS, PROCESS_STEPS, allocationCandidates,
+  TIERS, TIER_RIGHTS, PROCESS_STEPS, allocationCandidates, SPINOUT_FUND_SLUG,
 } from '../lib/spinoutFundModel';
+import {
+  selectHolding, quarterOf, lastClosedQuarter, fmtDate,
+} from '../lib/quarterlyReportViewModel';
 
 /* ---------------------------------------------------------------- primitives */
 
@@ -140,16 +143,28 @@ const LADDER = [
   [`Allocator · $${ALLOC_THRESHOLD_K}K`, 3, 'Allocation preferences, decision rights, follow-on co-invest.'],
 ];
 
-const ARCHIVE = [
-  ['Q2 2026 quarterly report', 'Q2 2026', 'Jul 14, 2026', 'Quarterly'],
-  ['Cohort 3 portfolio update', 'Q2 2026', 'Jun 30, 2026', 'Update'],
-  ['Annual audited statements 2025', 'FY 2025', 'Mar 28, 2026', 'Audited'],
-  ['K-1 tax package 2025', 'FY 2025', 'Mar 12, 2026', 'Tax'],
-  ['Reserve policy memo', '—', 'Feb 09, 2026', 'Memo'],
-  ['Q1 2026 quarterly report', 'Q1 2026', 'Apr 15, 2026', 'Quarterly'],
+// Documents this platform does NOT produce. The design listed them beside the
+// quarterly report as though every row were the same kind of thing; an audited
+// statement comes from the auditor and a K-1 from the fund administrator, and a
+// download button next to either would promise something no code here can
+// deliver. They stay listed — an LP is entitled to know what the reporting
+// package contains — with their real provenance stated.
+const EXTERNAL_DOCS = [
+  {
+    key: 'audited',
+    title: `Annual audited financial statements`,
+    period: 'Annual',
+    type: 'Audited',
+    from: 'Issued by the fund auditor',
+  },
+  {
+    key: 'k1',
+    title: 'Schedule K-1 tax package',
+    period: 'Annual',
+    type: 'Tax',
+    from: 'Issued by the fund administrator',
+  },
 ];
-
-const ARCHIVE_FILTERS = ['all', 'Quarterly', 'Update', 'Audited', 'Tax', 'Memo'];
 
 /* ------------------------------------------------------------------- page */
 
@@ -172,6 +187,8 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     Object.fromEntries(allocationCandidates().map((c) => [c.company, c.allocDefault ?? 0])));
   const [briefBusy, setBriefBusy] = useState(false);
   const [briefErr, setBriefErr] = useState('');
+  const [reportBusy, setReportBusy] = useState('');
+  const [reportErr, setReportErr] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -203,7 +220,84 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
 
   const commitLabel = derived.commitmentK > 0 ? `$${derived.commitmentK}K` : '—';
   const raisePct = Math.round((FUND.committed / FUND.target) * 100);
-  const archive = archiveFilter === 'all' ? ARCHIVE : ARCHIVE.filter((r) => r[3] === archiveFilter);
+
+  // Which of the viewer's holdings this workspace reports on. The slug first
+  // (stable across a rename); a viewer with exactly one holding resolves without
+  // it. A viewer with several and no slug set is ambiguous, and the reporting
+  // section says so — issuing a statement under the wrong fund's letterhead is
+  // worse than issuing none.
+  const holding = useMemo(
+    () => selectHolding(portal, { fundSlug: SPINOUT_FUND_SLUG }) || selectHolding(portal, {}),
+    [portal],
+  );
+  const ambiguousFund = !holding && (portal?.performance?.length ?? 0) > 1;
+
+  // The archive: periods the GP has actually issued, an always-available interim
+  // statement of the viewer's own account, then the documents that come from
+  // outside the platform.
+  const reportRows = useMemo(() => {
+    const issued = (Array.isArray(portal?.report_periods) ? portal.report_periods : [])
+      .filter((p) => !holding || p.fund_id === holding.fund_id)
+      .map((p) => ({
+        key: `period-${p.id}`,
+        title: `${p.period} quarterly LP report`,
+        period: p.period,
+        issued: fmtDate(p.issued_at),
+        type: 'Quarterly',
+        kind: 'issued',
+        periodRow: p,
+      }));
+    const now = new Date();
+    const interim = {
+      key: 'interim',
+      title: 'Interim capital account statement',
+      period: quarterOf(now).label,
+      issued: 'On demand',
+      type: 'Statement',
+      kind: 'interim',
+    };
+    return [...issued, interim, ...EXTERNAL_DOCS.map((d) => ({ ...d, kind: 'external', issued: '—' }))];
+  }, [portal, holding]);
+
+  const archive = archiveFilter === 'all'
+    ? reportRows
+    : reportRows.filter((r) => r.type === archiveFilter);
+  const ARCHIVE_FILTERS = ['all', ...new Set(reportRows.map((r) => r.type))];
+
+  /**
+   * Render one LP statement. The document is built from `portal` — the viewer's
+   * own rows — so an LP can only ever produce their own. An issued period also
+   * carries the GP's letter; the interim statement has none, so it comes out
+   * stamped DRAFT, which is exactly what it is.
+   */
+  const generateReport = async (row) => {
+    if (!holding) {
+      setReportErr(ambiguousFund
+        ? 'You hold more than one fund and this fund has no slug set, so the statement cannot be attributed. Ask the GP to set the fund slug.'
+        : 'No limited-partner position was found for your account in this fund.');
+      return;
+    }
+    setReportBusy(row.key);
+    setReportErr('');
+    try {
+      const { exportQuarterlyReportPdf } = await import('../lib/quarterlyReportPdf');
+      const isIssued = row.kind === 'issued';
+      await exportQuarterlyReportPdf({
+        payload: portal,
+        fundId: holding.fund_id,
+        period: isIssued
+          ? { ...quarterOf(new Date(`${row.periodRow.period_end}T12:00:00`)), label: row.periodRow.period }
+          : lastClosedQuarter(new Date()),
+        issuedAt: new Date(),
+        narrative: isIssued ? row.periodRow.narrative : null,
+        issued: isIssued,
+      });
+    } catch (e) {
+      setReportErr(e?.message || 'Could not generate the statement.');
+    } finally {
+      setReportBusy('');
+    }
+  };
 
   const kpis = [
     ['Gross MOIC', M.grossMoic.toFixed(2) + '×', 'Held ÷ invested'],
@@ -537,33 +631,69 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
               </div>
             </div>
             <div className="overflow-hidden rounded-xl border border-gray-100 dark:border-gray-800">
-              {archive.map(([title, period, issued, type]) => (
-                <div key={title} className="grid grid-cols-[1.9fr_.7fr_.8fr_auto] items-center gap-2 border-b border-gray-100 dark:border-gray-800 px-3 py-2.5 last:border-b-0">
-                  <div className="min-w-0">
-                    <div className={`truncate text-xs font-semibold ${hasReports ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}>{title}</div>
-                    <div className="text-[10px] text-gray-400 dark:text-gray-500">{type}</div>
+              {archive.map((row) => {
+                const generable = row.kind !== 'external' && hasReports && !!holding;
+                return (
+                  <div key={row.key} className="grid grid-cols-[1.9fr_.7fr_.8fr_auto] items-center gap-2 border-b border-gray-100 dark:border-gray-800 px-3 py-2.5 last:border-b-0">
+                    <div className="min-w-0">
+                      <div className={`truncate text-xs font-semibold ${hasReports ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}`}>{row.title}</div>
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500">
+                        {row.kind === 'external' ? row.from
+                          : row.kind === 'interim' ? 'Generated from your account · marked draft until the GP issues the period'
+                            : 'Issued by the General Partner'}
+                      </div>
+                    </div>
+                    <div className={`${MONO} text-[11px] text-gray-600 dark:text-gray-400`}>{row.period}</div>
+                    <div className={`${MONO} text-[11px] text-gray-500 dark:text-gray-400`}>{row.issued}</div>
+                    <div>
+                      {generable ? (
+                        <button
+                          type="button"
+                          onClick={() => generateReport(row)}
+                          disabled={reportBusy === row.key}
+                          data-testid={`generate-report-${row.key}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/40 px-2.5 py-1 text-[10.5px] font-bold text-violet-700 dark:text-violet-300 disabled:opacity-60"
+                        >
+                          {reportBusy === row.key
+                            ? <Loader2 size={11} className="animate-spin" aria-hidden="true" />
+                            : <FileDown size={11} aria-hidden="true" />}
+                          {reportBusy === row.key ? 'Building…' : row.kind === 'interim' ? 'Draft' : 'Download'}
+                        </button>
+                      ) : row.kind === 'external' ? (
+                        <span className="text-[10.5px] font-semibold text-gray-400 dark:text-gray-500">Not in platform</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-gray-400 dark:text-gray-500">
+                          <Lock size={11} /> Locked
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className={`${MONO} text-[11px] text-gray-600 dark:text-gray-400`}>{period}</div>
-                  <div className={`${MONO} text-[11px] text-gray-500 dark:text-gray-400`}>{issued}</div>
-                  <div>
-                    {hasReports ? (
-                      <Chip tone="violet">Available</Chip>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-gray-400 dark:text-gray-500">
-                        <Lock size={11} /> Locked
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {archive.length === 0 && (
                 <div className="px-3 py-6 text-center text-xs text-gray-400 dark:text-gray-500">No documents of this type.</div>
               )}
             </div>
+            {reportErr && (
+              <p className="mt-2 text-[11.5px] text-red-600 dark:text-red-400">{reportErr}</p>
+            )}
             {!hasReports && (
               <p className="mt-3 text-[11.5px] text-gray-400 dark:text-gray-500">
                 Archive metadata is visible to invited investors; documents unlock after acceptance.
                 Committed LPs receive the complete reporting package below.
+              </p>
+            )}
+            {hasReports && !holding && (
+              <p className="mt-3 text-[11.5px] text-amber-700 dark:text-amber-400">
+                {ambiguousFund
+                  ? 'You hold more than one fund and this one has no slug set, so a statement cannot be attributed to it. Ask the GP to set the fund slug.'
+                  : 'No limited-partner position was found for your account in this fund, so there is nothing to report on yet.'}
+              </p>
+            )}
+            {hasReports && holding && !portal?.report_periods?.length && (
+              <p className="mt-3 text-[11.5px] text-gray-500 dark:text-gray-400">
+                The General Partner has not issued a quarterly period yet. The interim statement above is generated
+                from your own commitment, capital calls and distributions, and is marked draft until a period is issued.
               </p>
             )}
             <div className="mt-4 rounded-xl border border-violet-200 dark:border-violet-900 bg-violet-50/60 dark:bg-violet-950/20 p-4">
@@ -632,6 +762,9 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           </div>
         </div>
       </div>
+
+      {/* GP desk — admin only */}
+      {isAdmin && <GpReportDesk />}
 
       {/* allocation gate */}
       <div>
@@ -756,6 +889,154 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         description="Curated capital participation in Axal VC Spin-Out Fund I — thesis, key terms, underwriting data, reporting, and commitment-gated allocation."
       />
       {loading ? <LpSkeleton /> : body}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- GP desk */
+
+/**
+ * The General Partner's side of the reporting loop: pick a fund, pick a limited
+ * partner, produce that LP's statement for a period.
+ *
+ * It reads GET /api/funds/:id/lp-report/:lpId, which answers in the same shape
+ * as the LP's own /lp-portal — so this desk and the LP's download are literally
+ * the same renderer over the same numbers, and the copy the GP reviews is the
+ * copy the LP receives.
+ *
+ * What it deliberately does NOT do yet is author the GP letter. That is prose
+ * attributed to a fiduciary, the endpoint to store it exists
+ * (POST /api/funds/:id/report-periods), and a text editor for it is the next
+ * piece of work — not something to fake with generated commentary.
+ */
+function GpReportDesk() {
+  const [funds, setFunds] = useState([]);
+  const [fundId, setFundId] = useState('');
+  const [lps, setLps] = useState([]);
+  const [lpId, setLpId] = useState('');
+  const [periods, setPeriods] = useState([]);
+  const [periodKey, setPeriodKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    let live = true;
+    api.fundsList()
+      .then((r) => { if (live) setFunds(r?.items || []); })
+      .catch((e) => { if (live) setErr(e?.message || 'Could not load funds.'); });
+    return () => { live = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!fundId) { setLps([]); setPeriods([]); return undefined; }
+    let live = true;
+    setErr('');
+    Promise.all([
+      api.fundsLpsList(fundId).catch(() => ({ items: [] })),
+      api.fundsReportPeriods(fundId).catch(() => ({ items: [] })),
+    ]).then(([l, p]) => {
+      if (!live) return;
+      setLps(l?.items || []);
+      setPeriods(p?.items || []);
+      setLpId('');
+    });
+    return () => { live = false; };
+  }, [fundId]);
+
+  // The last four closed quarters, plus any period the fund already has a row
+  // for. A GP can always produce a statement for a quarter that has ended; only
+  // an issued row carries a letter.
+  const periodOptions = useMemo(() => {
+    const out = [];
+    let cursor = new Date();
+    for (let i = 0; i < 4; i++) {
+      const q = lastClosedQuarter(cursor);
+      const row = periods.find((p) => p.period === q.label);
+      out.push({ ...q, key: q.label, status: row?.status || 'none', row });
+      cursor = new Date(`${q.start}T12:00:00`);
+    }
+    return out;
+  }, [periods]);
+
+  const selected = periodOptions.find((p) => p.key === periodKey) || periodOptions[0];
+
+  const generate = async () => {
+    if (!fundId || !lpId || !selected) return;
+    setBusy(true); setErr(''); setNote('');
+    try {
+      const payload = await api.fundsLpReport(fundId, lpId);
+      const { exportQuarterlyReportPdf } = await import('../lib/quarterlyReportPdf');
+      const issued = selected.status === 'issued';
+      const out = await exportQuarterlyReportPdf({
+        payload,
+        fundId: Number(fundId),
+        period: { ...selected, label: selected.label },
+        issuedAt: new Date(),
+        narrative: selected.row?.narrative || null,
+        issued,
+      });
+      setNote(`${out.filename} · ${out.pages} pages${out.draft ? ' · marked DRAFT' : ''}`);
+    } catch (e) {
+      setErr(e?.message || 'Could not generate that statement.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const SELECT = 'rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 '
+    + 'px-2.5 py-2 text-xs text-gray-700 dark:text-gray-300';
+
+  return (
+    <div>
+      <SectionLabel right={<Chip tone="violet">GP only</Chip>}>
+        Generate an LP statement
+      </SectionLabel>
+      <div className={`${CARD} p-5`} data-testid="gp-report-desk">
+        <p className="text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+          Produces a named limited partner&apos;s quarterly report from their own commitment, capital calls and
+          distributions, over the fund model this workspace shows. The document is stamped
+          <strong className="text-gray-700 dark:text-gray-300"> DRAFT</strong> until the period is issued and
+          carries a General Partner letter.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-4">
+          <select value={fundId} onChange={(e) => setFundId(e.target.value)} className={SELECT} aria-label="Fund">
+            <option value="">Select fund…</option>
+            {funds.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+          <select value={lpId} onChange={(e) => setLpId(e.target.value)} className={SELECT} aria-label="Limited partner" disabled={!lps.length}>
+            <option value="">{lps.length ? 'Select LP…' : 'No LPs on this fund'}</option>
+            {lps.map((l) => (
+              <option key={l.id} value={l.id}>{l.name || l.email || `LP #${l.id}`}</option>
+            ))}
+          </select>
+          <select value={periodKey} onChange={(e) => setPeriodKey(e.target.value)} className={SELECT} aria-label="Period">
+            {periodOptions.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}{p.status === 'issued' ? ' · issued' : p.status === 'draft' ? ' · draft' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={generate}
+            disabled={busy || !fundId || !lpId}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+          >
+            {busy ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : <FileDown size={13} aria-hidden="true" />}
+            {busy ? 'Building…' : 'Generate'}
+          </button>
+        </div>
+        {note && <p className="mt-3 text-[11.5px] text-green-700 dark:text-green-400">{note}</p>}
+        {err && <p className="mt-3 text-[11.5px] text-red-600 dark:text-red-400">{err}</p>}
+        <p className="mt-3 text-[11px] leading-relaxed text-gray-400 dark:text-gray-500">
+          The signature block, the administrator, auditor, counsel and custody lines come from the fund record
+          (<span className={MONO}>vc_funds</span>). Anything unset prints as &ldquo;not recorded&rdquo; rather than a
+          name — set them with <span className={MONO}>PATCH /api/funds/:id</span>. Writing the period letter and
+          issuing a period is <span className={MONO}>POST /api/funds/:id/report-periods</span>; no editor for it
+          ships in this change.
+        </p>
+      </div>
     </div>
   );
 }

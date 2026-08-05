@@ -1920,6 +1920,15 @@ export const api = {
   fundsSignLpa: (lpId) =>
     request(`/funds/lps/${lpId}/sign-lpa`, { method: 'POST', body: JSON.stringify({}) }),
   fundsLpPortal: () => request('/funds/lp-portal'),
+  // GP-only. Returns ONE limited partner's reporting data in the same shape as
+  // fundsLpPortal, so the quarterly-report renderer is a single code path
+  // whether the LP downloads their own statement or the GP produces it.
+  fundsLpReport: (fundId, lpId) => request(`/funds/${fundId}/lp-report/${lpId}`),
+  // GP-only. Quarterly reporting periods; a period is a DRAFT until issued, and
+  // issuing freezes the fund-level snapshot and the GP's letter.
+  fundsReportPeriods: (fundId) => request(`/funds/${fundId}/report-periods`),
+  fundsSaveReportPeriod: (fundId, data) =>
+    request(`/funds/${fundId}/report-periods`, { method: 'POST', body: JSON.stringify(data) }),
   fundsSyndication: () => request('/funds/syndication'),
   fundsDistributions: (fund_id) => request(`/funds/distributions?fund_id=${fund_id}`),
   fundsExecuteDistribution: (data) =>
