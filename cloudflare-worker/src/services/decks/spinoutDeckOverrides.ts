@@ -185,13 +185,16 @@ export function applySpinoutOverrides(
   // Drop the gaps that the overrides answer. `gapFields` is index-aligned with
   // `gaps`; an untagged gap (null) is never dropped.
   const gapFields = bundle.gapFields || [];
+  const gapSections = bundle.gapSections || [];
   const gaps: string[] = [];
   const nextGapFields: Array<string | null> = [];
+  const nextGapSections: Array<string | null> = [];
   bundle.gaps.forEach((g, i) => {
     const field = gapFields[i] ?? null;
     if (field && appliedKeys.has(field)) return;
     gaps.push(g);
     nextGapFields.push(field);
+    nextGapSections.push(gapSections[i] ?? null);
   });
 
   return {
@@ -200,6 +203,7 @@ export function applySpinoutOverrides(
     fields: flattenSpinoutDeckData(data),
     gaps,
     gapFields: nextGapFields,
+    gapSections: nextGapSections,
     draft: bundle.programDay < 28 || gaps.length > 0,
     overrides: applied,
     overriddenKeys: Object.keys(applied).sort(),

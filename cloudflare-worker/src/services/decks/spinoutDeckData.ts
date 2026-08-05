@@ -118,6 +118,19 @@ export interface SpinoutDeckBundle {
    * moment a thesis exists, whatever wrote it.
    */
   gapFields?: Array<string | null>;
+  /**
+   * Index-aligned with `gaps`: which SLIDE each gap belongs to, as a key of
+   * `SpinoutDeckData` (`cover`, `problem`, `validation`, …).
+   *
+   * This is the Pitch Deck Builder's readiness contract. `fields` cannot carry
+   * it: `flattenSpinoutDeckData` omits empty scalars, so a template FALLBACK
+   * figure and a founder-authored one are indistinguishable there, and a
+   * project with nothing filled in yields a field map with zero empty entries.
+   * Counting filled-vs-total over `fields` therefore reports every slide
+   * complete for a founder who has done no work — which is exactly what the
+   * builder used to show. Readiness has to be read from the gaps instead.
+   */
+  gapSections?: Array<string | null>;
   draft: boolean;
   programDay: number;
   /** Task #55 — flat dotted-key field map for the editor's hydrate() contract. */
@@ -249,7 +262,30 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   // override of that field can retire it. Omit it for gaps no single scalar
   // can answer (missing chart data, an empty advisor roster).
   const gapFields: Array<string | null> = [];
-  const gap = (s: string, field: string | null = null) => { gaps.push(s); gapFields.push(field); };
+  // Third arg is the SLIDE the gap belongs to, and it is the signal the Pitch
+  // Deck Builder needs most.
+  //
+  // WHY. A slide whose module is empty still renders: the FALLBACK block below
+  // supplies template figures so the deck is never broken mid-sprint, and every
+  // one of those substitutions raises a gap. But `fields` — the flat map the
+  // builder consumes — cannot carry that distinction: flattenSpinoutDeckData
+  // SKIPS empty scalars, so a fallback value and a founder-authored value look
+  // identical in it, and an all-empty project produced a field map with zero
+  // empty entries. The builder read that as "every slide complete" and captioned
+  // eleven slides of template content "Data populated from your work".
+  //
+  // So the gap list is the readiness contract, and it has to say WHICH SLIDE.
+  // Section names match the keys of SpinoutDeckData (and SLIDE_META.prefix in
+  // frontend/src/lib/pitchDeckViewModel.js) — asserted in the tests, because a
+  // typo here would silently mark a slide permanently ready.
+  const gapSections: Array<string | null> = [];
+  const gap = (s: string, field: string | null = null, section: string | null = null) => {
+    gaps.push(s);
+    gapFields.push(field);
+    // A field key already names its section; only tag explicitly when there is
+    // no field (chart series, rosters, multi-field modules).
+    gapSections.push(section || (field ? field.split('.')[0] : null));
+  };
 
   const m = src.meta;
   const remaining = clamp(Number(m.days_remaining ?? PROGRAM_DAYS), 0, PROGRAM_DAYS);
@@ -290,7 +326,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     // and consistent.
     signalX = FALLBACK.signalX;
     signalY = FALLBACK.signalX.map(() => 0);
-    gap('Cover: log discovery interviews to build the validation-signal chart.');
+    gap('Cover: log discovery interviews to build the validation-signal chart.', null, 'cover');
   }
 
   const cover: SpinoutDeckData['cover'] = {
@@ -325,7 +361,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
       clamp(Math.round(((t.mentions || 0) / base) * 100), 0, 100),
       interviewN > 0 ? `${t.mentions || 0} / ${interviewN}` : `${t.mentions || 0}`,
     ] as [string, number, string]);
-  } else { pains = FALLBACK.pains; gap('Problem: cluster discovery pains in the Customer Discovery module.'); }
+  } else { pains = FALLBACK.pains; gap('Problem: cluster discovery pains in the Customer Discovery module.', null, 'problem'); }
 
   const quote0 = (src.validation?.quotes || [])[0];
   let quote: string; let quoteAttr: string;
@@ -364,7 +400,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     stages = [['Interviewed', interviewN]];
     if (painsN > 0) stages.push(['Pain confirmed', Math.min(painsN, interviewN)]);
     if (ratedN > 0) stages.push(['Solution-fit \u2265 4/5', fitN]);
-    if (stages.length < 3) gap('Validation: add outreach and LOI/design-partner counts to complete the discovery funnel.');
+    if (stages.length < 3) gap('Validation: add outreach and LOI/design-partner counts to complete the discovery funnel.', null, 'validation');
     conversion = ratedN > 0
       ? [`${Math.round((fitN / ratedN) * 100)}%`, 'rated solution-fit \u2265 4 / 5']
       : [DASH, 'solution-fit not yet rated'];
@@ -381,7 +417,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     // this change. An empty chart plus the gap below is the honest state.
     stages = [];
     conversion = [DASH, 'log discovery interviews to compute'];
-    gap('Validation: log discovery interviews and ratings in the Customer Discovery module.');
+    gap('Validation: log discovery interviews and ratings in the Customer Discovery module.', null, 'validation');
   }
 
   const validation: SpinoutDeckData['validation'] = {
@@ -400,12 +436,12 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     ['SAM', has(mk.sam) ? mk.sam : DASH, 'Serviceable available'],
     ['SOM', has(mk.som) ? mk.som : DASH, 'Serviceable obtainable'],
   ];
-  if (marketFilled < 3) gap('Market: size TAM/SAM/SOM in the Market Intel module.');
+  if (marketFilled < 3) gap('Market: size TAM/SAM/SOM in the Market Intel module.', null, 'market');
 
   const whyNow = (mk.why_now || []).filter(has).slice(0, 3);
   let why: Array<[string, string]>;
   if (whyNow.length) why = whyNow.map((w) => splitWhy(w));
-  else { why = [['Why now', '[draft — add why-now drivers in the Market Intel module]']]; gap('Market: add why-now drivers in the Market Intel module.'); }
+  else { why = [['Why now', '[draft — add why-now drivers in the Market Intel module]']]; gap('Market: add why-now drivers in the Market Intel module.', null, 'market'); }
 
   const market: SpinoutDeckData['market'] = {
     eyebrow: 'Market', idx: '04',
@@ -425,7 +461,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     ['act', 'Act', 'Trigger the next action the moment signal moves.'],
   ];
   const steps = stepDefs.map((d, i) => [d[0], d[1], has(caps[i]) ? caps[i] : d[2]] as [string, string, string]);
-  if (!caps.length) gap('Solution: describe your MVP capabilities in the Solution module.');
+  if (!caps.length) gap('Solution: describe your MVP capabilities in the Solution module.', null, 'solution');
 
   const solution: SpinoutDeckData['solution'] = {
     eyebrow: 'Solution', idx: '05',
@@ -461,7 +497,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     caption: pdCaption,
   };
   if (!has(pdVideo) && !has(pdLive) && !has(pdShot)) {
-    gap('Product demo: add a demo video link, live demo URL, or screenshot on the project.');
+    gap('Product demo: add a demo video link, live demo URL, or screenshot on the project.', null, 'productDemo');
   }
 
   /* ---- roadmap ---- */
@@ -477,7 +513,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
       ['NEXT', 'Day 31 \u2013 60', []],
       ['LATER', 'Day 61 \u2013 90', []],
     ];
-    gap('Roadmap: add 90-day OKRs in the Roadmap module.');
+    gap('Roadmap: add 90-day OKRs in the Roadmap module.', null, 'roadmap');
   } else {
     const nowMapped: Array<[Status, string]> = nowItems.map((t, i) =>
       [(programDay < PROGRAM_DAYS && i === nowItems.length - 1) ? 'active' : 'done', t] as [Status, string]);
@@ -529,7 +565,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   } else {
     founder = { initials: DASH, name: 'Founder', role: 'Founder & CEO', bio: '[draft — add your founder profile in the Team module]' };
     founders = [founder];
-    gap('Team: add your founder profile in the Cofounder/Team module.');
+    gap('Team: add your founder profile in the Cofounder/Team module.', null, 'team');
   }
 
   const advisorNames = (src.mentor_network?.mentors || []).filter(has);
@@ -546,7 +582,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     advisors = advisorNames.slice(0, 8).map((n) => [initialsOf(n), n, 'Advisor'] as [string, string, string, string?]);
   } else {
     advisors = [];
-    gap('Team: connect advisors in the Advisors & Network module.');
+    gap('Team: connect advisors in the Advisors & Network module.', null, 'team');
   }
 
   const team: SpinoutDeckData['team'] = {
@@ -590,7 +626,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     .slice(0, 6);
   if (simSegments.length) segments = simSegments;
   else if (realSegments.length) segments = realSegments;
-  else { segments = FALLBACK.segments; gap('Cap table: add holders in the Incorporate / Cap Table module.'); }
+  else { segments = FALLBACK.segments; gap('Cap table: add holders in the Incorporate / Cap Table module.', null, 'captable'); }
 
   const captable: SpinoutDeckData['captable'] = {
     eyebrow: 'Cap table & incorporation', idx: '09',
@@ -623,8 +659,8 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   if (nextMilestones.length) milestone = ['Gets us to:', nextMilestones[0]];
   else milestone = ['Gets us to:', '[draft — add your next funding milestone in the Capital module]'];
 
-  if (askEmpty) gap('The ask: set raise, runway, and use-of-funds in the Capital module.');
-  else if (!nextMilestones.length) gap('The ask: add your next funding milestone in the Capital module.');
+  if (askEmpty) gap('The ask: set raise, runway, and use-of-funds in the Capital module.', null, 'ask');
+  else if (!nextMilestones.length) gap('The ask: add your next funding milestone in the Capital module.', null, 'ask');
 
   const ask: SpinoutDeckData['ask'] = {
     eyebrow: 'The ask', idx: '10',
@@ -645,7 +681,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     ['Customer references', interviewN > 0 ? 'On request' : 'Pending'],
     ['NDA', da.nda_required ? 'Required' : 'Not required'],
   ];
-  if (!has(contactEmail)) gap('Review the deal: add a contact email / deal-room link in the Compliance module.');
+  if (!has(contactEmail)) gap('Review the deal: add a contact email / deal-room link in the Compliance module.', null, 'deal');
 
   const deal: SpinoutDeckData['deal'] = {
     eyebrow: 'Deal readiness', idx: '11',
@@ -668,7 +704,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
 
   const draft = programDay < PROGRAM_DAYS || gaps.length > 0;
   const fields = flattenSpinoutDeckData(data);
-  return { data, notes: NOTES, gaps, gapFields, draft, programDay, fields };
+  return { data, notes: NOTES, gaps, gapFields, gapSections, draft, programDay, fields };
 }
 
 /* ============================================================================

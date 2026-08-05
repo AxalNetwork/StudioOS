@@ -39,34 +39,65 @@ export const WEEKS = [
 /** Design rule: export unlocks once 6 of 11 slides carry real data. */
 export const EXPORT_MIN_READY = 6;
 
-/** Per-slide readiness from the flat dotted-key field map.
- *  → { state: 'ready'|'partial'|'missing'|'unknown', filled, total, missing }.
- *  `unknown` (no keys for this prefix) means the deck is showing template
- *  sample content — deliberately distinct from `missing`, which means the
- *  source tool has the field but the founder hasn't filled it. */
-export function slideStatus(meta, fields) {
-  if (!fields || typeof fields !== 'object') return { state: 'unknown', filled: 0, total: 0, missing: 0 };
-  const pref = `${meta.prefix}.`;
-  let total = 0;
-  let filled = 0;
-  for (const [k, v] of Object.entries(fields)) {
-    if (!k.startsWith(pref)) continue;
-    total += 1;
-    const s = v == null ? '' : String(v).trim();
-    if (s !== '' && s !== '—') filled += 1;
+/**
+ * Per-slide readiness.
+ *
+ * READ THIS BEFORE CHANGING THE SIGNAL IT USES. Readiness comes from the
+ * worker's `gaps` / `gap_sections`, NOT from counting entries in `fields`.
+ *
+ * The obvious implementation — walk `fields`, count how many keys under this
+ * slide's prefix are non-empty — is wrong, and was wrong here for real users.
+ * `flattenSpinoutDeckData` (worker side) SKIPS empty scalars, so an unfilled
+ * field is simply absent from the map rather than present-and-empty. Every key
+ * that exists is non-empty by construction, `filled` always equalled `total`,
+ * and every slide reported `ready`. A founder who had done no work at all saw
+ * eleven green ticks and "Data populated from your work" under eleven slides of
+ * template fallback content — the deck was showing the sample and calling it
+ * theirs.
+ *
+ * The worker has always known better. Each time a module is empty it substitutes
+ * template figures so the slide still renders, and raises a gap saying so;
+ * `gap_sections` names the slide. That list is the readiness contract.
+ *
+ * @param meta    a SLIDE_META entry
+ * @param fields  live field map (or null) — only used to tell "no data at all"
+ *                from "data, with gaps"
+ * @param gaps    { gaps, gapSections } from useSpinoutDeckFields, or null
+ * → { state: 'ready'|'partial'|'unknown', gaps: string[], missing }
+ *
+ * `unknown` means the deck is showing template sample content because we could
+ * not load the bundle at all (signed-out preview, paywall, request failed) —
+ * deliberately distinct from a slide whose module is merely empty, which is
+ * `partial` and names what to go and fill in.
+ */
+export function slideStatus(meta, fields, gaps = null) {
+  const list = Array.isArray(gaps?.gaps) ? gaps.gaps : null;
+  const sections = Array.isArray(gaps?.gapSections) ? gaps.gapSections : null;
+
+  // No bundle, or a bundle from a worker that does not report sections: we
+  // cannot claim the slide is complete. Say "sample" rather than guess — an
+  // over-optimistic default is the bug this function exists to prevent.
+  if (!fields || typeof fields !== 'object' || !list || !sections) {
+    return { state: 'unknown', gaps: [], missing: 0 };
   }
-  if (total === 0) return { state: 'unknown', filled: 0, total: 0, missing: 0 };
-  const missing = total - filled;
-  if (missing === 0) return { state: 'ready', filled, total, missing };
-  if (filled === 0) return { state: 'missing', filled, total, missing };
-  return { state: 'partial', filled, total, missing };
+
+  const mine = list.filter((_, i) => sections[i] === meta.prefix);
+  if (mine.length === 0) return { state: 'ready', gaps: [], missing: 0 };
+  return { state: 'partial', gaps: mine, missing: mine.length };
 }
 
 /** Card sub-label per state (design statusText()). */
 export function statusTextFor(status) {
   switch (status.state) {
     case 'ready': return 'Data populated from your work';
-    case 'partial': return `Partial — ${status.missing} field${status.missing === 1 ? '' : 's'} missing`;
+    // Name the first thing to go and do, not a count. The gap text is already
+    // written as an instruction naming the module ("Problem: cluster discovery
+    // pains in the Customer Discovery module."), which is more use to a founder
+    // than "2 fields missing" — and the slide sub-label is the only place they
+    // will see it before exporting.
+    case 'partial': return status.gaps?.[0]
+      ? status.gaps[0]
+      : `${status.missing} item${status.missing === 1 ? '' : 's'} still needed`;
     case 'missing': return 'No data yet — complete the source tool';
     default: return 'Sample data shown';
   }
@@ -87,20 +118,23 @@ export const DOT_CLASS = {
 function weekPillFor(week, slides) {
   const mine = slides.filter((s) => s.week === week.num);
   if (mine.length === 0) return { ...week, state: 'pending', note: '' };
-  if (mine.every((s) => s.status.state === 'ready')) return { ...week, state: 'done', note: '' };
-  const incomplete = mine.filter((s) => s.status.state !== 'ready' && s.status.state !== 'unknown').length;
-  if (mine.some((s) => s.status.state === 'ready' || s.status.state === 'partial')) {
-    return { ...week, state: 'warn', note: `${incomplete} item${incomplete === 1 ? '' : 's'} missing` };
-  }
-  return { ...week, state: 'pending', note: '' };
+  // Nothing loaded (paywall / signed-out preview / failed request): the deck is
+  // showing sample content, so no week can claim to be done.
+  if (mine.every((s) => s.status.state === 'unknown')) return { ...week, state: 'pending', note: '' };
+  const incomplete = mine.filter((s) => s.status.state !== 'ready').length;
+  // Guarded, not implied: the old version could reach the warn branch with
+  // incomplete === 0 and render the self-contradicting pill
+  // "Build — Week 3, 0 items missing" (visible in the reported screenshot).
+  if (incomplete === 0) return { ...week, state: 'done', note: '' };
+  return { ...week, state: 'warn', note: `${incomplete} item${incomplete === 1 ? '' : 's'} missing` };
 }
 
 /** Full page view model. Pure — safe to call on every render.
  *  @param fields  live field map (or null while loading / unavailable)
  *  @param canExport  gate the export button on having a resolvable deck */
-export function buildPitchDeckViewModel({ fields, canExport = true } = {}) {
+export function buildPitchDeckViewModel({ fields, gaps = null, canExport = true } = {}) {
   const slides = SLIDE_META.map((meta, i) => {
-    const status = slideStatus(meta, fields);
+    const status = slideStatus(meta, fields, gaps);
     return {
       ...meta,
       index: i,

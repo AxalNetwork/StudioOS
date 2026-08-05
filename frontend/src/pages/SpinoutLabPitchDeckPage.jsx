@@ -55,7 +55,12 @@ export default function SpinoutLabPitchDeckPage() {
   const [projectId, setProjectId] = useState(null);
   const [projectLoading, setProjectLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
-  const { fields, loading: fieldsLoading } = useSpinoutDeckFields({ projectId, enabled: !!projectId, reloadKey });
+  // `gaps`/`gapSections` are the readiness signal — see slideStatus(). `fields`
+  // alone cannot distinguish a slide the founder filled in from one showing
+  // template fallback content, because the worker omits empty scalars from it.
+  const {
+    fields, gaps, gapSections, loading: fieldsLoading,
+  } = useSpinoutDeckFields({ projectId, enabled: !!projectId, reloadKey });
 
   const [view, setView] = useState('grid'); // grid | editor
   const [slideIdx, setSlideIdx] = useState(0);
@@ -103,7 +108,11 @@ export default function SpinoutLabPitchDeckPage() {
   }, []);
 
   const template = TEMPLATES.axal_spinout_demoday;
-  const vm = useMemo(() => buildPitchDeckViewModel({ fields, canExport: !!projectId }), [fields, projectId]);
+  const deckGaps = useMemo(() => ({ gaps, gapSections }), [gaps, gapSections]);
+  const vm = useMemo(
+    () => buildPitchDeckViewModel({ fields, gaps: deckGaps, canExport: !!projectId }),
+    [fields, deckGaps, projectId],
+  );
 
   // W2 deliverable — deck v1 counts as drafted once enough slides carry real
   // data to export (the page's own export threshold).
