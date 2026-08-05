@@ -26,14 +26,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Landmark, Lock, Check, Clock, ShieldCheck, FileText,
-  AlertCircle, MessageSquare, RefreshCw,
+  AlertCircle, MessageSquare, RefreshCw, FileDown, Loader2,
 } from 'lucide-react';
 import { WorkspaceHeader } from '../components/WorkspaceTabs';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 import {
   fundModel, money, lpAccessState, lpHasReports, lpAllocationOpen,
-  ALLOC_THRESHOLD_K, LP_STATES, FUND,
+  ALLOC_THRESHOLD_K, LP_STATES, FUND, PROGRAM, THESIS, fundTerms,
+  TIERS, TIER_RIGHTS, PROCESS_STEPS, allocationCandidates,
 } from '../lib/spinoutFundModel';
 
 /* ---------------------------------------------------------------- primitives */
@@ -110,33 +111,10 @@ const PROFILE_CHIP = {
 
 /* --------------------------------------------------------------- static data */
 
-const TIERS = [
-  { name: 'Supporter', amount: '$50K', sub: 'Minimum ticket' },
-  { name: 'Member', amount: '$100K', sub: '' },
-  { name: 'Allocator', amount: '$250K', sub: 'Allocation rights', hl: true },
-  { name: 'Anchor', amount: '$500K+', sub: 'By discussion' },
-];
-
-const TIER_ROWS = [
-  { right: 'Quarterly reports', note: 'Audited statement + portfolio marks', c: ['✓', '✓', '✓', '✓'] },
-  { right: 'Cohort dashboard', note: 'Live readiness + revenue telemetry', c: ['✓', '✓', '✓', '✓'] },
-  { right: 'Demo day', note: 'Livestream at Supporter; in person above', c: ['Stream', 'In person', 'In person', 'In person'] },
-  { right: 'Portfolio deep-dives', note: 'Company-level diligence sessions', c: ['—', '✓', '✓', '✓'] },
-  { right: 'Allocation preferences', note: `Commitment-weighted, from $${ALLOC_THRESHOLD_K}K`, c: ['—', '—', '✓', '✓'] },
-  { right: 'Follow-on co-invest', note: 'Priority at Anchor', c: ['—', '—', '✓', 'Priority'] },
-  { right: 'LPAC seat eligibility', note: 'Three seats at first close', c: ['—', '—', '—', '✓'] },
-];
-
-const PROC_STEPS = [
-  ['01', 'Invited', 'Curated introduction'],
-  ['02', 'Applied', 'Type, size, preferences'],
-  ['03', 'Under review', 'Within 5 business days'],
-  ['04', 'Accepted', 'Capacity-limited'],
-  ['05', 'KYC / AML', 'Parallel Markets'],
-  ['06', 'Soft commit', 'Indication of size'],
-  ['07', 'Legal docs', 'Subscription + LPA'],
-  ['08', 'Funded', 'Capital call schedule'],
-];
+// TIERS, TIER_RIGHTS, PROCESS_STEPS and the key-terms list used to be declared
+// here. They now live in lib/spinoutFundModel.js because the downloadable fund
+// brief renders the same three sections: a second copy would let the document
+// an LP takes away drift from the page they read it on.
 
 const REPORT_PKG = [
   'Quarterly portfolio report with company-level marks',
@@ -186,7 +164,14 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   // be used to self-grant access; see the file header.
   const [preview, setPreview] = useState(null);
   const [archiveFilter, setArchiveFilter] = useState('all');
-  const [alloc, setAlloc] = useState({ NovaCraft: 30, MeridianIQ: 25, LoopSense: 20, 'Foundry Legal': 10 });
+  // Sliders come from the shared Cohort 4 list (everything the IC has moved
+  // past 'Track'), which is the same list the fund brief prints as the current
+  // pipeline — so the document can never name a different cohort than the one
+  // being allocated across.
+  const [alloc, setAlloc] = useState(() =>
+    Object.fromEntries(allocationCandidates().map((c) => [c.company, c.allocDefault ?? 0])));
+  const [briefBusy, setBriefBusy] = useState(false);
+  const [briefErr, setBriefErr] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -228,16 +213,34 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     ['Reserve remaining', `$${M.reserveCloseM}M`, `${Math.round(FUND.reservePolicy * 100)}% policy`],
   ];
 
-  const econ = [
-    ['Target / hard cap', `$${FUND.target}M / $${FUND.hardCap}M`, 'Delaware LP · 10-yr term'],
-    ['Stage', 'Pre-seed', 'Lab graduates only'],
-    ['Initial check', '$100–150K', 'Up to $250K high conviction'],
-    ['Portfolio', '25–40 companies', 'Across cohorts'],
-    ['Reserve policy', '30–40%', 'Follow-ons only'],
-    ['Management fee', '2%', 'Carried interest 20%'],
-    ['Minimum ticket', money.k(FUND.minTicketK), `Allocation rights from ${money.k(ALLOC_THRESHOLD_K)}`],
-    ['Reporting', 'Quarterly', 'Annual audit · Mar 31'],
-  ];
+  // The eight rows flagged `page`; the brief prints the twelve flagged `brief`
+  // off the same list, so neither can be edited without the other following.
+  const econ = useMemo(() => fundTerms().filter((t) => t.page), []);
+
+  // The brief is built at click time from the model above plus the viewer's own
+  // derived standing — never `state`, which an admin can preview. A previewed
+  // state must not be stamped into a document as though it were real.
+  const downloadBrief = async () => {
+    setBriefBusy(true);
+    setBriefErr('');
+    try {
+      const { exportFundBriefPdf } = await import('../lib/fundBriefPdf');
+      await exportFundBriefPdf({
+        generatedAt: new Date(),
+        recipient: {
+          name: user?.name,
+          email: user?.email,
+          standing: derived.commitmentK > 0
+            ? `${PROFILE_CHIP[derived.state]?.[1] || 'Investor'} · $${derived.commitmentK}K committed`
+            : PROFILE_CHIP[derived.state]?.[1],
+        },
+      });
+    } catch (e) {
+      setBriefErr(e?.message || 'Could not generate the fund brief.');
+    } finally {
+      setBriefBusy(false);
+    }
+  };
 
   const body = (
     <div className="space-y-6">
@@ -301,37 +304,57 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1e1533] via-[#2d1d52] to-[#3b2470] p-8 text-white">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-green-400/15 px-2.5 py-1 text-[11px] font-bold text-green-300">
-              Open · raising toward first close
+              {FUND.status}
             </span>
-            <span className="text-xs text-white/60">Axal VC Spin-Out Fund I · Pre-seed · Vintage 2026</span>
+            <span className="text-xs text-white/60">
+              Axal VC Spin-Out Fund I · {FUND.stage} · Vintage {FUND.vintage}
+            </span>
           </div>
           <div className="max-w-xl text-2xl font-extrabold leading-tight tracking-tight">
-            Back companies at the moment they become companies.
+            {THESIS.headline}
           </div>
-          <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-white/75">
-            The fund invests exclusively in Spin-Out Lab graduates — incorporated, 83(b)-filed,
-            cap-table-clean companies with verified customer discovery and revenue proof. Every
-            investment is underwritten by 28 days of observed execution data, not a pitch.
-          </p>
+          <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-white/75">{THESIS.hero}</p>
           <div className="mt-5 flex flex-wrap gap-6 border-t border-white/10 pt-4">
-            {[['37', 'Graduates to date'], ['86%', 'Incorporated on time'], ['$8.6M', 'Raised by alumni']].map(([v, k]) => (
+            {[
+              [String(PROGRAM.graduates), 'Graduates to date'],
+              [`${PROGRAM.onTimeIncorpPct}%`, 'Incorporated on time'],
+              [money.m(PROGRAM.alumniRaisedM * 1000), 'Raised by alumni'],
+            ].map(([v, k]) => (
               <div key={k}>
                 <div className={`${MONO} text-[17px] font-bold`}>{v}</div>
                 <div className="text-[10.5px] font-semibold uppercase tracking-wider text-white/55">{k}</div>
               </div>
             ))}
           </div>
-          <div className="mt-5 flex flex-wrap gap-2.5">
+          <div className="mt-5 flex flex-wrap items-center gap-2.5">
             {/* dark:bg-white is deliberate, not a copy-paste slip: this button
                 sits on the always-dark gradient hero, so it stays white in both
                 themes. The pairing also satisfies the dark-mode guard. */}
             <Link to="/spinout-lab" className="rounded-lg bg-white dark:bg-white px-4 py-2.5 text-[13px] font-bold text-[#2d1d52]">
               Explore the Spin-Out Lab
             </Link>
-            <Link to="/spinout-lab/brief" className="rounded-lg border border-white/35 px-4 py-2.5 text-[13px] font-semibold text-white">
-              Fund brief
-            </Link>
+            {/* Generates the one-pager from this page's own model at click time,
+                so a download always carries what the page is currently showing.
+                The old link went to /spinout-lab/brief — the public PROGRAM
+                brochure, not a fund brief. */}
+            <button
+              type="button"
+              onClick={downloadBrief}
+              disabled={briefBusy}
+              data-testid="download-fund-brief"
+              className="inline-flex items-center gap-2 rounded-lg border border-white/35 px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-60"
+            >
+              {briefBusy
+                ? <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                : <FileDown size={14} aria-hidden="true" />}
+              {briefBusy ? 'Preparing…' : 'Fund brief (PDF)'}
+            </button>
           </div>
+          <p className="mt-2.5 text-[10.5px] leading-relaxed text-white/45">
+            {briefErr
+              ? briefErr
+              : 'One page, generated now — raise status, structure, tiers, track record, Cohort 4 pipeline and the commitment process, as shown on this page.'}
+          </p>
         </div>
 
         <div className={`${CARD} flex flex-col p-6`}>
@@ -372,11 +395,11 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
       <div>
         <SectionLabel>Key terms</SectionLabel>
         <div className={`${CARD} grid grid-cols-1 overflow-hidden sm:grid-cols-2 lg:grid-cols-4`}>
-          {econ.map(([k, v, note]) => (
-            <div key={k} className="border-b border-r border-gray-100 dark:border-gray-800 p-4">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">{k}</div>
-              <div className={`${MONO} mt-1 text-[15px] font-bold text-gray-900 dark:text-gray-100`}>{v}</div>
-              <div className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">{note}</div>
+          {econ.map((t) => (
+            <div key={t.k} className="border-b border-r border-gray-100 dark:border-gray-800 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t.k}</div>
+              <div className={`${MONO} mt-1 text-[15px] font-bold text-gray-900 dark:text-gray-100`}>{t.v}</div>
+              <div className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">{t.note}</div>
             </div>
           ))}
         </div>
@@ -402,7 +425,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
               </tr>
             </thead>
             <tbody>
-              {TIER_ROWS.map((r) => (
+              {TIER_RIGHTS.map((r) => (
                 <tr key={r.right} className="border-b border-gray-100 dark:border-gray-800">
                   <td className="px-5 py-3">
                     <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{r.right}</div>
@@ -422,7 +445,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
       <div>
         <SectionLabel>Commitment process</SectionLabel>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-          {PROC_STEPS.map(([n, label, note]) => (
+          {PROCESS_STEPS.map(([n, label, note]) => (
             <div key={n} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
               <div className={`${MONO} text-[8px] font-bold text-violet-300 dark:text-violet-700`}>{n}</div>
               <div className="mt-0.5 text-[11.5px] font-bold leading-tight text-gray-900 dark:text-gray-100">{label}</div>

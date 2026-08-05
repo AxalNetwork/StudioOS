@@ -47,10 +47,171 @@ export const FUND = {
   firstClose: 'Sep 15, 2026',
   minCloseM: 5,
   demoDay: 'Aug 21, 2026',
+  // The fields below feed the workspace hero and "Key terms" grid, and the fund
+  // brief's masthead and "Fund structure" block (through fundTerms()), so a
+  // change here reaches every surface and every brief downloaded afterwards.
+  status: 'Open · raising toward first close',
+  stage: 'Pre-seed',
+  vintage: 2026,
+  domicile: 'Delaware LP',
+  termYears: 10,
+  checkLowK: 100,
+  checkHighK: 150,
+  convictionCheckK: 250,
+  portfolioLow: 25,
+  portfolioHigh: 40,
+  reserveLowPct: 30,
+  reserveHighPct: 40, // must equal reservePolicy × 100 — asserted in the tests
+  mgmtFeePct: 2,
+  carryPct: 20,
+  auditDate: 'Mar 31',
+  k1Date: 'Mar 15',
 };
 
 /** Commitment (in $K) at or above which allocation + decision rights open. */
 export const ALLOC_THRESHOLD_K = FUND.allocThresholdK;
+
+/**
+ * Program-level track record shown in the workspace hero and repeated on the
+ * fund brief.
+ *
+ * NOTE ON A PRE-EXISTING CONFLICT: pages/SpinoutLabBriefPage.jsx (the public
+ * *program* brochure, a different document) states "12 companies built to date"
+ * and "$2.4M total capital raised by graduates". Those numbers disagree with
+ * these and predate this module. The LP workspace is the stated authority for
+ * the fund brief, so the brief follows these; reconciling the brochure is a
+ * separate decision for whoever owns that page.
+ */
+export const PROGRAM = {
+  graduates: 37,
+  onTimeIncorpPct: 86,
+  alumniRaisedM: 8.6,
+};
+
+/** Narrative copy. Shared so the hero and the brief cannot say different things. */
+export const THESIS = {
+  headline: 'Back companies at the moment they become companies.',
+  hero:
+    'The fund invests exclusively in Spin-Out Lab graduates — incorporated, 83(b)-filed, '
+    + 'cap-table-clean companies with verified customer discovery and revenue proof. Every '
+    + 'investment is underwritten by 28 days of observed execution data, not a pitch.',
+  brief:
+    'Back companies at the moment they become companies. The fund invests exclusively in '
+    + 'Spin-Out Lab graduates — incorporated, 83(b)-filed, cap-table-clean, with verified '
+    + 'customer discovery and revenue proof.',
+  body:
+    'Every investment is underwritten by 28 days of observed execution data, not a pitch. The '
+    + 'Spin-Out Lab runs founders through structured customer discovery, incorporation, '
+    + 'cap-table formation, and first revenue — producing a verified evidence base before any '
+    + 'check is written. The fund sees the work, not the narrative.',
+};
+
+/**
+ * Fund terms, in one list, derived from FUND.
+ *
+ * `page` marks the eight rows the workspace "Key terms" grid shows (with their
+ * notes); `brief` marks the twelve the one-pager's "Fund structure" block shows.
+ * Target/hard cap is page-only because the brief already carries it in the raise
+ * strip and would otherwise state it twice.
+ */
+export function fundTerms() {
+  const k = (n) => `$${n}K`;
+  return [
+    { k: 'Target / hard cap', v: `$${FUND.target}M / $${FUND.hardCap}M`, note: `${FUND.domicile} · ${FUND.termYears}-yr term`, page: true },
+    { k: 'Stage', v: FUND.stage, note: 'Lab graduates only', page: true, brief: true },
+    { k: 'Sourcing', v: 'Lab graduates only', brief: true },
+    { k: 'Portfolio', v: `${FUND.portfolioLow}–${FUND.portfolioHigh} companies`, note: 'Across cohorts', page: true, brief: true },
+    { k: 'Initial check', v: `$${FUND.checkLowK}–${FUND.checkHighK}K`, note: `Up to ${k(FUND.convictionCheckK)} high conviction`, page: true, brief: true },
+    { k: 'High conviction', v: `up to ${k(FUND.convictionCheckK)}`, brief: true },
+    { k: 'Reserve policy', v: `${FUND.reserveLowPct}–${FUND.reserveHighPct}%`, note: 'Follow-ons only', page: true, brief: true },
+    { k: 'Minimum ticket', v: k(FUND.minTicketK), note: `Allocation rights from ${k(FUND.allocThresholdK)}`, page: true, brief: true },
+    { k: 'Allocation rights', v: `from ${k(FUND.allocThresholdK)}`, brief: true },
+    { k: 'Management fee', v: `${FUND.mgmtFeePct}%`, note: `Carried interest ${FUND.carryPct}%`, page: true, brief: true },
+    { k: 'Carried interest', v: `${FUND.carryPct}%`, brief: true },
+    { k: 'Reporting', v: 'Quarterly', note: `Annual audit · ${FUND.auditDate}`, page: true, brief: true },
+    { k: 'Audit', v: `Annual · ${FUND.auditDate}`, brief: true },
+  ];
+}
+
+/** Participation tiers. `rights` is the brief's prose form of the matrix below. */
+export const TIERS = [
+  { name: 'Supporter', amountK: 50, amount: '$50K', sub: 'Minimum ticket',
+    rights: 'Quarterly reports, audited statement, cohort dashboard, demo-day livestream.' },
+  { name: 'Member', amountK: 100, amount: '$100K', sub: '',
+    rights: 'Adds in-person demo day, portfolio deep-dives, founder introductions.' },
+  { name: 'Allocator', amountK: 250, amount: '$250K', sub: 'Allocation rights', hl: true,
+    rights: 'Adds commitment-weighted allocation preferences, voting, follow-on co-invest.' },
+  { name: 'Anchor', amountK: 500, amount: '$500K+', sub: 'By discussion',
+    rights: 'Adds co-invest priority and LPAC seat eligibility. Terms by discussion.' },
+];
+
+/** The rights matrix. One cell per tier, in TIERS order. */
+export const TIER_RIGHTS = [
+  { right: 'Quarterly reports', note: 'Audited statement + portfolio marks', c: ['✓', '✓', '✓', '✓'] },
+  { right: 'Cohort dashboard', note: 'Live readiness + revenue telemetry', c: ['✓', '✓', '✓', '✓'] },
+  { right: 'Demo day', note: 'Livestream at Supporter; in person above', c: ['Stream', 'In person', 'In person', 'In person'] },
+  { right: 'Portfolio deep-dives', note: 'Company-level diligence sessions', c: ['—', '✓', '✓', '✓'] },
+  { right: 'Allocation preferences', note: `Commitment-weighted, from $${FUND.allocThresholdK}K`, c: ['—', '—', '✓', '✓'] },
+  { right: 'Follow-on co-invest', note: 'Priority at Anchor', c: ['—', '—', '✓', 'Priority'] },
+  { right: 'LPAC seat eligibility', note: 'Three seats at first close', c: ['—', '—', '—', '✓'] },
+];
+
+/** Commitment process, invitation through funding. */
+export const PROCESS_STEPS = [
+  ['01', 'Invited', 'Curated introduction'],
+  ['02', 'Applied', 'Type, size, preferences'],
+  ['03', 'Under review', 'Within 5 business days'],
+  ['04', 'Accepted', 'Capacity-limited'],
+  ['05', 'KYC / AML', 'Parallel Markets'],
+  ['06', 'Soft commit', 'Indication of size'],
+  ['07', 'Legal docs', 'Subscription + LPA'],
+  ['08', 'Funded', 'Capital call schedule'],
+];
+
+/**
+ * Cohort 4 — the companies graduating into the current allocation window.
+ * Operator-maintained like the rest of this module: `score` is the readiness
+ * score at last review and `revenueK` the observed first revenue in $K.
+ *
+ * This list feeds BOTH the brief's pipeline table and the workspace's
+ * allocation sliders (see allocationCandidates), so the document can never name
+ * a different cohort than the one an LP is allocating across.
+ */
+export const COHORT_4 = [
+  { company: 'NovaCraft AI', sector: 'Async workflow automation', score: 71, revenueK: 12.8, ic: 'Advance', allocDefault: 30 },
+  { company: 'MeridianIQ', sector: 'Deal intelligence', score: 68, revenueK: 9.2, ic: 'Advance', allocDefault: 25 },
+  { company: 'LoopSense', sector: 'Sensor analytics', score: 62, revenueK: 6.1, ic: 'Watch', allocDefault: 20 },
+  { company: 'Foundry Legal', sector: 'Contract operations', score: 59, revenueK: 4.9, ic: 'Watch', allocDefault: 10 },
+  { company: 'Arcline', sector: 'Financial infrastructure', score: 49, revenueK: 5.4, ic: 'Track' },
+  { company: 'Kelp Bio', sector: 'Materials science', score: 51, revenueK: null, ic: 'Track' },
+];
+
+/**
+ * The subset of Cohort 4 open to allocation preferences: everything the IC has
+ * moved past 'Track'. Returns fresh objects so a caller's slider state cannot
+ * mutate the shared list.
+ */
+export function allocationCandidates() {
+  return COHORT_4.filter((c) => c.ic !== 'Track').map((c) => ({ ...c }));
+}
+
+/**
+ * Governance and service providers named on the fund brief.
+ *
+ * ⚠ THESE CAME FROM THE DESIGN MOCK AND NAME REAL THIRD-PARTY FIRMS. The brief
+ * is a distributable document, so an unedited value here asserts a commercial
+ * relationship that may not exist ('Ashurst Perkins Coie' is visibly two
+ * separate real firms merged by the mock). Confirm each line with the GP before
+ * the brief is circulated.
+ */
+export const SERVICE_PROVIDERS = [
+  { k: 'Fund administrator', v: 'Carta Fund Admin' },
+  { k: 'Legal counsel', v: 'Ashurst Perkins Coie' },
+  { k: 'Auditor', v: 'Deloitte LLP' },
+  { k: 'Custody / banking', v: 'Mercury · First Republic' },
+  { k: 'Governance', v: 'LPAC · 3 seats at first close' },
+  { k: 'Tax documents', v: `K-1 issued by ${FUND.k1Date}` },
+];
 
 const r2 = (n) => Math.round(n * 100) / 100;
 
