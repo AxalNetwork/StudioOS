@@ -748,4 +748,77 @@ spinoutLab.get('/cohort', async (c) => {
   return c.json(members);
 });
 
+// GET /fund-metrics — auth-gated: live program + raise numbers for the LP &
+// Investor Workspace. Program figures come from real graduate rows (the same
+// week-4 `incorporation_completed` signal /stats uses, plus on-time timing
+// against `spinout_lab_started_at`); raise figures aggregate the Spin-Out
+// fund's own `limited_partners` rows. Aggregation lives in
+// services/spinoutFundMetrics.ts (pure, tested); this handler only queries.
+// Each block carries `available` so the SPA can fall back to its
+// operator-maintained model with honest provenance instead of rendering
+// zeros as facts. Never throws — a missing table answers `available: false`.
+spinoutLab.get('/fund-metrics', async (c) => {
+  const user = await requireAuth(c);
+  const { summarizeGraduates, summarizeLpRows } = await import('../services/spinoutFundMetrics');
+
+  let program: import('../services/spinoutFundMetrics').ProgramSummary = {
+    available: false, graduates: 0, on_time_pct: null, alumni_raised: null,
+  };
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT m.user_id, m.completed_at, u.spinout_lab_started_at AS started_at,
+              p.total_funding
+       FROM spinout_lab_milestones m
+       JOIN users u ON u.id = m.user_id
+       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
+       WHERE m.milestone_key = 'incorporation_completed'
+       ORDER BY m.user_id ASC, p.id ASC`,
+    ).all<import('../services/spinoutFundMetrics').GraduateTimingRow>();
+    program = summarizeGraduates(res.results ?? [], SPRINT_DAYS);
+  } catch { /* tables predate the Lab migrations */ }
+
+  // The fund this workspace reports on — resolved by slug, not name, for the
+  // same rename-safety reason the SPA's SPINOUT_FUND_SLUG comment gives.
+  //
+  // Raise aggregates (committed, soft-circled, LP count, median ticket) are
+  // capital-side facts, so they are scoped beyond bare authentication:
+  // admin/partner/investor roles see them, as does any caller who actually
+  // holds an LP row in this fund. Everyone else gets `available: false` and
+  // the SPA's operator-maintained figures — exactly what such a viewer saw
+  // before this endpoint existed, so nothing is newly exposed to founders or
+  // guests. The program block above stays role-free: it is the same
+  // graduate-level data the public GET /stats already serves.
+  let fund: Record<string, unknown> = { available: false };
+  try {
+    const { Funds } = await import('../models/funds');
+    const row = await Funds.bySlug(c.env, 'spinout-fund-i');
+    let entitled = ['admin', 'partner', 'investor'].includes(user?.role);
+    if (row && !entitled) {
+      const mine = await c.env.DB.prepare(
+        `SELECT 1 FROM limited_partners WHERE fund_id = ? AND (user_id = ? OR LOWER(email) = LOWER(?)) LIMIT 1`,
+      ).bind(row.id, user.id, user.email ?? '').first();
+      entitled = !!mine;
+    }
+    if (row && entitled) {
+      const lps = await c.env.DB.prepare(
+        `SELECT commitment_amount, lpa_signed FROM limited_partners WHERE fund_id = ?`,
+      ).bind(row.id).all<import('../services/spinoutFundMetrics').LpCommitmentRow>();
+      fund = {
+        available: true,
+        fund_id: row.id,
+        name: row.name,
+        slug: row.slug,
+        // Fund size (target) is the v2 `fund_size_cents` column —
+        // `total_commitment` is aggregated LP commitments, which would make
+        // the raise bar read 100% by definition. Null falls back to the
+        // operator-stated target in the SPA.
+        target: Number(row.fund_size_cents || 0) > 0 ? Number(row.fund_size_cents) / 100 : null,
+        ...summarizeLpRows(lps.results ?? []),
+      };
+    }
+  } catch { /* fund tables absent or pre-slug */ }
+
+  return c.json({ ok: true, program, fund });
+});
+
 export default spinoutLab;

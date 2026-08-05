@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { WorkspaceHeader } from '../components/WorkspaceTabs';
 import { useAuth } from '../hooks/useAuthSync';
-import { api } from '../lib/api';
+import { api, spinoutLab } from '../lib/api';
 import {
   fundModel, money, lpAccessState, lpHasReports, lpAllocationOpen,
   ALLOC_THRESHOLD_K, LP_STATES, FUND, PROGRAM, THESIS, fundTerms,
@@ -173,6 +173,10 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   const isAdmin = user?.role === 'admin';
 
   const [portal, setPortal] = useState(null);
+  // GET /spinout-lab/fund-metrics — live program track record + raise
+  // aggregates. Each block carries `available`; anything unavailable falls
+  // back to the operator-maintained model in lib/spinoutFundModel.js.
+  const [live, setLive] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   // Admin-only preview override. Never consulted for a non-admin, so it cannot
@@ -193,16 +197,25 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   const load = async () => {
     setLoading(true);
     setErr('');
-    try {
-      setPortal(await api.fundsLpPortal());
-    } catch (e) {
+    // The portal (the viewer's own position) and the fund metrics (program +
+    // raise aggregates) fail independently: a metrics outage must not blank
+    // the viewer's standing, and vice versa. Metrics failure degrades to the
+    // operator-maintained model below — with its provenance caption, so the
+    // page never claims live telemetry it does not have.
+    const [portalRes, metricsRes] = await Promise.allSettled([
+      api.fundsLpPortal(),
+      spinoutLab.fundMetrics(),
+    ]);
+    if (portalRes.status === 'fulfilled') {
+      setPortal(portalRes.value);
+    } else {
       // A failure must not silently look like "no commitments" — that would
       // read as a downgrade of the viewer's real standing.
-      setErr(e?.message || 'Could not load your LP position.');
+      setErr(portalRes.reason?.message || 'Could not load your LP position.');
       setPortal(null);
-    } finally {
-      setLoading(false);
     }
+    setLive(metricsRes.status === 'fulfilled' ? metricsRes.value : null);
+    setLoading(false);
   };
   useEffect(() => { load(); }, []);
 
@@ -219,7 +232,44 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   const showPending = state === 'pending';
 
   const commitLabel = derived.commitmentK > 0 ? `$${derived.commitmentK}K` : '—';
-  const raisePct = Math.round((FUND.committed / FUND.target) * 100);
+
+  // Live-vs-operator-maintained resolution, per block. The endpoint answers
+  // in DOLLARS; the model's vocabulary is $M / $K, so convert once here.
+  // `available: false` (or a failed fetch) falls back to the static model —
+  // the provenance captions below follow the same flags, so the page states
+  // where each number came from instead of guessing.
+  const liveProgram = live?.program?.available ? live.program : null;
+  const liveFund = live?.fund?.available ? live.fund : null;
+  const P = liveProgram
+    ? {
+      graduates: liveProgram.graduates,
+      onTimeIncorpPct: liveProgram.on_time_pct, // may be null: no measurable starts
+      alumniRaisedM: liveProgram.alumni_raised != null ? liveProgram.alumni_raised / 1e6 : null,
+    }
+    : PROGRAM;
+  const F = liveFund
+    ? {
+      committed: (Number(liveFund.committed) || 0) / 1e6,
+      softCircled: (Number(liveFund.soft_circled) || 0) / 1e6,
+      lpCount: Number(liveFund.lp_count) || 0,
+      medianTicketK: liveFund.median_commitment != null
+        ? Math.round(Number(liveFund.median_commitment) / 1000)
+        : null,
+      // A fund row with no recorded size keeps the operator-stated target so
+      // the progress bar still has a denominator.
+      target: Number(liveFund.target) > 0 ? Number(liveFund.target) / 1e6 : FUND.target,
+    }
+    : {
+      committed: FUND.committed,
+      softCircled: FUND.softCircled,
+      lpCount: FUND.lpCount,
+      medianTicketK: FUND.medianTicketK,
+      target: FUND.target,
+    };
+  const capacityRemainingM = Math.round((F.target - F.committed) * 100) / 100;
+  const raisePct = F.target > 0
+    ? Math.max(0, Math.min(100, Math.round((F.committed / F.target) * 100)))
+    : 0;
 
   // Which of the viewer's holdings this workspace reports on. The slug first
   // (stable across a rename); a viewer with exactly one holding resolves without
@@ -408,17 +458,27 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
             {THESIS.headline}
           </div>
           <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-white/75">{THESIS.hero}</p>
-          <div className="mt-5 flex flex-wrap gap-6 border-t border-white/10 pt-4">
+          {/* Provenance for the program stats below — the same live-vs-model
+              disclosure the raise card makes, so neither block can imply a
+              source it does not have. */}
+          <div className="mt-5 border-t border-white/10 pt-4">
+            <div className="mb-2 text-[9.5px] font-semibold uppercase tracking-wider text-white/40">
+              {liveProgram
+                ? 'Live program telemetry · computed from graduate records'
+                : 'Operator-maintained track record · live telemetry unavailable'}
+            </div>
+          <div className="flex flex-wrap gap-6">
             {[
-              [String(PROGRAM.graduates), 'Graduates to date'],
-              [`${PROGRAM.onTimeIncorpPct}%`, 'Incorporated on time'],
-              [money.m(PROGRAM.alumniRaisedM * 1000), 'Raised by alumni'],
+              [String(P.graduates), 'Graduates to date'],
+              [P.onTimeIncorpPct != null ? `${P.onTimeIncorpPct}%` : '—', 'Incorporated on time'],
+              [P.alumniRaisedM != null ? money.m(P.alumniRaisedM * 1000) : '—', 'Raised by alumni'],
             ].map(([v, k]) => (
               <div key={k}>
                 <div className={`${MONO} text-[17px] font-bold`}>{v}</div>
                 <div className="text-[10.5px] font-semibold uppercase tracking-wider text-white/55">{k}</div>
               </div>
             ))}
+          </div>
           </div>
           <div className="mt-5 flex flex-wrap items-center gap-2.5">
             {/* dark:bg-white is deliberate, not a copy-paste slip: this button
@@ -455,22 +515,22 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           <SectionLabel right={<Chip tone="gray">First close {FUND.firstClose}</Chip>}>Raise progress</SectionLabel>
           <div className="flex items-baseline gap-2">
             <div className={`${MONO} text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100`}>
-              {money.m(FUND.committed * 1000)}
+              {money.m(F.committed * 1000)}
             </div>
-            <div className="text-[13px] text-gray-500 dark:text-gray-400">of ${FUND.target}M target</div>
+            <div className="text-[13px] text-gray-500 dark:text-gray-400">of ${F.target}M target</div>
           </div>
           <div className="relative mt-3 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
             <div className="h-full rounded-full bg-violet-600" style={{ width: `${raisePct}%` }} />
           </div>
           <div className="mt-1.5 flex justify-between text-[10.5px] text-gray-400 dark:text-gray-500">
-            <span>$0</span><span>${FUND.minCloseM}M minimum close</span><span>${FUND.target}M</span>
+            <span>$0</span><span>${FUND.minCloseM}M minimum close</span><span>${F.target}M</span>
           </div>
           <dl className="mt-4 flex flex-1 flex-col gap-2.5 border-t border-gray-100 dark:border-gray-800 pt-4 text-xs">
             {[
-              ['Soft-circled', money.m(FUND.softCircled * 1000)],
-              ['Accepted LPs', String(FUND.lpCount)],
-              ['Median commitment', money.k(FUND.medianTicketK)],
-              ['Capacity remaining', `$${M.capacityRemainingM}M`],
+              ['Soft-circled', money.m(F.softCircled * 1000)],
+              ['Accepted LPs', String(F.lpCount)],
+              ['Median commitment', F.medianTicketK != null ? money.k(F.medianTicketK) : '—'],
+              ['Capacity remaining', `$${capacityRemainingM}M`],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between">
                 <dt className="text-gray-500 dark:text-gray-400">{k}</dt>
@@ -480,7 +540,10 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           </dl>
           <p className="mt-3 text-[10.5px] leading-relaxed text-gray-400 dark:text-gray-500">
             Committed = countersigned subscription. Soft-circled amounts are indications, not
-            commitments. Fund-level figures are operator-maintained, not live telemetry.
+            commitments.{' '}
+            {liveFund
+              ? 'Figures are computed live from the fund’s limited-partner records.'
+              : 'Fund-level figures are operator-maintained, not live telemetry.'}
           </p>
         </div>
       </div>

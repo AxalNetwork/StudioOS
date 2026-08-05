@@ -3273,6 +3273,10 @@ export const spinoutLab = {
   // Cohort application — signed-in founders only; contact info comes from
   // the account. Sends a confirmation email (production Worker).
   apply: (data) => request('/spinout-lab/apply', { method: 'POST', body: JSON.stringify(data) }),
+  // Auth'd — live program track record + Spin-Out Fund raise progress for the
+  // LP & Investor Workspace. Blocks carry `available`; the workspace falls
+  // back to its operator-maintained model when a block is not.
+  fundMetrics: () => request('/spinout-lab/fund-metrics'),
 };
 
 // Task #39 — Event engine. `events` covers the authenticated host/attendee

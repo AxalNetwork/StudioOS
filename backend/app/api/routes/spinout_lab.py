@@ -595,6 +595,106 @@ def apply_to_cohort(
     return {"ok": True, "emailed": False, "application": _latest_application(session, user.id)}
 
 
+@router.get("/fund-metrics")
+def fund_metrics(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Dev-parity mirror of the Worker's GET /spinout-lab/fund-metrics.
+
+    Program block: real graduate rows (week-4 `incorporation_completed`),
+    with on-time computed against `spinout_lab_started_at`. Dev projects
+    carry no funding column, so `alumni_raised` is null here (the Worker
+    sums projects.total_funding).
+
+    Fund block — DEV DIVERGENCES, deliberate: the dev schema has no
+    `vc_funds.slug` (migration 163 is D1-only) so the fund resolves by
+    name; and no `limited_partners.lpa_signed` (funds_v2 is D1-only) so
+    every positive commitment counts as committed and `soft_circled` is 0.
+    Both blocks carry `available` so the SPA falls back to its
+    operator-maintained model instead of rendering gaps as facts.
+    """
+    program = {"available": False, "graduates": 0, "on_time_pct": None, "alumni_raised": None}
+    try:
+        rows = session.exec(
+            text(
+                "SELECT m.user_id, MIN(m.completed_at) AS completed_at, u.spinout_lab_started_at "
+                "FROM spinout_lab_milestones m JOIN users u ON u.id = m.user_id "
+                "WHERE m.milestone_key = 'incorporation_completed' "
+                "GROUP BY m.user_id, u.spinout_lab_started_at"
+            )
+        ).all()
+        measurable = on_time = 0
+        for _uid, completed_at, started_at in rows:
+            try:
+                done = completed_at if isinstance(completed_at, datetime) else datetime.fromisoformat(str(completed_at))
+                start = started_at if isinstance(started_at, datetime) else datetime.fromisoformat(str(started_at))
+            except (TypeError, ValueError):
+                continue  # a data gap must not read as a late graduation
+            if done >= start:
+                measurable += 1
+                if (done - start).days <= SPRINT_DAYS:
+                    on_time += 1
+        # available=True whenever the query succeeded — a genuine zero-graduate
+        # state is a live fact; only the except (tables absent) answers False.
+        program = {
+            "available": True,
+            "graduates": len(rows),
+            "on_time_pct": round(on_time / measurable * 100) if measurable else None,
+            "alumni_raised": None,
+        }
+    except Exception:
+        session.rollback()  # tables predate the Lab migrations
+
+    # Raise aggregates are capital-side facts — scoped beyond bare auth, same
+    # rule as the Worker: admin/partner/investor roles, or a caller who holds
+    # an LP row in this fund. Others fall back to the operator-maintained model.
+    fund = {"available": False}
+    try:
+        role = str(getattr(user, "role", "") or "").lower().replace("userrole.", "")
+        entitled = role in ("admin", "partner", "investor")
+        frow = session.exec(
+            text(
+                "SELECT id, name, total_commitment FROM vc_funds "
+                "WHERE LOWER(name) LIKE 'spin-out fund%' OR LOWER(name) LIKE 'spinout fund%' "
+                "ORDER BY id LIMIT 1"
+            )
+        ).first()
+        if frow and not entitled:
+            entitled = bool(session.exec(
+                text(
+                    "SELECT 1 FROM limited_partners WHERE fund_id = :fid AND "
+                    "(user_id = :uid OR LOWER(email) = LOWER(:em)) LIMIT 1"
+                ).bindparams(fid=frow[0], uid=user.id, em=user.email or "")
+            ).first())
+        if frow and entitled:
+            fund_id, fund_name, _total_commitment = frow
+            lp_rows = session.exec(
+                text("SELECT commitment_amount FROM limited_partners WHERE fund_id = :fid").bindparams(fid=fund_id)
+            ).all()
+            tickets = sorted(float(r[0]) for r in lp_rows if r[0] and float(r[0]) > 0)
+            n = len(tickets)
+            median = None if not n else (tickets[n // 2] if n % 2 else (tickets[n // 2 - 1] + tickets[n // 2]) / 2)
+            fund = {
+                "available": True,
+                "fund_id": fund_id,
+                "name": fund_name,
+                "slug": None,
+                # Dev has no fund_size_cents column, and total_commitment is
+                # aggregated LP commitments — not a target. Null lets the SPA
+                # keep its operator-stated target as the denominator.
+                "target": None,
+                "committed": sum(tickets),
+                "soft_circled": 0,
+                "lp_count": len(lp_rows),
+                "median_commitment": median,
+            }
+    except Exception:
+        session.rollback()
+
+    return {"ok": True, "program": program, "fund": fund}
+
+
 @router.post("/exit")
 def exit_lab(
     user: User = Depends(get_current_user),
