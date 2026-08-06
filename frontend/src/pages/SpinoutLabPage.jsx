@@ -235,10 +235,31 @@ function fmtRaised(n) {
   return `$${Math.round(v)}`;
 }
 
+/**
+ * Parse a SQLite timestamp.
+ *
+ * `datetime('now')` returns "YYYY-MM-DD HH:MM:SS" in UTC — no `T`, no `Z`.
+ * That string is not a valid ISO-8601 date-time, so `new Date()` handling of
+ * it is implementation-defined: V8 accepts it and reads it as LOCAL time,
+ * Safari returns Invalid Date. Both are wrong for a UTC value, and the local
+ * reading is the more dangerous one because it silently shifts every rendered
+ * date by the viewer's offset.
+ *
+ * Normalises the separator, then appends `Z` unless the string already carries
+ * a zone. Returns null rather than an Invalid Date so callers can fall back to
+ * omitting the date instead of printing "Invalid Date" at a founder.
+ */
+export function parseSqliteUtc(s) {
+  if (s == null || s === '') return null;
+  const raw = String(s);
+  const iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const d = new Date(/[Zz]$|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : `${iso}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function gradDateLabel(iso) {
-  if (!iso) return null;
-  const d = new Date(String(iso).replace(' ', 'T'));
-  if (Number.isNaN(d.getTime())) return null;
+  const d = parseSqliteUtc(iso);
+  if (!d) return null;
   return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 }
 
@@ -532,8 +553,8 @@ export function CohortTrackerSection() {
   // Subtitle facts are derived from the live members — no invented numbers.
   const cohortLabel = gradCohortLabel(active.find((m) => m.cohort)?.cohort ?? null);
   const earliestStart = active
-    .map((m) => (m.started_at ? new Date(String(m.started_at).replace(' ', 'T')) : null))
-    .filter((d) => d && !Number.isNaN(d.getTime()))
+    .map((m) => parseSqliteUtc(m.started_at))
+    .filter(Boolean)
     .sort((a, b) => a - b)[0];
 
   return (
@@ -685,6 +706,84 @@ export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
         </a>
       </div>
       <p className="mt-6 text-[12px] text-[#c4b5fd]">Spin-Out Lab is open to all Axal VC users. Acceptance is selective. No equity taken by Axal VC.</p>
+    </section>
+  );
+}
+
+/**
+ * Standing acknowledgement of the founder's own application.
+ *
+ * `GET /spinout-lab/state` has always returned the founder's latest
+ * `spinout_applications` row, and this page has always thrown it away — so a
+ * founder who applied on Tuesday came back on Thursday to the same marketing
+ * page and the same "Apply Now" button, with nothing anywhere confirming their
+ * application exists. Pressing it again is not merely redundant: the apply
+ * endpoint 409s a second pending application, so the only feedback the product
+ * gave them was an error.
+ *
+ * Pending REPLACES the apply CTA (re-applying is the thing that 409s).
+ * Refused sits ABOVE it, because a refused founder genuinely may re-apply —
+ * the insert only guards against a second *pending* row.
+ */
+export function ApplicationStatusSection({ application }) {
+  const status = String(application?.status || '').toLowerCase();
+  if (status !== 'pending' && status !== 'refused') return null;
+
+  const submitted = parseSqliteUtc(application.created_at);
+  const decided = parseSqliteUtc(application.decided_at);
+  const fmt = (d) => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  const pending = status === 'pending';
+  const tone = pending
+    ? { ring: 'ring-amber-300/70 dark:ring-amber-400/30', chip: 'bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-300', dot: 'bg-amber-500' }
+    : { ring: 'ring-gray-300/70 dark:ring-gray-600/40', chip: 'bg-gray-100 text-gray-700 dark:bg-gray-700/40 dark:text-gray-300', dot: 'bg-gray-400' };
+
+  return (
+    <section
+      data-testid="application-status"
+      data-status={status}
+      className={`rounded-[20px] p-8 bg-white dark:bg-gray-800 ring-1 ${tone.ring} shadow-sm`}
+    >
+      <div className="flex items-center gap-2.5 mb-3">
+        <span className={`h-2 w-2 rounded-full ${tone.dot}`} aria-hidden="true" />
+        <span className={`text-[11px] font-bold uppercase tracking-[.08em] px-2 py-0.5 rounded-full ${tone.chip}`}>
+          {pending ? 'In review' : 'Not this cohort'}
+        </span>
+      </div>
+
+      <h2 className="m-0 text-[24px] font-black tracking-[-.02em] text-gray-900 dark:text-gray-50">
+        {pending ? 'Your application is in review.' : 'You weren’t selected for this cohort.'}
+      </h2>
+
+      <p className="mt-2.5 text-[14.5px] leading-relaxed text-gray-600 dark:text-gray-300">
+        {pending ? (
+          <>
+            We have your application{application.company_name ? <> for <strong className="font-semibold text-gray-900 dark:text-gray-100">{application.company_name}</strong></> : null}
+            {submitted ? <>, submitted {fmt(submitted)}</> : null}. Every application is read by a
+            program manager, and you’ll get an email either way — you don’t need to apply again.
+          </>
+        ) : (
+          <>
+            {decided ? <>We reviewed your application on {fmt(decided)}. </> : null}
+            Cohorts are capped at 8 companies, so strong applications get turned down for space
+            alone. You’re welcome to apply again below.
+          </>
+        )}
+      </p>
+
+      {application.cohort ? (
+        <p className="mt-4 text-[12.5px] text-gray-500 dark:text-gray-400">
+          Applied to <span className="font-semibold text-gray-700 dark:text-gray-200">{application.cohort}</span>
+        </p>
+      ) : null}
+
+      {pending ? (
+        <div className="mt-6 flex gap-3 flex-wrap">
+          <a href={LAB_CONTACT_HREF} className="h-10 px-4 rounded-[10px] border border-gray-300 dark:border-gray-600 text-[13.5px] font-semibold text-gray-700 dark:text-gray-200 flex items-center hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+            Talk to a Program Manager
+          </a>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -905,9 +1004,17 @@ export function Dashboard({ state, previewAllUnlocked = false, investorView = fa
             application to someone whose role the apply endpoint refuses — is a
             property of THIS page, and should hold for anything that renders it
             directly rather than depending on the router getting it right. */}
-        {investorView
-          ? <LpCtaSection />
-          : <ApplyCtaSection applyHref="/spinout-lab/apply" />}
+        {investorView ? <LpCtaSection /> : (
+          <>
+            {/* A founder mid-review gets their own status instead of a button
+                that 409s. Refused founders get BOTH — the acknowledgement and
+                the CTA — because only a *pending* row blocks re-application. */}
+            <ApplicationStatusSection application={state?.application} />
+            {String(state?.application?.status || '').toLowerCase() === 'pending'
+              ? null
+              : <ApplyCtaSection applyHref="/spinout-lab/apply" />}
+          </>
+        )}
 
       </main>
     </div>
