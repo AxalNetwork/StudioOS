@@ -50,6 +50,7 @@ import { ensureSkillProfileSchema } from '../skillProfileSchema';
 import { parseUseOfFundsValue } from '../../util/useOfFunds';
 import { simulate, type Inputs, type SimulateResult } from '../captable';
 import { ensureCapTableVariantColumn } from '../captableSchema';
+import { ensureCompetitorSchema } from '../competitorSchema';
 
 /**
  * Task #1 — Load admin-managed mentor/partner network profiles.
@@ -411,6 +412,33 @@ export type SpinoutDemoDayData = {
     eyebrow: string; headline: string; body: string;
     loop_url: string; live_url: string; screenshot_url: string; caption: string;
   };
+  // Competitive landscape — the project's latest COMPLETED Competitor
+  // Analysis (Market Intel). `present` is false when no completed analysis
+  // exists for the project, in which case the deck mapper emits template
+  // sample rows + a gap. `rows` are the top competitors (by position /
+  // relevance); `gaps` / `wedge` come from the generated report's
+  // output_json. All fields degrade to empty arrays / '' — never fabricated.
+  competitor: {
+    present: boolean;
+    headline: string;
+    rows: Array<{ name: string; category: string; stage: string; gap: string }>;
+    gaps: string[];
+    wedge: string;
+  };
+  // Traction — the project's ACTUAL revenue proof (validation.revenue_proof /
+  // projects.revenue,mrr). `present` is true only when the project has logged
+  // REAL revenue proof (status paid / pilot_paid). We deliberately carry NO
+  // monthly series: financial_models.computed_json.months[] is a FORECAST
+  // (projectFinancials derives it from units/price/growth/churn), not realized
+  // revenue, so charting it as monthly traction would present projections as
+  // fact. There is no actual monthly history anywhere in the schema — the deck
+  // mapper renders an honest zero-baseline trend and flags the gap.
+  traction: {
+    present: boolean;
+    mrr: number | null;
+    total_revenue: number | null;
+    paying_customers: number | null;
+  };
 };
 
 type ProjectRow = {
@@ -576,6 +604,86 @@ async function loadSimSegments(env: Env, projectId: number): Promise<Array<[stri
     return segmentsFromSimResult(result);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Load the project's newest COMPLETED Competitor Analysis (Market Intel) and
+ * shape it into the deck's `competitor` block: the top competitors plus the
+ * generated report's gaps / wedge.
+ *
+ * SCOPING mirrors routes/competitors.ts: analyses are owned by `user_id` and
+ * carry an OPTIONAL `project_id`. We prefer the project-scoped analysis; when
+ * none exists we fall back to the founder's newest completed analysis that has
+ * no project attached (`project_id IS NULL`) — never another project's — so the
+ * slide is populated for founders who ran a general analysis before linking it.
+ *
+ * Returns `{ present: false, … }` on any miss (no completed analysis, table
+ * absent) so the deck mapper renders template rows + a gap. Never throws.
+ */
+type CompetitorReport = { gaps?: unknown; wedge?: unknown };
+async function loadCompetitorLandscape(
+  env: Env,
+  userId: number,
+  projectId: number,
+): Promise<SpinoutDemoDayData['competitor']> {
+  const empty: SpinoutDemoDayData['competitor'] = {
+    present: false, headline: '', rows: [], gaps: [], wedge: '',
+  };
+  try {
+    await ensureCompetitorSchema(env);
+    // Newest completed analysis: project-scoped first, then the founder's
+    // project-less analyses. Both constrained to this user so we never read
+    // another founder's landscape.
+    const analysis = await env.DB.prepare(
+      `SELECT id FROM competitor_analyses
+        WHERE user_id = ? AND status = 'complete'
+          AND (project_id = ? OR project_id IS NULL)
+        ORDER BY (project_id = ?) DESC, created_at DESC LIMIT 1`,
+    ).bind(userId, projectId, projectId).first<{ id: string }>();
+    if (!analysis?.id) return empty;
+
+    const [cands, outRow] = await Promise.all([
+      env.DB.prepare(
+        `SELECT name, category, summary, details_json
+           FROM competitor_candidates WHERE analysis_id = ?
+          ORDER BY position ASC, relevance_score DESC LIMIT 4`,
+      ).bind(analysis.id).all<{
+        name: string | null; category: string | null;
+        summary: string | null; details_json: string | null;
+      }>(),
+      env.DB.prepare(
+        `SELECT output_json FROM competitor_analysis_outputs WHERE analysis_id = ?`,
+      ).bind(analysis.id).first<{ output_json: string | null }>(),
+    ]);
+
+    let report: CompetitorReport = {};
+    try { report = JSON.parse(outRow?.output_json || '{}') as CompetitorReport; } catch { /* keep {} */ }
+    const reportGaps = Array.isArray(report.gaps)
+      ? report.gaps.map((g) => String(g).trim()).filter(Boolean)
+      : [];
+    const wedge = typeof report.wedge === 'string' ? report.wedge.trim() : '';
+
+    const rows = (cands?.results || []).map((c, i) => {
+      let details: Record<string, unknown> = {};
+      try { details = JSON.parse(c.details_json || '{}') as Record<string, unknown>; } catch { /* {} */ }
+      // Category as a display word (Direct / Adjacent), stage from details when
+      // present, and a one-line weakness from the report's per-index gap, then
+      // the candidate summary. Trimmed to ~90 chars for the slide.
+      const rawCat = String(c.category || '').trim().toLowerCase();
+      const category = rawCat === 'direct' ? 'Direct' : rawCat === 'adjacent' ? 'Adjacent' : (rawCat ? rawCat[0].toUpperCase() + rawCat.slice(1) : DASH);
+      const stageRaw = String((details.stage ?? details.traction ?? '') as string).trim();
+      const stage = stageRaw ? stageRaw.slice(0, 40) : DASH;
+      const gapSrc = String(reportGaps[i] || c.summary || '').trim();
+      const gap = gapSrc ? gapSrc.slice(0, 90) : DASH;
+      return { name: String(c.name || '').trim() || DASH, category, stage, gap };
+    }).filter((r) => r.name !== DASH);
+
+    if (!rows.length) return empty;
+    return { present: true, headline: '', rows, gaps: reportGaps, wedge };
+  } catch (err) {
+    console.warn('[axalSpinoutDemoDay] loadCompetitorLandscape failed', err);
+    return empty;
   }
 }
 
@@ -884,6 +992,11 @@ export async function fillAxalSpinoutDemoDay(
   // scenario (preferred over the holders table on Slide 08).
   const simSegments = await loadSimSegments(env, projectId);
 
+  // Competitive landscape — newest completed Competitor Analysis (Market
+  // Intel). Empty (present:false) when the founder has not run one; the deck
+  // mapper then renders template rows + a gap.
+  const competitor = await loadCompetitorLandscape(env, userId, projectId);
+
   // ------ Task #14: activity log (last 30 days of Lab events) ---------
   // Aggregates milestones + interviews + advisor answers by day so the
   // Cover ActivityLog30Day primitive can render an honest pulse. Dates
@@ -993,6 +1106,19 @@ export async function fillAxalSpinoutDemoDay(
       ...(amount ? { amount, label, signed } : {}),
     };
   })();
+
+  // ------ Traction: ACTUAL revenue proof only --------------------------
+  // `present` is true only when the founder has logged REAL revenue proof
+  // (status paid / pilot_paid). We carry no monthly series on purpose: the
+  // financial model's computed months are a forecast, not realized revenue,
+  // and there is no actual monthly history in the schema. The deck mapper
+  // renders an honest zero-baseline trend and flags the missing history.
+  const traction: SpinoutDemoDayData['traction'] = {
+    present: revenueProof.status === 'paid' || revenueProof.status === 'pilot_paid',
+    mrr: revenueProof.mrr,
+    total_revenue: revenueProof.total_revenue,
+    paying_customers: revenueProof.paying_customers,
+  };
 
   // ------ Task #1: mentor profiles + skill coverage + network --------
   // Real, admin-managed roster from network_profiles (loaded above).
@@ -1289,6 +1415,10 @@ export async function fillAxalSpinoutDemoDay(
     },
 
     product_demo: productDemo,
+
+    competitor,
+
+    traction,
   };
 }
 

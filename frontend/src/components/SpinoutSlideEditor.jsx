@@ -75,10 +75,17 @@ const DECK_ROWS = {
     { label: 'Pull quote', key: 'problem.quote', kind: 'paragraph' },
     { label: 'Quote attribution', key: 'problem.quoteAttr' },
   ],
-  validation: [{ label: 'Slide headline', key: 'validation.title' }],
   market: [
     { label: 'Slide headline', key: 'market.title' },
     { label: 'Sizing assumptions', key: 'market.assumptions', kind: 'paragraph' },
+  ],
+  competitive: [
+    { label: 'Slide headline', key: 'competitive.title' },
+    { label: 'Whitespace claim', key: 'competitive.whitespace', kind: 'paragraph' },
+  ],
+  traction: [
+    { label: 'Slide headline', key: 'traction.title' },
+    { label: 'Takeaway line', key: 'traction.takeaway', kind: 'paragraph' },
   ],
   solution: [{ label: 'Slide headline', key: 'solution.title' }],
   product_demo: [
@@ -88,7 +95,6 @@ const DECK_ROWS = {
   ],
   roadmap: [{ label: 'Slide headline', key: 'roadmap.title' }],
   team_network: [{ label: 'Slide headline', key: 'team.title' }],
-  cap_table: [{ label: 'Slide headline', key: 'captable.title' }],
   ask: [{ label: 'Slide headline', key: 'ask.title' }],
   review_the_deal: [
     { label: 'Slide headline', key: 'deal.title' },
@@ -118,8 +124,20 @@ const CONFIG = {
     edit: [],
   },
   problem: {
-    title: 'Problem',
+    title: 'Problem & validation',
     auto: [
+      {
+        // The standalone Validation slide is merged into Problem — its
+        // scorecard renders here so the evidence stays reviewable.
+        label: 'Discovery scorecard',
+        src: 'discovery',
+        multi: (f) => {
+          const cards = j(f['validation.cards_json']) || [];
+          return cards
+            .map((c) => (Array.isArray(c) ? { label: c[1] || 'Metric', value: orDash(c[0]) } : null))
+            .filter(Boolean);
+        },
+      },
       {
         label: 'Discovery quote',
         src: 'discovery',
@@ -143,24 +161,6 @@ const CONFIG = {
         help: 'The core, evidenced problem your venture solves.',
       },
     ],
-  },
-  validation: {
-    title: 'Validation',
-    // Data-driven: render the live discovery scorecard exactly as assembled
-    // (each card carries its own label), so labels never drift from the data.
-    auto: [
-      {
-        label: 'Discovery scorecard',
-        src: 'discovery',
-        multi: (f) => {
-          const cards = j(f['validation.cards_json']) || [];
-          return cards
-            .map((c) => (Array.isArray(c) ? { label: c[1] || 'Metric', value: orDash(c[0]) } : null))
-            .filter(Boolean);
-        },
-      },
-    ],
-    edit: [],
   },
   market: {
     title: 'Market',
@@ -256,26 +256,52 @@ const CONFIG = {
     ],
     edit: [],
   },
-  cap_table: {
-    title: 'Cap table & incorporation',
+  competitive: {
+    title: 'Competitive landscape',
     auto: [
       {
-        label: 'Cap table',
-        src: 'captable',
-        get: (f) => orDash(listJoin(j(f['captable.segments_json']),
-          (s) => (Array.isArray(s) ? `${s[0]} ${s[1]}%` : ''))),
+        label: 'Competitors',
+        src: 'project',
+        get: (f) => orDash(listJoin(j(f['competitive.competitors_json']),
+          (c) => (Array.isArray(c) ? `${c[0]}${c[1] ? ` (${c[1]})` : ''}` : String(c)))),
       },
       {
-        label: 'Incorporation',
-        src: 'incorporation',
-        get: (f) => orDash(listJoin(j(f['captable.items_json']),
-          (i) => (Array.isArray(i) ? `${i[0]} (${i[1]})` : String(i)))),
+        label: 'Our edge',
+        src: 'project',
+        get: (f) => orDash(listJoin(j(f['competitive.edges_json']), (e) => String(e))),
+      },
+    ],
+    edit: [],
+  },
+  traction: {
+    title: 'Traction',
+    auto: [
+      {
+        label: 'Monthly revenue trend',
+        src: 'project',
+        get: (f) => {
+          const labels = j(f['traction.trendLabels_json']) || [];
+          const months = j(f['traction.trendX_json']) || [];
+          const out = months.map((m, i) => `${m} ${labels[i] ?? ''}`.trim()).filter(Boolean);
+          return out.length ? out.join(' · ') : '—';
+        },
+      },
+      {
+        label: 'MRR & growth',
+        src: 'project',
+        get: (f) => orDash([f['traction.mrr'], f['traction.growth']].filter(Boolean).join ('  ·  ')),
+      },
+      {
+        label: 'Revenue mix',
+        src: 'project',
+        get: (f) => orDash(listJoin(j(f['traction.mix_json']),
+          (m) => (Array.isArray(m) ? `${m[0]} ${m[2]}%` : String(m)))),
       },
     ],
     edit: [],
   },
   ask: {
-    title: 'The ask',
+    title: 'The ask & cap table',
     note: 'Edit the use-of-funds allocation in the “THE ASK — Use of Funds” panel on the right. The raise and milestone are pulled from your startup.',
     auto: [
       {
@@ -297,6 +323,20 @@ const CONFIG = {
           const m = j(f['ask.milestone_json']);
           return Array.isArray(m) ? orDash(m.filter(Boolean).join(' — ')) : '—';
         },
+      },
+      {
+        // The standalone Cap Table slide is merged into Ask — surface its
+        // splits + entity checklist here so they stay reviewable.
+        label: 'Cap table',
+        src: 'captable',
+        get: (f) => orDash(listJoin(j(f['captable.segments_json']),
+          (s) => (Array.isArray(s) ? `${s[0]} ${s[1]}%` : ''))),
+      },
+      {
+        label: 'Incorporation',
+        src: 'incorporation',
+        get: (f) => orDash(listJoin(j(f['captable.items_json']),
+          (i) => (Array.isArray(i) ? `${i[0]} (${i[1]})` : String(i)))),
       },
     ],
     edit: [],

@@ -148,11 +148,33 @@ test('every slide prefix is one a gap can actually be tagged with', () => {
   // drifted from those keys, that slide could never receive a gap and would be
   // permanently, silently "ready" — the original bug in a new disguise.
   const WORKER_SECTIONS = new Set([
-    'cover', 'problem', 'validation', 'market', 'solution',
-    'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal',
+    'cover', 'problem', 'validation', 'market', 'solution', 'productDemo',
+    'competitive', 'traction', 'roadmap', 'team', 'captable', 'ask', 'deal',
   ]);
   for (const m of SLIDE_META) {
-    assert.ok(WORKER_SECTIONS.has(m.prefix), `${m.spec}: prefix '${m.prefix}' is not a worker section`);
+    for (const p of (m.prefixes || [m.prefix])) {
+      assert.ok(WORKER_SECTIONS.has(p), `${m.spec}: prefix '${p}' is not a worker section`);
+    }
   }
   assert.equal(new Set(SLIDE_META.map((m) => m.prefix)).size, SLIDE_META.length, 'prefixes are unique');
+  // Every worker section that raises gaps must be claimed by some slide, or a
+  // gap tagged with it would silently never mark any slide partial.
+  const claimed = new Set(SLIDE_META.flatMap((m) => m.prefixes || [m.prefix]));
+  for (const s of WORKER_SECTIONS) {
+    assert.ok(claimed.has(s), `worker section '${s}' is not claimed by any slide`);
+  }
+});
+
+/* --------------------------------------------------------- merged slides */
+
+test('a gap in an absorbed section marks the host slide partial', () => {
+  // Problem absorbs the validation funnel; Ask absorbs the cap table. A gap
+  // tagged with the absorbed section must surface on the host slide.
+  const problemMeta = SLIDE_META.find((m) => m.spec === 'problem');
+  const askMeta = SLIDE_META.find((m) => m.spec === 'ask');
+  assert.equal(slideStatus(problemMeta, FIELDS, gapsFor('validation')).state, 'partial');
+  assert.equal(slideStatus(askMeta, FIELDS, gapsFor('captable')).state, 'partial');
+  // …and only the host slide: nothing else claims those sections.
+  const vm = buildPitchDeckViewModel({ fields: FIELDS, gaps: gapsFor('validation', 'captable') });
+  assert.equal(vm.readyCount, SLIDE_META.length - 2, 'exactly the two host slides are partial');
 });

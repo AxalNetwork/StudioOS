@@ -28,7 +28,7 @@ import { SPINOUT_OVERRIDABLE_KEYS } from '../src/services/decks/spinoutDeckOverr
 
 const SLIDE_KEYS = [
   'brand', 'cover', 'problem', 'validation', 'market',
-  'solution', 'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal',
+  'solution', 'productDemo', 'competitive', 'traction', 'roadmap', 'team', 'captable', 'ask', 'deal',
 ] as const;
 
 const SOLUTION_ICONS = new Set(['ingest', 'score', 'monitor', 'act']);
@@ -177,6 +177,25 @@ function makeFullSrc(): SpinoutDemoDayData {
       screenshot_url: 'https://example.com/basepoint-shot.png',
       caption: 'Live scoring dashboard.',
     },
+    competitor: {
+      present: true,
+      headline: 'Where the incumbents leave lenders exposed.',
+      // The loader (loadCompetitorLandscape) already normalises category to a
+      // display word and unknown stage to '—'; the mapper passes them through.
+      rows: [
+        { name: 'RiskLegacy Inc', category: 'Direct', stage: 'Series C', gap: 'Batch scoring on stale data; weeks to onboard.' },
+        { name: 'Spreadsheet + analyst', category: 'Direct', stage: '—', gap: 'Manual, slow, impossible to monitor continuously.' },
+        { name: 'DataWarehouse Co', category: 'Adjacent', stage: 'Series B', gap: 'Stores the data but leaves scoring to the customer.' },
+      ],
+      gaps: ['Weak explainability among incumbents', 'No continuous monitoring'],
+      wedge: 'Win private-credit teams with real-time, explainable scoring the incumbents cannot match.',
+    },
+    traction: {
+      present: true,
+      mrr: 4200,
+      total_revenue: 18000,
+      paying_customers: 5,
+    },
   } as SpinoutDemoDayData;
 }
 
@@ -197,6 +216,8 @@ function makePartialSrc(): SpinoutDemoDayData {
     team: { ...full.team, headline: '', founders: [] },
     mentor_network: { ...full.mentor_network, profiles: [], mentors: [] },
     cap_table: { ...full.cap_table, headline: '', holders: [] },
+    competitor: { present: false, headline: '', rows: [], gaps: [], wedge: '' },
+    traction: { present: false, mrr: null, total_revenue: null, paying_customers: null },
     ask: { ...full.ask, headline: '', raise_amount: '', runway: '', use_of_funds: [], next_milestones: [] },
     contact: {
       ...full.contact, headline: '', signoff: '', contact_email: '',
@@ -210,12 +231,19 @@ function hasDraftPlaceholder(data: unknown): boolean {
   return JSON.stringify(data).includes('[draft');
 }
 
-test('full project (Day 28) => no gaps, no placeholders, not draft', () => {
-  const { data, notes, gaps, draft, programDay } = mapToSpinoutDeckData(makeFullSrc());
+test('full project (Day 28) => only the traction-history gap, no placeholders', () => {
+  const { data, notes, gaps, draft, programDay, gapSections } = mapToSpinoutDeckData(makeFullSrc());
 
   assert.equal(programDay, 28, 'days_remaining 0 => programDay 28');
-  assert.equal(gaps.length, 0, `expected zero gaps, got: ${JSON.stringify(gaps)}`);
-  assert.equal(draft, false, 'a complete Day-28 project is not a draft');
+  // The ONE gap a fully-completed deck cannot retire: there is no realized
+  // monthly revenue history anywhere in the schema (the financial model's
+  // months are a forecast, never charted here), so the trend is an honest
+  // zero baseline and the slide is flagged partial rather than forecast-backed.
+  assert.deepEqual(gaps, [
+    'Traction: monthly revenue history is not tracked yet — the trend shows a zero baseline.',
+  ], `expected only the traction-history gap, got: ${JSON.stringify(gaps)}`);
+  assert.deepEqual(gapSections, ['traction']);
+  assert.equal(draft, true, 'the un-retirable traction-history gap holds the deck in draft');
   assert.equal(hasDraftPlaceholder(data), false, 'no [draft …] placeholder should leak into a full deck');
 
   // Speaker notes exist for every rendered slide (cover..deal).
@@ -312,7 +340,7 @@ test('flattenSpinoutDeckData: scalars become dotted keys, arrays become _json ke
 
   // All SLIDE_KEYS sections present.
   const sections = new Set(Object.keys(fields).map((k) => k.split('.')[0]));
-  for (const s of ['cover', 'problem', 'validation', 'market', 'solution', 'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal']) {
+  for (const s of ['cover', 'problem', 'validation', 'market', 'solution', 'productDemo', 'competitive', 'traction', 'roadmap', 'team', 'captable', 'ask', 'deal']) {
     assert.ok(sections.has(s), `section "${s}" present in flat fields`);
   }
 });
@@ -528,11 +556,14 @@ test('a genuinely pre-revenue company shows a dash and raises NO gap', () => {
   // "unfinished work"; pre-revenue is a truthful, complete state for a pre-seed
   // company mid-sprint, and gapping it would stamp DRAFT on an accurate deck.
   const src = withRevenue({ status: 'pre_revenue' });
-  const { data, gaps } = mapToSpinoutDeckData(src);
+  const { data, gaps, gapSections } = mapToSpinoutDeckData(src);
   assert.deepEqual(data.ask.kpis[3], ['—', 'Revenue proof'], 'honest dash, never a fabricated figure');
+  // Scope to the Ask slide: the Traction slide owns its own revenue gaps (it is
+  // a distinct slide with a distinct readiness contract), so filter those out.
+  const askRevenueGaps = gaps.filter((g, i) => gapSections![i] === 'ask' && /revenue/i.test(g));
   assert.ok(
-    !gaps.some((g) => /revenue/i.test(g)),
-    `pre-revenue must not raise a gap, got: ${JSON.stringify(gaps.filter((g) => /revenue/i.test(g)))}`,
+    askRevenueGaps.length === 0,
+    `pre-revenue must not raise an ASK gap, got: ${JSON.stringify(askRevenueGaps)}`,
   );
 });
 
@@ -596,7 +627,7 @@ test('a project with an ask but no OKRs is sent to Roadmap, not Capital', () => 
 
 const DECK_SECTIONS = new Set([
   'cover', 'problem', 'validation', 'market', 'solution',
-  'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal',
+  'productDemo', 'competitive', 'traction', 'roadmap', 'team', 'captable', 'ask', 'deal',
 ]);
 
 test('every gap names a real deck section, index-aligned with gaps', () => {
@@ -638,8 +669,121 @@ test('an empty project raises a gap for EVERY slide — none may look complete',
   }
 });
 
-test('a fully-completed project raises no gaps at all, so every slide is ready', () => {
+test('a fully-completed project leaves only the un-retirable traction-history gap', () => {
+  // Every slide but Traction can reach "ready"; Traction cannot, because there
+  // is no realized monthly revenue history in the schema to plot. The gap keeps
+  // the slide honestly partial rather than backing the trend with a forecast.
   const { gaps, gapSections } = mapToSpinoutDeckData(makeFullSrc());
-  assert.deepEqual(gaps, [], `expected zero gaps, got: ${JSON.stringify(gaps)}`);
-  assert.deepEqual(gapSections, []);
+  assert.deepEqual(gaps, [
+    'Traction: monthly revenue history is not tracked yet — the trend shows a zero baseline.',
+  ], `expected only the traction-history gap, got: ${JSON.stringify(gaps)}`);
+  assert.deepEqual(gapSections, ['traction']);
+});
+
+/* ============================================================================
+ *  New narrative arc — the 11 rendered slides carry the renumbered idx values,
+ *  and the two NEW sections (competitive / traction) are emitted from their
+ *  backing modules.
+ * ========================================================================== */
+
+test('the slide idx values follow the new narrative arc', () => {
+  const { data } = mapToSpinoutDeckData(makeFullSrc());
+  assert.equal(data.problem.idx, '02', 'problem is slot 02');
+  assert.equal(data.solution.idx, '03', 'solution is slot 03');
+  assert.equal(data.productDemo.idx, '04', 'product demo is slot 04');
+  assert.equal(data.market.idx, '05', 'market is slot 05');
+  assert.equal(data.competitive.idx, '06', 'competitive is slot 06');
+  assert.equal(data.traction.idx, '07', 'traction is slot 07');
+  assert.equal(data.roadmap.idx, '08', 'roadmap is slot 08');
+  assert.equal(data.team.idx, '09', 'team is slot 09');
+  assert.equal(data.ask.idx, '10', 'ask is slot 10');
+  assert.equal(data.deal.idx, '11', 'deal is slot 11');
+  // validation/captable render INSIDE their host slides (problem / ask).
+  assert.equal(data.validation.idx, '02', 'validation renders inside the merged Problem slide');
+  assert.equal(data.captable.idx, '10', 'captable renders inside the merged Ask slide');
+});
+
+test('competitive: a completed analysis populates rows, edges and whitespace, no gap', () => {
+  const { data, gaps } = mapToSpinoutDeckData(makeFullSrc());
+  assert.ok(data.competitive.competitors.length > 0 && data.competitive.competitors.length <= 4, 'up to 4 rows');
+  for (const row of data.competitive.competitors) {
+    assert.equal(row.length, 4, 'each row is [name, category, stage, gap]');
+  }
+  // Category is displayed as a word; direct → Direct.
+  assert.equal(data.competitive.competitors[0][1], 'Direct', 'category rendered as a word');
+  // Unknown stage renders as the DASH placeholder.
+  assert.equal(data.competitive.competitors[1][2], '—', 'unknown stage is a dash');
+  assert.ok(data.competitive.edges.length > 0 && data.competitive.edges.length <= 3, 'up to 3 edge lines');
+  assert.ok(data.competitive.whitespace.length > 0, 'a closing positioning line');
+  assert.ok(!gaps.some((g) => /competitor analysis in Market Intel/.test(g)), 'a real analysis raises no competitive gap');
+});
+
+test('competitive: no analysis falls back to sample rows and raises a gap', () => {
+  const src = makeFullSrc();
+  src.competitor = { present: false, headline: '', rows: [], gaps: [], wedge: '' };
+  const { data, gaps } = mapToSpinoutDeckData(src);
+  assert.equal(data.competitive.competitors.length, 4, 'sample rows keep the slide renderable');
+  assert.ok(
+    gaps.some((g) => /Competitive: run a competitor analysis in Market Intel/.test(g)),
+    'a competitive gap is recorded',
+  );
+});
+
+test('traction: real revenue proof shows actual MRR + a HISTORY gap, never a forecast trend', () => {
+  const { data, gaps, gapSections } = mapToSpinoutDeckData(makeFullSrc());
+  assert.equal(data.traction.trendX.length, data.traction.trendY.length, 'x/y aligned');
+  assert.equal(data.traction.trendX.length, data.traction.trendLabels.length, 'labels aligned');
+  assert.ok(data.traction.trendY.length >= 4 && data.traction.trendY.length <= 6, '4-6 points');
+  // The trend is ALWAYS a flat-0 baseline: there is no realized monthly history
+  // to plot, and the financial model's months are a forecast we refuse to chart.
+  assert.ok(data.traction.trendY.every((n) => n === 0), 'flat-0 baseline even when revenue exists — never a forecast curve');
+  assert.ok(data.traction.trendLabels.every((l) => l === ''), 'blank point labels: no per-month figure is claimed');
+  // MRR + mix carry the real figure straight from revenue_proof.
+  assert.match(data.traction.mrr, /^\$/, 'MRR shows the actual money figure from proof');
+  assert.equal(data.traction.growth, '—', 'growth is a dash — no realized series to compute it from');
+  assert.match(data.traction.growthNote, /history not tracked/, 'growth note explains the dash');
+  assert.deepEqual(data.traction.mix, [['Recurring revenue', data.traction.mrr, 100]], 'single honest mix row, never a fabricated split');
+  assert.match(data.traction.takeaway, /paying customer/, 'takeaway is phrased only from actuals (MRR + paying customers)');
+  // The DISTINCT history gap, not the "log revenue proof" one.
+  const histIdx = gaps.findIndex((g) => /monthly revenue history is not tracked/.test(g));
+  assert.ok(histIdx >= 0, 'a project with revenue still flags the missing monthly history');
+  assert.equal(gapSections![histIdx], 'traction', 'filed under the traction slide');
+  assert.ok(!gaps.some((g) => /Traction: log revenue proof/.test(g)), 'and NOT the pre-revenue gap');
+});
+
+test('traction: the two gap variants are distinct (history vs. no-proof)', () => {
+  const paid = mapToSpinoutDeckData(makeFullSrc());
+  const pre = (() => {
+    const src = makeFullSrc();
+    src.traction = { present: false, mrr: null, total_revenue: null, paying_customers: null };
+    return mapToSpinoutDeckData(src);
+  })();
+  const historyGap = 'Traction: monthly revenue history is not tracked yet — the trend shows a zero baseline.';
+  const noProofGap = 'Traction: log revenue proof in the Validation module to populate this slide.';
+  assert.ok(paid.gaps.includes(historyGap) && !paid.gaps.includes(noProofGap), 'paid → history gap only');
+  assert.ok(pre.gaps.includes(noProofGap) && !pre.gaps.includes(historyGap), 'pre-revenue → no-proof gap only');
+  assert.notEqual(historyGap, noProofGap, 'the two wordings must differ');
+});
+
+test('traction: pre-revenue renders an honest flat-0 trend and raises the no-proof gap', () => {
+  const src = makeFullSrc();
+  src.traction = { present: false, mrr: null, total_revenue: null, paying_customers: null };
+  const { data, gaps } = mapToSpinoutDeckData(src);
+  assert.ok(data.traction.trendY.length > 0, 'a month axis still renders');
+  assert.ok(data.traction.trendY.every((n) => n === 0), 'flat-0 baseline, never a fabricated rising curve');
+  assert.equal(data.traction.mrr, '—', 'no MRR figure asserted');
+  assert.ok(
+    gaps.some((g) => /Traction: log revenue proof in the Validation module/.test(g)),
+    'a traction gap is recorded',
+  );
+});
+
+test('Day-16 partial raises the two new gaps (competitive + traction)', () => {
+  const { gaps, gapSections } = mapToSpinoutDeckData(makePartialSrc());
+  const compIdx = gaps.findIndex((g) => /Competitive: run a competitor analysis/.test(g));
+  const tracIdx = gaps.findIndex((g) => /Traction: log revenue proof/.test(g));
+  assert.ok(compIdx >= 0, 'a partial project gaps the competitive slide');
+  assert.ok(tracIdx >= 0, 'a partial project gaps the traction slide');
+  assert.equal(gapSections![compIdx], 'competitive', 'filed under the competitive slide');
+  assert.equal(gapSections![tracIdx], 'traction', 'filed under the traction slide');
 });

@@ -13,19 +13,22 @@
 // deterministic "sample data" state instead of broken/NaN UI.
 
 /** The 11 deck slides. `spec` matches SpinoutSlideEditor's CONFIG keys and the
- *  stored deck spec_id; `prefix` is the hydrate() section each slide reads;
- *  `week` is the Lab week that sources it (0 = studio profile). */
+ *  stored deck spec_id; `prefix` is the hydrate() section each slide reads —
+ *  merged slides list every section they read via `prefixes` (Problem absorbs
+ *  the validation funnel; Ask absorbs the cap table), so a gap in any of those
+ *  sections marks the host slide partial; `week` is the Lab week that sources
+ *  it (0 = studio profile). */
 export const SLIDE_META = [
   { spec: 'cover', title: 'Cover', week: 0, prefix: 'cover' },
-  { spec: 'problem', title: 'Problem', week: 1, prefix: 'problem' },
-  { spec: 'validation', title: 'Validation', week: 1, prefix: 'validation' },
-  { spec: 'market', title: 'Market', week: 1, prefix: 'market' },
+  { spec: 'problem', title: 'Problem & Validation', week: 1, prefix: 'problem', prefixes: ['problem', 'validation'] },
   { spec: 'solution', title: 'Solution', week: 1, prefix: 'solution' },
   { spec: 'product_demo', title: 'Product Demo', week: 3, prefix: 'productDemo' },
+  { spec: 'market', title: 'Market', week: 1, prefix: 'market' },
+  { spec: 'competitive', title: 'Competitive', week: 1, prefix: 'competitive' },
+  { spec: 'traction', title: 'Traction', week: 3, prefix: 'traction' },
   { spec: 'roadmap', title: 'Roadmap', week: 3, prefix: 'roadmap' },
   { spec: 'team_network', title: 'Team & Network', week: 2, prefix: 'team' },
-  { spec: 'cap_table', title: 'Cap Table', week: 2, prefix: 'captable' },
-  { spec: 'ask', title: 'The Ask · Use of Funds', week: 4, prefix: 'ask' },
+  { spec: 'ask', title: 'The Ask · Cap Table', week: 4, prefix: 'ask', prefixes: ['ask', 'captable'] },
   { spec: 'review_the_deal', title: 'Deal Readiness', week: 4, prefix: 'deal' },
 ];
 
@@ -81,7 +84,8 @@ export function slideStatus(meta, fields, gaps = null) {
     return { state: 'unknown', gaps: [], missing: 0 };
   }
 
-  const mine = list.filter((_, i) => sections[i] === meta.prefix);
+  const prefixes = Array.isArray(meta.prefixes) ? meta.prefixes : [meta.prefix];
+  const mine = list.filter((_, i) => prefixes.includes(sections[i]));
   if (mine.length === 0) return { state: 'ready', gaps: [], missing: 0 };
   return { state: 'partial', gaps: mine, missing: mine.length };
 }

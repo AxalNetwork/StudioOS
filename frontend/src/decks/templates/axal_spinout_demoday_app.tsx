@@ -9,10 +9,15 @@
  * editor, picker thumbnail, preview modal, share view and PDF export all show
  * the same deck.
  *
- * Slide order (9): Cover · Problem · Validation · Market · Solution ·
- * Roadmap · Team & network · Cap table · Ask. The standalone Axal Signal and
- * Product Demo slides are dropped; the two people slides are merged into Team
- * & network.
+ * Slide order (11): Cover · Problem (+ validation evidence) · Solution ·
+ * Product demo · Market · Competitive · Traction · Roadmap · Team & network ·
+ * Ask (+ cap table) · Review the deal. The narrative arc runs problem (with
+ * its validation proof) → solution → proof → opportunity → traction → plan →
+ * team → the raise: the standalone Validation slide is merged into Problem
+ * (discovery funnel strip) and the standalone Cap Table slide into Ask (donut
+ * + entity status), while Competitive and Traction are new slides. The
+ * `validation.*` / `captable.*` field sections remain unchanged — the merged
+ * slides read them in place.
  *
  * Geometry: the PPTX canvas is 13.33in × 7.5in (= 960pt × 540pt). It maps to
  * the shared 1920 × 1080 `<Slide16x9>` frame at exactly 144px / inch and
@@ -81,7 +86,8 @@ type Status = 'done' | 'active' | 'pending';
 /* ─────────────────────────── hydrate ─────────────────────────── */
 const SECTIONS = new Set([
   'brand', 'cover', 'problem', 'validation', 'market', 'solution',
-  'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal',
+  'productDemo', 'competitive', 'traction', 'roadmap', 'team', 'captable',
+  'ask', 'deal',
 ]);
 
 const clone = (o: any) => JSON.parse(JSON.stringify(o));
@@ -410,10 +416,17 @@ const SlideCover: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   );
 };
 
-/* 2 — PROBLEM */
+/* 2 — PROBLEM (+ validation evidence) */
+// The standalone Validation slide is merged here: the discovery funnel renders
+// as a compact stat strip along the bottom, reading the unchanged
+// `validation.*` section (stages + conversion) in place.
 const SlideProblem: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   const p = d.problem;
+  const v = d.validation || {};
+  const stages: Array<[string, number]> = Array.isArray(v.stages) ? v.stages : [];
+  const conversion: [string, string] = Array.isArray(v.conversion) ? v.conversion : ['', ''];
   const bx = 5.35, bw = 7.25;
+  const stW = stages.length ? Math.min(1.85, 9.25 / stages.length) : 1.85;
   return (
     <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
       <div style={{ position: 'absolute', inset: 0 }}>
@@ -438,60 +451,40 @@ const SlideProblem: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
             </React.Fragment>
           );
         })}
+
+        {/* validation evidence strip — discovery funnel + conversion */}
+        {stages.length > 0 && (
+          <>
+            <Txt l={ML} t={6.02} w={6} h={0.25} size={9.5} bold spacing={1} color={K.muted}>{v.funnelLabel}</Txt>
+            {stages.map((st, i) => {
+              const x = ML + i * stW;
+              return (
+                <React.Fragment key={i}>
+                  <Txt l={x} t={6.3} w={stW - 0.2} h={0.32} size={16} bold color={i === stages.length - 1 ? K.accent : K.ink}>{String(st[1])}</Txt>
+                  {/* single-line clamp: the footer starts at 7.06, so a wrapping
+                      stage label would collide with it */}
+                  <Txt l={x} t={6.62} w={stW - 0.2} h={0.26} size={8.5} lh={1.05} color={K.muted}>
+                    <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st[0]}</span>
+                  </Txt>
+                  {i < stages.length - 1 && (
+                    <Txt l={x + stW - 0.24} t={6.3} w={0.24} h={0.32} size={12} align="center" valign="middle" color={K.accentMid}>{'\u2192'}</Txt>
+                  )}
+                </React.Fragment>
+              );
+            })}
+            <Txt l={10.1} t={6.3} w={2.53} h={0.56} size={11} valign="top" lh={1.15} color={K.muted}>
+              <span style={{ fontWeight: 700, color: K.accent, fontSize: pt(16) }}>{conversion[0]}</span>
+              <span>{'  ' + (conversion[1] || '')}</span>
+            </Txt>
+          </>
+        )}
         <Footer brand={d.brand} />
       </div>
     </Slide16x9>
   );
 };
 
-/* 3 — VALIDATION */
-const SlideValidation: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
-  const v = d.validation;
-  const cw = 2.85, gap = 0.18, cy = 1.95, ch = 1.45;
-  const stages: Array<[string, number]> = Array.isArray(v.stages) ? v.stages : [];
-  const maxV = stages.length ? Math.max(...stages.map((s) => Number(s[1]))) : 1;
-  const fx = 3.05, maxW = 7.7;
-  const trans = [1, 0.6, 0.45, 0.28, 0.12];
-  return (
-    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={v.eyebrow} idx={v.idx} />
-        <Title text={v.title} path="validation.title" editable={editable} onEdit={onEdit} />
-
-        {(Array.isArray(v.cards) ? v.cards : []).map((c: [string, string], i: number) => {
-          const x = ML + i * (cw + gap);
-          return (
-            <React.Fragment key={i}>
-              <Rect l={x} t={cy} w={cw} h={ch} r={0.1} />
-              <Txt l={x + 0.25} t={cy + 0.18} w={cw - 0.5} h={0.7} size={40} bold valign="middle" color={K.accent}>{c[0]}</Txt>
-              <Txt l={x + 0.25} t={cy + 0.92} w={cw - 0.5} h={0.4} size={11} color={K.muted}>{c[1]}</Txt>
-            </React.Fragment>
-          );
-        })}
-
-        <Txt l={ML} t={3.75} w={11} h={0.3} size={10} bold spacing={1} color={K.muted}>{v.funnelLabel}</Txt>
-        {stages.map((st, i) => {
-          const fy = 4.2 + i * 0.5;
-          const w = Math.max(0.45, maxW * (Number(st[1]) / maxV));
-          return (
-            <React.Fragment key={i}>
-              <Txt l={ML} t={fy} w={2.25} h={0.34} size={12} bold valign="middle" color={K.ink}>{st[0]}</Txt>
-              <div style={{ position: 'absolute', left: inch(fx), top: inch(fy), width: inch(w), height: inch(0.34), background: K.accent, opacity: trans[Math.min(i, trans.length - 1)], borderRadius: inch(0.05) }} />
-              <Txt l={fx + w + 0.12} t={fy} w={1.0} h={0.34} size={12} bold valign="middle" color={i === stages.length - 1 ? K.accent : K.body}>{String(st[1])}</Txt>
-            </React.Fragment>
-          );
-        })}
-        <Txt l={6.4} t={5.72} w={6.0} h={0.4} size={12} valign="middle" color={K.muted}>
-          <span style={{ fontWeight: 700, color: K.accent, fontSize: pt(18) }}>{(v.conversion || [])[0]}</span>
-          <span>{'  ' + ((v.conversion || [])[1] || '')}</span>
-        </Txt>
-        <Footer brand={d.brand} />
-      </div>
-    </Slide16x9>
-  );
-};
-
-/* 4 — MARKET */
+/* 5 — MARKET */
 const SlideMarket: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   const m = d.market;
   const rings: Array<[string, string, string]> = Array.isArray(m.rings) ? m.rings : [];
@@ -768,67 +761,26 @@ const SlideTeamNetwork: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   );
 };
 
-/* 8 — CAP TABLE */
-const SlideCapTable: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
-  const c = d.captable;
-  const lx = ML, lw = 6.5;
-  const items: Array<[string, string]> = Array.isArray(c.items) ? c.items : [];
-  const rx = 7.55, rw = 5.05;
-  const segments: Array<[string, number]> = Array.isArray(c.segments) ? c.segments : [];
-  const donutColors = [K.accent, K.accentMid, K.panel2];
-  return (
-    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={c.eyebrow} idx={c.idx} />
-        <Title text={c.title} path="captable.title" editable={editable} onEdit={onEdit} />
-
-        <Txt l={lx} t={2.0} w={lw} h={0.3} size={10} bold spacing={1} color={K.muted}>{c.checklistLabel}</Txt>
-        {items.map((it, i) => {
-          const iy = 2.5 + i * 0.6;
-          const done = it[1] === 'done';
-          return (
-            <React.Fragment key={i}>
-              <Rect l={lx} t={iy} w={lw} h={0.5} r={0.06} fill={K.panel} line={false} shadow={false} />
-              <div style={{ position: 'absolute', left: inch(lx + 0.18), top: inch(iy + 0.13) }}><StatusDot status={it[1] as Status} d={0.24} /></div>
-              <Txt l={lx + 0.6} t={iy} w={lw - 2.1} h={0.5} size={13} bold valign="middle" color={K.ink}>{it[0]}</Txt>
-              <Txt l={lx + lw - 1.5} t={iy} w={1.35} h={0.5} size={11} bold align="right" valign="middle" color={done ? K.done : K.active}>{done ? 'Done' : 'In progress'}</Txt>
-            </React.Fragment>
-          );
-        })}
-
-        <Txt l={rx} t={2.0} w={rw} h={0.3} size={10} bold spacing={1} color={K.muted}>{c.donutLabel}</Txt>
-        <Donut l={rx + 0.55} t={2.5} w={3.9} h={3.0} segments={segments} colors={donutColors} />
-        <Txt l={rx + 1.6} t={3.62} w={1.8} h={0.78} size={22} bold align="center" valign="middle" color={K.ink}>
-          <span style={{ display: 'block' }}>{c.centerBig}</span>
-          <span style={{ display: 'block', fontSize: pt(10), fontWeight: 400, color: K.muted }}>{c.centerSmall}</span>
-        </Txt>
-        {segments.map((seg, i) => {
-          const cy2 = 5.75 + i * 0.3;
-          const col = donutColors[i % donutColors.length];
-          return (
-            <React.Fragment key={i}>
-              <Oval l={rx + 0.55} t={cy2 + 0.02} d={0.16} fill={col} line={col === K.panel2 ? K.line : undefined} />
-              <Txt l={rx + 0.8} t={cy2 - 0.05} w={rw - 0.8} h={0.28} size={11} valign="middle" color={K.muted}>
-                <span style={{ color: K.ink, fontWeight: 700 }}>{seg[0] + '   '}</span>
-                <span>{seg[1]}%</span>
-              </Txt>
-            </React.Fragment>
-          );
-        })}
-        <Footer brand={d.brand} />
-      </div>
-    </Slide16x9>
-  );
-};
-
-/* 9 — ASK */
+/* 10 — ASK (+ cap table) */
+// The standalone Cap Table slide is merged here: the fully-diluted donut and
+// an entity-setup status line render as a right column, reading the unchanged
+// `captable.*` section (segments / items / labels) in place.
 const SlideAsk: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   const a = d.ask;
-  const kw = 2.85, kh = 1.7, kgx = 0.3, kgy = 0.3, kx0 = ML, ky0 = 2.2;
+  const c = d.captable || {};
+  const kw = 2.32, kh = 1.7, kgx = 0.26, kgy = 0.3, kx0 = ML, ky0 = 2.2;
   const kpis: Array<[string, string]> = Array.isArray(a.kpis) ? a.kpis : [];
-  const ux = 6.95, uw = 5.65;
+  const ux = 5.85, uw = 3.6;
   const funds: Array<[string, number]> = Array.isArray(a.funds) ? a.funds : [];
   const milestone: [string, string] = Array.isArray(a.milestone) ? a.milestone : ['', ''];
+  const rx = 9.75, rw = 2.88;
+  // Legend capped at 3 rows (4.95..5.83): the entity-status panel starts at
+  // 6.0, so real cap tables with 5–6 holders would otherwise collide with it.
+  const allSegments: Array<[string, number]> = Array.isArray(c.segments) ? c.segments : [];
+  const segments = allSegments.slice(0, 3);
+  const items: Array<[string, string]> = Array.isArray(c.items) ? c.items : [];
+  const doneN = items.filter((it) => it[1] === 'done').length;
+  const donutColors = [K.accent, K.accentMid, K.panel2];
   return (
     <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
       <div style={{ position: 'absolute', inset: 0 }}>
@@ -840,8 +792,8 @@ const SlideAsk: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
           return (
             <React.Fragment key={i}>
               <Rect l={x} t={y} w={kw} h={kh} r={0.1} />
-              <Txt l={x + 0.28} t={y + 0.3} w={kw - 0.5} h={0.75} size={33} bold valign="middle" color={K.accent}>{k[0]}</Txt>
-              <Txt l={x + 0.28} t={y + 1.05} w={kw - 0.5} h={0.45} size={12} valign="top" color={K.muted}>{k[1]}</Txt>
+              <Txt l={x + 0.24} t={y + 0.3} w={kw - 0.44} h={0.75} size={26} bold valign="middle" color={K.accent}>{k[0]}</Txt>
+              <Txt l={x + 0.24} t={y + 1.05} w={kw - 0.44} h={0.45} size={11} valign="top" lh={1.1} color={K.muted}>{k[1]}</Txt>
             </React.Fragment>
           );
         })}
@@ -851,17 +803,143 @@ const SlideAsk: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
           const fy = 2.55 + i * 0.82;
           return (
             <React.Fragment key={i}>
-              <Txt l={ux} t={fy} w={uw - 0.9} h={0.3} size={13} bold valign="middle" color={K.ink}>{fn[0]}</Txt>
-              <Txt l={ux + uw - 0.9} t={fy} w={0.9} h={0.3} size={13} bold align="right" valign="middle" color={i === 0 ? K.accent : K.body}>{fn[1]}%</Txt>
+              <Txt l={ux} t={fy} w={uw - 0.8} h={0.3} size={12} bold valign="middle" color={K.ink}>{fn[0]}</Txt>
+              <Txt l={ux + uw - 0.8} t={fy} w={0.8} h={0.3} size={12} bold align="right" valign="middle" color={i === 0 ? K.accent : K.body}>{fn[1]}%</Txt>
               <Bar l={ux} t={fy + 0.36} w={uw} h={0.17} pct={Number(fn[1]) / 100} fill={i === 0 ? K.accent : K.accentMid} />
             </React.Fragment>
           );
         })}
-        <Rect l={ux} t={6.0} w={uw} h={0.7} fill={K.accentSoft} line={false} shadow={false} />
-        <Txt l={ux + 0.25} t={6.0} w={uw - 0.5} h={0.7} size={12} valign="middle" color={K.ink}>
+        <Rect l={ux} t={6.0} w={uw} h={0.85} fill={K.accentSoft} line={false} shadow={false} />
+        <Txt l={ux + 0.22} t={6.0} w={uw - 0.44} h={0.85} size={11} lh={1.15} valign="middle" color={K.ink}>
           <span style={{ fontWeight: 700, color: K.accent }}>{milestone[0] + '  '}</span>
           <span>{milestone[1]}</span>
         </Txt>
+
+        {/* cap table column */}
+        <Txt l={rx} t={2.0} w={rw} h={0.3} size={10} bold spacing={1} color={K.muted}>{c.donutLabel}</Txt>
+        <Donut l={rx + 0.29} t={2.45} w={2.3} h={2.3} segments={allSegments} colors={donutColors} />
+        <Txt l={rx + 0.79} t={3.31} w={1.3} h={0.58} size={16} bold align="center" valign="middle" color={K.ink}>
+          <span style={{ display: 'block' }}>{c.centerBig}</span>
+          <span style={{ display: 'block', fontSize: pt(8.5), fontWeight: 400, color: K.muted }}>{c.centerSmall}</span>
+        </Txt>
+        {segments.map((seg, i) => {
+          const cy2 = 4.95 + i * 0.3;
+          const col = donutColors[i % donutColors.length];
+          return (
+            <React.Fragment key={i}>
+              <Oval l={rx} t={cy2 + 0.02} d={0.16} fill={col} line={col === K.panel2 ? K.line : undefined} />
+              <Txt l={rx + 0.26} t={cy2 - 0.05} w={rw - 0.26} h={0.28} size={10.5} valign="middle" color={K.muted}>
+                <span style={{ color: K.ink, fontWeight: 700 }}>{seg[0] + '   '}</span>
+                <span>{seg[1]}%</span>
+              </Txt>
+            </React.Fragment>
+          );
+        })}
+        {items.length > 0 && (
+          <>
+            <Rect l={rx} t={6.0} w={rw} h={0.85} fill={K.panel} line={false} shadow={false} />
+            <Txt l={rx + 0.2} t={6.0} w={rw - 0.4} h={0.85} size={10.5} lh={1.2} valign="middle" color={K.body}>
+              <span style={{ fontWeight: 700, color: doneN === items.length ? K.done : K.active }}>{`${doneN} / ${items.length}  `}</span>
+              <span>entity setup steps complete</span>
+            </Txt>
+          </>
+        )}
+        <Footer brand={d.brand} />
+      </div>
+    </Slide16x9>
+  );
+};
+
+/* 6 — COMPETITIVE */
+// New slide: the landscape table on the left (name / category / stage / gap),
+// the numbered edges on the right, and the whitespace claim as a callout.
+const SlideCompetitive: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
+  const cp = d.competitive || {};
+  const rows: Array<[string, string, string, string]> = Array.isArray(cp.competitors) ? cp.competitors : [];
+  const edges: string[] = Array.isArray(cp.edges) ? cp.edges : [];
+  const lx = ML, lw = 7.3;
+  const rx = 8.35, rw = 4.28;
+  return (
+    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <Eyebrow label={cp.eyebrow} idx={cp.idx} />
+        <Title text={cp.title} path="competitive.title" editable={editable} onEdit={onEdit} />
+
+        <Txt l={lx} t={2.0} w={lw} h={0.3} size={10} bold spacing={1} color={K.muted}>{cp.tableLabel}</Txt>
+        {rows.map((r, i) => {
+          const ry = 2.5 + i * 0.94;
+          return (
+            <React.Fragment key={i}>
+              <Rect l={lx} t={ry} w={lw} h={0.8} r={0.08} />
+              <Txt l={lx + 0.24} t={ry + 0.13} w={2.0} h={0.32} size={13.5} bold valign="middle" color={K.ink}>{r[0]}</Txt>
+              <Txt l={lx + 0.24} t={ry + 0.46} w={2.0} h={0.24} size={9.5} bold spacing={0.5} valign="middle" color={K.accent}>{String(r[1] || '').toUpperCase()}</Txt>
+              <Txt l={lx + 2.3} t={ry} w={1.0} h={0.8} size={10} valign="middle" color={K.muted}>{r[2]}</Txt>
+              <Txt l={lx + 3.4} t={ry + 0.1} w={lw - 3.6} h={0.6} size={10.5} lh={1.15} valign="middle" color={K.body}>{r[3]}</Txt>
+            </React.Fragment>
+          );
+        })}
+
+        <Txt l={rx} t={2.0} w={rw} h={0.3} size={11} bold spacing={1} color={K.accent}>{cp.edgeLabel}</Txt>
+        {edges.map((e, i) => {
+          const ey = 2.5 + i * 0.98;
+          return (
+            <React.Fragment key={i}>
+              <Txt l={rx} t={ey} w={0.55} h={0.5} size={18} bold valign="top" color={K.accentMid}>{String(i + 1).padStart(2, '0')}</Txt>
+              <Txt l={rx + 0.6} t={ey} w={rw - 0.6} h={0.85} size={12.5} bold valign="top" lh={1.15} color={K.ink}>{e}</Txt>
+            </React.Fragment>
+          );
+        })}
+        <Rect l={rx} t={5.6} w={rw} h={1.2} fill={K.accentSoft} line={false} shadow={false} />
+        <Ed l={rx + 0.24} t={5.75} w={rw - 0.48} h={0.9} size={11.5} italic lh={1.2} valign="top" color={K.ink}
+          value={cp.whitespace} path="competitive.whitespace" editable={editable} onEdit={onEdit} />
+        <Footer brand={d.brand} />
+      </div>
+    </Slide16x9>
+  );
+};
+
+/* 7 — TRACTION */
+// New slide: monthly revenue trend (area chart + MRR + growth) on the left,
+// revenue mix bars and the takeaway callout on the right.
+const SlideTraction: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
+  const tr = d.traction || {};
+  const trendY: number[] = Array.isArray(tr.trendY) ? tr.trendY : [];
+  const trendX: string[] = Array.isArray(tr.trendX) ? tr.trendX : [];
+  const trendLabels: string[] = Array.isArray(tr.trendLabels) ? tr.trendLabels : [];
+  const lastLabel = trendLabels.length ? trendLabels[trendLabels.length - 1] : '';
+  const mix: Array<[string, string, number]> = Array.isArray(tr.mix) ? tr.mix : [];
+  const lx = ML, lw = 6.6;
+  const rx = 7.9, rw = 4.73;
+  return (
+    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <Eyebrow label={tr.eyebrow} idx={tr.idx} />
+        <Title text={tr.title} path="traction.title" editable={editable} onEdit={onEdit} />
+
+        <Txt l={lx} t={2.0} w={lw} h={0.3} size={10} bold spacing={1} color={K.muted}>{tr.trendLabel}</Txt>
+        <Txt l={lx} t={2.35} w={3.4} h={0.75} size={40} bold valign="middle" color={K.accent}>{tr.mrr}</Txt>
+        <Txt l={lx} t={3.12} w={3.4} h={0.3} size={11} bold spacing={1} color={K.muted}>{tr.mrrLabel}</Txt>
+        <Txt l={lx + 3.6} t={2.45} w={3.0} h={0.45} size={20} bold valign="middle" color={K.done}>{tr.growth}</Txt>
+        <Txt l={lx + 3.6} t={2.95} w={3.0} h={0.3} size={10} color={K.muted}>{tr.growthNote}</Txt>
+        <AreaChart l={lx} t={3.75} w={lw} h={2.5} values={trendY} labels={trendX} color={K.accent} />
+        <Txt l={lx + lw - 1.2} t={3.8} w={1.2} h={0.35} size={14} bold align="right" color={K.accent}>{lastLabel}</Txt>
+
+        <Txt l={rx} t={2.0} w={rw} h={0.3} size={10} bold spacing={1} color={K.muted}>{tr.mixLabel}</Txt>
+        {mix.map((mx, i) => {
+          const my = 2.5 + i * 0.85;
+          return (
+            <React.Fragment key={i}>
+              <Txt l={rx} t={my} w={rw - 1.7} h={0.3} size={12.5} bold valign="middle" color={K.ink}>{mx[0]}</Txt>
+              <Txt l={rx + rw - 1.7} t={my} w={1.7} h={0.3} size={12} bold align="right" valign="middle" color={i === 0 ? K.accent : K.body}>
+                {`${mx[1]}  ·  ${mx[2]}%`}
+              </Txt>
+              <Bar l={rx} t={my + 0.36} w={rw} h={0.17} pct={Number(mx[2]) / 100} fill={i === 0 ? K.accent : K.accentMid} />
+            </React.Fragment>
+          );
+        })}
+        <Rect l={rx} t={5.55} w={rw} h={1.25} fill={K.accentSoft} line={false} shadow={false} />
+        <Ed l={rx + 0.24} t={5.72} w={rw - 0.48} h={0.95} size={11.5} italic lh={1.2} valign="top" color={K.ink}
+          value={tr.takeaway} path="traction.takeaway" editable={editable} onEdit={onEdit} />
         <Footer brand={d.brand} />
       </div>
     </Slide16x9>
@@ -986,15 +1064,15 @@ const SlideDealReadiness: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
 type SlideEntry = { id: string; title: string; Component: React.FC<SlideProps> };
 export const SLIDES: SlideEntry[] = [
   { id: 'cover', title: 'Cover', Component: SlideCover },
-  { id: 'problem', title: 'Problem', Component: SlideProblem },
-  { id: 'validation', title: 'Validation', Component: SlideValidation },
-  { id: 'market', title: 'Market', Component: SlideMarket },
+  { id: 'problem', title: 'Problem & validation', Component: SlideProblem },
   { id: 'solution', title: 'Solution', Component: SlideSolution },
   { id: 'product_demo', title: 'Product demo', Component: SlideProductDemo },
+  { id: 'market', title: 'Market', Component: SlideMarket },
+  { id: 'competitive', title: 'Competitive', Component: SlideCompetitive },
+  { id: 'traction', title: 'Traction', Component: SlideTraction },
   { id: 'roadmap', title: 'Roadmap', Component: SlideRoadmap },
   { id: 'team_network', title: 'Team & network', Component: SlideTeamNetwork },
-  { id: 'cap_table', title: 'Cap table', Component: SlideCapTable },
-  { id: 'ask', title: 'Ask', Component: SlideAsk },
+  { id: 'ask', title: 'Ask & cap table', Component: SlideAsk },
   { id: 'review_the_deal', title: 'Review the deal', Component: SlideDealReadiness },
 ];
 

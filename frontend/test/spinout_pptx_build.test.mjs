@@ -62,10 +62,15 @@ test('draft option still yields a valid package', async () => {
   assertValidPptx(buf, 'draft-deck');
 });
 
-test('exported fixtures keep the 10-slide content contract', () => {
+test('exported fixtures keep the section content contract', () => {
+  // validation/captable remain data sections (merged into Problem/Ask) but no
+  // longer carry their own speaker notes; competitive/traction are new slides.
+  for (const key of ['validation', 'captable']) {
+    assert.ok(SAMPLE_DATA[key], `SAMPLE_DATA missing section: ${key}`);
+  }
   for (const key of [
-    'cover', 'problem', 'validation', 'market', 'solution',
-    'roadmap', 'team', 'captable', 'ask', 'deal',
+    'cover', 'problem', 'market', 'solution', 'competitive', 'traction',
+    'roadmap', 'team', 'ask', 'deal',
   ]) {
     assert.ok(SAMPLE_DATA[key], `SAMPLE_DATA missing section: ${key}`);
     assert.equal(typeof SAMPLE_NOTES[key], 'string', `SAMPLE_NOTES missing note: ${key}`);

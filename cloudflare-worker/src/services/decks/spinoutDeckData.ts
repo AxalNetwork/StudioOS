@@ -66,6 +66,31 @@ export interface SpinoutDeckData {
     walkthroughLabel: string; body: string;
     videoUrl: string; liveUrl: string; screenshot: string; caption: string;
   };
+  // Competitive landscape (slot 06, NEW). Sourced from the project's latest
+  // completed Competitor Analysis (Market Intel). `competitors` is up to 4
+  // [name, category, stage, gap] rows; `edges` up to 3 one-liners; `whitespace`
+  // the closing positioning line. Falls back to Basepoint-style sample rows +
+  // a gap when no analysis exists.
+  competitive: {
+    eyebrow: string; idx: string; title: string;
+    tableLabel: string;
+    competitors: Array<[string, string, string, string]>;
+    edgeLabel: string; edges: string[];
+    whitespace: string;
+  };
+  // Traction (slot 07, NEW). Sourced from validation.revenue_proof + the
+  // financial model's computed monthly series. Honest zero-state (flat-0 trend,
+  // '—' MRR) + a gap when the project is pre-revenue / has no data.
+  traction: {
+    eyebrow: string; idx: string; title: string;
+    trendLabel: string;
+    trendX: string[]; trendY: number[]; trendLabels: string[];
+    mrr: string; mrrLabel: string;
+    growth: string; growthNote: string;
+    mixLabel: string;
+    mix: Array<[string, string, number]>;
+    takeaway: string;
+  };
   roadmap: {
     eyebrow: string; idx: string; title: string;
     days: string[]; currentDay: number;
@@ -157,6 +182,14 @@ const pctNum = (v: unknown): number => {
   return Number.isFinite(n) ? clamp(Math.round(n), 0, 100) : 0;
 };
 
+// Compact money display for the traction trend point labels ('$1.8k', '$0').
+const moneyShort = (v: number): string => {
+  const n = Number(v) || 0;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
+  return `$${Math.round(n)}`;
+};
+
 // Short deck-card form of a score_snapshots.tier code (classifyTier() in
 // ../scoring.ts). Deliberately NOT the full tierLabel() sentence ("Tier 1 —
 // Immediate Spinout") — a slide card has room for a word, not a clause. Falls
@@ -242,6 +275,22 @@ const FALLBACK = {
     ['Option pool', 15],
     ['Reserved', 5],
   ] as Array<[string, number]>,
+  // Basepoint-consistent fintech sample rows for the competitive slide when no
+  // Competitor Analysis exists (always paired with a gap + DRAFT watermark).
+  competitors: [
+    ['Legacy risk vendor', 'Direct', 'Series C', 'Batch scoring on stale data; weeks to onboard.'],
+    ['Spreadsheet + analyst', 'Direct', DASH, 'Manual, slow, and impossible to monitor continuously.'],
+    ['Data-infra platform', 'Adjacent', 'Series B', 'Stores the data but leaves scoring to the customer.'],
+    ['In-house build', 'Adjacent', DASH, 'Expensive to staff; rarely reaches production.'],
+  ] as Array<[string, string, string, string]>,
+  edges: [
+    'Real-time scoring on live data, not a quarterly batch.',
+    'Explainable drivers investors and regulators can audit.',
+    'Continuous monitoring, not a point-in-time review.',
+  ] as string[],
+  whitespace: 'No incumbent pairs live data with explainable, continuous scoring — that seam is ours.',
+  // Honest zero-state month labels for the traction trend (flat-0, no curve).
+  trendX: ['M1', 'M2', 'M3', 'M4'] as string[],
 };
 
 /** Speaker notes — auto/manual field map, one per rendered slide. */
@@ -252,6 +301,8 @@ const NOTES: SpinoutDeckNotes = {
   market: 'MARKET. Message: credible bottom-up serviceable market.\nAUTO: TAM/SAM/SOM figures, why-now lines.\nMANUAL: sizing assumptions + citation basis.',
   solution: 'SOLUTION. Message: data \u2192 live score, four steps.\nAUTO: step copy from capabilities.\nMANUAL: confirm target outcome metrics vs. latest pilot.',
   productDemo: 'PRODUCT DEMO. Message: show the product, don\u2019t just describe it.\nAUTO: walkthrough copy.\nMANUAL: paste a live demo URL + short loop video link or screenshot from the project.',
+  competitive: 'COMPETITIVE. Message: where the landscape leaves a seam open.\nAUTO: top competitors, categories, gaps, our edge \u2014 from the Market Intel competitor analysis.\nMANUAL: sharpen the headline + closing whitespace line.',
+  traction: 'TRACTION. Message: early revenue, converted from discovery.\nAUTO: revenue trend, MRR, growth, mix \u2014 from revenue proof + the financial model.\nMANUAL: confirm the takeaway framing.',
   roadmap: 'ROADMAP. Message: operating plan on the 28-day cadence.\nAUTO: Now/Next/Later from OKRs + status flags.\nMANUAL: none if tracker is current.',
   team: 'TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: founder profile, advisor roster, network nodes.\nMANUAL: advisor consent; swap initials for headshots.',
   captable: 'CAP TABLE & INCORPORATION. Message: legal + equity setup is investor-ready.\nAUTO: readiness checklist statuses, cap-table splits.\nMANUAL: none if module current.',
@@ -455,7 +506,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   }
 
   const validation: SpinoutDeckData['validation'] = {
-    eyebrow: 'Validation', idx: '03',
+    eyebrow: 'Validation', idx: '02',
     title: has(src.validation?.headline) ? src.validation.headline : 'Empirical signal from the discovery sprint.',
     cards,
     funnelLabel: 'DISCOVERY FUNNEL · INTERVIEWS \u2192 SOLUTION-FIT',
@@ -478,7 +529,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   else { why = [['Why now', '[draft — add why-now drivers in the Market Intel module]']]; gap('Market: add why-now drivers in the Market Intel module.', null, 'market'); }
 
   const market: SpinoutDeckData['market'] = {
-    eyebrow: 'Market', idx: '04',
+    eyebrow: 'Market', idx: '05',
     title: has(mk.headline) ? mk.headline : 'A serviceable market, sized bottom-up.',
     rings,
     whyNowLabel: 'WHY NOW',
@@ -498,7 +549,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   if (!caps.length) gap('Solution: describe your MVP capabilities in the Solution module.', null, 'solution');
 
   const solution: SpinoutDeckData['solution'] = {
-    eyebrow: 'Solution', idx: '05',
+    eyebrow: 'Solution', idx: '03',
     title: has(src.solution?.headline) ? src.solution.headline : 'From raw inputs to a live, actionable output.',
     steps,
     outcomeLabel: 'TARGET OUTCOMES',
@@ -521,7 +572,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   const pdCaption = has(pd?.caption) ? pd.caption : '';
   const pdBody = has(pd?.body) ? pd.body : '';
   const productDemo: SpinoutDeckData['productDemo'] = {
-    eyebrow: 'Product demo', idx: '06',
+    eyebrow: 'Product demo', idx: '04',
     title: has(pd?.headline) ? pd.headline : 'See the product in action.',
     walkthroughLabel: 'WALKTHROUGH',
     body: pdBody,
@@ -533,6 +584,107 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   if (!has(pdVideo) && !has(pdLive) && !has(pdShot)) {
     gap('Product demo: add a demo video link, live demo URL, or screenshot on the project.', null, 'productDemo');
   }
+
+  /* ---- competitive landscape (slot 06, NEW) ---- */
+  // Sourced from the project's latest COMPLETED Competitor Analysis (Market
+  // Intel). Empty (present:false) → Basepoint-style sample rows + a gap so the
+  // slide still renders under a DRAFT watermark.
+  const comp = src.competitor;
+  let competitors: Array<[string, string, string, string]>;
+  let edges: string[];
+  let whitespace: string;
+  if (comp?.present && (comp.rows || []).length) {
+    competitors = comp.rows.slice(0, 4).map((r) => [
+      has(r.name) ? r.name : DASH,
+      has(r.category) ? r.category : DASH,
+      has(r.stage) ? r.stage : DASH,
+      has(r.gap) ? r.gap : DASH,
+    ] as [string, string, string, string]);
+    // OUR EDGE — derived from the report's wedge + gaps (up to 3 one-liners).
+    const edgeSrc: string[] = [];
+    if (has(comp.wedge)) edgeSrc.push(String(comp.wedge));
+    for (const g of comp.gaps || []) { if (has(g)) edgeSrc.push(String(g)); }
+    edges = edgeSrc.slice(0, 3);
+    if (!edges.length) edges = FALLBACK.edges;
+    whitespace = has(comp.wedge) ? String(comp.wedge) : FALLBACK.whitespace;
+  } else {
+    competitors = FALLBACK.competitors;
+    edges = FALLBACK.edges;
+    whitespace = FALLBACK.whitespace;
+    gap('Competitive: run a competitor analysis in Market Intel to populate this slide.', null, 'competitive');
+  }
+
+  const competitive: SpinoutDeckData['competitive'] = {
+    eyebrow: 'Competitive landscape', idx: '06',
+    title: has(comp?.headline) ? String(comp.headline) : 'Where the landscape leaves the seam open.',
+    tableLabel: 'LANDSCAPE \u00b7 WHO ELSE IS HERE',
+    competitors,
+    edgeLabel: 'OUR EDGE',
+    edges,
+    whitespace,
+  };
+
+  /* ---- traction (slot 07, NEW) ---- */
+  // Sourced ONLY from ACTUAL revenue proof (src.traction.present true for paid
+  // / pilot_paid). There is NO realized monthly history in the schema — the
+  // financial model's computed months are a forecast, and charting them under
+  // "REVENUE · MONTHLY" would present projections as fact. So the trend is
+  // ALWAYS an honest flat-0 baseline over recent month labels (Task #65
+  // zero-state discipline, as on the cover); the MRR headline and mix carry the
+  // real figure. Two distinct gaps: one when there is proof but no monthly
+  // history to plot, one when there is no proof at all.
+  const tr = src.traction;
+  // The trend is a flat-0 baseline in every case — never a fabricated curve.
+  const trendX = FALLBACK.trendX;
+  const trendY = FALLBACK.trendX.map(() => 0);
+  // Blank point labels: a '$0' at every month would read as "we earned $0 each
+  // month", which is itself a claim we cannot make. An empty label is honest.
+  const trendLabels = FALLBACK.trendX.map(() => '');
+  let mrrStr: string; let growth: string; let growthNote: string;
+  let mix: Array<[string, string, number]>;
+  let takeaway: string;
+  if (tr?.present) {
+    // MRR from proof (actual); fall back to total revenue to date. Both come
+    // straight from revenue_proof, never from the forecast.
+    const mrrNum = tr.mrr != null && Number(tr.mrr) > 0 ? Number(tr.mrr) : null;
+    const totalNum = tr.total_revenue != null && Number(tr.total_revenue) > 0 ? Number(tr.total_revenue) : null;
+    mrrStr = mrrNum != null ? moneyShort(mrrNum) : (totalNum != null ? moneyShort(totalNum) : DASH);
+    // No realized month-over-month series exists, so growth cannot be computed.
+    growth = DASH;
+    growthNote = 'monthly history not tracked yet';
+    mix = [['Recurring revenue', mrrStr, 100]];
+    // Takeaway phrased only from actuals.
+    const payN = tr.paying_customers != null && Number(tr.paying_customers) > 0 ? Math.floor(Number(tr.paying_customers)) : 0;
+    if (has(mrrStr) && payN > 0) {
+      takeaway = `${mrrStr} MRR across ${payN} paying ${payN === 1 ? 'customer' : 'customers'}.`;
+    } else if (has(mrrStr)) {
+      takeaway = `${mrrStr} in recurring revenue, logged from the sprint.`;
+    } else if (payN > 0) {
+      takeaway = `${payN} paying ${payN === 1 ? 'customer' : 'customers'} converted from discovery.`;
+    } else {
+      takeaway = 'Revenue proof logged from the discovery sprint.';
+    }
+    gap('Traction: monthly revenue history is not tracked yet — the trend shows a zero baseline.', null, 'traction');
+  } else {
+    mrrStr = DASH;
+    growth = DASH;
+    growthNote = 'no revenue logged yet';
+    mix = [['Recurring revenue', DASH, 0]];
+    takeaway = 'Log revenue proof to show the trend converting.';
+    gap('Traction: log revenue proof in the Validation module to populate this slide.', null, 'traction');
+  }
+
+  const traction: SpinoutDeckData['traction'] = {
+    eyebrow: 'Traction', idx: '07',
+    title: 'Early revenue, converted from discovery.',
+    trendLabel: 'REVENUE \u00b7 MONTHLY',
+    trendX, trendY, trendLabels,
+    mrr: mrrStr, mrrLabel: 'MRR',
+    growth, growthNote,
+    mixLabel: 'REVENUE MIX',
+    mix,
+    takeaway,
+  };
 
   /* ---- roadmap ---- */
   const rm = src.roadmap || ({} as SpinoutDemoDayData['roadmap']);
@@ -559,7 +711,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   }
 
   const roadmap: SpinoutDeckData['roadmap'] = {
-    eyebrow: 'Roadmap', idx: '07',
+    eyebrow: 'Roadmap', idx: '08',
     title: has(rm.headline) ? rm.headline : 'Now, next, later \u2014 on a 28-day operating clock.',
     days: ['Day 0', 'Day 30', 'Day 60', 'Day 90'],
     currentDay: programDay >= 15 ? 1 : 0,
@@ -620,7 +772,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   }
 
   const team: SpinoutDeckData['team'] = {
-    eyebrow: 'Team & Network', idx: '08',
+    eyebrow: 'Team & Network', idx: '09',
     title: has(src.team?.headline) ? src.team.headline : 'A founder backed by an operating network.',
     founder,
     founders,
@@ -663,7 +815,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   else { segments = FALLBACK.segments; gap('Cap table: add holders in the Incorporate / Cap Table module.', null, 'captable'); }
 
   const captable: SpinoutDeckData['captable'] = {
-    eyebrow: 'Cap table & incorporation', idx: '09',
+    eyebrow: 'Cap table & incorporation', idx: '10',
     title: has(src.cap_table?.headline) ? src.cap_table.headline : 'Entity-ready: clean cap table and founder setup.',
     checklistLabel: 'FOUNDER & ENTITY SETUP',
     items,
@@ -779,7 +931,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   };
 
   const data: SpinoutDeckData = {
-    brand, cover, problem, validation, market, solution, productDemo, roadmap, team, captable, ask, deal,
+    brand, cover, problem, solution, productDemo, market, competitive, traction, roadmap, team, captable, ask, deal, validation,
   };
 
   const draft = programDay < PROGRAM_DAYS || gaps.length > 0;
@@ -837,7 +989,7 @@ export function flattenSpinoutDeckData(data: SpinoutDeckData): Record<string, st
 
 const SECTIONS = new Set([
   'brand', 'cover', 'problem', 'validation', 'market', 'solution',
-  'productDemo', 'roadmap', 'team', 'captable', 'ask', 'deal',
+  'productDemo', 'competitive', 'traction', 'roadmap', 'team', 'captable', 'ask', 'deal',
 ]);
 
 /* ============================================================================

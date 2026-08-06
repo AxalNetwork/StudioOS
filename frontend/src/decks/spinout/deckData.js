@@ -105,7 +105,7 @@ export const SAMPLE_DATA = {
   },
 
   problem: {
-    eyebrow: 'Problem', idx: '02',
+    eyebrow: 'Problem & validation', idx: '02',
     title: 'Three pains surface in every lender conversation.',
     framing: 'Synthesized from 42 discovery interviews with credit and risk teams at mid-market private lenders.',
     quote: "We re-underwrite on data that's already three weeks old. By then the borrower has moved.",
@@ -119,8 +119,10 @@ export const SAMPLE_DATA = {
     ],
   },
 
+  // Rendered inside the merged Problem slide (funnel strip) — kept as its own
+  // section so the worker field contract (`validation.*`) is unchanged.
   validation: {
-    eyebrow: 'Validation', idx: '03',
+    eyebrow: 'Validation', idx: '02',
     title: 'Empirical signal from a 28-day discovery sprint.',
     cards: [
       ['42', 'Interviews completed'],
@@ -140,7 +142,7 @@ export const SAMPLE_DATA = {
   },
 
   market: {
-    eyebrow: 'Market', idx: '04',
+    eyebrow: 'Market', idx: '05',
     title: 'A $3.2B serviceable market, expanding with private credit.',
     // [shortLabel, value, description] — outer to inner
     rings: [
@@ -158,7 +160,7 @@ export const SAMPLE_DATA = {
   },
 
   solution: {
-    eyebrow: 'Solution', idx: '05',
+    eyebrow: 'Solution', idx: '03',
     title: 'From raw borrower data to a live risk score.',
     // [iconKey, label, description] — iconKey maps to ICONS
     steps: [
@@ -176,7 +178,7 @@ export const SAMPLE_DATA = {
   },
 
   productDemo: {
-    eyebrow: 'Product demo', idx: '06',
+    eyebrow: 'Product demo', idx: '04',
     title: 'See the live risk score in action.',
     walkthroughLabel: 'WALKTHROUGH',
     body: 'A 90-second walkthrough: connect a loan tape, generate a real-time risk score, and watch continuous monitoring flag risk the moment it moves.',
@@ -189,8 +191,47 @@ export const SAMPLE_DATA = {
     caption: 'Real-time scoring dashboard \u2014 explainable risk drivers update as new borrower data lands.',
   },
 
+  competitive: {
+    eyebrow: 'Competitive landscape', idx: '06',
+    title: 'Where the landscape leaves the seam open.',
+    tableLabel: 'LANDSCAPE \u00B7 WHO ELSE IS HERE',
+    // [name, category, stage, one-line weakness]
+    competitors: [
+      ['RiskWave', 'Direct', 'Series B', 'Public-market signals only \u2014 blind to private borrowers'],
+      ['CreditLens', 'Direct', 'Series C', 'Quarterly batch reviews; no continuous scoring'],
+      ['Excel + analysts', 'Incumbent', '\u2014', 'Manual, slow, and unauditable at portfolio scale'],
+      ['LoanTape.io', 'Adjacent', 'Seed', 'Data warehousing without a risk layer on top'],
+    ],
+    edgeLabel: 'OUR EDGE',
+    edges: [
+      'Real-time scores on private borrower data, not stale filings',
+      'Explainable drivers \u2014 credit teams can defend every score',
+      'Deploys on the loan data lenders already warehouse',
+    ],
+    whitespace: 'No incumbent scores private credit risk continuously \u2014 the seam where lenders actually lose money.',
+  },
+
+  traction: {
+    eyebrow: 'Traction', idx: '07',
+    title: 'Early revenue, converted from discovery.',
+    trendLabel: 'REVENUE \u00B7 MONTHLY',
+    trendX: ['Apr', 'May', 'Jun', 'Jul'],
+    trendY: [300, 700, 1100, 1800],
+    trendLabels: ['$300', '$700', '$1.1k', '$1.8k'],
+    mrr: '$1.8k', mrrLabel: 'MRR',
+    growth: '+82%', growthNote: '3-month average',
+    mixLabel: 'REVENUE MIX',
+    // [label, valueStr, pctNum]
+    mix: [
+      ['Paid pilots', '$1.2k', 67],
+      ['Annual prepay', '$0.4k', 22],
+      ['Services', '$0.2k', 11],
+    ],
+    takeaway: 'Revenue is recurring and expanding month over month, converted directly from logged discovery interviews.',
+  },
+
   roadmap: {
-    eyebrow: 'Roadmap', idx: '07',
+    eyebrow: 'Roadmap', idx: '08',
     title: 'Now, next, later \u2014 on a 28-day operating clock.',
     days: ['Day 0', 'Day 30', 'Day 60', 'Day 90'],
     currentDay: 1, // index into days marked as "today"
@@ -214,7 +255,7 @@ export const SAMPLE_DATA = {
   },
 
   team: {
-    eyebrow: 'Team & Network', idx: '08',
+    eyebrow: 'Team & Network', idx: '09',
     title: 'A founder backed by an operating network.',
     founder: {
       initials: 'MO', name: 'Maya Osei', role: 'Founder & CEO',
@@ -256,8 +297,10 @@ export const SAMPLE_DATA = {
     ],
   },
 
+  // Rendered inside the merged Ask slide (donut + entity status) — kept as its
+  // own section so the worker field contract (`captable.*`) is unchanged.
   captable: {
-    eyebrow: 'Cap table & incorporation', idx: '09',
+    eyebrow: 'Cap table & incorporation', idx: '10',
     title: 'Entity-ready: clean cap table and founder setup.',
     checklistLabel: 'FOUNDER & ENTITY SETUP',
     items: [
@@ -280,7 +323,7 @@ export const SAMPLE_DATA = {
   },
 
   ask: {
-    eyebrow: 'The ask', idx: '10',
+    eyebrow: 'The ask & cap table', idx: '10',
     title: 'Raising $750K pre-seed to reach revenue.',
     kpis: [
       ['$750K', 'Target raise'],
@@ -325,14 +368,14 @@ export const SAMPLE_DATA = {
  * -------------------------------------------------------------------------- */
 export const SAMPLE_NOTES = {
   cover: 'COVER. Focal: thesis statement; area chart is the data hero (cumulative discovery interviews over the sprint).\nAUTO: company, thesis, sector/stage/founder, lab-day counter, validation-signal series.\nMANUAL: final thesis wording.',
-  problem: 'PROBLEM. Message: a few high-frequency, evidenced pains, ranked.\nAUTO: pain themes, frequency %, interview counts, pull quote.\nMANUAL: choose which quote to surface; trim labels.',
-  validation: 'VALIDATION. Message: measurable signal from the sprint.\nAUTO: scorecard values, funnel stage counts, conversion rate.\nMANUAL: none (computed).',
+  problem: 'PROBLEM & VALIDATION. Message: a few high-frequency, evidenced pains, ranked \u2014 with the discovery funnel as proof.\nAUTO: pain themes, frequency %, interview counts, pull quote, funnel stages, conversion.\nMANUAL: choose which quote to surface; trim labels.',
   market: 'MARKET. Message: credible bottom-up serviceable market.\nAUTO: TAM/SAM/SOM figures, ACV + lender-count assumptions.\nMANUAL: the three why-now lines.',
   solution: 'SOLUTION. Message: data \u2192 live score, four steps.\nAUTO: step copy, outcome metrics.\nMANUAL: confirm outcome numbers vs. latest pilot.',
   productDemo: 'PRODUCT DEMO. Message: show the product, do not just describe it.\nAUTO: walkthrough copy.\nMANUAL: paste a live demo URL + short loop video link or screenshot from the project.',
+  competitive: 'COMPETITIVE. Message: name the landscape honestly, then claim the seam.\nAUTO: competitor rows from the Market Intel analysis; edges from the report wedge.\nMANUAL: whitespace line; trim competitor weaknesses.',
+  traction: 'TRACTION. Message: revenue proof, converted from discovery \u2014 never fabricated.\nAUTO: monthly revenue trend, MRR, growth, mix.\nMANUAL: takeaway line.',
   roadmap: 'ROADMAP. Message: operating plan on the 28-day cadence.\nAUTO: milestones + status flags (milestone tracker).\nMANUAL: none if tracker is current.',
   team: 'TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: profiles, network node labels (people graph).\nMANUAL: advisor consent; swap initials for headshots.',
-  captable: 'CAP TABLE & INCORPORATION. Message: legal + equity setup is investor-ready.\nAUTO: checklist statuses, cap-table splits (data-room module).\nMANUAL: none if module current.',
-  ask: 'THE ASK. Message: specific raise tied to a milestone.\nAUTO: raise, instrument/cap, runway, close, allocations.\nMANUAL: confirm cap + close with counsel.',
+  ask: 'THE ASK & CAP TABLE. Message: specific raise tied to a milestone, on a clean cap table.\nAUTO: raise, instrument/cap, runway, close, allocations, cap-table splits.\nMANUAL: confirm cap + close with counsel.',
   deal: 'DEAL READINESS. Message: diligence-ready now, frictionless next step.\nAUTO: document statuses, timeline, contact.\nMANUAL: confirm contact + live data-room link.',
 };
