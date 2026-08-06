@@ -50,7 +50,7 @@ def _check_rate_limit(email: str):
         if locked_until and now < locked_until:
             remaining = int((locked_until - now).total_seconds())
             raise HTTPException(status_code=429, detail=f"Too many attempts. Try again in {remaining} seconds.")
-        if locked_until and now >= locked_until:
+        if locked_until:
             _login_attempts[key] = (0, None)
 
 
