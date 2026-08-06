@@ -13,19 +13,33 @@
  * ========================================================================== */
 
 /* ----------------------------------------------------------------------------
- *  THEME — restrained editorial VC system (white/black/grayscale + 1 accent)
+ *  THEME — the Axal VC deck system.
  *  Colours are bare hex (pptxgenjs convention — never inject '#').
+ *
+ *  This was a blue "restrained editorial" system (accent 2C4BE0) named after
+ *  its sample company, BASEPOINT. It did not match the repo's OWN design
+ *  reference for this deck — spin-out-lab-pipeline/project/AxalSlide.dc.html,
+ *  which is violet #6B46C1 on a Tailwind-ish slate ramp — which is why
+ *  founders reported My Pitch Deck showing a deck in the wrong brand.
+ *
+ *  Changing these values re-skins BOTH renderers at once: the React template
+ *  derives `K` from this object (templates/axal_spinout_demoday_app.tsx) and
+ *  the browser PPTX generator reads it directly (buildDeck.js), so preview and
+ *  export cannot drift apart on palette.
  * -------------------------------------------------------------------------- */
 export const THEME = {
-  fileName: 'Basepoint_SpinOut_DemoDay.pptx',
+  fileName: 'Axal_SpinOut_DemoDay.pptx',
   fonts: { head: 'Arial', body: 'Arial' },
   color: {
-    ink: '12151C', body: '4B5563', muted: '8A93A0', faint: 'AEB6C0',
-    line: 'E4E7EC', panel: 'F6F7F9', panel2: 'EEF0F3', white: 'FFFFFF',
-    accent: '2C4BE0', accentSoft: 'E7EBFD', accentMid: 'B9C4F6',
-    dbg: '0E1116', dpanel: '171C25', dline: '2A313D',
-    dmuted: '9099A6', dfaint: '5C6573', accentLt: '6E86FF',
-    done: '1F9D6B', active: 'D98A2B', pending: '9AA3AF',
+    // Slate text ramp — #1A202C / #4A5568 / #718096 / #A0AEC0 in the design.
+    ink: '1A202C', body: '4A5568', muted: '718096', faint: 'A0AEC0',
+    line: 'E2E8F0', panel: 'F8F8FA', panel2: 'F1F0F5', white: 'FFFFFF',
+    // Violet accent ramp — 6B46C1 primary, EDE9FE/C4B5FD tints, 8B5CF6 light.
+    accent: '6B46C1', accentSoft: 'EDE9FE', accentMid: 'C4B5FD',
+    // Dark surfaces come from the cover gradient (17142e -> 241d4c -> 3b1d6e).
+    dbg: '17142E', dpanel: '241D4C', dline: '3B1D6E',
+    dmuted: 'A89FCE', dfaint: '8B7FC0', accentLt: '8B5CF6',
+    done: '38A169', active: 'D97706', pending: 'A0AEC0',
   },
 };
 
