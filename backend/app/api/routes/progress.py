@@ -22,8 +22,6 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field as PydField, field_validator
-
-VALID_HYPOTHESIS_STATUSES = {"validated", "invalidated", "inconclusive"}
 from sqlalchemy import text
 from sqlmodel import Session, select
 
@@ -49,6 +47,8 @@ from backend.app.services.pain_groups import (
     norm_phrase,
 )
 from backend.app.services import email_service
+
+VALID_HYPOTHESIS_STATUSES = {"validated", "invalidated", "inconclusive"}
 
 router = APIRouter(prefix="/progress", tags=["Discovery / Roadmap / Metrics"])
 
