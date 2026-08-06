@@ -1100,14 +1100,21 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
   // candidate the same decision email. Ledger tables may not exist in older
   // dev DBs — treat a failed claim probe as "not yet sent" (best-effort).
   let emailClaimed = true;
+  // The cycle this application is pinned to, when the cycle tables exist.
+  // Needed twice below: for the shared decision-email ledger claim, and — on
+  // accept — for the activation that keeps this route in step with the cron.
+  let cycle: { id: number; start_at: string } | null = null;
   try {
     const caRow = await c.env.DB.prepare(
-      `SELECT cohort_cycle_id FROM cohort_applicants WHERE application_id = ? ORDER BY id DESC LIMIT 1`,
-    ).bind(appId).first<{ cohort_cycle_id: number }>();
+      `SELECT ca.cohort_cycle_id AS cycle_id, cc.start_at
+         FROM cohort_applicants ca JOIN cohort_cycles cc ON cc.id = ca.cohort_cycle_id
+        WHERE ca.application_id = ? ORDER BY ca.id DESC LIMIT 1`,
+    ).bind(appId).first<{ cycle_id: number; start_at: string }>();
     if (caRow) {
+      cycle = { id: Number(caRow.cycle_id), start_at: String(caRow.start_at) };
       const { claimDecisionEmail } = await import('../services/cohortApplications');
       emailClaimed = await claimDecisionEmail(
-        c.env, app.user_id, Number(caRow.cohort_cycle_id),
+        c.env, app.user_id, cycle.id,
         decision === 'accepted' ? 'approved' : 'rejected',
       );
     }
@@ -1120,6 +1127,42 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
        VALUES (?, 1, ?)
        ON CONFLICT(user_id) DO UPDATE SET spinout_lab_admitted = 1, spinout_lab_cohort = excluded.spinout_lab_cohort`,
     ).bind(app.user_id, cohort).run();
+
+    // Land the founder in the SAME state activateDueCycles would have.
+    //
+    // This route used to stop at `admitted = 1`, leaving `spinout_lab_active`
+    // at 0 — so the founder saw the "Start Week 1" screen and `startLab()`
+    // stamped `spinout_lab_started_at` with their CLICK time, which could be
+    // weeks off their cohort. That drift is not cosmetic: `getCohortGate`
+    // resolves a founder's cycle by `start_at <= started_at < end_at`, so an
+    // early starter resolves to the PREVIOUS month's cycle (whose week
+    // windows have already expired, unlocking all four weeks at once) or to
+    // no cycle at all, and the admin review/at-risk queues — which count
+    // participants by `started_at BETWEEN cycle.start_at AND cycle.end_at` —
+    // stop seeing them entirely.
+    //
+    // Binding `started_at` to the cycle's own start instant is what the cron
+    // does, and it is what makes the two admin tabs interchangeable. The
+    // `spinout_lab_active = 0` guard mirrors the cron's, so re-deciding never
+    // resets a running founder's clock. With no cycle row (an un-migrated dev
+    // DB, or an application never pinned to one) there is no calendar to clamp
+    // to and `getCohortGate` treats the founder as un-gated anyway, so the
+    // old admitted-only behaviour stands.
+    if (cycle) {
+      await c.env.DB.prepare(
+        `UPDATE users SET spinout_lab_active = 1, spinout_lab_week = 1, spinout_lab_started_at = ?
+          WHERE id = ? AND (spinout_lab_active IS NULL OR spinout_lab_active = 0)`,
+      ).bind(cycle.start_at, app.user_id).run();
+      // Retire the applicant from the activation queue we just did by hand,
+      // so the cron's own pass is a no-op rather than a second admission.
+      try {
+        await c.env.DB.prepare(
+          `UPDATE cohort_applicants SET status = 'activated', decided_at = datetime('now')
+            WHERE application_id = ? AND status = 'approved'`,
+        ).bind(appId).run();
+      } catch { /* cohort_applicants not yet migrated */ }
+    }
+
     if (emailClaimed) try {
       const { send } = await import('../services/email/send');
       const labUrl = `${appUrl}/spinout-lab`;
