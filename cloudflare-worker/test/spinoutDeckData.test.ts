@@ -472,6 +472,118 @@ test('the score is never on the deck-override allowlist', () => {
 });
 
 /* ============================================================================
+ *  Revenue proof on the Ask slide.
+ *
+ *  fillAxalSpinoutDemoDay assembles a full `validation.revenue_proof` object —
+ *  status, MRR, total revenue, paying customers — and no slide read any of it.
+ *  It now drives the 4th Ask KPI, replacing a hardcoded 'Pre-seed' / 'Stage'
+ *  literal the cover slide already stated.
+ * ========================================================================== */
+
+const askKpi = (src: SpinoutDemoDayData) => {
+  const { data } = mapToSpinoutDeckData(src);
+  return data.ask.kpis[data.ask.kpis.length - 1];
+};
+
+const withRevenue = (rp: Partial<SpinoutDemoDayData['validation']['revenue_proof']>) => {
+  const src = makeFullSrc();
+  src.validation.revenue_proof = {
+    status: 'pre_revenue', total_revenue: null, mrr: null,
+    paying_customers: null, first_payment_date: null, ...rp,
+  } as SpinoutDemoDayData['validation']['revenue_proof'];
+  return src;
+};
+
+test('the Ask slide always carries exactly 4 KPIs — the renderer lays out 4 slots', () => {
+  for (const src of [makeFullSrc(), makePartialSrc(), withRevenue({})]) {
+    const { data } = mapToSpinoutDeckData(src);
+    assert.equal(data.ask.kpis.length, 4, 'a 5th KPI would overflow the slide');
+  }
+});
+
+test('MRR wins over every other revenue signal and uses the preformatted amount', () => {
+  const kpi = askKpi(withRevenue({ status: 'paid', mrr: 4200, total_revenue: 50000, amount: '$4.2K' }));
+  assert.deepEqual(kpi, ['$4.2K', 'MRR'], 'MRR is the strongest signal, formatted upstream');
+});
+
+test('total revenue is used when there is no MRR', () => {
+  const kpi = askKpi(withRevenue({ status: 'paid', total_revenue: 50000, amount: '$50K' }));
+  assert.deepEqual(kpi, ['$50K', 'Revenue to date']);
+});
+
+test('paying customers carry the slide when no money figure is logged', () => {
+  assert.deepEqual(askKpi(withRevenue({ status: 'pilot_paid', paying_customers: 3 })), ['3', 'Paying customers']);
+  assert.deepEqual(
+    askKpi(withRevenue({ status: 'pilot_paid', paying_customers: 1 })), ['1', 'Paying customer'],
+    'singular for exactly one — a deck that says "1 Paying customers" reads as a bug to an investor',
+  );
+});
+
+test('a signed-but-unpaid pilot is stated as such, not as revenue', () => {
+  assert.deepEqual(askKpi(withRevenue({ status: 'pilot_signed' })), ['Signed', 'Paid pilot']);
+});
+
+test('a genuinely pre-revenue company shows a dash and raises NO gap', () => {
+  // The deliberate exception to the gap rule. Every other empty module means
+  // "unfinished work"; pre-revenue is a truthful, complete state for a pre-seed
+  // company mid-sprint, and gapping it would stamp DRAFT on an accurate deck.
+  const src = withRevenue({ status: 'pre_revenue' });
+  const { data, gaps } = mapToSpinoutDeckData(src);
+  assert.deepEqual(data.ask.kpis[3], ['—', 'Revenue proof'], 'honest dash, never a fabricated figure');
+  assert.ok(
+    !gaps.some((g) => /revenue/i.test(g)),
+    `pre-revenue must not raise a gap, got: ${JSON.stringify(gaps.filter((g) => /revenue/i.test(g)))}`,
+  );
+});
+
+test('a zero/negative revenue figure is treated as absent, not printed as $0', () => {
+  assert.deepEqual(askKpi(withRevenue({ mrr: 0, total_revenue: 0, paying_customers: 0 })), ['—', 'Revenue proof']);
+});
+
+test('a missing revenue_proof object degrades to the dash state instead of throwing', () => {
+  const src = makeFullSrc();
+  delete (src.validation as Record<string, unknown>).revenue_proof;
+  assert.deepEqual(askKpi(src), ['—', 'Revenue proof']);
+});
+
+test('the Ask slide no longer restates the cover slide’s hardcoded stage', () => {
+  const { data } = mapToSpinoutDeckData(makeFullSrc());
+  const askLabels = data.ask.kpis.map((k) => k[1]);
+  assert.ok(!askLabels.includes('Stage'), 'the Stage KPI was a literal the cover meta row already carries');
+  assert.ok(
+    data.cover.meta.some(([k, v]) => k === 'STAGE' && v === 'Pre-seed'),
+    'and the cover still states it, so no information left the deck',
+  );
+});
+
+/* ------------------------------------------------- Ask-slide gap targeting */
+
+test('the ask gaps name the module that actually owns the data, never Capital', () => {
+  // Both messages used to say "in the Capital module", which owns none of these
+  // fields — a founder following that text found nothing to fix there.
+  const empty = mapToSpinoutDeckData(makePartialSrc());
+  const askGaps = empty.gaps.filter((_, i) => empty.gapSections![i] === 'ask');
+  assert.ok(askGaps.length > 0, 'an empty ask still raises a gap');
+  for (const g of askGaps) {
+    assert.ok(!/Capital module/.test(g), `"${g}" points at a module that owns none of the ask fields`);
+  }
+  assert.ok(
+    askGaps.some((g) => /Use of Funds module/.test(g)),
+    'the raise + allocation gap names Use of Funds (projects.funding_needed / use_of_funds)',
+  );
+});
+
+test('a project with an ask but no OKRs is sent to Roadmap, not Capital', () => {
+  const src = makeFullSrc();
+  src.ask = { ...src.ask, next_milestones: [] };
+  const { data, gaps } = mapToSpinoutDeckData(src);
+  const milestoneGap = gaps.find((g) => /next-milestone/.test(g));
+  assert.ok(milestoneGap, 'a missing milestone raises its own gap');
+  assert.match(milestoneGap!, /Roadmap module/, 'next_milestones reads from roadmap_okrs');
+  assert.match(data.ask.milestone[1], /Roadmap module/, 'and the on-slide placeholder agrees');
+});
+
+/* ============================================================================
  *  gapSections — the Pitch Deck Builder's readiness contract.
  *
  *  The builder cannot derive per-slide readiness from `fields`:

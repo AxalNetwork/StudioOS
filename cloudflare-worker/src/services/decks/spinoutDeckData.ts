@@ -678,11 +678,43 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   const nextMilestones = (ak.next_milestones || []).filter(has);
   const askEmpty = !has(ak.raise_amount) && !has(ak.runway) && useOfFunds.length === 0;
 
+  // Revenue proof — the Revenue module's logged traction, carrying a
+  // verification state (Stripe-synced vs. manually entered) and reading the
+  // exact `projects` columns the investor-side spinoutFundMetrics.ts scores
+  // for its revenue-proof percentage. fillAxalSpinoutDemoDay assembles this
+  // whole object and, until now, no slide read a single field of it.
+  //
+  // It replaces the hardcoded 'Pre-seed' / 'Stage' KPI rather than becoming a
+  // 5th: that KPI was a literal (never derived from the project) AND the cover
+  // slide's meta row already states ['STAGE', 'Pre-seed'], so nothing is lost
+  // from the deck — a duplicated constant makes way for a real, evidenced
+  // figure. The row is fixed at 4 KPIs by both renderers, as with the
+  // validation cards.
+  const rp = src.validation?.revenue_proof;
+  let revenueKpi: [string, string];
+  if (rp?.mrr != null && Number(rp.mrr) > 0) {
+    revenueKpi = [has(rp.amount) ? String(rp.amount) : String(rp.mrr), 'MRR'];
+  } else if (rp?.total_revenue != null && Number(rp.total_revenue) > 0) {
+    revenueKpi = [has(rp.amount) ? String(rp.amount) : String(rp.total_revenue), 'Revenue to date'];
+  } else if (rp?.paying_customers != null && Number(rp.paying_customers) > 0) {
+    const n = Math.floor(Number(rp.paying_customers));
+    revenueKpi = [String(n), n === 1 ? 'Paying customer' : 'Paying customers'];
+  } else if (rp?.status === 'pilot_signed') {
+    revenueKpi = ['Signed', 'Paid pilot'];
+  } else {
+    // Deliberately NOT a gap. Every other empty module here means "the founder
+    // has not done this work yet", but pre-revenue is a truthful, complete
+    // state for a pre-seed company mid-sprint — stamping DRAFT on an accurate
+    // deck would make the DRAFT signal cry wolf. The KPI names its own source
+    // so the slide still points somewhere.
+    revenueKpi = [DASH, 'Revenue proof'];
+  }
+
   const kpis: Array<[string, string]> = [
     [has(ak.raise_amount) ? ak.raise_amount : DASH, 'Target raise'],
     ['SAFE', 'Instrument'],
     [has(ak.runway) ? ak.runway : DASH, 'Runway'],
-    ['Pre-seed', 'Stage'],
+    revenueKpi,
   ];
 
   let funds: Array<[string, number]>;
@@ -691,10 +723,24 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
 
   let milestone: [string, string];
   if (nextMilestones.length) milestone = ['Gets us to:', nextMilestones[0]];
-  else milestone = ['Gets us to:', '[draft — add your next funding milestone in the Capital module]'];
+  else milestone = ['Gets us to:', '[draft — add a 90-day OKR in the Roadmap module]'];
 
-  if (askEmpty) gap('The ask: set raise, runway, and use-of-funds in the Capital module.', null, 'ask');
-  else if (!nextMilestones.length) gap('The ask: add your next funding milestone in the Capital module.', null, 'ask');
+  // Name the module that actually OWNS each field. These two gaps both used to
+  // say "in the Capital module", which owns none of them: the raise and the
+  // allocation are `projects.funding_needed` / `projects.use_of_funds`, written
+  // by Use of Funds (whose own page says "Your pitch deck's ASK slide reads
+  // this allocation live"); runway is `financial_models.inputs_json`, written
+  // by the Financial Model; and the milestone line is the first Now/Next/Later
+  // OKR from `roadmap_okrs`, written by Roadmap. A founder who followed the old
+  // text to /spinout-lab/capital found nothing there to fix.
+  if (askEmpty) {
+    gap(
+      'The ask: set your raise and allocation in the Use of Funds module (runway comes from the Financial Model).',
+      null, 'ask',
+    );
+  } else if (!nextMilestones.length) {
+    gap('The ask: add a 90-day OKR in the Roadmap module — the next-milestone line reads from it.', null, 'ask');
+  }
 
   const ask: SpinoutDeckData['ask'] = {
     eyebrow: 'The ask', idx: '10',
