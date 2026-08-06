@@ -140,7 +140,19 @@ test('merged slides render the absorbed sections in place', () => {
   assert.ok(html.includes(SAMPLE_DATA.validation.conversion[0]), 'Problem slide missing conversion stat');
   // Ask carries the cap-table donut labels (captable.* read in place).
   assert.ok(html.includes(SAMPLE_DATA.captable.donutLabel), 'Ask slide missing cap-table donut label');
-  assert.ok(html.includes('entity setup steps complete'), 'Ask slide missing entity setup status');
+  // Was a hardcoded English sentence from the pre-rebuild Ask slide. Asserting
+  // the label comes from the data and the count is computed from the items is
+  // the same contract — the merged cap table must state its completion — but it
+  // survives a rewording and fails if either side stops being data-driven.
+  // renderToStaticMarkup escapes &, so compare against the escaped form —
+  // "FOUNDER & ENTITY SETUP" reaches the DOM as "FOUNDER &amp; ENTITY SETUP".
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  assert.ok(html.includes(esc(SAMPLE_DATA.captable.checklistLabel)), 'Ask slide missing entity setup label');
+  const settled = SAMPLE_DATA.captable.items.filter(([, st]) => st === 'done').length;
+  assert.ok(
+    html.includes(`${settled} of ${SAMPLE_DATA.captable.items.length} complete`),
+    'Ask slide missing entity setup completion count',
+  );
   // New slides render their sample content.
   assert.ok(html.includes(SAMPLE_DATA.competitive.tableLabel), 'Competitive slide missing landscape table');
   assert.ok(html.includes(SAMPLE_DATA.traction.mixLabel), 'Traction slide missing revenue mix');

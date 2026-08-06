@@ -45,6 +45,10 @@ const slide = (id) => {
   return renderToStaticMarkup(React.createElement(entry.Component, { d: SAMPLE_DATA }));
 };
 const deck = () => renderToStaticMarkup(React.createElement(Deck, { data: {} }));
+// renderToStaticMarkup escapes &, <, > and '. Fixture copy carries all of them
+// ("Founder & CEO", "risk tooling isn't"), so compare against the escaped form.
+const esc = (t) => String(t)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#x27;');
 
 const COVER = slide('cover');
 const PROBLEM = slide('problem');
@@ -260,4 +264,163 @@ test('the rebuilt slides render nothing when their sections are empty', () => {
     React.createElement(SLIDES.find((s) => s.id === 'traction').Component, { d: bare }),
   );
   assert.ok(!emptyTraction.includes('Tracked'), 'an empty trend must not render a KPI card');
+});
+
+/* ══════════════════ the remaining eight slides ════════════════════════════
+ * Cover, Problem and Traction were rebuilt first; these eight followed. Each
+ * lands on a design section that assumes fields this deck's data model does
+ * not carry, so what is locked below is mostly the choice made at each of
+ * those gaps: render what exists, never invent the rest.
+ */
+const MARKET = slide('market');
+const SOLUTION = slide('solution');
+const COMPETITIVE = slide('competitive');
+const DEMO = slide('product_demo');
+const ROADMAP = slide('roadmap');
+const TEAM = slide('team_network');
+const ASK = slide('ask');
+const DEAL = slide('review_the_deal');
+
+test('every slide now lays out in flow, none on the inch() grid', () => {
+  // The absolute path exists to mirror PPTX geometry and is what kept the
+  // design's cards and gradients off these slides. One `inset: 0` container
+  // per slide, then flow — the Footer is the single remaining absolute part.
+  const html = deck();
+  const frames = html.split('data-slide-frame').slice(1);
+  assert.equal(frames.length, 11);
+  for (const [i, f] of frames.entries()) {
+    assert.ok(f.includes('position:absolute;inset:0'), `slide ${i} lost its flow container`);
+  }
+});
+
+test('Market keeps TAM dominant and sources every figure from the rings', () => {
+  for (const [label, value, desc] of SAMPLE_DATA.market.rings) {
+    assert.ok(MARKET.includes(label), `ring ${label} missing`);
+    assert.ok(MARKET.includes(value), `ring value ${value} missing`);
+    assert.ok(MARKET.includes(esc(desc)), `ring description for ${label} missing`);
+  }
+  // The design's lower-left panel charts segment share; there is no segment
+  // split in the data, so it carries the why-now claims instead.
+  for (const [head] of SAMPLE_DATA.market.why) assert.ok(MARKET.includes(esc(head)), `why-now "${head}" missing`);
+  assert.ok(MARKET.includes(esc(SAMPLE_DATA.market.assumptions)), 'the sizing assumptions must stay on the slide');
+  assert.ok(MARKET.includes(`linear-gradient(135deg, ${'#' + THEME.color.accent}`), 'TAM card lost its gradient');
+});
+
+test('Solution renders each step and does not drop the outcome numbers', () => {
+  for (const [, label, desc] of SAMPLE_DATA.solution.steps) {
+    assert.ok(SOLUTION.includes(label), `step ${label} missing`);
+    assert.ok(SOLUTION.includes(esc(desc)), `step description for ${label} missing`);
+  }
+  // The design's right panel is a Before/After pair, which this data has no
+  // fields for — outcomes are the same claim as numbers.
+  for (const [value, label] of SAMPLE_DATA.solution.outcomes) {
+    assert.ok(SOLUTION.includes(value), `outcome ${value} missing`);
+    assert.ok(SOLUTION.includes(label), `outcome label ${label} missing`);
+  }
+  for (const invented of ['Before', 'After', 'Unfair advantage']) {
+    assert.ok(!SOLUTION.includes(`>${invented}<`), `Solution invents a "${invented}" block the data cannot fill`);
+  }
+});
+
+test('Competitive runs four columns — there is no per-competitor share to chart', () => {
+  for (const [name, cat, stage, gap] of SAMPLE_DATA.competitive.competitors) {
+    for (const cell of [name, cat, gap]) assert.ok(COMPETITIVE.includes(esc(cell)), `cell "${cell}" missing`);
+    if (stage && stage !== '—') assert.ok(COMPETITIVE.includes(stage), `stage ${stage} missing`);
+  }
+  assert.ok(!COMPETITIVE.includes('>Share<'), 'a share column would have no data behind it');
+  for (const e of SAMPLE_DATA.competitive.edges) assert.ok(COMPETITIVE.includes(e), 'an edge is missing from the wedge card');
+  assert.ok(COMPETITIVE.includes(SAMPLE_DATA.competitive.whitespace));
+});
+
+test('the competitor monogram skips connector tokens', () => {
+  // "Excel + analysts" monogrammed as "E+" before initialsOf filtered tokens
+  // that do not open with a letter or digit.
+  assert.ok(COMPETITIVE.includes('>EA<'), 'expected the EA monogram for "Excel + analysts"');
+  assert.ok(!COMPETITIVE.includes('>E+<'), 'the "+" is being read as a word');
+});
+
+test('Product demo shows the placeholder until a screenshot exists', () => {
+  assert.ok(DEMO.includes(SAMPLE_DATA.productDemo.caption), 'placeholder caption missing');
+  assert.ok(!DEMO.includes('<img'), 'no screenshot is set, so no image should render');
+  const withShot = renderToStaticMarkup(React.createElement(
+    SLIDES.find((s) => s.id === 'product_demo').Component,
+    { d: { ...SAMPLE_DATA, productDemo: { ...SAMPLE_DATA.productDemo, screenshot: 'https://x/y.png', liveUrl: 'app.demo' } } },
+  ));
+  assert.ok(withShot.includes('<img'), 'an uploaded screenshot must replace the placeholder');
+  assert.ok(withShot.includes('app.demo'), 'the live-product pill must render when a URL is set');
+  assert.ok(!DEMO.includes('app.demo'), 'the pill must stay hidden when there is no URL');
+});
+
+test('Roadmap derives its completion figure from the tasks beside it', () => {
+  const tasks = SAMPLE_DATA.roadmap.phases.flatMap(([, , ts]) => ts);
+  const done = tasks.filter(([st]) => st === 'done').length;
+  assert.ok(ROADMAP.includes(`${Math.round((done / tasks.length) * 100)}% complete`), 'header figure is not derived');
+  for (const [, , ts] of SAMPLE_DATA.roadmap.phases) {
+    for (const [, label] of ts) assert.ok(ROADMAP.includes(esc(label)), `task "${label}" missing`);
+  }
+});
+
+test('Roadmap keeps the in-flight state visible, not collapsed into "not started"', () => {
+  // The design's checkbox is binary. The data has three states, and which task
+  // is being worked on right now is the only live signal on the slide.
+  assert.ok(ROADMAP.includes('◆'), 'the active-task marker is missing');
+  assert.ok(ROADMAP.includes('line-through'), 'completed tasks must read as struck through');
+  const idle = renderToStaticMarkup(React.createElement(SLIDES.find((s) => s.id === 'roadmap').Component, {
+    d: { ...SAMPLE_DATA, roadmap: { ...SAMPLE_DATA.roadmap, phases: [['NOW', 'Day 0', [['pending', 'Nothing started']]]] } },
+  }));
+  assert.ok(!idle.includes('◆'), 'nothing is active, so no active marker should render');
+  assert.ok(idle.includes('0% complete'));
+});
+
+test('Team renders the roster and puts the advisor label over the advisors', () => {
+  for (const f of SAMPLE_DATA.team.founders) {
+    assert.ok(TEAM.includes(esc(f.name)) && TEAM.includes(esc(f.role)) && TEAM.includes(esc(f.bio)), `founder ${f.name} incomplete`);
+  }
+  for (const [, name, role] of SAMPLE_DATA.team.advisors) {
+    assert.ok(TEAM.includes(name), `advisor ${name} missing`);
+    assert.ok(TEAM.includes(esc(role)), `advisor role "${role}" missing`);
+  }
+  // The design's dark panel charts a skills assessment; there are no skills
+  // scores in this data, so it carries the network the slide is titled after.
+  for (const [, , name, sub] of SAMPLE_DATA.team.nodes) {
+    assert.ok(TEAM.includes(name) && TEAM.includes(sub), `network node ${name} missing`);
+  }
+  assert.ok(!TEAM.includes('Skills coverage'), 'there is no skills data to chart');
+});
+
+test('Ask derives the cap-table donut from its own legend', () => {
+  assert.ok(ASK.includes(SAMPLE_DATA.ask.kpis[0][0]), 'the raise is the hero figure');
+  for (const [cat, pct] of SAMPLE_DATA.ask.funds) {
+    assert.ok(ASK.includes(esc(cat)), `use-of-funds row ${cat} missing`);
+    assert.ok(ASK.includes(`width:${pct}%`), `stacked bar segment for ${cat} is not ${pct}%`);
+  }
+  // conic-gradient stops computed from the same array the legend prints, so
+  // the wedges cannot drift from the percentages beside them.
+  let acc = 0;
+  const total = SAMPLE_DATA.captable.segments.reduce((s, [, p]) => s + p, 0);
+  for (const [, pct] of SAMPLE_DATA.captable.segments) {
+    const from = (acc / total) * 100; acc += pct;
+    assert.ok(ASK.includes(`${from}% ${(acc / total) * 100}%`), 'donut stop does not match the legend');
+  }
+});
+
+test('Deal readiness treats "Not required" as resolved, not as a warning', () => {
+  // Flagging it amber beside "On request" told investors the package was less
+  // ready than it is, and counted a non-item against the total.
+  const na = SAMPLE_DATA.deal.ready.filter(([, st]) => /not required/i.test(st));
+  assert.ok(na.length, 'fixture should carry at least one not-required row');
+  const inScope = SAMPLE_DATA.deal.ready.length - na.length;
+  const ready = SAMPLE_DATA.deal.ready.filter(([, st]) => !/request|pending|not required/i.test(st)).length;
+  assert.ok(DEAL.includes(`${ready} of ${inScope}`), `expected "${ready} of ${inScope}", excluding not-required rows`);
+  for (const [, text] of SAMPLE_DATA.deal.steps) assert.ok(DEAL.includes(esc(text)), `next step "${text}" missing`);
+  assert.ok(DEAL.includes(SAMPLE_DATA.deal.contact));
+});
+
+test('all eleven slides survive an entirely empty data object', () => {
+  for (const s of SLIDES) {
+    assert.doesNotThrow(
+      () => renderToStaticMarkup(React.createElement(s.Component, { d: {} })),
+      `${s.id} crashed with no data at all`,
+    );
+  }
 });

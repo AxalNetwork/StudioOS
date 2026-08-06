@@ -290,7 +290,7 @@ export const SAMPLE_DATA = {
         photo: _avatar('#1F9D6B', '#FFFFFF'),
       },
     ],
-    advisorsLabel: 'ADVISORS & ADVISORS',
+    advisorsLabel: 'ADVISORS & PARTNERS',
     // [initials, name, role, photo?] — some carry headshots, others fall back
     // to the initials monogram.
     advisors: [
