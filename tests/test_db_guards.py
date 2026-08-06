@@ -8,11 +8,13 @@ to prove both layers are blocked.
 """
 from __future__ import annotations
 
+import importlib
+
 import pytest
 from sqlalchemy import insert
 from sqlmodel import Session
 
-import backend.app.main  # side-effect: install guards
+importlib.import_module("backend.app.main")  # side-effect: install guards
 from backend.app.database import engine
 from backend.app.models.entities import Entity, EntityType, LPInvestor
 
