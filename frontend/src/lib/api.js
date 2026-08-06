@@ -1908,7 +1908,7 @@ export const api = {
   infraReembedMetrics: (hours = 24) => request(`/infra/reembed-metrics?hours=${hours}`),
 
   // ---------- Funds & LPs ----------
-  fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
+  fundsListByStatus: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
   fundGet: (id) => request(`/funds/${id}`),
   fundCreate: (data) => request('/funds', { method: 'POST', body: JSON.stringify(data) }),
   fundUpdate: (id, data) => request(`/funds/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
