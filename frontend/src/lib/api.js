@@ -737,7 +737,7 @@ export const api = {
   listInvestors: () => request('/capital/investors'),
   createInvestor: (data) => request('/capital/investors', { method: 'POST', body: JSON.stringify(data) }),
   getInvestor: (id) => request(`/capital/investors/${id}`),
-  createCapitalCall: (data) => request('/capital/calls', { method: 'POST', body: JSON.stringify(data) }),
+  createCapitalCallV2: (data) => request('/capital/calls', { method: 'POST', body: JSON.stringify(data) }),
   listCapitalCalls: (status) => request(`/capital/calls${status ? `?status=${status}` : ''}`),
   payCapitalCall: (id) => request(`/capital/calls/${id}/pay`, { method: 'POST' }),
   portfolio: () => request('/capital/portfolio'),
