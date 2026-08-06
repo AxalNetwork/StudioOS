@@ -326,9 +326,12 @@ export type SpinoutDemoDayData = {
     quarter: string;
     now: string[]; next: string[]; later: string[];
   };
+  // The Brand SLIDE was dropped; what survives of this block feeds other
+  // slides — `tagline` is the thesis fallback on the rendered deck and the
+  // three flags drive the cap-table readiness checklist. Its old eyebrow /
+  // headline / vision were rebuilt on every deck load and read by nothing.
   brand: {
-    eyebrow: string; headline: string;
-    tagline: string; vision: string;
+    tagline: string;
     brand_kit_ready: boolean;
     pitch_deck_ready: boolean;
     incorporated: boolean;
@@ -1192,10 +1195,7 @@ export async function fillAxalSpinoutDemoDay(
     },
 
     brand: {
-      eyebrow: '06 · Brand',
-      headline: orDash(p.tagline) !== DASH ? String(p.tagline) : 'How we show up.',
       tagline: orDash(p.tagline),
-      vision: orDash(p.vision),
       brand_kit_ready: doneMap.has('brand_kit'),
       pitch_deck_ready: doneMap.has('pitch_deck_v1'),
       incorporated: doneMap.has('incorporation_completed'),
