@@ -274,7 +274,7 @@ export const SAMPLE_DATA = {
     founder: {
       initials: 'MO', name: 'Maya Osei', role: 'Founder & CEO',
       bio: 'Ex-credit-risk lead; built underwriting models across a $2B private-credit book.',
-      photo: _avatar('#2C4BE0', '#FFFFFF'),
+      photo: _avatar('#6B46C1', '#FFFFFF'),
     },
     // Founder roster (primary first). With a co-founder present the renderer
     // switches the founder block to compact cards to keep the roster on-slide.
@@ -282,7 +282,7 @@ export const SAMPLE_DATA = {
       {
         initials: 'MO', name: 'Maya Osei', role: 'Founder & CEO',
         bio: 'Ex-credit-risk lead; built underwriting models across a $2B private-credit book.',
-        photo: _avatar('#2C4BE0', '#FFFFFF'),
+        photo: _avatar('#6B46C1', '#FFFFFF'),
       },
       {
         initials: 'SR', name: 'Sofia Reyes', role: 'Co-founder & CTO',
