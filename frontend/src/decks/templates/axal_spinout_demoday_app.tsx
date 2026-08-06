@@ -43,7 +43,7 @@
 import React from 'react';
 import type { DeckProps } from '../DeckBase';
 import { Slide16x9, Editable } from '../DeckBase';
-import { SAMPLE_DATA as SPINOUT_SAMPLE_DATA } from '../spinout/deckData';
+import { THEME, SAMPLE_DATA as SPINOUT_SAMPLE_DATA } from '../spinout/deckData';
 
 /* ─────────────────────────── sample re-export ─────────────────────────── */
 // Re-exported so `sample.ts::previewDataFor('axal_spinout_demoday')` and the
@@ -72,20 +72,19 @@ const pt = (n: number) => n * 2;  // 1 point → 2 px    (1920 / 960pt)
 const W = 13.33, MARGIN = 0.7, CW = W - MARGIN * 2;
 const ML = MARGIN;
 
-/* The renderer is intentionally self contained: the approved NovaCraft
- * reference uses a warm-violet system rather than the legacy BASEPOINT blue. */
-const K = {
-  ink: '#171321', body: '#4E4A59', muted: '#727080', faint: '#A8A5B1',
-  line: '#E7E5EA', panel: '#F7F7F9', panel2: '#EEEFF3', white: '#FCFCFD',
-  accent: '#6B46C1', accentSoft: '#F0ECFF', accentMid: '#B9A5F4',
-  dbg: '#09080D', dpanel: '#17132D', dline: '#2D2747',
-  dmuted: '#BDB4D8', dfaint: '#71698A', accentLt: '#8B5CF6',
-  done: '#3BA477', active: '#D58A16', pending: '#AAB0BA',
-} as const;
+/* Palette. DERIVED from `THEME.color` in ../spinout/deckData — not a second
+ * copy of it. That module's header promises "the React template derives K from
+ * this object … so preview and export cannot drift apart on palette"; until
+ * now K was a hand-maintained near-miss (ink #171321 vs the design's #1A202C,
+ * panel #F7F7F9 vs #F8F8FA, dbg #09080D vs #17142E …), so the promise held for
+ * the accent and nothing else. THEME stores bare hex for pptxgenjs, which never
+ * wants a '#'; the browser always does. That is the only difference. */
+const K = Object.fromEntries(
+  Object.entries(THEME.color).map(([k, hex]) => [k, `#${hex}`]),
+) as Record<keyof typeof THEME.color, string>;
 
 const FF = '"Inter", "Helvetica Neue", system-ui, sans-serif';
 const SERIF = '"Inter", system-ui, sans-serif';
-const MONO = '"Roboto Mono", ui-monospace, SFMono-Regular, monospace';
 
 type OnEdit = (path: string, value: string) => void;
 type Data = Record<string, any>;
@@ -331,32 +330,6 @@ const Footer: React.FC<{ brand: any; dark?: boolean }> = ({ brand, dark }) => {
   );
 };
 
-const AreaChart: React.FC<{ l: number; t: number; w: number; h: number; values: number[]; labels: string[]; color: string }> = ({
-  l, t, w, h, values, labels, color,
-}) => {
-  const safe = Array.isArray(values) && values.length ? values.map(Number) : [0];
-  const max = Math.ceil(Math.max(...safe) * 1.14) || 1;
-  const pw = inch(w), ph = inch(h);
-  const n = safe.length;
-  const px = (i: number) => (n > 1 ? (i / (n - 1)) * pw : pw / 2);
-  const py = (val: number) => ph - (val / max) * ph;
-  const line = safe.map((val, i) => `${px(i)},${py(val)}`).join(' ');
-  const area = `0,${ph} ${line} ${pw},${ph}`;
-  return (
-    <div style={{ position: 'absolute', left: inch(l), top: inch(t), width: pw, height: ph }}>
-      <svg width={pw} height={ph} viewBox={`0 0 ${pw} ${ph}`} style={{ display: 'block' }} preserveAspectRatio="none">
-        <polygon points={area} fill={color} fillOpacity={0.28} />
-        <polyline points={line} fill="none" stroke={color} strokeWidth={6} strokeLinejoin="round" strokeLinecap="round" />
-      </svg>
-      <div style={{ position: 'absolute', left: 0, top: ph + inch(0.06), width: pw, display: 'flex', justifyContent: 'space-between' }}>
-        {(Array.isArray(labels) ? labels : []).map((lab, i) => (
-          <span key={i} style={{ fontFamily: FF, fontSize: pt(8), color: K.dfaint }}>{lab}</span>
-        ))}
-      </div>
-    </div>
-  );
-};
-
 const Donut: React.FC<{ l: number; t: number; w: number; h: number; segments: Array<[string, number]>; colors: string[] }> = ({
   l, t, w, h, segments, colors,
 }) => {
@@ -391,94 +364,339 @@ const Donut: React.FC<{ l: number; t: number; w: number; h: number; segments: Ar
 /* ─────────────────────────── slides ─────────────────────────── */
 type SlideProps = { d: Data; editable?: boolean; onEdit?: OnEdit };
 
+/* ───────────── design-source geometry (AxalSlide.dc.html) ─────────────────
+ * The canonical design for this deck lives in-repo at
+ * `spin-out-lab-pipeline/project/AxalSlide.dc.html`, authored on a 1280 × 720
+ * artboard. The shared frame is 1920 × 1080 — exactly 1.5× — so every design
+ * pixel maps through `u()` with no eyeballing and no accumulated drift. Read a
+ * value off the design, wrap it in u(), done.
+ *
+ * Slides rebuilt against the design lay themselves out in FLOW (flex, gaps,
+ * radii, gradients) rather than the `inch()` / `pt()` absolute placement the
+ * PPTX-mirroring slides use. Both live inside the same `<Slide16x9>`: a rebuilt
+ * slide owns one `inset: 0` container and does its own padding; the rest still
+ * position every element absolutely. The absolute path exists to keep the PPTX
+ * export pixel-aligned, and it is why those slides could never carry the
+ * design's cards, gradients and rounded panels.
+ *
+ * Export note: the PDF path rasterises `[data-slide-frame]` with html2canvas
+ * (PitchDeckPrintPage.jsx), which does not implement `background-clip: text`.
+ * The design's gradient-filled cover wordmark is therefore rendered in solid
+ * white — a clipped gradient exports as a coloured bar behind the letters.
+ */
+const U = 1.5;                    // 1280 × 720 design px → 1920 × 1080 frame px
+const u = (n: number) => n * U;
+
+// Slate tints the design uses inline and THEME does not carry as tokens.
+const D = {
+  ink2: '#2D3748', hair: '#EDF2F7', arrow: '#CBD5E0',
+  violetBg: '#F7F5FF', violetLine: '#E9E4FB', violetDeep: '#553C9A',
+  redBg: '#FEE2E2', redInk: '#DC2626',
+  greenBg: '#F0FBF4', greenLine: '#C6F6D5', greenInk: '#2F855A',
+  onDark: '#E9E4FB', onDarkSoft: '#CBC4E8',
+} as const;
+
+const FUNNEL_BARS = ['#6B46C1', '#8B5CF6', '#A78BFA', '#C4B5FD'];
+
+const initialsOf = (s: any, n = 2) =>
+  String(s ?? '').trim().split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, n).toUpperCase();
+
+/* Header row for the rebuilt slides: eyebrow · provenance · slide index.
+ * The design carries only eyebrow + provenance, but the eight slides still on
+ * the absolute path show "NN / 11" via <Eyebrow>; dropping it from three of
+ * eleven would read as a rendering bug while paging through the deck. */
+const HeadRow: React.FC<{ eyebrow: any; idx: any; right?: React.ReactNode; mb?: number }> = ({
+  eyebrow, idx, right, mb = 22,
+}) => (
+  <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: u(20), marginBottom: u(mb) }}>
+    <div style={{
+      fontSize: u(15), fontWeight: 800, color: K.accent,
+      textTransform: 'uppercase', letterSpacing: '.12em',
+    }}>{String(eyebrow ?? '')}</div>
+    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: u(18), minWidth: 0 }}>
+      {right}
+      <span style={{ flex: 'none', fontSize: u(12), fontWeight: 700, color: K.faint, letterSpacing: '.06em' }}>
+        {String(idx ?? '')} / 11
+      </span>
+    </div>
+  </div>
+);
+
 /* 1 — COVER (dark) */
+// Rebuilt against the design's cover: radial violet bloom over a 120° dark
+// gradient, brand row at the top, wordmark + thesis pushed to the optical
+// centre by `margin-top:auto`, then the meta chips and the discovery strip.
+//
+// "Discovery to date" reads the discovery FUNNEL (`validation.stages`) — the
+// same series the Problem slide charts. It previously read the last four points
+// of `cover.signalY`, a cumulative interview count, and labelled them
+// Customers / Advisors / Co-founders / Investors: four hardcoded labels over
+// four numbers that were none of those things. The funnel carries its own
+// labels, so the strip now says what it is showing.
 const SlideCover: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
-  const c = d.cover, brand = d.brand;
-  const sigY: number[] = Array.isArray(c.signalY) ? c.signalY : [];
+  const c = d.cover || {};
+  const v = d.validation || {};
+  const meta: Array<[string, string]> = Array.isArray(c.meta) ? c.meta : [];
+  const discovery: Array<[string, number]> = (Array.isArray(v.stages) ? v.stages : []).slice(0, 4);
   return (
-    <Slide16x9 bg={K.dbg} ink={K.white} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <div style={{position:'absolute',left:inch(-1),top:inch(-2.25),width:inch(8.3),height:inch(3.35),borderRadius:'50%',background:'#8B5CF6',transform:'rotate(-7deg)'}} />
-        <Rect l={ML} t={0.76} w={0.5} h={0.5} r={0.12} fill={K.accentLt} line={false} shadow={false} />
-        <Txt l={ML} t={0.76} w={0.5} h={0.5} size={14} bold align="center" valign="middle" color={K.white}>N</Txt>
-        <Txt l={ML + 0.7} t={0.76} w={3} h={0.5} size={11} color={K.dmuted} valign="middle">{c.company}</Txt>
-        <Rect l={10.55} t={0.8} w={1.8} h={0.32} r={0.16} fill={K.dbg} line={K.dline} shadow={false} />
-        <Txt l={10.65} t={0.8} w={1.6} h={0.32} size={8.5} face={MONO} color={K.dmuted} align="center" valign="middle">{c.eyebrowRight}</Txt>
-        <Ed l={ML} t={2.3} w={8.3} h={0.8} size={40} bold lh={1} color={K.white} value={c.company} path="cover.company" editable={editable} onEdit={onEdit} />
-        <Ed l={ML} t={3.05} w={8.2} h={0.8} size={16} color="#D8D0F1" lh={1.16} value={c.thesis} path="cover.thesis" editable={editable} onEdit={onEdit} />
-        {(Array.isArray(c.meta) ? c.meta : []).map((m: [string, string], i: number) => {
-          const x = ML + i * 2.92;
-          return <React.Fragment key={i}><Rect l={x} t={4.25} w={2.55} h={0.56} r={0.1} fill="#14121B" line="#272433" shadow={false} /><Txt l={x + .18} t={4.35} w={2.2} h={.15} size={7} bold spacing={.8} color={K.accentLt}>{m[0]}</Txt><Txt l={x + .18} t={4.55} w={2.2} h={.18} size={11} bold color={K.white}>{m[1]}</Txt></React.Fragment>;
-        })}
-        <div style={{position:'absolute',left:inch(ML),top:inch(5.15),width:inch(11.65),height:pt(1),background:'#272433'}} />
-        <Txt l={ML} t={5.38} w={2} h={.2} size={7.5} bold spacing={1} color={K.accentLt}>DISCOVERY TO DATE</Txt>
-        {sigY.slice(-4).map((n,i)=><React.Fragment key={i}><Txt l={2.35+i*1.15} t={5.29} w={.35} h={.3} size={15} bold color={K.white}>{String(n)}</Txt><Txt l={2.78+i*1.15} t={5.4} w={.75} h={.2} size={8} color={K.dmuted}>{['Customers','Advisors','Co-founders','Investors'][i]}</Txt></React.Fragment>)}
+    <Slide16x9 bg={K.dbg} ink="#FFFFFF" font={FF}>
+      <div style={{
+        position: 'absolute', inset: 0, color: '#FFFFFF',
+        display: 'flex', flexDirection: 'column',
+        padding: `${u(72)}px ${u(80)}px`,
+        background:
+          `radial-gradient(${u(1100)}px ${u(460)}px at 16% -12%, rgba(139,92,246,.5), transparent 60%), `
+          + `linear-gradient(120deg, ${K.dbg}, ${K.dpanel} 52%, ${K.dline})`,
+      }}>
+        {/* brand row */}
+        <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: u(13) }}>
+          <div style={{
+            width: u(48), height: u(48), flex: 'none', borderRadius: u(13),
+            background: 'rgba(255,255,255,.14)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: u(22),
+          }}>{initialsOf(c.company)}</div>
+          <span style={{ fontSize: u(19), fontWeight: 600, color: D.onDarkSoft }}>{String(c.company ?? '')}</span>
+          <span style={{
+            marginLeft: 'auto', flex: 'none', fontSize: u(14), fontWeight: 600, color: K.dfaint,
+            border: '1px solid rgba(255,255,255,.22)', borderRadius: 999,
+            padding: `${u(7)}px ${u(16)}px`, whiteSpace: 'nowrap',
+          }}>{String(c.eyebrowRight ?? '')}</span>
+        </div>
+
+        {/* wordmark + thesis — `margin-top:auto` is what floats the block */}
+        <div style={{ marginTop: 'auto' }}>
+          <Editable
+            as="div" value={String(c.company ?? '')} path="cover.company" editable={editable} onEdit={onEdit}
+            style={{ fontSize: u(92), fontWeight: 900, letterSpacing: '-.035em', lineHeight: .98, color: '#FFFFFF' }} />
+          <Editable
+            as="div" value={String(c.thesis ?? '')} path="cover.thesis" editable={editable} onEdit={onEdit}
+            style={{ fontSize: u(30), fontWeight: 500, lineHeight: 1.3, color: D.onDarkSoft, marginTop: u(20), maxWidth: u(900) }} />
+        </div>
+
+        {/* meta chips — sector / stage / founder / lab status */}
+        {meta.length > 0 && (
+          <div style={{ flex: 'none', display: 'flex', gap: u(14), marginTop: u(38) }}>
+            {meta.map((m, i) => (
+              <div key={i} style={{
+                background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.13)',
+                borderRadius: u(13), padding: `${u(15)}px ${u(18)}px`, minWidth: u(150),
+              }}>
+                <div style={{
+                  fontSize: u(11), fontWeight: 700, color: K.dfaint,
+                  textTransform: 'uppercase', letterSpacing: '.07em',
+                }}>{String(m?.[0] ?? '')}</div>
+                <div style={{ fontSize: u(19), fontWeight: 700, color: '#FFFFFF', marginTop: u(5) }}>
+                  {String(m?.[1] ?? '')}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* discovery strip */}
+        {discovery.length > 0 && (
+          <div style={{
+            flex: 'none', display: 'flex', alignItems: 'center', gap: u(22),
+            marginTop: u(16), paddingTop: u(20), borderTop: '1px solid rgba(255,255,255,.12)',
+          }}>
+            <span style={{
+              flex: 'none', fontSize: u(12), fontWeight: 700, color: K.dfaint,
+              textTransform: 'uppercase', letterSpacing: '.08em',
+            }}>Discovery to date</span>
+            <div style={{ display: 'flex', gap: u(26), minWidth: 0 }}>
+              {discovery.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: u(8) }}>
+                  <span style={{ fontSize: u(26), fontWeight: 900, color: '#FFFFFF' }}>{String(s?.[1] ?? '')}</span>
+                  <span style={{ fontSize: u(14), color: K.dmuted, whiteSpace: 'nowrap' }}>{String(s?.[0] ?? '')}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Slide16x9>
   );
 };
 
 /* 2 — PROBLEM (+ validation evidence) */
-// The standalone Validation slide is merged here: the discovery funnel renders
-// as a compact stat strip along the bottom, reading the unchanged
-// `validation.*` section (stages + conversion) in place.
+// Rebuilt against the design's Problem slide: headline + numbered pain cards on
+// the left, a "Who feels this" panel over a dark pull-quote card on the right,
+// and the merged validation evidence strip along the bottom (stat block +
+// funnel chips). The standalone Validation slide stays merged here and
+// `validation.*` is still read in place — the field contract is unchanged, only
+// its rendering is.
 const SlideProblem: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
-  const p = d.problem;
+  const p = d.problem || {};
   const v = d.validation || {};
+  const pains: Array<[string, number, string]> = Array.isArray(p.pains) ? p.pains : [];
   const stages: Array<[string, number]> = Array.isArray(v.stages) ? v.stages : [];
   const conversion: [string, string] = Array.isArray(v.conversion) ? v.conversion : ['', ''];
-  const bx = 5.35, bw = 7.25;
-  const stW = stages.length ? Math.min(1.85, 9.25 / stages.length) : 1.85;
+  // Discovery cards + the conversion rate, which carries the same
+  // [value, label] shape and belongs in the same block.
+  //
+  // `validation.cards` and `validation.stages` overlap: the sample ships cards
+  // for "42 Interviews completed" and "9 Design-partner LOIs" while the funnel
+  // beside them already reads 42 → Interviewed and 9 → LOI. Printing a number
+  // twice on one strip reads as two findings, and it is what pushed the strip
+  // past the slide width. Cards whose value the funnel already shows are
+  // dropped; with no funnel present every card survives.
+  const funnelValues = new Set(stages.map((s) => String(s?.[1] ?? '')));
+  const stats: Array<[string, string]> = [
+    ...((Array.isArray(v.cards) ? v.cards : []) as Array<[string, string]>)
+      .filter((cd) => !funnelValues.has(String(cd?.[0] ?? ''))),
+    ...(conversion[0] ? [conversion] : []),
+  ];
   return (
     <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={p.eyebrow} idx={p.idx} />
-        <Title text={p.title} path="problem.title" editable={editable} onEdit={onEdit} />
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        padding: `${u(56)}px ${u(80)}px ${u(52)}px`,
+      }}>
+        <HeadRow
+          eyebrow={p.eyebrow} idx={p.idx}
+          right={<span style={{ fontSize: u(13), fontWeight: 600, color: K.muted }}>{String(p.barsLabel ?? '')}</span>}
+        />
 
-        <Ed l={ML} t={2.15} w={4.0} h={1.0} size={13.5} color={K.body} lh={1.18} valign="top" value={p.framing} path="problem.framing" editable={editable} onEdit={onEdit} />
-        <Rect l={ML} t={3.45} w={4.0} h={2.5} fill={K.panel} line={false} shadow={false} />
-        <Txt l={ML + 0.15} t={3.35} w={1} h={0.9} size={54} bold color={K.accentMid} face={SERIF}>{'\u201C'}</Txt>
-        <Ed l={ML + 0.35} t={4.05} w={3.35} h={1.3} size={14.5} italic color={K.ink} lh={1.14} valign="top" value={p.quote} path="problem.quote" editable={editable} onEdit={onEdit} />
-        <Ed l={ML + 0.35} t={5.35} w={3.35} h={0.4} size={10} bold spacing={0.5} color={K.muted} value={p.quoteAttr} path="problem.quoteAttr" editable={editable} onEdit={onEdit} />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: u(52) }}>
+          {/* left — headline + ranked pains */}
+          <div style={{ flex: '1.15', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <Editable
+              as="div" value={String(p.title ?? '')} path="problem.title" editable={editable} onEdit={onEdit}
+              style={{
+                fontSize: u(44), fontWeight: 800, letterSpacing: '-.02em',
+                lineHeight: 1.12, color: K.ink, marginBottom: u(34),
+              }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: u(18) }}>
+              {pains.map((pn, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: u(16),
+                  background: K.panel, border: `1px solid ${D.hair}`,
+                  borderRadius: u(14), padding: `${u(16)}px ${u(20)}px`,
+                }}>
+                  <span style={{
+                    width: u(30), height: u(30), flex: 'none', borderRadius: u(9),
+                    background: D.redBg, color: D.redInk, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: u(15),
+                  }}>{i + 1}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: u(21), lineHeight: 1.35, color: D.ink2, fontWeight: 500 }}>
+                    {String(pn?.[0] ?? '')}
+                  </span>
+                  {/* One pill, both numbers. The design carries a single
+                      "mentions" chip; the data carries a frequency AND a raw
+                      count, and dropping either loses evidence off the slide. */}
+                  <span style={{
+                    flex: 'none', fontSize: u(13), fontWeight: 700, color: D.redInk, background: D.redBg,
+                    borderRadius: 999, padding: `${u(5)}px ${u(12)}px`, whiteSpace: 'nowrap',
+                  }}>
+                    {[
+                      pn?.[1] == null || String(pn[1]) === '' ? '' : `${pn[1]}%`,
+                      pn?.[2] ? String(pn[2]) : '',
+                    ].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
 
-        <Txt l={bx} t={2.0} w={bw} h={0.3} size={10} bold spacing={1} color={K.muted}>{p.barsLabel}</Txt>
-        {(Array.isArray(p.pains) ? p.pains : []).map((pn: [string, number, string], i: number) => {
-          const py = 2.55 + i * 0.92;
-          return (
-            <React.Fragment key={i}>
-              <Txt l={bx} t={py} w={bw - 1.6} h={0.32} size={14} bold valign="middle" color={K.ink}>{pn[0]}</Txt>
-              <Txt l={bx + bw - 1.6} t={py} w={0.9} h={0.32} size={14} bold align="right" valign="middle" color={i === 0 ? K.accent : K.body}>{pn[1]}%</Txt>
-              <Txt l={bx + bw - 0.65} t={py} w={0.65} h={0.32} size={9.5} align="right" valign="middle" color={K.faint}>{pn[2]}</Txt>
-              <Bar l={bx} t={py + 0.4} w={bw} h={0.17} pct={Number(pn[1]) / 100} fill={i === 0 ? K.accent : K.accentMid} />
-            </React.Fragment>
-          );
-        })}
+          {/* right — who feels it, and one of them saying so */}
+          <div style={{ flex: '.85', minWidth: 0, display: 'flex', flexDirection: 'column', gap: u(20) }}>
+            <div style={{
+              flex: 'none', background: D.violetBg, border: `1px solid ${D.violetLine}`,
+              borderRadius: u(16), padding: u(24),
+            }}>
+              <div style={{
+                fontSize: u(12), fontWeight: 800, color: K.accent,
+                textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: u(9),
+              }}>Who feels this</div>
+              <Editable
+                as="div" value={String(p.framing ?? '')} path="problem.framing" editable={editable} onEdit={onEdit}
+                style={{ fontSize: u(20), lineHeight: 1.4, color: D.ink2, fontWeight: 500 }} />
+            </div>
 
-        {/* validation evidence strip — discovery funnel + conversion */}
-        {stages.length > 0 && (
-          <>
-            <Txt l={ML} t={6.02} w={6} h={0.25} size={9.5} bold spacing={1} color={K.muted}>{v.funnelLabel}</Txt>
-            {stages.map((st, i) => {
-              const x = ML + i * stW;
-              return (
-                <React.Fragment key={i}>
-                  <Txt l={x} t={6.3} w={stW - 0.2} h={0.32} size={16} bold color={i === stages.length - 1 ? K.accent : K.ink}>{String(st[1])}</Txt>
-                  {/* single-line clamp: the footer starts at 7.06, so a wrapping
-                      stage label would collide with it */}
-                  <Txt l={x} t={6.62} w={stW - 0.2} h={0.26} size={8.5} lh={1.05} color={K.muted}>
-                    <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st[0]}</span>
-                  </Txt>
-                  {i < stages.length - 1 && (
-                    <Txt l={x + stW - 0.24} t={6.3} w={0.24} h={0.32} size={12} align="center" valign="middle" color={K.accentMid}>{'\u2192'}</Txt>
-                  )}
-                </React.Fragment>
-              );
-            })}
-            <Txt l={10.1} t={6.3} w={2.53} h={0.56} size={11} valign="top" lh={1.15} color={K.muted}>
-              <span style={{ fontWeight: 700, color: K.accent, fontSize: pt(16) }}>{conversion[0]}</span>
-              <span>{'  ' + (conversion[1] || '')}</span>
-            </Txt>
-          </>
+            <div style={{
+              flex: 1, minHeight: 0, background: K.dbg, color: '#FFFFFF', borderRadius: u(16),
+              padding: u(30), display: 'flex', flexDirection: 'column', justifyContent: 'center',
+            }}>
+              <div style={{ fontSize: u(66), lineHeight: 0.3, color: K.accentLt, fontWeight: 800, fontFamily: SERIF }}>
+                {'“'}
+              </div>
+              <Editable
+                as="div" value={String(p.quote ?? '')} path="problem.quote" editable={editable} onEdit={onEdit}
+                style={{ fontSize: u(23), lineHeight: 1.45, fontStyle: 'italic', color: D.onDark, marginTop: u(12) }} />
+              {/* The design puts a named interviewee behind a monogram here.
+                  Discovery attribution is a ROLE, not a person — the field
+                  reads "Head of Credit · mid-market direct lender" — so the
+                  monogram carries a quote glyph rather than invented initials. */}
+              <div style={{ marginTop: u(20), display: 'flex', alignItems: 'center', gap: u(11) }}>
+                <div style={{
+                  width: u(36), height: u(36), flex: 'none', borderRadius: '50%',
+                  background: K.accent, color: '#FFFFFF', fontWeight: 700, fontSize: u(20), lineHeight: 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SERIF,
+                }}>{'”'}</div>
+                <Editable
+                  as="div" value={String(p.quoteAttr ?? '')} path="problem.quoteAttr" editable={editable} onEdit={onEdit}
+                  style={{ fontSize: u(15), fontWeight: 700, color: '#FFFFFF' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* merged validation evidence — discovery stats + funnel */}
+        {(stats.length > 0 || stages.length > 0) && (
+          <div style={{
+            flex: 'none', display: 'flex', alignItems: 'center', gap: u(26), overflow: 'hidden',
+            marginTop: u(22), paddingTop: u(18), borderTop: `1px solid ${K.line}`,
+          }}>
+            <div style={{
+              flex: 'none', maxWidth: u(120), fontSize: u(11.5), fontWeight: 800, color: K.accent,
+              textTransform: 'uppercase', letterSpacing: '.09em', lineHeight: 1.35,
+            }}>{String(v.funnelLabel ?? '')}</div>
+            {/* The stat block is the ONLY flexible element in the strip: the
+                funnel chips are sized by their own copy and the label is fixed,
+                so a crowded strip squeezes here, where a stat label wraps to a
+                second line and stays legible, instead of ellipsising a funnel
+                stage down to "Sol…". */}
+            <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', gap: u(24) }}>
+              {stats.map((s, i) => (
+                <div key={i} style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: u(28), fontWeight: 900, letterSpacing: '-.02em', color: K.ink, lineHeight: 1 }}>
+                    {String(s?.[0] ?? '')}
+                  </div>
+                  <div style={{ fontSize: u(12.5), color: K.muted, marginTop: u(3), fontWeight: 500, lineHeight: 1.25 }}>
+                    {String(s?.[1] ?? '')}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {stages.length > 0 && (
+              <div style={{
+                flex: 'none', display: 'flex', alignItems: 'center',
+                justifyContent: 'flex-end', gap: u(9),
+              }}>
+                {stages.map((st, i) => (
+                  <React.Fragment key={i}>
+                    <div style={{
+                      flex: 'none', minWidth: u(74), textAlign: 'center',
+                      background: K.panel, border: `1px solid ${D.hair}`,
+                      borderRadius: u(11), padding: `${u(9)}px ${u(13)}px`,
+                    }}>
+                      <div style={{
+                        fontSize: u(19), fontWeight: 900, lineHeight: 1,
+                        color: FUNNEL_BARS[Math.min(i, FUNNEL_BARS.length - 1)],
+                      }}>{String(st?.[1] ?? '')}</div>
+                      <div style={{
+                        fontSize: u(10.5), color: K.muted, marginTop: u(3), fontWeight: 600, lineHeight: 1.2,
+                        whiteSpace: 'nowrap',
+                      }}>{String(st?.[0] ?? '')}</div>
+                    </div>
+                    {i < stages.length - 1 && (
+                      <div style={{ flex: 'none', color: D.arrow, fontSize: u(15) }}>{'→'}</div>
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         <Footer brand={d.brand} />
       </div>
@@ -901,47 +1119,173 @@ const SlideCompetitive: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
 };
 
 /* 7 — TRACTION */
-// New slide: monthly revenue trend (area chart + MRR + growth) on the left,
-// revenue mix bars and the takeaway callout on the right.
+// Rebuilt against the design's Traction slide: a KPI card row, the monthly
+// revenue column chart in a bordered card on the left, revenue-mix bars and the
+// takeaway callout stacked on the right.
+//
+// The design draws four KPIs — MRR, paying customers, average contract, MoM
+// growth. Only two of those exist in the data: `SpinoutDeckData['traction']`
+// (cloudflare-worker/src/services/decks/spinoutDeckData.ts) carries mrr, growth,
+// the trend series and the mix, and nothing else. Rather than print two
+// invented numbers, the row renders the KPIs that have a source, plus the span
+// of the trend series itself — derived from data already on the slide. Cards
+// that have no value are dropped, so the row narrows instead of showing blanks.
 const SlideTraction: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   const tr = d.traction || {};
-  const trendY: number[] = Array.isArray(tr.trendY) ? tr.trendY : [];
+  const trendY: number[] = (Array.isArray(tr.trendY) ? tr.trendY : []).map((n: any) => Number(n) || 0);
   const trendX: string[] = Array.isArray(tr.trendX) ? tr.trendX : [];
   const trendLabels: string[] = Array.isArray(tr.trendLabels) ? tr.trendLabels : [];
-  const lastLabel = trendLabels.length ? trendLabels[trendLabels.length - 1] : '';
   const mix: Array<[string, string, number]> = Array.isArray(tr.mix) ? tr.mix : [];
-  const lx = ML, lw = 6.6;
-  const rx = 7.9, rw = 4.73;
+
+  // Design: h = 20 + (value / max) * 168, in design px.
+  const tMax = Math.max(1, ...trendY);
+  const barH = (n: number) => u(20) + (Math.max(0, n) / tMax) * u(168);
+  // Last month is the accent, the one before it the light violet, the rest the
+  // mid tint — so the eye lands on the current month without a legend.
+  const barTone = (i: number, n: number) =>
+    (i === n - 1 ? K.accent : i === n - 2 ? K.accentLt : K.accentMid);
+
+  const KPI_TONES = [
+    { bg: D.violetBg, border: D.violetLine, ink: D.violetDeep, label: K.accentLt },
+    { bg: K.white, border: K.line, ink: K.ink, label: K.faint },
+    { bg: D.greenBg, border: D.greenLine, ink: D.greenInk, label: K.done },
+  ];
+  const kpis: Array<{ label: string; value: string; note: string }> = [];
+  if (tr.mrr) kpis.push({ label: String(tr.mrrLabel || 'MRR'), value: String(tr.mrr), note: 'Recurring, verified' });
+  if (trendX.length) {
+    kpis.push({
+      label: 'Tracked',
+      value: `${trendX.length} mo`,
+      note: trendX.length > 1 ? `${trendX[0]} – ${trendX[trendX.length - 1]}` : String(trendX[0] ?? ''),
+    });
+  }
+  if (tr.growth) kpis.push({ label: 'MoM growth', value: String(tr.growth), note: String(tr.growthNote || '') });
+
   return (
     <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={tr.eyebrow} idx={tr.idx} />
-        <Title text={tr.title} path="traction.title" editable={editable} onEdit={onEdit} />
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        padding: `${u(68)}px ${u(80)}px ${u(60)}px`,
+      }}>
+        {/* The design has no headline on this slide; `traction.title` is an
+            editable field the deck editor exposes, and it reads as the summary
+            line the design puts in the header's right slot. */}
+        <HeadRow
+          eyebrow={tr.eyebrow} idx={tr.idx} mb={26}
+          right={(
+            <Editable
+              as="span" value={String(tr.title ?? '')} path="traction.title" editable={editable} onEdit={onEdit}
+              style={{ fontSize: u(13), fontWeight: 600, color: K.muted }} />
+          )}
+        />
 
-        <Txt l={lx} t={2.0} w={lw} h={0.3} size={10} bold spacing={1} color={K.muted}>{tr.trendLabel}</Txt>
-        <Txt l={lx} t={2.35} w={3.4} h={0.75} size={40} bold valign="middle" color={K.accent}>{tr.mrr}</Txt>
-        <Txt l={lx} t={3.12} w={3.4} h={0.3} size={11} bold spacing={1} color={K.muted}>{tr.mrrLabel}</Txt>
-        <Txt l={lx + 3.6} t={2.45} w={3.0} h={0.45} size={20} bold valign="middle" color={K.done}>{tr.growth}</Txt>
-        <Txt l={lx + 3.6} t={2.95} w={3.0} h={0.3} size={10} color={K.muted}>{tr.growthNote}</Txt>
-        <AreaChart l={lx} t={3.75} w={lw} h={2.5} values={trendY} labels={trendX} color={K.accent} />
-        <Txt l={lx + lw - 1.2} t={3.8} w={1.2} h={0.35} size={14} bold align="right" color={K.accent}>{lastLabel}</Txt>
+        {kpis.length > 0 && (
+          <div style={{ flex: 'none', display: 'flex', gap: u(16), marginBottom: u(22) }}>
+            {kpis.map((k, i) => {
+              const tone = KPI_TONES[Math.min(i, KPI_TONES.length - 1)];
+              return (
+                <div key={i} style={{
+                  flex: 1, minWidth: 0, background: tone.bg, border: `1px solid ${tone.border}`,
+                  borderRadius: u(16), padding: `${u(20)}px ${u(24)}px`,
+                }}>
+                  <div style={{
+                    fontSize: u(12), fontWeight: 800, letterSpacing: '.05em',
+                    textTransform: 'uppercase', color: tone.label,
+                  }}>{k.label}</div>
+                  <div style={{
+                    fontSize: u(40), fontWeight: 900, letterSpacing: '-.03em',
+                    lineHeight: 1.05, marginTop: u(6), color: tone.ink,
+                  }}>{k.value}</div>
+                  <div style={{ fontSize: u(13), color: K.muted, marginTop: u(3) }}>{k.note}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-        <Txt l={rx} t={2.0} w={rw} h={0.3} size={10} bold spacing={1} color={K.muted}>{tr.mixLabel}</Txt>
-        {mix.map((mx, i) => {
-          const my = 2.5 + i * 0.85;
-          return (
-            <React.Fragment key={i}>
-              <Txt l={rx} t={my} w={rw - 1.7} h={0.3} size={12.5} bold valign="middle" color={K.ink}>{mx[0]}</Txt>
-              <Txt l={rx + rw - 1.7} t={my} w={1.7} h={0.3} size={12} bold align="right" valign="middle" color={i === 0 ? K.accent : K.body}>
-                {`${mx[1]}  ·  ${mx[2]}%`}
-              </Txt>
-              <Bar l={rx} t={my + 0.36} w={rw} h={0.17} pct={Number(mx[2]) / 100} fill={i === 0 ? K.accent : K.accentMid} />
-            </React.Fragment>
-          );
-        })}
-        <Rect l={rx} t={5.55} w={rw} h={1.25} fill={K.accentSoft} line={false} shadow={false} />
-        <Ed l={rx + 0.24} t={5.72} w={rw - 0.48} h={0.95} size={11.5} italic lh={1.2} valign="top" color={K.ink}
-          value={tr.takeaway} path="traction.takeaway" editable={editable} onEdit={onEdit} />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: u(20) }}>
+          {/* left — monthly revenue column chart */}
+          <div style={{
+            flex: '1.65', minWidth: 0, background: K.white, border: `1px solid ${K.line}`,
+            borderRadius: u(16), padding: `${u(22)}px ${u(26)}px`, display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{
+              flex: 'none', display: 'flex', justifyContent: 'space-between',
+              alignItems: 'center', gap: u(12), marginBottom: u(18),
+            }}>
+              <span style={{
+                fontSize: u(13), fontWeight: 800, color: K.muted,
+                textTransform: 'uppercase', letterSpacing: '.08em',
+              }}>{String(tr.trendLabel ?? '')}</span>
+              <span style={{ flex: 'none', fontSize: u(12), color: K.faint }}>Verified · logged in Revenue</span>
+            </div>
+            <div style={{
+              flex: 1, minHeight: 0, display: 'flex', alignItems: 'flex-end',
+              gap: u(16), paddingBottom: u(4),
+            }}>
+              {trendY.map((n, i) => (
+                <div key={i} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: u(8) }}>
+                  <div style={{ fontSize: u(14), fontWeight: 800, color: i === trendY.length - 1 ? D.violetDeep : K.muted }}>
+                    {String(trendLabels[i] ?? '')}
+                  </div>
+                  <div style={{
+                    width: '100%', height: barH(n),
+                    borderRadius: `${u(10)}px ${u(10)}px ${u(4)}px ${u(4)}px`,
+                    background: barTone(i, trendY.length),
+                  }} />
+                  <div style={{ fontSize: u(12.5), fontWeight: 600, color: K.muted }}>{String(trendX[i] ?? '')}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* right — revenue mix over the takeaway */}
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: u(14) }}>
+            <div style={{
+              flex: 1, minHeight: 0, background: K.panel, border: `1px solid ${K.line}`,
+              borderRadius: u(16), padding: `${u(20)}px ${u(22)}px`, display: 'flex', flexDirection: 'column',
+            }}>
+              <div style={{
+                flex: 'none', fontSize: u(13), fontWeight: 800, color: K.muted,
+                textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: u(14),
+              }}>{String(tr.mixLabel ?? '')}</div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: u(12), justifyContent: 'center' }}>
+                {mix.map((mx, i) => (
+                  <div key={i}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: u(10), marginBottom: u(5) }}>
+                      <span style={{ fontSize: u(14), fontWeight: 600, color: D.ink2, minWidth: 0 }}>
+                        {String(mx?.[0] ?? '')}
+                      </span>
+                      <span style={{ flex: 'none', fontSize: u(14), fontWeight: 800, color: K.ink }}>
+                        {String(mx?.[1] ?? '')}
+                      </span>
+                    </div>
+                    <div style={{ height: u(9), borderRadius: 999, background: K.panel2, overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${Math.max(0, Math.min(100, Number(mx?.[2]) || 0))}%`,
+                        borderRadius: 999,
+                        background: FUNNEL_BARS[Math.min(i, 2)],
+                      }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{
+              flex: 'none', background: D.violetBg, border: `1px solid ${D.violetLine}`,
+              borderRadius: u(16), padding: `${u(16)}px ${u(20)}px`,
+            }}>
+              <div style={{
+                fontSize: u(11.5), fontWeight: 800, letterSpacing: '.06em',
+                textTransform: 'uppercase', color: K.accentLt, marginBottom: u(6),
+              }}>Takeaway</div>
+              <Editable
+                as="div" value={String(tr.takeaway ?? '')} path="traction.takeaway" editable={editable} onEdit={onEdit}
+                style={{ fontSize: u(13.5), color: K.body, lineHeight: 1.5 }} />
+            </div>
+          </div>
+        </div>
         <Footer brand={d.brand} />
       </div>
     </Slide16x9>
