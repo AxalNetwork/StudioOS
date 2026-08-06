@@ -326,7 +326,7 @@ function getSidebarGroups(role, primaryPersonaId, user) {
   // Apply tier gating per group (stub passes everything through today;
   // Phase C will swap `hasTier` for the real subscription check).
   const groups = base
-    .map((g) => ({ ...g, items: filterItemsByTier(g.items, user) }))
+    .map((g) => ({ ...g, items: filterItemsByTier(g.items) }))
     .filter((g) => (g.items || []).length > 0);
 
   // Persona-specific deep-links surface as their own collapsible group
