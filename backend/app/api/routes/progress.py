@@ -1484,7 +1484,6 @@ def _revenue_slider(latest: Optional[MetricsSnapshot]) -> tuple[float, dict]:
         return 0.0, {"reason": "no_revenue"}
     # log scale: $1k=4, $10k=6, $100k=8, $1M+=10
     import math
-    score = max(0.0, min(10.0, 4.0 + math.log10(max(mrr, 1.0)) * 2.0 - 2.0 * math.log10(1000)/math.log10(10)))
     # Simplification: 4 + 2*(log10(mrr) - log10(1000)) → $1k=4, $10k=6, $100k=8, $1M=10
     score = max(0.0, min(10.0, 4.0 + 2.0 * (math.log10(max(mrr, 1.0)) - 3.0)))
     churn = latest.monthly_churn_pct or 0
