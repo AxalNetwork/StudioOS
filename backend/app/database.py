@@ -18,5 +18,11 @@ def get_session():
 
 
 def init_db():
-    engine = get_engine()
-    SQLModel.metadata.create_all(engine)
+    _engine = get_engine()
+    SQLModel.metadata.create_all(_engine)
+
+
+# Module-level singleton so `from backend.app.database import engine` works
+# across the codebase. Created lazily on first import (DATABASE_URL must be
+# set by that point — identical requirement to every other call site).
+engine = get_engine()
