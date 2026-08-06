@@ -243,12 +243,25 @@ export const SIDEBAR_GROUPS = {
     // Task #7 — Growth section mirrors the advisor/partner profiles: five tabs
     // (Talent, Customers, Partnerships, Capital, Experts) served by the shared
     // GrowthWorkspace under /founder/growth/*.
+    //
+    // Founder-journey audit — these five tabs are UI shell only (mock data,
+    // see src/data/growth.js), and sat unlocked next to the REAL Raise/Team
+    // workspaces with a colliding label: two sidebar items both read "Capital"
+    // — one live (/raise/capital), one sample data. `requiredTier: 'growth'`
+    // gives them the same lock-icon + PaywallModal treatment every other
+    // tier-gated item already gets (see `/liquidity` below), which at minimum
+    // stops a free founder from being shown counterfeit data as a working
+    // feature. It does NOT fully resolve the label collision on its own: Lab
+    // -active founders bypass this gate too (`hasTier`'s existing rule for
+    // REQUIRED lab tooling, e.g. the deck builder) and would still see an
+    // unlocked "Capital" here beside the real one — hence also renaming this
+    // one to "Capital Match" below, which stays true regardless of lock state.
     { key: 'growth', label: 'Growth', items: [
-      { to: '/founder/growth/talent', icon: Users, label: 'Talent' },
-      { to: '/founder/growth/customers', icon: Briefcase, label: 'Customers' },
-      { to: '/founder/growth/partnerships', icon: Handshake, label: 'Partnerships' },
-      { to: '/founder/growth/capital', icon: DollarSign, label: 'Capital' },
-      { to: '/founder/growth/experts', icon: Brain, label: 'Experts' },
+      { to: '/founder/growth/talent', icon: Users, label: 'Talent', requiredTier: 'growth' },
+      { to: '/founder/growth/customers', icon: Briefcase, label: 'Customers', requiredTier: 'growth' },
+      { to: '/founder/growth/partnerships', icon: Handshake, label: 'Partnerships', requiredTier: 'growth' },
+      { to: '/founder/growth/capital', icon: DollarSign, label: 'Capital Match', requiredTier: 'growth' },
+      { to: '/founder/growth/experts', icon: Brain, label: 'Experts', requiredTier: 'growth' },
     ]},
     // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
     // the shared Research workspace (also used by advisors/investors/partners).
