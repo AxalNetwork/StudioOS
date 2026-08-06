@@ -883,7 +883,11 @@ export function CongratulationsScreen({ cohort, onStart, starting, startError })
 // real locking rules are untouched.
 export function Dashboard({ state, previewAllUnlocked = false, investorView = false }) {
   const week = Math.max(1, Math.min(4, state.week || 1));
-  const completedKeys = new Set((state.milestones || []).map((m) => m.key));
+  const completedKeys = new Set(
+    (state.milestones || [])
+      .map((m) => (typeof m === "string" ? m : (m?.key || m?.milestone_key)))
+      .filter(Boolean)
+  );
   const isIncorporated = completedKeys.has("incorporation_completed");
 
   // Reference design: Delaware + Wyoming selectable, the rest "Soon".
