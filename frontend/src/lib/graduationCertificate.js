@@ -72,10 +72,19 @@ export function cohortNumber(cohortLabel) {
 /**
  * Stable credential reference derived from the graduation record.
  *
- * NOT an issued serial: with no registry there is nothing to allocate from.
- * Same inputs always produce the same reference, which is what makes it
- * usable for verification without a store. Returns null when the graduation
- * facts needed to make it reproducible are missing.
+ * Same inputs always produce the same reference. That reproducibility is the
+ * point: the worker's `credentialRefFor` (routes/spinout_certificates.ts)
+ * applies the identical rule when it allocates a row, so the reference a
+ * founder sees BEFORE issuance is the one the registry then issues — it does
+ * not change under them the moment the credential is persisted. The two
+ * implementations are kept in lockstep deliberately; a test pins them.
+ *
+ * A derived reference is not by itself proof of issuance. Whether a row
+ * exists is answered by GET /spinout-lab/certificates/mine, and only an
+ * issued row carries the public_token a third party can verify against.
+ *
+ * Returns null when the graduation facts needed to make it reproducible are
+ * missing.
  */
 export function certificateRef({ cohortLabel, conferredAt, userId }) {
   const n = cohortNumber(cohortLabel);

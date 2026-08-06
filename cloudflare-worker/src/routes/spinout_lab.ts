@@ -490,6 +490,23 @@ spinoutLab.post('/milestone', async (c) => {
   const r = await recordMilestone(sql, user.id, key);
   await sql.end();
   if (!r.ok) return c.json({ error: r.error }, r.status);
+
+  // Graduation issues the credential. `incorporation_completed` is already
+  // the definition of "graduated" everywhere else (public graduate list,
+  // /stats, week-4 gating), so keying issuance on the same row avoids
+  // inventing a second, competing definition.
+  //
+  // Deliberately after recordMilestone and outside its transaction: a founder
+  // finishing the program must not have their completion rejected because a
+  // certificate insert failed. issueOnGraduation never throws and is
+  // idempotent, and the backfill picks up anything it missed.
+  if (key === 'incorporation_completed') {
+    try {
+      const { issueOnGraduation } = await import('../services/certificateIssuance');
+      await issueOnGraduation(c.env, user.id);
+    } catch { /* issuance is best-effort — never blocks graduation */ }
+  }
+
   return c.json(r.state);
 });
 

@@ -153,6 +153,24 @@ app.post('/certificates/:id/revoke', async (c) => {
   return c.json({ certificate: row });
 });
 
+/**
+ * Catch-up issuance for graduates who finished before auto-issuance existed.
+ *
+ * Admin-only and idempotent: it runs the same per-founder path the live
+ * graduation hook does, so it can never mint a credential that path wouldn't,
+ * and re-running it does nothing. Bounded per call — it reports `remaining`
+ * rather than pretending one call drained the queue.
+ */
+app.post('/certificates/backfill', async (c) => {
+  const user = await requireAuth(c);
+  if (user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  await ensureTables(c.env);
+  const body = (await c.req.json().catch(() => ({}))) as { limit?: unknown };
+  const { backfillCertificates } = await import('../services/certificateIssuance');
+  const result = await backfillCertificates(c.env, Number(body.limit) || 100);
+  return c.json(result);
+});
+
 // ---------------------------------------------------------------- OWNER ----
 app.get('/certificates/mine', async (c) => {
   const user = await requireAuth(c);
