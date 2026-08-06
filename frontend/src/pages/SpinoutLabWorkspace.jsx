@@ -76,7 +76,11 @@ export const TOOL_INFO = {
   // pages); the partner/admin scoring console stays at /scoring.
   scoring: { label: 'Scoring Engine', to: '/spinout-lab/scoring', desc: 'Venture-readiness diligence', icon: Gauge },
   // Lab-facing matching + booking page; the full directory stays at /advisors.
-  advisors: { label: 'Advisors', to: '/spinout-lab/advisors', desc: 'Matched advisor network', icon: Users },
+  // The desc names WHO you book, because Office Hours below is the other
+  // "book an expert" tile and the two are not interchangeable: this one books
+  // an individual advisor matched to your skill gaps and satisfies the Week-3
+  // REQUIRED milestone; that one books partner organisations and does not.
+  advisors: { label: 'Advisors', to: '/spinout-lab/advisors', desc: '1:1 advisors matched to your gaps', icon: Users },
   // Revenue capture + traction proof (metrics snapshots + project proof fields).
   revenue: { label: 'Revenue', to: '/spinout-lab/revenue', desc: 'Real revenue & investor-ready proof', icon: DollarSign },
   // Capital allocation + runway modeling; edits the SAME canonical
@@ -84,7 +88,7 @@ export const TOOL_INFO = {
   'use-of-funds': { label: 'Use of Funds', to: '/spinout-lab/use-of-funds', desc: 'Allocation & budget plan', icon: PieChart },
   // Lab-facing partner session booking (design: Office Hours tool page);
   // /office-hours stays the advisor-side ops console.
-  'office-hours': { label: 'Office Hours', to: '/spinout-lab/office-hours', desc: 'Book partner sessions', icon: CalendarCheck },
+  'office-hours': { label: 'Office Hours', to: '/spinout-lab/office-hours', desc: 'Investors, lawyers & operators', icon: CalendarCheck },
   'cofounder-match': { label: 'Co-founder Match', to: '/spinout-lab/cofounder-match', desc: 'Co-founder sourcing', icon: Users },
   incorporate: { label: 'Incorporate', to: '/spinout-lab/incorporate', desc: 'Entity formation', icon: Landmark },
   captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Founder stock & vesting', icon: PieChart },

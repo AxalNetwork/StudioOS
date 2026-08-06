@@ -607,6 +607,18 @@ export default function SpinoutLabOfficeHoursPage() {
         )}
       />
 
+      {/* Disambiguation against Advisors — the reciprocal of the note on
+          /spinout-lab/advisors. This page books PARTNER ORGANISATIONS and
+          fires an OPTIONAL milestone; the advisor surface books an individual
+          matched to your skill gaps and is what satisfies Week 3's REQUIRED
+          one. A founder booking here to "do Week 3" would come up short. */}
+      <p className="mb-4 text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="xlink-advisors">
+        Need a 1:1 with an advisor matched to your skill gaps — the booking that completes Week 3?{' '}
+        <Link to="/spinout-lab/advisors" className="font-semibold text-teal-700 dark:text-teal-400 hover:underline">
+          See your matched advisors →
+        </Link>
+      </p>
+
       {!unlocked && (
         <div className={`${CARD} p-4 mb-5 flex items-center gap-3`} data-testid="banner-locked">
           <Lock className="w-4 h-4 text-gray-400" />
