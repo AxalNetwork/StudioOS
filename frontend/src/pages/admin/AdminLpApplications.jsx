@@ -86,22 +86,29 @@ export default function AdminLpApplications() {
   const [note, setNote] = useState('');
   const [flash, setFlash] = useState(null);
   const [downstream, setDownstream] = useState([]);
+  // Which fund's queue is on screen. lp_applications has always been per-fund
+  // (migration 165 keys its unique index on fund_slug); the queue read one
+  // hardcoded slug, so a Fund II application was written and then invisible.
+  const [fund, setFund] = useState('');
+  const [funds, setFunds] = useState([]);
 
   const load = useCallback(async (keepSel) => {
     try {
       // Always fetch the full set and segment client-side: the counts must not
       // change as the reviewer switches tabs, and it keeps tab switching instant.
-      const r = await api.adminLpApplications();
+      const r = await api.adminLpApplications(fund || undefined);
       const list = Array.isArray(r?.applications) ? r.applications : [];
       setApps(list);
       setCounts(r?.counts || {});
+      setFunds(Array.isArray(r?.funds) ? r.funds : []);
+      if (!fund && r?.fund_slug) setFund(r.fund_slug);
       setStatus('ready');
       if (!keepSel) setSelId((prev) => (prev && list.some((a) => a.id === prev) ? prev : (list[0]?.id ?? null)));
     } catch (e) {
       reportError('AdminLpApplications:load', e);
       setStatus('error');
     }
-  }, []);
+  }, [fund]);
 
   useEffect(() => { load(false); }, [load]);
 
@@ -197,7 +204,20 @@ export default function AdminLpApplications() {
         <span className="inline-block px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">
           Internal · not LP-visible
         </span>
-        <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">Axal VC Spin-Out Lab Fund I</span>
+        {funds.length > 1 ? (
+          <select
+            value={fund}
+            onChange={(e) => { setFund(e.target.value); setSelId(null); }}
+            data-testid="lpapps-fund"
+            className="ml-auto px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-medium text-gray-700 dark:text-gray-200 outline-none"
+          >
+            {funds.map((f) => <option key={f.slug} value={f.slug}>{f.name}</option>)}
+          </select>
+        ) : (
+          <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">
+            {funds[0]?.name || 'Axal VC Spin-Out Lab Fund I'}
+          </span>
+        )}
       </div>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
         Status changes are logged against your name with a timestamp.

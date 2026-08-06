@@ -3298,8 +3298,8 @@ export const spinoutLab = {
   // GP application review (admin only). The queue returns every application
   // for the fund plus per-status counts computed BEFORE filtering, so the tab
   // badges stay stable while the reviewer switches views.
-  adminLpApplications: (status) =>
-    request(`/admin/lp-applications${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  adminLpApplications: (fund) =>
+    request(`/admin/lp-applications${fund ? `?fund=${encodeURIComponent(fund)}` : ''}`),
   adminLpApplicationReview: (id, body) =>
     request(`/admin/lp-applications/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   submitLpApplication: (body) =>

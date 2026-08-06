@@ -138,3 +138,57 @@ test('a Google-path failure to record the lane does not break sign-in', () => {
   assert.match(block, /try \{/);
   assert.match(block, /catch/);
 });
+
+/* ─────────────────── LP queue: multi-fund selector ────────────────────── */
+
+const LPQ = read('../src/pages/admin/AdminLpApplications.jsx');
+const LPR = read('../../cloudflare-worker/src/routes/admin_lp_applications.ts');
+
+test('the queue is no longer pinned to one hardcoded fund', () => {
+  // lp_applications has always been per-fund — migration 165 keys its unique
+  // index on fund_slug precisely so a second fund cannot collide with the
+  // first. The queue read one slug, so a Fund II application would have been
+  // written and then been invisible to every reviewer.
+  const src = code(LPR);
+  assert.doesNotMatch(src, /LP_FUND_SLUG/, 'the hardcoded constant must be gone');
+  assert.match(src, /c\.req\.query\('fund'\)/);
+  assert.match(src, /\.bind\(fundSlug\)/);
+});
+
+test('the fund list unions vc_funds with funds that have applications', () => {
+  // A newly-created fund must appear before its first application arrives, and
+  // an application against a since-renamed fund must stay reachable.
+  const src = code(LPR);
+  assert.match(src, /SELECT slug, name FROM vc_funds/);
+  assert.match(src, /SELECT DISTINCT fund_slug FROM lp_applications/);
+});
+
+test('a missing vc_funds table degrades instead of emptying the picker', () => {
+  const src = code(LPR);
+  const fn = src.slice(src.indexOf('async function listFunds'), src.indexOf('adminLpApplications.get'));
+  assert.match(fn, /catch/);
+  assert.match(fn, /if \(!seen\.has\(DEFAULT_FUND_SLUG\)\)/, 'the default must always be offered');
+});
+
+test('a decision is looked up by id alone, not pinned to the default fund', () => {
+  // Pinning the fund on PATCH would 404 every decision made from a non-default
+  // fund's queue — the exact bug the selector would otherwise introduce.
+  const src = code(LPR);
+  assert.match(src, /SELECT id, status FROM lp_applications WHERE id = \?'/);
+});
+
+test('the page fetches per fund and refetches when it changes', () => {
+  const src = code(LPQ);
+  assert.match(src, /api\.adminLpApplications\(fund \|\| undefined\)/);
+  assert.match(src, /\}, \[fund\]\);/, 'load must depend on fund or the queue never refreshes');
+});
+
+test('switching fund clears the selected application', () => {
+  // The detail panel would otherwise keep showing an applicant from the fund
+  // you just navigated away from.
+  assert.match(code(LPQ), /setFund\(e\.target\.value\); setSelId\(null\);/);
+});
+
+test('the picker only appears when there is more than one fund', () => {
+  assert.match(code(LPQ), /funds\.length > 1 \?/);
+});
