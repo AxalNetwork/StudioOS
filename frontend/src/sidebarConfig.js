@@ -80,6 +80,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/circles', icon: Network, label: 'Communities Admin' },
       // Task #9 — chat-onboarded users awaiting binding agreement + role assignment.
       { to: '/admin/exploring', icon: UserCircle, label: 'Exploring Users' },
+      // GP review queue for Spin-Out Fund I LP applications (migration 165).
+      { to: '/admin/lp-applications', icon: Inbox, label: 'LP Applications' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
       { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
