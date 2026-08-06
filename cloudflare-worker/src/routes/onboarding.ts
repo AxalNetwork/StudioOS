@@ -140,7 +140,31 @@ onboarding.post('/complete', async (c) => {
       console.warn('[onboarding] assistant_enabled flip skipped:', e?.message);
     }
   }
-  return c.json({ ok: true, completed_at: true });
+
+  // Project the founder's answers onto their real project record. Until this
+  // existed, `onboarding_progress.data` was written on every step and read back
+  // only by the wizard rehydrating itself — so the moment a founder finished,
+  // their problem / solution / why-now went unreachable and the next surface
+  // asked for them again as empty textareas.
+  //
+  // Deliberately after `completed_at` is stamped, and deliberately swallowing:
+  // onboarding is finished either way, and no projection failure may strand a
+  // founder in the wizard. `applyFounderOnboarding` already returns outcomes
+  // instead of throwing; the catch is for the dynamic import itself.
+  let projection: string | undefined;
+  if (body.flow === 'founder') {
+    try {
+      const { applyFounderOnboarding } = await import('../services/onboardingProjection');
+      const outcome = await applyFounderOnboarding(c.env, user as any);
+      projection = outcome.status;
+      if (outcome.status === 'error') {
+        console.warn('[onboarding] project projection failed:', outcome.reason);
+      }
+    } catch (e: any) {
+      console.warn('[onboarding] project projection unavailable:', e?.message);
+    }
+  }
+  return c.json({ ok: true, completed_at: true, ...(projection ? { projection } : {}) });
 });
 
 export default onboarding;
