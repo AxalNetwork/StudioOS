@@ -58,7 +58,14 @@ export default function RegisterPage() {
       // Task #1 — carry the invite/deep-link target through the OAuth state
       // so the worker callback lands the user straight on it (new signups
       // included). The localStorage copy written on mount is defence-in-depth.
-      const { url } = await api.googleStartUrl({ action: 'signin', ...(nextPath ? { redirect: nextPath } : {}) });
+      // Carry the chosen lane too. Without it a Google signup recorded no
+      // suggested role at all, so the same person choosing "founder" arrived
+      // in the admin queue with intent via email and with none via Google.
+      const { url } = await api.googleStartUrl({
+        action: 'signin',
+        ...(nextPath ? { redirect: nextPath } : {}),
+        ...(laneRole ? { lane: laneRole } : {}),
+      });
       if (!url) throw new Error('No redirect URL returned.');
       window.location.href = url;
     } catch (e) {

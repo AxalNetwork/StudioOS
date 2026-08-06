@@ -15,9 +15,34 @@ import { useAuth } from '../hooks/useAuthSync';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
 import ProfileFitSection from '../components/profile/ProfileFitSection';
 
+// What the applicant told us they were, at signup. `suggested_role` is the
+// server's copy (users' own /me), stored by upsertSuggestedRole and never
+// applied to users.role — only an admin assignment does that, behind a signed
+// binding agreement. Showing it back changes nothing about access; it just
+// stops every applicant seeing byte-identical copy that never mentions what
+// they actually applied for.
+const LANE_COPY = {
+  founder: {
+    label: 'Founder',
+    next: 'reviews your venture profile and sends a membership agreement to sign. Once signed, your workspace opens with the Spin-Out Lab tools.',
+  },
+  investor: {
+    label: 'Investor',
+    next: 'reviews your investor profile and sends a membership agreement to sign. Once signed, deal flow and diligence surfaces open up.',
+  },
+  partner: {
+    label: 'Partner',
+    next: 'reviews your partner profile and sends a membership agreement to sign. Once signed, your partner workspace and referral tools open up.',
+  },
+};
+
 export default function ExploringDashboard() {
   const { user } = useAuth();
   const firstName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
+  // Absent for anyone who signed up before the lane was recorded, and for
+  // Google signups predating the OAuth lane fix — those fall back to the
+  // generic copy rather than guessing.
+  const lane = LANE_COPY[user?.suggested_role] || null;
 
   return (
     <div className="space-y-6">
@@ -28,7 +53,7 @@ export default function ExploringDashboard() {
             Welcome, {firstName}
           </h1>
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
-            <Compass size={12} /> Exploring
+            <Compass size={12} /> {lane ? `${lane.label} · under review` : 'Exploring'}
           </span>
         </div>
         <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -38,11 +63,12 @@ export default function ExploringDashboard() {
 
       {/* Status strip — what happens next. */}
       <div className="rounded-xl border border-sky-200 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/40 px-4 py-3 text-sm text-sky-900 dark:text-sky-200">
-        <strong>What happens next:</strong> the Axal team reviews your onboarding
-        profile and will send you a membership agreement to sign. Once it's
-        signed, your workspace unlocks with the tools that fit your role. In the
-        meantime, keep chatting with your Personal Advisor below — the more we
-        know, the better the fit.
+        <strong>What happens next:</strong> the Axal team{' '}
+        {lane
+          ? lane.next
+          : 'reviews your onboarding profile and will send you a membership agreement to sign. Once it\u2019s signed, your workspace unlocks with the tools that fit your role.'}
+        {' '}In the meantime, keep chatting with your Personal Advisor below — the
+        more we know, the better the fit.
       </div>
 
       {/* Personal Advisor — keeps collecting answers; its role detector

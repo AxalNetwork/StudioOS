@@ -310,6 +310,10 @@ export const api = {
     const qs = new URLSearchParams();
     if (params.action) qs.set('action', params.action);
     if (params.redirect) qs.set('redirect', params.redirect);
+    // Signup lane — the worker whitelists it again and signs it into the OAuth
+    // state. Without this the param is dropped here and a Google signup
+    // records no suggested role, unlike every other signup path.
+    if (params.lane) qs.set('lane', params.lane);
     const q = qs.toString();
     return request(`/auth/google/start${q ? `?${q}` : ''}`, { headers: { accept: 'application/json' } });
   },
@@ -3294,8 +3298,8 @@ export const spinoutLab = {
   // GP application review (admin only). The queue returns every application
   // for the fund plus per-status counts computed BEFORE filtering, so the tab
   // badges stay stable while the reviewer switches views.
-  adminLpApplications: (status) =>
-    request(`/admin/lp-applications${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  adminLpApplications: (fund) =>
+    request(`/admin/lp-applications${fund ? `?fund=${encodeURIComponent(fund)}` : ''}`),
   adminLpApplicationReview: (id, body) =>
     request(`/admin/lp-applications/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   submitLpApplication: (body) =>

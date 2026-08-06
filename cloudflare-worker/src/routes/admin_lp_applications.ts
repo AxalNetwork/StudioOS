@@ -30,7 +30,37 @@ import {
 
 const adminLpApplications = new Hono<{ Bindings: Env }>();
 
-const LP_FUND_SLUG = 'spinout-fund-i';
+// The fund the LP workspace ships today. Kept as the DEFAULT rather than the
+// only value: `lp_applications.fund_slug` has always been per-fund (migration
+// 165 keyed its unique index on it precisely so a second fund would not collide
+// with the first), and `vc_funds.slug` carries the real handles. The queue
+// hardcoded this one, so a Fund II application would have been written to the
+// table and then been invisible to every reviewer.
+const DEFAULT_FUND_SLUG = 'spinout-fund-i';
+
+/**
+ * Funds the selector can offer.
+ *
+ * Union of the funds that actually HAVE applications and the funds that exist
+ * in `vc_funds`, so a newly-created fund appears before its first application
+ * arrives, and an application against a fund since renamed or deleted is still
+ * reachable rather than orphaned. Never throws — a missing vc_funds table
+ * degrades to whatever the applications themselves name.
+ */
+async function listFunds(env: Env, appSlugs: string[]) {
+  const seen = new Map<string, string>();
+  for (const slug of appSlugs) if (slug) seen.set(slug, slug);
+  try {
+    const res = await env.DB.prepare(
+      'SELECT slug, name FROM vc_funds WHERE slug IS NOT NULL ORDER BY created_at ASC',
+    ).all();
+    for (const r of ((res && res.results) || []) as any[]) {
+      if (r?.slug) seen.set(String(r.slug), String(r.name || r.slug));
+    }
+  } catch { /* table absent — application slugs alone are a usable list */ }
+  if (!seen.has(DEFAULT_FUND_SLUG)) seen.set(DEFAULT_FUND_SLUG, DEFAULT_FUND_SLUG);
+  return [...seen.entries()].map(([slug, name]) => ({ slug, name }));
+}
 
 /**
  * The queue.
@@ -49,6 +79,7 @@ const LP_FUND_SLUG = 'spinout-fund-i';
 adminLpApplications.get('/', async (c) => {
   await requireAdmin(c);
   const statusParam = c.req.query('status');
+  const fundSlug = (c.req.query('fund') || '').trim() || DEFAULT_FUND_SLUG;
 
   try {
     const res = await c.env.DB.prepare(
@@ -61,7 +92,7 @@ adminLpApplications.get('/', async (c) => {
          LEFT JOIN users r ON r.id = a.reviewed_by
         WHERE a.fund_slug = ?
         ORDER BY a.created_at ASC`,
-    ).bind(LP_FUND_SLUG).all();
+    ).bind(fundSlug).all();
 
     const now = Date.now();
     const all = ((res && res.results) || [])
@@ -80,7 +111,18 @@ adminLpApplications.get('/', async (c) => {
           ? all.filter((r) => r.status === statusParam)
           : all;
 
-    return c.json({ ok: true, applications, counts, fund_slug: LP_FUND_SLUG });
+    // Fund list is derived from EVERY application row, not just this fund's,
+    // so switching funds never empties the picker you switched with.
+    let funds: Array<{ slug: string; name: string }> = [];
+    try {
+      const slugRes = await c.env.DB.prepare(
+        'SELECT DISTINCT fund_slug FROM lp_applications',
+      ).all();
+      const slugs = ((slugRes && slugRes.results) || []).map((r: any) => String(r.fund_slug || ''));
+      funds = await listFunds(c.env, slugs);
+    } catch { funds = [{ slug: DEFAULT_FUND_SLUG, name: DEFAULT_FUND_SLUG }]; }
+
+    return c.json({ ok: true, applications, counts, fund_slug: fundSlug, funds });
   } catch (e) {
     // A queue that cannot be read must not render as an empty queue — that
     // reads as "no applications waiting" and is how a submission goes unseen.
@@ -113,8 +155,11 @@ adminLpApplications.patch('/:id', async (c) => {
 
   try {
     const existing = await c.env.DB.prepare(
-      'SELECT id, status FROM lp_applications WHERE id = ? AND fund_slug = ?',
-    ).bind(id, LP_FUND_SLUG).first<{ id: number; status: string }>();
+      // Looked up by id alone: the id is already unique across funds, and
+      // pinning the fund here would 404 a decision made from a non-default
+      // fund's queue.
+      'SELECT id, status FROM lp_applications WHERE id = ?',
+    ).bind(id).first<{ id: number; status: string }>();
     if (!existing) return c.json({ error: 'Application not found.' }, 404);
 
     const check = validateTransition(existing.status, body.status, body.review_note);
