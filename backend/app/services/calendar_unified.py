@@ -469,7 +469,7 @@ def push_event_to_google(*, access_token: str, event_payload: dict,
                 )
                 # If the remote got deleted, fall through to a fresh insert.
                 if r.status_code == 404:
-                    google_event_id = None
+                    pass
                 elif r.status_code >= 400:
                     logger.warning("gcal patch %s: %s", r.status_code, r.text[:200])
                     return None
