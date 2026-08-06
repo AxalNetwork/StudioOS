@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireApprovedKyc, canAccessFounderResource } from '../auth';
+import { requireAuth, requireApprovedKyc, canAccessFounderResource, entityListScope } from '../auth';
 import { seedStandardEventsForJurisdiction } from './compliance';
 import { CONTRACT_DOC_TYPES } from './admin_contracts';
 import { getActiveTemplateBody } from '../services/legalTemplateStore';
@@ -1011,16 +1011,63 @@ legal.post('/cofounder-agreement', async (c) => {
   });
 });
 
+/**
+ * Cross-tenant read guard.
+ *
+ * This was `SELECT * FROM entities` behind a bare `requireAuth`, so every
+ * authenticated principal received every incorporated company in the studio:
+ * legal name, jurisdiction, incorporation date, and the `parent_id` chain that
+ * discloses who owns what. Nothing had to be tampered with to trigger it — the
+ * /legal page loads entities in the same `Promise.all` as /legal/documents, and
+ * `GET /documents` (170 lines up) was already scoped correctly. The two routes
+ * disagreed inside one file.
+ *
+ * `entities` carries no owner column; the link is `projects.entity_id`, so an
+ * entity belongs to the founder whose project points at it. Scoping therefore
+ * mirrors `canAccessFounderResource`: admin/partner are studio-wide staff and
+ * keep the full list, a founder sees only entities reachable from their own
+ * projects, and every other role sees none — unlike the projects list there is
+ * no masked entity view to fall back on, so the safe default is empty.
+ *
+ * The `IN (SELECT ...)` shape rather than a JOIN is deliberate: two of a
+ * founder's projects may share one holding entity, and a JOIN would return it
+ * twice.
+ */
 legal.get('/entities', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
+  const scope = entityListScope(user);
+  if (scope.kind === 'none') return c.json([]);
   const sql = getSQL(c.env);
-  const entities = await sql`SELECT * FROM entities ORDER BY created_at DESC`;
+  const entities = scope.kind === 'all'
+    ? await sql`SELECT * FROM entities ORDER BY created_at DESC`
+    : await sql`
+        SELECT * FROM entities
+        WHERE id IN (
+          SELECT entity_id FROM projects
+          WHERE founder_id = ${scope.founderId} AND entity_id IS NOT NULL
+        )
+        ORDER BY created_at DESC`;
   await sql.end();
   return c.json(entities);
 });
 
+/**
+ * Staff-only, and the write half of the same hole: this had no ownership check
+ * at all, so any authenticated principal could graft a row into the corporate
+ * tree — including one whose `parent_id` points at another founder's holding
+ * company.
+ *
+ * Restricting to staff costs nothing: no caller exists (`api.js` exposes only
+ * `listEntities`), and the legitimate way a founder's entity comes into being
+ * is POST /incorporate, which creates it under that project's own ownership
+ * check and links it via `projects.entity_id`. An entity minted here is
+ * unreachable from the scoped GET above anyway, since nothing points at it.
+ */
 legal.post('/entities', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
+  if (user.role !== 'admin' && user.role !== 'partner') {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
   const data = await c.req.json();
   const sql = getSQL(c.env);
   const [entity] = await sql`INSERT INTO entities (name, entity_type, parent_id, jurisdiction) VALUES (${data.name}, ${data.entity_type}, ${data.parent_id || null}, ${data.jurisdiction || null}) RETURNING *`;

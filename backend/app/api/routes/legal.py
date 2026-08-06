@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 from sqlalchemy.exc import IntegrityError
 from backend.app.database import get_session
-from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User, Section83bTracker, Incorporation
+from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User, UserRole, Section83bTracker, Incorporation
 from backend.app.schemas.scoring import DocumentCreate
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import require_role, ensure_founder_access, is_privileged
@@ -2279,7 +2279,29 @@ def incorporate_project(project_id: int, jurisdiction: str = "Delaware", session
 
 @router.get("/entities")
 def list_entities(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
-    return session.exec(select(Entity).order_by(Entity.created_at.desc())).all()
+    """Dev mirror of the worker's scoped `GET /api/legal/entities`.
+
+    This used to return every Entity row to any logged-in user — every
+    incorporated company's name, jurisdiction, incorporation date and
+    parent chain. `entities` has no owner column, so ownership is derived
+    through `Project.entity_id`.
+
+    Deliberately NOT `is_privileged()`: that helper still counts investors
+    as staff for legacy read paths, and an investor has no masked entity
+    view to fall back on. This matches the worker, which admits only
+    admin/partner and then the owning founder.
+    """
+    if user.role in (UserRole.ADMIN, UserRole.PARTNER):
+        return session.exec(select(Entity).order_by(Entity.created_at.desc())).all()
+    if user.role != UserRole.FOUNDER or not user.founder_id:
+        return []
+    owned = select(Project.entity_id).where(
+        Project.founder_id == user.founder_id,
+        Project.entity_id.is_not(None),
+    )
+    return session.exec(
+        select(Entity).where(Entity.id.in_(owned)).order_by(Entity.created_at.desc())
+    ).all()
 
 
 @router.post("/spinout/{project_id}")
