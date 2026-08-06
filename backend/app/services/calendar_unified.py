@@ -560,7 +560,7 @@ def sync_user_to_google(session: Session, user: User, *,
                 # Defensive: another transaction beat us to it. Roll back
                 # just this insert and treat it as an update.
                 session.rollback()
-                pushed = pushed  # unchanged
+                pass
                 failed += 1
     token_row.last_synced_at = datetime.utcnow()
     session.add(token_row)
