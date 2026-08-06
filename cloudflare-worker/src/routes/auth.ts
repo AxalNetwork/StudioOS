@@ -889,10 +889,27 @@ auth.get('/me', async (c) => {
   } catch (e) {
     console.error('[auth:/me] ensureRoleProfile failed:', (e as Error).message);
   }
+  // The lane the user picked at signup, stored as a SUGGESTION by
+  // upsertSuggestedRole (never applied to users.role — only an admin
+  // assignment does that, behind a signed binding agreement). Exposed here so
+  // the holding-state screen can address someone by the intent they actually
+  // declared instead of showing every applicant identical copy. The caller's
+  // own row, so no new disclosure; absent for everyone past 'exploring'.
+  let suggestedRole: string | null = null;
+  if (String(user.role) === 'exploring') {
+    try {
+      const rr = await c.env.DB.prepare(
+        'SELECT suggested_role FROM user_role_review WHERE user_id = ?',
+      ).bind(user.id).first<{ suggested_role: string | null }>();
+      suggestedRole = rr?.suggested_role || null;
+    } catch { /* table absent on a partial DB — the screen falls back to generic copy */ }
+  }
+
   return c.json({
     id: user.id, email: user.email, name: user.name, role: user.role,
     is_active: user.is_active, created_at: user.created_at,
     founder_id: founderId, partner_id: partnerId,
+    suggested_role: suggestedRole,
     // Spin-Out Lab flags — parity with the login payload and the FastAPI
     // dev backend's /me, so frontend route guards keep lab access stable
     // across auth refreshes.

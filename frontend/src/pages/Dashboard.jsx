@@ -11,6 +11,7 @@ import InvestorTrialBanner from '../components/InvestorTrialBanner';
 import InvestorQuotaBars from '../components/InvestorQuotaBars';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
 import ProfileFitSection from '../components/profile/ProfileFitSection';
+import VentureNextStep from '../components/VentureNextStep';
 // Task #81 — reuse the founder command-center lifecycle rail for the investor
 // deal desk (rendered read-only: canEdit={false}).
 import LifecycleModule from '../components/command-center/LifecycleModule';
@@ -198,6 +199,13 @@ export default function Dashboard() {
         <InvestorHome data={data} lifecycle={investorLC} user={user} />
       ) : (
         <>
+          {/* Venture progress comes FIRST. This page used to open straight onto
+              ProfileFitSection — skills, values, archetype — so a founder's
+              front door said nothing about their company. This strip carries
+              the same next-action LifecycleModule shows and links into Command
+              Center, which nothing on this page reached before. */}
+          <VentureNextStep />
+
           {/* Task #20 — Best-Fit: skills/values/archetype/completion + matches range. */}
           <ProfileFitSection />
 

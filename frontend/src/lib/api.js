@@ -310,6 +310,10 @@ export const api = {
     const qs = new URLSearchParams();
     if (params.action) qs.set('action', params.action);
     if (params.redirect) qs.set('redirect', params.redirect);
+    // Signup lane — the worker whitelists it again and signs it into the OAuth
+    // state. Without this the param is dropped here and a Google signup
+    // records no suggested role, unlike every other signup path.
+    if (params.lane) qs.set('lane', params.lane);
     const q = qs.toString();
     return request(`/auth/google/start${q ? `?${q}` : ''}`, { headers: { accept: 'application/json' } });
   },
