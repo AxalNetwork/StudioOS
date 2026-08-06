@@ -17,6 +17,16 @@ from backend.app.database import engine
 from backend.app.models.entities import Entity, EntityType, LPInvestor
 
 
+def test_orm_insert_non_vc_fund_entity_is_allowed():
+    with Session(engine) as s:
+        e = Entity(name="Allowed Entity", entity_type=EntityType.LP)
+        s.add(e)
+        s.commit()
+        assert e.id is not None
+        s.delete(e)
+        s.commit()
+
+
 def test_orm_insert_into_lp_investors_is_blocked():
     with Session(engine) as s:
         s.add(LPInvestor(name="Test LP", email="test-lp@example.com"))
@@ -28,9 +38,11 @@ def test_orm_insert_into_lp_investors_is_blocked():
 def test_orm_insert_entity_with_vc_fund_type_is_blocked():
     with Session(engine) as s:
         s.add(Entity(name="Block-me Fund", entity_type=EntityType.VC_FUND))
-        with pytest.raises(RuntimeError, match="vc_fund.*deprecated"):
-            s.commit()
-        s.rollback()
+        try:
+            with pytest.raises(RuntimeError, match="vc_fund.*deprecated"):
+                s.commit()
+        finally:
+            s.rollback()
 
 
 def test_core_bulk_insert_into_lp_investors_is_blocked():
