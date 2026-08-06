@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import insert
 from sqlmodel import Session
 
-from backend.app import main as _backend_main  # noqa: F401  side-effect: install guards
+import backend.app.main  # side-effect: install guards
 from backend.app.database import engine
 from backend.app.models.entities import Entity, EntityType, LPInvestor
 
