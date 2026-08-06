@@ -4,9 +4,21 @@
 // Data mapping and the honesty rules live in lib/graduationCertificate.js —
 // read its header. In short: the certificate itself is fully real (founder,
 // company, cohort, conferral date, jurisdiction, duration, signatory all come
-// from existing records), while the design's Admin-issuance and Data-model
-// tabs describe a credential SYSTEM whose five tables do not exist. Those are
-// not stubbed here; the page says what is missing and why.
+// from existing records).
+//
+// The issuance REGISTRY is also real, which this page did not used to know.
+// `spinout_certificates` ships in routes/spinout_certificates.ts with issue,
+// revoke, list, mine and sharing routes, and the public verifier is live at
+// /verify/:token. The page previously asserted the opposite — that nothing had
+// been allocated and that a third party could not verify anything — because it
+// was written against the four table names the DESIGN proposed
+// (issued_certificates, certificate_badges, certificate_events,
+// certificate_delivery_logs), not the one the registry was actually built as.
+// It now reads GET /certificates/mine and renders the credential, its public
+// link and the holder's sharing switch when a row exists.
+//
+// What still does not exist is the design's admin issuance DASHBOARD, delivery
+// tracking, profile-badge mint and activity log. Those stay unstubbed.
 //
 // The design's three view tabs are reduced to the one that has data. A tab
 // strip whose other two tabs render invented graduates, invented delivery
@@ -38,19 +50,30 @@ export default function SpinoutLabCertificatePage() {
   const [downloading, setDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const [dlError, setDlError] = useState(null);
+  // The registry row for this founder, if one has been issued. null = none
+  // issued (the page falls back to the derived preview); an object = a real
+  // credential with a public token a third party can verify.
+  const [credential, setCredential] = useState(null);
+  const [sharingBusy, setSharingBusy] = useState(false);
+  const [sharingError, setSharingError] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let dead = false;
     (async () => {
       try {
-        const [st, me, projects] = await Promise.all([
+        const [st, me, projects, cert] = await Promise.all([
           spinoutLab.state().catch(() => null),
           api.getMe().catch(() => null),
           api.listProjects().catch(() => []),
+          // Best-effort: a founder with no issued credential gets null here,
+          // which is a normal state, not an error.
+          api.spinoutCertificateMine().then((r) => r?.certificate ?? null).catch(() => null),
         ]);
         if (dead) return;
         setState(st);
         setUser(me);
+        setCredential(cert);
         const proj = pickLabProject(projects, me);
         setProject(proj || null);
         setStatus('ready');
@@ -82,6 +105,17 @@ export default function SpinoutLabCertificatePage() {
     () => buildCertificateViewModel({ state, user, project, evidence }),
     [state, user, project, evidence],
   );
+
+  // The public verifier keys on the credential's random public_token, never on
+  // credential_id — credential_id embeds the user id (…-0117), so a public URL
+  // built from it would let anyone enumerate graduates by walking that number.
+  const verifyUrl = useMemo(() => {
+    if (!credential?.public_token) return null;
+    const origin = typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'https://axal.vc';
+    return `${origin}/verify/${credential.public_token}`;
+  }, [credential]);
 
   const isAdmin = user?.role === 'admin';
   const unlocked = isAdmin || Boolean(state?.is_incorporated) || (state?.unlocked_features || []).includes('incorporate');
@@ -290,23 +324,123 @@ export default function SpinoutLabCertificatePage() {
                 ))}
               </div>
 
-              {/* What the design proposes that does not exist. Stated rather
-                  than stubbed — a fake issuance dashboard would be worse. */}
-              <div className={CARD} data-testid="card-not-built">
-                <div className={`${LBL} mb-2`}>Not issued from a registry</div>
-                <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed mb-2">
-                  The credential reference above is <span className="font-semibold text-gray-700 dark:text-gray-200">derived</span> from
-                  your graduation record — reproducible, but not allocated by an issuance registry. Verification re-checks
-                  the live record rather than a stored issuance row.
-                </p>
-                <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed">
-                  The design's admin issuance dashboard, delivery tracking, profile-badge mint, revoke/reissue and activity
-                  log all need the credential tables it specifies (<span className="font-mono text-[11px]">issued_certificates</span>,{' '}
-                  <span className="font-mono text-[11px]">certificate_badges</span>,{' '}
-                  <span className="font-mono text-[11px]">certificate_events</span>,{' '}
-                  <span className="font-mono text-[11px]">certificate_delivery_logs</span>). None exist yet, so none are shown.
-                </p>
-              </div>
+              {/* Registry state.
+                  This card used to assert that no issuance registry existed
+                  and that a third party could not verify the credential. Both
+                  were false: `spinout_certificates` ships in the worker with
+                  issue/revoke/list/mine/sharing routes, and the public
+                  verifier is live at /verify/:token. The claim was written
+                  against the FOUR TABLE NAMES THE DESIGN PROPOSED
+                  (issued_certificates, certificate_badges, certificate_events,
+                  certificate_delivery_logs) — none of which is what the
+                  registry was actually built as, so the page looked for them,
+                  found nothing, and told every graduate their credential was
+                  unverifiable. */}
+              {credential && credential.status === 'issued' ? (
+                <div className={CARD} data-testid="card-credential-issued">
+                  <div className={`${LBL} mb-2`}>Issued credential</div>
+                  <div className="flex items-baseline justify-between gap-3 mb-1">
+                    <span className="font-mono text-[13px] font-semibold text-gray-900 dark:text-gray-50 break-all" data-testid="issued-credential-id">
+                      {credential.credential_id}
+                    </span>
+                    <span className="flex-none text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                      Issued
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed mb-3">
+                    Allocated from the graduation registry
+                    {credential.issued_at ? <> on {String(credential.issued_at).slice(0, 10)}</> : null}. This is a
+                    stored issuance row, not a value re-derived on each page load.
+                  </p>
+
+                  {credential.public_share_enabled ? (
+                    <>
+                      <div className={`${LBL} mb-1.5`}>Public verification link</div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <code className="flex-1 min-w-0 truncate text-[11.5px] bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-2 text-gray-700 dark:text-gray-200" data-testid="verify-url">
+                          {verifyUrl}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(verifyUrl);
+                              setCopied(true);
+                              setTimeout(() => setCopied(false), 2000);
+                            } catch { /* clipboard blocked — the URL is selectable above */ }
+                          }}
+                          data-testid="button-copy-verify"
+                          className="flex-none h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 text-[12px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                        >
+                          {copied ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="text-[11.5px] text-gray-400 dark:text-gray-500 leading-relaxed">
+                        Anyone with this link can confirm your credential without an Axal account. It shows your name,
+                        company, cohort and issue date — never your email or any internal identifier.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                      Public verification is turned off, so the link returns nothing — the endpoint reports a disabled
+                      credential as not-found rather than as hidden, so it cannot be used to confirm one you have closed.
+                    </p>
+                  )}
+
+                  <label className="mt-4 flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={!!credential.public_share_enabled}
+                      disabled={sharingBusy}
+                      data-testid="toggle-public-sharing"
+                      onChange={async (e) => {
+                        const next = e.target.checked;
+                        setSharingBusy(true);
+                        setSharingError(null);
+                        try {
+                          const r = await api.spinoutCertificateSharing(next);
+                          setCredential(r?.certificate ?? null);
+                        } catch {
+                          setSharingError('Could not update sharing. Please try again.');
+                        } finally {
+                          setSharingBusy(false);
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-violet-600 focus:ring-violet-500"
+                    />
+                    <span className="text-[12.5px] text-gray-700 dark:text-gray-200">
+                      Allow public verification of this credential
+                    </span>
+                  </label>
+                  {sharingError ? (
+                    <p className="mt-1.5 text-[11.5px] text-red-600 dark:text-red-400" data-testid="sharing-error">{sharingError}</p>
+                  ) : null}
+                </div>
+              ) : credential && credential.status === 'revoked' ? (
+                <div className={CARD} data-testid="card-credential-revoked">
+                  <div className={`${LBL} mb-2`}>Credential revoked</div>
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                    <span className="font-mono text-[11.5px]">{credential.credential_id}</span> was revoked
+                    {credential.revoked_at ? <> on {String(credential.revoked_at).slice(0, 10)}</> : null}
+                    {credential.revocation_reason ? <> — {credential.revocation_reason}</> : null}. Public verification
+                    reports it as revoked rather than silently failing.
+                  </p>
+                </div>
+              ) : (
+                <div className={CARD} data-testid="card-credential-pending">
+                  <div className={`${LBL} mb-2`}>Not yet issued</div>
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed mb-2">
+                    The reference above is <span className="font-semibold text-gray-700 dark:text-gray-200">derived</span> from
+                    your graduation record. It is the exact reference the registry will allocate — the worker builds
+                    credential ids with the same rule this page uses — but no issuance row exists for you yet, so there
+                    is no public verification link to share.
+                  </p>
+                  <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                    Certificates are issued by a program admin. Once yours is issued this card becomes your credential
+                    id and a public link a third party can check.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </>
@@ -332,8 +466,15 @@ export default function SpinoutLabCertificatePage() {
                 </div>
               ))}
             </div>
-            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-3">
-              This check is internal. A third party cannot verify it yet — that needs the public verification endpoint the design proposes.
+            {/* This line used to read "A third party cannot verify it yet —
+                that needs the public verification endpoint the design
+                proposes." That endpoint has shipped: GET /api/public/verify/
+                :token, unauthenticated, with /verify/:token routed to the
+                public page. */}
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-3" data-testid="verify-modal-footnote">
+              {verifyUrl
+                ? <>This check is internal. For a third party, share your public verification link — it confirms the credential without an Axal account.</>
+                : <>This check is internal. Third-party verification becomes available when your credential is issued from the registry.</>}
             </p>
             <button type="button" onClick={() => setVerifyOpen(false)} data-testid="button-close-verify"
               className="mt-4 w-full h-9 rounded-lg border border-gray-200 dark:border-gray-700 text-[12.5px] font-semibold text-gray-600 dark:text-gray-300">
