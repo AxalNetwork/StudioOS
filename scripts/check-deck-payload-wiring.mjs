@@ -110,27 +110,62 @@ for (const [name, text] of Object.entries(CONSUMERS)) {
 const CODE = Object.fromEntries(Object.entries(CONSUMERS).map(([k, v]) => [k, codeOnly(v)]));
 
 /**
- * Local names a consumer binds to a payload block, so `const ct =
- * data.cap_table; … ct.holders` resolves. Covers the `data.` and `src.`
- * spellings both consumers use.
+ * Index each consumer ONCE into the property accesses it performs, instead of
+ * compiling a fresh regex per (consumer, block, field) triple. Two reasons:
+ *
+ *  - Every pattern below is now a hardcoded literal. The earlier version
+ *    interpolated parsed identifiers into `new RegExp(...)`, which Semgrep
+ *    flags as a ReDoS vector (detect-non-literal-regexp). It was a false
+ *    positive here — this is a build-time script and its only "input" is
+ *    `\w+` identifiers parsed out of the repo's own TypeScript, so anyone who
+ *    could influence them can already run code in CI — but the indexed form
+ *    is simply better, so there is nothing to argue about.
+ *  - It turns ~95 fields × 5 consumers of regex compilation into 5 passes.
+ *
+ * Chains are captured whole and then split pairwise, because a global regex
+ * cannot produce overlapping matches: `src.cap_table?.sim_segments` must yield
+ * BOTH ('src','cap_table') and ('cap_table','sim_segments'), and matching
+ * `obj.prop` directly would consume `cap_table` and lose the second pair.
  */
-function aliasesFor(text, block) {
-  const names = [];
-  // The bare block name counts ONLY where the consumer actually reaches the
-  // payload through it. Consumers carry unrelated locals with colliding names
-  // — `brand` in pptx.ts is the deck watermark, nothing to do with the
-  // payload's `brand` block — and accepting the bare name unconditionally let
-  // `brand.headline` there vouch for a payload field nobody reads.
-  if (new RegExp(`(?:data|src)\\??\\.${block}\\b`).test(text)) names.push(block);
-  const re = new RegExp(`const\\s+(\\w+)\\s*=\\s*(?:data|src)\\??\\.${block}\\b`, 'g');
-  let m;
-  while ((m = re.exec(text))) names.push(m[1]);
+const CHAIN = /\w+(?:\s*\??\.\s*\w+)+/g;
+const ALIAS_BINDING = /const\s+(\w+)\s*=\s*(?:data|src)\s*\??\.\s*(\w+)/g;
+
+function indexConsumer(text) {
+  /** Set of "object.property" pairs, whitespace normalised away. */
+  const access = new Set();
+  for (const chain of text.match(CHAIN) || []) {
+    const parts = chain.split(/\s*\??\.\s*/);
+    for (let i = 0; i + 1 < parts.length; i += 1) access.add(`${parts[i]}.${parts[i + 1]}`);
+  }
+  /** block -> local names bound to it (`const ct = data.cap_table`). */
+  const aliases = new Map();
+  for (const m of text.matchAll(ALIAS_BINDING)) {
+    if (!aliases.has(m[2])) aliases.set(m[2], []);
+    aliases.get(m[2]).push(m[1]);
+  }
+  return { access, aliases };
+}
+
+const INDEX = Object.fromEntries(Object.entries(CODE).map(([k, v]) => [k, indexConsumer(v)]));
+
+/**
+ * Names through which a consumer can legitimately reach `block`.
+ *
+ * The bare block name counts ONLY where the consumer actually reaches the
+ * payload through it (`data.brand` / `src.brand` appears). Consumers carry
+ * unrelated locals with colliding names — `brand` in pptx.ts is the deck
+ * watermark, nothing to do with the payload's `brand` block — and accepting
+ * the bare name unconditionally let `brand.headline` there vouch for a payload
+ * field nobody reads.
+ */
+function namesFor({ access, aliases }, block) {
+  const names = aliases.get(block) ? [...aliases.get(block)] : [];
+  if (access.has(`data.${block}`) || access.has(`src.${block}`)) names.push(block);
   return names;
 }
 
-const readers = (block, field) => Object.entries(CODE)
-  .filter(([, text]) => aliasesFor(text, block)
-    .some((n) => new RegExp(`\\b${n}\\??\\.\\s*${field}\\b`).test(text)))
+const readers = (block, field) => Object.entries(INDEX)
+  .filter(([, idx]) => namesFor(idx, block).some((n) => idx.access.has(`${n}.${field}`)))
   .map(([name]) => name);
 
 // --- report ----------------------------------------------------------------
