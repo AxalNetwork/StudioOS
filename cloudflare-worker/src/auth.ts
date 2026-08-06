@@ -461,6 +461,37 @@ export function canAccessFounderResource(user: User, ownerFounderId: number | nu
   return user.role === 'founder' && !!user.founder_id && user.founder_id === ownerFounderId;
 }
 
+/**
+ * Which rows of `entities` a principal may list.
+ *
+ * Returns a scope rather than a boolean because `entities` carries no owner
+ * column: ownership is derived through `projects.entity_id`, so the caller has
+ * to turn this into a WHERE clause. Keeping the decision here (and out of the
+ * SQL) is what makes it testable — `GET /api/legal/entities` lives in
+ * legal.ts, whose import graph is too heavy for the strip-types test gate.
+ *
+ * Same policy as `canAccessFounderResource` above: admin/partner are
+ * studio-wide staff; a founder reaches only entities their own projects point
+ * at; everyone else gets nothing. `'none'` is the default for investor,
+ * exploring and any future role, because unlike the projects list there is no
+ * masked entity view to fall back on — an entity row is a company's legal
+ * name, jurisdiction and parent chain, with nothing safe left after masking.
+ */
+export type EntityListScope =
+  | { kind: 'all' }
+  | { kind: 'own_projects'; founderId: number }
+  | { kind: 'none' };
+
+export function entityListScope(user: User): EntityListScope {
+  if (user.role === 'admin' || user.role === 'partner') return { kind: 'all' };
+  // Role-gated, not merely founder_id-gated — a principal converted to another
+  // role may still carry a residual founder_id, and must not read through it.
+  if (user.role === 'founder' && !!user.founder_id) {
+    return { kind: 'own_projects', founderId: user.founder_id };
+  }
+  return { kind: 'none' };
+}
+
 /** Phase 0.1 — true iff viewer may see capital / LP / fund cashflow data.
  * Strictly admin or investor. Mirrors `services.access_policy.can_view_lp_data`. */
 export function canViewLpData(user: User | null | undefined): boolean {
