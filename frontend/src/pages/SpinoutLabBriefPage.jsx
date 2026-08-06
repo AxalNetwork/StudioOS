@@ -4,7 +4,10 @@ import {
   ArrowLeft, FileDown, FlaskConical, Building2, PieChart, FileCheck2,
   Presentation, LineChart, Handshake, Users, FolderOpen,
 } from "lucide-react";
-import { PIPELINE_PHASES, pipelineItemsFor, deliverablesFor, outcomeBadgesFor, labJurisdiction } from "./SpinoutLabPage";
+import {
+  PIPELINE_PHASES, pipelineItemsFor, deliverablesFor, outcomeBadgesFor, labJurisdiction,
+  useSpinoutStats, companiesLabel, openCohortCopy,
+} from "./SpinoutLabPage";
 
 // Program Brief — the printable slide deck for the Spin-Out Lab (reference:
 // Spin-Out Lab-print-1vkgcux.dc.html BRIEF VIEW; print paging from
@@ -29,16 +32,27 @@ const PHASE_ACCENTS = {
 // deliverablesFor so the jurisdiction-derived rows stay in sync).
 const DELIVERABLE_ICONS = [Building2, PieChart, FileCheck2, Presentation, LineChart, Handshake, Users, FolderOpen];
 
-const STATS = [
-  { value: "12 companies", label: "Built to date" },
-  { value: "$2.4M", label: "Total capital raised by graduates" },
-  { value: "28 days", label: "Average time to incorporation" },
-];
-
 export default function SpinoutLabBriefPage() {
   const [searchParams] = useSearchParams();
   const juris = labJurisdiction(searchParams.get("j"));
   const deliverables = deliverablesFor(juris.key).slice(0, DELIVERABLE_ICONS.length);
+
+  // The track-record slide used to be three string literals — "12 companies",
+  // "$2.4M" — that no query produced and nobody updated. This is the artifact
+  // most likely to be printed and forwarded to an investor, so it is the last
+  // place a stale number should live. Same public endpoint and same em-dash
+  // fallback as the marketing hero, so the two can never disagree. "28 days"
+  // stays a literal: it is the program's length, not a measurement.
+  const { companies, raised } = useSpinoutStats();
+  const stats = [
+    { value: companiesLabel(companies), label: "Built to date" },
+    { value: raised === null ? "—" : raised, label: "Total capital raised by graduates" },
+    { value: "28 days", label: "Average time to incorporation" },
+  ];
+
+  // Likewise the CTA: "Apply to Cohort 4 · closes August 1, 2026" was frozen
+  // in source and had already gone past.
+  const cohort = openCohortCopy();
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-950 print:bg-white" data-testid="spinout-brief-page">
@@ -145,7 +159,7 @@ export default function SpinoutLabBriefPage() {
             <div className="text-[11px] font-bold uppercase tracking-[.06em] text-[#d8b4fe] mb-1.5">Track record</div>
             <h2 className="m-0 mb-6 text-[26px] font-extrabold tracking-[-.02em]">Outcomes to date</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 print:grid-cols-3 gap-4 mb-8">
-              {STATS.map((s) => (
+              {stats.map((s) => (
                 <div key={s.label} className="rounded-[12px] bg-white/10 border border-white/15 p-[18px]">
                   <div className="tabular-nums text-[24px] font-extrabold">{s.value}</div>
                   <div className="text-[12px] text-[#e9d5ff] mt-0.5">{s.label}</div>
@@ -154,8 +168,12 @@ export default function SpinoutLabBriefPage() {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3.5 border-t border-white/20 pt-6">
               <div>
-                <div className="text-[18px] font-extrabold">Apply to Cohort 4</div>
-                <div className="tabular-nums text-[13px] text-[#e9d5ff] mt-0.5">Applications close August 1, 2026 · 8 spots</div>
+                <div className="text-[18px] font-extrabold">
+                  {cohort ? `Apply to Cohort ${cohort.cohortNum}` : "Apply to the next cohort"}
+                </div>
+                <div className="tabular-nums text-[13px] text-[#e9d5ff] mt-0.5">
+                  {cohort ? `Applications close ${cohort.deadlineLabel} · 8 spots` : "Applications are now open · 8 spots"}
+                </div>
               </div>
               <div className="text-[12px] text-[#c4b5fd] max-w-[280px]">
                 Open to all Axal VC users. Acceptance is selective. No equity taken by Axal VC.

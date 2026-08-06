@@ -484,7 +484,21 @@ export function GraduatesSection() {
 // measurement. The raised row always shows: "$0" when there is no funding
 // recorded yet (dev has no funding columns; production sums
 // projects.total_funding).
-export function HeroStatsPanel() {
+/**
+ * The Lab's three headline outcome numbers, live from the public
+ * `GET /spinout-lab/stats`.
+ *
+ * Shared because two surfaces quote them — the marketing hero and the
+ * printable Program Brief — and the brief used to carry its own hardcoded
+ * copies ("12 companies", "$2.4M") that no query produced. Two literals
+ * claiming a track record are a liability the moment the real one moves, and
+ * a brief is the artifact most likely to be forwarded to an investor.
+ *
+ * `companies`/`raised` are null while loading and on failure; both callers
+ * render an em-dash rather than a zero, because "0 companies built" is a
+ * worse thing to print than "we couldn't load this".
+ */
+export function useSpinoutStats() {
   // null = loading, 'error' = fetch failed, object = loaded
   const [stats, setStats] = useState(null);
 
@@ -505,14 +519,48 @@ export function HeroStatsPanel() {
   }, []);
 
   const loaded = stats && stats !== 'error' ? stats : null;
-  const companies = loaded ? Number(loaded.companies) || 0 : null;
-  const raised = loaded ? (fmtRaised(loaded.total_raised) ?? '$0') : null;
+  return {
+    companies: loaded ? Number(loaded.companies) || 0 : null,
+    raised: loaded ? (fmtRaised(loaded.total_raised) ?? '$0') : null,
+  };
+}
+
+/** Label for the companies-built stat, singular-correct. */
+export function companiesLabel(companies) {
+  return companies === null ? '—' : `${companies} ${companies === 1 ? 'company' : 'companies'}`;
+}
+
+/**
+ * The open cohort's number and application deadline, formatted in Delaware
+ * time. Shared so the marketing CTA and the printable brief can never quote
+ * different dates for the same cohort — the brief had "Cohort 4 · closes
+ * August 1, 2026" frozen in source, which was simply past by the time anyone
+ * read it. Returns null if the cohort math throws, which both callers render
+ * as a generic "next cohort" line rather than a wrong one.
+ */
+export function openCohortCopy(nowMs = Date.now()) {
+  try {
+    const c = resolveOpenCohort(nowMs);
+    if (!c) return null;
+    return {
+      cohortNum: c.cohortNum,
+      deadlineLabel: new Date(c.closeMs).toLocaleDateString('en-US', {
+        month: 'long', day: 'numeric', year: 'numeric', timeZone: COHORT_TZ,
+      }),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function HeroStatsPanel() {
+  const { companies, raised } = useSpinoutStats();
 
   return (
     <div className="flex flex-col gap-[1px] min-w-[230px] bg-white/10 border border-white/20 rounded-[16px] overflow-hidden">
       <div className="p-4 px-5 flex flex-col gap-0.5">
         <div className="tabular-nums text-[26px] font-extrabold tracking-tight">
-          {companies === null ? '—' : `${companies} ${companies === 1 ? 'company' : 'companies'}`}
+          {companiesLabel(companies)}
         </div>
         <div className="text-[12.5px] text-[#a89fce]">Built to date</div>
       </div>
@@ -674,23 +722,14 @@ export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
   // Deadline = 7 days before the 1st of the cohort month at 23:59:59 ET.
   // Workspace access is automatically granted at midnight Delaware time on
   // the 1st by the Worker's cohort-timing cron — no client action needed.
-  const cohort = useMemo(() => {
-    try { return resolveOpenCohort(); } catch { return null; }
-  }, []);
+  const cohort = useMemo(() => openCohortCopy(), []);
 
   const headline = cohort
     ? `Apply to Cohort ${cohort.cohortNum}.`
     : 'Apply to the next cohort.';
 
-  const deadline = cohort
-    ? new Date(cohort.closeMs).toLocaleDateString('en-US', {
-        month: 'long', day: 'numeric', year: 'numeric',
-        timeZone: COHORT_TZ,
-      })
-    : null;
-
-  const sub = deadline
-    ? `Applications close ${deadline}. 8 spots available.`
+  const sub = cohort
+    ? `Applications close ${cohort.deadlineLabel}. 8 spots available.`
     : 'Applications are now open. 8 spots available.';
 
   return (
