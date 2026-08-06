@@ -320,11 +320,16 @@ const Title: React.FC<{ text: any; path: string; editable?: boolean; onEdit?: On
 
 const Footer: React.FC<{ brand: any; dark?: boolean }> = ({ brand, dark }) => {
   const col = dark ? K.dfaint : K.faint;
+  // Every slide mounts this, so an absent `brand` block took the whole deck
+  // down rather than dropping one line of chrome. hydrate() always supplies it
+  // for the real render path; a slide rendered directly from partial data (a
+  // preview, a test, a half-populated payload) did not.
+  const b = brand || {};
   return (
     <>
-      <Txt l={ML} t={7.06} w={6} h={0.3} size={8} spacing={1} valign="middle" color={col}>{brand.lab}</Txt>
+      <Txt l={ML} t={7.06} w={6} h={0.3} size={8} spacing={1} valign="middle" color={col}>{b.lab || ''}</Txt>
       {!dark && (
-        <Txt l={W - MARGIN - 6} t={7.06} w={6} h={0.3} size={8} spacing={1} align="right" valign="middle" color={col}>{brand.footerRight}</Txt>
+        <Txt l={W - MARGIN - 6} t={7.06} w={6} h={0.3} size={8} spacing={1} align="right" valign="middle" color={col}>{b.footerRight || ''}</Txt>
       )}
     </>
   );
@@ -399,7 +404,11 @@ const D = {
 const FUNNEL_BARS = ['#6B46C1', '#8B5CF6', '#A78BFA', '#C4B5FD'];
 
 const initialsOf = (s: any, n = 2) =>
-  String(s ?? '').trim().split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, n).toUpperCase();
+  String(s ?? '').trim().split(/\s+/)
+    // "Excel + analysts" must monogram as EA, not E+ — a token that opens with
+    // punctuation is a connector, not a word.
+    .filter((w) => /^[\p{L}\p{N}]/u.test(w))
+    .map((w) => w[0]).join('').slice(0, n).toUpperCase();
 
 /* Header row for the rebuilt slides: eyebrow · provenance · slide index.
  * The design carries only eyebrow + provenance, but the eight slides still on
@@ -705,276 +714,411 @@ const SlideProblem: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
 };
 
 /* 5 — MARKET */
+// Rebuilt against the design: a dominant gradient TAM card beside SAM and SOM,
+// then the why-now panel and the assumptions note. The design's lower-left
+// panel charts segment share; this data carries no segment split, so that slot
+// holds `market.why` — the three why-now claims, which is what the deck
+// actually has to argue with.
 const SlideMarket: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
-  const m = d.market;
+  const m = d.market || {};
   const rings: Array<[string, string, string]> = Array.isArray(m.rings) ? m.rings : [];
-  const cx = 3.35, cy = 4.0, dia = [3.5, 2.4, 1.25];
-  const fills = [K.panel2, K.accentSoft, K.accent];
-  const wx = 7.05, ww = 5.55;
+  const why: Array<[string, string]> = Array.isArray(m.why) ? m.why : [];
+  const [tam, sam, som] = [rings[0], rings[1], rings[2]];
   return (
     <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={m.eyebrow} idx={m.idx} />
-        <Title text={m.title} path="market.title" editable={editable} onEdit={onEdit} />
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        padding: `${u(68)}px ${u(80)}px ${u(60)}px`,
+      }}>
+        <HeadRow
+          eyebrow={m.eyebrow} idx={m.idx} mb={30}
+          right={(
+            <Editable
+              as="span" value={String(m.title ?? '')} path="market.title" editable={editable} onEdit={onEdit}
+              style={{ fontSize: u(13), fontWeight: 600, color: K.muted }} />
+          )}
+        />
 
-        {dia.map((dd, i) => (
-          <Oval key={i} l={cx - dd / 2} t={cy - dd / 2} d={dd} fill={fills[i]} line={K.white} lineW={1.5} />
-        ))}
-        {rings[2] && <Txt l={cx - 0.9} t={cy - 0.22} w={1.8} h={0.44} size={15} bold align="center" valign="middle" color={K.white}>{rings[2][1]}</Txt>}
-        {rings[1] && <Txt l={cx - 0.7} t={cy - 1.05} w={1.4} h={0.34} size={13} bold align="center" color={K.ink}>{rings[1][1]}</Txt>}
-        {rings[0] && <Txt l={cx - 0.6} t={cy - 1.62} w={1.2} h={0.3} size={12} bold align="center" color={K.body}>{rings[0][1]}</Txt>}
-
-        {[2, 1, 0].map((idx, j) => {
-          const r = rings[idx];
-          if (!r) return null;
-          const ly = 6.05 + j * 0.34;
-          const col = fills[idx];
-          return (
-            <React.Fragment key={idx}>
-              <Oval l={ML} t={ly + 0.02} d={0.16} fill={col} line={col === K.panel2 ? K.line : undefined} />
-              <Txt l={ML + 0.28} t={ly - 0.06} w={5.6} h={0.3} size={11} valign="middle" color={K.muted}>
-                <span style={{ fontWeight: 700, color: K.ink }}>{r[0] + '  '}</span>
-                <span style={{ fontWeight: 700, color: K.accent }}>{r[1] + '  '}</span>
-                <span>{r[2]}</span>
-              </Txt>
-            </React.Fragment>
-          );
-        })}
-
-        <Txt l={wx} t={2.0} w={ww} h={0.3} size={11} bold spacing={1} color={K.accent}>{m.whyNowLabel}</Txt>
-        {(Array.isArray(m.why) ? m.why : []).map((q: [string, string], i: number) => {
-          const yy = 2.5 + i * 1.18;
-          return (
-            <React.Fragment key={i}>
-              <Txt l={wx} t={yy} w={0.6} h={0.5} size={18} bold valign="top" color={K.accentMid}>{String(i + 1).padStart(2, '0')}</Txt>
-              <Txt l={wx + 0.65} t={yy} w={ww - 0.65} h={0.35} size={14.5} bold valign="top" color={K.ink}>{q[0]}</Txt>
-              <Txt l={wx + 0.65} t={yy + 0.36} w={ww - 0.65} h={0.7} size={11.5} valign="top" lh={1.14} color={K.body}>{q[1]}</Txt>
-            </React.Fragment>
-          );
-        })}
-        <Ed l={wx} t={6.05} w={ww} h={0.6} size={9.5} italic lh={1.1} valign="top" color={K.muted} value={m.assumptions} path="market.assumptions" editable={editable} onEdit={onEdit} />
-        <Footer brand={d.brand} />
-      </div>
-    </Slide16x9>
-  );
-};
-
-/* 5 — SOLUTION */
-const SlideSolution: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
-  const sol = d.solution;
-  const steps: Array<[string, string, string]> = Array.isArray(sol.steps) ? sol.steps : [];
-  const n = steps.length || 1, gap = 0.4, cw = (CW - (n - 1) * gap) / n, cy = 2.2, ch = 2.3;
-  const outcomes: Array<[string, string]> = Array.isArray(sol.outcomes) ? sol.outcomes : [];
-  const ow = 3.85, og = 0.19, oy = 5.2;
-  return (
-    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={sol.eyebrow} idx={sol.idx} />
-        <Title text={sol.title} path="solution.title" editable={editable} onEdit={onEdit} />
-
-        {steps.map((st, i) => {
-          const x = ML + i * (cw + gap);
-          return (
-            <React.Fragment key={i}>
-              <Rect l={x} t={cy} w={cw} h={ch} r={0.1} />
-              <Oval l={x + 0.28} t={cy + 0.3} d={0.72} fill={K.accentSoft}>
-                <StepIcon name={st[0]} d={0.36} color={K.accent} />
-              </Oval>
-              <Txt l={x + cw - 0.85} t={cy + 0.3} w={0.6} h={0.4} size={13} bold align="right" color={K.faint}>{`0${i + 1}`}</Txt>
-              <Txt l={x + 0.28} t={cy + 1.15} w={cw - 0.5} h={0.4} size={17} bold color={K.ink}>{st[1]}</Txt>
-              <Txt l={x + 0.28} t={cy + 1.55} w={cw - 0.5} h={0.65} size={11} valign="top" lh={1.14} color={K.body}>{st[2]}</Txt>
-              {i < n - 1 && (
-                <Txt l={x + cw + 0.02} t={cy + 0.85} w={gap - 0.04} h={0.5} size={20} align="center" valign="middle" color={K.accentMid}>{'\u2192'}</Txt>
-              )}
-            </React.Fragment>
-          );
-        })}
-
-        <Txt l={ML} t={4.85} w={4} h={0.3} size={10} bold spacing={1} color={K.accent}>{sol.outcomeLabel}</Txt>
-        {outcomes.map((o, i) => {
-          const x = ML + i * (ow + og);
-          return (
-            <React.Fragment key={i}>
-              <Rect l={x} t={oy} w={ow} h={1.15} fill={K.panel} line={false} shadow={false} />
-              <Txt l={x + 0.28} t={oy + 0.15} w={ow - 0.5} h={0.55} size={26} bold valign="middle" color={K.ink}>{o[0]}</Txt>
-              <Txt l={x + 0.28} t={oy + 0.7} w={ow - 0.5} h={0.38} size={11} valign="top" color={K.body}>{o[1]}</Txt>
-            </React.Fragment>
-          );
-        })}
-        <Footer brand={d.brand} />
-      </div>
-    </Slide16x9>
-  );
-};
-
-/* 6 — ROADMAP */
-const SlideRoadmap: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
-  const r = d.roadmap;
-  const days: string[] = Array.isArray(r.days) ? r.days : [];
-  const railY = 2.2, x0 = ML + 0.1, x1 = W - MARGIN - 0.1;
-  const cur = Number(r.currentDay) || 0;
-  const colW = 3.77, colGap = 0.31, colY = 2.85, colH = 3.55;
-  const phases: Array<[string, string, Array<[Status, string]>]> = Array.isArray(r.phases) ? r.phases : [];
-  return (
-    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={r.eyebrow} idx={r.idx} />
-        <Title text={r.title} path="roadmap.title" editable={editable} onEdit={onEdit} />
-
-        <div style={{ position: 'absolute', left: inch(x0), top: inch(railY), width: inch(x1 - x0), height: pt(1.5), background: K.line }} />
-        {days.map((day, i) => {
-          const x = x0 + (x1 - x0) * (days.length > 1 ? i / (days.length - 1) : 0);
-          const now = i === cur;
-          return (
-            <React.Fragment key={i}>
-              <Oval l={x - 0.07} t={railY - 0.07} d={0.14} fill={now ? K.accent : K.faint} />
-              <Txt l={x - 1} t={railY + 0.12} w={2} h={0.25} size={9.5} bold align="center" color={now ? K.accent : K.muted}>{day + (now ? '  ·  today' : '')}</Txt>
-            </React.Fragment>
-          );
-        })}
-
-        {phases.map((p, i) => {
-          const x = ML + i * (colW + colGap);
-          return (
-            <React.Fragment key={i}>
-              <Rect l={x} t={colY} w={colW} h={colH} r={0.1} fill={i === 0 ? K.accentSoft : K.panel} line={false} shadow={false} />
-              <Txt l={x + 0.3} t={colY + 0.28} w={colW - 0.6} h={0.4} size={16} bold spacing={0.5} color={i === 0 ? K.accent : K.ink}>{p[0]}</Txt>
-              <Txt l={x + 0.3} t={colY + 0.68} w={colW - 0.6} h={0.3} size={11} bold color={K.muted}>{p[1]}</Txt>
-              {(Array.isArray(p[2]) ? p[2] : []).map((mi, j) => {
-                const iy = colY + 1.2 + j * 0.72;
-                return (
-                  <React.Fragment key={j}>
-                    <div style={{ position: 'absolute', left: inch(x + 0.3), top: inch(iy + 0.02) }}><StatusDot status={mi[0]} d={0.22} /></div>
-                    <Txt l={x + 0.64} t={iy - 0.04} w={colW - 0.94} h={0.55} size={11.5} valign="top" lh={1.08} color={K.ink}>{mi[1]}</Txt>
-                  </React.Fragment>
-                );
-              })}
-            </React.Fragment>
-          );
-        })}
-
-        <Txt l={ML} t={6.55} w={11} h={0.3} size={10} valign="middle" color={K.muted}>
-          <span style={{ color: K.done, fontSize: pt(11) }}>{'\u25CF '}</span><span>{'Done    '}</span>
-          <span style={{ color: K.active, fontSize: pt(11) }}>{'\u25CF '}</span><span>{'In progress    '}</span>
-          <span style={{ color: K.pending, fontSize: pt(11) }}>{'\u25CB '}</span><span>{'Planned'}</span>
-        </Txt>
-        <Footer brand={d.brand} />
-      </div>
-    </Slide16x9>
-  );
-};
-
-/* 7 — TEAM & NETWORK */
-const SlideTeamNetwork: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
-  const t = d.team;
-  const f = t.founder || {};
-  const lx = ML, lw = 4.7;
-  const rawFounders: Array<any> = Array.isArray(t.founders) && t.founders.length ? t.founders : [f];
-  const founders = rawFounders.filter((x) => x && (x.name || x.initials || x.photo));
-  const multi = founders.length > 1;
-  const advisors: Array<[string, string, string, (string | null)?]> = Array.isArray(t.advisors) ? t.advisors : [];
-  const nodes: Array<[number, number, string, string]> = Array.isArray(t.nodes) ? t.nodes : [];
-  const cX = 9.35, cY = 4.15, nw = 2.2, nh = 0.92;
-
-  // ── left-column vertical fit ────────────────────────────────────────────
-  // The founder block + roster must stay between the title and the footer no
-  // matter how many people are listed. With co-founders the founder block
-  // becomes compact rows to reclaim space; the roster then scales its row
-  // height (and only caps its visible count as a last resort) so the final
-  // row never crosses the bottom margin.
-  const TOP = 2.0, BOTTOM = 6.92;
-  const leftEls: React.ReactNode[] = [];
-  let founderBottom: number;
-
-  if (!multi) {
-    const fo = founders[0] || f;
-    leftEls.push(<Rect key="fcard" l={lx} t={TOP} w={lw} h={2.0} r={0.1} />);
-    leftEls.push(
-      <Avatar key="favatar" l={lx + 0.3} t={TOP + 0.3} d={1.05}
-        photo={fo.photo} initials={fo.initials} fill={K.accent} fontSize={24} textColor={K.white} />,
-    );
-    leftEls.push(<Ed key="fname" l={lx + 1.55} t={TOP + 0.32} w={lw - 1.8} h={0.4} size={19} bold color={K.ink} value={fo.name} path="team.founder.name" editable={editable} onEdit={onEdit} />);
-    leftEls.push(<Ed key="frole" l={lx + 1.55} t={TOP + 0.72} w={lw - 1.8} h={0.3} size={12} bold color={K.accent} value={fo.role} path="team.founder.role" editable={editable} onEdit={onEdit} />);
-    leftEls.push(<Ed key="fbio" l={lx + 0.3} t={TOP + 1.45} w={lw - 0.6} h={0.5} size={11.5} lh={1.1} valign="top" color={K.body} value={fo.bio} path="team.founder.bio" editable={editable} onEdit={onEdit} />);
-    founderBottom = TOP + 2.0;
-  } else {
-    // Compact stacked founder cards: smaller avatar, name + role, no bio.
-    const rowH = founders.length >= 3 ? 0.82 : 0.96;
-    const cardH = rowH - 0.12;
-    const avD = Math.max(0.4, cardH - 0.26);
-    founders.forEach((fo, i) => {
-      const y = TOP + i * rowH;
-      const tx = lx + 0.16 + avD + 0.18;
-      const tw = lw - (0.16 + avD + 0.18) - 0.2;
-      leftEls.push(<Rect key={`fc${i}`} l={lx} t={y} w={lw} h={cardH} r={0.1} />);
-      leftEls.push(
-        <Avatar key={`fa${i}`} l={lx + 0.16} t={y + (cardH - avD) / 2} d={avD}
-          photo={fo.photo} initials={fo.initials} fill={K.accent} fontSize={15} textColor={K.white} />,
-      );
-      leftEls.push(<Txt key={`fn${i}`} l={tx} t={y + 0.16} w={tw} h={0.34} size={15} bold color={K.ink}>{fo.name}</Txt>);
-      leftEls.push(<Txt key={`fr${i}`} l={tx} t={y + 0.5} w={tw} h={0.3} size={11} bold color={K.accent}>{fo.role}</Txt>);
-    });
-    founderBottom = TOP + founders.length * rowH;
-  }
-
-  // ── roster (advisors / advisors / partners) ──────────────────────────────
-  const labelY = founderBottom + 0.16;
-  const rosterTop = labelY + 0.36;
-  const avail = Math.max(0, BOTTOM - rosterTop);
-  const MAX_ROW = 0.62, MIN_ROW = 0.46;
-  let rowH = MAX_ROW;
-  let visible = advisors;
-  if (advisors.length > 0) {
-    rowH = Math.min(MAX_ROW, avail / advisors.length);
-    if (rowH < MIN_ROW) {
-      const maxRows = Math.max(1, Math.floor(avail / MIN_ROW));
-      visible = advisors.slice(0, maxRows);
-      rowH = Math.min(MAX_ROW, avail / visible.length);
-    }
-  }
-  const avD = Math.max(0.34, Math.min(0.5, rowH - 0.12));
-  const nameSize = Math.max(10.5, Math.min(12.5, rowH * 20));
-  const roleSize = Math.max(9.5, nameSize - 1.5);
-
-  return (
-    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={t.eyebrow} idx={t.idx} />
-        <Title text={t.title} path="team.title" editable={editable} onEdit={onEdit} />
-
-        {leftEls}
-
-        <Txt l={lx} t={labelY} w={lw} h={0.3} size={10} bold spacing={1} color={K.muted}>{t.advisorsLabel}</Txt>
-        {visible.map((a, i) => {
-          const ay = rosterTop + i * rowH;
-          const photo = a[3] || undefined;
-          return (
-            <React.Fragment key={i}>
-              <Avatar l={lx} t={ay + (rowH - avD) / 2} d={avD}
-                photo={photo || undefined} initials={a[0]} fill={K.panel2} fontSize={11} textColor={K.body} />
-              <Txt l={lx + avD + 0.15} t={ay} w={lw - avD - 0.15} h={rowH} size={nameSize} valign="middle" color={K.ink}>
-                <span style={{ fontWeight: 700 }}>{a[1] + '   '}</span>
-                <span style={{ color: K.muted, fontWeight: 400, fontSize: pt(roleSize) }}>{a[2]}</span>
-              </Txt>
-            </React.Fragment>
-          );
-        })}
-
-        {/* network graph */}
-        <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} viewBox="0 0 1920 1080">
-          {nodes.map((nd, i) => (
-            <line key={i} x1={inch(cX)} y1={inch(cY)} x2={inch(nd[0])} y2={inch(nd[1])} stroke={K.accentMid} strokeWidth={pt(1.5)} />
+        {/* TAM dominant, SAM and SOM beside it */}
+        <div style={{ flex: 'none', display: 'flex', gap: u(16), alignItems: 'stretch', marginBottom: u(20) }}>
+          <div style={{
+            flex: '1.5', minWidth: 0, borderRadius: u(18), padding: `${u(26)}px ${u(30)}px`, color: '#FFFFFF',
+            background: `linear-gradient(135deg, ${K.accent}, ${D.violetDeep})`,
+          }}>
+            <div style={{ fontSize: u(13), fontWeight: 800, letterSpacing: '.06em', color: '#E9D5FF' }}>
+              {String(tam?.[0] ?? '')} · TOTAL ADDRESSABLE
+            </div>
+            <div style={{ fontSize: u(66), fontWeight: 900, letterSpacing: '-.03em', marginTop: u(6), lineHeight: 1 }}>
+              {String(tam?.[1] ?? '')}
+            </div>
+            <div style={{ fontSize: u(16), color: '#E9D5FF', marginTop: u(2) }}>{String(tam?.[2] ?? '')}</div>
+          </div>
+          {[sam, som].map((r, i) => (
+            <div key={i} style={{
+              flex: 1, minWidth: 0, borderRadius: u(18), padding: `${u(24)}px ${u(26)}px`,
+              display: 'flex', flexDirection: 'column', justifyContent: 'center',
+              background: i === 0 ? '#F5F3FF' : K.panel,
+              border: `1px solid ${i === 0 ? D.violetLine : K.line}`,
+            }}>
+              <div style={{
+                fontSize: u(12), fontWeight: 800, letterSpacing: '.05em',
+                color: i === 0 ? K.accentLt : K.faint,
+              }}>{String(r?.[0] ?? '')} · {i === 0 ? 'SERVICEABLE AVAILABLE' : 'OBTAINABLE'}</div>
+              <div style={{
+                fontSize: u(i === 0 ? 46 : 40), fontWeight: 900, letterSpacing: '-.02em', lineHeight: 1,
+                marginTop: u(4), color: i === 0 ? D.violetDeep : K.body,
+              }}>{String(r?.[1] ?? '')}</div>
+              <div style={{ fontSize: u(14), color: K.muted, marginTop: u(2) }}>{String(r?.[2] ?? '')}</div>
+            </div>
           ))}
-        </svg>
-        {nodes.map((nd, i) => (
-          <React.Fragment key={i}>
-            <Rect l={nd[0] - nw / 2} t={nd[1] - nh / 2} w={nw} h={nh} r={0.1} />
-            <Txt l={nd[0] - nw / 2 + 0.1} t={nd[1] - nh / 2 + 0.13} w={nw - 0.2} h={0.32} size={12.5} bold align="center" color={K.ink}>{nd[2]}</Txt>
-            <Txt l={nd[0] - nw / 2 + 0.1} t={nd[1] - nh / 2 + 0.48} w={nw - 0.2} h={0.3} size={10} align="center" color={K.muted}>{nd[3]}</Txt>
-          </React.Fragment>
-        ))}
-        <Oval l={cX - 1.0} t={cY - 0.55} d={1.1} fill={K.accent} shadow z={2} />
-        <Txt l={cX - 1.0} t={cY - 0.55} w={2.0} h={1.1} size={16} bold align="center" valign="middle" color={K.white} z={3}>{t.centerName}</Txt>
+        </div>
+
+        {/* why now + assumptions */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: u(20) }}>
+          <div style={{
+            flex: '1.6', minWidth: 0, background: K.white, border: `1px solid ${K.line}`,
+            borderRadius: u(16), padding: `${u(22)}px ${u(26)}px`, display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{
+              flex: 'none', fontSize: u(13), fontWeight: 800, color: K.muted,
+              textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: u(16),
+            }}>{String(m.whyNowLabel ?? '')}</div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: u(14), justifyContent: 'center' }}>
+              {why.map((w, i) => (
+                <div key={i} style={{ display: 'flex', gap: u(14), alignItems: 'flex-start' }}>
+                  <span style={{
+                    flex: 'none', width: u(26), height: u(26), borderRadius: u(8),
+                    background: K.accentSoft, color: K.accent, fontWeight: 800, fontSize: u(13),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>{i + 1}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: u(16), fontWeight: 700, color: K.ink }}>{String(w?.[0] ?? '')}</div>
+                    <div style={{ fontSize: u(13.5), color: K.muted, lineHeight: 1.45, marginTop: u(2) }}>
+                      {String(w?.[1] ?? '')}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{
+            flex: 1, minWidth: 0, background: K.panel, border: `1px solid ${K.line}`,
+            borderRadius: u(16), padding: `${u(22)}px ${u(24)}px`, display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{
+              fontSize: u(13), fontWeight: 800, color: K.muted,
+              textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: u(12),
+            }}>How this is sized</div>
+            <Editable
+              as="div" value={String(m.assumptions ?? '')} path="market.assumptions" editable={editable} onEdit={onEdit}
+              style={{ fontSize: u(13), color: K.muted, lineHeight: 1.5, flex: 1 }} />
+          </div>
+        </div>
+        <Footer brand={d.brand} />
+      </div>
+    </Slide16x9>
+  );
+};
+
+/* 3 — SOLUTION */
+// Rebuilt against the design: headline plus ticked capability list on the left,
+// a panel on the right. The design's right panel is a Before/After pair; this
+// data has no before/after, so it holds `solution.outcomes` — the measurable
+// results, which is the same claim expressed as numbers.
+const SlideSolution: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
+  const s = d.solution || {};
+  const steps: Array<[string, string, string]> = Array.isArray(s.steps) ? s.steps : [];
+  const outcomes: Array<[string, string]> = Array.isArray(s.outcomes) ? s.outcomes : [];
+  return (
+    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        padding: `${u(64)}px ${u(80)}px ${u(56)}px`,
+      }}>
+        <HeadRow eyebrow={s.eyebrow} idx={s.idx} mb={26} />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: u(52) }}>
+          <div style={{ flex: '1.1', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <Editable
+              as="div" value={String(s.title ?? '')} path="solution.title" editable={editable} onEdit={onEdit}
+              style={{
+                fontSize: u(44), fontWeight: 800, letterSpacing: '-.02em',
+                lineHeight: 1.12, color: K.ink, marginBottom: u(32),
+              }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: u(18), justifyContent: 'center' }}>
+              {steps.map((st, i) => (
+                <div key={i} style={{ display: 'flex', gap: u(15), alignItems: 'flex-start' }}>
+                  <span style={{
+                    width: u(30), height: u(30), flex: 'none', borderRadius: u(9),
+                    background: D.greenBg, color: K.done, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: u(16),
+                  }}>✓</span>
+                  <span style={{ fontSize: u(21), lineHeight: 1.38, color: D.ink2, fontWeight: 500, minWidth: 0 }}>
+                    <strong style={{ color: K.ink, fontWeight: 700 }}>{String(st?.[1] ?? '')}</strong>
+                    {st?.[2] ? ` — ${st[2]}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{
+            flex: '.85', minWidth: 0, alignSelf: 'center', background: K.panel,
+            border: `1px solid ${K.line}`, borderRadius: u(18), overflow: 'hidden',
+          }}>
+            <div style={{
+              padding: `${u(18)}px ${u(30)}px`, background: D.violetBg, borderBottom: `1px solid ${D.violetLine}`,
+              fontSize: u(12), fontWeight: 800, color: K.accent,
+              textTransform: 'uppercase', letterSpacing: '.08em',
+            }}>{String(s.outcomeLabel ?? '')}</div>
+            {outcomes.map((o, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'baseline', gap: u(16),
+                padding: `${u(22)}px ${u(30)}px`,
+                borderTop: i ? `1px solid ${D.hair}` : 'none',
+              }}>
+                <span style={{
+                  flex: 'none', fontSize: u(34), fontWeight: 900, letterSpacing: '-.02em',
+                  color: K.accent, lineHeight: 1,
+                }}>{String(o?.[0] ?? '')}</span>
+                <span style={{ fontSize: u(17), color: D.ink2, lineHeight: 1.3, minWidth: 0 }}>
+                  {String(o?.[1] ?? '')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <Footer brand={d.brand} />
+      </div>
+    </Slide16x9>
+  );
+};
+
+/* 8 — ROADMAP */
+// Rebuilt against the design: three phase columns, each tinted by its own
+// state, with per-task checkboxes — done tasks struck through, upcoming ones
+// hollow. The design prints a "N% complete" figure in the header; it is derived
+// here from the task flags on this slide rather than stored separately, so the
+// headline number and the checkboxes underneath it cannot disagree.
+const SlideRoadmap: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
+  const r = d.roadmap || {};
+  const phases: Array<[string, string, Array<[Status, string]>]> = Array.isArray(r.phases) ? r.phases : [];
+  const tasks = phases.flatMap((p) => (Array.isArray(p?.[2]) ? p[2] : []));
+  const done = tasks.filter((t) => t?.[0] === 'done').length;
+  const pct = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
+
+  // Phase tone follows the phase's own tasks: everything checked reads as
+  // complete, anything in flight reads as active, otherwise upcoming.
+  const toneFor = (ts: Array<[Status, string]>) => {
+    if (ts.length && ts.every((t) => t?.[0] === 'done')) {
+      return { bg: D.greenBg, border: D.greenLine, chip: D.greenLine, ink: D.greenInk, status: 'Completed' };
+    }
+    if (ts.some((t) => t?.[0] === 'active' || t?.[0] === 'done')) {
+      return { bg: D.violetBg, border: D.violetLine, chip: K.accentSoft, ink: K.accent, status: 'In progress' };
+    }
+    return { bg: K.panel, border: K.line, chip: D.hair, ink: K.faint, status: 'Upcoming' };
+  };
+
+  return (
+    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        padding: `${u(60)}px ${u(80)}px ${u(56)}px`,
+      }}>
+        <HeadRow
+          eyebrow={r.eyebrow} idx={r.idx} mb={8}
+          right={(
+            <span style={{ fontSize: u(14), fontWeight: 600, color: K.muted }}>
+              {tasks.length ? `${pct}% complete` : ''}
+            </span>
+          )}
+        />
+        <Editable
+          as="div" value={String(r.title ?? '')} path="roadmap.title" editable={editable} onEdit={onEdit}
+          style={{ flex: 'none', fontSize: u(34), fontWeight: 800, letterSpacing: '-.02em', color: K.ink, marginBottom: u(26) }} />
+
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: u(18) }}>
+          {phases.map((p, i) => {
+            const ts: Array<[Status, string]> = Array.isArray(p?.[2]) ? p[2] : [];
+            const tone = toneFor(ts);
+            return (
+              <div key={i} style={{
+                flex: 1, minWidth: 0, background: tone.bg, border: `1px solid ${tone.border}`,
+                borderRadius: u(16), padding: u(22), display: 'flex', flexDirection: 'column',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: u(10), marginBottom: u(6) }}>
+                  <span style={{
+                    width: u(30), height: u(30), flex: 'none', borderRadius: u(9),
+                    background: tone.chip, color: tone.ink, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: u(14),
+                  }}>{i + 1}</span>
+                  <span style={{
+                    fontSize: u(12), fontWeight: 800, color: tone.ink,
+                    textTransform: 'uppercase', letterSpacing: '.05em',
+                  }}>{tone.status}</span>
+                </div>
+                <div style={{ fontSize: u(21), fontWeight: 800, color: K.ink, marginBottom: u(4) }}>
+                  {String(p?.[0] ?? '')}
+                </div>
+                <div style={{ fontSize: u(13.5), color: K.muted, marginBottom: u(16) }}>{String(p?.[1] ?? '')}</div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: u(9), justifyContent: 'center' }}>
+                  {ts.map((t, j) => {
+                    const isDone = t?.[0] === 'done';
+                    // The design's checkbox is binary, done or not. The data
+                    // carries a third state — in flight — and collapsing it into
+                    // "not started" loses the only signal on this slide that
+                    // says which task is being worked on right now.
+                    const isActive = t?.[0] === 'active';
+                    return (
+                      <div key={j} style={{ display: 'flex', gap: u(10), alignItems: 'flex-start' }}>
+                        <span style={{
+                          width: u(19), height: u(19), flex: 'none', marginTop: u(1), borderRadius: u(6),
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: u(12), fontWeight: 800, lineHeight: 1,
+                          ...(isDone
+                            ? { background: K.done, color: '#FFFFFF' }
+                            : isActive
+                              ? { background: '#FFFAF0', border: `1.5px solid ${K.active}`, color: K.active }
+                              : { background: K.white, border: `1.5px solid ${D.arrow}`, color: D.arrow }),
+                        }}>{isDone ? '✓' : isActive ? '◆' : '–'}</span>
+                        <span style={{
+                          fontSize: u(15), lineHeight: 1.35, minWidth: 0,
+                          color: isDone ? K.faint : isActive ? K.ink : D.ink2,
+                          fontWeight: isActive ? 600 : undefined,
+                          textDecoration: isDone ? 'line-through' : undefined,
+                        }}>{String(t?.[1] ?? '')}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <Footer brand={d.brand} />
+      </div>
+    </Slide16x9>
+  );
+};
+
+/* 9 — TEAM & NETWORK */
+// Rebuilt against the design: founder cards over advisor chips on the left, a
+// dark panel on the right. The design's dark panel charts a skills assessment;
+// this data carries no skills scores, so it holds `team.nodes` — the operating
+// network the slide's title is actually about.
+const SlideTeamNetwork: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
+  const t = d.team || {};
+  const founders: Array<any> = Array.isArray(t.founders) && t.founders.length
+    ? t.founders
+    : (t.founder ? [t.founder] : []);
+  const advisors: Array<[string, string, string, string?]> = Array.isArray(t.advisors) ? t.advisors : [];
+  const nodes: Array<[number, number, string, string]> = Array.isArray(t.nodes) ? t.nodes : [];
+  const AV = [[K.accentSoft, K.accent], ['#DBEAFE', '#1D4ED8']];
+  return (
+    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        padding: `${u(68)}px ${u(80)}px ${u(60)}px`,
+      }}>
+        <HeadRow
+          eyebrow={t.eyebrow} idx={t.idx} mb={28}
+          right={(
+            <Editable
+              as="span" value={String(t.title ?? '')} path="team.title" editable={editable} onEdit={onEdit}
+              style={{ fontSize: u(13), fontWeight: 600, color: K.muted }} />
+          )}
+        />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: u(24) }}>
+          <div style={{ flex: '1.15', minWidth: 0, display: 'flex', flexDirection: 'column', gap: u(16) }}>
+            <div style={{ flex: 'none', display: 'flex', gap: u(16) }}>
+              {founders.map((f, i) => (
+                <div key={i} style={{
+                  flex: 1, minWidth: 0, background: K.panel, border: `1px solid ${K.line}`,
+                  borderRadius: u(16), padding: u(22), display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', textAlign: 'center',
+                }}>
+                  <div style={{
+                    width: u(72), height: u(72), borderRadius: '50%', overflow: 'hidden',
+                    background: AV[i % 2][0], color: AV[i % 2][1], fontWeight: 800, fontSize: u(24),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: u(13),
+                  }}>
+                    {f?.photo
+                      ? <img src={f.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      : (f?.initials || initialsOf(f?.name))}
+                  </div>
+                  <div style={{ fontSize: u(21), fontWeight: 800, color: K.ink }}>{String(f?.name ?? '')}</div>
+                  <div style={{ fontSize: u(15), color: K.accent, fontWeight: 600, marginTop: u(2) }}>
+                    {String(f?.role ?? '')}
+                  </div>
+                  <div style={{ fontSize: u(14), color: K.muted, marginTop: u(9), lineHeight: 1.4 }}>
+                    {String(f?.bio ?? '')}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{
+              flex: 'none', fontSize: u(12), fontWeight: 800, color: K.muted,
+              textTransform: 'uppercase', letterSpacing: '.08em',
+            }}>{String(t.advisorsLabel ?? '')}</div>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexWrap: 'wrap', gap: u(12), alignContent: 'flex-start' }}>
+              {advisors.map((a, i) => (
+                <div key={i} style={{
+                  flex: '1 1 44%', minWidth: 0, background: K.white, border: `1px solid ${K.line}`,
+                  borderRadius: u(12), padding: `${u(14)}px ${u(16)}px`,
+                  display: 'flex', alignItems: 'center', gap: u(12),
+                }}>
+                  <div style={{
+                    width: u(40), height: u(40), flex: 'none', borderRadius: '50%', overflow: 'hidden',
+                    background: D.violetBg, color: K.accent, fontWeight: 700, fontSize: u(14),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {a?.[3]
+                      ? <img src={a[3]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      : String(a?.[0] ?? '')}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: u(7) }}>
+                      <span style={{ fontSize: u(16), fontWeight: 700, color: K.ink }}>{String(a?.[1] ?? '')}</span>
+                    </div>
+                    <div style={{ fontSize: u(13.5), color: K.muted, marginTop: u(2) }}>{String(a?.[2] ?? '')}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{
+            flex: '.85', minWidth: 0, background: K.dbg, color: '#FFFFFF', borderRadius: u(18),
+            padding: `${u(26)}px ${u(28)}px`, display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{
+              fontSize: u(13), fontWeight: 800, color: K.dmuted,
+              textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: u(4),
+              marginBottom: u(20),
+            }}>Operating network</div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: u(16), justifyContent: 'center' }}>
+              {nodes.map((n, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: u(13) }}>
+                  <span style={{
+                    width: u(10), height: u(10), flex: 'none', borderRadius: '50%',
+                    background: i === 0 ? K.accentLt : K.accentMid,
+                  }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: u(15), fontWeight: 600, color: D.onDark }}>{String(n?.[2] ?? '')}</div>
+                    <div style={{ fontSize: u(13), color: K.dfaint, marginTop: u(1) }}>{String(n?.[3] ?? '')}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {t.centerName && (
+              <div style={{
+                borderTop: '1px solid rgba(255,255,255,.14)', paddingTop: u(14), marginTop: u(6),
+                fontSize: u(13), color: K.dmuted,
+              }}>
+                Centred on <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{String(t.centerName)}</span>
+              </div>
+            )}
+          </div>
+        </div>
         <Footer brand={d.brand} />
       </div>
     </Slide16x9>
@@ -982,88 +1126,194 @@ const SlideTeamNetwork: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
 };
 
 /* 10 — ASK (+ cap table) */
-// The standalone Cap Table slide is merged here: the fully-diluted donut and
-// an entity-setup status line render as a right column, reading the unchanged
-// `captable.*` section (segments / items / labels) in place.
+// Rebuilt against the design: the raise as the hero with the supporting terms
+// in dark chips, use-of-funds as a stacked bar over its breakdown on the left,
+// and the merged cap table — donut, legend, entity checklist — on the right.
+// `captable.*` is still read in place; the field contract is unchanged.
 const SlideAsk: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
-  const a = d.ask;
-  const c = d.captable || {};
-  const kw = 2.32, kh = 1.7, kgx = 0.26, kgy = 0.3, kx0 = ML, ky0 = 2.2;
+  const a = d.ask || {};
+  const ct = d.captable || {};
   const kpis: Array<[string, string]> = Array.isArray(a.kpis) ? a.kpis : [];
-  const ux = 5.85, uw = 3.6;
   const funds: Array<[string, number]> = Array.isArray(a.funds) ? a.funds : [];
+  const segments: Array<[string, number]> = Array.isArray(ct.segments) ? ct.segments : [];
+  const items: Array<[string, Status]> = Array.isArray(ct.items) ? ct.items : [];
   const milestone: [string, string] = Array.isArray(a.milestone) ? a.milestone : ['', ''];
-  const rx = 9.75, rw = 2.88;
-  // Legend capped at 3 rows (4.95..5.83): the entity-status panel starts at
-  // 6.0, so real cap tables with 5–6 holders would otherwise collide with it.
-  const allSegments: Array<[string, number]> = Array.isArray(c.segments) ? c.segments : [];
-  const segments = allSegments.slice(0, 3);
-  const items: Array<[string, string]> = Array.isArray(c.items) ? c.items : [];
-  const doneN = items.filter((it) => it[1] === 'done').length;
-  const donutColors = [K.accent, K.accentMid, K.panel2];
+  const UF = [K.accent, K.accentLt, K.accentMid, D.violetLine];
+  const SEG = [K.accent, K.accentLt, K.accentMid, D.violetLine];
+
+  // conic-gradient stops, so the donut cannot drift from its legend.
+  const total = segments.reduce((sum, s) => sum + (Number(s?.[1]) || 0), 0) || 1;
+  let acc = 0;
+  const stops = segments.map((s, i) => {
+    const from = (acc / total) * 100;
+    acc += Number(s?.[1]) || 0;
+    return `${SEG[i % SEG.length]} ${from}% ${(acc / total) * 100}%`;
+  });
+  const doneCount = items.filter((it) => it?.[1] === 'done').length;
+
   return (
     <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={a.eyebrow} idx={a.idx} />
-        <Title text={a.title} path="ask.title" editable={editable} onEdit={onEdit} />
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        padding: `${u(60)}px ${u(80)}px ${u(56)}px`,
+      }}>
+        <div style={{
+          flex: 'none', display: 'flex', justifyContent: 'space-between',
+          alignItems: 'flex-end', gap: u(24), marginBottom: u(28),
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              fontSize: u(15), fontWeight: 800, color: K.accent,
+              textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: u(10),
+            }}>{String(a.eyebrow ?? '')}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: u(16), flexWrap: 'wrap' }}>
+              <span style={{
+                fontSize: u(88), fontWeight: 900, letterSpacing: '-.03em', color: K.accent, lineHeight: .9,
+              }}>{String(kpis[0]?.[0] ?? '')}</span>
+              <span style={{ fontSize: u(24), color: K.muted, fontWeight: 600 }}>{String(kpis[0]?.[1] ?? '')}</span>
+            </div>
+          </div>
+          <div style={{ flex: 'none', display: 'flex', gap: u(12), alignItems: 'flex-end' }}>
+            {kpis.slice(1).map((k, i) => (
+              <div key={i} style={{ background: K.dbg, color: '#FFFFFF', borderRadius: u(14), padding: `${u(16)}px ${u(22)}px` }}>
+                <div style={{ fontSize: u(13), color: K.dfaint, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                  {String(k?.[1] ?? '')}
+                </div>
+                <div style={{ fontSize: u(28), fontWeight: 800, marginTop: u(3) }}>{String(k?.[0] ?? '')}</div>
+              </div>
+            ))}
+            <span style={{ fontSize: u(12), fontWeight: 700, color: K.faint, letterSpacing: '.06em', paddingBottom: u(6) }}>
+              {String(a.idx ?? '')} / 11
+            </span>
+          </div>
+        </div>
 
-        {kpis.map((k, i) => {
-          const x = kx0 + (i % 2) * (kw + kgx), y = ky0 + Math.floor(i / 2) * (kh + kgy);
-          return (
-            <React.Fragment key={i}>
-              <Rect l={x} t={y} w={kw} h={kh} r={0.1} />
-              <Txt l={x + 0.24} t={y + 0.3} w={kw - 0.44} h={0.75} size={26} bold valign="middle" color={K.accent}>{k[0]}</Txt>
-              <Txt l={x + 0.24} t={y + 1.05} w={kw - 0.44} h={0.45} size={11} valign="top" lh={1.1} color={K.muted}>{k[1]}</Txt>
-            </React.Fragment>
-          );
-        })}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: u(26) }}>
+          {/* use of funds */}
+          <div style={{ flex: '1.35', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{
+              flex: 'none', fontSize: u(12.5), fontWeight: 800, color: K.muted,
+              textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: u(11),
+            }}>{String(a.useLabel ?? '')}</div>
+            <div style={{ flex: 'none', display: 'flex', height: u(20), borderRadius: u(7), overflow: 'hidden', marginBottom: u(14) }}>
+              {funds.map((f, i) => (
+                <div key={i} style={{ width: `${Number(f?.[1]) || 0}%`, background: UF[i % UF.length] }} />
+              ))}
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: u(10) }}>
+              {funds.map((f, i) => (
+                <div key={i} style={{
+                  flex: 1, minHeight: 0, background: K.panel, border: `1px solid ${K.line}`,
+                  borderRadius: u(14), padding: `${u(14)}px ${u(18)}px`,
+                  display: 'flex', alignItems: 'center', gap: u(16),
+                }}>
+                  <span style={{ flex: 'none', width: u(11), height: u(11), borderRadius: u(3), background: UF[i % UF.length] }} />
+                  <span style={{
+                    flex: 'none', minWidth: u(66), fontSize: u(28), fontWeight: 900, color: K.ink, lineHeight: 1,
+                  }}>{Number(f?.[1]) || 0}%</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: u(16), fontWeight: 700, color: D.ink2 }}>
+                    {String(f?.[0] ?? '')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
 
-        <Txt l={ux} t={2.0} w={uw} h={0.3} size={10} bold spacing={1} color={K.muted}>{a.useLabel}</Txt>
-        {funds.map((fn, i) => {
-          const fy = 2.55 + i * 0.82;
-          return (
-            <React.Fragment key={i}>
-              <Txt l={ux} t={fy} w={uw - 0.8} h={0.3} size={12} bold valign="middle" color={K.ink}>{fn[0]}</Txt>
-              <Txt l={ux + uw - 0.8} t={fy} w={0.8} h={0.3} size={12} bold align="right" valign="middle" color={i === 0 ? K.accent : K.body}>{fn[1]}%</Txt>
-              <Bar l={ux} t={fy + 0.36} w={uw} h={0.17} pct={Number(fn[1]) / 100} fill={i === 0 ? K.accent : K.accentMid} />
-            </React.Fragment>
-          );
-        })}
-        <Rect l={ux} t={6.0} w={uw} h={0.85} fill={K.accentSoft} line={false} shadow={false} />
-        <Txt l={ux + 0.22} t={6.0} w={uw - 0.44} h={0.85} size={11} lh={1.15} valign="middle" color={K.ink}>
-          <span style={{ fontWeight: 700, color: K.accent }}>{milestone[0] + '  '}</span>
-          <span>{milestone[1]}</span>
-        </Txt>
+          {/* merged cap table */}
+          <div style={{
+            flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+            paddingLeft: u(26), borderLeft: `1px solid ${K.line}`,
+          }}>
+            <div style={{
+              flex: 'none', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+              gap: u(10), marginBottom: u(11),
+            }}>
+              <span style={{
+                fontSize: u(12.5), fontWeight: 800, color: K.muted,
+                textTransform: 'uppercase', letterSpacing: '.08em',
+              }}>{String(ct.donutLabel ?? '')}</span>
+              <span style={{ fontSize: u(11.5), color: K.faint, fontWeight: 600 }}>{String(ct.centerSmall ?? '')}</span>
+            </div>
+            <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: u(18), marginBottom: u(14) }}>
+              <div style={{
+                flex: 'none', width: u(104), height: u(104), borderRadius: '50%',
+                background: stops.length ? `conic-gradient(${stops.join(',')})` : K.panel2,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <div style={{
+                  width: u(64), height: u(64), borderRadius: '50%', background: K.white,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <span style={{ fontSize: u(20), fontWeight: 900, color: K.ink, lineHeight: 1.15 }}>
+                    {String(ct.centerBig ?? '')}
+                  </span>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: u(7) }}>
+                {segments.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: u(8), fontSize: u(13) }}>
+                    <span style={{ flex: 'none', width: u(11), height: u(11), borderRadius: u(3), background: SEG[i % SEG.length] }} />
+                    <span style={{ color: D.ink2, minWidth: 0 }}>
+                      {String(s?.[0] ?? '')} · <strong style={{ color: K.accent }}>{Number(s?.[1]) || 0}%</strong>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-        {/* cap table column */}
-        <Txt l={rx} t={2.0} w={rw} h={0.3} size={10} bold spacing={1} color={K.muted}>{c.donutLabel}</Txt>
-        <Donut l={rx + 0.29} t={2.45} w={2.3} h={2.3} segments={allSegments} colors={donutColors} />
-        <Txt l={rx + 0.79} t={3.31} w={1.3} h={0.58} size={16} bold align="center" valign="middle" color={K.ink}>
-          <span style={{ display: 'block' }}>{c.centerBig}</span>
-          <span style={{ display: 'block', fontSize: pt(8.5), fontWeight: 400, color: K.muted }}>{c.centerSmall}</span>
-        </Txt>
-        {segments.map((seg, i) => {
-          const cy2 = 4.95 + i * 0.3;
-          const col = donutColors[i % donutColors.length];
-          return (
-            <React.Fragment key={i}>
-              <Oval l={rx} t={cy2 + 0.02} d={0.16} fill={col} line={col === K.panel2 ? K.line : undefined} />
-              <Txt l={rx + 0.26} t={cy2 - 0.05} w={rw - 0.26} h={0.28} size={10.5} valign="middle" color={K.muted}>
-                <span style={{ color: K.ink, fontWeight: 700 }}>{seg[0] + '   '}</span>
-                <span>{seg[1]}%</span>
-              </Txt>
-            </React.Fragment>
-          );
-        })}
-        {items.length > 0 && (
-          <>
-            <Rect l={rx} t={6.0} w={rw} h={0.85} fill={K.panel} line={false} shadow={false} />
-            <Txt l={rx + 0.2} t={6.0} w={rw - 0.4} h={0.85} size={10.5} lh={1.2} valign="middle" color={K.body}>
-              <span style={{ fontWeight: 700, color: doneN === items.length ? K.done : K.active }}>{`${doneN} / ${items.length}  `}</span>
-              <span>entity setup steps complete</span>
-            </Txt>
-          </>
-        )}
+            <div style={{
+              flex: 1, minHeight: 0, background: K.panel, border: `1px solid ${K.line}`,
+              borderRadius: u(13), padding: `${u(14)}px ${u(16)}px`, display: 'flex', flexDirection: 'column',
+            }}>
+              <div style={{
+                flex: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: u(9),
+              }}>
+                <span style={{
+                  fontSize: u(10.5), fontWeight: 800, color: K.muted,
+                  textTransform: 'uppercase', letterSpacing: '.08em',
+                }}>{String(ct.checklistLabel ?? '')}</span>
+                {items.length > 0 && (
+                  <span style={{ fontSize: u(11), fontWeight: 700, color: K.done }}>
+                    {doneCount} of {items.length} complete
+                  </span>
+                )}
+              </div>
+              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: u(6), justifyContent: 'center' }}>
+                {items.map((it, i) => {
+                  const isDone = it?.[1] === 'done';
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: u(9) }}>
+                      <span style={{
+                        width: u(15), height: u(15), flex: 'none', borderRadius: u(5),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: u(10), fontWeight: 800, lineHeight: 1,
+                        background: isDone ? K.done : '#FFFAF0',
+                        color: isDone ? '#FFFFFF' : K.active,
+                        border: isDone ? 'none' : '1px solid #FEEBC8',
+                      }}>{isDone ? '✓' : '·'}</span>
+                      <span style={{ fontSize: u(12.5), color: isDone ? K.muted : D.ink2, minWidth: 0 }}>
+                        {String(it?.[0] ?? '')}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {milestone[1] && (
+              <div style={{
+                flex: 'none', background: D.violetBg, border: `1px solid ${D.violetLine}`,
+                borderRadius: u(13), padding: `${u(14)}px ${u(16)}px`, marginTop: u(14),
+              }}>
+                <div style={{
+                  fontSize: u(10.5), fontWeight: 800, color: K.accent,
+                  textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: u(6),
+                }}>{String(milestone[0] ?? '')}</div>
+                <div style={{ fontSize: u(13), color: K.body, lineHeight: 1.5 }}>{String(milestone[1])}</div>
+              </div>
+            )}
+          </div>
+        </div>
         <Footer brand={d.brand} />
       </div>
     </Slide16x9>
@@ -1071,47 +1321,119 @@ const SlideAsk: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
 };
 
 /* 6 — COMPETITIVE */
-// New slide: the landscape table on the left (name / category / stage / gap),
-// the numbered edges on the right, and the whitespace claim as a callout.
+// Rebuilt against the design: the landscape table on the left, the gradient
+// wedge card and whitespace callout stacked on the right. The design's table
+// carries a market-share column with a bar; this data has no share figure per
+// competitor, so the table runs four columns rather than inventing a fifth.
 const SlideCompetitive: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   const cp = d.competitive || {};
   const rows: Array<[string, string, string, string]> = Array.isArray(cp.competitors) ? cp.competitors : [];
   const edges: string[] = Array.isArray(cp.edges) ? cp.edges : [];
-  const lx = ML, lw = 7.3;
-  const rx = 8.35, rw = 4.28;
+  const CAT_TONE: Record<string, { bg: string; ink: string }> = {
+    Direct: { bg: '#FFF5F5', ink: '#C53030' },
+    Indirect: { bg: '#FFFAF0', ink: '#B45309' },
+    Incumbent: { bg: '#FFFAF0', ink: '#B45309' },
+    Adjacent: { bg: K.panel, ink: K.muted },
+  };
+  const AV = [[K.accentSoft, K.accent], ['#DBEAFE', '#1D4ED8'], ['#FEF3C7', '#B45309'], [D.redBg, '#C53030']];
+  const GRID = '1.35fr .85fr .7fr 1.9fr';
   return (
     <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={cp.eyebrow} idx={cp.idx} />
-        <Title text={cp.title} path="competitive.title" editable={editable} onEdit={onEdit} />
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        padding: `${u(68)}px ${u(80)}px ${u(60)}px`,
+      }}>
+        <HeadRow
+          eyebrow={cp.eyebrow} idx={cp.idx} mb={26}
+          right={<span style={{ fontSize: u(13), fontWeight: 600, color: K.muted }}>{String(cp.tableLabel ?? '')}</span>}
+        />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: u(20) }}>
+          <div style={{
+            flex: '1.9', minWidth: 0, background: K.white, border: `1px solid ${K.line}`,
+            borderRadius: u(16), overflow: 'hidden', display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{
+              display: 'grid', gridTemplateColumns: GRID, background: K.panel,
+              borderBottom: `1px solid ${K.line}`, flex: 'none',
+            }}>
+              {['Player', 'Category', 'Stage', 'Where they fall short'].map((h, i) => (
+                <div key={i} style={{
+                  padding: `${u(13)}px ${i === 0 ? u(20) : u(10)}px`, fontSize: u(11.5), fontWeight: 800,
+                  textTransform: 'uppercase', letterSpacing: '.07em', color: K.faint,
+                }}>{h}</div>
+              ))}
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              {rows.map((r, i) => {
+                const tone = CAT_TONE[String(r?.[1] ?? '')] || CAT_TONE.Adjacent;
+                const av = AV[i % AV.length];
+                return (
+                  <div key={i} style={{
+                    flex: 1, display: 'grid', gridTemplateColumns: GRID, alignItems: 'center',
+                    borderBottom: i < rows.length - 1 ? `1px solid ${K.panel2}` : 'none',
+                    background: i % 2 ? K.panel : K.white,
+                  }}>
+                    <div style={{ padding: `${u(14)}px ${u(20)}px`, display: 'flex', alignItems: 'center', gap: u(11), minWidth: 0 }}>
+                      <div style={{
+                        width: u(32), height: u(32), flex: 'none', borderRadius: u(9),
+                        background: av[0], color: av[1], display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontSize: u(12.5), fontWeight: 800,
+                      }}>{initialsOf(r?.[0])}</div>
+                      <span style={{ fontSize: u(15), fontWeight: 700, color: K.ink, minWidth: 0 }}>
+                        {String(r?.[0] ?? '')}
+                      </span>
+                    </div>
+                    <div style={{ padding: `${u(14)}px ${u(10)}px` }}>
+                      <span style={{
+                        fontSize: u(12), fontWeight: 800, padding: `${u(4)}px ${u(10)}px`,
+                        borderRadius: 999, background: tone.bg, color: tone.ink, whiteSpace: 'nowrap',
+                      }}>{String(r?.[1] ?? '')}</span>
+                    </div>
+                    <div style={{ padding: `${u(14)}px ${u(10)}px`, fontSize: u(13), color: K.muted }}>
+                      {String(r?.[2] ?? '')}
+                    </div>
+                    <div style={{ padding: `${u(14)}px ${u(20)}px ${u(14)}px ${u(10)}px`, fontSize: u(13), color: K.muted, lineHeight: 1.45 }}>
+                      {String(r?.[3] ?? '')}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
-        <Txt l={lx} t={2.0} w={lw} h={0.3} size={10} bold spacing={1} color={K.muted}>{cp.tableLabel}</Txt>
-        {rows.map((r, i) => {
-          const ry = 2.5 + i * 0.94;
-          return (
-            <React.Fragment key={i}>
-              <Rect l={lx} t={ry} w={lw} h={0.8} r={0.08} />
-              <Txt l={lx + 0.24} t={ry + 0.13} w={2.0} h={0.32} size={13.5} bold valign="middle" color={K.ink}>{r[0]}</Txt>
-              <Txt l={lx + 0.24} t={ry + 0.46} w={2.0} h={0.24} size={9.5} bold spacing={0.5} valign="middle" color={K.accent}>{String(r[1] || '').toUpperCase()}</Txt>
-              <Txt l={lx + 2.3} t={ry} w={1.0} h={0.8} size={10} valign="middle" color={K.muted}>{r[2]}</Txt>
-              <Txt l={lx + 3.4} t={ry + 0.1} w={lw - 3.6} h={0.6} size={10.5} lh={1.15} valign="middle" color={K.body}>{r[3]}</Txt>
-            </React.Fragment>
-          );
-        })}
-
-        <Txt l={rx} t={2.0} w={rw} h={0.3} size={11} bold spacing={1} color={K.accent}>{cp.edgeLabel}</Txt>
-        {edges.map((e, i) => {
-          const ey = 2.5 + i * 0.98;
-          return (
-            <React.Fragment key={i}>
-              <Txt l={rx} t={ey} w={0.55} h={0.5} size={18} bold valign="top" color={K.accentMid}>{String(i + 1).padStart(2, '0')}</Txt>
-              <Txt l={rx + 0.6} t={ey} w={rw - 0.6} h={0.85} size={12.5} bold valign="top" lh={1.15} color={K.ink}>{e}</Txt>
-            </React.Fragment>
-          );
-        })}
-        <Rect l={rx} t={5.6} w={rw} h={1.2} fill={K.accentSoft} line={false} shadow={false} />
-        <Ed l={rx + 0.24} t={5.75} w={rw - 0.48} h={0.9} size={11.5} italic lh={1.2} valign="top" color={K.ink}
-          value={cp.whitespace} path="competitive.whitespace" editable={editable} onEdit={onEdit} />
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: u(14) }}>
+            <div style={{
+              flex: 1, minHeight: 0, borderRadius: u(16), padding: `${u(22)}px ${u(24)}px`, color: '#FFFFFF',
+              background: `linear-gradient(135deg, ${K.accent}, ${D.violetDeep})`,
+              display: 'flex', flexDirection: 'column',
+            }}>
+              <div style={{
+                fontSize: u(11.5), fontWeight: 800, letterSpacing: '.07em',
+                textTransform: 'uppercase', color: '#E9D5FF', marginBottom: u(14),
+              }}>{String(cp.edgeLabel ?? '')}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: u(12), flex: 1, justifyContent: 'center' }}>
+                {edges.map((e, i) => (
+                  <div key={i} style={{ display: 'flex', gap: u(10), alignItems: 'flex-start' }}>
+                    <span style={{ flex: 'none', color: K.accentMid, fontSize: u(15), lineHeight: 1.4, fontWeight: 800 }}>✓</span>
+                    <span style={{ fontSize: u(14), color: '#E9D5FF', lineHeight: 1.45, minWidth: 0 }}>{String(e)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{
+              flex: 'none', background: K.panel, border: `1px solid ${K.line}`,
+              borderRadius: u(16), padding: `${u(16)}px ${u(20)}px`,
+            }}>
+              <div style={{
+                fontSize: u(11.5), fontWeight: 800, letterSpacing: '.06em',
+                textTransform: 'uppercase', color: K.faint, marginBottom: u(6),
+              }}>Whitespace</div>
+              <Editable
+                as="div" value={String(cp.whitespace ?? '')} path="competitive.whitespace" editable={editable} onEdit={onEdit}
+                style={{ fontSize: u(13.5), color: K.body, lineHeight: 1.5 }} />
+            </div>
+          </div>
+        </div>
         <Footer brand={d.brand} />
       </div>
     </Slide16x9>
@@ -1292,61 +1614,86 @@ const SlideTraction: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   );
 };
 
-/* 6 — PRODUCT DEMO */
-// Slot 6 in the canonical order. Mirrors `productDemo()` in buildDeck.js 1:1:
-// a left media frame (screenshot when present, otherwise a play-glyph "add a
-// demo" placeholder) with a caption, and a right column carrying the
-// walkthrough copy plus the live-demo + demo-video links. All copy fields are
-// inline-editable via the `productDemo.*` dotted-key contract.
+/* 4 — PRODUCT DEMO */
+// Rebuilt against the design: eyebrow + headline with the live-product pill on
+// the right, a dark media frame carrying the screenshot (or the play-glyph
+// placeholder when none is uploaded), and the walkthrough copy beneath it.
+// The design's bottom strip is three numbered feature chips; this data has no
+// feature list, so that row carries the walkthrough it does have.
 const SlideProductDemo: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   const pd = d.productDemo || {};
-  const mediaX = ML, mediaY = 2.15, mediaW = 7.05, mediaH = 4.0;
   const shot = typeof pd.screenshot === 'string' ? pd.screenshot.trim() : '';
-  const rx = 8.05, rw = W - MARGIN - rx;
+  const live = typeof pd.liveUrl === 'string' ? pd.liveUrl.trim() : '';
   return (
     <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={pd.eyebrow} idx={pd.idx} />
-        <Title text={pd.title} path="productDemo.title" editable={editable} onEdit={onEdit} />
-
-        {/* media frame */}
-        <Rect l={mediaX} t={mediaY} w={mediaW} h={mediaH} r={0.12} fill={K.panel} line={K.line} shadow={false} />
-        {shot ? (
-          <div style={{
-            position: 'absolute', left: inch(mediaX + 0.12), top: inch(mediaY + 0.12),
-            width: inch(mediaW - 0.24), height: inch(mediaH - 0.24), borderRadius: inch(0.08),
-            overflow: 'hidden', background: K.panel2,
-          }}>
-            <img src={shot} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        padding: `${u(60)}px ${u(80)}px ${u(56)}px`,
+      }}>
+        <div style={{ flex: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: u(24), marginBottom: u(22) }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              fontSize: u(15), fontWeight: 800, color: K.accent,
+              textTransform: 'uppercase', letterSpacing: '.12em',
+            }}>{String(pd.eyebrow ?? '')}</div>
+            <Editable
+              as="div" value={String(pd.title ?? '')} path="productDemo.title" editable={editable} onEdit={onEdit}
+              style={{ fontSize: u(38), fontWeight: 800, letterSpacing: '-.02em', marginTop: u(8), color: K.ink }} />
           </div>
-        ) : (
-          <>
-            <Oval l={mediaX + mediaW / 2 - 0.55} t={mediaY + mediaH / 2 - 0.9} d={1.1} fill={K.accentSoft} shadow={false}>
-              <svg width={inch(0.4)} height={inch(0.4)} viewBox="0 0 24 24" fill={K.accent}><path d="M8 5v14l11-7z" /></svg>
-            </Oval>
-            <Txt l={mediaX} t={mediaY + mediaH / 2 + 0.35} w={mediaW} h={0.4} size={12} bold align="center" color={K.muted}>
-              Add a demo video or screenshot on the project
-            </Txt>
-          </>
-        )}
-        <Ed l={mediaX} t={mediaY + mediaH + 0.16} w={mediaW} h={0.5} size={10.5} italic lh={1.1} valign="top"
-          color={K.muted} value={pd.caption} path="productDemo.caption" editable={editable} onEdit={onEdit} placeholder="Caption" />
+          <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: u(14) }}>
+            {live && (
+              <span style={{
+                fontSize: u(17), fontWeight: 700, color: K.accent, background: K.accentSoft,
+                borderRadius: 999, padding: `${u(9)}px ${u(20)}px`, whiteSpace: 'nowrap',
+              }}>{live} →</span>
+            )}
+            <span style={{ fontSize: u(12), fontWeight: 700, color: K.faint, letterSpacing: '.06em' }}>
+              {String(pd.idx ?? '')} / 11
+            </span>
+          </div>
+        </div>
 
-        {/* right column */}
-        <Txt l={rx} t={2.15} w={rw} h={0.3} size={10} bold spacing={1} color={K.accent}>{pd.walkthroughLabel || 'WALKTHROUGH'}</Txt>
-        <Ed l={rx} t={2.5} w={rw} h={2.0} size={13.5} lh={1.22} valign="top" color={K.body}
-          value={pd.body} path="productDemo.body" editable={editable} onEdit={onEdit} placeholder="Describe the demo flow" />
+        <div style={{
+          flex: 1, minHeight: 0, background: K.dbg, borderRadius: u(18), position: 'relative',
+          overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: u(20),
+        }}>
+          <div style={{ display: 'flex', gap: u(9), position: 'absolute', top: u(18), left: u(20), zIndex: 2 }}>
+            {['#FF5F57', '#FEBC2E', '#28C840'].map((c) => (
+              <span key={c} style={{ width: u(13), height: u(13), borderRadius: '50%', background: c }} />
+            ))}
+          </div>
+          {shot ? (
+            <img src={shot} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          ) : (
+            <div style={{ textAlign: 'center', color: K.dfaint }}>
+              <div style={{
+                width: u(74), height: u(74), margin: '0 auto', border: `2px solid ${K.dfaint}`,
+                borderRadius: u(16), display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <div style={{
+                  width: 0, height: 0, marginLeft: u(5),
+                  borderLeft: `${u(22)}px solid ${K.dfaint}`,
+                  borderTop: `${u(14)}px solid transparent`,
+                  borderBottom: `${u(14)}px solid transparent`,
+                }} />
+              </div>
+              <div style={{ fontSize: u(17), marginTop: u(14) }}>{String(pd.caption ?? '')}</div>
+            </div>
+          )}
+        </div>
 
-        <Txt l={rx} t={4.75} w={rw} h={0.3} size={9.5} bold spacing={1} color={K.muted}>LIVE DEMO</Txt>
-        <Rect l={rx} t={5.05} w={rw} h={0.58} r={0.08} fill={K.accentSoft} line={false} shadow={false} />
-        <Ed l={rx + 0.22} t={5.05} w={rw - 0.44} h={0.58} size={12} bold valign="middle" color={K.accent}
-          value={pd.liveUrl} path="productDemo.liveUrl" editable={editable} onEdit={onEdit} placeholder="Add a live demo URL" />
-
-        <Txt l={rx} t={5.85} w={rw} h={0.3} size={9.5} bold spacing={1} color={K.muted}>DEMO VIDEO</Txt>
-        <Rect l={rx} t={6.15} w={rw} h={0.58} r={0.08} fill={K.panel} line={K.line} shadow={false} />
-        <Ed l={rx + 0.22} t={6.15} w={rw - 0.44} h={0.58} size={12} bold valign="middle" color={K.ink}
-          value={pd.videoUrl} path="productDemo.videoUrl" editable={editable} onEdit={onEdit} placeholder="Add a demo video URL" />
-
+        <div style={{
+          flex: 'none', background: K.panel, border: `1px solid ${K.line}`,
+          borderRadius: u(13), padding: `${u(18)}px ${u(22)}px`,
+        }}>
+          <div style={{
+            fontSize: u(11.5), fontWeight: 800, letterSpacing: '.06em',
+            textTransform: 'uppercase', color: K.faint, marginBottom: u(6),
+          }}>{String(pd.walkthroughLabel ?? '')}</div>
+          <Editable
+            as="div" value={String(pd.body ?? '')} path="productDemo.body" editable={editable} onEdit={onEdit}
+            style={{ fontSize: u(16), fontWeight: 500, color: D.ink2, lineHeight: 1.45 }} />
+        </div>
         <Footer brand={d.brand} />
       </div>
     </Slide16x9>
@@ -1354,53 +1701,119 @@ const SlideProductDemo: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
 };
 
 /* 11 — REVIEW THE DEAL / DEAL READINESS */
-// Slot 11, the closing slide. Mirrors `deal()` in buildDeck.js 1:1: a dark
-// frame with the diligence checklist on the left, numbered next-steps on the
-// right, then the closing line + contact. Title / closing line / contact are
-// inline-editable via the `deal.*` dotted-key contract.
+// Rebuilt against the design: the close on the left — headline, closing line,
+// numbered next steps, contact — and the diligence package on the right with a
+// status tag per document. The design puts a readiness ring beside the summary;
+// the document statuses here are free text ("Open", "On request", "Not
+// required"), so the package's completeness is stated as a count rather than
+// inferred into a percentage that would only look precise.
 const SlideDealReadiness: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   const dl = d.deal || {};
   const ready: Array<[string, string]> = Array.isArray(dl.ready) ? dl.ready : [];
   const steps: Array<[string, string]> = Array.isArray(dl.steps) ? dl.steps : [];
-  const lx = ML, lw = 6.0;
-  const rx = 7.35, rw = 5.25;
+  // "Not required" is a RESOLVED state — an NDA nobody needs is not an
+  // outstanding item, and flagging it amber beside "On request" told investors
+  // the package was less ready than it is.
+  const PENDING = /request|pending|in progress|awaiting/i;
+  const NA = /not required|n\/a|none/i;
+  const state = (v: any) => (NA.test(String(v ?? '')) ? 'na' : PENDING.test(String(v ?? '')) ? 'pending' : 'ready');
+  const inScope = ready.filter((r) => state(r?.[1]) !== 'na');
+  const settled = inScope.filter((r) => state(r?.[1]) === 'ready').length;
   return (
     <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={dl.eyebrow} idx={dl.idx} />
-        <Ed l={ML} t={1.05} w={5.7} h={0.95} size={30} bold lh={1.04} valign="top" color={K.ink}
-          value={dl.title} path="deal.title" editable={editable} onEdit={onEdit} />
-        <Txt l={lx} t={2.15} w={lw} h={0.3} size={10} bold spacing={1} color={K.muted}>{dl.diligenceLabel}</Txt>
-        {ready.map((r, i) => {
-          const ry = 2.6 + i * 0.66;
-          return (
-            <React.Fragment key={i}>
-              <Rect l={lx} t={ry} w={lw} h={0.55} r={0.06} fill={K.panel} line={K.line} shadow={false} />
-              <Oval l={lx + 0.22} t={ry + 0.185} d={0.18} fill={K.accentSoft} shadow={false} />
-              <Txt l={lx + 0.6} t={ry} w={lw - 2.3} h={0.55} size={13} bold valign="middle" color={K.ink}>{r[0]}</Txt>
-              <Txt l={lx + lw - 1.85} t={ry} w={1.7} h={0.55} size={12} bold align="right" valign="middle" color={r[1] === 'Open' || r[1] === 'Included' ? K.done : K.active}>{r[1]}</Txt>
-            </React.Fragment>
-          );
-        })}
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex', gap: u(44),
+        padding: `${u(68)}px ${u(80)}px ${u(60)}px`,
+      }}>
+        <div style={{ flex: '1.05', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: u(16), marginBottom: u(26) }}>
+            <span style={{
+              fontSize: u(15), fontWeight: 800, color: K.accent,
+              textTransform: 'uppercase', letterSpacing: '.12em',
+            }}>{String(dl.eyebrow ?? '')}</span>
+            <span style={{ marginLeft: 'auto', fontSize: u(12), fontWeight: 700, color: K.faint, letterSpacing: '.06em' }}>
+              {String(dl.idx ?? '')} / 11
+            </span>
+          </div>
+          <Editable
+            as="div" value={String(dl.title ?? '')} path="deal.title" editable={editable} onEdit={onEdit}
+            style={{ fontSize: u(50), fontWeight: 900, letterSpacing: '-.02em', color: K.ink, lineHeight: 1.08 }} />
+          <Editable
+            as="div" value={String(dl.closingLine ?? '')} path="deal.closingLine" editable={editable} onEdit={onEdit}
+            style={{ fontSize: u(22), color: K.muted, marginTop: u(8), lineHeight: 1.35 }} />
 
-        <Rect l={rx - .28} t={1.0} w={5.0} h={5.9} r={0.12} fill={K.panel} line={K.line} shadow={false} />
-        <Txt l={rx} t={2.15} w={rw} h={0.3} size={10} bold spacing={1} color={K.muted}>{dl.nextLabel}</Txt>
-        {steps.map((st, i) => {
-          const sy = 2.6 + i * 0.85;
-          return (
-            <React.Fragment key={i}>
-              <Oval l={rx} t={sy} d={0.5} fill={K.accentSoft} shadow={false} />
-              <Txt l={rx} t={sy} w={0.5} h={0.5} size={16} bold align="center" valign="middle" color={K.accent}>{st[0]}</Txt>
-              <Txt l={rx + 0.7} t={sy} w={rw - 0.7} h={0.5} size={14} bold valign="middle" color={K.ink}>{st[1]}</Txt>
-            </React.Fragment>
-          );
-        })}
-        <div style={{ position: 'absolute', left: inch(rx), top: inch(5.55), width: inch(rw), height: pt(1), background: K.line }} />
-        <Ed l={rx} t={5.7} w={rw} h={0.5} size={15} bold lh={1.1} valign="top" color={K.ink}
-          value={dl.closingLine} path="deal.closingLine" editable={editable} onEdit={onEdit} />
-        <Ed l={rx} t={6.2} w={rw} h={0.4} size={12} valign="top" color={K.accent}
-          value={dl.contact} path="deal.contact" editable={editable} onEdit={onEdit} />
-        <Txt l={ML} t={7.06} w={6} h={0.3} size={8} spacing={1} valign="middle" color={K.faint}>{d.brand.lab}</Txt>
+          <div style={{ marginTop: u(30), display: 'flex', flexDirection: 'column', gap: u(13) }}>
+            <div style={{
+              fontSize: u(12), fontWeight: 800, color: K.muted,
+              textTransform: 'uppercase', letterSpacing: '.08em',
+            }}>{String(dl.nextLabel ?? '')}</div>
+            {steps.map((s, i) => (
+              <div key={i} style={{ display: 'flex', gap: u(13), alignItems: 'center' }}>
+                <span style={{
+                  width: u(28), height: u(28), flex: 'none', borderRadius: u(9),
+                  background: K.accentSoft, color: K.accent, fontWeight: 800, fontSize: u(14),
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>{String(s?.[0] ?? i + 1)}</span>
+                <span style={{ fontSize: u(18), color: D.ink2, minWidth: 0 }}>{String(s?.[1] ?? '')}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: u(14), flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: u(10), background: K.accent, color: '#FFFFFF',
+              borderRadius: u(12), padding: `${u(16)}px ${u(26)}px`, fontSize: u(20), fontWeight: 700,
+            }}>Request intro →</div>
+            <Editable
+              as="div" value={String(dl.contact ?? '')} path="deal.contact" editable={editable} onEdit={onEdit}
+              style={{ fontSize: u(15), color: K.faint }} />
+          </div>
+        </div>
+
+        <div style={{
+          flex: '.9', minWidth: 0, background: K.panel, border: `1px solid ${K.line}`,
+          borderRadius: u(18), padding: `${u(28)}px ${u(30)}px`, display: 'flex', flexDirection: 'column',
+        }}>
+          <div style={{
+            flex: 'none', fontSize: u(13), fontWeight: 800, color: K.muted,
+            textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: u(18),
+          }}>{String(dl.diligenceLabel ?? '')}</div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: u(13) }}>
+            {ready.map((r, i) => {
+              const st = state(r?.[1]);
+              const pending = st === 'pending';
+              const na = st === 'na';
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: u(13) }}>
+                  <span style={{
+                    width: u(28), height: u(28), flex: 'none', borderRadius: u(8),
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: u(14), fontWeight: 800, lineHeight: 1,
+                    background: na ? K.panel2 : pending ? '#FFFAF0' : D.greenBg,
+                    color: na ? K.faint : pending ? K.active : K.done,
+                  }}>{na ? '–' : pending ? '!' : '✓'}</span>
+                  <span style={{ flex: 1, fontSize: u(18), color: D.ink2, fontWeight: 500, minWidth: 0 }}>
+                    {String(r?.[0] ?? '')}
+                  </span>
+                  <span style={{
+                    flex: 'none', fontSize: u(13), fontWeight: 700,
+                    color: na ? K.faint : pending ? K.active : K.done,
+                  }}>{String(r?.[1] ?? '')}</span>
+                </div>
+              );
+            })}
+          </div>
+          {ready.length > 0 && (
+            <div style={{
+              flex: 'none', borderTop: `1px solid ${K.line}`, paddingTop: u(16), marginTop: u(8),
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <span style={{ fontSize: u(14), color: K.muted }}>Ready to share now</span>
+              <span style={{ fontSize: u(20), fontWeight: 900, color: K.ink }}>{settled} of {inScope.length}</span>
+            </div>
+          )}
+        </div>
+        <Footer brand={d.brand} />
       </div>
     </Slide16x9>
   );
