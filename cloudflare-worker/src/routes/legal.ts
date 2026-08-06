@@ -21,6 +21,11 @@ import {
   getIncorporationForUser,
 } from '../services/incorporations';
 import legal83b from './legal_83b';
+import {
+  validateCofounderAgreement,
+  renderCofounderAgreement,
+  totalEquityPct,
+} from '../services/cofounderAgreement';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -935,6 +940,75 @@ legal.put('/documents/:id/sign', async (c) => {
   const [updated] = await sql`SELECT * FROM documents WHERE id = ${id}`;
   await sql.end();
   return c.json(safeDoc(updated));
+});
+
+/**
+ * POST /legal/cofounder-agreement — generate a founder-terms agreement.
+ *
+ * This existed only in the Replit-dev FastAPI service, which CLAUDE.md is
+ * explicit is never deployed — so on production it 404'd for every caller and
+ * the Co-Founder Agreement tool's entire namesake action did nothing, on both
+ * /spinout-lab/cofounder-agreement and /incorporate/cofounder-agreement (they
+ * post the same payload to the same method).
+ *
+ * The document assembly lives in services/cofounderAgreement.ts, both so it is
+ * unit-testable without this file's heavy import graph — the same reason
+ * legal_83b is a sub-app — and so the template stays a local constant. It must
+ * NOT route through POST /templates/:key/generate: D1 already carries an active
+ * `cofounder_agreement` row in `legal_templates` with a different two-party
+ * {{dotted.path}} vocabulary, `getActiveTemplateBody` prefers the stored body
+ * over any inline one, and `applyMergeFields` leaves unresolved tokens as
+ * literals — so that path would hand a founder a legal document reading
+ * {{founder.legal_name}} with none of the terms they just entered.
+ */
+legal.post('/cofounder-agreement', async (c) => {
+  const user = await requireAuth(c);
+  const parsed = validateCofounderAgreement(await c.req.json().catch(() => null));
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const value = parsed.value;
+
+  const sql = getSQL(c.env);
+  const projRows = await sql`SELECT id, founder_id FROM projects WHERE id = ${value.project_id}`;
+  if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  const project = projRows[0] as any;
+
+  // Same rule as /incorporate/wizard, and the same rule the FastAPI original
+  // enforced: admin/partner, or the founder who owns this project. Investors
+  // are NOT privileged on this write path — a co-founder agreement records who
+  // owns the company, so writing one against a project you do not own is a
+  // cross-project IDOR, not a read-path convenience.
+  if (user.role !== 'admin' && user.role !== 'partner') {
+    const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
+    if (!ownsProject) {
+      await sql.end();
+      return c.json({ error: 'Forbidden: you do not own this project' }, 403);
+    }
+  }
+
+  const content = renderCofounderAgreement(value);
+  const title = `Co-Founder Agreement — ${value.company_name}`;
+  // `template_name` must stay exactly 'cofounder_agreement': the Lab page
+  // refreshes its list after generating and filters on that literal, so any
+  // other value saves the document but hides it from the founder.
+  const [doc] = await sql`
+    INSERT INTO documents (project_id, title, doc_type, status, content, template_name)
+    VALUES (${project.id}, ${title}, 'other', 'generated', ${content}, 'cofounder_agreement')
+    RETURNING id, uid, title, template_name`;
+  await sql.end();
+
+  // The /incorporate page dereferences `result.document.title` unguarded, so
+  // this envelope (and the 200, not 201) is part of the contract.
+  return c.json({
+    ok: true,
+    document: doc,
+    summary: {
+      founders: value.founders.length,
+      total_equity_pct: totalEquityPct(value.founders),
+      vesting_years: value.vesting_years,
+      cliff_months: value.cliff_months,
+      acceleration: value.acceleration,
+    },
+  });
 });
 
 legal.get('/entities', async (c) => {

@@ -57,7 +57,6 @@
     "POST /api/engagements/:p/reviews",
     "POST /api/engagements/:p/start",
     "POST /api/investor-profile/me/opt-out",
-    "POST /api/legal/cofounder-agreement",
     "POST /api/legal/documents/generate",
     "POST /api/legal/incorporate",
     "POST /api/legal/spinout/:p",
