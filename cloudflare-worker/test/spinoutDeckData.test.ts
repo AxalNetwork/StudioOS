@@ -423,7 +423,7 @@ test('captable readiness checklist stays tied to holders, not sim_segments', () 
 
 test('a scored project shows the tier on the validation card, raises no scoring gap', () => {
   const src = makeFullSrc(); // venture_readiness: { total_score: '78', tier: 'A', ... }
-  const { data, gaps, gapFields } = mapToSpinoutDeckData(src);
+  const { data, gaps } = mapToSpinoutDeckData(src);
 
   assert.ok(data.validation.cards.length <= 4, 'never more than 4 cards — the renderer lays out exactly 4 slots');
   const scoreCard = data.validation.cards[data.validation.cards.length - 1];
