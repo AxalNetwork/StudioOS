@@ -21,7 +21,7 @@ const METRICS = [
   { value: 38, label: 'Spin-Outs Completed' },
   { value: 1200, label: 'Deals Scored', suffix: '+' },
   { value: 200, label: 'Venture Partners', suffix: '+' },
-  { value: 30, label: 'Days Average' },
+  { value: 28, label: 'Days Average' },
 ];
 
 const PAIN_POINTS = [
@@ -46,7 +46,7 @@ const SOLUTION_PILLARS = [
   {
     icon: Rocket,
     title: 'Spin-Out Lab',
-    desc: '30-day structured sprint: idea to Delaware C-Corp with cap table, 83(b) election, and pitch deck. Advisor-guided, milestone-driven.',
+    desc: '28-day structured sprint: idea to Delaware C-Corp with cap table, 83(b) election, and pitch deck. Advisor-guided, milestone-driven.',
     tag: 'Flagship',
   },
   {
@@ -170,7 +170,7 @@ const FAQS = [
     a: "Apply anyway. We assess founder-market fit, not idea maturity. If you are not ready for the Lab, we will tell you exactly what to do first and when to reapply.",
   },
   {
-    q: 'What happens after 30 days?',
+    q: 'What happens after 28 days?',
     a: 'You leave with a Delaware C-Corp (or equivalent), cap table, 83(b) election, pitch deck, venture-readiness score, and three warm investor intros — if you qualify. Alumni access to the network is lifetime.',
   },
 ];
