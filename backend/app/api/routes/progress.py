@@ -152,6 +152,8 @@ def _compute_lifecycle_signals(session: Session, project_id: int) -> dict:
         "monthly_churn_pct": None,
         "new_users": None,
         "active_prospects": 0,
+        "mvp_features_count": 0,
+        "has_launch_activity": False,
     }
     try:
         row = session.exec(text(
@@ -187,6 +189,21 @@ def _compute_lifecycle_signals(session: Session, project_id: int) -> dict:
         out["active_prospects"] = int(row["n"]) if row and row.get("n") is not None else 0
     except Exception:
         logger.debug("lifecycle: raise_prospects count failed", exc_info=True)
+    try:
+        row = session.exec(text(
+            "SELECT COUNT(*) AS n FROM mvp_features WHERE project_id = :pid"
+        ), params={"pid": project_id}).mappings().first()
+        out["mvp_features_count"] = int(row["n"]) if row and row.get("n") is not None else 0
+    except Exception:
+        logger.debug("lifecycle: mvp_features count failed", exc_info=True)
+    try:
+        row = session.exec(text(
+            "SELECT COUNT(*) AS n FROM activity_logs "
+            "WHERE project_id = :pid AND action IN ('launch', 'product_launch', 'go_live')"
+        ), params={"pid": project_id}).mappings().first()
+        out["has_launch_activity"] = bool(row and int(row.get("n") or 0) > 0)
+    except Exception:
+        logger.debug("lifecycle: activity_logs launch lookup failed", exc_info=True)
     return out
 
 
@@ -195,6 +212,10 @@ def _infer_stage_from_signals(s: dict) -> str:
         return "raise"
     if (s["latest_mrr"] or 0) > 0:
         return "grow"
+    if s.get("has_launch_activity"):
+        return "launch"
+    if (s.get("mvp_features_count") or 0) > 0:
+        return "build"
     if s["landing_published"] and s["interview_count"] >= 5:
         return "validate"
     return "idea"
