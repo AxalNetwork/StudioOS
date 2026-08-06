@@ -43,7 +43,7 @@
 import React from 'react';
 import type { DeckProps } from '../DeckBase';
 import { Slide16x9, Editable } from '../DeckBase';
-import { THEME, SAMPLE_DATA as SPINOUT_SAMPLE_DATA } from '../spinout/deckData';
+import { SAMPLE_DATA as SPINOUT_SAMPLE_DATA } from '../spinout/deckData';
 
 /* ─────────────────────────── sample re-export ─────────────────────────── */
 // Re-exported so `sample.ts::previewDataFor('axal_spinout_demoday')` and the
@@ -72,12 +72,20 @@ const pt = (n: number) => n * 2;  // 1 point → 2 px    (1920 / 960pt)
 const W = 13.33, MARGIN = 0.7, CW = W - MARGIN * 2;
 const ML = MARGIN;
 
-const K = Object.fromEntries(
-  Object.entries(THEME.color).map(([k, v]) => [k, `#${v}`]),
-) as Record<keyof typeof THEME.color, string>;
+/* The renderer is intentionally self contained: the approved NovaCraft
+ * reference uses a warm-violet system rather than the legacy BASEPOINT blue. */
+const K = {
+  ink: '#171321', body: '#4E4A59', muted: '#727080', faint: '#A8A5B1',
+  line: '#E7E5EA', panel: '#F7F7F9', panel2: '#EEEFF3', white: '#FCFCFD',
+  accent: '#6B46C1', accentSoft: '#F0ECFF', accentMid: '#B9A5F4',
+  dbg: '#09080D', dpanel: '#17132D', dline: '#2D2747',
+  dmuted: '#BDB4D8', dfaint: '#71698A', accentLt: '#8B5CF6',
+  done: '#3BA477', active: '#D58A16', pending: '#AAB0BA',
+} as const;
 
-const FF = 'Arial, "Helvetica Neue", Helvetica, system-ui, sans-serif';
-const SERIF = 'Georgia, "Times New Roman", serif';
+const FF = '"Inter", "Helvetica Neue", system-ui, sans-serif';
+const SERIF = '"Inter", system-ui, sans-serif';
+const MONO = '"Roboto Mono", ui-monospace, SFMono-Regular, monospace';
 
 type OnEdit = (path: string, value: string) => void;
 type Data = Record<string, any>;
@@ -211,7 +219,7 @@ const Rect: React.FC<{
     position: 'absolute', left: inch(l), top: inch(t), width: inch(w), height: inch(h),
     background: fill, borderRadius: inch(r),
     border: line === false ? 'none' : `${pt(lineW)}px solid ${line}`,
-    boxShadow: shadow ? '2px 2px 9px rgba(0,0,0,0.10)' : undefined, zIndex: z,
+  boxShadow: shadow ? '0 1px 3px rgba(23,19,33,0.035)' : undefined, zIndex: z,
   }} />
 );
 
@@ -308,7 +316,7 @@ const Eyebrow: React.FC<{ label: string; idx: string; dark?: boolean }> = ({ lab
 );
 
 const Title: React.FC<{ text: any; path: string; editable?: boolean; onEdit?: OnEdit; w?: number }> = ({ text, path, editable, onEdit, w }) => (
-  <Ed l={ML} t={1.05} w={w || 11.5} h={0.95} size={29} bold color={K.ink} lh={1.04} valign="top" value={text} path={path} editable={editable} onEdit={onEdit} />
+  <Ed l={ML} t={1.05} w={w || 11.5} h={0.95} size={27} bold color={K.ink} lh={1.04} valign="top" value={text} path={path} editable={editable} onEdit={onEdit} />
 );
 
 const Footer: React.FC<{ brand: any; dark?: boolean }> = ({ brand, dark }) => {
@@ -387,30 +395,24 @@ type SlideProps = { d: Data; editable?: boolean; onEdit?: OnEdit };
 const SlideCover: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   const c = d.cover, brand = d.brand;
   const sigY: number[] = Array.isArray(c.signalY) ? c.signalY : [];
-  const last = sigY.length ? sigY[sigY.length - 1] : '';
   return (
     <Slide16x9 bg={K.dbg} ink={K.white} font={FF}>
       <div style={{ position: 'absolute', inset: 0 }}>
-        <Txt l={ML} t={0.5} w={8} h={0.3} size={11} bold spacing={1.5} valign="middle" color={K.dmuted}>{brand.lab}</Txt>
-        <Txt l={W - MARGIN - 5} t={0.5} w={5} h={0.3} size={11} bold spacing={1} align="right" valign="middle" color={K.accentLt}>{c.eyebrowRight}</Txt>
-
-        <Ed l={ML} t={1.95} w={7.6} h={0.4} size={15} bold spacing={2} color={K.accentLt} value={c.company} path="cover.company" editable={editable} onEdit={onEdit} />
-        <Ed l={ML} t={2.45} w={7.5} h={2.6} size={33} bold lh={1.06} color={K.white} valign="top" value={c.thesis} path="cover.thesis" editable={editable} onEdit={onEdit} />
-
-        <Txt l={8.7} t={2.2} w={4.0} h={0.3} size={9.5} bold spacing={1} color={K.dmuted}>{c.signalLabel}</Txt>
-        <AreaChart l={8.55} t={2.55} w={4.25} h={2.5} values={sigY} labels={c.signalX} color={K.accentLt} />
-        <Txt l={11.85} t={2.62} w={0.95} h={0.35} size={16} bold align="right" color={K.accentLt}>{String(last)}</Txt>
-        <Txt l={8.55} t={5.5} w={4.25} h={0.3} size={9} italic color={K.dfaint} face={SERIF}>{c.signalCaption}</Txt>
-
+        <div style={{position:'absolute',left:inch(-1),top:inch(-2.25),width:inch(8.3),height:inch(3.35),borderRadius:'50%',background:'#8B5CF6',transform:'rotate(-7deg)'}} />
+        <Rect l={ML} t={0.76} w={0.5} h={0.5} r={0.12} fill={K.accentLt} line={false} shadow={false} />
+        <Txt l={ML} t={0.76} w={0.5} h={0.5} size={14} bold align="center" valign="middle" color={K.white}>N</Txt>
+        <Txt l={ML + 0.7} t={0.76} w={3} h={0.5} size={11} color={K.dmuted} valign="middle">{c.company}</Txt>
+        <Rect l={10.55} t={0.8} w={1.8} h={0.32} r={0.16} fill={K.dbg} line={K.dline} shadow={false} />
+        <Txt l={10.65} t={0.8} w={1.6} h={0.32} size={8.5} face={MONO} color={K.dmuted} align="center" valign="middle">{c.eyebrowRight}</Txt>
+        <Ed l={ML} t={2.3} w={8.3} h={0.8} size={40} bold lh={1} color={K.white} value={c.company} path="cover.company" editable={editable} onEdit={onEdit} />
+        <Ed l={ML} t={3.05} w={8.2} h={0.8} size={16} color="#D8D0F1" lh={1.16} value={c.thesis} path="cover.thesis" editable={editable} onEdit={onEdit} />
         {(Array.isArray(c.meta) ? c.meta : []).map((m: [string, string], i: number) => {
-          const x = ML + i * 2.95;
-          return (
-            <React.Fragment key={i}>
-              <Txt l={x} t={6.05} w={2.6} h={0.25} size={9} bold spacing={1} color={K.dfaint}>{m[0]}</Txt>
-              <Txt l={x} t={6.32} w={2.6} h={0.4} size={15} bold color={K.white}>{m[1]}</Txt>
-            </React.Fragment>
-          );
+          const x = ML + i * 2.92;
+          return <React.Fragment key={i}><Rect l={x} t={4.25} w={2.55} h={0.56} r={0.1} fill="#14121B" line="#272433" shadow={false} /><Txt l={x + .18} t={4.35} w={2.2} h={.15} size={7} bold spacing={.8} color={K.accentLt}>{m[0]}</Txt><Txt l={x + .18} t={4.55} w={2.2} h={.18} size={11} bold color={K.white}>{m[1]}</Txt></React.Fragment>;
         })}
+        <div style={{position:'absolute',left:inch(ML),top:inch(5.15),width:inch(11.65),height:pt(1),background:'#272433'}} />
+        <Txt l={ML} t={5.38} w={2} h={.2} size={7.5} bold spacing={1} color={K.accentLt}>DISCOVERY TO DATE</Txt>
+        {sigY.slice(-4).map((n,i)=><React.Fragment key={i}><Txt l={2.35+i*1.15} t={5.29} w={.35} h={.3} size={15} bold color={K.white}>{String(n)}</Txt><Txt l={2.78+i*1.15} t={5.4} w={.75} h={.2} size={8} color={K.dmuted}>{['Customers','Advisors','Co-founders','Investors'][i]}</Txt></React.Fragment>)}
       </div>
     </Slide16x9>
   );
@@ -1007,7 +1009,7 @@ const SlideProductDemo: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   );
 };
 
-/* 11 — REVIEW THE DEAL / DEAL READINESS (dark) */
+/* 11 — REVIEW THE DEAL / DEAL READINESS */
 // Slot 11, the closing slide. Mirrors `deal()` in buildDeck.js 1:1: a dark
 // frame with the diligence checklist on the left, numbered next-steps on the
 // right, then the closing line + contact. Title / closing line / contact are
@@ -1019,42 +1021,42 @@ const SlideDealReadiness: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
   const lx = ML, lw = 6.0;
   const rx = 7.35, rw = 5.25;
   return (
-    <Slide16x9 bg={K.dbg} ink={K.white} font={FF}>
+    <Slide16x9 bg={K.white} ink={K.ink} font={FF}>
       <div style={{ position: 'absolute', inset: 0 }}>
-        <Eyebrow label={dl.eyebrow} idx={dl.idx} dark />
-        <Ed l={ML} t={1.05} w={11.5} h={0.95} size={30} bold lh={1.04} valign="top" color={K.white}
+        <Eyebrow label={dl.eyebrow} idx={dl.idx} />
+        <Ed l={ML} t={1.05} w={5.7} h={0.95} size={30} bold lh={1.04} valign="top" color={K.ink}
           value={dl.title} path="deal.title" editable={editable} onEdit={onEdit} />
-
-        <Txt l={lx} t={2.15} w={lw} h={0.3} size={10} bold spacing={1} color={K.accentLt}>{dl.diligenceLabel}</Txt>
+        <Txt l={lx} t={2.15} w={lw} h={0.3} size={10} bold spacing={1} color={K.muted}>{dl.diligenceLabel}</Txt>
         {ready.map((r, i) => {
           const ry = 2.6 + i * 0.66;
           return (
             <React.Fragment key={i}>
-              <Rect l={lx} t={ry} w={lw} h={0.55} r={0.06} fill={K.dpanel} line={K.dline} shadow={false} />
-              <Oval l={lx + 0.22} t={ry + 0.185} d={0.18} fill={K.accentLt} shadow={false} />
-              <Txt l={lx + 0.6} t={ry} w={lw - 2.3} h={0.55} size={13} bold valign="middle" color={K.white}>{r[0]}</Txt>
-              <Txt l={lx + lw - 1.85} t={ry} w={1.7} h={0.55} size={12} bold align="right" valign="middle" color={K.dmuted}>{r[1]}</Txt>
+              <Rect l={lx} t={ry} w={lw} h={0.55} r={0.06} fill={K.panel} line={K.line} shadow={false} />
+              <Oval l={lx + 0.22} t={ry + 0.185} d={0.18} fill={K.accentSoft} shadow={false} />
+              <Txt l={lx + 0.6} t={ry} w={lw - 2.3} h={0.55} size={13} bold valign="middle" color={K.ink}>{r[0]}</Txt>
+              <Txt l={lx + lw - 1.85} t={ry} w={1.7} h={0.55} size={12} bold align="right" valign="middle" color={r[1] === 'Open' || r[1] === 'Included' ? K.done : K.active}>{r[1]}</Txt>
             </React.Fragment>
           );
         })}
 
-        <Txt l={rx} t={2.15} w={rw} h={0.3} size={10} bold spacing={1} color={K.accentLt}>{dl.nextLabel}</Txt>
+        <Rect l={rx - .28} t={1.0} w={5.0} h={5.9} r={0.12} fill={K.panel} line={K.line} shadow={false} />
+        <Txt l={rx} t={2.15} w={rw} h={0.3} size={10} bold spacing={1} color={K.muted}>{dl.nextLabel}</Txt>
         {steps.map((st, i) => {
           const sy = 2.6 + i * 0.85;
           return (
             <React.Fragment key={i}>
-              <Oval l={rx} t={sy} d={0.5} fill={K.accent} shadow={false} />
-              <Txt l={rx} t={sy} w={0.5} h={0.5} size={16} bold align="center" valign="middle" color={K.white}>{st[0]}</Txt>
-              <Txt l={rx + 0.7} t={sy} w={rw - 0.7} h={0.5} size={14} bold valign="middle" color={K.white}>{st[1]}</Txt>
+              <Oval l={rx} t={sy} d={0.5} fill={K.accentSoft} shadow={false} />
+              <Txt l={rx} t={sy} w={0.5} h={0.5} size={16} bold align="center" valign="middle" color={K.accent}>{st[0]}</Txt>
+              <Txt l={rx + 0.7} t={sy} w={rw - 0.7} h={0.5} size={14} bold valign="middle" color={K.ink}>{st[1]}</Txt>
             </React.Fragment>
           );
         })}
-        <div style={{ position: 'absolute', left: inch(rx), top: inch(5.55), width: inch(rw), height: pt(1), background: K.dline }} />
-        <Ed l={rx} t={5.7} w={rw} h={0.5} size={15} bold lh={1.1} valign="top" color={K.white}
+        <div style={{ position: 'absolute', left: inch(rx), top: inch(5.55), width: inch(rw), height: pt(1), background: K.line }} />
+        <Ed l={rx} t={5.7} w={rw} h={0.5} size={15} bold lh={1.1} valign="top" color={K.ink}
           value={dl.closingLine} path="deal.closingLine" editable={editable} onEdit={onEdit} />
-        <Ed l={rx} t={6.2} w={rw} h={0.4} size={12} valign="top" color={K.accentLt}
+        <Ed l={rx} t={6.2} w={rw} h={0.4} size={12} valign="top" color={K.accent}
           value={dl.contact} path="deal.contact" editable={editable} onEdit={onEdit} />
-        <Txt l={ML} t={7.06} w={6} h={0.3} size={8} spacing={1} valign="middle" color={K.dfaint}>{d.brand.lab}</Txt>
+        <Txt l={ML} t={7.06} w={6} h={0.3} size={8} spacing={1} valign="middle" color={K.faint}>{d.brand.lab}</Txt>
       </div>
     </Slide16x9>
   );
