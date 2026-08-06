@@ -681,8 +681,8 @@ def _waitlist_outreach(kind: str, project_id: int, signup_id: int, session: Sess
     # Gmail) is a SOFT path that still records the CRM action.
     email_sent = False
     email_reason: Optional[str] = None
-    if email_service._is_gmail_configured():
-        ok = email_service._send_html_email(
+    if email_service.is_gmail_configured():
+        ok = email_service.send_html_email(
             to_email=signup["email"], subject=subject, html_body=html,
             plain_text=plain, sender_label=product_name, reply_to="support@axal.vc",
         )
