@@ -30,6 +30,10 @@ const PHASE_ACCENTS = {
 // Lucide equivalents, by row, for the shared deliverables list (the brief
 // keeps its lighter 15px icon treatment; names/descriptions come from
 // deliverablesFor so the jurisdiction-derived rows stay in sync).
+// Intentionally 8 icons: the shared DELIVERABLES source currently has a 9th
+// "Verified Badge" row, but this brief only shows produced work-product
+// deliverables. We therefore omit that conferred-status item and slice to this
+// icon count on purpose.
 const DELIVERABLE_ICONS = [Building2, PieChart, FileCheck2, Presentation, LineChart, Handshake, Users, FolderOpen];
 
 export default function SpinoutLabBriefPage() {
