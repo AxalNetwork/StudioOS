@@ -35,6 +35,8 @@ const DELIVERABLE_ICONS = [Building2, PieChart, FileCheck2, Presentation, LineCh
 export default function SpinoutLabBriefPage() {
   const [searchParams] = useSearchParams();
   const juris = labJurisdiction(searchParams.get("j"));
+  // Intentional: this compact brief shows only the 8 produced deliverables with icons.
+  // The final shared row ("Verified Badge") is conferred rather than produced, so it is omitted here.
   const deliverables = deliverablesFor(juris.key).slice(0, DELIVERABLE_ICONS.length);
 
   // The track-record slide used to be three string literals — "12 companies",
