@@ -24,6 +24,7 @@ import assert from 'node:assert/strict';
 import { mapToSpinoutDeckData, flattenSpinoutDeckData } from '../src/services/decks/spinoutDeckData.ts';
 import type { SpinoutDeckData } from '../src/services/decks/spinoutDeckData.ts';
 import type { SpinoutDemoDayData } from '../src/services/decks/axalSpinoutDemoDay.ts';
+import { SPINOUT_OVERRIDABLE_KEYS } from '../src/services/decks/spinoutDeckOverrides.ts';
 
 const SLIDE_KEYS = [
   'brand', 'cover', 'problem', 'validation', 'market',
@@ -408,6 +409,66 @@ test('captable readiness checklist stays tied to holders, not sim_segments', () 
   assert.ok(recorded && recorded[1] === 'pending', 'checklist still reflects the holders table');
   // …yet the donut already shows the simulator segments.
   assert.deepEqual(data.captable.segments, [['Founders', 100]], 'donut uses sim_segments');
+});
+
+/* ============================================================================
+ *  Venture score on the Validation slide.
+ *
+ *  score_snapshots (via src.venture_readiness) is the Lab's most rigorously
+ *  verified figure — HMAC-signed, anomaly-checked, LP-visible — and used to
+ *  reach no slide at all. These tests pin its one appearance: a 4th card on
+ *  Validation, capped so the renderer's fixed-width card row never overflows,
+ *  honest about an unscored project, and never eligible for a manual override.
+ * ========================================================================== */
+
+test('a scored project shows the tier on the validation card, raises no scoring gap', () => {
+  const src = makeFullSrc(); // venture_readiness: { total_score: '78', tier: 'A', ... }
+  const { data, gaps, gapFields } = mapToSpinoutDeckData(src);
+
+  assert.ok(data.validation.cards.length <= 4, 'never more than 4 cards — the renderer lays out exactly 4 slots');
+  const scoreCard = data.validation.cards[data.validation.cards.length - 1];
+  assert.equal(scoreCard[0], '78', 'the score card leads with the bare numeric score');
+  assert.match(scoreCard[1], /Axal score/, 'the score card names itself');
+  assert.ok(!gaps.some((g) => /run an official venture score/.test(g)), 'a real score raises no scoring gap');
+});
+
+test('an unscored project (real production shape) shows a placeholder card and a gap', () => {
+  const src = makeFullSrc();
+  // axalSpinoutDemoDay.ts's actual shape for a never-scored project: DASH
+  // placeholders, not an absent object — score_snapshots has no matching row.
+  src.venture_readiness = {
+    eyebrow: '07 · Venture readiness', headline: 'Axal score — to be run in Week 2.',
+    total_score: '—', tier: '—', is_sandbox: false, breakdown: [], ai_notes: '—',
+  };
+  const { data, gaps, gapFields, gapSections } = mapToSpinoutDeckData(src);
+
+  const scoreCard = data.validation.cards[data.validation.cards.length - 1];
+  assert.deepEqual(scoreCard, ['—', 'Axal score · not yet run'], 'DASH placeholder, not a fabricated score');
+  const idx = gaps.findIndex((g) => /run an official venture score/.test(g));
+  assert.ok(idx >= 0, 'an unscored project raises a scoring gap');
+  assert.equal(gapSections![idx], 'validation', 'filed under the validation slide');
+  assert.equal(gapFields![idx], null, 'no field is tagged — see below, this must never become overridable');
+});
+
+test('a project with no venture_readiness object at all degrades the same way', () => {
+  // Mirrors the "empty project" fixture style used elsewhere in this file —
+  // a test double that omits whole sections, not just blanks their strings.
+  const src = { ...makeFullSrc(), venture_readiness: undefined } as unknown as SpinoutDemoDayData;
+  const { data, gaps } = mapToSpinoutDeckData(src);
+  const scoreCard = data.validation.cards[data.validation.cards.length - 1];
+  assert.equal(scoreCard[0], '—', 'a missing venture_readiness reads as unscored, not a crash');
+  assert.ok(gaps.some((g) => /run an official venture score/.test(g)));
+});
+
+test('the score is never on the deck-override allowlist', () => {
+  // The whole point of surfacing this figure is that it is NOT founder-
+  // authored copy. If a future edit ever adds a validation.cards-shaped key
+  // to SPINOUT_OVERRIDABLE_KEYS, a typed-in number could impersonate a
+  // cryptographically signed one — assert the allowlist stays scalars-only
+  // and does not reach into the cards array.
+  for (const key of SPINOUT_OVERRIDABLE_KEYS) {
+    assert.ok(!key.startsWith('validation.cards'), `"${key}" would let a founder type over the venture score`);
+  }
 });
 
 /* ============================================================================

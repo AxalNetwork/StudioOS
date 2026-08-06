@@ -157,6 +157,12 @@ const pctNum = (v: unknown): number => {
   return Number.isFinite(n) ? clamp(Math.round(n), 0, 100) : 0;
 };
 
+// Short deck-card form of a score_snapshots.tier code (classifyTier() in
+// ../scoring.ts). Deliberately NOT the full tierLabel() sentence ("Tier 1 —
+// Immediate Spinout") — a slide card has room for a word, not a clause. Falls
+// through to the raw code for anything unrecognized rather than hiding it.
+const TIER_SHORT: Record<string, string> = { TIER_1: 'Tier 1', TIER_2: 'Tier 2', REJECT: 'Reject' };
+
 const initialsOf = (name: string): string => {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return '—';
@@ -392,6 +398,34 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   let cards: Array<[string, string]>;
   if (metrics.length) cards = metrics.slice(0, 4).map((mc) => [String(mc.value ?? DASH), String(mc.label ?? '')] as [string, string]);
   else { cards = FALLBACK.cards; }
+
+  // Venture score — the Scoring module's latest OFFICIAL (non-sandbox),
+  // HMAC-signed result (score_snapshots, read by fillAxalSpinoutDemoDay into
+  // src.venture_readiness). It is the single most rigorously verified figure
+  // anywhere in the Lab, and until now reached no slide at all: this mapper
+  // has 11 slides and none of them read venture_readiness. Validation is
+  // where it belongs — the slide's whole job is "how validated is this
+  // venture", and the platform's own scored verdict is exactly that, not a
+  // twelfth thing bolted beside the interview metrics.
+  //
+  // Never put this behind an override. SPINOUT_OVERRIDABLE_KEYS
+  // (spinoutDeckOverrides.ts) is scalars-only by design for exactly this
+  // reason: a typed-in "94/100" would defeat the point of a cryptographically
+  // signed one. Capped at one extra card (not appended unconditionally) —
+  // the renderer lays validation.cards out at fixed x-offsets sized for
+  // exactly 4 (axal_spinout_demoday_app.tsx / buildDeck.js), so a 5th card
+  // would run off the right edge of the slide.
+  const vrScore = src.venture_readiness?.total_score;
+  const vrTier = src.venture_readiness?.tier;
+  const scoreNum = has(vrScore) ? String(vrScore).match(/\d+/)?.[0] : undefined;
+  let scoreCard: [string, string];
+  if (scoreNum && has(vrTier)) {
+    scoreCard = [scoreNum, `${TIER_SHORT[vrTier as string] || vrTier} · Axal score`];
+  } else {
+    scoreCard = [DASH, 'Axal score · not yet run'];
+    gap('Validation: run an official venture score in the Scoring module.', null, 'validation');
+  }
+  cards = [...cards.slice(0, 3), scoreCard];
 
   let stages: Array<[string, number]>;
   let conversion: [string, string];
