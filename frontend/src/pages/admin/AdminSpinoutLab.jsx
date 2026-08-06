@@ -616,6 +616,66 @@ function ParticipantsSection({ participants, catalog, loading, onOpenWorkspace, 
 // ---------------------------------------------------------------------------
 // Page shell
 // ---------------------------------------------------------------------------
+/**
+ * Catch-up issuance for graduates who finished before graduation started
+ * issuing certificates automatically.
+ *
+ * Graduating now issues the credential on the spot, so this exists only for
+ * the backlog. It is idempotent — it runs the same per-founder path the live
+ * hook does and skips anyone already holding one — so pressing it twice is
+ * harmless, and it is bounded per call, which is why it reports `remaining`
+ * instead of claiming the queue is drained.
+ */
+function CertificateBackfillRow() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function run() {
+    setBusy(true);
+    setError(null);
+    try {
+      setResult(await api.spinoutCertificateBackfill(100));
+    } catch (e) {
+      reportError('admin:certificate-backfill', e);
+      setError('Backfill failed. See logs.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="mt-5 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap items-center justify-between gap-3"
+      data-testid="certificate-backfill"
+    >
+      <div className="min-w-0">
+        <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Graduation certificates</div>
+        <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5">
+          Issued automatically on graduation. Run this once to cover graduates who finished before that existed.
+        </div>
+        {result ? (
+          <div className="text-[11.5px] text-gray-600 dark:text-gray-300 mt-1.5 tabular-nums" data-testid="backfill-result">
+            Issued {result.issued} of {result.scanned} scanned
+            {result.skipped ? <> · {result.skipped} skipped</> : null}
+            {result.remaining ? <> · <span className="font-semibold">{result.remaining}+ still pending — run again</span></> : null}
+          </div>
+        ) : null}
+        {error ? <div className="text-[11.5px] text-red-600 dark:text-red-400 mt-1.5">{error}</div> : null}
+      </div>
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy}
+        data-testid="button-backfill-certificates"
+        className="flex-none h-9 px-3.5 rounded-lg border border-gray-300 dark:border-gray-600 text-[12.5px] font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+      >
+        {busy ? 'Issuing…' : 'Backfill certificates'}
+      </button>
+    </div>
+  );
+}
+
 export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
   const navigate = useNavigate();
   const [section, setSection] = useState('applications');
@@ -733,13 +793,16 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
       ) : section === 'cycles' ? (
         <AdminCohortApplications />
       ) : (
-        <ParticipantsSection
-          participants={participants}
-          catalog={catalog}
-          loading={loading}
-          onOpenWorkspace={openWorkspace}
-          openingId={openingId}
-        />
+        <>
+          <ParticipantsSection
+            participants={participants}
+            catalog={catalog}
+            loading={loading}
+            onOpenWorkspace={openWorkspace}
+            openingId={openingId}
+          />
+          <CertificateBackfillRow />
+        </>
       )}
     </div>
   );

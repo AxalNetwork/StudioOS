@@ -478,6 +478,13 @@ export const api = {
     request(`/spinout-lab/certificates/${id}/revoke`, {
       method: 'POST', body: JSON.stringify({ reason: reason || null }),
     }),
+  // Catch-up issuance for graduates who finished before auto-issuance
+  // existed. Admin-only, idempotent, and bounded per call — the response
+  // reports `remaining` so the caller knows whether to run it again.
+  spinoutCertificateBackfill: (limit) =>
+    request('/spinout-lab/certificates/backfill', {
+      method: 'POST', body: JSON.stringify({ limit: limit || 100 }),
+    }),
   // Public, unauthenticated: returns only the public_* snapshot.
   publicVerifyCertificate: (token) =>
     request(`/public/verify/${encodeURIComponent(token)}`),
