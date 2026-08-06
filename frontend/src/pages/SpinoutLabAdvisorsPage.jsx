@@ -505,6 +505,22 @@ export default function SpinoutLabAdvisorsPage() {
         weekChip={`Unlocked · Wk ${week}`}
       />
 
+      {/* Disambiguation against Office Hours.
+          The Lab has two "book an expert" surfaces and they share no tables:
+          this one books an INDIVIDUAL advisor, matched to the skill gaps in
+          your latest scoring run, and completing a booking satisfies the
+          Week-3 REQUIRED milestone. /spinout-lab/office-hours books PARTNER
+          ORGANISATIONS — investors, lawyers, operators — on an optional
+          milestone. The split is deliberate, but nothing on either page said
+          so, and a founder who picked wrong either missed a required
+          milestone or hit a tier gate they didn't need. */}
+      <p className="mb-4 text-[12.5px] text-gray-500 dark:text-gray-400" data-testid="xlink-office-hours">
+        Looking for an investor, lawyer, or operator instead?{' '}
+        <Link to="/spinout-lab/office-hours" className="font-semibold text-violet-600 dark:text-violet-400 hover:underline">
+          Book partner Office Hours →
+        </Link>
+      </p>
+
       {/* Gap diagnosis strip — from the latest real scoring run */}
       <div className={CARD} data-testid="card-gaps">
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
