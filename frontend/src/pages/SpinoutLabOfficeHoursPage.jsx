@@ -331,19 +331,24 @@ export default function SpinoutLabOfficeHoursPage() {
   }, [partners]);
 
   const allBookings = bookings?.items || [];
-  const now = Date.now();
   // Bookings without a start time (Worker DTO omits it) stay "upcoming" while
   // active — never silently dropped.
   const startMs = (b) => {
     const t = new Date(b.scheduled_start || '').getTime();
     return Number.isFinite(t) ? t : null;
   };
-  const upcoming = useMemo(() => allBookings
-    .filter((b) => ['requested', 'confirmed'].includes(b.status) && (startMs(b) === null || startMs(b) > now))
-    .sort((a, b) => (startMs(a) ?? Infinity) - (startMs(b) ?? Infinity)), [allBookings, now]);
-  const past = useMemo(() => allBookings
-    .filter((b) => b.status === 'completed' || (b.status !== 'cancelled' && startMs(b) !== null && startMs(b) <= now))
-    .sort((a, b) => (startMs(b) ?? 0) - (startMs(a) ?? 0)), [allBookings, now]);
+  const upcoming = useMemo(() => {
+    const now = Date.now();
+    return allBookings
+      .filter((b) => ['requested', 'confirmed'].includes(b.status) && (startMs(b) === null || startMs(b) > now))
+      .sort((a, b) => (startMs(a) ?? Infinity) - (startMs(b) ?? Infinity));
+  }, [allBookings]);
+  const past = useMemo(() => {
+    const now = Date.now();
+    return allBookings
+      .filter((b) => b.status === 'completed' || (b.status !== 'cancelled' && startMs(b) !== null && startMs(b) <= now))
+      .sort((a, b) => (startMs(b) ?? 0) - (startMs(a) ?? 0));
+  }, [allBookings]);
   const completedCount = allBookings.filter((b) => b.status === 'completed').length;
   // Counts ONLY requests the partner hasn't answered yet. It deliberately does
   // not include confirmed future sessions — those are already counted by the
