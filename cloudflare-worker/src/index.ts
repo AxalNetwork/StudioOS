@@ -209,6 +209,7 @@ import consultations, { adminConsultations } from './routes/consultations';
 import adminBestFit from './routes/admin_bestfit';
 // Task #9 — Admin review queue for 'exploring' users (binding e-sign + role assignment).
 import adminExploring from './routes/admin_exploring';
+import adminLpApplications from './routes/admin_lp_applications';
 import bestFitSelf from './routes/best_fit';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
@@ -712,6 +713,8 @@ app.route('/api/admin/best-fit', adminBestFit);
 // Task #9 — Exploring-users review queue. Mount BEFORE the catch-all
 // /api/admin so /api/admin/exploring/* resolves here. requireAdmin per-route.
 app.route('/api/admin/exploring', adminExploring);
+// GP review queue for Spin-Out Fund I LP applications. requireAdmin per-route.
+app.route('/api/admin/lp-applications', adminLpApplications);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);

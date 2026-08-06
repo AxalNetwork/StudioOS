@@ -67,6 +67,7 @@ const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 // Task #9 — 'exploring' holding-state surfaces.
 const ExploringDashboard = lazy(() => import('./pages/ExploringDashboard'));
 const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
+const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminSpinoutLab = lazy(() => import('./pages/admin/AdminSpinoutLab'));
@@ -1539,6 +1540,7 @@ function AppInner() {
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
       <Route path="/admin/exploring" element={guard(['admin'], <AdminExploring />)} />
+      <Route path="/admin/lp-applications" element={guard(['admin'], <AdminLpApplications />)} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}

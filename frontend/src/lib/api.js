@@ -3290,6 +3290,14 @@ export const spinoutLab = {
   // expression of interest, NOT an entitlement — it moves the workspace's
   // access ladder from 'visitor' to 'pending', and 'pending' unlocks nothing.
   lpApplication: () => request('/spinout-lab/lp-application'),
+
+  // GP application review (admin only). The queue returns every application
+  // for the fund plus per-status counts computed BEFORE filtering, so the tab
+  // badges stay stable while the reviewer switches views.
+  adminLpApplications: (status) =>
+    request(`/admin/lp-applications${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  adminLpApplicationReview: (id, body) =>
+    request(`/admin/lp-applications/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   submitLpApplication: (body) =>
     request('/spinout-lab/lp-application', { method: 'POST', body: JSON.stringify(body) }),
 };
