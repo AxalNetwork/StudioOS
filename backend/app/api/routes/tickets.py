@@ -9,15 +9,15 @@ from datetime import datetime
 
 router = APIRouter(prefix="/tickets", tags=["Support"])
 
-_type_column_ensured = False
+_unused_type_column_ensured = False
 
 
 def _ensure_type_column(session: Session):
     """Task #9 dev parity — the prod Worker adds tickets.type at runtime;
     mirror that here so create_all-provisioned dev DBs pick it up without a
     migration (same in-route ensure pattern as brand.py)."""
-    global _type_column_ensured
-    if _type_column_ensured:
+    global _unused_type_column_ensured
+    if _unused_type_column_ensured:
         return
     from sqlalchemy import text
     # Postgres path first; SQLite (no IF NOT EXISTS) falls back to a plain
@@ -32,7 +32,7 @@ def _ensure_type_column(session: Session):
             break
         except Exception:
             session.rollback()
-    _type_column_ensured = True
+    _unused_type_column_ensured = True
 
 
 @router.get("")
