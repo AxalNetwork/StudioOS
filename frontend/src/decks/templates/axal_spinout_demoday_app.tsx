@@ -335,36 +335,7 @@ const Footer: React.FC<{ brand: any; dark?: boolean }> = ({ brand, dark }) => {
   );
 };
 
-const Donut: React.FC<{ l: number; t: number; w: number; h: number; segments: Array<[string, number]>; colors: string[] }> = ({
-  l, t, w, h, segments, colors,
-}) => {
-  const pw = inch(w), ph = inch(h);
-  const size = Math.min(pw, ph);
-  const r = size / 2;
-  const stroke = r * (1 - 0.62);
-  const rad = r - stroke / 2;
-  const circ = 2 * Math.PI * rad;
-  const total = segments.reduce((a, s) => a + Number(s[1]), 0) || 1;
-  let acc = 0;
-  return (
-    <div style={{ position: 'absolute', left: inch(l), top: inch(t), width: pw, height: ph }}>
-      <svg width={pw} height={ph} viewBox={`0 0 ${pw} ${ph}`}>
-        <g transform={`translate(${pw / 2},${ph / 2}) rotate(-90)`}>
-          {segments.map((seg, i) => {
-            const frac = Number(seg[1]) / total;
-            const dash = frac * circ;
-            const off = acc * circ;
-            acc += frac;
-            return (
-              <circle key={i} r={rad} cx={0} cy={0} fill="none" stroke={colors[i % colors.length]} strokeWidth={stroke}
-                strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={-off} />
-            );
-          })}
-        </g>
-      </svg>
-    </div>
-  );
-};
+
 
 /* ─────────────────────────── slides ─────────────────────────── */
 type SlideProps = { d: Data; editable?: boolean; onEdit?: OnEdit };
