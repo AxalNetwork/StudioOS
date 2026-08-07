@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   security-events: write
+  actions: read
 
 # Static-analysis scan using the official Semgrep CLI with public OSS rule
 # packs. We deliberately do NOT use `semgrep ci` (which requires a paid

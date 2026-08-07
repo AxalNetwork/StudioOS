@@ -288,6 +288,12 @@ async function checkRoute(base, route, assetSink) {
         problems.push('body is not an HTML document');
       }
       if (problems.length === 0) {
+        // `assetSink` is an intentionally optional parameter (see the doc comment
+        // above `checkRoute`): the current caller always passes a `Set`, but a
+        // future caller that only wants pass/fail without asset collection can
+        // omit it. Static analysis only sees today's single call site and reads
+        // this guard as always-true — it's deliberate defensive handling of an
+        // optional argument, not dead code.
         if (assetSink) for (const ref of extractAssetRefs(body)) assetSink.add(ref);
         return null;
       }

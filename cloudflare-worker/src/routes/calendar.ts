@@ -910,7 +910,9 @@ export async function persistGoogleCallbackTokens(
       }
     } else if (userEmail && ge !== userEmail) {
       warn = 'google_email_mismatch';
-      warnEmail = googleEmail || '';
+      // googleEmail is proven truthy by the enclosing `if (googleSub && googleEmail)`
+      // above, so the `|| ''` fallback here was always dead.
+      warnEmail = googleEmail;
     }
   }
   return warn ? { ok: true, warn, warnEmail } : { ok: true };

@@ -216,7 +216,9 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<stri
     const fresh = await readCreds();
     const liveFresh = isLive(fresh);
     if (liveFresh) {
-      try { if (acquired) await env.RATE_LIMITS.delete(lockKey); } catch {}
+      // We're in the `else` of `if (!acquired)` above, so `acquired` is
+      // always true here — no need to re-check it.
+      try { await env.RATE_LIMITS.delete(lockKey); } catch {}
       return liveFresh;
     }
     creds = fresh;

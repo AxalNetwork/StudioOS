@@ -712,7 +712,9 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
 
   // CTA card (share mode only — never on the authenticated /deck/:id/print).
   const ctaCategory = templateMeta?.category || null;
-  const shareCtaProps = (shareMode && ctaCategory && deck) ? {
+  // `deck` is proven truthy by the `if (!deck) return ...` guard above —
+  // this render path is unreachable without it.
+  const shareCtaProps = (shareMode && ctaCategory) ? {
     category: ctaCategory,
     shareToken: token,
     deckId: deck.id,

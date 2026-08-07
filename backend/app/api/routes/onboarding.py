@@ -71,6 +71,12 @@ def _ensure_schema(session: Session) -> None:
             """
         ))
         session.commit()
+        # codeql[py/unused-global-variable] -- _migrated is read via the `global _migrated` guard at the top of this same function (`if
+        # _migrated: return`); the write here is what a LATER, separate call's read observes. CodeQL's
+        # dead-store analysis does not model a global's value persisting across separate invocations of
+        # the function that sets it, so it sees this write as never consumed. It is: this flag exists
+        # specifically to make the schema-migration idempotent-but-skippable after the first successful
+        # request in this process.
         _migrated = True
     except Exception:
         session.rollback()
@@ -431,6 +437,12 @@ def _ensure_checklist_schema(session: Session) -> None:
             """
         ))
         session.commit()
+        # codeql[py/unused-global-variable] -- _checklist_migrated is read via the `global _checklist_migrated` guard at the top of this
+        # same function (`if _checklist_migrated: return`); the write here is what a LATER, separate
+        # call's read observes. CodeQL's dead-store analysis does not model a global's value persisting
+        # across separate invocations of the function that sets it, so it sees this write as never
+        # consumed. It is: this flag exists specifically to make the schema-migration idempotent-but-
+        # skippable after the first successful request in this process.
         _checklist_migrated = True
     except Exception:
         session.rollback()
