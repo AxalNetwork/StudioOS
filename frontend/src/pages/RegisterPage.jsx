@@ -39,6 +39,7 @@ export default function RegisterPage() {
   // worker has no GOOGLE_AUTH_CLIENT_ID configured (start returns 503).
   const [googleAvailable, setGoogleAvailable] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
