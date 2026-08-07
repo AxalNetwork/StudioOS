@@ -233,11 +233,18 @@ def _ic_events(session: Session, user: User,
             IcMeeting.status != "cancelled",
         )
     ).all()
+    meeting_ids = [m.id for m in rows]
+    attendees_by_meeting: dict[int, list[IcMeetingAttendee]] = {}
+    if meeting_ids:
+        all_attendees = session.exec(
+            select(IcMeetingAttendee).where(IcMeetingAttendee.meeting_id.in_(meeting_ids))
+        ).all()
+        for a in all_attendees:
+            attendees_by_meeting.setdefault(a.meeting_id, []).append(a)
+
     out: list[dict] = []
     for m in rows:
-        attendees = session.exec(
-            select(IcMeetingAttendee).where(IcMeetingAttendee.meeting_id == m.id)
-        ).all()
+        attendees = attendees_by_meeting.get(m.id, [])
         invited_user_ids = {a.user_id for a in attendees}
         if not (is_admin or m.organizer_user_id == user.id or user.id in invited_user_ids):
             continue
