@@ -75,6 +75,12 @@ def _ensure_schema(session: Session) -> None:
             session.commit()
         except Exception:
             session.rollback()
+    # codeql[py/unused-global-variable] -- _schema_ready is read via the `global _schema_ready` guard at the top of this
+    # same function (`if _schema_ready: return`); the write here is what a LATER, separate
+    # call's read observes. CodeQL's dead-store analysis does not model a global's value persisting
+    # across separate invocations of the function that sets it, so it sees this write as never
+    # consumed. It is: this flag exists specifically to make the schema-migration idempotent-but-
+    # skippable after the first successful request in this process.
     _schema_ready = True
 
 
