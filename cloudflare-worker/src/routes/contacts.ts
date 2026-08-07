@@ -358,23 +358,33 @@ r.get('/', async (c) => {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
     const scope = await ownedProjectScope(c.env, user);
+    // Filters are qualified with the `c.` alias — the leads query LEFT JOINs
+    // landing_pages, which shares the project_id and audience column names.
     let where = '1=1';
     const params: any[] = [];
     if (scope !== 'all') {
       if (scope.length === 0) return c.json({ items: [], counts: {} });
-      where += ` AND project_id IN (${scope.map(() => '?').join(',')})`;
+      where += ` AND c.project_id IN (${scope.map(() => '?').join(',')})`;
       params.push(...scope);
     }
     const audience = c.req.query('audience');
     const status = c.req.query('status');
     const routed = c.req.query('routed_to');
-    if (audience) { where += ' AND audience = ?'; params.push(audience); }
-    if (status) { where += ' AND status = ?'; params.push(status); }
-    if (routed) { where += ' AND routed_to = ?'; params.push(routed); }
+    if (audience) { where += ' AND c.audience = ?'; params.push(audience); }
+    if (status) { where += ' AND c.status = ?'; params.push(status); }
+    if (routed) { where += ' AND c.routed_to = ?'; params.push(routed); }
+    // LEFT JOIN the source landing page so destination pages can show WHICH
+    // template a lead signed up through ("Inbound leads · Brand & Pages").
+    // Manually-added / invited contacts have no landing_page_id and come back
+    // with NULL attribution — the UI treats that as "added directly".
     const rows = await c.env.DB.prepare(
-      `SELECT * FROM contacts WHERE ${where} ORDER BY COALESCE(last_activity_at, created_at) DESC LIMIT 500`
-    ).bind(...params).all<ContactRow>();
-    const items = (rows.results || []) as ContactRow[];
+      `SELECT c.*, lp.template_kit AS landing_template_kit, lp.name AS landing_page_name
+         FROM contacts c
+         LEFT JOIN landing_pages lp ON lp.id = c.landing_page_id
+        WHERE ${where}
+        ORDER BY COALESCE(c.last_activity_at, c.created_at) DESC LIMIT 500`
+    ).bind(...params).all<ContactRow & { landing_template_kit: string | null; landing_page_name: string | null }>();
+    const items = (rows.results || []) as (ContactRow & { landing_template_kit: string | null; landing_page_name: string | null })[];
     const counts: Record<string, number> = {};
     for (const it of items) counts[it.audience] = (counts[it.audience] || 0) + 1;
     return c.json({ items, counts });

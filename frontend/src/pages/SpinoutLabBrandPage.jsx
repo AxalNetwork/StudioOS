@@ -29,7 +29,7 @@ import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, Palette, Upload, Sparkles, Check, AlertTriangle, X,
   ExternalLink, Copy, Plus, Pencil, Eye, CalendarPlus, ChevronDown, ChevronRight,
-  Monitor, Smartphone,
+  Monitor, Smartphone, LayoutGrid, List,
 } from 'lucide-react';
 import LabPageHeader from '../components/spinout/LabPageHeader';
 import { api } from '../lib/api';
@@ -58,15 +58,20 @@ export const AUDIENCE_COLORS = {
 };
 
 // Where each audience's inflow routes to in the Lab (design's "Routing to →").
-// Co-founder leads route to Co-founder Match per the design's audience table
-// (the agreement page is the step AFTER a match).
+// Every destination is a REAL page that renders an "INBOUND LEADS · BRAND &
+// PAGES" panel fed by the same contacts hub this rail reads, so the counts
+// here and the lists there always agree:
+//   customer → Lab Customer Discovery   advisor → Lab Advisors
+//   cofounder → Lab Co-founder Match    investor → Lab Capital
+//   partner → Marketplace (routeFor: partner → marketplace)
+//   mentor → Advisory (routeFor: mentor → advisory)
 const AUDIENCE_ROUTING = {
   customer: { label: 'Customer Discovery', to: '/spinout-lab/discovery' },
   advisor: { label: 'Advisors', to: '/spinout-lab/advisors' },
-  cofounder: { label: 'Co-founder Match', to: '/cofounder' },
+  cofounder: { label: 'Co-founder Match', to: '/spinout-lab/cofounder-match' },
   investor: { label: 'Capital', to: '/spinout-lab/capital' },
-  partner: { label: 'Studio Ops', to: null },
-  mentor: { label: 'Office Hours', to: null },
+  partner: { label: 'Marketplace', to: '/build/marketplace' },
+  mentor: { label: 'Advisory', to: '/advisory' },
 };
 
 // Read-only "Form fields" chips per audience — mirrors the design's
@@ -114,17 +119,39 @@ const timeAgo = (iso) => {
 
 const templateById = (id) => TEMPLATES.find((t) => t.id === id) || null;
 
-/** Mini placeholder thumbnail — audience-tinted layout bars whose geometry
- *  follows the template kind, like the design's scaled-down previews (pure
- *  CSS; no live render backend for templates). `flush` renders it as the
- *  edge-to-edge strip of a page card. */
-function TemplateThumb({ audience, kind = {}, flush = false }) {
-  const bar = AUDIENCE_COLORS[audience]?.bar || '#7c3aed';
+// Which landing-page template a lead signed up through. Contacts rows carry
+// landing_template_kit / landing_page_name from the worker's attribution
+// JOIN; legacy waitlist rows only have the raw source string.
+const leadSource = (row) => templateById(row.landing_template_kit)?.label
+  || row.landing_page_name
+  || row.source
+  || 'landing page';
+
+/** Mini placeholder thumbnail — layout bars whose geometry follows the
+ *  template kind, like the design's scaled-down previews (pure CSS; no live
+ *  render backend for templates). When the template has a signature palette
+ *  (`visual`), the thumb paints with the design's OWN background + accent so
+ *  each card reads as its actual look (dark investor briefs vs warm cream
+ *  letters) instead of a generic audience tint; the audience color remains
+ *  the fallback. `flush` renders it as the edge-to-edge strip of a page card;
+ *  `tall` is the larger library-card variant. */
+function TemplateThumb({ audience, kind = {}, flush = false, tall = false, visual = null }) {
+  const sig = visual ? VISUAL_TEMPLATE_PALETTES[visual] : null;
+  const bar = sig?.theme_color || AUDIENCE_COLORS[audience]?.bar || '#7c3aed';
+  const bg = sig?.palette_bg || null;
+  const ink = sig?.palette_ink || null;
+  const dark = !!sig && isDarkHex(sig.palette_bg);
+  const lineA = sig ? (dark ? `${ink}66` : `${ink}55`) : null;
+  const lineB = sig ? (dark ? `${ink}3d` : `${ink}33`) : null;
+  const height = flush ? 'h-24 border-b' : tall ? 'h-32 rounded-lg border' : 'h-20 rounded-lg border';
   return (
-    <div className={`${flush ? 'h-24 border-b' : 'h-20 rounded-lg border'} bg-gray-50 dark:bg-gray-800 border-gray-100 dark:border-gray-700 p-2.5 overflow-hidden flex flex-col gap-1`}>
+    <div
+      className={`${height} ${sig ? '' : 'bg-gray-50 dark:bg-gray-800'} border-gray-100 dark:border-gray-700 p-2.5 overflow-hidden flex flex-col gap-1`}
+      style={sig ? { background: bg } : undefined}
+    >
       <div className="h-1.5 w-2/5 rounded-full flex-none" style={{ background: bar, opacity: 0.85 }} />
-      <div className="h-1 w-4/5 rounded-full bg-gray-300 dark:bg-gray-600 flex-none" />
-      <div className="h-1 w-3/5 rounded-full bg-gray-200 dark:bg-gray-600 flex-none" />
+      <div className={`h-1 w-4/5 rounded-full flex-none ${sig ? '' : 'bg-gray-300 dark:bg-gray-600'}`} style={sig ? { background: lineA } : undefined} />
+      <div className={`h-1 w-3/5 rounded-full flex-none ${sig ? '' : 'bg-gray-200 dark:bg-gray-600'}`} style={sig ? { background: lineB } : undefined} />
       {kind.media && (
         <div className="h-6 rounded flex-none flex items-center justify-center" style={{ background: `${bar}22` }}>
           <span className="w-0 h-0 border-y-[5px] border-y-transparent border-l-[8px]" style={{ borderLeftColor: bar }} />
@@ -137,11 +164,19 @@ function TemplateThumb({ audience, kind = {}, flush = false }) {
         </div>
       )}
       <div className="flex gap-1 mt-auto">
-        <div className="h-3.5 flex-1 rounded bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600" />
+        <div className={`h-3.5 flex-1 rounded border ${sig ? 'border-transparent' : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600'}`} style={sig ? { background: dark ? '#ffffff22' : '#ffffffcc' } : undefined} />
         <div className="h-3.5 w-9 rounded" style={{ background: bar }} />
       </div>
     </div>
   );
+}
+
+// Relative-luminance check so signature-palette thumbs pick legible line
+// tints on both dark (Capital Ready Kit) and light (Advisor Connect) designs.
+function isDarkHex(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex || '')) return false;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 128;
 }
 
 // The four editable content blocks of the inline editor (design's editBlocks).
@@ -159,6 +194,10 @@ export default function SpinoutLabBrandPage() {
   const libraryRef = useRef(null);
 
   const [projectId, setProjectId] = useState(null);
+  // Full Lab project record — the auto-population source for template copy
+  // (name / description / problem_statement / solution / sector), same data
+  // SpinoutLabStartupPage renders as the company identity.
+  const [project, setProject] = useState(null);
   const [projectLoading, setProjectLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -174,10 +213,26 @@ export default function SpinoutLabBrandPage() {
 
   const [pages, setPages] = useState([]);
   const [pagesLoading, setPagesLoading] = useState(true);
+  // Waitlist rows (legacy capture log) — kept for per-page sub counts and the
+  // customer "Invite to meet" action, whose endpoint is keyed by waitlist
+  // signup id.
   const [signups, setSignups] = useState([]);
+  // Contacts-hub rows — the 6-audience inflow source. The legacy
+  // waitlist_signups.audience column is CHECK-limited to customer/partner/
+  // investor (advisor/mentor/cofounder signups store NULL there), so counting
+  // from it silently zeroed three audiences and inflated Customers. The
+  // contacts table carries the full taxonomy plus the landing-page/template
+  // attribution the rail now shows.
+  const [contacts, setContacts] = useState([]);
   const [busyPage, setBusyPage] = useState(null); // page id being duplicated etc.
   const [creatingFrom, setCreatingFrom] = useState(null); // template id being used
   const [libFilter, setLibFilter] = useState('all');
+  // Template library view — grid (thumbnail cards) or list (compact rows).
+  // Persisted per browser; there is no server-side UI-prefs store for this.
+  const [libView, setLibView] = useState(() => {
+    try { return localStorage.getItem('spinoutBrandLibView') === 'list' ? 'list' : 'grid'; }
+    catch { return 'grid'; }
+  });
   const [previewTpl, setPreviewTpl] = useState(null);
   const [openAudiences, setOpenAudiences] = useState({ customer: true });
   const [inflowExpanded, setInflowExpanded] = useState({}); // audience → show all leads
@@ -199,6 +254,8 @@ export default function SpinoutLabBrandPage() {
   const autofillRef = useRef(null); // one cached autofill promise per editor session
 
   // Resolve the founder's Lab project (same picker as the other tool pages).
+  // The full record is kept — not just the id — so template auto-population
+  // can draw on description / problem_statement / solution / sector.
   useEffect(() => {
     let alive = true;
     setProjectLoading(true);
@@ -206,6 +263,7 @@ export default function SpinoutLabBrandPage() {
       .then((projects) => {
         if (!alive) return;
         const proj = pickLabProject(projects, user);
+        setProject(proj || null);
         setProjectId(proj?.id ?? null);
       })
       .catch((e) => { if (alive) reportError('SpinoutLabBrandPage:projects', e); })
@@ -230,7 +288,8 @@ export default function SpinoutLabBrandPage() {
       api.brandGetLanding(projectId),
       api.brandListPages(projectId),
       api.brandListWaitlist(projectId),
-    ]).then(([lp, pg, wl]) => {
+      api.contactsList(),
+    ]).then(([lp, pg, wl, ct]) => {
       if (!alive) return;
       if (lp.status === 'fulfilled' && lp.value) {
         const v = lp.value;
@@ -249,6 +308,11 @@ export default function SpinoutLabBrandPage() {
       }
       if (pg.status === 'fulfilled') setPages(Array.isArray(pg.value?.pages) ? pg.value.pages : []);
       if (wl.status === 'fulfilled') setSignups(Array.isArray(wl.value?.signups) ? wl.value.signups : []);
+      // Contacts scope to the founder's own projects server-side; keep only
+      // this Lab project's leads so the rail matches the pages shown here.
+      if (ct.status === 'fulfilled') {
+        setContacts((ct.value?.items || []).filter((c) => Number(c.project_id) === Number(projectId)));
+      }
       setBrandLoaded(true);
     }).finally(() => { if (alive) setPagesLoading(false); });
     return () => { alive = false; };
@@ -352,7 +416,7 @@ export default function SpinoutLabBrandPage() {
     try {
       const palette = VISUAL_TEMPLATE_PALETTES[tpl.visualTemplate] || {};
       const existing = pages.filter((p) => p.template_kit === tpl.id).length;
-      await api.brandCreatePage(projectId, {
+      const created = await api.brandCreatePage(projectId, {
         name: `${tpl.label} v${existing + 1}`,
         template: tpl.visualTemplate,
         template_kit: tpl.id,
@@ -365,8 +429,15 @@ export default function SpinoutLabBrandPage() {
       await refreshPages();
       // W2 deliverable — a real landing page now exists for this project.
       markMilestone(user, 'landing_page_created');
-      showToast({ msg: `Created "${tpl.label}" draft — open Edit to finish it.`, kind: 'ok' });
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Using a template opens the draft straight in the inline editor —
+      // content is reviewed/edited before publishing, not published blind.
+      if (created?.id) {
+        showToast({ msg: `"${tpl.label}" draft created — edit the content, then publish.`, kind: 'ok' });
+        await openEditor(created);
+      } else {
+        showToast({ msg: `Created "${tpl.label}" draft — open Edit to finish it.`, kind: 'ok' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } catch (e) {
       setError(e?.message || 'Could not create the page');
       reportError('SpinoutLabBrandPage:useTemplate', e);
@@ -406,12 +477,22 @@ export default function SpinoutLabBrandPage() {
     try {
       const rec = await api.brandGetPage(page.id);
       const aud = AUDIENCES.includes(rec.audience) ? rec.audience : 'customer';
+      // Auto-population: blocks the founder hasn't written yet pre-fill from
+      // data already captured elsewhere in the workspace — the brand record
+      // (tagline) and the Lab PROJECT record (description / problem_statement
+      // / solution), the same single source of truth the Startup page and the
+      // deck autofill read. Nothing is persisted until Save draft / Publish.
+      const seededHeadline = rec.headline || draft.tagline || rec.tagline || project?.name || '';
+      const seededSub = rec.subheadline || project?.description || '';
+      const seededBody = rec[`audience_${aud}_body`]
+        || [project?.problem_statement, project?.solution].filter(Boolean).join('\n\n')
+        || '';
       setEditorBlocks({
-        headline: rec.headline || '',
-        subheadline: rec.subheadline || '',
+        headline: seededHeadline,
+        subheadline: seededSub,
         // Body copy lives in the page audience's copy column — the column the
         // public renderer reads for this audience (falling back to subheadline).
-        body: rec[`audience_${aud}_body`] || '',
+        body: seededBody,
         cta: rec.cta_text || '',
       });
       setEditorDevice('desktop');
@@ -507,12 +588,14 @@ export default function SpinoutLabBrandPage() {
   };
 
   // Founder-authored product description for the autofill prompt (the endpoint
-  // 400s under 4 chars) — best available real text, newest edit first.
+  // 400s under 4 chars) — best available real text, newest edit first, then
+  // the Lab project record (same source BrandBuilderPage feeds the endpoint).
   const suggestDescription = () => {
     const rec = editorRec || {};
     const cands = [
       editorBlocks.body, rec[`audience_${editorAud}_body`], editorBlocks.subheadline,
       rec.subheadline, rec.tagline, draft.tagline,
+      project?.description, project?.problem_statement,
     ];
     for (const c of cands) {
       const s = (c || '').trim();
@@ -556,8 +639,9 @@ export default function SpinoutLabBrandPage() {
       // Cache the PROMISE so concurrent popovers share one request; a failed
       // call clears it so the next click retries.
       autofillRef.current = api.brandAutofillLanding({
-        name: (draft.name || editorRec?.name || '').trim(),
-        sector: null,
+        name: (draft.name || project?.name || editorRec?.name || '').trim(),
+        // Same project-record source BrandBuilderPage feeds this endpoint.
+        sector: project?.sector || null,
         description,
         template: editorRec?.template || 'minimal',
       });
@@ -583,12 +667,37 @@ export default function SpinoutLabBrandPage() {
     () => (libFilter === 'all' ? TEMPLATES : TEMPLATES.filter((t) => t.audience === libFilter)),
     [libFilter],
   );
+  // Inflows read from the CONTACTS hub, which carries the full 6-audience
+  // taxonomy — the legacy waitlist column CHECK-limits audience to customer/
+  // partner/investor, storing NULL for the other three, so bucketing waitlist
+  // rows mis-filed every advisor/mentor/co-founder lead under Customers.
+  // Falls back to the waitlist rows only when contacts returned nothing at
+  // all (e.g. a dev backend predating the contacts mirror).
   const signupsByAudience = useMemo(() => {
     const m = {};
     for (const a of AUDIENCES) m[a] = [];
+    if (contacts.length > 0) {
+      for (const c of contacts) {
+        const a = AUDIENCES.includes(c.audience) ? c.audience : 'customer';
+        m[a].push(c);
+      }
+    } else {
+      for (const s of signups) {
+        const a = AUDIENCES.includes(s.audience) ? s.audience : 'customer';
+        m[a].push(s);
+      }
+    }
+    return m;
+  }, [contacts, signups]);
+
+  // The customer "Invite to meet" endpoint is keyed by WAITLIST signup id.
+  // Contact rows carry the same email (both writes happen on the same public
+  // capture), so map a rail row back to its waitlist record by email.
+  const waitlistByEmail = useMemo(() => {
+    const m = new Map();
     for (const s of signups) {
-      const a = AUDIENCES.includes(s.audience) ? s.audience : 'customer';
-      m[a].push(s);
+      const key = (s.email || '').toLowerCase();
+      if (key && !m.has(key)) m.set(key, s);
     }
     return m;
   }, [signups]);
@@ -878,9 +987,14 @@ export default function SpinoutLabBrandPage() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_300px] gap-5 items-start">
-          {/* ================= Brand identity rail ================= */}
-          <div className={`${CARD} p-4`} data-testid="brand-identity-panel">
+        /* Two-column shell: the template library + pages own the main column;
+           Brand identity and Audience inflows share the right rail (identity
+           row 1, inflows row 2 — grid-rows-[auto_1fr] keeps them stacked
+           tight while the main column spans both rows). On mobile everything
+           stacks in source order, same as before the restructure. */
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] gap-5 items-start">
+          {/* ================= Brand identity (right rail, top) ================= */}
+          <div className={`${CARD} p-4 lg:col-start-2 lg:row-start-1`} data-testid="brand-identity-panel">
             <div className={`${LBL} mb-3`}>Brand identity</div>
 
             <div className={`${LBL} mb-1.5`}>Logo</div>
@@ -976,8 +1090,8 @@ export default function SpinoutLabBrandPage() {
             <div className="mt-2 text-[10.5px] text-gray-400 text-center">Brand settings apply to all pages in this project</div>
           </div>
 
-          {/* ================= Center: pages + template library ================= */}
-          <div className="min-w-0">
+          {/* ================= Main: pages + template library ================= */}
+          <div className="min-w-0 lg:col-start-1 lg:row-start-1 lg:row-span-2">
             {/* ---- Your pages ---- */}
             <div className="flex items-center gap-2 mb-3">
               <div className={LBL}>Your pages</div>
@@ -1053,6 +1167,30 @@ export default function SpinoutLabBrandPage() {
             {/* ---- template library ---- */}
             <div ref={libraryRef} className="flex items-center gap-2 mb-3 scroll-mt-20">
               <div className={LBL}>Template library</div>
+              {/* Grid / list view toggle — persisted per browser. */}
+              <div
+                className="ml-auto flex gap-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 p-0.5"
+                role="group"
+                aria-label="Template library view"
+                data-testid="library-view-toggle"
+              >
+                {[['grid', LayoutGrid, 'Thumbnail grid view'], ['list', List, 'List view']].map(([v, Icon, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-label={label}
+                    aria-pressed={libView === v}
+                    onClick={() => {
+                      setLibView(v);
+                      try { localStorage.setItem('spinoutBrandLibView', v); } catch { /* private mode */ }
+                    }}
+                    className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[11.5px] font-semibold ${libView === v ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                    data-testid={`library-view-${v}`}
+                  >
+                    <Icon size={12} /> {v === 'grid' ? 'Grid' : 'List'}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5 mb-4" data-testid="library-filters">
               {['all', ...AUDIENCES].map((a) => (
@@ -1068,45 +1206,87 @@ export default function SpinoutLabBrandPage() {
               ))}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4" data-testid="template-grid">
-              {filteredTemplates.map((t) => {
-                const c = AUDIENCE_COLORS[t.audience];
-                return (
-                  <div key={t.id} className={`${CARD} p-3.5`} data-testid={`template-card-${t.id}`}>
-                    <TemplateThumb audience={t.audience} kind={templateKind(t.visualTemplate)} />
-                    <div className="flex items-start gap-2 mt-2.5">
-                      <div className="min-w-0">
-                        <div className="text-[12.5px] font-bold text-gray-900 dark:text-gray-100 truncate">{t.label}</div>
-                        <div className="text-[11px] text-gray-400 line-clamp-2">{t.notes || ''}</div>
+            {libView === 'grid' ? (
+              /* Two-up cards in the (now full-width) main column — roughly
+                 double the old three-in-a-narrow-center size, with the full
+                 title and description visible and a taller, signature-palette
+                 thumbnail per template. */
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="template-grid">
+                {filteredTemplates.map((t) => {
+                  const c = AUDIENCE_COLORS[t.audience];
+                  return (
+                    <div key={t.id} className={`${CARD} p-4`} data-testid={`template-card-${t.id}`}>
+                      <TemplateThumb audience={t.audience} kind={templateKind(t.visualTemplate)} visual={t.visualTemplate} tall />
+                      <div className="flex items-start gap-2 mt-3">
+                        <div className="min-w-0">
+                          <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-100">{t.label}</div>
+                          <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{t.notes || ''}</div>
+                        </div>
+                        <span className={`ml-auto flex-none px-2 py-0.5 rounded text-[10.5px] font-bold ${c.chip}`}>{AUDIENCE_LABELS[t.audience]}</span>
                       </div>
-                      <span className={`ml-auto flex-none px-1.5 py-0.5 rounded text-[10px] font-bold ${c.chip}`}>{AUDIENCE_LABELS[t.audience]}</span>
+                      <div className="flex items-center gap-2 mt-3">
+                        <button
+                          type="button"
+                          disabled={!!creatingFrom}
+                          onClick={() => useTemplate(t)}
+                          className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-violet-600 text-white text-[12px] font-semibold hover:bg-violet-700 disabled:opacity-60"
+                          data-testid={`button-use-template-${t.id}`}
+                        >
+                          {creatingFrom === t.id ? <Loader2 size={12} className="animate-spin" /> : null} Use &amp; edit <ChevronRight size={12} />
+                        </button>
+                        <button type="button" onClick={() => setPreviewTpl(t)} className="inline-flex items-center gap-1 h-8 px-3 rounded-lg text-[12px] font-semibold text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30" data-testid={`button-preview-template-${t.id}`}>
+                          <Eye size={12} /> Preview
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 mt-2.5">
-                      <button
-                        type="button"
-                        disabled={!!creatingFrom}
-                        onClick={() => useTemplate(t)}
-                        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg bg-violet-600 text-white text-[11.5px] font-semibold hover:bg-violet-700 disabled:opacity-60"
-                        data-testid={`button-use-template-${t.id}`}
-                      >
-                        {creatingFrom === t.id ? <Loader2 size={11} className="animate-spin" /> : null} Use Template <ChevronRight size={11} />
-                      </button>
-                      <button type="button" onClick={() => setPreviewTpl(t)} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11.5px] font-semibold text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30" data-testid={`button-preview-template-${t.id}`}>
-                        <Eye size={11} /> Preview
-                      </button>
+                  );
+                })}
+              </div>
+            ) : (
+              /* List view — one row per template: small signature thumb, full
+                 title + description, audience chip, actions. */
+              <div className="flex flex-col gap-2.5" data-testid="template-list">
+                {filteredTemplates.map((t) => {
+                  const c = AUDIENCE_COLORS[t.audience];
+                  return (
+                    <div key={t.id} className={`${CARD} p-3 flex items-center gap-3.5`} data-testid={`template-card-${t.id}`}>
+                      <div className="w-28 flex-none">
+                        <TemplateThumb audience={t.audience} kind={templateKind(t.visualTemplate)} visual={t.visualTemplate} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">{t.label}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${c.chip}`}>{AUDIENCE_LABELS[t.audience]}</span>
+                        </div>
+                        <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{t.notes || ''}</div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 flex-none">
+                        <button
+                          type="button"
+                          disabled={!!creatingFrom}
+                          onClick={() => useTemplate(t)}
+                          className="inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-lg bg-violet-600 text-white text-[11.5px] font-semibold hover:bg-violet-700 disabled:opacity-60"
+                          data-testid={`button-use-template-${t.id}`}
+                        >
+                          {creatingFrom === t.id ? <Loader2 size={11} className="animate-spin" /> : null} Use &amp; edit
+                        </button>
+                        <button type="button" onClick={() => setPreviewTpl(t)} className="inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-lg text-[11.5px] font-semibold text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30" data-testid={`button-preview-template-${t.id}`}>
+                          <Eye size={11} /> Preview
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {/* ================= Audience inflows rail ================= */}
+          {/* ================= Audience inflows (right rail, under identity) ================= */}
           {/* The design's Log Interview capture lightbox (Otter/AI/manual
               paste, format + duration pills, pain chips, ICP signal) is
               deliberately not built here — those fields live in the
               discovery-flow backend, so leads deep-link there instead. */}
-          <div className={`${CARD} p-4`} data-testid="audience-inflows">
+          <div className={`${CARD} p-4 lg:col-start-2 lg:row-start-2`} data-testid="audience-inflows">
             <div className={`${LBL} mb-3`}>Audience inflows</div>
             {AUDIENCES.map((a) => {
               const list = signupsByAudience[a] || [];
@@ -1139,38 +1319,47 @@ export default function SpinoutLabBrandPage() {
                         <div className="text-[11px] text-gray-400 italic">No signups yet</div>
                       ) : (
                         <>
-                          {shown.map((s) => (
-                            <div key={s.id} className="flex items-center gap-2 py-1" data-testid={`inflow-lead-${s.id}`}>
-                              <span className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${c.chip}`}>
-                                {((s.name || s.email || '?').trim()[0] || '?').toUpperCase()}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[11.5px] font-semibold text-gray-800 dark:text-gray-200 truncate">{s.name || s.email}</div>
-                                <div className="text-[10px] text-gray-400 truncate">{s.source || 'landing page'} · {timeAgo(s.created_at)}</div>
+                          {shown.map((s) => {
+                            // Rail rows are contact records (waitlist rows only
+                            // in the legacy fallback); the customer invite
+                            // endpoint is waitlist-id-keyed, so resolve the
+                            // matching waitlist signup by email.
+                            const wlRow = a === 'customer'
+                              ? (s.crm_status !== undefined ? s : waitlistByEmail.get((s.email || '').toLowerCase()))
+                              : null;
+                            return (
+                              <div key={s.uid || s.id} className="flex items-center gap-2 py-1" data-testid={`inflow-lead-${s.id}`}>
+                                <span className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center flex-none ${c.chip}`}>
+                                  {((s.name || s.email || '?').trim()[0] || '?').toUpperCase()}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[11.5px] font-semibold text-gray-800 dark:text-gray-200 truncate">{s.name || s.email}</div>
+                                  <div className="text-[10px] text-gray-400 truncate">{leadSource(s)} · {timeAgo(s.created_at)}</div>
+                                </div>
+                                {a === 'customer' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={!wlRow || invitingLead === wlRow?.id}
+                                      onClick={() => wlRow && onInviteLead(wlRow)}
+                                      title={wlRow ? 'Invite to meet' : 'Invite unavailable for this lead'}
+                                      className="w-6 h-6 flex-none rounded-md border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:border-violet-300 dark:hover:border-violet-700 disabled:opacity-40"
+                                      data-testid={`inflow-invite-${s.id}`}
+                                    >
+                                      {wlRow && invitingLead === wlRow.id ? <Loader2 size={11} className="animate-spin" /> : <CalendarPlus size={12} />}
+                                    </button>
+                                    <Link
+                                      to="/spinout-lab/discovery"
+                                      title="Log interview"
+                                      className="w-6 h-6 flex-none rounded-md border border-gray-200 dark:border-gray-700 flex items-center justify-center text-violet-600 dark:text-violet-400 hover:border-violet-300 dark:hover:border-violet-700"
+                                    >
+                                      <Plus size={12} />
+                                    </Link>
+                                  </>
+                                )}
                               </div>
-                              {a === 'customer' && (
-                                <>
-                                  <button
-                                    type="button"
-                                    disabled={invitingLead === s.id}
-                                    onClick={() => onInviteLead(s)}
-                                    title="Invite to meet"
-                                    className="w-6 h-6 flex-none rounded-md border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 hover:border-violet-300 dark:hover:border-violet-700 disabled:opacity-60"
-                                    data-testid={`inflow-invite-${s.id}`}
-                                  >
-                                    {invitingLead === s.id ? <Loader2 size={11} className="animate-spin" /> : <CalendarPlus size={12} />}
-                                  </button>
-                                  <Link
-                                    to="/spinout-lab/discovery"
-                                    title="Log interview"
-                                    className="w-6 h-6 flex-none rounded-md border border-gray-200 dark:border-gray-700 flex items-center justify-center text-violet-600 dark:text-violet-400 hover:border-violet-300 dark:hover:border-violet-700"
-                                  >
-                                    <Plus size={12} />
-                                  </Link>
-                                </>
-                              )}
-                            </div>
-                          ))}
+                            );
+                          })}
                           {list.length > 4 && (
                             <button
                               type="button"

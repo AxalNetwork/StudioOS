@@ -63,6 +63,7 @@ export default function FounderMarketplacePage({ user }) {
       {(isFounder || isAdmin) && (
         <IncomingLeadsStrip
           audience="partner"
+          sectionLabel="INBOUND LEADS · BRAND & PAGES"
           title="New partner leads"
           blurb="Partners who reached out via your landing pages."
         />

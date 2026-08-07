@@ -36,6 +36,7 @@ import { api, spinoutLab } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -734,6 +735,17 @@ export default function SpinoutLabCapitalPage() {
               <p className="text-[12px] text-amber-600 dark:text-amber-400">Couldn't load your raise pipeline right now — reload to retry. Data-room readiness below is unaffected.</p>
             </div>
           )}
+
+          {/* Investor signups captured on the founder's published landing
+              pages (audience: investor) route here — the destination the
+              Brand page's "Routing to → Capital" points at. Promoting one
+              (via Contacts) creates a raise prospect in the pipeline below. */}
+          <IncomingLeadsStrip
+            audience="investor"
+            sectionLabel="INBOUND LEADS · BRAND & PAGES"
+            title="New investor leads"
+            blurb="Investors who requested an intro via your landing pages — promote one in Contacts to add it to the pipeline."
+          />
 
           {raiseAvailable && (
             <div className={CARD} data-testid="card-pipeline">

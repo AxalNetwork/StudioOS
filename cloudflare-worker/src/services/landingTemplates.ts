@@ -108,6 +108,10 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
   },
   {
     key: 'distribution-deck',
+    // Posts `partner`, not `investor`: the design is a partnership memo
+    // (customer-overlap tables, channel economics, integration options,
+    // "Discuss distribution fit"). It was mis-filed as an investor deck from
+    // the name, which routed its signups to Capital instead of Marketplace.
     label: 'Distribution Deck',
     description: 'Blueprint partnership memo — overlap tables, channel value, rollout.',
     thumbnailPlaceholder: 'distribution-deck',
@@ -188,8 +192,13 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
   },
   {
     key: 'builders-launchpad',
+    // Posts `cofounder`, not `customer`: despite the launch-y name the design
+    // is a technical co-founder brief (hiring badge, shipped-vs-missing lists,
+    // equity terms, "Join as technical co-founder"). Mis-filed as a customer
+    // launch teaser, it routed applicants to Discovery instead of Co-founder
+    // Match.
     label: "Builder's Launchpad",
-    description: 'Dark terminal launch teaser — quick facts, status badges, shell CTA.',
+    description: 'Dark terminal co-founder brief — quick facts, build status, apply CTA.',
     thumbnailPlaceholder: 'builders-launchpad',
     usesHero: false,
     usesProduct: false,
@@ -2673,7 +2682,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </div></section>
     <footer><span>${logoChip(bk, 18, 5)} ${name} · Distribution brief</span><span>Built with Axal VC</span></footer>
   </div>
-${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
+${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 </body></html>`;
 }
 
@@ -3904,7 +3913,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </section>
     <footer><span>${logoChip(bk, 18, 5)} ${name}</span><span>commit ${(name||'axal').toLowerCase().slice(0,4)}0x9f3a · Built with Axal VC</span></footer>
   </div>
-${singleWaitlistScript(bk.apiWaitlist, 'customer', bk.nonce)}
+${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 </body></html>`;
 }
 

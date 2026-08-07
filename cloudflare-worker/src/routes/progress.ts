@@ -553,16 +553,29 @@ progress.get('/discovery/:projectId/waitlist', async (c) => {
   ensureCanView(project, user);
 
   await ensureWaitlistCrmColumns(c.env);
+  // The list view JOINs the source landing page so the Discovery panel can
+  // show WHICH template each lead signed up through. Deliberately NOT folded
+  // into WAITLIST_SELECT: loadCustomerSignup reuses that fragment with
+  // unqualified WHERE columns (id/project_id/audience exist on both tables),
+  // so a shared JOIN would make those queries ambiguous.
   const { results } = await c.env.DB.prepare(
-    `${WAITLIST_SELECT}
-      WHERE project_id = ? AND audience = 'customer'
-      ORDER BY created_at DESC, id DESC
+    `SELECT w.id, w.project_id, w.email, w.name, w.source, w.audience, w.created_at,
+            w.crm_status, w.invited_at, w.followed_up_at, w.promoted_at, w.promoted_interview_id,
+            lp.template_kit AS landing_template_kit, lp.name AS landing_page_name
+       FROM waitlist_signups w
+       LEFT JOIN landing_pages lp ON lp.id = w.landing_page_id
+      WHERE w.project_id = ? AND w.audience = 'customer'
+      ORDER BY w.created_at DESC, w.id DESC
       LIMIT 500`,
-  ).bind(projectId).all<WaitlistSignupRow>();
+  ).bind(projectId).all<WaitlistSignupRow & { landing_template_kit: string | null; landing_page_name: string | null }>();
 
   return c.json({
     project_id: projectId,
-    signups: (results || []).map(serializeWaitlistSignup),
+    signups: (results || []).map((r) => ({
+      ...serializeWaitlistSignup(r),
+      landing_template_kit: r.landing_template_kit ?? null,
+      landing_page_name: r.landing_page_name ?? null,
+    })),
   });
 });
 

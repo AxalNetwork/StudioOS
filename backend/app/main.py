@@ -553,6 +553,11 @@ app.include_router(_kyc.router, prefix="/api")
 from backend.app.database import get_session  # noqa: E402
 from backend.app.api.routes import brand as _brand  # noqa: E402
 app.include_router(_brand.router, prefix="/api")
+# Contacts — dev mirror of the worker's inbound relationship hub (list side
+# only) so the "INBOUND LEADS · BRAND & PAGES" panels and the Brand page's
+# audience-inflow counts read real rows in local dev.
+from backend.app.api.routes import contacts as _contacts  # noqa: E402
+app.include_router(_contacts.router, prefix="/api")
 # Task #38 — dev-only parity shims (Skills profile + Payouts/network).
 from backend.app.api.routes import skills as _skills  # noqa: E402
 app.include_router(_skills.router, prefix="/api")

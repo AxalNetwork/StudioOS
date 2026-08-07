@@ -24,6 +24,7 @@ import { archetypeMeta } from '../lib/assessmentMeta';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import {
   buildMatchBrief, buildEvidenceModules, buildDecisionModel, serializeDecision,
   fitRows, DECISION_OUTCOMES, CAPABILITY_GAP_THRESHOLD,
@@ -247,6 +248,18 @@ export default function SpinoutLabCofounderMatchPage() {
         <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2">
           Each module is a real evidence source this decision can draw on — complete them in Profiling, Scoring, and your co-founder profile.
         </p>
+      </div>
+
+      {/* Co-founder signups captured on the founder's published landing pages
+          (audience: cofounder) route here — the destination the Brand page's
+          "Routing to → Co-founder Match" points at. */}
+      <div className="mb-5">
+        <IncomingLeadsStrip
+          audience="cofounder"
+          sectionLabel="INBOUND LEADS · BRAND & PAGES"
+          title="New co-founder leads"
+          blurb="People who reached out about co-founding via your landing pages."
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5 items-start">

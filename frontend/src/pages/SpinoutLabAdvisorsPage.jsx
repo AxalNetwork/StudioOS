@@ -39,6 +39,7 @@ import {
   AlertTriangle, ExternalLink, X, ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
 import LabPageHeader from '../components/spinout/LabPageHeader';
+import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import { api, spinoutLab, assessment } from '../lib/api';
 import { archetypeMeta, SKILL_AXES } from '../lib/assessmentMeta';
 import { pickLabProject } from './SpinoutLabStartupPage';
@@ -520,6 +521,18 @@ export default function SpinoutLabAdvisorsPage() {
           Book partner Office Hours →
         </Link>
       </p>
+
+      {/* Advisor signups captured on the founder's published landing pages
+          (audience: advisor) route here — the destination the Brand page's
+          "Routing to → Advisors" points at. */}
+      <div className="mb-5">
+        <IncomingLeadsStrip
+          audience="advisor"
+          sectionLabel="INBOUND LEADS · BRAND & PAGES"
+          title="New advisor leads"
+          blurb="People who offered to advise via your landing pages."
+        />
+      </div>
 
       {/* Gap diagnosis strip — from the latest real scoring run */}
       <div className={CARD} data-testid="card-gaps">
