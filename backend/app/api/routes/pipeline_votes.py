@@ -417,7 +417,7 @@ async def cast_vote(
             # Best-effort admin fan-out on the threshold crossing. The voter's
             # own tally (returned below) must go through regardless of
             # whether admins get paged about it.
-            logger.warning("pipeline_votes: threshold fan-out failed for deal %s: %s", deal_id, exc)
+            logger.warning("pipeline_votes: threshold fan-out failed for deal %s: %s", deal_id, exc)  # codeql[py/log-injection] -- deal_id is `int`-typed on the route signature (line 310); FastAPI/Pydantic reject a non-integer path segment with 422 before this handler ever runs, so it cannot carry the newline/control-char injection this query guards against
 
     # Caller gets the same public tally PLUS their own vote attached.
     return _build_tally(deal_id, session, viewer=user)
