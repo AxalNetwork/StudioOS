@@ -771,7 +771,7 @@ export default function AdminX() {
   );
 }
 
-function AdminXFull() {
+function AdminXFull() { // codeql[js/unused-local-variable] -- deliberately unreferenced while the feature is paused; see the re-enable plan in the comment above the default export. Preserved verbatim, not dead code.
   const [tab, setTab] = useState('accounts');
   const [accounts, setAccounts] = useState([]);
   const [configOk, setConfigOk] = useState(true);

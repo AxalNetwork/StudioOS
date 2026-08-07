@@ -185,26 +185,19 @@ test('partyRolesFor returns the configured role set per doc_type', async () => {
 
 // ---------- Route-level UNION + admin-authz tests ----------
 //
-// We load the route module and inject a stubbed `getSQL` via a small
-// shim that intercepts the `../db` import. The stub returns canned rows
-// from each of the 4 source tables and lets us prove that:
-//   (a) the GET / list returns rows from all 4 sources
-//   (b) the source discriminator is preserved per row
-//   (c) optional tables that throw are tolerated (older D1)
-//   (d) requireAdmin gates the route (non-admin → 403)
+// `loadRouter` does NOT mount a Hono app or hit the route over HTTP — an
+// earlier version tried that (inject a stubbed `getSQL` via a shim that
+// intercepts the `../db` import) and was rewritten to something lighter:
+// read `admin_contracts.ts` as text, slice out `loadAllContracts` and the
+// pure helpers it calls, transpile that slice, and eval it against a stubbed
+// `sql` tag. What each claim below is actually checked by:
+//   (a) the GET / list returns rows from all 4 sources   — this file, loadRouter()
+//   (b) the source discriminator is preserved per row     — this file, loadRouter()
+//   (c) optional tables that throw are tolerated (older D1) — this file, loadRouter()
+//   (d) requireAdmin gates the route (non-admin → 403)    — 'admin contracts route
+//       requires admin (requireAdmin gate)' below, via source inspection
 
 async function loadRouter({ documents = [], esign = [], pairwise = [], partner = [], pairwiseThrows = false, partnerThrows = false } = {}) {
-  const { Hono } = await import('../node_modules/hono/dist/index.js')
-    .catch(() => import('hono'));
-
-  function makeSqlTag(rows) {
-    // postgres.js tagged-template signature: sql`...` returns a Promise
-    // that resolves to a row array. Our admin_contracts loaders only
-    // depend on this shape — they don't touch any other postgres.js
-    // helper besides `.unsafe(sql, args)` and `.end()`.
-    return async () => rows;
-  }
-
   // The stubbed sql function recognises which loader is calling it by
   // sniffing the SQL fragment passed in (FROM <table>).
   function makeSql() {
@@ -231,12 +224,10 @@ async function loadRouter({ documents = [], esign = [], pairwise = [], partner =
     return tag;
   }
 
-  // Inject our stub into the module cache before importing the route.
-  const dbPath = resolve(__dirname, '../src/db.ts');
-  // Easiest: build a tiny harness that re-implements the route's GET '/'
-  // using the same loadAllContracts helper. We don't try to import the
-  // TS route directly (no transpile pipeline here) — instead we extract
-  // and run loadAllContracts the same way we extract the helpers above.
+  // Build a tiny harness that re-implements the route's GET '/' using the
+  // same loadAllContracts helper. We don't import the TS route directly (no
+  // transpile pipeline here) — instead we extract and run loadAllContracts
+  // the same way we extract the helpers below.
   const srcPath = resolve(__dirname, '../src/routes/admin_contracts.ts');
   const src = await readFile(srcPath, 'utf8');
 

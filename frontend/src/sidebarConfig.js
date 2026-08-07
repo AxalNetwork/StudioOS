@@ -21,8 +21,8 @@ import {
   Globe, Brain, Activity, Shield, ShieldCheck,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, LayoutGrid,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
-  BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
-  Gavel, Inbox, FileBarChart, Radar, Wallet, PhoneCall,
+  BookOpen, Settings as SettingsIcon, Gamepad2, ShieldAlert,
+  Gavel, Inbox, FileBarChart, Radar, Wallet,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
