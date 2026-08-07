@@ -1179,10 +1179,13 @@ def _pick_utm(v: Any) -> Optional[Dict[str, str]]:
 
 @router.post("/landing/{slug}/waitlist")
 def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Session = Depends(get_session)):
+    # Sanitize user-controlled path value before writing to logs to prevent
+    # log injection / forged log lines via control characters.
+    safe_slug = re.sub(r"[\r\n\t\x00-\x1f\x7f]+", " ", (slug or "")).strip()[:200]
     # Honeypot — answer 200 so a bot can't distinguish the trap from success
     # (a 400 teaches it to adapt). Nothing is written. Mirrors the worker.
     if (payload.company_website or "").strip():
-        logger.warning("brand: honeypot tripped on landing %s", slug)
+        logger.warning("brand: honeypot tripped on landing %s", safe_slug)
         return {"ok": True}
     email = (payload.email or "").strip().lower()
     if not _EMAIL_RE.match(email):
@@ -1232,7 +1235,7 @@ def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Ses
         session.commit()
     except Exception as exc:
         session.rollback()
-        logger.warning("brand: contacts ingest failed for landing %s: %s", slug, exc)
+        logger.warning("brand: contacts ingest failed for landing %s: %s", safe_slug, exc)
     return {"ok": True}
 
 
