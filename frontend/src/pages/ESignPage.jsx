@@ -14,6 +14,15 @@ export default function ESignPage() {
   const { token } = useParams();
   const [loading, setLoading] = useState(true);
   const [envelope, setEnvelope] = useState(null);
+  // `loadError` gates the whole page (envelope fetch failed — nothing to
+  // show). `error` is the inline, in-flow alert for a failed submit/reject
+  // once the signing UI is already up. These must stay separate: they used
+  // to share one state, so a failed signature submit (which sets it from
+  // inside `submit()`, well after the initial load) re-triggered the early
+  // full-page ErrorCard return below and wiped out the founder's typed name,
+  // acceptance checkbox, and drawn signature instead of showing the inline
+  // alert at the bottom of the signature panel.
+  const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(null);
@@ -45,13 +54,13 @@ export default function ESignPage() {
     let alive = true;
     api.esignFetchByToken(token)
       .then((env) => { if (alive) { setEnvelope(env); setTypedName(env.recipient_name || ''); } })
-      .catch((e) => { if (alive) setError(e.message || 'Could not load this signing link.'); })
+      .catch((e) => { if (alive) setLoadError(e.message || 'Could not load this signing link.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [token]);
 
   if (loading) return <PageShell><div className="p-12 text-center text-gray-500">Loading envelope…</div></PageShell>;
-  if (error)   return <PageShell><ErrorCard message={error} /></PageShell>;
+  if (loadError) return <PageShell><ErrorCard message={loadError} /></PageShell>;
   if (!envelope) return <PageShell><ErrorCard message="Envelope not found." /></PageShell>;
 
   if (done) {

@@ -155,6 +155,13 @@ def verify_cf_access_jwt(request: Request) -> Optional[dict]:
                 "Backoffice routes rely on application auth only. "
                 "Set both env vars to activate the perimeter."
             )
+            # codeql[py/unused-global-variable] -- _warned_disabled is read via the `global _warned_disabled` guard
+            # a few lines above (`if not _warned_disabled:`); the write here is what a LATER, separate
+            # call's read observes. CodeQL's dead-store analysis does not model a global's value
+            # persisting across separate invocations of the function that sets it, so it sees this
+            # write as never consumed. It is: this flag exists to log the "Access verification is
+            # DISABLED" warning exactly once per process instead of once per request, so it doesn't
+            # spam the logs on every unauthenticated-perimeter call.
             _warned_disabled = True
         return None
 

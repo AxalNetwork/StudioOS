@@ -181,6 +181,12 @@ def _ensure_schema(session: Session) -> None:
             session.commit()
         except Exception:
             session.rollback()
+    # codeql[py/unused-global-variable] -- _migrated is read via the `global _migrated` guard at the top of this same function (`if
+    # _migrated: return`); the write here is what a LATER, separate call's read observes. CodeQL's
+    # dead-store analysis does not model a global's value persisting across separate invocations of
+    # the function that sets it, so it sees this write as never consumed. It is: this flag exists
+    # specifically to make the schema-migration idempotent-but-skippable after the first successful
+    # request in this process.
     _migrated = True
 
 
@@ -1450,6 +1456,12 @@ def _ensure_user_settings_schema(session: Session) -> None:
         session.commit()
     except Exception:
         session.rollback()
+    # codeql[py/unused-global-variable] -- _user_settings_migrated is read via the `global _user_settings_migrated` guard at the top of
+    # this same function (`if _user_settings_migrated: return`); the write here is what a LATER,
+    # separate call's read observes. CodeQL's dead-store analysis does not model a global's value
+    # persisting across separate invocations of the function that sets it, so it sees this write as
+    # never consumed. It is: this flag exists specifically to make the schema-migration idempotent-
+    # but-skippable after the first successful request in this process.
     _user_settings_migrated = True
 
 
@@ -1814,6 +1826,12 @@ def _ensure_profile_extras_schema(session: Session) -> None:
             )
         """))
         session.commit()
+        # codeql[py/unused-global-variable] -- _profile_extras_migrated is read via the `global _profile_extras_migrated` guard at the top
+        # of this same function (`if _profile_extras_migrated: return`); the write here is what a LATER,
+        # separate call's read observes. CodeQL's dead-store analysis does not model a global's value
+        # persisting across separate invocations of the function that sets it, so it sees this write as
+        # never consumed. It is: this flag exists specifically to make the schema-migration idempotent-
+        # but-skippable after the first successful request in this process.
         _profile_extras_migrated = True
     except Exception:
         session.rollback()

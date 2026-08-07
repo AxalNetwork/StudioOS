@@ -36,6 +36,12 @@ def _ensure_type_column(session: Session):
             break
         except Exception:
             session.rollback()
+    # codeql[py/unused-global-variable] -- _type_column_ensured is read via the `global _type_column_ensured` guard at the top of this
+    # same function (`if _type_column_ensured: return`); the write here is what a LATER, separate
+    # call's read observes. CodeQL's dead-store analysis does not model a global's value persisting
+    # across separate invocations of the function that sets it, so it sees this write as never
+    # consumed. It is: this flag exists specifically to make the schema-migration idempotent-but-
+    # skippable after the first successful request in this process.
     _type_column_ensured = True
 
 
