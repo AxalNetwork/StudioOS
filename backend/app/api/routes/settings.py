@@ -1020,7 +1020,8 @@ def totp_repair(
         img.save(buf, format="PNG")
         qr_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
     except Exception as exc:
-        logger.warning("settings: TOTP QR generation failed for user %s: %s", user.id, exc)
+        safe_user_id = str(user.id).replace("\r", "").replace("\n", "").replace("\t", "")
+        logger.warning("settings: TOTP QR generation failed for user %s: %s", safe_user_id, exc)
 
     return {
         "ok": True,
