@@ -546,7 +546,7 @@ def sync_user_to_google(session: Session, user: User, *,
             continue
         if rec:
             rec.google_event_id = new_id
-            rec.last_synced_at = datetime.utcnow()
+            rec.last_synced_at = datetime.now(timezone.utc)
             session.add(rec); updated += 1
         else:
             try:
@@ -561,7 +561,7 @@ def sync_user_to_google(session: Session, user: User, *,
                 # just this insert and treat it as an update.
                 session.rollback()
                 failed += 1
-    token_row.last_synced_at = datetime.utcnow()
+    token_row.last_synced_at = datetime.now(timezone.utc)
     session.add(token_row)
     session.commit()
     return {
