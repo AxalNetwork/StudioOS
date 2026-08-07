@@ -499,7 +499,7 @@
         return;
       }
 
-      const { email, name, setup_token } = confirmData;
+      const { email, setup_token } = confirmData;
       setStep(3);
 
       const totpRes = await fetch(`${API}/setup-totp`, {

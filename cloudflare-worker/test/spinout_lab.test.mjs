@@ -275,7 +275,10 @@ test('unlockedFeaturesThrough is cumulative and stable per week', async () => {
 /* Route-flow smoke test — start → milestone (auto-advance) → exit    */
 /* ------------------------------------------------------------------ */
 test('happy path: start → 4 weeks of milestones → auto-exit on week 4', async () => {
-  const { startLab, recordMilestone, exitLab } = await loadModule();
+  // exitLab is not called here — week 4's 'incorporation_completed' milestone
+  // auto-exits the lab from inside recordMilestone, which is the behaviour
+  // this test asserts below. Exercising exitLab() directly is a separate test.
+  const { startLab, recordMilestone } = await loadModule();
   const { sql, state } = makeSql();
 
   // start()
