@@ -2,7 +2,10 @@
  * GENERATED FILE — do not edit by hand.
  *
  * Written by `scripts/generate-og-images.mjs`. Maps an OG image key to the
- * SHA-256 (first 8 hex chars) of the generated PNG's bytes.
+ * SHA-256 (first 8 hex chars) of the card's RENDER INPUTS — its copy plus the
+ * inlined font, mark and template. Deliberately not a hash of the PNG bytes:
+ * those vary by browser build, which made the CI check fail on any machine but
+ * the one that generated the cards.
  *
  * The hash is appended to the image URL as `?v=<hash>`, which is what makes
  * cache-busting automatic: regenerating a card because its copy changed also
@@ -16,17 +19,17 @@
  * Regenerate with:  node scripts/generate-og-images.mjs
  */
 export const OG_MANIFEST = {
-  "articles": "a58fa6df",
-  "company": "4c30a70f",
-  "content": "8cc826c5",
-  "default": "b8e2d3dc",
-  "home": "88aa287c",
-  "jobs": "11dcbf8f",
-  "pricing": "410ae5e8",
-  "product": "eb4e2a52",
-  "product-advisors": "78559744",
-  "product-founders": "dece2995",
-  "product-investors": "f54ae8c5",
-  "product-service-partners": "b64d1e59",
-  "spinout-lab": "c72b2c5b",
+  "articles": "f8ba8540",
+  "company": "9e7ceb16",
+  "content": "2bc2c9b1",
+  "default": "1a45773f",
+  "home": "69a1630b",
+  "jobs": "83856fd8",
+  "pricing": "8612984c",
+  "product": "29a42ae7",
+  "product-advisors": "e83acd0d",
+  "product-founders": "896964db",
+  "product-investors": "9d41dfcb",
+  "product-service-partners": "3902653e",
+  "spinout-lab": "59a05b30",
 };
