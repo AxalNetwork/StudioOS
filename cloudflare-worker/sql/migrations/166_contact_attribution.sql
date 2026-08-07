@@ -1,0 +1,34 @@
+-- Lead attribution on captured contacts — where a landing-page signup came from.
+--
+-- WHY THIS EXISTS. Founder landing pages capture a lead and file it by
+-- audience, but until now they recorded nothing about HOW the person arrived.
+-- A founder running a launch could see 40 new leads and had no way to tell the
+-- ones that came from a paid post from the ones that came from a co-founder's
+-- personal share — which is exactly the question that decides where the next
+-- effort goes. These two columns answer it.
+--
+-- WHY A JSON BLOB, NOT FIVE COLUMNS. The useful key set changes with whatever
+-- the founder actually runs campaigns on; utm_term and utm_content are dead
+-- weight for most and essential for a few. A blob keeps that from being a
+-- migration every time. Nothing joins or filters on these server-side today —
+-- they are read back whole and displayed — so there is no index to lose.
+--
+-- TRUST BOUNDARY. Both columns hold text that originated on a PUBLIC,
+-- unauthenticated endpoint, so they are attacker-controlled by construction.
+-- The capture path in cloudflare-worker/src/routes/brand.ts allowlists the
+-- five standard utm_* keys and clips every value (120 chars per UTM value,
+-- 300 for the referrer) BEFORE this row is written — the storage layer is not
+-- the validation layer, and neither column is ever interpolated into HTML or
+-- SQL. Anything outside the allowlist is dropped, not stored.
+--
+-- Apply with the ledger-driven runner (NOT a raw `wrangler d1 execute`):
+--   npm run d1:migrate:remote      # === node scripts/migrate-d1.mjs --remote
+--
+-- SQLite/D1 has no ALTER TABLE ... ADD COLUMN IF NOT EXISTS, so replay-safety
+-- for prod comes from the PRAGMA-guarded runtime bootstrap in
+-- contacts.ts ensureSchema() (same pattern as promoted_ref_id / migration 128).
+-- A cold isolate on a DB that never got this file still self-heals rather than
+-- 500ing on "no such column".
+
+ALTER TABLE contacts ADD COLUMN utm_json TEXT;
+ALTER TABLE contacts ADD COLUMN referrer TEXT;

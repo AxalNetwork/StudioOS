@@ -19,7 +19,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema';
-import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES, sanitizeLandingContent, LANDING_CONTENT_SCHEMA } from '../services/landingTemplates';
+import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES, sanitizeLandingContent, LANDING_CONTENT_SCHEMA, HONEYPOT_FIELD } from '../services/landingTemplates';
 import type { TemplateKey } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
 import { run as aiRouterRun } from '../services/aiRouter';
@@ -432,6 +432,67 @@ function cleanSlug(v: unknown): string | null {
 // /p/* is its own namespace so site slugs can't shadow app routes; this list
 // only blocks names that would be confusing or useful for phishing.
 const RESERVED_SITE_SLUGS = new Set(['api', 'app', 'admin', 'axal', 'assets', 'landing', 'login', 'preview', 'register', 'static', 'www']);
+
+/**
+ * Reserved PAGE slugs. Narrower than the site list on purpose.
+ *
+ * A page slug is the second segment (`/p/{site}/{page}`), so unlike a site
+ * slug it can never shadow an app route — the /p/* namespace already isolates
+ * it. What it CAN do is impersonate a trust surface on the founder's own
+ * domain path: `/p/acme/login`, `/p/acme/verify` and friends are exactly the
+ * shapes a phishing page wants, and these pages are attacker-authorable free
+ * text. So this blocks credential/payment-adjacent names and the reserved
+ * words that would collide with our own future per-site routes, and nothing
+ * else — founders keep `/p/acme/pricing`, `/p/acme/about` and so on.
+ */
+const RESERVED_PAGE_SLUGS = new Set([
+  'login', 'signin', 'sign-in', 'logout', 'register', 'signup', 'sign-up',
+  'auth', 'oauth', 'sso', 'password', 'reset', 'verify', 'verification',
+  'account', 'billing', 'payment', 'payments', 'checkout', 'card',
+  'admin', 'api', 'assets', 'static', 'preview', 'settings', 'security',
+]);
+
+/** Max landing pages one project may own. Deliberately a named constant. */
+const MAX_PAGES_PER_PROJECT = 5;
+
+/** Trim + hard-clip attacker-controlled free text. Null when empty. */
+function clipStr(v: unknown, max: number): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  if (!s) return null;
+  return s.slice(0, max);
+}
+
+/**
+ * Allowlisted UTM extraction. Mirrors the clip-and-allowlist approach the
+ * marketing funnel already uses (frontend/src/lib/funnel.js → routes/track.ts)
+ * so the two attribution paths agree on shape. Anything outside the five
+ * standard keys is dropped rather than stored.
+ */
+const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
+function pickUtm(v: unknown): Record<string, string> | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const src = v as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  for (const k of UTM_KEYS) {
+    const s = clipStr(src[k], 120);
+    if (s) out[k] = s;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * Page-count cap. Enforced HERE (server-side) rather than only in the UI,
+ * because the endpoint is a plain authenticated POST that anything can call.
+ * Each page is a ~40-column D1 row plus a globally-unique public URL, so an
+ * unbounded creator is both a storage and a namespace problem.
+ */
+async function pageCountFor(env: Env, projectId: number): Promise<number> {
+  const row = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM landing_pages WHERE project_id = ?'
+  ).bind(projectId).first<any>();
+  return Number(row?.n ?? 0);
+}
 
 function deriveSlugBase(name: string): string {
   return (name || '')
@@ -967,9 +1028,13 @@ brand.get('/landing/by-project/:pid/waitlist', async (c) => {
   catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const audienceFilter = VALID_AUDIENCE(c.req.query('audience'));
+  // landing_page_id is selected so the founder UI can attribute a signup to
+  // the page that captured it. It was previously omitted, which left the UI
+  // trying to match on `source` — a column the capture route always writes as
+  // the constant 'landing', so every per-page count rendered 0.
   const sql = audienceFilter
-    ? `SELECT id, email, name, source, audience, created_at FROM waitlist_signups WHERE project_id = ? AND audience = ? ORDER BY created_at DESC LIMIT 500`
-    : `SELECT id, email, name, source, audience, created_at FROM waitlist_signups WHERE project_id = ? ORDER BY created_at DESC LIMIT 500`;
+    ? `SELECT id, landing_page_id, email, name, source, audience, created_at FROM waitlist_signups WHERE project_id = ? AND audience = ? ORDER BY created_at DESC LIMIT 500`
+    : `SELECT id, landing_page_id, email, name, source, audience, created_at FROM waitlist_signups WHERE project_id = ? ORDER BY created_at DESC LIMIT 500`;
   const stmt = c.env.DB.prepare(sql);
   const rows = audienceFilter
     ? stmt.bind(pid, audienceFilter).all<any>()
@@ -1087,6 +1152,18 @@ brand.post('/landing/by-project/:pid/pages', async (c) => {
   const name = String(body?.name || '').trim();
   if (!name) return c.json({ error: 'name required' }, 400);
 
+  // Hard cap, server-side. 409 (not 400) — the request is well-formed, it
+  // conflicts with the account's current state, and deleting a page resolves it.
+  const existingCount = await pageCountFor(c.env, pid);
+  if (existingCount >= MAX_PAGES_PER_PROJECT) {
+    return c.json({
+      error: `You've reached the limit of ${MAX_PAGES_PER_PROJECT} landing pages for this project. Delete a page to make room for a new one.`,
+      code: 'page_limit_reached',
+      limit: MAX_PAGES_PER_PROJECT,
+      count: existingCount,
+    }, 409);
+  }
+
   // Seed from a saved template the caller owns; the merged body is re-parsed
   // through the shared sanitiser, so stored snapshots are never trusted as-is.
   let seed: Record<string, any> = body || {};
@@ -1114,6 +1191,9 @@ brand.post('/landing/by-project/:pid/pages', async (c) => {
     const cleaned = cleanSlug(rawPageSlug);
     if (!cleaned) {
       return c.json({ error: 'Page slug must be 1-48 characters: lowercase letters, numbers, and hyphens (no leading/trailing hyphen).' }, 400);
+    }
+    if (RESERVED_PAGE_SLUGS.has(cleaned)) {
+      return c.json({ error: `"${cleaned}" is reserved and can't be used as a page URL.`, code: 'slug_reserved' }, 400);
     }
     pageSlug = cleaned;
   } else {
@@ -1169,6 +1249,9 @@ brand.put('/landing/pages/:id', async (c) => {
     pageSlug = cleanSlug(rawPageSlug);
     if (!pageSlug) {
       return c.json({ error: 'Page slug must be 1-48 characters: lowercase letters, numbers, and hyphens (no leading/trailing hyphen).' }, 400);
+    }
+    if (RESERVED_PAGE_SLUGS.has(pageSlug)) {
+      return c.json({ error: `"${pageSlug}" is reserved and can't be used as a page URL.`, code: 'slug_reserved' }, 400);
     }
   }
   const previewToken = existing.preview_token || newPreviewToken();
@@ -1233,6 +1316,75 @@ brand.get('/landing/pages/:id/preview-url', async (c) => {
     await c.env.DB.prepare('UPDATE landing_pages SET preview_token = ? WHERE id = ?').bind(token, id).run();
   }
   return c.json({ url: `/landing/preview/${token}` });
+});
+
+/**
+ * The page's PUBLIC url — the one to share, not the private preview token.
+ *
+ * This exists because there was no way to get it. The founder-facing UI only
+ * ever had `preview-url`, so "View Live" opened a `noindex, no-store` draft
+ * link and the real public address was never shown anywhere in the product.
+ *
+ * `published` is returned alongside so the caller can be honest about what the
+ * link is: an unpublished page HAS a public URL, it just 404s until it goes
+ * live, and telling the founder that beats handing over a link that looks
+ * broken.
+ */
+brand.get('/landing/pages/:id/public-url', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  await ensureSchema(c.env);
+  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(id).first<any>();
+  if (!row) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c.env, user, row.project_id); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  const origin = new URL(c.req.url).origin;
+  const url = await canonicalPublicUrl(c.env, row, origin);
+  return c.json({ url, published: !!row.published, page_slug: row.page_slug || 'home' });
+});
+
+/**
+ * Is this page slug free for this project?
+ *
+ * Pre-flight for the slug editor, mirroring the company-name check the
+ * Incorporate wizard already uses (routes/legal.ts). Without it the only
+ * feedback is a 409 AFTER a failed save, which means a founder discovers the
+ * clash having already lost their edit.
+ *
+ * Returns the same three verdicts the write path enforces — malformed,
+ * reserved, taken — so the two can't disagree. Advisory only: the write still
+ * re-validates, because anything can change between this call and the save.
+ */
+brand.get('/landing/by-project/:pid/page-slug-available', async (c) => {
+  const user = await requireAuth(c);
+  const pid = parseInt(c.req.param('pid'));
+  try { await projectOwned(c.env, user, pid); }
+  catch (e: any) {
+    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  await ensureSchema(c.env);
+  const raw = c.req.query('slug');
+  const cleaned = cleanSlug(raw);
+  if (!cleaned) {
+    return c.json({
+      available: false,
+      reason: 'invalid',
+      message: 'Use 1-48 characters: lowercase letters, numbers and hyphens (no leading or trailing hyphen).',
+    });
+  }
+  if (RESERVED_PAGE_SLUGS.has(cleaned)) {
+    return c.json({ available: false, reason: 'reserved', message: `"${cleaned}" is reserved and can't be used as a page URL.` });
+  }
+  // Exclude the page being renamed, so re-saving its own slug isn't a clash.
+  const excludeId = parseInt(String(c.req.query('exclude_page_id') ?? '')) || 0;
+  const clash = await c.env.DB.prepare(
+    `SELECT id FROM landing_pages WHERE project_id = ? AND page_slug = ? AND id <> ? LIMIT 1`
+  ).bind(pid, cleaned, excludeId).first<any>();
+  if (clash) {
+    return c.json({ available: false, reason: 'taken', message: 'You already have a page at that URL.', slug: cleaned });
+  }
+  return c.json({ available: true, slug: cleaned });
 });
 
 // --- Saved custom templates (Task #2) ---------------------------------------
@@ -1336,6 +1488,20 @@ brand.post('/landing/:slug/waitlist', async (c) => {
   await ensureSchema(c.env);
   const slug = c.req.param('slug');
   const body = await c.req.json().catch(() => ({} as any));
+
+  // Honeypot. The rendered form carries an off-screen, aria-hidden,
+  // autocomplete-off text input that no human ever sees or fills. Naive bots
+  // that blindly populate every input give themselves away here.
+  //
+  // We answer 200 {ok:true} rather than an error ON PURPOSE: a bot that gets a
+  // 400 learns the trap exists and adapts, while an indistinguishable success
+  // wastes its time. Nothing is written.
+  const trap = body?.[HONEYPOT_FIELD];
+  if (typeof trap === 'string' && trap.trim() !== '') {
+    console.warn('brand waitlist: honeypot tripped on', slug);
+    return c.json({ ok: true });
+  }
+
   const email = String(body?.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return c.json({ error: 'invalid email' }, 400);
   const lp = await c.env.DB.prepare(
@@ -1352,17 +1518,38 @@ brand.post('/landing/:slug/waitlist', async (c) => {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ip));
     ipHash = Array.from(new Uint8Array(buf)).slice(0, 16).map((b) => b.toString(16).padStart(2, '0')).join('');
   }
+
+  // Idempotent re-submit. The same person hitting the button twice, or
+  // re-visiting a page they already joined, previously produced a duplicate
+  // row in BOTH tables — the founder's inbox showed the same lead repeatedly
+  // with no indication it was one person. Treat a repeat of the same email on
+  // the same page as a no-op and report success, which is what the visitor
+  // sees anyway. Different page = genuinely a different lead, so it's scoped
+  // to (landing_page_id, email), not email alone.
+  const already = await c.env.DB.prepare(
+    `SELECT id FROM waitlist_signups WHERE landing_page_id = ? AND email = ? LIMIT 1`
+  ).bind(lp.id, email).first<any>();
+  if (already) return c.json({ ok: true, duplicate: true });
+
+  // Attribution. Captured from the page's own querystring (forwarded by the
+  // form script) and the document referrer, so a founder can tell an
+  // organic visit from one they paid for. Clipped + allowlisted — this is
+  // attacker-controlled text on a public endpoint.
+  const utm = pickUtm(body?.utm);
+  const referrer = clipStr(body?.referrer, 300);
+
   await c.env.DB.prepare(
     `INSERT INTO waitlist_signups (project_id, landing_page_id, email, name, source, audience, ip_hash)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).bind(lp.project_id, lp.id, email, body?.name || null, body?.source || 'landing', audience, ipHash).run();
+  ).bind(lp.project_id, lp.id, email, clipStr(body?.name, 200), body?.source || 'landing', audience, ipHash).run();
   // Route the lead into the Contacts hub (best-effort — never fail the capture).
   try {
     await ingestContact(c.env, {
       projectId: lp.project_id, landingPageId: lp.id, email,
-      name: body?.name || null, audience: contactAudience,
-      cta: body?.cta || null, message: body?.message || null,
+      name: clipStr(body?.name, 200), audience: contactAudience,
+      cta: clipStr(body?.cta, 200), message: clipStr(body?.message, 2000),
       source: body?.source || 'landing',
+      utm, referrer,
     });
   } catch (e: any) {
     // Capture must still succeed even if the Contacts write fails — but log it
@@ -1382,9 +1569,44 @@ brand.post('/landing/:slug/view', async (c) => {
 
 // --- Public HTML renderer (mounted from index.ts at /landing/:slug) ------
 
+/**
+ * The ONE public URL a published page should be indexed and shared under.
+ *
+ * A published page is reachable at BOTH the legacy random `/landing/:slug`
+ * and — once its project has a brand_sites row — the branded
+ * `/p/:site/:page`. Identical HTML on two URLs is duplicate content, and the
+ * two would compete with each other in search and in link previews. The
+ * branded URL wins: it is the one the founder chose, it is stable across
+ * re-publishes, and it reads as theirs. Both renderers call this, so whichever
+ * URL a visitor arrives on, the page points at the same canonical.
+ *
+ * Falls back to the legacy URL when the project has no site row yet.
+ */
+export async function canonicalPublicUrl(env: Env, row: any, origin: string): Promise<string | null> {
+  if (!origin) return null;
+  try {
+    const site = await env.DB.prepare(
+      'SELECT slug FROM brand_sites WHERE project_id = ?'
+    ).bind(row.project_id).first<any>();
+    if (site?.slug) {
+      const page = String(row.page_slug || 'home');
+      // The site root serves the 'home' page, so 'home' canonicalises to the
+      // bare /p/:site rather than the equivalent /p/:site/home.
+      return page === 'home'
+        ? `${origin}/p/${encodeURIComponent(site.slug)}`
+        : `${origin}/p/${encodeURIComponent(site.slug)}/${encodeURIComponent(page)}`;
+    }
+  } catch (e: any) {
+    // A missing brand_sites table (fresh/unmigrated DB) must not break the
+    // render — fall through to the legacy URL.
+    console.warn('brand canonical lookup:', e?.message);
+  }
+  return row.slug ? `${origin}/landing/${encodeURIComponent(row.slug)}` : null;
+}
+
 function buildLandingPageHtml(
   row: any,
-  opts: { slug?: string; token?: string; noindex?: boolean; nonce?: string } = {},
+  opts: { slug?: string; token?: string; noindex?: boolean; nonce?: string; canonical?: string | null } = {},
 ): Response {
   const html = renderLandingTemplate(row, opts);
   return new Response(html, {
@@ -1396,7 +1618,7 @@ function buildLandingPageHtml(
   });
 }
 
-export async function renderLandingHtml(env: Env, slug: string, nonce?: string): Promise<Response> {
+export async function renderLandingHtml(env: Env, slug: string, nonce?: string, origin = ''): Promise<Response> {
   await ensureSchema(env);
   const row = await env.DB.prepare(
     `SELECT * FROM landing_pages WHERE slug = ? AND published = 1`
@@ -1408,13 +1630,14 @@ export async function renderLandingHtml(env: Env, slug: string, nonce?: string):
   env.DB.prepare(
     `UPDATE landing_pages SET views_count = COALESCE(views_count, 0) + 1 WHERE slug = ?`
   ).bind(slug).run().catch(() => {});
-  return buildLandingPageHtml(row, { slug, noindex: false, nonce });
+  const canonical = await canonicalPublicUrl(env, row, origin);
+  return buildLandingPageHtml(row, { slug, noindex: false, nonce, canonical });
 }
 
 // Branded site SSR — /p/{site}/{page} (and /p/{site} → the home page).
 // The row's legacy slug is passed through so the rendered waitlist form and
 // view ping keep POSTing to the existing /api/brand/landing/:slug endpoints.
-export async function renderSitePage(env: Env, siteSlug: string, pageSlug: string | null, nonce?: string): Promise<Response> {
+export async function renderSitePage(env: Env, siteSlug: string, pageSlug: string | null, nonce?: string, origin = ''): Promise<Response> {
   await ensureSchema(env);
   const site = await env.DB.prepare('SELECT project_id FROM brand_sites WHERE slug = ?').bind(siteSlug).first<any>();
   if (!site) {
@@ -1439,7 +1662,8 @@ export async function renderSitePage(env: Env, siteSlug: string, pageSlug: strin
   env.DB.prepare(
     'UPDATE landing_pages SET views_count = COALESCE(views_count, 0) + 1 WHERE id = ?'
   ).bind(row.id).run().catch(() => {});
-  return buildLandingPageHtml(row, { slug: row.slug, noindex: false, nonce });
+  const canonical = await canonicalPublicUrl(env, row, origin);
+  return buildLandingPageHtml(row, { slug: row.slug, noindex: false, nonce, canonical });
 }
 
 export async function renderLandingPreview(env: Env, token: string, nonce?: string): Promise<Response> {

@@ -6,6 +6,21 @@
  * JS is required for rendering.
  */
 
+/**
+ * Honeypot field name, shared by the form renderer below and the capture route
+ * (routes/brand.ts) that rejects on it.
+ *
+ * Lives HERE, not in brand.ts, because brand.ts already imports this module —
+ * defining it there and importing it back would be a cycle.
+ *
+ * Deliberately plausible: a bot's heuristic is "does this look like a field
+ * worth filling", so `company_website` gets filled where a name like
+ * `honeypot_do_not_fill` would be skipped. Exported so the renderer, the route
+ * and the tests all use one string — a rename that hit only one side would
+ * silently disable the trap, which is how this defence usually rots.
+ */
+export const HONEYPOT_FIELD = 'company_website';
+
 export const TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit', 'capital-storyteller', 'seed-stage-spark', 'distribution-deck', 'pilot-partner-page', 'partner-hub', 'partner-pipeline-pro', 'co-founder-builder', 'co-founder-canvas', 'cofounder-connect', 'co-founder-quest', 'mentor-connect', 'mentor-connect-page', 'builders-launchpad'] as const;
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 
@@ -277,9 +292,66 @@ interface BrandKit {
   nonce?: string;
   heroMediaUrl?: string | null;
   productScreenshotUrl?: string | null;
+  /** Absolute canonical URL of this page, when the caller knows it. */
+  canonical?: string | null;
+  /** Absolute https image URL for the social card, when one is available. */
+  socialImage?: string | null;
 }
 
-function buildBrandKit(row: any, opts: { slug?: string; token?: string; noindex?: boolean; nonce?: string }): BrandKit {
+/**
+ * Open Graph / Twitter Card / canonical block, shared by every renderer.
+ *
+ * WHY A HELPER. Each of the 21 renderers inlines its own `<head>` as a
+ * template literal, so before this existed the head was copy-pasted 21 times
+ * and carried NO social metadata at all — a shared /landing/:slug link
+ * rendered in Slack, iMessage, WhatsApp or X as a bare URL with no title,
+ * no description and no image. Founders are told to share these pages, so
+ * that was the single highest-impact gap on the public surface. Emitting the
+ * tags from one function means the next field lands in one place, not 21.
+ *
+ * A note on `og:image`: there is no per-page card generation. The repo's
+ * OG pipeline (scripts/generate-og-images.mjs) is build-time, renders a
+ * fixed key registry with headless Chromium, and ships committed PNGs for
+ * the MARKETING site — it cannot produce a card per founder page at request
+ * time, and the Worker has no image renderer. So the card image is the
+ * founder's own uploaded logo when they have one, and is omitted otherwise
+ * (an absent og:image degrades to a text-only card, which is correct;
+ * pointing at a wrong or generic image would be worse). Generated per-page
+ * cards need an image-rendering path that does not exist yet.
+ */
+function socialMeta(bk: BrandKit, a: { h: string; b: string; c: string }): string {
+  // A preview must never be indexed or unfurled — it is a private draft link.
+  if (bk.noindex) return '';
+  const title = bk.name;
+  const desc = a.b || '';
+  const out = [
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:title" content="${title}" />`,
+    `<meta property="og:site_name" content="${title}" />`,
+  ];
+  if (desc) out.push(`<meta property="og:description" content="${desc}" />`);
+  if (bk.canonical) {
+    out.push(`<meta property="og:url" content="${escapeHtml(bk.canonical)}" />`);
+    out.push(`<link rel="canonical" href="${escapeHtml(bk.canonical)}" />`);
+  }
+  if (bk.socialImage) {
+    out.push(`<meta property="og:image" content="${escapeHtml(bk.socialImage)}" />`);
+    out.push(`<meta name="twitter:image" content="${escapeHtml(bk.socialImage)}" />`);
+    // A logo is square-ish; summary (not summary_large_image) is the honest
+    // card shape for it, and avoids X cropping a logo into a letterbox.
+    out.push(`<meta name="twitter:card" content="summary" />`);
+  } else {
+    out.push(`<meta name="twitter:card" content="summary" />`);
+  }
+  out.push(`<meta name="twitter:title" content="${title}" />`);
+  if (desc) out.push(`<meta name="twitter:description" content="${desc}" />`);
+  return out.join('\n');
+}
+
+function buildBrandKit(
+  row: any,
+  opts: { slug?: string; token?: string; noindex?: boolean; nonce?: string; canonical?: string | null },
+): BrandKit {
   const color = hex6(row.theme_color, '#7c3aed');
   const bgColor = hex6(row.palette_bg, '#fafafa');
   const inkColor = hex6(row.palette_ink, '#0f172a');
@@ -296,11 +368,19 @@ function buildBrandKit(row: any, opts: { slug?: string; token?: string; noindex?
     : (row.logo_svg || svgLogoInline(row.name, color));
   const slug = opts.slug || '';
   const apiWaitlist = opts.slug ? `/api/brand/landing/${encodeURIComponent(opts.slug)}/waitlist` : '';
+  // The social card can only use an ABSOLUTE https image — a crawler fetching
+  // the card has no origin to resolve `/uploads/x.png` against. validMediaUrl
+  // deliberately allows same-origin paths (they're fine inside the document),
+  // so re-check here rather than reusing it.
+  const rawLogo = typeof row.logo_url === 'string' ? row.logo_url.trim() : '';
+  const socialImage = /^https:\/\/\S+$/.test(rawLogo) ? rawLogo : null;
   return {
     color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, logoInline, name, slug,
     apiWaitlist, noindex: !!opts.noindex, nonce: opts.nonce,
     heroMediaUrl: validMediaUrl(row.hero_media_url),
     productScreenshotUrl: validMediaUrl(row.product_screenshot_url),
+    canonical: opts.canonical || null,
+    socialImage,
   };
 }
 
@@ -1513,11 +1593,38 @@ function selectedAudience(row: any): string {
   return (AUDIENCE_KEYS as readonly string[]).includes(a) ? a : 'customer';
 }
 
+/**
+ * Honeypot input, rendered inside every public capture form.
+ *
+ * MUST live in the static markup, not be injected by script: the bots this
+ * catches parse the served HTML and fill every input they find. One that
+ * never runs our JS would never see a JS-created field (and one that posts
+ * straight to the API skips the form entirely — that is the rate limiter's
+ * job, not this one).
+ *
+ * Hidden four ways because any single one is defeatable: off-screen
+ * positioning (not `display:none`, which the cruder scrapers specifically
+ * skip), `aria-hidden` so screen readers ignore it, `tabindex="-1"` so it is
+ * unreachable by keyboard, and `autocomplete="off"` so no password manager
+ * helpfully fills it for a real user — a false positive here silently drops a
+ * genuine lead, which is worse than missing a bot.
+ *
+ * The field name is shared with the route via HONEYPOT_FIELD so a rename can
+ * never disable the trap on one side only.
+ */
+function honeypotField(): string {
+  return `
+        <div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">
+          <label for="${HONEYPOT_FIELD}">Company website (leave blank)</label>
+          <input id="${HONEYPOT_FIELD}" type="text" name="${HONEYPOT_FIELD}" tabindex="-1" autocomplete="off" />
+        </div>`;
+}
+
 // One waitlist form for the selected audience. `a.c` (the CTA) is already
 // HTML-escaped by buildAudienceData.
 function audienceForm(a: { h: string; b: string; c: string }): string {
   return `
-      <form id="wl-form">
+      <form id="wl-form">${honeypotField()}
         <label for="email" class="sr">Email</label>
         <input id="email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit">${a.c}</button>
@@ -1549,11 +1656,20 @@ function singleWaitlistScript(apiWaitlist: string, audience: string, nonce?: str
   if(!api) return;
   var f=document.getElementById('wl-form'), m=document.getElementById('wl-msg');
   if(!f) return;
+  // Attribution, read once at load: which campaign sent this visitor, and what
+  // page linked here. Allowlisted client-side too so a crafted querystring
+  // can't push arbitrary keys at the API (which allowlists again server-side).
+  var utm={}, qs=new URLSearchParams(location.search);
+  ['utm_source','utm_medium','utm_campaign','utm_term','utm_content'].forEach(function(k){
+    var v=qs.get(k); if(v) utm[k]=String(v).slice(0,120);
+  });
+  var ref=document.referrer||'';
   f.addEventListener('submit',function(e){
     e.preventDefault();
     var email=f.email.value.trim(); if(!email) return;
     var btn=f.querySelector('button'); btn.disabled=true;
-    fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'omit',body:JSON.stringify({email:email,source:'landing',audience:${JSON.stringify(audience)}})})
+    var trap=f.elements[${JSON.stringify(HONEYPOT_FIELD)}];
+    fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'omit',body:JSON.stringify({email:email,source:'landing',audience:${JSON.stringify(audience)},utm:utm,referrer:ref.slice(0,300),${JSON.stringify(HONEYPOT_FIELD)}:trap?trap.value:''})})
       .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
       .then(function(x){
         if(x.ok){ m.className='wl-ok'; m.textContent="You're on the list. We'll be in touch."; f.reset(); }
@@ -1606,6 +1722,7 @@ function renderMinimal(bk: BrandKit, aud: Record<string, { h: string; b: string;
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   body { margin:0; font-family: ${fontStack(fontPairing)}; background: ${bgColor}; color: ${inkColor}; }
@@ -1654,6 +1771,7 @@ function renderBoldHero(bk: BrandKit, aud: Record<string, { h: string; b: string
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   body { margin:0; font-family: ${fontStack(fontPairing)}; background: ${bgColor}; color: ${inkColor}; }
@@ -1712,6 +1830,7 @@ function renderVideoFirst(bk: BrandKit, aud: Record<string, { h: string; b: stri
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   body { margin:0; font-family: ${fontStack(fontPairing)}; background: ${bgColor}; color: ${inkColor}; }
@@ -1767,6 +1886,7 @@ function renderEditorial(bk: BrandKit, aud: Record<string, { h: string; b: strin
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   body { margin:0; font-family: ${fontStack(fontPairing)}; background: ${bgColor}; color: ${inkColor}; line-height: 1.6; }
@@ -1816,6 +1936,7 @@ function renderProductMock(bk: BrandKit, aud: Record<string, { h: string; b: str
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   body { margin:0; font-family: ${fontStack(fontPairing)}; background: ${bgColor}; color: ${inkColor}; }
@@ -1878,6 +1999,7 @@ function renderAdvisorConnect(bk: BrandKit, aud: Record<string, { h: string; b: 
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   *{box-sizing:border-box;}
@@ -2002,7 +2124,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="cta" id="join">
       <h2>${a.c}</h2>
       <p>Leave your email and we'll send a short brief plus a link to book an intro call.</p>
-      <form id="wl-form">
+      <form id="wl-form">${honeypotField()}
         <label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn">${a.c}</button>
@@ -2036,6 +2158,7 @@ function renderProofBuilder(bk: BrandKit, aud: Record<string, { h: string; b: st
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   *{box-sizing:border-box;}
@@ -2161,7 +2284,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="cta" id="join">
       <h2>${a.c}</h2>
       <p>Join the early list. We'll share what we're seeing and bring you in as we open access.</p>
-      <form id="wl-form">
+      <form id="wl-form">${honeypotField()}
         <label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn">${a.c}</button>
@@ -2196,6 +2319,7 @@ function renderCapitalReadyKit(bk: BrandKit, aud: Record<string, { h: string; b:
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: dark; }
   *{box-sizing:border-box;}
@@ -2321,7 +2445,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="cta" id="intro">
       <h2>${a.c}</h2>
       <p>Leave your email for the data room and a 30-minute intro with the founders.</p>
-      <form id="wl-form">
+      <form id="wl-form">${honeypotField()}
         <label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@fund.com" required />
         <button type="submit" class="btn">${a.c}</button>
@@ -2355,6 +2479,7 @@ function renderCapitalStoryteller(bk: BrandKit, aud: Record<string, { h: string;
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root{color-scheme:dark;}*{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -2451,7 +2576,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="cta">
       <h2>${a.c}</h2>
       <p>Leave your email for the full data room and a 30-minute intro with the founding team.</p>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@fund.com" required />
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -2473,6 +2598,7 @@ function renderSeedStageSpark(bk: BrandKit, aud: Record<string, { h: string; b: 
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root{color-scheme:dark;}*{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -2554,7 +2680,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="cta" id="raise">
       <h2>${a.c}</h2>
       <p>We're sharing the deck and metrics with a small group of seed investors. Add your email.</p>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@fund.com" required />
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -2577,6 +2703,7 @@ function renderDistributionDeck(bk: BrandKit, aud: Record<string, { h: string; b
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -2674,7 +2801,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </section>
     <section class="ctaSec" id="next"><div class="wrap two" style="padding:0;max-width:none;">
       <div><h2>${a.c}</h2><p>Send your overlap assumptions and we'll come back with a modelled channel plan — no slideware.</p></div>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@partner.com" required />
         <button type="submit" class="btn">${a.c}</button>
         <div id="wl-msg" aria-live="polite"></div>
@@ -2698,6 +2825,7 @@ function renderPilotPartnerPage(bk: BrandKit, aud: Record<string, { h: string; b
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -2790,7 +2918,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   <section class="ctaSec" id="apply"><div class="wrap in">
     <h2>${a.c}</h2>
     <div><p>Tell us where it hurts. If there's a fit, we'll set up a 30-minute call this week.</p>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@company.com" required />
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -2813,6 +2941,7 @@ function renderPartnerHub(bk: BrandKit, aud: Record<string, { h: string; b: stri
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.65;-webkit-font-smoothing:antialiased;}
@@ -2902,7 +3031,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div><h2>${a.c}</h2><p>Tell us about your customers and we'll come back with a concrete partnership shape.</p>
       <ul><li>Who your customers are</li><li>The overlap you see</li><li>What a win looks like</li></ul>
     </div>
-    <div class="card"><form id="wl-form">
+    <div class="card"><form id="wl-form">${honeypotField()}
       <label for="wl-email" class="sr">Email</label>
       <input id="wl-email" type="email" name="email" placeholder="you@partner.com" required />
       <button type="submit" class="btn">${a.c}</button>
@@ -2925,6 +3054,7 @@ function renderPartnerPipelinePro(bk: BrandKit, aud: Record<string, { h: string;
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -3028,7 +3158,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="ctaBox" id="fit">
       <h2>${a.c}</h2>
       <p class="lead">Send your overlap assumptions ahead and we'll bring a modelled channel plan to a working session.</p>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@partner.com" required />
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -3051,6 +3181,7 @@ function renderCoFounderBuilder(bk: BrandKit, aud: Record<string, { h: string; b
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -3160,7 +3291,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   <section class="ctaSec" id="apply"><div class="grid"></div><div class="in wrap">
     <h2>${a.c}</h2>
     <p>No CV theater — we'd rather read your code. Drop your email and we'll send the brief and a time.</p>
-    <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+    <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
       <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
       <button type="submit" class="btn">${a.c}</button></form>
     <div id="wl-msg" aria-live="polite"></div>
@@ -3182,6 +3313,7 @@ function renderCoFounderCanvas(bk: BrandKit, aud: Record<string, { h: string; b:
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
@@ -3303,7 +3435,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="cta" id="talk">
       <h2>Let's <em>talk</em>.</h2>
       <ol class="steps">${c.list('steps').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn acc">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -3327,6 +3459,7 @@ function renderCofounderConnect(bk: BrandKit, aud: Record<string, { h: string; b
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
@@ -3446,7 +3579,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   <section class="ctaSec" id="talk"><div class="wrap">
     <h2>Let's <em>talk</em> about building this together.</h2>
     <ol class="steps">${c.list('steps').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
-    <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+    <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
       <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
       <button type="submit" class="btn">${a.c}</button></form>
     <div id="wl-msg" aria-live="polite"></div>
@@ -3468,6 +3601,7 @@ function renderCoFounderQuest(bk: BrandKit, aud: Record<string, { h: string; b: 
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
@@ -3574,7 +3708,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div class="label">Join the build</div>
       <h2>Let's find out if it clicks</h2>
       <ol class="steps">${c.list('steps').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn acc">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -3597,6 +3731,7 @@ function renderMentorConnect(bk: BrandKit, aud: Record<string, { h: string; b: s
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
@@ -3681,7 +3816,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div class="eyebrow">The ask</div>
       <h2>${a.c}</h2>
       <p>Thirty minutes, whenever suits you. A one-line "not this quarter" is a complete reply.</p>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -3703,6 +3838,7 @@ function renderMentorConnectPage(bk: BrandKit, aud: Record<string, { h: string; 
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
@@ -3773,7 +3909,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <div class="card">
           ${c.list('ask_options').map((it) => `<div class="opt"><span class="k">${it.t('key')}</span><span>${it.t('body')}</span></div>`).join('')}
         </div>
-        <form id="wl-form" style="margin-top:16px;"><label for="wl-email" class="sr">Email</label>
+        <form id="wl-form" style="margin-top:16px;">${honeypotField()}<label for="wl-email" class="sr">Email</label>
           <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
           <button type="submit" class="btn acc">${a.c}</button></form>
         <div id="wl-msg" aria-live="polite"></div>
@@ -3809,6 +3945,7 @@ function renderBuildersLaunchpad(bk: BrandKit, aud: Record<string, { h: string; 
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root{color-scheme:dark;}*{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_MONO};line-height:1.65;font-size:15px;-webkit-font-smoothing:antialiased;}
@@ -3903,7 +4040,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
             <p class="ln">› drop your email below and you're on the list.</p>
           </div>
           <div class="foot">
-            <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+            <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
               <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
               <button type="submit" class="btn">${a.c}</button></form>
           </div>

@@ -17,10 +17,11 @@ dev.
 """
 from __future__ import annotations
 
+import json
 import logging
 import secrets
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
@@ -61,6 +62,9 @@ def _ensure_schema(session: Session) -> None:
             status TEXT NOT NULL DEFAULT 'new',
             promoted_to TEXT,
             promoted_ref_id INTEGER,
+            -- Lead attribution (mirrors worker migration 166).
+            utm_json TEXT,
+            referrer TEXT,
             last_activity_at TEXT,
             created_at TEXT,
             updated_at TEXT
@@ -68,6 +72,11 @@ def _ensure_schema(session: Session) -> None:
         """,
         "CREATE INDEX IF NOT EXISTS idx_contacts_project ON contacts(project_id, audience)",
         "CREATE INDEX IF NOT EXISTS idx_contacts_status ON contacts(status)",
+        # CREATE TABLE IF NOT EXISTS never adds columns to a table that already
+        # exists, so a dev DB created before attribution needs these ALTERs.
+        # Each runs in its own try/except — a duplicate column just rolls back.
+        "ALTER TABLE contacts ADD COLUMN utm_json TEXT",
+        "ALTER TABLE contacts ADD COLUMN referrer TEXT",
     ]
     for stmt in stmts:
         try:
@@ -107,20 +116,27 @@ def ingest_contact(
     cta: Optional[str] = None,
     message: Optional[str] = None,
     source: Optional[str] = None,
+    utm: Optional[Dict[str, str]] = None,
+    referrer: Optional[str] = None,
 ) -> None:
     """Best-effort lead ingest — callers must not let a failure break capture."""
     _ensure_schema(session)
     aud = audience if audience in CONTACT_AUDIENCES else "customer"
     now = datetime.utcnow().isoformat()
+    # Attribution stored as a JSON blob (mirrors the worker): the useful key
+    # set changes per campaign, and a blob keeps that from being a migration
+    # each time. Written only from the caller's allowlisted+clipped map.
+    utm_json = json.dumps(utm) if utm else None
     session.exec(text(
         "INSERT INTO contacts (uid, project_id, audience, routed_to, name, email, cta, message, "
-        "source, landing_page_id, status, last_activity_at, created_at, updated_at) "
+        "source, landing_page_id, status, utm_json, referrer, last_activity_at, created_at, updated_at) "
         "VALUES (:uid, :pid, :aud, :routed, :name, :email, :cta, :message, "
-        ":source, :lid, 'new', :now, :now, :now)"
+        ":source, :lid, 'new', :utm, :ref, :now, :now, :now)"
     ), params={
         "uid": secrets.token_hex(12), "pid": project_id, "aud": aud, "routed": route_for(aud),
         "name": name, "email": (email or "").lower(), "cta": cta, "message": message,
-        "source": source or "landing", "lid": landing_page_id, "now": now,
+        "source": source or "landing", "lid": landing_page_id,
+        "utm": utm_json, "ref": referrer, "now": now,
     })
 
 

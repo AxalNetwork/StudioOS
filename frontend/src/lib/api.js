@@ -1613,6 +1613,14 @@ export const api = {
   brandDeletePage: (pageId) => request(`/brand/landing/pages/${pageId}`, { method: 'DELETE' }),
   brandPublishPage: (pageId, published) => request(`/brand/landing/pages/${pageId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
   brandPagePreviewUrl: (pageId) => request(`/brand/landing/pages/${pageId}/preview-url`),
+  // The SHAREABLE public url (distinct from the noindex preview-token link
+  // above). Returns { url, published, page_slug }.
+  brandPagePublicUrl: (pageId) => request(`/brand/landing/pages/${pageId}/public-url`),
+  // Pre-flight for the slug editor. Returns { available, reason?, message?, slug? }.
+  brandPageSlugAvailable: (projectId, slug, excludePageId) => request(
+    `/brand/landing/by-project/${projectId}/page-slug-available?slug=${encodeURIComponent(slug)}`
+    + (excludePageId ? `&exclude_page_id=${encodeURIComponent(excludePageId)}` : ''),
+  ),
   brandListCustomTemplates: () => request('/brand/custom-templates'),
   brandSaveCustomTemplate: (name, fromPageId) => request('/brand/custom-templates', { method: 'POST', body: JSON.stringify({ name, from_page_id: fromPageId }) }),
   brandDeleteCustomTemplate: (id) => request(`/brand/custom-templates/${id}`, { method: 'DELETE' }),
