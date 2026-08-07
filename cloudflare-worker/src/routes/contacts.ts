@@ -103,6 +103,11 @@ async function ensureSchema(env: Env): Promise<void> {
        status TEXT NOT NULL DEFAULT 'new',
        promoted_to TEXT,
        promoted_ref_id INTEGER,
+       -- Lead attribution (migration 166). utm_json is an allowlisted,
+       -- length-clipped {utm_source,utm_medium,utm_campaign,utm_term,
+       -- utm_content} blob; referrer is the capturing page's document.referrer.
+       utm_json TEXT,
+       referrer TEXT,
        last_activity_at TEXT,
        created_at TEXT NOT NULL DEFAULT (datetime('now')),
        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -196,6 +201,19 @@ async function ensureSchema(env: Env): Promise<void> {
       catch (e) { console.warn('[contacts] ALTER raise_prospects.amount failed (likely already applied)', e); }
     }
   } catch (e) { console.warn('[contacts] raise_prospects.amount bootstrap failed', e); }
+  // Lead attribution — self-heal utm_json/referrer on an EXISTING contacts
+  // table. Canonical add is migration 166; same PRAGMA-guarded pattern as
+  // promoted_ref_id above (see GOTCHAS.md "Migrations & schema").
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(contacts)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((x) => x.name));
+    for (const [col, decl] of [['utm_json', 'TEXT'], ['referrer', 'TEXT']] as const) {
+      if (!have.has(col)) {
+        try { await env.DB.prepare(`ALTER TABLE contacts ADD COLUMN ${col} ${decl}`).run(); }
+        catch (e) { console.warn(`[contacts] ALTER ${col} failed (likely already applied)`, e); }
+      }
+    }
+  } catch (e) { console.warn('[contacts] attribution bootstrap failed', e); }
   _ensured = true;
 }
 
@@ -206,20 +224,34 @@ async function ensureSchema(env: Env): Promise<void> {
  */
 export async function ingestContact(
   env: Env,
-  opts: { projectId: number; landingPageId?: number | null; email: string; name?: string | null; audience?: string | null; cta?: string | null; message?: string | null; source?: string | null; status?: string },
+  opts: {
+    projectId: number; landingPageId?: number | null; email: string; name?: string | null;
+    audience?: string | null; cta?: string | null; message?: string | null; source?: string | null;
+    status?: string;
+    /** Allowlisted utm_* map from the capturing page's querystring. */
+    utm?: Record<string, string> | null;
+    /** document.referrer of the capturing page. */
+    referrer?: string | null;
+  },
 ): Promise<void> {
   await ensureSchema(env);
   const audience = opts.audience && CONTACT_AUDIENCES.includes(opts.audience) ? opts.audience : 'customer';
   const uid = newUid();
+  // Attribution is stored as a JSON blob rather than five columns: the set of
+  // useful keys changes with whatever the founder runs campaigns on, and a
+  // blob keeps that from being a migration each time. It is written only from
+  // the allowlisted+clipped map the caller built, never raw request input.
+  const utmJson = opts.utm && Object.keys(opts.utm).length ? JSON.stringify(opts.utm) : null;
   await env.DB.prepare(
-    `INSERT INTO contacts (uid, project_id, audience, routed_to, name, email, cta, message, source, landing_page_id, status, last_activity_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO contacts (uid, project_id, audience, routed_to, name, email, cta, message, source, landing_page_id, status, utm_json, referrer, last_activity_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     uid, opts.projectId, audience, routeFor(audience),
     opts.name || null, String(opts.email).toLowerCase(),
     opts.cta || null, opts.message || null, opts.source || 'landing',
     opts.landingPageId ?? null,
     opts.status && CONTACT_STATUSES.includes(opts.status) ? opts.status : 'new',
+    utmJson, opts.referrer || null,
     nowIso(), nowIso(), nowIso(),
   ).run();
 }

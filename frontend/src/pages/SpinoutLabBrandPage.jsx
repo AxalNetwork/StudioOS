@@ -29,9 +29,10 @@ import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Loader2, Palette, Upload, Sparkles, Check, AlertTriangle, X,
   ExternalLink, Copy, Plus, Pencil, Eye, CalendarPlus, ChevronDown, ChevronRight,
-  Monitor, Smartphone, LayoutGrid, List,
+  Monitor, Smartphone, LayoutGrid, List, Trash2, Link2,
 } from 'lucide-react';
 import LabPageHeader from '../components/spinout/LabPageHeader';
+import ShareButtons from '../components/ShareButtons';
 import { api } from '../lib/api';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { reportError } from '../lib/log';
@@ -42,6 +43,11 @@ import {
   TEMPLATES, AUDIENCES, AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES,
 } from '../lib/brand/templates';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
+
+// Mirrors MAX_PAGES_PER_PROJECT in cloudflare-worker/src/routes/brand.ts (and
+// the FastAPI mirror). The server rejects over-cap creates on its own — this
+// copy exists only so the UI can warn before a save is refused.
+export const MAX_PAGES_PER_PROJECT = 5;
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -276,7 +282,16 @@ export default function SpinoutLabBrandPage() {
     if (!pid) return;
     try {
       const r = await api.brandListPages(pid);
-      setPages(Array.isArray(r?.pages) ? r.pages : []);
+      const list = Array.isArray(r?.pages) ? r.pages : [];
+      setPages(list);
+      // A newly created / renamed page needs its public URL resolved, and a
+      // deleted one's cached entry dropped, so the share row never points at
+      // a stale address.
+      setPublicUrls((m) => {
+        const live = new Set(list.map((p) => p.id));
+        return Object.fromEntries(Object.entries(m).filter(([id]) => live.has(Number(id))));
+      });
+      loadPublicUrls(list);
     } catch (e) { reportError('SpinoutLabBrandPage:pages', e); }
   };
 
@@ -306,7 +321,11 @@ export default function SpinoutLabBrandPage() {
           logo_asset_id: v.logo_asset_id || null,
         }));
       }
-      if (pg.status === 'fulfilled') setPages(Array.isArray(pg.value?.pages) ? pg.value.pages : []);
+      if (pg.status === 'fulfilled') {
+        const list = Array.isArray(pg.value?.pages) ? pg.value.pages : [];
+        setPages(list);
+        loadPublicUrls(list);
+      }
       if (wl.status === 'fulfilled') setSignups(Array.isArray(wl.value?.signups) ? wl.value.signups : []);
       // Contacts scope to the founder's own projects server-side; keep only
       // this Lab project's leads so the rail matches the pages shown here.
@@ -358,19 +377,83 @@ export default function SpinoutLabBrandPage() {
   };
 
   // ---- page actions ----
-  // Only signups whose recorded source matches this page — no audience-wide
-  // fallback (that would double-count the same signups across pages).
+  // Signups belonging to THIS page.
+  //
+  // Was: `s.source === page.page_slug || s.source === page.slug`. The capture
+  // route hardcodes source='landing' for every submission, so neither side of
+  // that could ever match and every card rendered "0 subs" no matter the real
+  // volume. `landing_page_id` is the actual foreign key the row carries, so
+  // match on that; the source comparison is kept only as a fallback for any
+  // historical row written by a caller that set a custom source.
   const subsForPage = (page) => signups.filter(
-    (s) => s.source && (s.source === page.page_slug || s.source === page.slug),
+    (s) => (s.landing_page_id != null && Number(s.landing_page_id) === Number(page.id))
+      || (s.source && s.source !== 'landing' && (s.source === page.page_slug || s.source === page.slug)),
   ).length;
 
+  // Public URLs, resolved per page and cached by page id. The server is the
+  // authority (it decides between the branded /p/{site}/{page} and the legacy
+  // /landing/{slug}), so this never composes the URL client-side.
+  const [publicUrls, setPublicUrls] = useState({});
+
+  const loadPublicUrls = async (list) => {
+    const missing = (list || []).filter((p) => publicUrls[p.id] === undefined);
+    if (!missing.length) return;
+    const entries = await Promise.all(missing.map(async (p) => {
+      try {
+        const r = await api.brandPagePublicUrl(p.id);
+        const raw = r?.url || null;
+        const abs = raw && !raw.startsWith('http') ? `${window.location.origin}${raw}` : raw;
+        return [p.id, abs];
+      } catch (e) {
+        // A page whose URL can't be resolved still renders — it just shows no
+        // share row, rather than blocking the whole grid.
+        reportError('SpinoutLabBrandPage:publicUrl', e);
+        return [p.id, null];
+      }
+    }));
+    setPublicUrls((m) => ({ ...m, ...Object.fromEntries(entries) }));
+  };
+
+  // "View Live" used to open api.brandPagePreviewUrl — the private,
+  // noindex/no-store PREVIEW-TOKEN link — so it never showed the real public
+  // page, and behaved identically for an unpublished draft. Published pages
+  // now open their true public URL; drafts keep the preview link, which is the
+  // only thing that renders them, and say so.
   const onViewLive = async (page) => {
     try {
+      if (page.published) {
+        const url = publicUrls[page.id] || (await api.brandPagePublicUrl(page.id))?.url;
+        if (!url) throw new Error('No public URL available for this page');
+        const abs = url.startsWith('http') ? url : `${window.location.origin}${url}`;
+        window.open(abs, '_blank', 'noopener');
+        return;
+      }
       const r = await api.brandPagePreviewUrl(page.id);
       const url = r?.url || r?.preview_url;
-      if (url) window.open(url, '_blank', 'noopener');
-      else throw new Error('No preview URL returned');
-    } catch (e) { setError(e?.message || 'Could not open the live page'); }
+      if (!url) throw new Error('No preview URL returned');
+      window.open(url.startsWith('http') ? url : `${window.location.origin}${url}`, '_blank', 'noopener');
+    } catch (e) { setError(e?.message || 'Could not open the page'); }
+  };
+
+  const onDeletePage = async (page) => {
+    if (busyPage) return;
+    // Deleting a published page takes a live URL offline and its leads lose
+    // their origin — worth one confirm.
+    const msg = page.published
+      ? `Delete "${page.name}"? Its public page goes offline immediately and the URL stops working. Leads already captured are kept.`
+      : `Delete the draft "${page.name}"? This can't be undone.`;
+    if (!window.confirm(msg)) return;
+    setBusyPage(page.id); setError('');
+    try {
+      await api.brandDeletePage(page.id);
+      await refreshPages();
+      showToast({ msg: 'Page deleted.', kind: 'ok' });
+    } catch (e) {
+      // The worker refuses to delete a project's last page (unpublish instead)
+      // — surface that reason rather than a generic failure.
+      setError(e?.message || 'Could not delete the page');
+      reportError('SpinoutLabBrandPage:deletePage', e);
+    } finally { setBusyPage(null); }
   };
 
   // Explicit LandingUpsert allowlist — never spread the server row into the
@@ -390,6 +473,11 @@ export default function SpinoutLabBrandPage() {
 
   const onDuplicate = async (page) => {
     if (busyPage) return;
+    // Duplicate creates a page too, so it's bound by the same cap.
+    if (pages.length >= MAX_PAGES_PER_PROJECT) {
+      setError(`You've reached the limit of ${MAX_PAGES_PER_PROJECT} landing pages for this project. Delete a page to make room for a new one.`);
+      return;
+    }
     setBusyPage(page.id); setError('');
     try {
       const full = await api.brandGetPage(page.id);
@@ -412,6 +500,11 @@ export default function SpinoutLabBrandPage() {
 
   const useTemplate = async (tpl) => {
     if (creatingFrom || !projectId) return;
+    if (pages.length >= MAX_PAGES_PER_PROJECT) {
+      setError(`You've reached the limit of ${MAX_PAGES_PER_PROJECT} landing pages for this project. Delete a page to make room for a new one.`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     setCreatingFrom(tpl.id); setError('');
     try {
       const palette = VISUAL_TEMPLATE_PALETTES[tpl.visualTemplate] || {};
@@ -663,6 +756,11 @@ export default function SpinoutLabBrandPage() {
   };
 
   // ---- derived ----
+  // Mirrors MAX_PAGES_PER_PROJECT in cloudflare-worker/src/routes/brand.ts.
+  // The server is the enforcer — this only drives the pre-emptive UI notice,
+  // so a drift here degrades to a surprise 409, never to an exceeded cap.
+  const atPageLimit = pages.length >= MAX_PAGES_PER_PROJECT;
+
   const filteredTemplates = useMemo(
     () => (libFilter === 'all' ? TEMPLATES : TEMPLATES.filter((t) => t.audience === libFilter)),
     [libFilter],
@@ -1130,15 +1228,59 @@ export default function SpinoutLabBrandPage() {
                         <div className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">
                           <b className="text-gray-800 dark:text-gray-200">{p.views_count}</b> views · <b className="text-gray-800 dark:text-gray-200">{subs}</b> subs{p.updated_at ? ` · ${timeAgo(p.updated_at)}` : ''}
                         </div>
-                        <div className="flex items-center gap-1.5 mt-2.5">
+
+                        {/* The page's real public address. Previously the
+                            founder was never shown this anywhere — the only
+                            URL in the UI was the private preview token. */}
+                        {publicUrls[p.id] && (
+                          <div className="mt-2 rounded-lg bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-700 px-2 py-1.5" data-testid={`page-public-url-${p.id}`}>
+                            <div className="flex items-center gap-1.5">
+                              <Link2 size={11} className="flex-none text-gray-400" />
+                              <code className="text-[10.5px] font-mono text-gray-600 dark:text-gray-300 truncate" title={publicUrls[p.id]}>
+                                {publicUrls[p.id].replace(/^https?:\/\//, '')}
+                              </code>
+                            </div>
+                            {!p.published && (
+                              <div className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
+                                Publish the page for this link to work.
+                              </div>
+                            )}
+                            {/* Sharing a draft would hand out a link that 404s,
+                                so the row only appears once it's live. */}
+                            {p.published && (
+                              <div className="mt-1.5">
+                                <ShareButtons url={publicUrls[p.id]} title={p.name} size="sm" />
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                           <button type="button" disabled={openingPage === p.id} onClick={() => openEditor(p)} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg bg-violet-600 text-white text-[11.5px] font-semibold hover:bg-violet-700 disabled:opacity-60" data-testid={`button-edit-page-${p.id}`}>
                             {openingPage === p.id ? <Loader2 size={11} className="animate-spin" /> : <Pencil size={11} />} Edit
                           </button>
-                          <button type="button" onClick={() => onViewLive(p)} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-[11.5px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800" data-testid={`button-view-live-${p.id}`}>
-                            View Live <ExternalLink size={10} />
+                          <button
+                            type="button"
+                            onClick={() => onViewLive(p)}
+                            title={p.published ? 'Open the live public page' : 'Open the private draft preview'}
+                            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-[11.5px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            data-testid={`button-view-live-${p.id}`}
+                          >
+                            {p.published ? 'View Live' : 'Preview'} <ExternalLink size={10} />
                           </button>
                           <button type="button" disabled={busyPage === p.id} onClick={() => onDuplicate(p)} className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-[11.5px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-60" data-testid={`button-duplicate-page-${p.id}`}>
                             {busyPage === p.id ? <Loader2 size={11} className="animate-spin" /> : <Copy size={11} />} Duplicate
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyPage === p.id}
+                            onClick={() => onDeletePage(p)}
+                            aria-label={`Delete ${p.name}`}
+                            title={pages.length <= 1 ? 'A project keeps at least one page — unpublish it instead' : `Delete ${p.name}`}
+                            className="ml-auto inline-flex items-center gap-1 h-7 px-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-[11.5px] font-semibold text-gray-500 hover:text-red-600 hover:border-red-300 dark:border-gray-700 dark:hover:text-red-400 dark:hover:border-red-700 disabled:opacity-60"
+                            data-testid={`button-delete-page-${p.id}`}
+                          >
+                            <Trash2 size={11} />
                           </button>
                         </div>
                       </div>
@@ -1149,8 +1291,25 @@ export default function SpinoutLabBrandPage() {
             )}
 
             {/* ---- create new page (audience shortcuts) ---- */}
-            <div className="rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 px-4 py-3.5 mb-7 flex flex-wrap items-center gap-2" data-testid="create-page-row">
-              <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-gray-500 dark:text-gray-400"><Plus size={13} /> Create a new page for this project</span>
+            {/* The cap is enforced server-side (the endpoint 409s regardless of
+                what the UI shows); this is only so the founder learns about it
+                before losing work to a rejected save. */}
+            {atPageLimit && (
+              <div className="rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 mb-3 flex items-start gap-2" data-testid="page-limit-notice">
+                <AlertTriangle size={14} className="flex-none mt-0.5 text-amber-600 dark:text-amber-400" />
+                <div className="text-[12px] text-amber-800 dark:text-amber-200">
+                  <b>You've used all {MAX_PAGES_PER_PROJECT} landing pages for this project.</b>{' '}
+                  Delete one you're no longer using to make room for a new page.
+                </div>
+              </div>
+            )}
+            <div className={`rounded-2xl border-2 border-dashed px-4 py-3.5 mb-7 flex flex-wrap items-center gap-2 ${atPageLimit ? 'border-gray-200 dark:border-gray-800 opacity-60' : 'border-gray-200 dark:border-gray-700'}`} data-testid="create-page-row">
+              <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-gray-500 dark:text-gray-400">
+                <Plus size={13} /> Create a new page for this project
+              </span>
+              <span className="text-[11px] text-gray-400 tabular-nums" data-testid="page-quota">
+                {pages.length}/{MAX_PAGES_PER_PROJECT}
+              </span>
               {AUDIENCES.map((a) => (
                 <button
                   key={a}
