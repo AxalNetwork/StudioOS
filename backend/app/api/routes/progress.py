@@ -759,13 +759,31 @@ def list_waitlist_customers(
     p = _get_project_or_404(session, project_id)
     _ensure_can_view(p, user)
     _ensure_waitlist_crm_schema(session)
-    # Justification: concatenates a module-constant SELECT with a static WHERE clause; all
-    # values are bound params, dev-only FastAPI not exposed to user input
+    # Mirrors the worker: the list view JOINs the source landing page so the
+    # Discovery panel can show WHICH template each lead signed up through.
+    # Kept separate from _WAITLIST_SELECT — the by-id loaders reuse that
+    # fragment with unqualified columns that a JOIN would make ambiguous.
+    # Justification: static SQL with bound params only; dev-only FastAPI.
     rows = session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-        _WAITLIST_SELECT + " WHERE project_id = :pid AND audience = 'customer' "
-        "ORDER BY created_at DESC, id DESC LIMIT 500"
+        "SELECT w.id, w.project_id, w.email, w.name, w.source, w.audience, w.created_at, "
+        "w.crm_status, w.invited_at, w.followed_up_at, w.promoted_at, w.promoted_interview_id, "
+        "lp.template_kit AS landing_template_kit, lp.name AS landing_page_name "
+        "FROM waitlist_signups w "
+        "LEFT JOIN landing_pages lp ON lp.id = w.landing_page_id "
+        "WHERE w.project_id = :pid AND w.audience = 'customer' "
+        "ORDER BY w.created_at DESC, w.id DESC LIMIT 500"
     ), params={"pid": project_id}).mappings().all()
-    return {"project_id": project_id, "signups": [_serialize_signup(r) for r in rows]}
+    return {
+        "project_id": project_id,
+        "signups": [
+            {
+                **_serialize_signup(r),
+                "landing_template_kit": r.get("landing_template_kit"),
+                "landing_page_name": r.get("landing_page_name"),
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.post("/discovery/{project_id}/waitlist/{signup_id}/promote")

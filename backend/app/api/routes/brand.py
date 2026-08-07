@@ -1164,6 +1164,24 @@ def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Ses
         "source": payload.source or "landing", "audience": audience, "iph": ip_hash,
     })
     session.commit()
+    # Mirror the worker's dual-write: route the lead into the Contacts hub
+    # (full 6-audience taxonomy — the legacy waitlist column above is
+    # CHECK-limited to customer/partner/investor) so the destination pages'
+    # inbound-leads panels and the Brand page's inflow counts see it in dev.
+    # Best-effort: the capture above must succeed even if this write fails.
+    try:
+        from backend.app.api.routes.contacts import ingest_contact
+        contact_audience = _valid_page_audience(payload.audience) or "customer"
+        ingest_contact(
+            session,
+            project_id=row["project_id"], landing_page_id=row["id"],
+            email=email, name=payload.name, audience=contact_audience,
+            source=payload.source or "landing",
+        )
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.warning("brand: contacts ingest failed for landing %s: %s", slug, exc)
     return {"ok": True}
 
 

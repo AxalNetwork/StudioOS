@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Brain, Send, DollarSign, BarChart3, CheckCircle, AlertTriangle, XCircle, Info, ChevronDown, Users, Inbox, Mail, MailX, Archive, RotateCcw, Pencil, X, ArrowUpRight, Building2, Calendar, Clock } from 'lucide-react';
 import { api } from '../lib/api';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
+import IncomingLeadsStrip, { leadSourceLabel } from '../components/IncomingLeadsStrip';
 
 // lucide-react in this repo predates the `Linkedin` glyph, so we ship a tiny
 // inline SVG (same approach as JobManagePage.jsx / IntegrationsPage.jsx).
@@ -464,7 +465,9 @@ function AdvisorsTab({ projects }) {
               <div key={c.uid} className="flex items-center justify-between gap-3 px-3 py-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg">
                 <div className="min-w-0">
                   <div className="text-sm text-gray-900 dark:text-gray-100 font-medium truncate">{c.name || c.email}</div>
-                  <div className="text-[11px] text-gray-500 truncate">{c.email}</div>
+                  {/* Attribution: which landing-page template this lead
+                      signed up through (from the contacts JOIN). */}
+                  <div className="text-[11px] text-gray-500 truncate">{c.email} · {leadSourceLabel(c)}</div>
                 </div>
                 <button onClick={() => promote(c.uid)} disabled={busy}
                   className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium">
@@ -475,6 +478,16 @@ function AdvisorsTab({ projects }) {
           </div>
         )}
       </div>
+
+      {/* Mentor signups route to Advisory too (routeFor: mentor → advisory) —
+          they're guidance offers, not directory candidates, so they get their
+          own labeled panel instead of the promote flow above. */}
+      <IncomingLeadsStrip
+        audience="mentor"
+        sectionLabel="INBOUND LEADS · BRAND & PAGES"
+        title="New mentor leads"
+        blurb="People who offered guidance via your landing pages."
+      />
 
       <div>
         <div className="flex items-center gap-2 mb-3">

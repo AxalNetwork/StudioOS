@@ -47,8 +47,16 @@ import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
+import { TEMPLATES } from '../lib/brand/templates';
 
 const MIN_INTERVIEWS = 3; // program gate — week 1 requires 3 logged interviews
+
+// Which landing-page template a lead signed up through — template label first
+// (via the shared catalog), then the page name, then the raw source string
+// (legacy rows captured before the attribution JOIN existed).
+const leadTemplateLabel = (s) => TEMPLATES.find((t) => t.id === s.landing_template_kit)?.label
+  || s.landing_page_name
+  || s.source;
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
@@ -516,7 +524,10 @@ export default function SpinoutLabDiscoveryPage() {
                                 <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 ${chip.cls}`}>{chip.label}</span>
                               </div>
                               <div className="text-[11.5px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">
-                                {[s.email, s.source, timeAgo(s.created_at)].filter(Boolean).join(' · ')}
+                                {/* Attribution: which landing-page template this
+                                    lead signed up through (template label →
+                                    page name → raw source, in that order). */}
+                                {[s.email, leadTemplateLabel(s), timeAgo(s.created_at)].filter(Boolean).join(' · ')}
                               </div>
                             </div>
                           </div>

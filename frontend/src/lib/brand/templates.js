@@ -1189,13 +1189,19 @@ export const TEMPLATES = [
   {
     id: 'distribution-deck',
     label: 'Distribution Deck',
-    audience: 'investor',
+    // Recategorized after auditing the ported source (brandtemplates/
+    // "Distribution Deck"): the page is a partnership memo — customer-overlap
+    // tables, channel-value economics, integration/rollout options, and a
+    // "Discuss distribution fit" CTA aimed at a named BD counterpart. Nothing
+    // in it addresses investors; the old bucket came from the filename read
+    // ("deck"), not the content.
+    audience: 'partner',
     assetType: 'deck',
     primaryGoal: 'request_intro',
-    defaultCtaLabel: 'Request intro',
+    defaultCtaLabel: 'Request distribution review',
     defaultSlug: 'distribution-deck',
     visualTemplate: 'distribution-deck',
-    notes: 'Go-to-market / distribution story for investor conversations.',
+    notes: 'Blueprint partnership memo — overlap tables, channel value, rollout options.',
   },
 
   // ── Partner ───────────────────────────────────────────────────────
@@ -1336,13 +1342,19 @@ export const TEMPLATES = [
   {
     id: 'builders-launchpad',
     label: "Builder's Launchpad",
-    audience: 'customer',
+    // Recategorized after auditing the ported source (brandtemplates/
+    // "Builder's Launchpad"): despite the launch-y name, the page is a
+    // technical co-founder recruiting brief end to end — "Hiring · Technical
+    // co-founder" badge, what's-built/what's-missing honesty lists, 25–40%
+    // equity terms, and a terminal-styled "Join as technical co-founder"
+    // apply CTA. It was never a customer launch teaser.
+    audience: 'cofounder',
     assetType: 'landing',
-    primaryGoal: 'join_waitlist',
-    defaultCtaLabel: 'Join the waitlist',
+    primaryGoal: 'apply',
+    defaultCtaLabel: 'Apply to join',
     defaultSlug: 'builders-launchpad',
     visualTemplate: 'builders-launchpad',
-    notes: 'Bold product launch teaser for early customers.',
+    notes: 'Dark terminal-styled co-founder brief — quick facts, build status, apply CTA.',
   },
 ];
 
