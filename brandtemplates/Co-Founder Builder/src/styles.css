@@ -1,0 +1,159 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Axal VC — technical founder landing.
+ * Engineering-document aesthetic: warm paper, ink text, one signal accent,
+ * monospace labels. Restrained, credible, not glossy.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-signal: var(--signal);
+  --color-signal-foreground: var(--signal-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+}
+
+:root {
+  --radius: 0.25rem;
+
+  --background: oklch(0.985 0.006 95);
+  --foreground: oklch(0.205 0.012 260);
+
+  --card: oklch(0.998 0.003 95);
+  --card-foreground: oklch(0.205 0.012 260);
+
+  --popover: oklch(0.998 0.003 95);
+  --popover-foreground: oklch(0.205 0.012 260);
+
+  --primary: oklch(0.22 0.012 260);
+  --primary-foreground: oklch(0.985 0.006 95);
+
+  --secondary: oklch(0.955 0.008 95);
+  --secondary-foreground: oklch(0.28 0.012 260);
+
+  --muted: oklch(0.955 0.008 95);
+  --muted-foreground: oklch(0.5 0.012 260);
+
+  --accent: oklch(0.945 0.01 95);
+  --accent-foreground: oklch(0.24 0.012 260);
+
+  /* Signal accent — terminal-leaning green, confident not neon */
+  --signal: oklch(0.72 0.16 145);
+  --signal-foreground: oklch(0.18 0.04 150);
+
+  --destructive: oklch(0.55 0.2 27);
+  --destructive-foreground: oklch(0.985 0.006 95);
+
+  --border: oklch(0.9 0.008 95);
+  --border-strong: oklch(0.78 0.01 95);
+  --input: oklch(0.9 0.008 95);
+  --ring: oklch(0.72 0.16 145);
+}
+
+.dark {
+  --background: oklch(0.17 0.012 260);
+  --foreground: oklch(0.95 0.006 95);
+
+  --card: oklch(0.205 0.014 260);
+  --card-foreground: oklch(0.95 0.006 95);
+
+  --popover: oklch(0.205 0.014 260);
+  --popover-foreground: oklch(0.95 0.006 95);
+
+  --primary: oklch(0.95 0.006 95);
+  --primary-foreground: oklch(0.2 0.012 260);
+
+  --secondary: oklch(0.25 0.014 260);
+  --secondary-foreground: oklch(0.95 0.006 95);
+
+  --muted: oklch(0.25 0.014 260);
+  --muted-foreground: oklch(0.68 0.01 260);
+
+  --accent: oklch(0.26 0.014 260);
+  --accent-foreground: oklch(0.95 0.006 95);
+
+  --signal: oklch(0.78 0.17 145);
+  --signal-foreground: oklch(0.16 0.04 150);
+
+  --destructive: oklch(0.62 0.2 27);
+  --destructive-foreground: oklch(0.95 0.006 95);
+
+  --border: oklch(0.3 0.014 260);
+  --border-strong: oklch(0.42 0.016 260);
+  --input: oklch(0.3 0.014 260);
+  --ring: oklch(0.78 0.17 145);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "ss01", "cv05";
+  }
+
+  ::selection {
+    background-color: var(--signal);
+    color: var(--signal-foreground);
+  }
+}
+
+@layer components {
+  /* Monospace eyebrow / section index labels */
+  .label-mono {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  /* Faint engineering grid backdrop */
+  .grid-paper {
+    background-image:
+      linear-gradient(to right, var(--border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    background-size: 56px 56px;
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%);
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%);
+  }
+
+  .rule-top {
+    border-top: 1px solid var(--border-strong);
+  }
+}
