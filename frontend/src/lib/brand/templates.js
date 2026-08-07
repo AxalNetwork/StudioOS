@@ -4,9 +4,15 @@
 // audience + goal so the Brand & Landing wizard can recommend the right one
 // and pre-fill copy. Per the agreed approach (catalog + smart matching), a
 // published page keeps using one of the built-in *visual* templates — so each
-// catalog entry also names the `visualTemplate` it renders with. Some entries
-// now map to recreated source designs (Task #24, batch 1): advisor-connect,
-// proof-builder and capital-ready-kit each render with their own ported style.
+// catalog entry also names the `visualTemplate` it renders with. 15 of the 16
+// non-generic entries are recreated 1:1 from a real design in
+// `brandtemplates/` — see TEMPLATE_SOURCES in
+// `cloudflare-worker/src/services/landingTemplates.ts` for the authoritative
+// key → source-directory map. The 16th, proof-builder, is an original
+// in-house design; it was incorrectly labeled "ported" until an August 2026
+// fidelity audit caught the fabricated provenance. It's kept as the
+// catalog's only customer-audience entry, with its provenance now honestly
+// `null` rather than a made-up source.
 //
 // Pure data + pure helpers. No I/O, no network, no React.
 
@@ -278,11 +284,12 @@ export const TEMPLATE_CONTENT_SCHEMA = {
       itemFields: [
         { key: 'name', label: 'Name / role', kind: 'text' },
         { key: 'role', label: 'Detail', kind: 'text' },
+        { key: 'bio', label: 'Credential (one line)', kind: 'text' },
       ],
       default: [
-        { name: 'Founder', role: 'Sets the vision and owns the product.' },
-        { name: 'Co-founder', role: 'Leads build and the technical roadmap.' },
-        { name: 'Early team', role: 'Operators close to the customer.' },
+        { name: 'Founder', role: 'Sets the vision and owns the product.', bio: 'Years in this exact problem, before starting the company.' },
+        { name: 'Co-founder', role: 'Leads build and the technical roadmap.', bio: 'Shipped the hard technical part of this before, elsewhere.' },
+        { name: 'Early team', role: 'Operators close to the customer.', bio: 'Came from the industry this sells into, not a resume template.' },
       ],
     },
   ],
@@ -354,6 +361,19 @@ export const TEMPLATE_CONTENT_SCHEMA = {
         { label: 'Reserve', pct: '10' },
       ],
     },
+    {
+      key: 'team', label: 'Team', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'name', label: 'Name / role', kind: 'text' },
+        { key: 'role', label: 'Detail', kind: 'text' },
+        { key: 'bio', label: 'Credential (one line)', kind: 'text' },
+      ],
+      default: [
+        { name: 'Founder', role: 'Vision, product, and the story.', bio: 'Built and sold in this exact market before.' },
+        { name: 'Co-founder', role: 'Engineering and the technical roadmap.', bio: 'Shipped the hard infrastructure piece elsewhere, at scale.' },
+        { name: 'Early team', role: 'Go-to-market and first customers.', bio: 'Ran the playbook this company needs, somewhere else first.' },
+      ],
+    },
   ],
   'seed-stage-spark': [
     {
@@ -392,6 +412,32 @@ export const TEMPLATE_CONTENT_SCHEMA = {
         { label: 'Q2', pct: '52' },
         { label: 'Q3', pct: '71' },
         { label: 'Q4', pct: '100' },
+      ],
+    },
+    {
+      key: 'team', label: 'Team', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'name', label: 'Name / role', kind: 'text' },
+        { key: 'role', label: 'Detail', kind: 'text' },
+        { key: 'bio', label: 'Credential (one line)', kind: 'text' },
+      ],
+      default: [
+        { name: 'Founder', role: 'Vision, product, and the story.', bio: 'Built and sold in this exact market before.' },
+        { name: 'Co-founder', role: 'Engineering and the technical roadmap.', bio: 'Shipped the hard infrastructure piece elsewhere, at scale.' },
+        { name: 'Early team', role: 'Go-to-market and first customers.', bio: 'Ran the playbook this company needs, somewhere else first.' },
+      ],
+    },
+    {
+      key: 'round_details', label: 'Round details', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Stage', value: 'Seed' },
+        { label: 'Instrument', value: 'SAFE' },
+        { label: 'Runway', value: '~18 months' },
+        { label: 'Close', value: 'Rolling' },
       ],
     },
   ],
@@ -477,6 +523,18 @@ export const TEMPLATE_CONTENT_SCHEMA = {
       ],
     },
     {
+      key: 'not_for', label: "Who this isn't for", kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Needs it finished', body: "Looking for a polished, finished product — not a working pilot." },
+        { title: "Can't give the time", body: "Won't have someone showing up weekly with real feedback." },
+        { title: 'No path to a yes', body: "Can't say yes internally within the pilot window if it works." },
+      ],
+    },
+    {
       key: 'includes', label: 'What it includes', kind: 'groupList', max: 6,
       itemFields: [
         { key: 'title', label: 'Title', kind: 'text' },
@@ -532,6 +590,19 @@ export const TEMPLATE_CONTENT_SCHEMA = {
     {
       key: 'shared_fit', label: 'Shared fit', kind: 'textarea',
       default: `We start where our ideal customers already overlap — so the pilot proves value fast and the economics are obvious to both teams.`,
+    },
+    {
+      key: 'value_to_partner', label: 'Value to partner', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Account coverage', body: 'We show up inside accounts you already own — not around them.' },
+        { title: 'Faster cycles', body: 'Shared context means less re-explaining, faster yes or no.' },
+        { title: 'Lower lift', body: 'We do the integration work; you keep the relationship.' },
+        { title: 'Co-branded proof', body: 'Joint case studies and data you can take to your own team.' },
+      ],
     },
     {
       key: 'models', label: 'Ways to work together', kind: 'groupList', max: 3,
@@ -631,6 +702,27 @@ export const TEMPLATE_CONTENT_SCHEMA = {
     {
       key: 'quote_by', label: 'Quote attribution', kind: 'text',
       default: `VP, Strategic Partnerships`,
+    },
+    {
+      key: 'best_fit', label: 'Best fit', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'text' },
+      ],
+      default: [
+        { body: 'You already sell to the same accounts we do.' },
+        { body: 'Your reps can position a second product with no new headcount.' },
+        { body: "You want a revenue line that doesn't need new pipeline." },
+      ],
+    },
+    {
+      key: 'not_fit', label: 'Not a fit yet', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'text' },
+      ],
+      default: [
+        { body: 'No existing relationship with this customer base.' },
+        { body: 'Mid a platform migration — bad timing for a new integration.' },
+      ],
     },
   ],
   'co-founder-builder': [
@@ -1114,6 +1206,18 @@ export const TEMPLATE_CONTENT_SCHEMA = {
         { body: 'Smoother onboarding for new teams.' },
         { body: 'The two integrations you keep asking for.' },
         { body: 'v1, stable enough to depend on.' },
+      ],
+    },
+    {
+      key: 'equity', label: 'Equity & collaboration', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Term', kind: 'textarea' },
+      ],
+      default: [
+        { body: 'Equity: meaningful — expect double digits, negotiated directly, no games.' },
+        { body: 'Vesting: standard 4-year schedule, 1-year cliff.' },
+        { body: "Salary: modest now, market-rate the moment we're funded to pay it." },
+        { body: 'Location: remote-friendly, with occasional in-person time for the hard weeks.' },
       ],
     },
   ],
