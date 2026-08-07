@@ -1092,7 +1092,7 @@ const SlideTeamNetwork: React.FC<SlideProps> = ({ d, editable, onEdit }) => {
           }}>
             <div style={{
               fontSize: u(13), fontWeight: 800, color: K.dmuted,
-              textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: u(4),
+              textTransform: 'uppercase', letterSpacing: '.08em',
               marginBottom: u(20),
             }}>Operating network</div>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: u(16), justifyContent: 'center' }}>
