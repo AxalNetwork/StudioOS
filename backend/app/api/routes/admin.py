@@ -269,7 +269,9 @@ def user_profile(
             "created_at": r.created_at.isoformat() if r.created_at else None,
         })
 
-    # Tickets opened by this user
+    # Tickets opened by this user — best-effort: an admin profile view with a
+    # missing table on an old dev DB should show an empty section, not 500 the
+    # whole page.
     tickets = []
     try:
         trows = session.exec(
@@ -281,9 +283,10 @@ def user_profile(
             for t in trows
         ]
     except Exception:
+        # Best-effort — see the comment above this section.
         pass
 
-    # Integrations connected by this user
+    # Integrations connected by this user — same trade-off as tickets above.
     integrations = []
     try:
         irows = session.exec(
@@ -295,6 +298,7 @@ def user_profile(
             for i in irows
         ]
     except Exception:
+        # Best-effort — see the comment above this section.
         pass
 
     # KYC status — best-effort lookup from related Founder/Partner records

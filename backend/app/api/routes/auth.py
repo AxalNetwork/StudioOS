@@ -1,3 +1,4 @@
+import logging
 import os
 import pyotp
 import jwt
@@ -17,6 +18,8 @@ from backend.app.services.email_service import (
     get_verification_url,
     send_verification_email,
 )
+
+logger = logging.getLogger("studioos.auth")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -185,6 +188,8 @@ def get_current_user(authorization: Optional[str] = Header(None), session: Sessi
         try:
             session.rollback()
         except Exception:
+            # The rollback itself failing means the connection is already
+            # dead — there is no further recovery available at this layer.
             pass
         min_iat = 0
 
@@ -227,6 +232,8 @@ def get_current_user(authorization: Optional[str] = Header(None), session: Sessi
             try:
                 session.rollback()
             except Exception:
+                # As above: a failed rollback means the connection is already
+                # dead, nothing further to do here.
                 pass
 
     return user
@@ -291,6 +298,11 @@ def _register_rate_limit(ip: str, email: str) -> None:
 @router.post("/register")
 def register(req: RegisterRequest, request: Request, session: Session = Depends(get_session)):
     # Phase C4 — honeypot drop. Treat as 200 success so bots can't infer.
+    # The audit-log write is observability only, not the point of this branch:
+    # the response must stay identical whether or not it succeeds, so a DB
+    # hiccup here is swallowed rather than surfaced to the caller. Still
+    # logged, since a persistently failing write would mean honeypot trips
+    # go unrecorded without anyone noticing.
     if req.axl_hp:
         try:
             session.add(ActivityLog(
@@ -299,8 +311,8 @@ def register(req: RegisterRequest, request: Request, session: Session = Depends(
                 actor="honeypot",
             ))
             session.commit()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("auth: honeypot activity-log write failed: %s", exc)
         return {
             "message": "Verification email sent",
             "email": req.email,

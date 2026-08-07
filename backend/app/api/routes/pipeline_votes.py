@@ -413,8 +413,11 @@ async def cast_vote(
                             payload={"deal_id": deal_id, "tally": public},
                             channels=("in_app", "email", "slack"),
                         )
-        except Exception:
-            pass
+        except Exception as exc:
+            # Best-effort admin fan-out on the threshold crossing. The voter's
+            # own tally (returned below) must go through regardless of
+            # whether admins get paged about it.
+            logger.warning("pipeline_votes: threshold fan-out failed for deal %s: %s", deal_id, exc)
 
     # Caller gets the same public tally PLUS their own vote attached.
     return _build_tally(deal_id, session, viewer=user)
