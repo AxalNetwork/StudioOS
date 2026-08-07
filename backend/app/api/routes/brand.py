@@ -1232,7 +1232,8 @@ def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Ses
         session.commit()
     except Exception as exc:
         session.rollback()
-        logger.warning("brand: contacts ingest failed for landing %s: %s", slug, exc)
+        safe_slug = re.sub(r"[\r\n]", "", slug)
+        logger.warning("brand: contacts ingest failed for landing %s: %s", safe_slug, exc)
     return {"ok": True}
 
 
