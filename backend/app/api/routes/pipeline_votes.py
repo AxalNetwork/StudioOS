@@ -57,6 +57,11 @@ from backend.app.models.entities import (
 
 logger = logging.getLogger("studioos.votes")
 
+
+def _sanitize_for_log(value: object) -> str:
+    """Return a log-safe single-line representation of a value."""
+    return str(value).replace("\r", "").replace("\n", "")
+
 router = APIRouter(prefix="/pipeline", tags=["Pipeline Voting"])
 
 VOTE_TYPES = {"Strong_Buy", "Buy", "Hold", "Pass"}
@@ -417,7 +422,11 @@ async def cast_vote(
             # Best-effort admin fan-out on the threshold crossing. The voter's
             # own tally (returned below) must go through regardless of
             # whether admins get paged about it.
-            logger.warning("pipeline_votes: threshold fan-out failed for deal %s: %s", deal_id, exc)
+            logger.warning(
+                "pipeline_votes: threshold fan-out failed for deal %s: %s",
+                _sanitize_for_log(deal_id),
+                _sanitize_for_log(exc),
+            )
 
     # Caller gets the same public tally PLUS their own vote attached.
     return _build_tally(deal_id, session, viewer=user)
