@@ -1020,7 +1020,8 @@ def totp_repair(
         img.save(buf, format="PNG")
         qr_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
     except Exception as exc:
-        logger.warning("settings: TOTP QR generation failed for user %s: %s", user.id, exc)  # codeql[py/log-injection] -- user.id is the `int` primary key on the SQLModel User row resolved by get_current_user, not raw request text; an attacker cannot write to it, only to which existing row's id gets read back
+        # codeql[py/log-injection] -- user.id is the `int` primary key on the SQLModel User row resolved by get_current_user, not raw request text; an attacker cannot write to it, only to which existing row's id gets read back
+        logger.warning("settings: TOTP QR generation failed for user %s: %s", user.id, exc)
 
     return {
         "ok": True,
