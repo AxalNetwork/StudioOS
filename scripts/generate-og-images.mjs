@@ -30,9 +30,18 @@
  *   node scripts/generate-og-images.mjs            # render everything
  *   node scripts/generate-og-images.mjs --check    # verify, write nothing
  *
- * `--check` is what CI runs: it re-renders into a temp dir and fails if any
- * committed card is missing or stale, so copy changes cannot ship with an
- * outdated image.
+ * `--check` is what CI runs. It does NOT render: it recomputes each card's
+ * input fingerprint (copy + inlined font/mark + template) and compares that to
+ * the manifest, and separately asserts every committed card exists, measures
+ * 1200x630, and terminates with a PNG IEND chunk. So copy changes still cannot
+ * ship with an outdated image, and the check needs no browser.
+ *
+ * It used to re-render and compare PNG bytes, which could only ever pass on the
+ * one machine that generated the committed cards: raster output depends on the
+ * browser build, not just the card. Chromium 1194's full build and its
+ * headless-shell build — same version, same machine, same commit — disagree on
+ * all 13 cards. Regenerating and committing does not fix that, it only changes
+ * which machine fails, which is why this gate sat red rather than being useful.
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -360,6 +369,30 @@ function measureChromeOffset(chrome, workDir) {
 }
 
 /** Read a PNG's real pixel dimensions from its IHDR chunk. */
+/**
+ * True when the file ends with PNG's IEND chunk — the 4-byte type "IEND"
+ * followed by its 4-byte CRC. A truncated card still carries a valid IHDR
+ * (and so a valid width/height) in its first 24 bytes, so this is what
+ * actually distinguishes a whole PNG from half of one.
+ */
+function endsWithPngIend(file) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const { size } = fs.fstatSync(fd);
+      if (size < 12) return false;
+      const tail = Buffer.alloc(8);
+      fs.readSync(fd, tail, 0, 8, size - 8);
+      return tail.toString('latin1', 0, 4) === 'IEND'
+        && tail.readUInt32BE(4) === 0xae426082;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
+
 function pngSize(file) {
   const b = fs.readFileSync(file);
   if (b.length < 24 || b.toString('ascii', 12, 16) !== 'IHDR') return null;
@@ -488,6 +521,26 @@ function sha8(buf) {
   return createHash('sha256').update(buf).digest('hex').slice(0, 8);
 }
 
+/**
+ * Fingerprint a card by its INPUTS, not by the PNG the renderer produced.
+ *
+ * `cardHtml()` already inlines everything a card is made of — the eyebrow,
+ * title and description, the vendored font and the Axal mark as data URIs, and
+ * the template's own markup and CSS. Hashing that string therefore changes
+ * exactly when the card's content should change, and never otherwise.
+ *
+ * This used to hash the rendered PNG's bytes, which made the `--check` gate
+ * unrunnable in CI: PNG bytes are a function of the *browser build*, not just
+ * the card. Rendering the identical commit with Chromium 1194's full build and
+ * its headless-shell build — same version, same machine — produces different
+ * bytes for all 13 cards, so the committed cards could only ever match the one
+ * machine that generated them. Regenerating and committing does not fix that;
+ * it just moves which machine fails.
+ */
+function fingerprint(html) {
+  return sha8(Buffer.from(html, 'utf8'));
+}
+
 function writeManifest(manifest) {
   const entries = Object.keys(manifest)
     .sort()
@@ -497,7 +550,10 @@ function writeManifest(manifest) {
  * GENERATED FILE — do not edit by hand.
  *
  * Written by \`scripts/generate-og-images.mjs\`. Maps an OG image key to the
- * SHA-256 (first 8 hex chars) of the generated PNG's bytes.
+ * SHA-256 (first 8 hex chars) of the card's RENDER INPUTS — its copy plus the
+ * inlined font, mark and template. Deliberately not a hash of the PNG bytes:
+ * those vary by browser build, which made the CI check fail on any machine but
+ * the one that generated the cards.
  *
  * The hash is appended to the image URL as \`?v=<hash>\`, which is what makes
  * cache-busting automatic: regenerating a card because its copy changed also
@@ -520,64 +576,48 @@ ${entries}
 function main() {
   const check = process.argv.includes('--check');
 
-  let chrome;
-  try {
-    chrome = findChrome();
-  } catch (err) {
-    // In --check mode a missing browser must not read as "cards are fine".
-    // Skip loudly and non-zero-free rather than silently weakening the gate:
-    // the staleness itself is still caught by validate-og-tags.mjs (which
-    // verifies each card exists at 1200x630), only the *content* comparison
-    // is unavailable without a renderer.
-    if (check) {
-      console.warn('OG image check SKIPPED — no Chromium available on this machine.');
-      console.warn(`  ${err.message.split('\n')[0]}`);
-      console.warn('  Card existence and dimensions are still enforced by validate-og-tags.mjs;');
-      console.warn('  card *content* staleness is not. Install Chrome or set CHROME_PATH to close that gap.');
-      return;
-    }
-    throw err;
-  }
   const assets = {
     font: dataUri(FONT_FILE, 'font/woff2'),
     mark: dataUri(MARK_FILE, 'image/png'),
   };
 
   const cards = buildCards();
-  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'og-'));
-  const offset = measureChromeOffset(chrome, workDir);
-  const targetDir = check ? fs.mkdtempSync(path.join(os.tmpdir(), 'og-check-')) : OUT_DIR;
-  if (!check) fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  const manifest = {};
-  const problems = [];
+  // --check needs no browser: it compares each card's INPUT fingerprint
+  // against the manifest, plus the committed PNG's existence and dimensions.
+  // Nothing here is renderer-dependent, so it gives the same answer on a CI
+  // runner, a laptop and a container.
+  if (check) {
+    const problems = [];
+    const manifest = {};
+    const current = fs.existsSync(MANIFEST_FILE) ? fs.readFileSync(MANIFEST_FILE, 'utf8') : '';
 
-  for (const [key, copy] of [...cards].sort(([a], [b]) => a.localeCompare(b))) {
-    const outFile = path.join(targetDir, `${key}.png`);
-    renderCard(chrome, cardHtml(copy, assets), outFile, workDir, offset);
-    const bytes = fs.readFileSync(outFile);
-    manifest[key] = sha8(bytes);
-
-    if (check) {
+    for (const [key, copy] of [...cards].sort(([a], [b]) => a.localeCompare(b))) {
+      manifest[key] = fingerprint(cardHtml(copy, assets));
       const committed = path.join(OUT_DIR, `${key}.png`);
       if (!fs.existsSync(committed)) {
         problems.push(`missing card: frontend/public/og/${key}.png`);
-      } else if (sha8(fs.readFileSync(committed)) !== manifest[key]) {
-        problems.push(`stale card: frontend/public/og/${key}.png (copy changed?)`);
+        continue;
       }
-    } else {
-      const kb = Math.round(bytes.length / 1024);
-      console.log(`  ${key.padEnd(26)} ${WIDTH}x${HEIGHT}  ${String(kb).padStart(4)} KB  ${manifest[key]}`);
+      // A card that is not exactly 1200x630 is a broken card — several
+      // platforms crop or reject off-ratio images.
+      const size = pngSize(committed);
+      if (!size || size.width !== WIDTH || size.height !== HEIGHT) {
+        problems.push(
+          `wrong size: frontend/public/og/${key}.png is ` +
+            `${size ? `${size.width}x${size.height}` : 'unreadable'}, expected ${WIDTH}x${HEIGHT}`,
+        );
+      } else if (!endsWithPngIend(committed)) {
+        // Dimensions alone do not prove the file is whole: they come from the
+        // IHDR header in the first 24 bytes, which survives truncation. A
+        // half-written card reports 1200x630 and renders as a broken image.
+        problems.push(`truncated card: frontend/public/og/${key}.png has no PNG IEND terminator`);
+      }
+      if (!current.includes(`"${key}": "${manifest[key]}"`)) {
+        problems.push(`stale card: frontend/public/og/${key}.png — copy or assets changed, card not regenerated`);
+      }
     }
-  }
 
-  if (check) {
-    const current = fs.existsSync(MANIFEST_FILE) ? fs.readFileSync(MANIFEST_FILE, 'utf8') : '';
-    for (const [k, v] of Object.entries(manifest)) {
-      if (!current.includes(`"${k}": "${v}"`)) {
-        problems.push(`manifest out of date for "${k}" (expected ${v})`);
-      }
-    }
     if (problems.length) {
       console.error('OG image check FAILED:');
       for (const p of problems) console.error(`  - ${p}`);
@@ -586,6 +626,22 @@ function main() {
     }
     console.log(`OG image check passed — ${Object.keys(manifest).length} cards up to date.`);
     return;
+  }
+
+  const chrome = findChrome();
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'og-'));
+  const offset = measureChromeOffset(chrome, workDir);
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+
+  const manifest = {};
+
+  for (const [key, copy] of [...cards].sort(([a], [b]) => a.localeCompare(b))) {
+    const html = cardHtml(copy, assets);
+    const outFile = path.join(OUT_DIR, `${key}.png`);
+    renderCard(chrome, html, outFile, workDir, offset);
+    manifest[key] = fingerprint(html);
+    const kb = Math.round(fs.readFileSync(outFile).length / 1024);
+    console.log(`  ${key.padEnd(26)} ${WIDTH}x${HEIGHT}  ${String(kb).padStart(4)} KB  ${manifest[key]}`);
   }
 
   writeManifest(manifest);
