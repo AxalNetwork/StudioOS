@@ -404,7 +404,7 @@ def events_to_ics(events: list[dict], *, calendar_name: str = "Axal StudioOS") -
         "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH",
     ]
-    now = _ics_dt(datetime.utcnow())
+    now = _ics_dt(datetime.now(timezone.utc))
     for ev in events:
         start = datetime.fromisoformat(ev["start_at"])
         end = datetime.fromisoformat(ev["end_at"])
