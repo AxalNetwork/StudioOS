@@ -2466,7 +2466,11 @@ def cofounder_agreement(
     session.commit()
     session.refresh(doc)
 
-    # Persist to object storage (consistent with /incorporate/wizard).
+    # Persist to object storage (consistent with /incorporate/wizard). The doc
+    # already exists with `content` populated inline, so a failure here is not
+    # data loss — it just leaves the inline copy in place instead of moving to
+    # R2/S3. Still logged: a broken storage path would silently affect every
+    # doc generated from here on, and nothing else would ever surface it.
     try:
         from backend.app.services.file_storage import store_contract_bytes
         obj = store_contract_bytes(doc.uid, rendered.encode("utf-8"), "text/plain")
@@ -2477,8 +2481,8 @@ def cofounder_agreement(
         doc.content = None
         session.add(doc)
         session.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("legal: object-storage persist failed for cofounder-agreement doc %s: %s", doc.uid, exc)
 
     return {
         "ok": True,
@@ -2628,6 +2632,9 @@ def create_83b_tracker(
     session.add(doc)
     session.commit()
     session.refresh(doc)
+    # Persist to object storage, same trade-off as the cofounder-agreement
+    # path above: the doc already exists with `content` inline, so a failure
+    # here leaves that inline copy in place rather than losing the document.
     try:
         from backend.app.services.file_storage import store_contract_bytes
         obj = store_contract_bytes(doc.uid, rendered.encode("utf-8"), "text/plain")
@@ -2638,8 +2645,8 @@ def create_83b_tracker(
         doc.content = None
         session.add(doc)
         session.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("legal: object-storage persist failed for 83(b) doc %s: %s", doc.uid, exc)
 
     tracker = Section83bTracker(
         project_id=project.id,
@@ -2669,7 +2676,12 @@ def create_83b_tracker(
             return {"ok": True, "reused": True, "tracker": _tracker_dto(existing)}
         raise
 
-    # Calendar/notification ping (Task 0.2 notify subsystem).
+    # Calendar/notification ping (Task 0.2 notify subsystem). notify() already
+    # isolates and logs its own per-channel delivery failures (Slack/email/ws),
+    # so an exception escaping past it means something broke in the call above
+    # (a bad arg, a lookup failure) rather than a downed webhook. That is worth
+    # surfacing — this is the founder's only reminder of a real 30-day IRS
+    # filing deadline — but must not fail the tracker creation itself.
     try:
         from backend.app.services.notify import notify
         notify(
@@ -2689,8 +2701,8 @@ def create_83b_tracker(
             },
             channels=("in_app", "email"),
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("legal: 83(b) deadline notify failed for tracker %s: %s", tracker.id, exc)
 
     return {"ok": True, "reused": False, "tracker": _tracker_dto(tracker), "election_document_id": doc.id}
 

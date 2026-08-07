@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from backend.app.database import get_session
@@ -6,6 +8,8 @@ from backend.app.schemas.scoring import TicketCreate
 from backend.app.api.routes.auth import get_current_user
 from backend.app.services.github_service import create_github_issue
 from datetime import datetime
+
+logger = logging.getLogger("studioos.tickets")
 
 router = APIRouter(prefix="/tickets", tags=["Support"])
 
@@ -197,7 +201,11 @@ def update_ticket(
     session.commit()
     session.refresh(ticket)
 
-    # Phase 0.2 — notify ticket owner of any update by another actor.
+    # Phase 0.2 — notify ticket owner of any update by another actor. notify()
+    # already isolates and logs its own per-channel delivery failures, so an
+    # exception escaping past it is a bug in the call above, not a downed
+    # webhook — worth logging, but must not fail the update that already
+    # committed above.
     if ticket.user_id and ticket.user_id != user.id:
         try:
             from backend.app.services.notify import notify
@@ -210,6 +218,6 @@ def update_ticket(
                 payload={"ticket_id": ticket.id, "status": str(ticket.status)},
                 channels=("in_app", "email", "slack"),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("tickets: update notify failed for ticket %s: %s", ticket.id, exc)
     return ticket

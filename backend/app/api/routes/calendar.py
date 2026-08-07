@@ -24,6 +24,7 @@ scheduler is the source of truth.
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
@@ -402,12 +403,9 @@ def google_callback(
 ):
     """Exchange code → tokens, persist refresh_token, redirect to the
     in-app calendar page with a result flag."""
-    domain = ""
-    try:
-        import os
-        domain = os.environ.get("REPLIT_DEV_DOMAIN", "") or ""
-    except Exception:
-        pass
+    # os.environ.get() with a default cannot raise — this used to be wrapped
+    # in a try/except that guarded against nothing.
+    domain = os.environ.get("REPLIT_DEV_DOMAIN", "") or ""
     base = f"https://{domain}" if domain else ""
     success = f"{base}/calendar?google=connected"
     failure = f"{base}/calendar?google=failed"

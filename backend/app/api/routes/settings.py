@@ -737,10 +737,14 @@ def upload_headshot(
     )
     session.commit()
     if old_path and old_path != str(fpath):
+        # The new headshot is already saved and the row already points at it,
+        # so the response is correct either way — a stray old file is wasted
+        # disk, not a correctness problem. Logged so an accumulating leak
+        # (e.g. a permissions issue that fails every delete) would surface.
         try:
             Path(old_path).unlink(missing_ok=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("settings: could not remove old headshot %s: %s", old_path, exc)
     return {"ok": True, "headshot_url": f"/api/settings/headshot/{user.uid}"}
 
 
@@ -998,6 +1002,12 @@ def totp_repair(
     )
     session.commit()
 
+    # The re-pair itself is already committed above (secret stored, sessions
+    # invalidated, activity logged) — the QR is a rendering convenience on top
+    # of `provisioning_uri`, which any authenticator app can also accept
+    # directly. A failure here degrades to manual entry, not a broken re-pair,
+    # but is still logged: a `qrcode`/Pillow issue would otherwise silently
+    # strip the QR from every setup response with nothing to point at why.
     qr_b64: Optional[str] = None
     try:
         import qrcode
@@ -1009,8 +1019,8 @@ def totp_repair(
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         qr_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("settings: TOTP QR generation failed for user %s: %s", user.id, exc)
 
     return {
         "ok": True,

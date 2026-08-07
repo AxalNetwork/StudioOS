@@ -10,6 +10,7 @@ Response shapes preserve the legacy field names (`committed_capital`,
 without changes.
 """
 
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -33,6 +34,8 @@ from backend.app.schemas.scoring import (
     CapitalCallRequest,
     LPInvestorCreate,
 )
+
+logger = logging.getLogger("studioos.capital")
 
 router = APIRouter(prefix="/capital", tags=["Capital & Investment"])
 
@@ -215,6 +218,9 @@ def create_capital_call(
     session.refresh(call)
 
     # Phase 0.2 — notify the LP/investor that a capital call was issued.
+    # notify() already isolates and logs its own per-channel delivery
+    # failures, so an exception escaping past it is a bug in the call above —
+    # worth logging, but must not fail a call that already committed.
     if lp.user_id:
         try:
             from backend.app.services.notify import notify
@@ -227,8 +233,8 @@ def create_capital_call(
                 payload={"call_id": call.id, "amount": call.amount, "due_date": due.isoformat() if due else None},
                 channels=("in_app", "email", "slack"),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("capital: call-issued notify failed for call %s: %s", call.id, exc)
     return _call_dto(call)
 
 
@@ -306,7 +312,10 @@ def mark_call_paid(
     session.commit()
     session.refresh(call)
 
-    # Phase 0.2 — notify LP that their call was marked paid.
+    # Phase 0.2 — notify LP that their call was marked paid. Same trade-off as
+    # call-issued above: notify() already logs its own delivery failures, so
+    # this catches a bug in the call, and must not undo a payment that already
+    # committed.
     if lp_id:
         lp_for_notify = session.get(LimitedPartner, lp_id)
         if lp_for_notify and lp_for_notify.user_id:
@@ -321,8 +330,8 @@ def mark_call_paid(
                     payload={"call_id": call.id, "amount": call.amount},
                     channels=("in_app", "email", "slack"),
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("capital: call-paid notify failed for call %s: %s", call.id, exc)
     return {"status": "paid", "call": _call_dto(call)}
 
 

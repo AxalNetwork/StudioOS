@@ -81,6 +81,9 @@ def _normalise_tags(value) -> str:
             if isinstance(parsed, list):
                 return json.dumps([str(t).strip() for t in parsed if str(t).strip()][:20])
         except Exception:
+            # Not JSON at all — this is the expected shape for a plain
+            # comma-separated string, not a parse error to report. Fall
+            # through to the comma-split branch below.
             pass
         parts = [t.strip() for t in value.split(",") if t.strip()]
         return json.dumps(parts[:20])

@@ -1,4 +1,5 @@
 import json
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlmodel import Session, select
 from backend.app.database import get_session
@@ -20,6 +21,8 @@ from backend.app.services.score_integrity import (
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import require_role, ensure_founder_access
 from datetime import datetime, timedelta
+
+logger = logging.getLogger("studioos.scoring")
 
 router = APIRouter(prefix="/scoring", tags=["Scoring Engine"])
 
@@ -201,6 +204,10 @@ async def score_startup(
         result["anomaly_flags"] = flags
 
         # Phase 0.2 — notify the founder when an OFFICIAL score is generated.
+        # notify() already isolates and logs its own per-channel delivery
+        # failures, so an exception escaping past it is a bug in the lookup or
+        # call above — worth logging, but must not fail a score that already
+        # committed successfully.
         if not is_sandbox and project and getattr(project, "founder_id", None):
             try:
                 from backend.app.services.notify import notify
@@ -219,8 +226,8 @@ async def score_startup(
                         payload={"project_id": project.id, "snapshot_id": snapshot.id, "total_score": result.get("total_score")},
                         channels=("in_app", "email", "slack"),
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("scoring: score-generated notify failed for snapshot %s: %s", snapshot.id, exc)
 
         # Epic 5 — admin alert when a snapshot transitions to flagged. Best-effort:
         # an in-app activity_log row goes in the same transaction so admins
