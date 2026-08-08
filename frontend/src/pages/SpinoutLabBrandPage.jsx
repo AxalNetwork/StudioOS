@@ -42,6 +42,8 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import {
   TEMPLATES, AUDIENCES, AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES,
 } from '../lib/brand/templates';
+import BrandTemplatePreview from '../components/brand/templates/BrandTemplatePreview.jsx';
+import { getPreviewComponent } from '../components/brand/templates/templateRegistry.js';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
 
 // Mirrors MAX_PAGES_PER_PROJECT in cloudflare-worker/src/routes/brand.ts (and
@@ -133,14 +135,13 @@ const leadSource = (row) => templateById(row.landing_template_kit)?.label
   || row.source
   || 'landing page';
 
-/** Mini placeholder thumbnail — layout bars whose geometry follows the
- *  template kind, like the design's scaled-down previews (pure CSS; no live
- *  render backend for templates). When the template has a signature palette
- *  (`visual`), the thumb paints with the design's OWN background + accent so
- *  each card reads as its actual look (dark investor briefs vs warm cream
- *  letters) instead of a generic audience tint; the audience color remains
- *  the fallback. `flush` renders it as the edge-to-edge strip of a page card;
- *  `tall` is the larger library-card variant. */
+/** LEGACY placeholder thumbnail — layout bars only. Since the real preview
+ *  components landed (components/brand/templates/*), every supplied template
+ *  renders its faithful design via TemplateVisual below; this placeholder
+ *  survives ONLY as the fallback for keys with no registry entry (the five
+ *  generic visual styles and unknown/legacy page values). Do not route a
+ *  supplied template key here — brand_template_previews.test.mjs guards
+ *  against that regressing. */
 function TemplateThumb({ audience, kind = {}, flush = false, tall = false, visual = null }) {
   const sig = visual ? VISUAL_TEMPLATE_PALETTES[visual] : null;
   const bar = sig?.theme_color || AUDIENCE_COLORS[audience]?.bar || '#7c3aed';
@@ -175,6 +176,26 @@ function TemplateThumb({ audience, kind = {}, flush = false, tall = false, visua
       </div>
     </div>
   );
+}
+
+/** The real template visual for cards: renders the faithful preview
+ *  component (scaled artboard of the actual brandtemplates/ design) when the
+ *  key is in the registry, falling back to the legacy TemplateThumb bars only
+ *  for generic/unknown keys. `data` carries the founder's brand overrides so
+ *  their name/tagline/CTA flow into the design exactly as they will on the
+ *  published page. */
+function TemplateVisual({ visual, audience, data, flush = false, tall = false }) {
+  if (getPreviewComponent(visual)) {
+    const frame = flush
+      ? 'border-b border-gray-100 dark:border-gray-700'
+      : 'rounded-lg border border-gray-100 dark:border-gray-700 overflow-hidden';
+    return (
+      <div className={frame}>
+        <BrandTemplatePreview templateKey={visual} data={data} height={flush ? 96 : tall ? 176 : 80} />
+      </div>
+    );
+  }
+  return <TemplateThumb audience={audience} kind={templateKind(visual)} visual={visual} flush={flush} tall={tall} />;
 }
 
 // Relative-luminance check so signature-palette thumbs pick legible line
@@ -765,6 +786,28 @@ export default function SpinoutLabBrandPage() {
     () => (libFilter === 'all' ? TEMPLATES : TEMPLATES.filter((t) => t.audience === libFilter)),
     [libFilter],
   );
+
+  // Brand + palette payload for the real template previews. The signature
+  // palette wins (that's what "Use Template" seeds the page with — same rule
+  // the old modal used); the founder's own name/tagline/logo flow in so each
+  // card previews THEIR page, not the demo. Empty draft fields stay undefined
+  // so the preview's faithful sample copy shows instead of blank strings.
+  const previewDataFor = (tpl, page = null) => {
+    const pal = VISUAL_TEMPLATE_PALETTES[tpl?.visualTemplate || page?.template] || {};
+    return {
+      brandName: draft.name || undefined,
+      tagline: draft.tagline || undefined,
+      headline: page?.headline || undefined,
+      subheadline: page?.subheadline || undefined,
+      ctaText: page?.cta_text || tpl?.defaultCtaLabel || undefined,
+      themeColor: pal.theme_color,
+      paletteBg: pal.palette_bg,
+      paletteInk: pal.palette_ink,
+      paletteSecondary: pal.palette_secondary,
+      paletteAccent: pal.palette_accent,
+      logoUrl: draft.logo_url || undefined,
+    };
+  };
   // Inflows read from the CONTACTS hub, which carries the full 6-audience
   // taxonomy — the legacy waitlist column CHECK-limits audience to customer/
   // partner/investor, storing NULL for the other three, so bucketing waitlist
@@ -1213,7 +1256,7 @@ export default function SpinoutLabBrandPage() {
                   const subs = subsForPage(p);
                   return (
                     <div key={p.id} className={`${CARD} overflow-hidden`} data-testid={`page-card-${p.id}`}>
-                      <TemplateThumb audience={aud} kind={templateKind(p.template)} flush />
+                      <TemplateVisual visual={p.template} audience={aud} data={previewDataFor(tpl, p)} flush />
                       <div className="px-4 pt-2.5 pb-3.5">
                         <div className="flex items-center gap-1.5 mb-1">
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${c.chip}`}>{AUDIENCE_LABELS[aud]}</span>
@@ -1375,7 +1418,7 @@ export default function SpinoutLabBrandPage() {
                   const c = AUDIENCE_COLORS[t.audience];
                   return (
                     <div key={t.id} className={`${CARD} p-4`} data-testid={`template-card-${t.id}`}>
-                      <TemplateThumb audience={t.audience} kind={templateKind(t.visualTemplate)} visual={t.visualTemplate} tall />
+                      <TemplateVisual visual={t.visualTemplate} audience={t.audience} data={previewDataFor(t)} tall />
                       <div className="flex items-start gap-2 mt-3">
                         <div className="min-w-0">
                           <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-100">{t.label}</div>
@@ -1410,7 +1453,7 @@ export default function SpinoutLabBrandPage() {
                   return (
                     <div key={t.id} className={`${CARD} p-3 flex items-center gap-3.5`} data-testid={`template-card-${t.id}`}>
                       <div className="w-28 flex-none">
-                        <TemplateThumb audience={t.audience} kind={templateKind(t.visualTemplate)} visual={t.visualTemplate} />
+                        <TemplateVisual visual={t.visualTemplate} audience={t.audience} data={previewDataFor(t)} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -1545,16 +1588,17 @@ export default function SpinoutLabBrandPage() {
         </div>
       )}
 
-      {/* ---- template preview modal (scaled hero render, per design) ---- */}
+      {/* ---- template preview modal — the REAL design, scaled ---- */}
       {previewTpl && (() => {
         const c = AUDIENCE_COLORS[previewTpl.audience];
         const kind = templateKind(previewTpl.visualTemplate);
+        const hasReal = !!getPreviewComponent(previewTpl.visualTemplate);
         // "Use Template" seeds the page with the template's signature palette,
-        // so the hero mock uses it too (audience accent as the fallback).
+        // so the fallback hero mock uses it too (audience accent otherwise).
         const accent = VISUAL_TEMPLATE_PALETTES[previewTpl.visualTemplate]?.theme_color || c.bar;
         return (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setPreviewTpl(null)}>
-            <div className={`${CARD} w-full max-w-lg overflow-hidden`} onClick={(e) => e.stopPropagation()} data-testid="template-preview-modal">
+            <div className={`${CARD} w-full max-w-2xl overflow-hidden`} onClick={(e) => e.stopPropagation()} data-testid="template-preview-modal">
               <div className="flex items-start gap-2 px-5 py-4 border-b border-gray-100 dark:border-gray-800">
                 <div className="min-w-0">
                   <div className="text-[15px] font-extrabold text-gray-900 dark:text-gray-100 truncate">{previewTpl.label}</div>
@@ -1563,31 +1607,37 @@ export default function SpinoutLabBrandPage() {
                 <span className={`ml-auto flex-none px-1.5 py-0.5 rounded text-[10px] font-bold ${c.chip}`}>{AUDIENCE_LABELS[previewTpl.audience]}</span>
                 <button type="button" onClick={() => setPreviewTpl(null)} className="flex-none text-gray-400 hover:text-gray-600"><X size={16} /></button>
               </div>
-              <div className="max-h-[60vh] overflow-y-auto">
-                {/* Standalone light artboard on purpose — it mocks the public
-                    page, not the app UI. Copy seeds from the identity draft.
-                    dark-mode-exempt (whole artboard, through its form mock). */}
-                <div className="bg-white p-6">
-                  <div className="h-2 w-14 rounded-full mb-4" style={{ background: accent }} />
-                  <div className="text-[26px] font-extrabold text-gray-900 leading-tight mb-2">{draft.name || 'Your brand'}</div>
-                  {draft.tagline && <div className="text-[14px] text-gray-500 mb-5">{draft.tagline}</div>}
-                  {kind.media && (
-                    <div className="h-36 rounded-xl mb-5 flex items-center justify-center" style={{ background: `${accent}18` }}>
-                      <span className="w-0 h-0 border-y-[12px] border-y-transparent border-l-[19px]" style={{ borderLeftColor: accent }} />
+              <div className="max-h-[65vh] overflow-y-auto">
+                {hasReal ? (
+                  /* Full-height faithful render of the source design, scaled
+                     to the modal width; the founder's name/tagline/CTA flow
+                     in exactly as on the published page. */
+                  <BrandTemplatePreview templateKey={previewTpl.visualTemplate} data={previewDataFor(previewTpl)} full />
+                ) : (
+                  /* Legacy generic artboard — reachable only for keys without
+                     a real preview (generic visual styles). dark-mode-exempt. */
+                  <div className="bg-white p-6">
+                    <div className="h-2 w-14 rounded-full mb-4" style={{ background: accent }} />
+                    <div className="text-[26px] font-extrabold text-gray-900 leading-tight mb-2">{draft.name || 'Your brand'}</div>
+                    {draft.tagline && <div className="text-[14px] text-gray-500 mb-5">{draft.tagline}</div>}
+                    {kind.media && (
+                      <div className="h-36 rounded-xl mb-5 flex items-center justify-center" style={{ background: `${accent}18` }}>
+                        <span className="w-0 h-0 border-y-[12px] border-y-transparent border-l-[19px]" style={{ borderLeftColor: accent }} />
+                      </div>
+                    )}
+                    {kind.split && (
+                      <div className="flex gap-3 mb-5">
+                        <div className="flex-1 rounded-xl bg-red-50 p-3.5 text-[12px] text-red-900"><b>Before</b><br />Scattered, slow, manual</div>
+                        <div className="flex-1 rounded-xl bg-emerald-50 p-3.5 text-[12px] text-emerald-900"><b>After</b><br />Unified &amp; instant</div>
+                      </div>
+                    )}
+                    <div className="flex gap-2 border-t border-gray-100 pt-4">
+                      {/* dark-mode-exempt: still inside the light artboard. */}
+                      <div className="flex-1 h-10 rounded-lg border border-gray-200 bg-gray-50 px-3 flex items-center text-[12px] text-gray-400">Email address</div>
+                      <div className="h-10 px-4 rounded-lg flex-none flex items-center text-[12.5px] font-bold text-white whitespace-nowrap" style={{ background: accent }}>{previewTpl.defaultCtaLabel}</div>
                     </div>
-                  )}
-                  {kind.split && (
-                    <div className="flex gap-3 mb-5">
-                      <div className="flex-1 rounded-xl bg-red-50 p-3.5 text-[12px] text-red-900"><b>Before</b><br />Scattered, slow, manual</div>
-                      <div className="flex-1 rounded-xl bg-emerald-50 p-3.5 text-[12px] text-emerald-900"><b>After</b><br />Unified &amp; instant</div>
-                    </div>
-                  )}
-                  <div className="flex gap-2 border-t border-gray-100 pt-4">
-                    {/* dark-mode-exempt: still inside the light artboard. */}
-                    <div className="flex-1 h-10 rounded-lg border border-gray-200 bg-gray-50 px-3 flex items-center text-[12px] text-gray-400">Email address</div>
-                    <div className="h-10 px-4 rounded-lg flex-none flex items-center text-[12.5px] font-bold text-white whitespace-nowrap" style={{ background: accent }}>{previewTpl.defaultCtaLabel}</div>
                   </div>
-                </div>
+                )}
               </div>
               <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-gray-100 dark:border-gray-800">
                 <button
