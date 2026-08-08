@@ -86,6 +86,13 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
     usesHero: false,
     usesProduct: false,
   },
+  // NOT part of the "ported" batch above, despite sitting next to it — and
+  // despite having been labeled as such until an August 2026 fidelity audit
+  // caught it. No `brandtemplates/` directory has ever existed for "Proof
+  // Builder" (checked against the repo's full history). It's kept as an
+  // original, in-house template — the catalog's only customer-audience
+  // entry — not removed, but its provenance is honestly `null` below, not a
+  // fabricated source. See TEMPLATE_SOURCES for the authoritative map.
   {
     key: 'proof-builder',
     label: 'Proof Builder',
@@ -223,6 +230,61 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
 export const TEMPLATE_MAP = new Map<string, TemplateMeta>(
   TEMPLATE_REGISTRY.map((t) => [t.key, t]),
 );
+
+/**
+ * Source-of-truth provenance for every template key: which real upload under
+ * the repo's `brandtemplates/` directory (if any) its content and structure
+ * were recreated from. `null` means the key is an original, in-house design —
+ * NOT a recreation of anything uploaded — and must not claim otherwise in its
+ * label, description, or comments.
+ *
+ * Added after an August 2026 fidelity audit found `proof-builder` claiming
+ * "ported" status (grouped with genuinely-ported templates in both this
+ * file's TEMPLATE_REGISTRY comment and the frontend catalog's header
+ * comment) despite no `brandtemplates/` directory for it ever existing.
+ *
+ * This is now the ONE place that answers "does this template correspond to
+ * a real uploaded design, and which one" — everything else (labels,
+ * descriptions, code comments) should defer to it rather than restate
+ * provenance informally. `landing_template_provenance.test.ts` enforces it
+ * mechanically against the actual `brandtemplates/` directory listing on
+ * every run, so a future addition/removal can't silently drift the way
+ * proof-builder did.
+ *
+ * The 5 generic styles (minimal/bold-hero/video-first/editorial/product-mock)
+ * are deliberately absent: they've never claimed brandtemplates/ provenance,
+ * so there's nothing to verify.
+ */
+export const TEMPLATE_SOURCES: { [key in Exclude<TemplateKey, 'minimal' | 'bold-hero' | 'video-first' | 'editorial' | 'product-mock'>]: string | null } = {
+  'advisor-connect': 'Advisor Connect',
+  'proof-builder': null, // original in-house design — see doc comment above
+  'capital-ready-kit': 'Capital Ready Kit',
+  'capital-storyteller': 'Capital Storyteller',
+  'seed-stage-spark': 'Seed Stage Spark',
+  'distribution-deck': 'Distribution Deck',
+  'pilot-partner-page': 'Pilot Partner Page',
+  'partner-hub': 'Partner Hub',
+  'partner-pipeline-pro': 'Partner Pipeline Pro',
+  'co-founder-builder': 'Co-Founder Builder',
+  'co-founder-canvas': 'Co-Founder Canvas',
+  'cofounder-connect': 'Co-founder Connect',
+  'co-founder-quest': 'Co-Founder Quest',
+  'mentor-connect': 'Mentor Connect',
+  'mentor-connect-page': 'Mentor Connect Page',
+  'builders-launchpad': "Builder's Launchpad",
+};
+
+/**
+ * `brandtemplates/` directory names that are byte-identical duplicate
+ * uploads of another directory, not distinct templates — excluded from
+ * "every directory maps to a TEMPLATE_SOURCES value" in the provenance test.
+ * Verified with a full recursive diff (every file, not just the main page)
+ * on 2026-08-07: `Capital Ready Kit 2` is a re-upload of `Capital Ready Kit`
+ * with a different folder name and nothing else different.
+ */
+export const TEMPLATE_SOURCE_DUPLICATE_DIRS: Record<string, string> = {
+  'Capital Ready Kit 2': 'Capital Ready Kit',
+};
 
 function escapeHtml(s: string | null | undefined): string {
   if (!s) return '';
@@ -622,11 +684,12 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
       itemFields: [
         { key: 'name', label: 'Name / role', kind: 'text' },
         { key: 'role', label: 'Detail', kind: 'text' },
+        { key: 'bio', label: 'Credential (one line)', kind: 'text' },
       ],
       default: [
-        { name: 'Founder', role: 'Sets the vision and owns the product.' },
-        { name: 'Co-founder', role: 'Leads build and the technical roadmap.' },
-        { name: 'Early team', role: 'Operators close to the customer.' },
+        { name: 'Founder', role: 'Sets the vision and owns the product.', bio: 'Years in this exact problem, before starting the company.' },
+        { name: 'Co-founder', role: 'Leads build and the technical roadmap.', bio: 'Shipped the hard technical part of this before, elsewhere.' },
+        { name: 'Early team', role: 'Operators close to the customer.', bio: 'Came from the industry this sells into, not a resume template.' },
       ],
     },
   ],
@@ -698,6 +761,19 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
         { label: 'Reserve', pct: '10' },
       ],
     },
+    {
+      key: 'team', label: 'Team', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'name', label: 'Name / role', kind: 'text' },
+        { key: 'role', label: 'Detail', kind: 'text' },
+        { key: 'bio', label: 'Credential (one line)', kind: 'text' },
+      ],
+      default: [
+        { name: 'Founder', role: 'Vision, product, and the story.', bio: 'Built and sold in this exact market before.' },
+        { name: 'Co-founder', role: 'Engineering and the technical roadmap.', bio: 'Shipped the hard infrastructure piece elsewhere, at scale.' },
+        { name: 'Early team', role: 'Go-to-market and first customers.', bio: 'Ran the playbook this company needs, somewhere else first.' },
+      ],
+    },
   ],
   'seed-stage-spark': [
     {
@@ -736,6 +812,32 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
         { label: 'Q2', pct: '52' },
         { label: 'Q3', pct: '71' },
         { label: 'Q4', pct: '100' },
+      ],
+    },
+    {
+      key: 'team', label: 'Team', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'name', label: 'Name / role', kind: 'text' },
+        { key: 'role', label: 'Detail', kind: 'text' },
+        { key: 'bio', label: 'Credential (one line)', kind: 'text' },
+      ],
+      default: [
+        { name: 'Founder', role: 'Vision, product, and the story.', bio: 'Built and sold in this exact market before.' },
+        { name: 'Co-founder', role: 'Engineering and the technical roadmap.', bio: 'Shipped the hard infrastructure piece elsewhere, at scale.' },
+        { name: 'Early team', role: 'Go-to-market and first customers.', bio: 'Ran the playbook this company needs, somewhere else first.' },
+      ],
+    },
+    {
+      key: 'round_details', label: 'Round details', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Stage', value: 'Seed' },
+        { label: 'Instrument', value: 'SAFE' },
+        { label: 'Runway', value: '~18 months' },
+        { label: 'Close', value: 'Rolling' },
       ],
     },
   ],
@@ -821,6 +923,18 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
       ],
     },
     {
+      key: 'not_for', label: "Who this isn't for", kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Needs it finished', body: "Looking for a polished, finished product — not a working pilot." },
+        { title: "Can't give the time", body: "Won't have someone showing up weekly with real feedback." },
+        { title: 'No path to a yes', body: "Can't say yes internally within the pilot window if it works." },
+      ],
+    },
+    {
       key: 'includes', label: 'What it includes', kind: 'groupList', max: 6,
       itemFields: [
         { key: 'title', label: 'Title', kind: 'text' },
@@ -876,6 +990,19 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
     {
       key: 'shared_fit', label: 'Shared fit', kind: 'textarea',
       default: `We start where our ideal customers already overlap — so the pilot proves value fast and the economics are obvious to both teams.`,
+    },
+    {
+      key: 'value_to_partner', label: 'Value to partner', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Account coverage', body: 'We show up inside accounts you already own — not around them.' },
+        { title: 'Faster cycles', body: 'Shared context means less re-explaining, faster yes or no.' },
+        { title: 'Lower lift', body: 'We do the integration work; you keep the relationship.' },
+        { title: 'Co-branded proof', body: 'Joint case studies and data you can take to your own team.' },
+      ],
     },
     {
       key: 'models', label: 'Ways to work together', kind: 'groupList', max: 3,
@@ -975,6 +1102,27 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
     {
       key: 'quote_by', label: 'Quote attribution', kind: 'text',
       default: `VP, Strategic Partnerships`,
+    },
+    {
+      key: 'best_fit', label: 'Best fit', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'text' },
+      ],
+      default: [
+        { body: 'You already sell to the same accounts we do.' },
+        { body: 'Your reps can position a second product with no new headcount.' },
+        { body: "You want a revenue line that doesn't need new pipeline." },
+      ],
+    },
+    {
+      key: 'not_fit', label: 'Not a fit yet', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'text' },
+      ],
+      default: [
+        { body: 'No existing relationship with this customer base.' },
+        { body: 'Mid a platform migration — bad timing for a new integration.' },
+      ],
     },
   ],
   'co-founder-builder': [
@@ -1458,6 +1606,18 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
         { body: 'Smoother onboarding for new teams.' },
         { body: 'The two integrations you keep asking for.' },
         { body: 'v1, stable enough to depend on.' },
+      ],
+    },
+    {
+      key: 'equity', label: 'Equity & collaboration', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Term', kind: 'textarea' },
+      ],
+      default: [
+        { body: 'Equity: meaningful — expect double digits, negotiated directly, no games.' },
+        { body: 'Vesting: standard 4-year schedule, 1-year cliff.' },
+        { body: "Salary: modest now, market-rate the moment we're funded to pay it." },
+        { body: 'Location: remote-friendly, with occasional in-person time for the hard weeks.' },
       ],
     },
   ],
@@ -2369,6 +2529,7 @@ ${socialMeta(bk, a)}
   .member .av{width:46px;height:46px;border-radius:50%;background:${accent}26;border:1px solid ${accent}55;margin-bottom:14px;}
   .member h3{font-family:${serif};font-size:18px;font-weight:400;margin:0 0 4px;}
   .member p{margin:0;opacity:.65;font-size:13px;}
+  .member .bio{margin-top:6px;opacity:.85;}
   .cta{border:1px solid ${accent}55;background:${accent}12;border-radius:22px;padding:54px;margin:64px 0;text-align:center;}
   .cta h2{font-family:${serif};font-size:clamp(28px,3.8vw,44px);margin:0 0 10px;font-weight:400;}
   .cta p{opacity:.8;margin:0 0 26px;font-size:16px;}
@@ -2438,7 +2599,7 @@ ${socialMeta(bk, a)}
     <section>
       <div class="sec-head"><div class="eyebrow">Team</div><h2>Who's building ${brand}</h2></div>
       <div class="team">
-        ${c.list('team').map((it) => `<div class="member"><div class="av"></div><h3>${it.t('name')}</h3><p>${it.t('role')}</p></div>`).join('')}
+        ${c.list('team').map((it) => `<div class="member"><div class="av"></div><h3>${it.t('name')}</h3><p class="role">${it.t('role')}</p><p class="bio">${it.t('bio')}</p></div>`).join('')}
       </div>
     </section>
 
@@ -2517,6 +2678,11 @@ ${socialMeta(bk, a)}
   .two h3{font-family:${PORT_SERIF};font-weight:400;font-size:20px;margin:0 0 16px;}
   .term{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid ${secondary};font-size:14px;}
   .term:first-of-type{border-top:0;}.term .v{color:${accent};font-family:${PORT_MONO};}
+  .team{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};margin-top:8px;}
+  .team .cell{background:${bgColor};padding:26px 22px;}
+  .team .cell h3{font-family:${PORT_SERIF};font-weight:400;font-size:18px;margin:0 0 8px;}
+  .team .cell p{opacity:.68;font-size:14px;margin:0;}
+  .team .cell .bio{margin-top:6px;opacity:.85;}
   .cta{padding:80px 0 88px;text-align:center;}
   .cta h2{font-size:clamp(32px,4.4vw,52px);}
   .cta p{opacity:.78;margin:0 auto 28px;max-width:52ch;}
@@ -2526,7 +2692,7 @@ ${socialMeta(bk, a)}
   .wl-ok,.wl-err{margin-top:14px;font-size:13px;min-height:18px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
   footer{display:flex;justify-content:space-between;padding:28px 0;font-size:11px;opacity:.5;flex-wrap:wrap;gap:8px;font-family:${PORT_MONO};letter-spacing:.08em;text-transform:uppercase;}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
-  @media(max-width:820px){.raise,.bento,.two{grid-template-columns:1fr;}}
+  @media(max-width:820px){.raise,.bento,.two,.team{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
     <div class="brand"><span class="mark">${logoMarkup}</span><b>${name}</b> <span class="mono conf">· Confidential</span></div>
@@ -2571,6 +2737,13 @@ ${socialMeta(bk, a)}
         <div class="pane"><h3>Use of funds</h3>
           ${c.list('use_of_funds').map((it) => `<div class="term"><span>${it.t('label')}</span><span class="v">${it.pct('pct')}%</span></div>`).join('')}
         </div>
+      </div>
+    </section>
+    <section>
+      <div class="num"><span>05 — Team</span><div class="ln"></div></div>
+      <h2>Who's behind ${brand}</h2>
+      <div class="team">
+        ${c.list('team').map((it) => `<div class="cell"><h3>${it.t('name')}</h3><p class="role">${it.t('role')}</p><p class="bio">${it.t('bio')}</p></div>`).join('')}
       </div>
     </section>
     <div class="cta">
@@ -2636,6 +2809,7 @@ ${socialMeta(bk, a)}
   .pill{border:1px solid ${secondary};border-radius:14px;padding:24px;background:${secondary}26;}
   .pill .v{font-family:${PORT_MONO};font-size:30px;color:${accent};}
   .pill h3{font-size:16px;margin:12px 0 6px;}.pill p{margin:0;opacity:.7;font-size:14px;}
+  .pill .bio{margin-top:6px;opacity:.9;}
   .bars{display:flex;align-items:flex-end;gap:14px;height:160px;margin-top:10px;}
   .bars .b{flex:1;background:${accent};border-radius:6px 6px 0 0;position:relative;opacity:.85;}
   .bars .b span{position:absolute;bottom:-22px;left:0;right:0;text-align:center;font-family:${PORT_MONO};font-size:10px;opacity:.6;}
@@ -2677,6 +2851,18 @@ ${socialMeta(bk, a)}
         ${c.list('traction_bars').map((it) => `<div class="b" style="height:${it.pct('pct')}%"><span>${it.t('label')}</span></div>`).join('')}
       </div>
     </section>
+    <section>
+      <div class="eyebrow">03 / Team</div><h2>Who's building ${brand}</h2>
+      <div class="pillars">
+        ${c.list('team').map((it) => `<div class="pill"><h3>${it.t('name')}</h3><p class="role">${it.t('role')}</p><p class="bio">${it.t('bio')}</p></div>`).join('')}
+      </div>
+    </section>
+    <section>
+      <div class="eyebrow">04 / Round</div><h2>Round details</h2>
+      <div class="metrics">
+        ${c.list('round_details').map((it) => `<div class="cell"><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
+      </div>
+    </section>
     <div class="cta" id="raise">
       <h2>${a.c}</h2>
       <p>We're sharing the deck and metrics with a small group of seed investors. Add your email.</p>
@@ -2694,7 +2880,14 @@ ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 // ── Template: Distribution Deck (Task #25) — light blueprint partnership memo ──
 function renderDistributionDeck(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, name } = bk;
-  const a = aud.investor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  // Was `aud.investor` — a leftover from before this template's audience was
+  // corrected to 'partner' (see the catalog fix and singleWaitlistScript's
+  // 'partner' tag below). Distribution Deck is a partnership memo; nothing
+  // about it addresses an investor. Left uncorrected, the page displayed
+  // investor-audience copy while tagging every submitted lead 'partner' —
+  // whatever headline/body/CTA the founder wrote for partners never actually
+  // rendered.
+  const a = aud.partner; const brand = name || 'our company'; const btnInk = contrastText(color);
   const ctaInk = contrastText(inkColor);
   const c = landingContent(row, 'distribution-deck');
   return `<!doctype html>
@@ -2902,14 +3095,21 @@ ${socialMeta(bk, a)}
     </section>
     <hr/>
     <section class="sec">
-      <div class="head"><div class="label">02 — What it includes</div><div class="t">What you get</div></div>
+      <div class="head"><div class="label">02 — Who this isn't for</div><div class="t">Save us both the time</div></div>
+      <div class="who">
+        ${c.list('not_for').map((it) => `<div class="c"><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
+      </div>
+    </section>
+    <hr/>
+    <section class="sec">
+      <div class="head"><div class="label">03 — What it includes</div><div class="t">What you get</div></div>
       <div class="incl">
         ${c.list('includes').map((it, i) => `<div class="c"><div class="n">${String(i + 1).padStart(2, '0')}</div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
     <hr/>
     <section class="sec">
-      <div class="head"><div class="label">03 — Process</div><div class="t">From hello to results</div></div>
+      <div class="head"><div class="label">04 — Process</div><div class="t">From hello to results</div></div>
       <div class="steps">
         ${c.list('steps').map((it) => `<div class="s"><div class="k">${it.t('label')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
@@ -2971,6 +3171,9 @@ ${socialMeta(bk, a)}
   .why .c{background:${bgColor};padding:26px 22px;}
   .why .n{font-family:${PORT_MONO};font-size:12px;color:${accent};}
   .why h3{font-family:${PORT_SERIF};font-weight:400;font-size:19px;margin:10px 0 6px;}.why p{margin:0;opacity:.74;font-size:14px;}
+  .value{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};border-radius:14px;overflow:hidden;}
+  .value .c{background:${bgColor};padding:22px 18px;}
+  .value h3{font-family:${PORT_SERIF};font-weight:400;font-size:17px;margin:0 0 6px;}.value p{margin:0;opacity:.74;font-size:13px;}
   .models{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
   .model{border:1px solid ${secondary};border-radius:14px;padding:24px;box-shadow:0 10px 30px ${inkColor}0d;}
   .model .tag{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:${accent};font-weight:700;}
@@ -2991,7 +3194,7 @@ ${socialMeta(bk, a)}
   .wl-ok,.wl-err{font-size:13px;min-height:18px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
   footer{display:flex;justify-content:space-between;padding:24px 0;font-size:12px;opacity:.55;flex-wrap:wrap;gap:8px;}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
-  @media(max-width:840px){.stats,.why,.models{grid-template-columns:1fr;}.split,.ctaSec .in{grid-template-columns:1fr;}}
+  @media(max-width:840px){.stats,.why,.models,.value{grid-template-columns:1fr;}.split,.ctaSec .in{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
     <div class="brand">${logoChip(bk, 26, 6)}<b>${name}</b></div>
@@ -3017,6 +3220,12 @@ ${socialMeta(bk, a)}
       <div><div class="eyebrow">Shared fit</div><h2>The same customer wins twice</h2></div>
       <p>${c.t('shared_fit')}</p>
     </div></section>
+    <section>
+      <div class="eyebrow">Value to partner</div><h2 style="margin-bottom:24px;">What's in it for you</h2>
+      <div class="value">
+        ${c.list('value_to_partner').map((it) => `<div class="c"><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
+      </div>
+    </section>
     <section id="models"><div class="eyebrow">Models</div><h2 style="margin-bottom:24px;">Three ways to work together</h2>
       <div class="models">
         ${c.list('models').map((it) => `<div class="model"><div class="tag">${it.t('tag')}</div><h3>${it.t('title')}</h3><ul><li>${it.t('li1')}</li><li>${it.t('li2')}</li><li>${it.t('li3')}</li></ul></div>`).join('')}
@@ -3100,6 +3309,10 @@ ${socialMeta(bk, a)}
   .timeline .k{font-family:${PORT_MONO};font-size:11px;color:${accent};}.timeline .v{font-size:14px;margin-top:6px;}
   .quote{border-left:3px solid ${accent};padding-left:20px;}
   .quote p{font-family:${PORT_SERIF};font-size:clamp(20px,2.4vw,26px);margin:0 0 10px;}.quote .w{font-size:13px;opacity:.6;}
+  .fit2{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:${secondary};border:1px solid ${secondary};border-radius:10px;overflow:hidden;}
+  .fitcol{background:${bgColor};padding:22px 20px;}
+  .fitcol h3{margin:0 0 10px;font-size:15px;}.fitcol.good h3{color:${accent};}
+  .fitcol ul{margin:0;padding-left:18px;font-size:14px;opacity:.78;}.fitcol li{margin-bottom:6px;}
   .ctaBox{border:1px dashed ${secondary};border-radius:14px;padding:30px;margin-top:8px;}
   .ctaBox h2{margin-bottom:8px;}
   form{display:flex;gap:10px;flex-wrap:wrap;max-width:460px;margin-top:8px;}
@@ -3108,7 +3321,7 @@ ${socialMeta(bk, a)}
   .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:10px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
   footer{display:flex;justify-content:space-between;padding:22px 0;font-size:11px;opacity:.55;font-family:${PORT_MONO};flex-wrap:wrap;gap:8px;}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
-  @media(max-width:840px){.hero{grid-template-columns:1fr;}.nums,.opts{grid-template-columns:1fr;}}
+  @media(max-width:840px){.hero{grid-template-columns:1fr;}.nums,.opts,.fit2{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
     <div class="brand">${logoChip(bk, 26, 6)}<b>${name}</b><span class="tag">Distribution brief</span></div>
@@ -3154,6 +3367,14 @@ ${socialMeta(bk, a)}
     <section>
       <div class="slabel"><span class="n">04</span><span class="ln"></span><span class="t">Proof of demand</span></div>
       <div class="quote"><p>"${c.t('quote')}"</p><div class="w">${c.t('quote_by')}</div></div>
+    </section>
+    <section>
+      <div class="slabel"><span class="n">05</span><span class="ln"></span><span class="t">Audience fit</span></div>
+      <h2>Where this works — and where it doesn't yet</h2>
+      <div class="fit2">
+        <div class="fitcol good"><h3>Best fit</h3><ul>${c.list('best_fit').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul></div>
+        <div class="fitcol"><h3>Not a fit (yet)</h3><ul>${c.list('not_fit').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul></div>
+      </div>
     </section>
     <div class="ctaBox" id="fit">
       <h2>${a.c}</h2>
@@ -3936,7 +4157,12 @@ ${singleWaitlistScript(bk.apiWaitlist, 'mentor', bk.nonce)}
 // ── Template: Builder's Launchpad (Task #25) — dark terminal launch teaser ──
 function renderBuildersLaunchpad(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, name } = bk;
-  const a = aud.customer; const brand = name || 'our company'; const btnInk = contrastText(color);
+  // Was `aud.customer` — the same leftover as Distribution Deck above.
+  // Builder's Launchpad is a technical co-founder recruiting page; nothing
+  // about it addresses a customer. Left uncorrected, a founder's cofounder-
+  // audience headline/body/CTA never rendered — visitors saw the generic
+  // customer copy while every submission was tagged 'cofounder' regardless.
+  const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
   const c = landingContent(row, 'builders-launchpad');
   const ok = '#7bbf5a', warn = accent, danger = '#d9544e';
   return `<!doctype html>
@@ -4030,8 +4256,14 @@ ${socialMeta(bk, a)}
         <ol class="road">${c.list('road').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
       </div>
     </section>
+    <section>
+      <div class="side"><div class="idx">04</div><div class="lbl">Equity &amp; collaboration</div></div>
+      <div><h2>The offer</h2>
+        <ul class="state">${c.list('equity').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul>
+      </div>
+    </section>
     <section id="apply">
-      <div class="side"><div class="idx">04</div><div class="lbl">Get access</div></div>
+      <div class="side"><div class="idx">05</div><div class="lbl">Get access</div></div>
       <div><h2>${a.c}</h2>
         <div class="term">
           <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="name">~/join.sh</span></div>
