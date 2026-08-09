@@ -55,7 +55,18 @@ const STRUCTURAL_MARKERS = {
   'mentor-connect-page': 'Private link',
   'builders-launchpad': 'request access',
   'proof-builder': 'receipts', // in-house original — marker from its own worker renderer
+  'customer-acquisition': 'Two ways in', // the waitlist-OR-demo split that defines this design
+  'customer-audience': 'Built for', // the per-segment audience switcher
 };
+
+test('every registered preview has a structural marker (no template opts out of the check)', () => {
+  for (const key of Object.keys(PREVIEW_REGISTRY)) {
+    assert.ok(
+      STRUCTURAL_MARKERS[key],
+      `"${key}" has a preview component but no STRUCTURAL_MARKERS entry — it would ship without anyone checking it renders its own design`,
+    );
+  }
+});
 
 test('every catalog template resolves to a REAL preview component (no placeholder fallback)', () => {
   for (const t of TEMPLATES) {

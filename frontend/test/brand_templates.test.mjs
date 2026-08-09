@@ -40,8 +40,21 @@ const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 // ── Catalog integrity ──────────────────────────────────────────────
 
-test('catalog contains all 16 supplied templates', () => {
-  assert.equal(TEMPLATES.length, 16);
+// Was `assert.equal(TEMPLATES.length, 16)` — a literal that had to be edited
+// by hand every time a template shipped, and that asserted nothing about the
+// catalog beyond its size. The real invariant is the 1:1 pairing: every
+// non-generic visual style has exactly one catalog entry and vice versa, so a
+// template registered in one place but not the other fails here.
+const GENERIC_VISUAL_STYLES = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock'];
+
+test('every non-generic visual style has exactly one catalog entry, and vice versa', () => {
+  const designed = VISUAL_TEMPLATE_KEYS.filter((k) => !GENERIC_VISUAL_STYLES.includes(k));
+  const used = TEMPLATES.map((t) => t.visualTemplate);
+  assert.equal(new Set(used).size, used.length, 'two catalog entries share a visualTemplate — they would render identically');
+  assert.deepEqual(
+    [...used].sort(), [...designed].sort(),
+    'catalog entries and non-generic visual styles have drifted — a template was registered in one place but not the other',
+  );
 });
 
 test('every template has valid, in-enum fields', () => {

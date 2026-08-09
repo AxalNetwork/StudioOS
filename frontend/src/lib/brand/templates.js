@@ -10,9 +10,11 @@
 // `cloudflare-worker/src/services/landingTemplates.ts` for the authoritative
 // key → source-directory map. The 16th, proof-builder, is an original
 // in-house design; it was incorrectly labeled "ported" until an August 2026
-// fidelity audit caught the fabricated provenance. It's kept as the
-// catalog's only customer-audience entry, with its provenance now honestly
-// `null` rather than a made-up source.
+// fidelity audit caught the fabricated provenance. Its provenance is now
+// honestly `null` rather than a made-up source, and it is the only entry
+// here with no supplied source of any kind — the two `customer-*` templates
+// come from `.dc` design handoffs in `attached_assets/` (see
+// TEMPLATE_DESIGN_SOURCES alongside TEMPLATE_SOURCES).
 //
 // Pure data + pure helpers. No I/O, no network, no React.
 
@@ -35,7 +37,7 @@
  * One of the existing built-in landing visual styles the page renders with.
  * MUST mirror TEMPLATE_KEYS in
  * `cloudflare-worker/src/services/landingTemplates.ts`.
- * @typedef {'minimal'|'bold-hero'|'video-first'|'editorial'|'product-mock'|'advisor-connect'|'proof-builder'|'capital-ready-kit'|'capital-storyteller'|'seed-stage-spark'|'distribution-deck'|'pilot-partner-page'|'partner-hub'|'partner-pipeline-pro'|'co-founder-builder'|'co-founder-canvas'|'cofounder-connect'|'co-founder-quest'|'mentor-connect'|'mentor-connect-page'|'builders-launchpad'} VisualTemplate
+ * @typedef {'minimal'|'bold-hero'|'video-first'|'editorial'|'product-mock'|'advisor-connect'|'proof-builder'|'capital-ready-kit'|'capital-storyteller'|'seed-stage-spark'|'distribution-deck'|'pilot-partner-page'|'partner-hub'|'partner-pipeline-pro'|'co-founder-builder'|'co-founder-canvas'|'cofounder-connect'|'co-founder-quest'|'mentor-connect'|'mentor-connect-page'|'builders-launchpad'|'customer-acquisition'|'customer-audience'} VisualTemplate
  */
 
 /**
@@ -66,7 +68,7 @@ export const GOALS = ['join_waitlist', 'request_intro', 'start_pilot', 'book_cal
  * here so the catalog + its tests stay self-contained on the frontend.
  * @type {VisualTemplate[]}
  */
-export const VISUAL_TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit', 'capital-storyteller', 'seed-stage-spark', 'distribution-deck', 'pilot-partner-page', 'partner-hub', 'partner-pipeline-pro', 'co-founder-builder', 'co-founder-canvas', 'cofounder-connect', 'co-founder-quest', 'mentor-connect', 'mentor-connect-page', 'builders-launchpad'];
+export const VISUAL_TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit', 'capital-storyteller', 'seed-stage-spark', 'distribution-deck', 'pilot-partner-page', 'partner-hub', 'partner-pipeline-pro', 'co-founder-builder', 'co-founder-canvas', 'cofounder-connect', 'co-founder-quest', 'mentor-connect', 'mentor-connect-page', 'builders-launchpad', 'customer-acquisition', 'customer-audience'];
 
 /**
  * Signature palettes for the recreated designs (Task #24). Selecting one of
@@ -93,6 +95,8 @@ export const VISUAL_TEMPLATE_PALETTES = {
   'mentor-connect': { theme_color: '#c56a3e', palette_bg: '#fbfaf8', palette_ink: '#16100c', palette_secondary: '#e2ddd7', palette_accent: '#c56a3e' },
   'mentor-connect-page': { theme_color: '#b05139', palette_bg: '#fcfaf6', palette_ink: '#221811', palette_secondary: '#e2ddd5', palette_accent: '#b05139' },
   'builders-launchpad': { theme_color: '#dcb400', palette_bg: '#090e11', palette_ink: '#e8ecee', palette_secondary: '#2c343a', palette_accent: '#dcb400' },
+  'customer-acquisition': { theme_color: '#6b46c1', palette_bg: '#ffffff', palette_ink: '#141118', palette_secondary: '#e2e8f0', palette_accent: '#6b46c1' },
+  'customer-audience': { theme_color: '#6b46c1', palette_bg: '#ffffff', palette_ink: '#1a202c', palette_secondary: '#e2e8f0', palette_accent: '#6b46c1' },
 };
 
 /**
@@ -1221,6 +1225,203 @@ export const TEMPLATE_CONTENT_SCHEMA = {
       ],
     },
   ],
+  'customer-acquisition': [
+    {
+      key: 'problem_lead', label: 'The problem, in one line', kind: 'textarea',
+      default: `Async work broke the status update, and nothing replaced it.`,
+    },
+    {
+      key: 'costs', label: 'What it costs today', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Figure', kind: 'text' },
+        { key: 'label', label: 'What it measures', kind: 'text' },
+      ],
+      default: [
+        { value: '4.2 hrs', label: 'lost per person each week to work nobody should have to do' },
+        { value: '62%', label: 'of updates get repeated in a meeting after already being written' },
+        { value: '3.4', label: 'separate tools consulted to answer a single question' },
+      ],
+    },
+    {
+      key: 'product_lead', label: 'What it does', kind: 'textarea',
+      default: `One place for the work. The summary writes itself.`,
+    },
+    {
+      key: 'feature_notes', label: 'Feature notes', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Reads the tools you already run', body: 'No migration and no parallel system to keep alive.' },
+        { title: 'Outcomes, not chatter', body: 'Threads resolve into decisions with an owner and a date.' },
+        { title: 'Written for the reader', body: 'Everyone gets the slice that touches their work.' },
+      ],
+    },
+    {
+      key: 'why_now', label: 'Why now', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Heading', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { title: 'Built for how work happens now', body: 'The tools in this space were designed for a different shape of team and bolted the rest on later.' },
+        { title: 'The cost of coordination moved', body: 'The overhead is finally big enough that teams will pay to remove it.' },
+        { title: 'Early access shapes what ships', body: 'The first cohort gets direct input on the roadmap and keeps its pricing.' },
+      ],
+    },
+    {
+      key: 'quote', label: 'Customer quote', kind: 'textarea',
+      default: `We cancelled two standing meetings in the first week. The digest covered what they were for.`,
+    },
+    {
+      key: 'quote_by', label: 'Quote attribution', kind: 'text',
+      default: `Early customer · operations`,
+    },
+    {
+      key: 'conversion', label: 'Ways in', kind: 'groupList', max: 2,
+      itemFields: [
+        { key: 'title', label: 'Option', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+        { key: 'foot', label: 'Small print', kind: 'text' },
+      ],
+      default: [
+        { title: 'Join the waitlist', body: 'Access opens by fit rather than signup order, so tell us a little about your team.', foot: 'No credit card. Unsubscribe in one click.' },
+        { title: 'Book a demo', body: 'Twenty minutes with the founder, on your own data. Skip the queue entirely.', foot: 'No sales call — the founder runs these.' },
+      ],
+    },
+    {
+      key: 'faqs', label: 'Questions', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'q', label: 'Question', kind: 'text' },
+        { key: 'a', label: 'Answer', kind: 'textarea' },
+      ],
+      default: [
+        { q: 'When does access actually open?', a: 'Rolling. We onboard in order of fit rather than signup order, so a later signup with the right shape may come first.' },
+        { q: 'What does it cost?', a: 'Free through early access. Pricing is set with the first cohort rather than announced to them, and early teams keep their rate.' },
+        { q: 'What happens right after I sign up?', a: 'One email confirming your place. Then nothing until we have something real to show you.' },
+        { q: 'Can I bring my whole team?', a: 'Yes — access is granted per workspace rather than per seat.' },
+      ],
+    },
+  ],
+  'customer-audience': [
+    {
+      key: 'segments', label: 'Audience segments', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'label', label: 'Switcher label', kind: 'text' },
+        { key: 'headline', label: 'Headline for this audience', kind: 'text' },
+        { key: 'subhead', label: 'Subheadline for this audience', kind: 'textarea' },
+        { key: 'o1', label: 'Week-one outcome 1', kind: 'text' },
+        { key: 'o2', label: 'Week-one outcome 2', kind: 'text' },
+        { key: 'o3', label: 'Week-one outcome 3', kind: 'text' },
+        { key: 'stat_value', label: 'Headline stat', kind: 'text' },
+        { key: 'stat_label', label: 'Stat caption', kind: 'text' },
+      ],
+      default: [
+        {
+          label: 'Operations leads',
+          headline: 'Stop reconstructing what changed since yesterday.',
+          subhead: 'Every update your team already wrote, assembled into one read. No status meeting, no chasing, no second version of the truth.',
+          o1: 'A single daily digest replacing the standing status meeting',
+          o2: 'Every decision logged with an owner and a date',
+          o3: 'Connected to the tools you already run',
+          stat_value: '4.2 hrs', stat_label: 'returned per person, per week',
+        },
+        {
+          label: 'Engineering managers',
+          headline: 'Your engineers should not be writing status reports.',
+          subhead: 'Pull the update straight from the work and give leadership the read without taxing the team.',
+          o1: 'Sprint state assembled from the tracker, not from standup',
+          o2: 'Blockers surfaced the day they appear, not at retro',
+          o3: 'A leadership-readable summary nobody had to write',
+          stat_value: '6.1 hrs', stat_label: 'of reporting overhead removed per sprint',
+        },
+        {
+          label: 'Founders',
+          headline: 'Know what your company did this week without asking anyone.',
+          subhead: 'Past the point where you see everything, this keeps you current without turning you into the bottleneck.',
+          o1: 'A weekly company read assembled from actual work',
+          o2: 'Investor-ready progress notes with no separate write-up',
+          o3: 'Early warning when a workstream stops moving',
+          stat_value: '1 read', stat_label: 'replaces the round of check-in calls',
+        },
+      ],
+    },
+    {
+      key: 'problem_lead', label: 'What breaks today', kind: 'textarea',
+      default: `The information already exists. It is just spread across four tools and one person's memory.`,
+    },
+    {
+      key: 'pains', label: 'Pains', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'The update gets written twice', body: 'Once where the work happened, again where somebody asks what happened.' },
+        { title: 'Decisions have no home', body: 'They land mid-thread, get scrolled past, and resurface as the same argument later.' },
+        { title: 'Nobody reads the long version', body: 'The weekly summary is thorough, unread, and stale by the time it is sent.' },
+      ],
+    },
+    {
+      key: 'how_lead', label: 'How it works', kind: 'textarea',
+      default: `Three steps, and none of them are "write an update".`,
+    },
+    {
+      key: 'steps', label: 'Steps', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'title', label: 'Step', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+        { key: 'shot', label: 'Screenshot caption', kind: 'text' },
+      ],
+      default: [
+        { title: 'Connect what you already use', body: 'Read-only access, and nothing changes about how the team works.', shot: 'Connect screen' },
+        { title: 'It watches the work, not the people', body: 'Changes are captured where they happen and resolved into decisions.', shot: 'Activity view' },
+        { title: 'Everyone gets their slice', body: 'One digest, tailored per reader — not a firehose of everything that moved.', shot: 'Digest view' },
+      ],
+    },
+    {
+      key: 'quote', label: 'Customer quote', kind: 'textarea',
+      default: `We cancelled two standing meetings in the first week. The digest already covered what they were for.`,
+    },
+    {
+      key: 'quote_by', label: 'Quote attribution', kind: 'text',
+      default: `VP Operations · 140-person team`,
+    },
+    {
+      key: 'metrics', label: 'Proof metrics', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Figure', kind: 'text' },
+        { key: 'label', label: 'What it measures', kind: 'text' },
+      ],
+      default: [
+        { value: '2', label: 'recurring meetings removed in the first month' },
+        { value: '91%', label: 'of the team open the digest daily' },
+        { value: '0', label: 'status updates written by hand' },
+      ],
+    },
+    {
+      key: 'conv_lead', label: 'Conversion heading', kind: 'textarea',
+      default: `Get it running on your team.`,
+    },
+    {
+      key: 'conv_body', label: 'Conversion detail', kind: 'textarea',
+      default: `We onboard by team shape rather than signup order. Setup takes under twenty minutes and does not touch your existing workflow.`,
+    },
+    {
+      key: 'faqs', label: 'Questions', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'q', label: 'Question', kind: 'text' },
+        { key: 'a', label: 'Answer', kind: 'textarea' },
+      ],
+      default: [
+        { q: 'When does access open?', a: 'Rolling. We onboard by team shape rather than signup order, so a later signup with the right fit may come first.' },
+        { q: 'What does it cost?', a: 'Free through early access. Pricing is set with the first cohort, and early teams keep their rate.' },
+        { q: 'What do you connect to?', a: 'The common trackers, chat tools and code hosts — read-only, scoped to what you choose.' },
+        { q: 'Does my team have to change how they work?', a: 'No. If it requires a new habit, it will not survive contact with a busy week.' },
+      ],
+    },
+  ],
 };
 
 /**
@@ -1442,6 +1643,28 @@ export const TEMPLATES = [
     visualTemplate: 'proof-builder',
     recommended: true,
     notes: 'Customer-discovery landing to validate demand and collect a waitlist.',
+  },
+  {
+    id: 'customer-acquisition',
+    label: 'Customer Acquisition Page',
+    audience: 'customer',
+    assetType: 'landing',
+    primaryGoal: 'join_waitlist',
+    defaultCtaLabel: 'Join the waitlist',
+    defaultSlug: 'customer-acquisition',
+    visualTemplate: 'customer-acquisition',
+    notes: 'Full acquisition funnel for ONE audience — cost of the problem, product shot, why now, then two ways in: join the waitlist or book a demo.',
+  },
+  {
+    id: 'customer-audience',
+    label: 'Customer Audience Page',
+    audience: 'customer',
+    assetType: 'landing',
+    primaryGoal: 'join_waitlist',
+    defaultCtaLabel: 'Join the waitlist',
+    defaultSlug: 'customer-audience',
+    visualTemplate: 'customer-audience',
+    notes: 'One page, several buyers — a segment switcher retargets the headline, outcomes and proof per audience, with a single low-friction form.',
   },
   {
     id: 'builders-launchpad',

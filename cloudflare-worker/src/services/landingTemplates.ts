@@ -21,7 +21,7 @@
  */
 export const HONEYPOT_FIELD = 'company_website';
 
-export const TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit', 'capital-storyteller', 'seed-stage-spark', 'distribution-deck', 'pilot-partner-page', 'partner-hub', 'partner-pipeline-pro', 'co-founder-builder', 'co-founder-canvas', 'cofounder-connect', 'co-founder-quest', 'mentor-connect', 'mentor-connect-page', 'builders-launchpad'] as const;
+export const TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit', 'capital-storyteller', 'seed-stage-spark', 'distribution-deck', 'pilot-partner-page', 'partner-hub', 'partner-pipeline-pro', 'co-founder-builder', 'co-founder-canvas', 'cofounder-connect', 'co-founder-quest', 'mentor-connect', 'mentor-connect-page', 'builders-launchpad', 'customer-acquisition', 'customer-audience'] as const;
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 
 export interface TemplateMeta {
@@ -90,9 +90,12 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
   // despite having been labeled as such until an August 2026 fidelity audit
   // caught it. No `brandtemplates/` directory has ever existed for "Proof
   // Builder" (checked against the repo's full history). It's kept as an
-  // original, in-house template — the catalog's only customer-audience
-  // entry — not removed, but its provenance is honestly `null` below, not a
-  // fabricated source. See TEMPLATE_SOURCES for the authoritative map.
+  // original, in-house template targeting the customer audience — not
+  // removed, but its provenance is honestly `null` below, not a fabricated
+  // source. (It was the catalog's ONLY customer entry until the two
+  // `customer-*` templates were added from `.dc` design handoffs; it remains
+  // the only one with no supplied source of either kind.) See
+  // TEMPLATE_SOURCES for the authoritative map.
   {
     key: 'proof-builder',
     label: 'Proof Builder',
@@ -225,6 +228,22 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
     usesHero: false,
     usesProduct: false,
   },
+  {
+    key: 'customer-acquisition',
+    label: 'Customer Acquisition Page',
+    description: 'Full acquisition funnel — problem cost, product shot, why-now, and TWO ways in (waitlist or demo).',
+    thumbnailPlaceholder: 'customer-acquisition',
+    usesHero: false,
+    usesProduct: true,
+  },
+  {
+    key: 'customer-audience',
+    label: 'Customer Audience Page',
+    description: 'One page, several buyers — a segment switcher retargets the pitch, proof and form per audience.',
+    thumbnailPlaceholder: 'customer-audience',
+    usesHero: false,
+    usesProduct: false,
+  },
 ];
 
 export const TEMPLATE_MAP = new Map<string, TemplateMeta>(
@@ -234,9 +253,12 @@ export const TEMPLATE_MAP = new Map<string, TemplateMeta>(
 /**
  * Source-of-truth provenance for every template key: which real upload under
  * the repo's `brandtemplates/` directory (if any) its content and structure
- * were recreated from. `null` means the key is an original, in-house design —
- * NOT a recreation of anything uploaded — and must not claim otherwise in its
- * label, description, or comments.
+ * were recreated from. `null` means the key has NO `brandtemplates/` project
+ * behind it — either an original in-house design, or one recreated from a
+ * `.dc` design handoff in `attached_assets/`. Which of those it is, is
+ * answered by TEMPLATE_DESIGN_SOURCES below: a key that is null in BOTH maps
+ * is in-house and must not claim otherwise in its label, description, or
+ * comments.
  *
  * Added after an August 2026 fidelity audit found `proof-builder` claiming
  * "ported" status (grouped with genuinely-ported templates in both this
@@ -272,6 +294,32 @@ export const TEMPLATE_SOURCES: { [key in Exclude<TemplateKey, 'minimal' | 'bold-
   'mentor-connect': 'Mentor Connect',
   'mentor-connect-page': 'Mentor Connect Page',
   'builders-launchpad': "Builder's Launchpad",
+  // Recreated from a `.dc` design handoff, not a brandtemplates/ project —
+  // see TEMPLATE_DESIGN_SOURCES.
+  'customer-acquisition': null,
+  'customer-audience': null,
+};
+
+/**
+ * The OTHER kind of supplied source: a `.dc` design handoff under
+ * `attached_assets/`, the same format the Brand & Landing page itself was
+ * specified in (`attached_assets/Brand_&_Landing_Page.dc_*.html`). These are
+ * design documents rather than runnable projects, so they never appear under
+ * `brandtemplates/` and TEMPLATE_SOURCES records them as null.
+ *
+ * Keeping them in a SECOND map rather than overloading TEMPLATE_SOURCES is
+ * deliberate: TEMPLATE_SOURCES' null is load-bearing (it is what proof-builder's
+ * August 2026 provenance correction turns on), and silently widening it to
+ * mean "no project source, but maybe some other source" would erase exactly
+ * the distinction that audit established. A key absent from BOTH maps'
+ * non-null values is in-house.
+ *
+ * Paths are repo-relative and verified to exist by
+ * `landing_template_provenance.test.ts`, same as the directories above.
+ */
+export const TEMPLATE_DESIGN_SOURCES: Record<string, string> = {
+  'customer-acquisition': 'attached_assets/Customer_Acquisition_Landing_Page.dc.html',
+  'customer-audience': 'attached_assets/Customer_Audience_Landing_Page.dc.html',
 };
 
 /**
@@ -1621,6 +1669,203 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
       ],
     },
   ],
+  'customer-acquisition': [
+    {
+      key: 'problem_lead', label: 'The problem, in one line', kind: 'textarea',
+      default: `Async work broke the status update, and nothing replaced it.`,
+    },
+    {
+      key: 'costs', label: 'What it costs today', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Figure', kind: 'text' },
+        { key: 'label', label: 'What it measures', kind: 'text' },
+      ],
+      default: [
+        { value: '4.2 hrs', label: 'lost per person each week to work nobody should have to do' },
+        { value: '62%', label: 'of updates get repeated in a meeting after already being written' },
+        { value: '3.4', label: 'separate tools consulted to answer a single question' },
+      ],
+    },
+    {
+      key: 'product_lead', label: 'What it does', kind: 'textarea',
+      default: `One place for the work. The summary writes itself.`,
+    },
+    {
+      key: 'feature_notes', label: 'Feature notes', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Reads the tools you already run', body: 'No migration and no parallel system to keep alive.' },
+        { title: 'Outcomes, not chatter', body: 'Threads resolve into decisions with an owner and a date.' },
+        { title: 'Written for the reader', body: 'Everyone gets the slice that touches their work.' },
+      ],
+    },
+    {
+      key: 'why_now', label: 'Why now', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Heading', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { title: 'Built for how work happens now', body: 'The tools in this space were designed for a different shape of team and bolted the rest on later.' },
+        { title: 'The cost of coordination moved', body: 'The overhead is finally big enough that teams will pay to remove it.' },
+        { title: 'Early access shapes what ships', body: 'The first cohort gets direct input on the roadmap and keeps its pricing.' },
+      ],
+    },
+    {
+      key: 'quote', label: 'Customer quote', kind: 'textarea',
+      default: `We cancelled two standing meetings in the first week. The digest covered what they were for.`,
+    },
+    {
+      key: 'quote_by', label: 'Quote attribution', kind: 'text',
+      default: `Early customer · operations`,
+    },
+    {
+      key: 'conversion', label: 'Ways in', kind: 'groupList', max: 2,
+      itemFields: [
+        { key: 'title', label: 'Option', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+        { key: 'foot', label: 'Small print', kind: 'text' },
+      ],
+      default: [
+        { title: 'Join the waitlist', body: 'Access opens by fit rather than signup order, so tell us a little about your team.', foot: 'No credit card. Unsubscribe in one click.' },
+        { title: 'Book a demo', body: 'Twenty minutes with the founder, on your own data. Skip the queue entirely.', foot: 'No sales call — the founder runs these.' },
+      ],
+    },
+    {
+      key: 'faqs', label: 'Questions', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'q', label: 'Question', kind: 'text' },
+        { key: 'a', label: 'Answer', kind: 'textarea' },
+      ],
+      default: [
+        { q: 'When does access actually open?', a: 'Rolling. We onboard in order of fit rather than signup order, so a later signup with the right shape may come first.' },
+        { q: 'What does it cost?', a: 'Free through early access. Pricing is set with the first cohort rather than announced to them, and early teams keep their rate.' },
+        { q: 'What happens right after I sign up?', a: 'One email confirming your place. Then nothing until we have something real to show you.' },
+        { q: 'Can I bring my whole team?', a: 'Yes — access is granted per workspace rather than per seat.' },
+      ],
+    },
+  ],
+  'customer-audience': [
+    {
+      key: 'segments', label: 'Audience segments', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'label', label: 'Switcher label', kind: 'text' },
+        { key: 'headline', label: 'Headline for this audience', kind: 'text' },
+        { key: 'subhead', label: 'Subheadline for this audience', kind: 'textarea' },
+        { key: 'o1', label: 'Week-one outcome 1', kind: 'text' },
+        { key: 'o2', label: 'Week-one outcome 2', kind: 'text' },
+        { key: 'o3', label: 'Week-one outcome 3', kind: 'text' },
+        { key: 'stat_value', label: 'Headline stat', kind: 'text' },
+        { key: 'stat_label', label: 'Stat caption', kind: 'text' },
+      ],
+      default: [
+        {
+          label: 'Operations leads',
+          headline: 'Stop reconstructing what changed since yesterday.',
+          subhead: 'Every update your team already wrote, assembled into one read. No status meeting, no chasing, no second version of the truth.',
+          o1: 'A single daily digest replacing the standing status meeting',
+          o2: 'Every decision logged with an owner and a date',
+          o3: 'Connected to the tools you already run',
+          stat_value: '4.2 hrs', stat_label: 'returned per person, per week',
+        },
+        {
+          label: 'Engineering managers',
+          headline: 'Your engineers should not be writing status reports.',
+          subhead: 'Pull the update straight from the work and give leadership the read without taxing the team.',
+          o1: 'Sprint state assembled from the tracker, not from standup',
+          o2: 'Blockers surfaced the day they appear, not at retro',
+          o3: 'A leadership-readable summary nobody had to write',
+          stat_value: '6.1 hrs', stat_label: 'of reporting overhead removed per sprint',
+        },
+        {
+          label: 'Founders',
+          headline: 'Know what your company did this week without asking anyone.',
+          subhead: 'Past the point where you see everything, this keeps you current without turning you into the bottleneck.',
+          o1: 'A weekly company read assembled from actual work',
+          o2: 'Investor-ready progress notes with no separate write-up',
+          o3: 'Early warning when a workstream stops moving',
+          stat_value: '1 read', stat_label: 'replaces the round of check-in calls',
+        },
+      ],
+    },
+    {
+      key: 'problem_lead', label: 'What breaks today', kind: 'textarea',
+      default: `The information already exists. It is just spread across four tools and one person's memory.`,
+    },
+    {
+      key: 'pains', label: 'Pains', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'The update gets written twice', body: 'Once where the work happened, again where somebody asks what happened.' },
+        { title: 'Decisions have no home', body: 'They land mid-thread, get scrolled past, and resurface as the same argument later.' },
+        { title: 'Nobody reads the long version', body: 'The weekly summary is thorough, unread, and stale by the time it is sent.' },
+      ],
+    },
+    {
+      key: 'how_lead', label: 'How it works', kind: 'textarea',
+      default: `Three steps, and none of them are "write an update".`,
+    },
+    {
+      key: 'steps', label: 'Steps', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'title', label: 'Step', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+        { key: 'shot', label: 'Screenshot caption', kind: 'text' },
+      ],
+      default: [
+        { title: 'Connect what you already use', body: 'Read-only access, and nothing changes about how the team works.', shot: 'Connect screen' },
+        { title: 'It watches the work, not the people', body: 'Changes are captured where they happen and resolved into decisions.', shot: 'Activity view' },
+        { title: 'Everyone gets their slice', body: 'One digest, tailored per reader — not a firehose of everything that moved.', shot: 'Digest view' },
+      ],
+    },
+    {
+      key: 'quote', label: 'Customer quote', kind: 'textarea',
+      default: `We cancelled two standing meetings in the first week. The digest already covered what they were for.`,
+    },
+    {
+      key: 'quote_by', label: 'Quote attribution', kind: 'text',
+      default: `VP Operations · 140-person team`,
+    },
+    {
+      key: 'metrics', label: 'Proof metrics', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Figure', kind: 'text' },
+        { key: 'label', label: 'What it measures', kind: 'text' },
+      ],
+      default: [
+        { value: '2', label: 'recurring meetings removed in the first month' },
+        { value: '91%', label: 'of the team open the digest daily' },
+        { value: '0', label: 'status updates written by hand' },
+      ],
+    },
+    {
+      key: 'conv_lead', label: 'Conversion heading', kind: 'textarea',
+      default: `Get it running on your team.`,
+    },
+    {
+      key: 'conv_body', label: 'Conversion detail', kind: 'textarea',
+      default: `We onboard by team shape rather than signup order. Setup takes under twenty minutes and does not touch your existing workflow.`,
+    },
+    {
+      key: 'faqs', label: 'Questions', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'q', label: 'Question', kind: 'text' },
+        { key: 'a', label: 'Answer', kind: 'textarea' },
+      ],
+      default: [
+        { q: 'When does access open?', a: 'Rolling. We onboard by team shape rather than signup order, so a later signup with the right fit may come first.' },
+        { q: 'What does it cost?', a: 'Free through early access. Pricing is set with the first cohort, and early teams keep their rate.' },
+        { q: 'What do you connect to?', a: 'The common trackers, chat tools and code hosts — read-only, scoped to what you choose.' },
+        { q: 'Does my team have to change how they work?', a: 'No. If it requires a new habit, it will not survive contact with a busy week.' },
+      ],
+    },
+  ],
 };
 
 function parseLandingContent(row: any): Record<string, any> {
@@ -1867,6 +2112,11 @@ export const TEMPLATE_SIGNATURE_PALETTES: Record<string, {
   'mentor-connect': { theme_color: '#c56a3e', palette_bg: '#fbfaf8', palette_ink: '#16100c', palette_secondary: '#e2ddd7', palette_accent: '#c56a3e' },
   'mentor-connect-page': { theme_color: '#b05139', palette_bg: '#fcfaf6', palette_ink: '#221811', palette_secondary: '#e2ddd5', palette_accent: '#b05139' },
   'builders-launchpad': { theme_color: '#dcb400', palette_bg: '#090e11', palette_ink: '#e8ecee', palette_secondary: '#2c343a', palette_accent: '#dcb400' },
+  // Both `.dc` sources ship the same Inter/Instrument-Serif purple system;
+  // they are told apart by structure (dark funnel hero vs light segment
+  // switcher), not by hue — see their renderers.
+  'customer-acquisition': { theme_color: '#6b46c1', palette_bg: '#ffffff', palette_ink: '#141118', palette_secondary: '#e2e8f0', palette_accent: '#6b46c1' },
+  'customer-audience': { theme_color: '#6b46c1', palette_bg: '#ffffff', palette_ink: '#1a202c', palette_secondary: '#e2e8f0', palette_accent: '#6b46c1' },
 };
 
 // ── Template: Minimal (the original layout) ──────────────────────
@@ -4287,6 +4537,371 @@ ${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 }
 
 // ── Dispatcher ───────────────────────────────────────────────────
+// ── Customer Acquisition Page ──────────────────────────────────────────────
+// Recreated from attached_assets/Customer_Acquisition_Landing_Page.dc.html
+// (see TEMPLATE_DESIGN_SOURCES). Its signature is the funnel: a dark hero band,
+// the cost of the problem in figures, a product-screenshot frame, numbered
+// why-now rows, then TWO conversion cards side by side — waitlist and demo —
+// rather than one CTA. The waitlist card owns the real capture form; the demo
+// card is a mailto/anchor prompt, since booking has no backend here.
+function renderCustomerAcquisition(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud[selectedAudience(row)] || aud.customer;
+  const c = landingContent(row, 'customer-acquisition');
+  const btnInk = contrastText(color);
+  const band = inkColor; // the design's near-black hero/footer slab
+  const bandInk = bgColor;
+  const conv = c.list('conversion');
+  const shot = validMediaUrl(row.product_screenshot_url);
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};-webkit-font-smoothing:antialiased;}
+  a{color:${color};text-decoration:none;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 40px;}
+  .ser{font-family:${PORT_SERIF};font-weight:400;letter-spacing:-.015em;}
+  .lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;opacity:.55;}
+  .band{background:${band};color:${bandInk};}
+  .band .wrap{padding-top:26px;padding-bottom:74px;}
+  .nav{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:56px;flex-wrap:wrap;}
+  .brand{display:flex;align-items:center;gap:11px;font-size:15px;font-weight:800;letter-spacing:-.015em;}
+  .brand .mark{width:30px;height:30px;border-radius:9px;overflow:hidden;display:flex;}
+  .brand .mark :is(svg,img){width:100%!important;height:100%!important;border-radius:0!important;}
+  .ghost{padding:8px 16px;border-radius:9px;border:1px solid ${bandInk}33;font-size:12.5px;font-weight:600;color:${bandInk}dd;text-decoration:none;}
+  h1{font-size:clamp(38px,5.6vw,59px);line-height:1.06;margin:0;}
+  .lede{font-size:16.5px;opacity:.62;line-height:1.68;margin:22px 0 0;max-width:520px;}
+  .btn{display:inline-block;padding:14px 26px;border-radius:11px;background:${color};color:${btnInk};font-size:14.5px;font-weight:800;text-decoration:none;border:0;cursor:pointer;font-family:inherit;}
+  .btn2{display:inline-block;padding:14px 26px;border-radius:11px;border:1px solid ${bandInk}3d;color:${bandInk};font-size:14.5px;font-weight:700;text-decoration:none;}
+  section{padding:74px 0 0;}
+  .two{display:grid;grid-template-columns:1.15fr 1fr;gap:44px;align-items:start;}
+  .cost{display:flex;align-items:baseline;gap:14px;padding-bottom:12px;border-bottom:1px solid ${secondary};margin-bottom:12px;}
+  .cost .v{font-size:20px;font-weight:800;letter-spacing:-.02em;color:${accent};flex:none;min-width:64px;}
+  .cost .k{font-size:13.5px;opacity:.6;line-height:1.55;}
+  .shot{margin-top:34px;border:1px solid ${secondary};border-radius:16px;overflow:hidden;background:${inkColor}05;}
+  .shot .bar{display:flex;align-items:center;gap:7px;padding:11px 16px;border-bottom:1px solid ${secondary};background:${bgColor};}
+  .shot .dot{width:9px;height:9px;border-radius:50%;background:${secondary};}
+  .shot .body{min-height:280px;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;}
+  .shot img{display:block;width:100%;height:auto;}
+  .notes{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:22px;}
+  .notes h3{font-size:13.5px;font-weight:700;margin:0;}
+  .notes p{font-size:13px;opacity:.6;line-height:1.62;margin:5px 0 0;}
+  .why{display:flex;gap:28px;padding:26px 0;border-top:1px solid ${secondary};max-width:820px;}
+  .why .n{font-size:26px;color:${accent};flex:none;min-width:44px;line-height:1;}
+  .why h3{font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.35;margin:0;}
+  .why p{font-size:14.5px;opacity:.6;line-height:1.72;margin:8px 0 0;max-width:600px;}
+  blockquote{margin:0;border-left:2px solid ${accent};padding-left:22px;}
+  blockquote p{font-size:20px;line-height:1.5;margin:0;}
+  blockquote cite{display:block;font-style:normal;font-size:12px;opacity:.5;margin-top:12px;}
+  .conv{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch;margin-top:28px;}
+  .card{border:1px solid ${secondary};border-radius:16px;padding:30px 32px;display:flex;flex-direction:column;}
+  .card.alt{border-color:${accent}55;background:${accent}0d;}
+  .card h3{font-size:19px;font-weight:800;letter-spacing:-.02em;margin:0;}
+  .card p{font-size:14px;opacity:.6;line-height:1.68;margin:8px 0 0;}
+  .card .foot{font-size:12px;opacity:.45;margin-top:auto;padding-top:16px;}
+  form{display:flex;flex-direction:column;gap:10px;margin-top:22px;}
+  input{width:100%;padding:13px 15px;border-radius:10px;border:1px solid ${secondary};background:${inkColor}05;font-size:14px;color:${inkColor};outline:none;font-family:inherit;}
+  input:focus{border-color:${accent};}
+  .faq{display:grid;grid-template-columns:1fr 1fr;gap:14px 44px;max-width:960px;}
+  .faq .q{padding:20px 0;border-top:1px solid ${secondary};}
+  .faq h3{font-size:15px;font-weight:700;letter-spacing:-.01em;margin:0;}
+  .faq p{font-size:14px;opacity:.6;line-height:1.72;margin:8px 0 0;}
+  .end{background:${band};color:${bandInk};border-radius:20px;padding:44px 48px;display:flex;align-items:center;gap:30px;flex-wrap:wrap;margin:74px 0 0;}
+  .end .ser{font-size:30px;line-height:1.2;max-width:420px;}
+  footer{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 0 80px;flex-wrap:wrap;font-size:12px;opacity:.5;}
+  footer .mark{width:22px;height:22px;border-radius:7px;overflow:hidden;display:flex;}
+  footer .mark :is(svg,img){width:100%!important;height:100%!important;border-radius:0!important;}
+  .wl-ok,.wl-err{margin-top:12px;font-size:12.5px;min-height:18px;}
+  .wl-ok{color:${accent};}
+  .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+  @media(max-width:860px){.wrap{padding:0 26px;}.two,.conv,.notes,.faq{grid-template-columns:1fr;}.end{padding:32px 26px;}}
+</style>
+</head>
+<body>
+  <div class="band">
+    <div class="wrap">
+      <nav class="nav">
+        <div class="brand"><span class="mark">${logoMarkup}</span><span>${name}</span></div>
+        <a class="ghost" href="#join">${a.c}</a>
+      </nav>
+      <div style="max-width:660px">
+        <h1 class="ser">${a.h}</h1>
+        <p class="lede">${a.b}</p>
+        <div style="display:flex;gap:11px;margin-top:34px;flex-wrap:wrap">
+          <a class="btn" href="#join">${a.c}</a>
+          <a class="btn2" href="#join">See both options</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="lbl" style="margin-bottom:22px">The problem today</div>
+      <div class="two">
+        <div class="ser" style="font-size:33px;line-height:1.28">${c.t('problem_lead')}</div>
+        <div style="padding-top:6px">
+          ${c.list('costs').map((it) => `<div class="cost"><div class="v">${it.t('value')}</div><div class="k">${it.t('label')}</div></div>`).join('')}
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="lbl" style="margin-bottom:22px">What it does</div>
+      <div class="ser" style="font-size:29px;line-height:1.3;max-width:640px">${c.t('product_lead')}</div>
+      <div class="shot">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="body">${shot
+          ? `<img src="${escapeHtml(shot)}" alt="${name} product screenshot" />`
+          : `<div><div class="lbl" style="color:${accent};opacity:1">Product screenshot</div><div style="font-size:13px;opacity:.5;margin-top:8px;max-width:320px;line-height:1.6">Add a product screenshot in the builder — a real interface capture converts better than an illustration.</div></div>`}</div>
+      </div>
+      <div class="notes">
+        ${c.list('feature_notes').map((it) => `<div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
+      </div>
+    </section>
+
+    <section>
+      <div class="lbl" style="margin-bottom:26px">Why now</div>
+      ${c.list('why_now').map((it, i) => `<div class="why"><div class="n ser">${String(i + 1).padStart(2, '0')}</div><div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div></div>`).join('')}
+    </section>
+
+    <section>
+      <div class="lbl" style="margin-bottom:22px">In their words</div>
+      <blockquote><p class="ser">${c.t('quote')}</p><cite>${c.t('quote_by')}</cite></blockquote>
+    </section>
+
+    <section id="join">
+      <div class="lbl" style="margin-bottom:8px">Two ways in</div>
+      <div class="conv">
+        ${conv.map((it, i) => (i === 0
+    ? `<div class="card"><h3>${it.t('title')}</h3><p>${it.t('body')}</p>
+        <form id="wl-form">${honeypotField()}
+          <label for="wl-email" class="sr">Email</label>
+          <input id="wl-email" type="email" name="email" placeholder="Work email" required />
+          <button type="submit" class="btn">${a.c}</button>
+        </form>
+        <div id="wl-msg" aria-live="polite"></div>
+        <div class="foot">${it.t('foot')}</div></div>`
+    : `<div class="card alt"><h3>${it.t('title')}</h3><p>${it.t('body')}</p>
+        <div style="margin-top:22px"><a class="btn" href="#wl-email">${it.t('title')}</a></div>
+        <div class="foot">${it.t('foot')}</div></div>`)).join('')}
+      </div>
+    </section>
+
+    <section>
+      <div class="lbl" style="margin-bottom:22px">Questions</div>
+      <div class="faq">
+        ${c.list('faqs').map((it) => `<div class="q"><h3>${it.t('q')}</h3><p>${it.t('a')}</p></div>`).join('')}
+      </div>
+    </section>
+
+    <div class="end">
+      <div style="min-width:0;flex:1">
+        <div class="ser">${a.c}</div>
+        <div style="font-size:13.5px;opacity:.55;line-height:1.65;margin-top:10px;max-width:430px">${a.b}</div>
+      </div>
+      <div style="flex:none"><a class="btn" href="#wl-email">${a.c}</a></div>
+    </div>
+
+    <footer>
+      <span style="display:flex;align-items:center;gap:9px"><span class="mark">${logoMarkup}</span>${name}</span>
+      <span>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></span>
+    </footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, selectedAudience(row), bk.nonce)}
+</body>
+</html>`;
+}
+
+// ── Customer Audience Page ─────────────────────────────────────────────────
+// Recreated from attached_assets/Customer_Audience_Landing_Page.dc.html
+// (see TEMPLATE_DESIGN_SOURCES). Its signature is the audience switcher: one
+// page that retargets its headline, week-one outcomes and headline stat per
+// buyer segment. The source did that with component state; here it is pure
+// CSS (radio inputs + :checked sibling rules), so it keeps working under the
+// page's strict CSP with no extra script.
+function renderCustomerAudience(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud[selectedAudience(row)] || aud.customer;
+  const c = landingContent(row, 'customer-audience');
+  const btnInk = contrastText(color);
+  const segs = c.list('segments');
+  // One :checked rule per segment index — the whole switcher, no JS.
+  const segRules = segs.map((_, i) => `#sw${i}:checked~.tabs label[for="sw${i}"]{background:${color};color:${btnInk};font-weight:700;}`
+    + `#sw${i}:checked~.panels>.panel:nth-child(${i + 1}){display:grid;}`).join('');
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};-webkit-font-smoothing:antialiased;}
+  a{color:${color};text-decoration:none;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 40px;}
+  .ser{font-family:${PORT_SERIF};font-weight:400;letter-spacing:-.015em;}
+  .lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;opacity:.5;}
+  .hero{background:${inkColor}05;border-bottom:1px solid ${secondary};}
+  .hero .wrap{padding-top:26px;padding-bottom:64px;}
+  .nav{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:50px;flex-wrap:wrap;}
+  .brand{display:flex;align-items:center;gap:11px;font-size:15px;font-weight:800;letter-spacing:-.015em;}
+  .brand .mark{width:30px;height:30px;border-radius:9px;overflow:hidden;display:flex;}
+  .brand .mark :is(svg,img){width:100%!important;height:100%!important;border-radius:0!important;}
+  .btn{display:inline-block;padding:14px 26px;border-radius:11px;background:${color};color:${btnInk};font-size:14.5px;font-weight:800;text-decoration:none;border:0;cursor:pointer;font-family:inherit;}
+  .btn.sm{padding:8px 16px;border-radius:9px;font-size:12.5px;font-weight:700;}
+  .btn2{display:inline-block;padding:14px 26px;border-radius:11px;border:1px solid ${secondary};background:${bgColor};color:${inkColor};font-size:14.5px;font-weight:700;text-decoration:none;}
+  .sw{position:absolute;opacity:0;pointer-events:none;}
+  .tabs{display:inline-flex;gap:4px;padding:4px;background:${bgColor};border:1px solid ${secondary};border-radius:12px;flex-wrap:wrap;margin-bottom:30px;}
+  .tabs label{padding:9px 17px;border-radius:9px;font-size:13px;font-weight:600;opacity:.75;cursor:pointer;}
+  .panels>.panel{display:none;grid-template-columns:1.25fr 1fr;gap:52px;align-items:start;}
+  ${segRules}
+  h1{font-size:clamp(34px,5vw,54px);line-height:1.08;margin:0;}
+  .lede{font-size:16.5px;opacity:.6;line-height:1.7;margin:20px 0 0;max-width:520px;}
+  .oc{border:1px solid ${secondary};border-radius:16px;background:${bgColor};padding:24px 26px;}
+  .oc .row{display:flex;gap:13px;align-items:flex-start;margin-bottom:14px;font-size:13.5px;opacity:.72;line-height:1.62;}
+  .oc .tick{width:17px;height:17px;border-radius:6px;background:${accent}22;color:${accent};display:flex;align-items:center;justify-content:center;flex:none;font-size:11px;font-weight:800;}
+  .oc .stat{margin-top:20px;padding-top:16px;border-top:1px solid ${secondary};display:flex;align-items:baseline;gap:10px;}
+  .oc .stat .v{font-size:22px;font-weight:800;letter-spacing:-.025em;color:${accent};}
+  .oc .stat .k{font-size:12.5px;opacity:.6;line-height:1.5;}
+  section{padding:70px 0 0;}
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:34px;}
+  .pain{border-top:2px solid ${accent};padding-top:16px;}
+  .pain h3{font-size:14px;font-weight:700;letter-spacing:-.01em;margin:0;}
+  .pain p{font-size:13.5px;opacity:.6;line-height:1.68;margin:7px 0 0;}
+  .step{border:1px solid ${secondary};border-radius:14px;overflow:hidden;background:${bgColor};}
+  .step .shot{height:120px;background:${inkColor}08;display:flex;align-items:center;justify-content:center;border-bottom:1px solid ${secondary};font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:${accent};}
+  .step .in{padding:18px 20px;}
+  .step h3{font-size:14.5px;font-weight:700;letter-spacing:-.01em;margin:0;display:inline;}
+  .step p{font-size:13px;opacity:.6;line-height:1.65;margin:8px 0 0;}
+  .proof{background:${inkColor}05;border:1px solid ${secondary};border-radius:18px;padding:40px 44px;display:grid;grid-template-columns:1.3fr 1fr;gap:44px;align-items:center;}
+  .proof .q{font-size:25px;line-height:1.44;margin:0;}
+  .proof cite{display:block;font-style:normal;font-size:12.5px;opacity:.5;margin-top:16px;}
+  .m{display:flex;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid ${secondary};margin-bottom:14px;}
+  .m .v{font-size:21px;font-weight:800;letter-spacing:-.025em;color:${accent};flex:none;min-width:62px;}
+  .m .k{font-size:12.5px;opacity:.6;line-height:1.5;}
+  .conv{border:1px solid ${secondary};border-radius:18px;padding:42px 46px;display:grid;grid-template-columns:1.15fr 1fr;gap:46px;align-items:center;}
+  form{display:flex;flex-direction:column;gap:10px;}
+  input{width:100%;padding:13px 15px;border-radius:10px;border:1px solid ${secondary};background:${inkColor}05;font-size:14px;color:${inkColor};outline:none;font-family:inherit;}
+  input:focus{border-color:${accent};}
+  .faq{display:grid;grid-template-columns:1fr 1fr;gap:12px 44px;max-width:940px;}
+  .faq .q2{padding:20px 0;border-top:1px solid ${secondary};}
+  .faq h3{font-size:15px;font-weight:700;letter-spacing:-.01em;margin:0;}
+  .faq p{font-size:14px;opacity:.6;line-height:1.72;margin:8px 0 0;}
+  footer{border-top:1px solid ${secondary};margin-top:66px;padding:26px 0 76px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12.5px;opacity:.55;}
+  footer .mark{width:24px;height:24px;border-radius:8px;overflow:hidden;display:flex;}
+  footer .mark :is(svg,img){width:100%!important;height:100%!important;border-radius:0!important;}
+  .wl-ok,.wl-err{margin-top:12px;font-size:12.5px;min-height:18px;}
+  .wl-ok{color:${accent};}
+  .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+  @media(max-width:880px){.wrap{padding:0 26px;}.panels>.panel,.three,.proof,.conv,.faq{grid-template-columns:1fr!important;}}
+</style>
+</head>
+<body>
+  <div class="hero">
+    <div class="wrap">
+      <nav class="nav">
+        <div class="brand"><span class="mark">${logoMarkup}</span><span>${name}</span></div>
+        <a class="btn sm" href="#join">${a.c}</a>
+      </nav>
+      <div class="lbl" style="margin-bottom:12px">Built for</div>
+      ${segs.map((_, i) => `<input class="sw" type="radio" name="seg" id="sw${i}"${i === 0 ? ' checked' : ''} />`).join('')}
+      <div class="tabs">${segs.map((it, i) => `<label for="sw${i}">${it.t('label')}</label>`).join('')}</div>
+      <div class="panels">
+        ${segs.map((it) => `<div class="panel">
+          <div>
+            <h1 class="ser">${it.t('headline') || a.h}</h1>
+            <p class="lede">${it.t('subhead') || a.b}</p>
+            <div style="display:flex;gap:11px;margin-top:30px;flex-wrap:wrap">
+              <a class="btn" href="#join">${a.c}</a>
+              <a class="btn2" href="#how">See how it works</a>
+            </div>
+          </div>
+          <div class="oc">
+            <div class="lbl" style="margin-bottom:16px">What you get in week one</div>
+            ${[it.t('o1'), it.t('o2'), it.t('o3')].filter(Boolean).map((o) => `<div class="row"><span class="tick">&#10003;</span><span>${o}</span></div>`).join('')}
+            <div class="stat"><span class="v">${it.t('stat_value')}</span><span class="k">${it.t('stat_label')}</span></div>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="lbl" style="margin-bottom:20px">What breaks today</div>
+      <div class="ser" style="font-size:32px;line-height:1.28;max-width:660px">${c.t('problem_lead')}</div>
+      <div class="three">
+        ${c.list('pains').map((it) => `<div class="pain"><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="lbl" style="margin-bottom:20px">How it works</div>
+      <div class="ser" style="font-size:29px;line-height:1.3;max-width:560px">${c.t('how_lead')}</div>
+      <div class="three">
+        ${c.list('steps').map((it, i) => `<div class="step"><div class="shot">${it.t('shot')}</div><div class="in"><span class="ser" style="font-size:19px;color:${accent};margin-right:9px">${String(i + 1).padStart(2, '0')}</span><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div></div>`).join('')}
+      </div>
+    </section>
+
+    <section>
+      <div class="proof">
+        <div>
+          <p class="q ser">${c.t('quote')}</p>
+          <cite>${c.t('quote_by')}</cite>
+        </div>
+        <div>
+          ${c.list('metrics').map((it) => `<div class="m"><div class="v">${it.t('value')}</div><div class="k">${it.t('label')}</div></div>`).join('')}
+        </div>
+      </div>
+    </section>
+
+    <section id="join">
+      <div class="conv">
+        <div>
+          <div class="lbl" style="margin-bottom:12px">Get early access</div>
+          <div class="ser" style="font-size:29px;line-height:1.26;max-width:400px">${c.t('conv_lead')}</div>
+          <p style="font-size:14px;opacity:.6;line-height:1.7;margin:12px 0 0;max-width:420px">${c.t('conv_body')}</p>
+        </div>
+        <div>
+          <form id="wl-form">${honeypotField()}
+            <label for="wl-email" class="sr">Email</label>
+            <input id="wl-email" type="email" name="email" placeholder="Work email" required />
+            <button type="submit" class="btn">${a.c}</button>
+          </form>
+          <div id="wl-msg" aria-live="polite"></div>
+          <div style="font-size:12px;opacity:.45;margin-top:14px;line-height:1.55">No credit card, no sales call. Unsubscribe in one click.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="lbl" style="margin-bottom:20px">Questions</div>
+      <div class="faq">
+        ${c.list('faqs').map((it) => `<div class="q2"><h3>${it.t('q')}</h3><p>${it.t('a')}</p></div>`).join('')}
+      </div>
+    </section>
+
+    <footer>
+      <span style="display:flex;align-items:center;gap:10px"><span class="mark">${logoMarkup}</span>${name}</span>
+      <span>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></span>
+    </footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, selectedAudience(row), bk.nonce)}
+</body>
+</html>`;
+}
+
 const RENDERERS: Record<TemplateKey, (bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any) => string> = {
   minimal: renderMinimal,
   'bold-hero': renderBoldHero,
@@ -4309,6 +4924,8 @@ const RENDERERS: Record<TemplateKey, (bk: BrandKit, aud: Record<string, { h: str
   'mentor-connect': renderMentorConnect,
   'mentor-connect-page': renderMentorConnectPage,
   'builders-launchpad': renderBuildersLaunchpad,
+  'customer-acquisition': renderCustomerAcquisition,
+  'customer-audience': renderCustomerAudience,
 };
 
 export function renderLandingTemplate(
