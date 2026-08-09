@@ -85,12 +85,18 @@ test('og:image is emitted only for an absolute https logo', () => {
 });
 
 test('the social meta block is defined once, not per renderer', () => {
-  // The <head> is copy-pasted across 21 renderers; if a future change inlines
-  // og tags into one of them the others silently fall behind.
+  // The <head> is copy-pasted across every renderer; if a future change inlines
+  // og tags into one of them the others silently fall behind. Counted against
+  // TEMPLATE_KEYS rather than a literal so adding a template updates the
+  // expectation automatically — and still fails if the new renderer forgets
+  // the shared call.
   const defs = TEMPLATES_TS.match(/function socialMeta\(/g) || [];
   assert.equal(defs.length, 1, 'socialMeta must be a single shared helper');
   const calls = TEMPLATES_TS.match(/\$\{socialMeta\(bk, a\)\}/g) || [];
-  assert.equal(calls.length, 21, `all 21 renderer heads must call it (found ${calls.length})`);
+  assert.equal(
+    calls.length, TEMPLATE_KEYS.length,
+    `every one of the ${TEMPLATE_KEYS.length} renderer heads must call socialMeta (found ${calls.length}) — a renderer is missing it or inlined its own og tags`,
+  );
 });
 
 /* ──────────────────────────── canonical URL ────────────────────────────── */

@@ -26,6 +26,8 @@ import CoFounderQuestPreview from './CoFounderQuestPreview.jsx';
 import MentorConnectPreview from './MentorConnectPreview.jsx';
 import MentorConnectPagePreview from './MentorConnectPagePreview.jsx';
 import BuildersLaunchpadPreview from './BuildersLaunchpadPreview.jsx';
+import CustomerAcquisitionPreview from './CustomerAcquisitionPreview.jsx';
+import CustomerAudiencePreview from './CustomerAudiencePreview.jsx';
 
 /** Fixed artboard width every preview component designs at; the wrapper
  *  scales this down to whatever container it's placed in. */
@@ -50,6 +52,8 @@ export const PREVIEW_REGISTRY = {
   'mentor-connect': MentorConnectPreview,
   'mentor-connect-page': MentorConnectPagePreview,
   'builders-launchpad': BuildersLaunchpadPreview,
+  'customer-acquisition': CustomerAcquisitionPreview,
+  'customer-audience': CustomerAudiencePreview,
 };
 
 /** Look up the real preview component for a template key (null → caller

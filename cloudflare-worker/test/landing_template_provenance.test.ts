@@ -24,10 +24,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TEMPLATE_KEYS, TEMPLATE_SOURCES, TEMPLATE_SOURCE_DUPLICATE_DIRS } from '../src/services/landingTemplates.ts';
+import { TEMPLATE_KEYS, TEMPLATE_SOURCES, TEMPLATE_SOURCE_DUPLICATE_DIRS, TEMPLATE_DESIGN_SOURCES } from '../src/services/landingTemplates.ts';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const BRANDTEMPLATES_DIR = path.join(HERE, '..', '..', 'brandtemplates');
+const REPO_ROOT = path.join(HERE, '..', '..');
+const BRANDTEMPLATES_DIR = path.join(REPO_ROOT, 'brandtemplates');
 
 const GENERIC_STYLES = new Set(['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock']);
 
@@ -85,8 +86,31 @@ test('every real brandtemplates/ directory is claimed by exactly one template (o
   }
 });
 
+// The second provenance kind: a `.dc` design handoff under attached_assets/.
+// Same failure mode as the directory claims above — a path that stopped
+// existing, or a template quietly claiming a design it was never given.
+test('every TEMPLATE_DESIGN_SOURCES path is a real file in the repo', () => {
+  for (const [key, rel] of Object.entries(TEMPLATE_DESIGN_SOURCES)) {
+    assert.ok(
+      fs.existsSync(path.join(REPO_ROOT, rel)),
+      `"${key}" claims provenance from "${rel}", but no such file exists — a fabricated or stale design-source claim`,
+    );
+  }
+});
+
+test('TEMPLATE_DESIGN_SOURCES keys are real templates that claim no brandtemplates/ project', () => {
+  for (const key of Object.keys(TEMPLATE_DESIGN_SOURCES)) {
+    assert.ok((TEMPLATE_KEYS as readonly string[]).includes(key), `TEMPLATE_DESIGN_SOURCES has a "${key}" entry that isn't a real template key — stale entry`);
+    assert.equal(
+      TEMPLATE_SOURCES[key as keyof typeof TEMPLATE_SOURCES], null,
+      `"${key}" claims BOTH a brandtemplates/ project and a .dc design handoff — one of the two claims is wrong`,
+    );
+  }
+});
+
 test('proof-builder is documented as original, not a fabricated ported source', () => {
   assert.equal(TEMPLATE_SOURCES['proof-builder'], null, 'proof-builder regained a source claim — verify a brandtemplates/ directory genuinely exists for it before setting this');
+  assert.ok(!('proof-builder' in TEMPLATE_DESIGN_SOURCES), 'proof-builder gained a design-handoff claim — it is an in-house original with no supplied source of either kind');
 });
 
 test('TEMPLATE_SOURCE_DUPLICATE_DIRS entries are themselves real directories', () => {
