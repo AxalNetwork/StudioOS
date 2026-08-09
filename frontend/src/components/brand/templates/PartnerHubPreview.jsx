@@ -1,6 +1,10 @@
 // Preview: Partner Hub — calm teal serif BD landing.
 // Faithful miniature of brandtemplates/Partner Hub/ as rendered by
-// renderPartnerHub() in cloudflare-worker/src/services/landingTemplates.ts.
+// renderPartnerHub() in cloudflare-worker/src/services/landingTemplates.ts,
+// including its content_json sections (stats / why / shared_fit /
+// value_to_partner / models / quote), read through the same accessor.
+import { templateContent } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SANS = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif';
@@ -19,7 +23,9 @@ export default function PartnerHubPreview({ data = {} }) {
     paletteSecondary = '#dad7cf',
     paletteAccent = '#429595',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'partner-hub');
 
   const hairline = `1px solid ${paletteSecondary}`;
   const eyebrow = (t) => (
@@ -29,28 +35,10 @@ export default function PartnerHubPreview({ data = {} }) {
   );
   const btn = { display: 'inline-block', fontSize: 10, fontWeight: 600, background: themeColor, color: '#fff', borderRadius: 7, padding: '8px 15px' };
 
-  const stats = [
-    ['Pilot', '90-day model'],
-    ['Named', 'Owners both sides'],
-    ['Shared', 'Success criteria'],
-    ['On date', 'We ship'],
-  ];
-  const why = [
-    ['Shared accountability', 'Named owners on both sides, and a plan we both sign.'],
-    ['Productized surfaces', 'Real integration points, not a one-off favour.'],
-    ['We ship on date', 'A 90-day pilot with criteria agreed up front.'],
-  ];
-  const value = [
-    ['Account coverage', 'We show up inside accounts you already own.'],
-    ['Faster cycles', 'Shared context means faster yes or no.'],
-    ['Lower lift', 'We do the integration work; you keep the relationship.'],
-    ['Co-branded proof', 'Joint case studies you can take to your team.'],
-  ];
-  const models = [
-    ['Commercial', 'Co-sell', ['Joint pipeline', 'Shared targets', 'Rev-share']],
-    ['Technical', 'Integrate', ['Embedded surface', 'Shared data model', 'Co-built roadmap']],
-    ['Distribution', 'Channel', ['Bundled offer', 'Referral motion', 'Co-marketing']],
-  ];
+  const stats = c.list('stats');
+  const why = c.list('why');
+  const value = c.list('value_to_partner');
+  const models = c.list('models');
 
   return (
     <div data-testid="template-preview-partner-hub" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: SANS, overflow: 'hidden', lineHeight: 1.6 }}>
@@ -72,10 +60,10 @@ export default function PartnerHubPreview({ data = {} }) {
         <span style={btn}>{ctaText}</span>
         <span style={{ display: 'inline-block', marginLeft: 7, fontSize: 10, border: hairline, borderRadius: 7, padding: '7px 13px' }}>See models</span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, borderTop: hairline, marginTop: 26, paddingTop: 16 }}>
-          {stats.map(([v, l]) => (
-            <div key={l}>
-              <div style={{ fontFamily: SERIF, fontSize: 19, color: paletteAccent }}>{v}</div>
-              <div style={{ fontSize: 7.5, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.6, marginTop: 2 }}>{l}</div>
+          {stats.map((st, i) => (
+            <div key={i}>
+              <div style={{ fontFamily: SERIF, fontSize: 19, color: paletteAccent }}>{st.value}</div>
+              <div style={{ fontSize: 7.5, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.6, marginTop: 2 }}>{st.label}</div>
             </div>
           ))}
         </div>
@@ -84,11 +72,11 @@ export default function PartnerHubPreview({ data = {} }) {
       <div style={{ padding: '28px 28px', borderTop: hairline, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 22, alignItems: 'start' }}>
         <div>{eyebrow('Why partner')}<h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 17, margin: '8px 0 0', letterSpacing: '-0.01em' }}>Serious collaboration, not logos</h2></div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: paletteSecondary, border: hairline, borderRadius: 10, overflow: 'hidden' }}>
-          {why.map(([t, b], i) => (
-            <div key={t} style={{ background: paletteBg, padding: '14px 12px' }}>
+          {why.map((w, i) => (
+            <div key={i} style={{ background: paletteBg, padding: '14px 12px' }}>
               <div style={{ fontFamily: MONO, fontSize: 8.5, color: paletteAccent }}>{String(i + 1).padStart(2, '0')}</div>
-              <h3 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 12.5, margin: '6px 0 3px' }}>{t}</h3>
-              <p style={{ margin: 0, opacity: 0.74, fontSize: 9 }}>{b}</p>
+              <h3 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 12.5, margin: '6px 0 3px' }}>{w.title}</h3>
+              <p style={{ margin: 0, opacity: 0.74, fontSize: 9 }}>{w.body}</p>
             </div>
           ))}
         </div>
@@ -96,17 +84,17 @@ export default function PartnerHubPreview({ data = {} }) {
       {/* Shared fit split */}
       <div style={{ padding: '26px 28px', borderTop: hairline, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 22 }}>
         <div>{eyebrow('Shared fit')}<h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 17, margin: '8px 0 0', letterSpacing: '-0.01em' }}>The same customer wins twice</h2></div>
-        <p style={{ opacity: 0.76, fontSize: 11, margin: '4px 0 0' }}>We start where our ideal customers already overlap — so the pilot proves value fast and the economics are obvious to both teams.</p>
+        <p style={{ opacity: 0.76, fontSize: 11, margin: '4px 0 0' }}>{c.t('shared_fit')}</p>
       </div>
       {/* Value to partner — 4-col strip */}
       <div style={{ padding: '26px 28px', borderTop: hairline }}>
         {eyebrow('Value to partner')}
         <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 17, margin: '8px 0 14px', letterSpacing: '-0.01em' }}>What's in it for you</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: paletteSecondary, border: hairline, borderRadius: 10, overflow: 'hidden' }}>
-          {value.map(([t, b]) => (
-            <div key={t} style={{ background: paletteBg, padding: '13px 11px' }}>
-              <h3 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 11.5, margin: '0 0 3px' }}>{t}</h3>
-              <p style={{ margin: 0, opacity: 0.74, fontSize: 8.5 }}>{b}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, value.length))},1fr)`, gap: 1, background: paletteSecondary, border: hairline, borderRadius: 10, overflow: 'hidden' }}>
+          {value.map((v, i) => (
+            <div key={i} style={{ background: paletteBg, padding: '13px 11px' }}>
+              <h3 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 11.5, margin: '0 0 3px' }}>{v.title}</h3>
+              <p style={{ margin: 0, opacity: 0.74, fontSize: 8.5 }}>{v.body}</p>
             </div>
           ))}
         </div>
@@ -115,13 +103,13 @@ export default function PartnerHubPreview({ data = {} }) {
       <div style={{ padding: '26px 28px', borderTop: hairline }}>
         {eyebrow('Models')}
         <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 17, margin: '8px 0 14px', letterSpacing: '-0.01em' }}>Three ways to work together</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-          {models.map(([tag, t, lis]) => (
-            <div key={t} style={{ border: hairline, borderRadius: 10, padding: 14, boxShadow: `0 6px 18px ${paletteInk}0d` }}>
-              <div style={{ fontSize: 7.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: paletteAccent, fontWeight: 700 }}>{tag}</div>
-              <h3 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 14, margin: '6px 0 7px' }}>{t}</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(3, models.length))},1fr)`, gap: 12 }}>
+          {models.map((m, i) => (
+            <div key={i} style={{ border: hairline, borderRadius: 10, padding: 14, boxShadow: `0 6px 18px ${paletteInk}0d` }}>
+              <div style={{ fontSize: 7.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: paletteAccent, fontWeight: 700 }}>{m.tag}</div>
+              <h3 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 14, margin: '6px 0 7px' }}>{m.title}</h3>
               <ul style={{ margin: 0, paddingLeft: 13, fontSize: 9.5, opacity: 0.78 }}>
-                {lis.map((li) => <li key={li} style={{ marginBottom: 3 }}>{li}</li>)}
+                {[m.li1, m.li2, m.li3].filter(Boolean).map((li, k) => <li key={k} style={{ marginBottom: 3 }}>{li}</li>)}
               </ul>
             </div>
           ))}
@@ -131,8 +119,8 @@ export default function PartnerHubPreview({ data = {} }) {
       <div style={{ padding: '24px 28px', borderTop: hairline, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 22, alignItems: 'start' }}>
         <div>{eyebrow('Traction')}<h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 17, margin: '8px 0 0' }}>What partners say</h2></div>
         <div style={{ border: hairline, borderRadius: 12, padding: 18, background: `${paletteSecondary}33` }}>
-          <p style={{ fontFamily: SERIF, fontSize: 14, margin: '0 0 8px', lineHeight: 1.35 }}>"The pilot paid for itself before it ended — and our customers noticed."</p>
-          <div style={{ fontSize: 9.5, opacity: 0.6 }}>Head of Partnerships</div>
+          <p style={{ fontFamily: SERIF, fontSize: 14, margin: '0 0 8px', lineHeight: 1.35 }}>{c.t('quote')}</p>
+          <div style={{ fontSize: 9.5, opacity: 0.6 }}>{c.t('quote_by')}</div>
         </div>
       </div>
       {/* Dark CTA band with checklist + boxed form card */}

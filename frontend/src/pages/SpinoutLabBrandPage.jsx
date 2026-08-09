@@ -40,9 +40,12 @@ import { useAuth } from '../hooks/useAuthSync';
 import { useToast } from '../components/useToast';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import {
-  TEMPLATES, AUDIENCES, AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES,
+  TEMPLATES, AUDIENCES, AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES, SHARED_CONTENT_FIELDS,
 } from '../lib/brand/templates';
+import { contentForTemplate, contentFieldsFor } from '../lib/brand/templateContent.js';
 import BrandTemplatePreview from '../components/brand/templates/BrandTemplatePreview.jsx';
+import TemplateContentEditor from '../components/brand/TemplateContentEditor.jsx';
+import TemplateEditorPreview from '../components/brand/TemplateEditorPreview.jsx';
 import { getPreviewComponent } from '../components/brand/templates/templateRegistry.js';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
 
@@ -206,12 +209,35 @@ function isDarkHex(hex) {
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 128;
 }
 
-// The four editable content blocks of the inline editor (design's editBlocks).
-const EDITOR_BLOCKS = [
-  { key: 'headline', label: 'Headline', multiline: false },
-  { key: 'subheadline', label: 'Subheadline', multiline: false },
-  { key: 'body', label: 'Body copy', multiline: true },
-  { key: 'cta', label: 'CTA label', multiline: false },
+// The editor's SHARED hero blocks, derived from SHARED_CONTENT_FIELDS (the
+// mirror of the worker's SHARED_LANDING_FIELDS) rather than hand-listed here —
+// so the four columns the renderer reads and the four inputs shown always
+// agree. Two deliberate additions on top of the schema:
+//   - a label override for `name`, which on a PAGE row is both the page's name
+//     in "Your pages" AND the brand name the public renderer prints;
+//   - `body`, which is not a shared column but the page audience's copy column
+//     (audience_<aud>_body) — the text the renderer falls back to for the lede.
+// Template-specific sections are NOT listed here: they come from
+// TEMPLATE_CONTENT_SCHEMA via <TemplateContentEditor />.
+const SHARED_BLOCK_LABELS = { name: 'Page & brand name' };
+const EDITOR_SHARED_BLOCKS = (() => {
+  const mapped = SHARED_CONTENT_FIELDS.map((f) => ({
+    key: f.key,
+    label: SHARED_BLOCK_LABELS[f.key] || f.label,
+    multiline: f.kind === 'textarea',
+    suggestable: f.key !== 'name',
+  }));
+  const bodyBlock = { key: 'body', label: 'Body copy', multiline: true, suggestable: true };
+  const at = mapped.findIndex((b) => b.key === 'subheadline');
+  if (at < 0) return [...mapped, bodyBlock];
+  return [...mapped.slice(0, at + 1), bodyBlock, ...mapped.slice(at + 1)];
+})();
+
+// Page columns the editor's Brand section owns. Kept as an explicit list so the
+// save payload can carry them without spreading the server row.
+const EDITOR_BRAND_KEYS = [
+  'theme_color', 'palette_bg', 'palette_ink', 'palette_secondary', 'palette_accent',
+  'font_pairing', 'logo_url', 'logo_svg', 'hero_media_url', 'product_screenshot_url',
 ];
 
 export default function SpinoutLabBrandPage() {
@@ -269,14 +295,27 @@ export default function SpinoutLabBrandPage() {
   // route — "← Pages" simply drops back to the manager grid) ----
   const [editorRec, setEditorRec] = useState(null); // full page record while editing
   const [openingPage, setOpeningPage] = useState(null); // page id whose record is loading
-  const [editorBlocks, setEditorBlocks] = useState({ headline: '', subheadline: '', body: '', cta: '' });
+  // Unsaved editor state, in three parts so every editable field has a home and
+  // the whole thing serializes straight back into the PUT payload:
+  //   shared  — the hero columns (name/headline/subheadline/cta_text/tagline)
+  //             plus `body`, the page audience's copy column
+  //   content — content_json[template]: the template's own sections
+  //   brand   — palette / typography / logo / media columns
+  const [editorShared, setEditorShared] = useState({});
+  const [editorContent, setEditorContent] = useState({});
+  const [editorBrand, setEditorBrand] = useState({});
   const [editorDevice, setEditorDevice] = useState('desktop');
   const [savingDraft, setSavingDraft] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishedFlash, setPublishedFlash] = useState(null); // { url } only after a real publish
   const [linkCopied, setLinkCopied] = useState(false);
-  const [applyBrandColors, setApplyBrandColors] = useState(true);
+  // "Apply brand colors" now really applies: when on, the project palette is
+  // written onto the page by the save payload, so the preview and the published
+  // page can never disagree. It therefore opens OFF — flipping it on is an
+  // explicit choice to repaint the page, not something a plain Save does to a
+  // template that shipped with its own signature palette.
+  const [applyBrandColors, setApplyBrandColors] = useState(false);
   const [suggest, setSuggest] = useState(null); // { block, loading, variants }
   const autofillRef = useRef(null); // one cached autofill promise per editor session
 
@@ -601,16 +640,25 @@ export default function SpinoutLabBrandPage() {
       const seededBody = rec[`audience_${aud}_body`]
         || [project?.problem_statement, project?.solution].filter(Boolean).join('\n\n')
         || '';
-      setEditorBlocks({
+      setEditorShared({
+        // The page row's own name is the brand the public renderer prints.
+        name: rec.name || '',
         headline: seededHeadline,
         subheadline: seededSub,
         // Body copy lives in the page audience's copy column — the column the
         // public renderer reads for this audience (falling back to subheadline).
         body: seededBody,
-        cta: rec.cta_text || '',
+        cta_text: rec.cta_text || '',
+        tagline: rec.tagline || draft.tagline || '',
       });
+      // Saved sections win; anything the row has never carried fills in from the
+      // schema defaults — the same defaults the renderer falls back to — so the
+      // form is complete without ever overwriting the founder's own copy. The
+      // template_kit fallback rescues blocks stored under a legacy kit key.
+      setEditorContent(contentForTemplate(rec.content_json, rec.template, rec.template_kit));
+      setEditorBrand(Object.fromEntries(EDITOR_BRAND_KEYS.map((k) => [k, rec[k] ?? null])));
       setEditorDevice('desktop');
-      setApplyBrandColors(true);
+      setApplyBrandColors(false);
       setSuggest(null);
       setPublishedFlash(null);
       setLinkCopied(false);
@@ -632,21 +680,50 @@ export default function SpinoutLabBrandPage() {
   // Build the PUT body for the editor. brandUpdatePage is a FULL-ROW update
   // on the worker (fields missing from the body are reset to defaults), so
   // the loaded record is carried over through the same explicit DUP_FIELDS
-  // allowlist as onDuplicate — never a spread of the server row — and the
-  // four edited blocks are layered on top.
+  // allowlist as onDuplicate — never a spread of the server row — and every
+  // edited field is layered on top: the shared hero columns, the brand /
+  // palette / media columns, and the template's own content_json block.
   const editorPayload = () => {
     const rec = editorRec;
-    const payload = { name: rec.name };
+    const trimmed = (k) => (editorShared[k] || '').trim();
+    const payload = { name: trimmed('name') || rec.name };
     for (const k of DUP_FIELDS) {
       if (rec[k] !== undefined && rec[k] !== null) payload[k] = rec[k];
     }
+
+    // Shared hero columns.
+    payload.headline = trimmed('headline') || null;
+    payload.subheadline = trimmed('subheadline') || null;
+    payload.tagline = trimmed('tagline') || null;
+    payload.cta_text = trimmed('cta_text') || 'Join the waitlist';
+    payload[`audience_${editorAud}_body`] = trimmed('body') || null;
+
+    // Brand / palette / media columns. "Apply brand colors" layers the PROJECT
+    // palette over the page's own so the published page matches the preview.
+    for (const k of EDITOR_BRAND_KEYS) {
+      const v = editorBrand[k];
+      if (v !== undefined && v !== null && v !== '') payload[k] = v;
+    }
+    if (applyBrandColors) {
+      if (draft.theme_color) payload.theme_color = draft.theme_color;
+      if (draft.palette_secondary) payload.palette_secondary = draft.palette_secondary;
+      if (draft.palette_bg) payload.palette_bg = draft.palette_bg;
+      if (draft.font_pairing) payload.font_pairing = draft.font_pairing;
+    }
+
+    // The template's sections. Other templates' saved blocks are preserved, so
+    // switching a page's template in the full builder and back doesn't lose
+    // work; the worker re-validates the whole object against the schema.
     let cj = rec.content_json;
     if (typeof cj === 'string') { try { cj = JSON.parse(cj); } catch { cj = null; } }
-    if (cj && typeof cj === 'object' && !Array.isArray(cj)) payload.content_json = cj;
-    payload.headline = editorBlocks.headline.trim() || null;
-    payload.subheadline = editorBlocks.subheadline.trim() || null;
-    payload.cta_text = editorBlocks.cta.trim() || 'Join the waitlist';
-    payload[`audience_${editorAud}_body`] = editorBlocks.body.trim() || null;
+    const base = (cj && typeof cj === 'object' && !Array.isArray(cj)) ? cj : {};
+    const tkey = editorRec.template;
+    payload.content_json = contentFieldsFor(tkey).length
+      ? { ...base, [tkey]: editorContent }
+      : base;
+
+    payload.audience = rec.audience || editorAud;
+    payload.goal = rec.goal || editorTpl?.primaryGoal || null;
     return payload;
   };
 
@@ -707,7 +784,7 @@ export default function SpinoutLabBrandPage() {
   const suggestDescription = () => {
     const rec = editorRec || {};
     const cands = [
-      editorBlocks.body, rec[`audience_${editorAud}_body`], editorBlocks.subheadline,
+      editorShared.body, rec[`audience_${editorAud}_body`], editorShared.subheadline,
       rec.subheadline, rec.tagline, draft.tagline,
       project?.description, project?.problem_statement,
     ];
@@ -725,7 +802,7 @@ export default function SpinoutLabBrandPage() {
   // candidates the response implies for that block.
   const variantsForBlock = (blockKey, r) => {
     const rec = editorRec || {};
-    const current = (editorBlocks[blockKey] || '').trim().toLowerCase();
+    const current = (editorShared[blockKey] || '').trim().toLowerCase();
     const out = [];
     const push = (v) => {
       if (typeof v !== 'string') return;
@@ -735,12 +812,13 @@ export default function SpinoutLabBrandPage() {
     };
     if (blockKey === 'headline') { push(r.headline); push(r.tagline); push(rec.tagline); }
     else if (blockKey === 'subheadline') { push(r.subheadline); push(r.tagline); }
+    else if (blockKey === 'tagline') { push(r.tagline); push(r.subheadline); }
     else if (blockKey === 'body') {
       // The content payload's string fields (thesis/vision/mission-style
       // textareas) read as body copy on the published page — mine those first.
       for (const v of Object.values(r.content || {})) push(v);
       push(r.subheadline);
-    } else if (blockKey === 'cta') { push(r.cta_text); push(templateById(rec.template_kit)?.defaultCtaLabel); }
+    } else if (blockKey === 'cta_text') { push(r.cta_text); push(templateById(rec.template_kit)?.defaultCtaLabel); }
     return out.slice(0, 3);
   };
 
@@ -772,9 +850,14 @@ export default function SpinoutLabBrandPage() {
   };
 
   const pickSuggestion = (blockKey, text) => {
-    setEditorBlocks((b) => ({ ...b, [blockKey]: text }));
+    setEditorShared((b) => ({ ...b, [blockKey]: text }));
     setSuggest(null);
   };
+
+  // Every editable field writes straight into state, so the preview re-renders
+  // on the keystroke — no Save round-trip in between.
+  const setSharedField = (key, value) => setEditorShared((b) => ({ ...b, [key]: value }));
+  const setContentField = (key, value) => setEditorContent((v) => ({ ...v, [key]: value }));
 
   // ---- derived ----
   // Mirrors MAX_PAGES_PER_PROJECT in cloudflare-worker/src/routes/brand.ts.
@@ -792,10 +875,14 @@ export default function SpinoutLabBrandPage() {
   // the old modal used); the founder's own name/tagline/logo flow in so each
   // card previews THEIR page, not the demo. Empty draft fields stay undefined
   // so the preview's faithful sample copy shows instead of blank strings.
+  // NOTE: the pages LIST endpoint returns a summary row (no content_json), so a
+  // card preview shows the template's default sections rather than the page's
+  // saved ones. Opening Edit fetches the full record and the editor preview
+  // then shows the real content.
   const previewDataFor = (tpl, page = null) => {
     const pal = VISUAL_TEMPLATE_PALETTES[tpl?.visualTemplate || page?.template] || {};
     return {
-      brandName: draft.name || undefined,
+      brandName: page?.name || draft.name || undefined,
       tagline: draft.tagline || undefined,
       headline: page?.headline || undefined,
       subheadline: page?.subheadline || undefined,
@@ -808,6 +895,59 @@ export default function SpinoutLabBrandPage() {
       logoUrl: draft.logo_url || undefined,
     };
   };
+
+  // B4 — brand preview card + editor preview render with the pairing's real
+  // published stacks (see FONT_PAIRING_STACKS).
+  const pairingStack = FONT_PAIRING_STACKS[draft.font_pairing] || FONT_PAIRING_STACKS.editorial;
+  const previewStack = FONT_PAIRING_STACKS[
+    (applyBrandColors ? draft.font_pairing : editorBrand.font_pairing) || draft.font_pairing
+  ] || FONT_PAIRING_STACKS.editorial;
+
+  // The editor preview's data — built from UNSAVED editor state (never the last
+  // server row), so every keystroke shows up immediately and what's on screen is
+  // exactly what Publish will render.
+  const liveEditorPreviewData = useMemo(() => {
+    if (!editorRec) return null;
+    const val = (k) => {
+      const s = (editorShared[k] || '').trim();
+      return s || undefined;
+    };
+    const brandPatch = applyBrandColors
+      ? {
+        themeColor: draft.theme_color || undefined,
+        paletteSecondary: draft.palette_secondary || undefined,
+        paletteBg: draft.palette_bg || undefined,
+        fontPairing: draft.font_pairing || undefined,
+      }
+      : {};
+    return {
+      name: val('name'),
+      brandName: val('name') || draft.name || project?.name || undefined,
+      headline: val('headline'),
+      subheadline: val('subheadline'),
+      body: val('body'),
+      tagline: val('tagline'),
+      ctaText: val('cta_text') || editorTpl?.defaultCtaLabel || undefined,
+      themeColor: editorBrand.theme_color || undefined,
+      paletteBg: editorBrand.palette_bg || undefined,
+      paletteInk: editorBrand.palette_ink || undefined,
+      paletteSecondary: editorBrand.palette_secondary || undefined,
+      paletteAccent: editorBrand.palette_accent || undefined,
+      fontPairing: editorBrand.font_pairing || undefined,
+      logoUrl: editorBrand.logo_url || draft.logo_url || undefined,
+      logoSvg: editorBrand.logo_svg || draft.logo_svg || undefined,
+      heroMediaUrl: editorBrand.hero_media_url || undefined,
+      productScreenshotUrl: editorBrand.product_screenshot_url || undefined,
+      content: editorContent,
+      audience: editorAud,
+      goal: editorRec.goal || editorTpl?.primaryGoal || undefined,
+      // Only the generic-style fallback artboard reads these.
+      formFields: AUDIENCE_FORM_FIELDS[editorAud] || ['Email'],
+      fontStack: previewStack,
+      ...brandPatch,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorRec, editorShared, editorContent, editorBrand, applyBrandColors, draft, project, editorAud, editorTpl, previewStack]);
   // Inflows read from the CONTACTS hub, which carries the full 6-audience
   // taxonomy — the legacy waitlist column CHECK-limits audience to customer/
   // partner/investor, storing NULL for the other three, so bucketing waitlist
@@ -842,17 +982,6 @@ export default function SpinoutLabBrandPage() {
     }
     return m;
   }, [signups]);
-
-  // B4 — brand preview card + editor preview render with the pairing's real
-  // published stacks (see FONT_PAIRING_STACKS).
-  const pairingStack = FONT_PAIRING_STACKS[draft.font_pairing] || FONT_PAIRING_STACKS.editorial;
-  const previewStack = FONT_PAIRING_STACKS[editorRec?.font_pairing || draft.font_pairing] || FONT_PAIRING_STACKS.editorial;
-  // "Apply brand colors" previews the PROJECT palette on the pane (design's
-  // toggle copy); off shows the page's own stored palette. Client-side only —
-  // nothing is written until Save draft / Publish.
-  const previewAccent = applyBrandColors
-    ? (draft.theme_color || '#7c3aed')
-    : (editorRec?.theme_color || '#7c3aed');
 
   if (projectLoading) {
     return (
@@ -925,7 +1054,7 @@ export default function SpinoutLabBrandPage() {
               <ArrowLeft size={13} /> Pages
             </button>
             <div className="min-w-0">
-              <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-100 truncate">{editorRec.name}</div>
+              <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-100 truncate">{editorShared.name || editorRec.name}</div>
               <div className="text-[11px] text-gray-400 truncate">{editorTpl?.label || editorRec.template}</div>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -999,32 +1128,34 @@ export default function SpinoutLabBrandPage() {
                 </span>
               </div>
               <div className="flex flex-col gap-3">
-                {EDITOR_BLOCKS.map((b) => (
+                {EDITOR_SHARED_BLOCKS.map((b) => (
                   <div key={b.key} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3" data-testid={`editor-block-${b.key}`}>
                     <div className="flex items-center justify-between mb-1.5">
                       <span className={LBL}>{b.label}</span>
-                      <button
-                        type="button"
-                        onClick={() => openSuggest(b.key)}
-                        className="inline-flex items-center gap-1 h-6 px-2 rounded-md text-[10.5px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/40 border border-violet-100 dark:border-violet-900/50 hover:bg-violet-100 dark:hover:bg-violet-950/60"
-                        data-testid={`button-suggest-${b.key}`}
-                      >
-                        <Sparkles size={10} /> Suggest copy
-                      </button>
+                      {b.suggestable && (
+                        <button
+                          type="button"
+                          onClick={() => openSuggest(b.key)}
+                          className="inline-flex items-center gap-1 h-6 px-2 rounded-md text-[10.5px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/40 border border-violet-100 dark:border-violet-900/50 hover:bg-violet-100 dark:hover:bg-violet-950/60"
+                          data-testid={`button-suggest-${b.key}`}
+                        >
+                          <Sparkles size={10} /> Suggest copy
+                        </button>
+                      )}
                     </div>
                     {b.multiline ? (
                       <textarea
                         rows={3}
                         className={`${INPUT} h-auto py-1.5 resize-y`}
-                        value={editorBlocks[b.key]}
-                        onChange={(e) => setEditorBlocks((v) => ({ ...v, [b.key]: e.target.value }))}
+                        value={editorShared[b.key] || ''}
+                        onChange={(e) => setSharedField(b.key, e.target.value)}
                         data-testid={`input-block-${b.key}`}
                       />
                     ) : (
                       <input
                         className={INPUT}
-                        value={editorBlocks[b.key]}
-                        onChange={(e) => setEditorBlocks((v) => ({ ...v, [b.key]: e.target.value }))}
+                        value={editorShared[b.key] || ''}
+                        onChange={(e) => setSharedField(b.key, e.target.value)}
                         data-testid={`input-block-${b.key}`}
                       />
                     )}
@@ -1059,6 +1190,28 @@ export default function SpinoutLabBrandPage() {
                   </div>
                 ))}
 
+                {/* ---- the template's own sections ---- */}
+                {/* Schema-driven: every field TEMPLATE_CONTENT_SCHEMA declares for
+                    this template, in the same shape the renderer reads. No second
+                    hard-coded list lives in this file. */}
+                {contentFieldsFor(editorRec.template).length > 0 && (
+                  <div className="rounded-xl border border-violet-100 dark:border-violet-900/40 bg-violet-50/40 dark:bg-violet-950/20 p-3" data-testid="editor-template-sections">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={LBL}>Template sections</span>
+                      <span className="ml-auto text-[10.5px] text-gray-400">{editorTpl?.label || editorRec.template}</span>
+                    </div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-2.5">
+                      These fill the sections of this template — the preview updates as you type.
+                    </div>
+                    <TemplateContentEditor
+                      templateKey={editorRec.template}
+                      content={editorContent}
+                      onChange={setContentField}
+                      testIdPrefix="editor-content"
+                    />
+                  </div>
+                )}
+
                 {/* read-only form-field chips for the page's audience */}
                 <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3" data-testid="editor-form-fields">
                   <span className={LBL}>Form fields</span>
@@ -1072,7 +1225,7 @@ export default function SpinoutLabBrandPage() {
                 <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 p-3">
                   <div>
                     <div className="text-[12px] font-semibold text-gray-800 dark:text-gray-200">Apply brand colors</div>
-                    <div className="text-[10.5px] text-gray-400">Use the project palette on this preview</div>
+                    <div className="text-[10.5px] text-gray-400">Repaint this page in the project palette — saved with the page</div>
                   </div>
                   <button
                     type="button"
@@ -1093,37 +1246,16 @@ export default function SpinoutLabBrandPage() {
             </div>
 
             {/* ---- right: live preview pane ---- */}
-            <div className="rounded-2xl bg-gray-100 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-5 flex items-start justify-center overflow-x-auto" data-testid="editor-preview">
-              {/* Deliberately a standalone light artboard (no dark: pairs
-                  inside): it previews the public landing page document, not
-                  the app UI. */}
-              {/* dark-mode-exempt: the artboard IS the light public page. */}
-              <div
-                className="bg-white rounded-xl shadow-xl overflow-hidden transition-all flex-none"
-                style={{ width: editorDevice === 'mobile' ? 390 : '100%', maxWidth: '100%' }}
-              >
-                <div className={editorDevice === 'mobile' ? 'px-5 py-6' : 'px-10 py-9'} style={{ fontFamily: previewStack }}>
-                  <div className="h-2 w-16 rounded-full mb-5" style={{ background: previewAccent }} />
-                  <div className={`font-extrabold text-gray-900 leading-tight mb-3 ${editorDevice === 'mobile' ? 'text-[22px]' : 'text-[30px]'}`}>
-                    {editorBlocks.headline || editorRec.name}
-                  </div>
-                  {editorBlocks.subheadline && (
-                    <div className={`text-gray-500 mb-4 ${editorDevice === 'mobile' ? 'text-[13.5px]' : 'text-[15px]'}`}>{editorBlocks.subheadline}</div>
-                  )}
-                  {editorBlocks.body && (
-                    <div className="text-[13px] text-gray-600 leading-relaxed mb-6 whitespace-pre-line">{editorBlocks.body}</div>
-                  )}
-                  <div className={`border-t border-gray-100 pt-5 gap-2 ${editorDevice === 'mobile' ? 'flex flex-col' : 'flex flex-wrap items-center'}`}>
-                    {/* dark-mode-exempt: form mock inside the light artboard above. */}
-                    {(AUDIENCE_FORM_FIELDS[editorAud] || ['Email']).map((f) => (
-                      <div key={f} className="h-10 flex-1 min-w-[110px] rounded-lg border border-gray-200 bg-gray-50 px-3 flex items-center text-[12px] text-gray-400">{f}</div>
-                    ))}
-                    <div className="h-10 px-4 rounded-lg flex-none flex items-center justify-center text-[12.5px] font-bold text-white whitespace-nowrap" style={{ background: previewAccent }}>
-                      {editorBlocks.cta || 'Join the waitlist'}
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {/* The SAME renderer as the library card and the preview modal, fed
+                the UNSAVED editor state — so the founder edits against the real
+                template design and what they see is what Publish ships. */}
+            <div className="rounded-2xl bg-gray-100 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 p-5" data-testid="editor-preview">
+              <TemplateEditorPreview
+                templateKey={editorRec.template}
+                data={liveEditorPreviewData || {}}
+                device={editorDevice}
+                maxHeight={760}
+              />
             </div>
           </div>
         </div>

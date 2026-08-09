@@ -1,4 +1,8 @@
 // Ported from brandtemplates/Mentor Connect/ — minimal single-column mentor note.
+// building / oneline / help / qual / stats come from the same accessor
+// renderMentorConnect reads, so preview == published page.
+import { templateContent } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SANS = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif';
@@ -16,7 +20,9 @@ export default function MentorConnectPreview({ data = {} }) {
     paletteSecondary = '#e2ddd7',
     paletteAccent = '#c56a3e',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'mentor-connect');
   const muted = { color: paletteInk, opacity: 0.6 };
   const eyebrow = { fontSize: 8, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', color: paletteAccent };
   const secTitle = (n, t) => (
@@ -26,12 +32,16 @@ export default function MentorConnectPreview({ data = {} }) {
     </div>
   );
   const dot = <span style={{ width: 4, height: 4, borderRadius: 999, background: paletteAccent, display: 'inline-block', marginRight: 6, flexShrink: 0, marginTop: 5 }} />;
-  const stat = (k, v) => (
-    <div key={k}>
+  const stat = (key, k, v) => (
+    <div key={key}>
       <div style={{ fontSize: 7.5, textTransform: 'uppercase', letterSpacing: '0.1em', ...muted }}>{k}</div>
       <div style={{ fontSize: 10.5, marginTop: 2 }}>{v}</div>
     </div>
   );
+  const help = c.list('help');
+  const qual = c.list('qual');
+  const stats = c.list('stats');
+
   return (
     <div data-testid="template-preview-mentor-connect" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: SANS, overflow: 'hidden' }}>
       <div style={{ width: 560, margin: '0 auto', padding: '28px 0 36px' }}>
@@ -63,24 +73,20 @@ export default function MentorConnectPreview({ data = {} }) {
         {/* 01 */}
         <div style={{ padding: '22px 0', borderBottom: `1px solid ${paletteSecondary}` }}>
           {secTitle('01', "What we're building")}
-          <div style={{ fontSize: 11, lineHeight: 1.6, ...muted }}>
-            A verification layer for AI agents acting on a user's behalf — payments, scheduling, account changes. We confirm intent and produce a signed receipt.
-          </div>
-          <div style={{ fontSize: 11, marginTop: 6, ...muted }}>One line: <span style={{ color: paletteInk, opacity: 1 }}>a trust rail for agent-initiated transactions</span>.</div>
+          <div style={{ fontSize: 11, lineHeight: 1.6, ...muted }}>{c.t('building')}</div>
+          <div style={{ fontSize: 11, marginTop: 6, color: paletteInk }}>{c.t('oneline')}</div>
         </div>
 
         {/* 02 */}
         <div style={{ padding: '22px 0', borderBottom: `1px solid ${paletteSecondary}` }}>
           {secTitle('02', 'Where we need help')}
           <div style={{ borderLeft: `1px solid ${paletteSecondary}`, paddingLeft: 14, display: 'grid', gap: 10 }}>
-            <div>
-              <div style={{ fontSize: 11 }}>1. How do enterprise security teams actually evaluate a new authorization vendor?</div>
-              <div style={{ fontSize: 10, lineHeight: 1.55, marginTop: 3, ...muted }}>CISOs ask for proof-of-intent signing, then procurement says "Q3." Is the real gate technical, legal, or just who gets fired if this breaks?</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11 }}>2. Is the right first wedge consumer fintech, or internal enterprise agents?</div>
-              <div style={{ fontSize: 10, lineHeight: 1.55, marginTop: 3, ...muted }}>Fintech moves faster but compliance is stricter; enterprise pays more but sales cycles run 6–12 months.</div>
-            </div>
+            {help.map((h, i) => (
+              <div key={i}>
+                <div style={{ fontSize: 11 }}>{i + 1}. {h.title}</div>
+                <div style={{ fontSize: 10, lineHeight: 1.55, marginTop: 3, ...muted }}>{h.body}</div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -88,8 +94,8 @@ export default function MentorConnectPreview({ data = {} }) {
         <div style={{ padding: '22px 0', borderBottom: `1px solid ${paletteSecondary}` }}>
           {secTitle('03', 'What kind of experience matters')}
           <div style={{ display: 'grid', gap: 5 }}>
-            {['Sold infra or security into the F500.', 'Built a developer API that became a standard.', 'Picked a wedge wrong once and remembers why.'].map((t) => (
-              <div key={t} style={{ display: 'flex', fontSize: 11, ...muted }}>{dot}{t}</div>
+            {qual.map((t, i) => (
+              <div key={i} style={{ display: 'flex', fontSize: 11, ...muted }}>{dot}{t.body}</div>
             ))}
           </div>
           <div style={{ fontSize: 10, marginTop: 8, ...muted }}>You don't need all of these. One is plenty.</div>
@@ -99,19 +105,14 @@ export default function MentorConnectPreview({ data = {} }) {
         <div style={{ padding: '22px 0' }}>
           {secTitle('04', 'Progress so far')}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px 18px' }}>
-            {stat('Team', '3 founders, ex-Stripe')}
-            {stat('Product', 'Private beta, 4 design partners')}
-            {stat('Traction', '~12k verified intents / wk')}
-            {stat('Funding', 'Pre-seed closed')}
-            {stat('Built', 'SDK + dashboard + audit log')}
-            {stat('Next', 'First paid contract')}
+            {stats.map((st, i) => stat(i, st.key, st.value))}
           </div>
         </div>
 
         {/* CTA ask-card */}
         <div style={{ marginTop: 14, border: `1px solid ${paletteSecondary}`, borderRadius: 14, background: '#fff', padding: 22, boxShadow: '0 6px 18px -14px rgba(0,0,0,0.3)' }}>
           <div style={eyebrow}>The ask</div>
-          <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', marginTop: 6 }}>Offer 30 minutes of guidance.</div>
+          <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', marginTop: 6 }}>{ctaText}</div>
           <div style={{ fontSize: 10.5, lineHeight: 1.55, marginTop: 6, ...muted }}>We'll send a short pre-read 24 hours ahead, keep the call confidential, and follow up with a brief summary if you'd like.</div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <span style={{ fontSize: 10.5, fontWeight: 600, background: themeColor, color: '#fff', borderRadius: 6, padding: '7px 14px' }}>{ctaText}</span>

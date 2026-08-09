@@ -1,3 +1,8 @@
+// Builder's Launchpad — miniaturized preview of brandtemplates/Builder's Launchpad/.
+// facts / vision / state / road / equity come from the same accessor
+// renderBuildersLaunchpad reads, so preview == published page.
+import { templateContent } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const MONO = '"SF Mono","JetBrains Mono",ui-monospace,Menlo,Consolas,monospace';
@@ -14,7 +19,9 @@ export default function BuildersLaunchpadPreview({ data = {} }) {
     paletteSecondary = '#2c343a',
     paletteAccent = '#dcb400',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'builders-launchpad');
 
   const ok = '#7bbf5a', warn = paletteAccent, danger = '#d9544e';
   const um = { fontSize: 8, letterSpacing: '.14em', textTransform: 'uppercase' };
@@ -23,23 +30,11 @@ export default function BuildersLaunchpadPreview({ data = {} }) {
   const rail = { display: 'grid', gridTemplateColumns: '110px 1fr', gap: 20, padding: '26px 28px', borderTop: `1px solid ${paletteSecondary}` };
   const h2 = { fontSize: 17, fontWeight: 500, letterSpacing: '-.01em', margin: '0 0 10px', lineHeight: 1.25 };
 
-  const facts = [
-    ['Stage', 'Pre-seed · $1.4M SAFE'],
-    ['Revenue', '~$8k MRR, 40 design partners'],
-    ['Runway', '14 months at current burn'],
-    ['Next round', 'Seed in ~12 months'],
-  ];
-  const status = [
-    ['Working', ok, 'TypeScript SDK that wraps tool calls and emits signed execution traces. ~6k LOC.'],
-    ['Working', ok, 'Hosted ingestion + replay UI. Customers use it to debug agents in staging.'],
-    ['Half-working', warn, 'Multi-tenant control plane. Auth + orgs are in, billing is duct tape.'],
-    ['Not built', danger, 'Deterministic sandboxed execution layer. This is the hard part.'],
-  ];
-  const roadmap = [
-    ['01', 'Deterministic execution sandbox', 'A V8 isolate-based runtime that can re-execute a recorded agent trace and produce bit-identical outputs. This is the technical moat.'],
-    ['02', 'Attestation pipeline', "Move from 'we sign traces with our key' to verifiable third-party attestations. Likely TEEs for the hot path."],
-    ['03', 'Policy compiler', 'Compile the policy DSL to a small bytecode enforceable inside the sandbox with bounded execution time.'],
-  ];
+  const facts = c.list('facts');
+  const status = c.list('state');
+  const roadmap = c.list('road');
+  const equity = c.list('equity');
+  const toneColor = (t) => ({ ok, warn, dn: danger }[String(t || '').trim().toLowerCase()] || warn);
 
   return (
     <div data-testid="template-preview-builders-launchpad" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: MONO, overflow: 'hidden' }}>
@@ -51,7 +46,6 @@ export default function BuildersLaunchpadPreview({ data = {} }) {
           <span style={muted}>/ co-founder brief</span>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
-          <span style={muted}>last updated 2026-06-20</span>
           <span>apply →</span>
         </div>
       </div>
@@ -66,10 +60,10 @@ export default function BuildersLaunchpadPreview({ data = {} }) {
           <span style={{ border: `1px solid ${paletteSecondary}`, fontSize: 10, padding: '8px 14px' }}>Read where we actually are</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: paletteSecondary, border: `1px solid ${paletteSecondary}`, marginTop: 22 }}>
-          {facts.map(([k, v]) => (
-            <div key={k} style={{ background: paletteBg, padding: 10 }}>
-              <div style={{ ...um, ...muted }}>{k}</div>
-              <div style={{ fontSize: 9.5, marginTop: 5 }}>{v}</div>
+          {facts.map((f, i) => (
+            <div key={i} style={{ background: paletteBg, padding: 10 }}>
+              <div style={{ ...um, ...muted }}>{f.key}</div>
+              <div style={{ fontSize: 9.5, marginTop: 5 }}>{f.value}</div>
             </div>
           ))}
         </div>
@@ -82,8 +76,8 @@ export default function BuildersLaunchpadPreview({ data = {} }) {
           <div style={{ ...um, ...muted, marginTop: 2 }}>Product vision</div>
         </div>
         <div>
-          <h2 style={h2}>A trust layer between LLM agents and the systems they touch.</h2>
-          <p style={body}>The part nobody has solved well: <span style={{ color: paletteAccent }}>proving what an agent actually did</span>, to whom, under what policy, with what inputs. We are building the substrate the agents have to call through — signed commits and CI, but for agent actions.</p>
+          <h2 style={h2}>What {brandName} is building.</h2>
+          <p style={body}>{c.t('vision')}</p>
         </div>
       </div>
 
@@ -96,10 +90,10 @@ export default function BuildersLaunchpadPreview({ data = {} }) {
         <div>
           <h2 style={h2}>What exists today — written plainly.</h2>
           <div style={{ display: 'grid', gap: 8 }}>
-            {status.map(([s, c, t]) => (
-              <div key={t} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 10, borderLeft: `2px solid ${paletteSecondary}`, paddingLeft: 10 }}>
-                <span style={{ ...um, color: c, paddingTop: 2 }}>{s}</span>
-                <span style={{ ...body, fontSize: 10 }}>{t}</span>
+            {status.map((st, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 10, borderLeft: `2px solid ${paletteSecondary}`, paddingLeft: 10 }}>
+                <span style={{ ...um, color: toneColor(st.tone), paddingTop: 2 }}>{st.badge}</span>
+                <span style={{ ...body, fontSize: 10 }}>{st.body}</span>
               </div>
             ))}
           </div>
@@ -115,13 +109,10 @@ export default function BuildersLaunchpadPreview({ data = {} }) {
         <div>
           <h2 style={h2}>The next 12 months of engineering, in order.</h2>
           <div style={{ display: 'grid', gap: 10 }}>
-            {roadmap.map(([n, t, d]) => (
-              <div key={n} style={{ display: 'grid', gridTemplateColumns: '26px 1fr', gap: 10 }}>
-                <span style={{ color: paletteAccent, fontSize: 10 }}>{n}</span>
-                <div>
-                  <div style={{ fontSize: 10.5, fontWeight: 600 }}>{t}</div>
-                  <div style={{ ...body, ...muted, fontSize: 9.5, marginTop: 2 }}>{d}</div>
-                </div>
+            {roadmap.map((r, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '26px 1fr', gap: 10 }}>
+                <span style={{ color: paletteAccent, fontSize: 10 }}>{String(i + 1).padStart(2, '0')}</span>
+                <div style={{ ...body, fontSize: 10 }}>{r.body}</div>
               </div>
             ))}
           </div>
@@ -138,9 +129,11 @@ export default function BuildersLaunchpadPreview({ data = {} }) {
           <h2 style={h2}>How we want to work together.</h2>
           <p style={{ ...body, marginBottom: 8 }}><span style={{ color: paletteAccent }}>Co-founder, not first engineer.</span> Title, equity, and decision-making reflect that.</p>
           <div style={{ display: 'grid', gap: 6 }}>
-            <p style={{ ...body, ...muted, fontSize: 9.5 }}><span style={{ color: paletteInk, opacity: 1, fontWeight: 600 }}>Equity — </span><span style={{ color: paletteAccent }}>25–40% of common</span>, 4-year vest, 1-year cliff. The paid trial counts toward the cliff.</p>
-            <p style={{ ...body, ...muted, fontSize: 9.5 }}><span style={{ color: paletteInk, opacity: 1, fontWeight: 600 }}>Salary — </span><span style={{ color: paletteAccent }}>$90–130k year one</span>, steps to ~$180k at seed close. The equity is the compensation.</p>
-            <p style={{ ...body, ...muted, fontSize: 9.5 }}><span style={{ color: paletteInk, opacity: 1, fontWeight: 600 }}>Location — </span>SF preferred; fully remote on US hours is fine. ~1 week per quarter on-site.</p>
+            {equity.map((e, i) => (
+              <p key={i} style={{ ...body, ...muted, fontSize: 9.5 }}>
+                <span style={{ color: paletteAccent }}>— </span>{e.body}
+              </p>
+            ))}
           </div>
         </div>
       </div>
@@ -152,7 +145,7 @@ export default function BuildersLaunchpadPreview({ data = {} }) {
           <div style={{ ...um, ...muted, marginTop: 2 }}>Apply</div>
         </div>
         <div>
-          <h2 style={h2}>Join as technical co-founder.</h2>
+          <h2 style={h2}>{ctaText}</h2>
           <p style={{ ...body, ...muted }}>Send a note. No formal CV needed — link to something you built and the hardest bug you remember shipping.</p>
           <div style={{ border: `1px solid ${paletteSecondary}`, marginTop: 12, background: 'rgba(255,255,255,0.02)' }}>
             <div style={{ borderBottom: `1px solid ${paletteSecondary}`, padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 9 }}>
@@ -174,7 +167,7 @@ export default function BuildersLaunchpadPreview({ data = {} }) {
 
       <div style={{ borderTop: `1px solid ${paletteSecondary}`, padding: '12px 28px', display: 'flex', justifyContent: 'space-between', fontSize: 8.5, ...muted }}>
         <span>© {brandName}, Inc. — Brief, not a pitch deck.</span>
-        <span>commit 0x9f3a · 2026-06-20</span>
+        <span>Built with Axal VC</span>
       </div>
     </div>
   );

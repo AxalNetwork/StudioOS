@@ -1,3 +1,8 @@
+// Co-Founder Builder — miniaturized preview of brandtemplates/Co-Founder Builder/.
+// data / vision / shipped / weak / roadmap / equity come from the same accessor
+// renderCoFounderBuilder reads, so preview == published page.
+import { templateContent } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SANS = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif';
@@ -26,32 +31,19 @@ export default function CoFounderBuilderPreview({ data = {} }) {
     paletteSecondary = '#dfded8',
     paletteAccent = '#5bbe62',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'co-founder-builder');
   const lm = { fontFamily: MONO, fontSize: 8, letterSpacing: '.14em', textTransform: 'uppercase', opacity: 0.55 };
   const gridPaper = {
     backgroundImage: `linear-gradient(${paletteSecondary} 1px,transparent 1px),linear-gradient(90deg,${paletteSecondary} 1px,transparent 1px)`,
     backgroundSize: '42px 42px',
   };
-  const shipped = [
-    'Policy DSL + evaluator for gating agent actions',
-    'Recorded sandbox capturing every tool call',
-    'Python + TypeScript SDKs used by 11 design partners',
-  ];
-  const weak = [
-    'Single-tenant; no real multi-tenant isolation yet',
-    'Replay engine is in-memory and breaks past ~a few thousand events',
-    'Auth is hand-rolled and needs to be torn out',
-  ];
-  const roadmap = [
-    'Weeks 1–4: read the codebase end to end, write the ADR for the durable replay engine.',
-    'Weeks 4–8: ship the append-only event log + snapshotting that replaces in-memory replay.',
-    'Weeks 8–12: stand up real job orchestration so runs survive restarts.',
-  ];
-  const equity = [
-    'Equity — co-founder level, standard 4-year vest with a 1-year cliff. Full cap table before you commit.',
-    'Funding — pre-seed closing now; design-partner revenue extends runway to ~9 months.',
-    'Salary — ~$120k–$160k after close. If the close slips, equity goes up — in writing.',
-  ];
+  const heroData = c.list('data');
+  const shipped = c.list('shipped');
+  const weak = c.list('weak');
+  const roadmap = c.list('roadmap');
+  const equity = c.list('equity');
   return (
     <div data-testid="template-preview-co-founder-builder" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: SANS, overflow: 'hidden', lineHeight: 1.55 }}>
       {/* Nav */}
@@ -79,10 +71,10 @@ export default function CoFounderBuilderPreview({ data = {} }) {
           <span style={{ display: 'inline-block', marginLeft: 8, fontFamily: MONO, fontSize: 9, border: `1px solid ${paletteSecondary}`, borderRadius: 6, padding: '8px 12px' }}>Where we actually are</span>
           {/* Hero data grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: paletteSecondary, border: `1px solid ${paletteSecondary}`, marginTop: 24 }}>
-            {[['Stage', 'Pre-seed'], ['Users', '11 partners'], ['Working', 'Remote · EU/US'], ['Equity', 'Co-founder']].map(([k, v]) => (
-              <div key={k} style={{ background: paletteBg, padding: '12px 12px' }}>
-                <div style={lm}>{k}</div>
-                <div style={{ fontFamily: MONO, fontSize: 12, marginTop: 4, color: paletteAccent }}>{v}</div>
+            {heroData.map((d, i) => (
+              <div key={i} style={{ background: paletteBg, padding: '12px 12px' }}>
+                <div style={lm}>{d.key}</div>
+                <div style={{ fontFamily: MONO, fontSize: 12, marginTop: 4, color: paletteAccent }}>{d.value}</div>
               </div>
             ))}
           </div>
@@ -92,9 +84,7 @@ export default function CoFounderBuilderPreview({ data = {} }) {
       <div style={{ padding: '28px 32px', borderBottom: `1px solid ${paletteSecondary}` }}>
         <Eyebrow n="01" t="Vision" accent={paletteAccent} secondary={paletteSecondary} ink={paletteInk} />
         <h2 style={{ fontSize: 19, margin: '0 0 8px', fontWeight: 600, letterSpacing: '-.01em' }}>What {brandName} is really building</h2>
-        <p style={{ fontSize: 11, opacity: 0.78, maxWidth: '62ch', margin: 0 }}>
-          Teams are shipping agents into production without a way to know what they'll do. {brandName} is the layer that makes agent behavior inspectable and reversible.
-        </p>
+        <p style={{ fontSize: 11, opacity: 0.78, maxWidth: '62ch', margin: 0 }}>{c.t('vision')}</p>
       </div>
       {/* 02 Shipped vs weak — signature two-pane */}
       <div style={{ padding: '28px 32px', borderBottom: `1px solid ${paletteSecondary}` }}>
@@ -103,17 +93,17 @@ export default function CoFounderBuilderPreview({ data = {} }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: paletteSecondary, border: `1px solid ${paletteSecondary}` }}>
           <div style={{ background: paletteBg, padding: '16px 15px' }}>
             <div style={{ ...lm, opacity: 1, color: paletteAccent, marginBottom: 10 }}>Shipped &amp; in use</div>
-            {shipped.map((t) => (
-              <div key={t} style={{ display: 'flex', gap: 7, fontSize: 10.5, marginBottom: 7, opacity: 0.85 }}>
-                <span style={{ fontFamily: MONO, fontWeight: 700, color: paletteAccent }}>+</span><span>{t}</span>
+            {shipped.map((t, i) => (
+              <div key={i} style={{ display: 'flex', gap: 7, fontSize: 10.5, marginBottom: 7, opacity: 0.85 }}>
+                <span style={{ fontFamily: MONO, fontWeight: 700, color: paletteAccent }}>+</span><span>{t.body}</span>
               </div>
             ))}
           </div>
           <div style={{ background: paletteBg, padding: '16px 15px' }}>
             <div style={{ ...lm, marginBottom: 10 }}>Known weak points</div>
-            {weak.map((t) => (
-              <div key={t} style={{ display: 'flex', gap: 7, fontSize: 10.5, marginBottom: 7, opacity: 0.8 }}>
-                <span style={{ fontFamily: MONO, fontWeight: 700, color: DANGER }}>!</span><span>{t}</span>
+            {weak.map((t, i) => (
+              <div key={i} style={{ display: 'flex', gap: 7, fontSize: 10.5, marginBottom: 7, opacity: 0.8 }}>
+                <span style={{ fontFamily: MONO, fontWeight: 700, color: DANGER }}>!</span><span>{t.body}</span>
               </div>
             ))}
           </div>
@@ -124,9 +114,9 @@ export default function CoFounderBuilderPreview({ data = {} }) {
         <Eyebrow n="03" t="Roadmap" accent={paletteAccent} secondary={paletteSecondary} ink={paletteInk} />
         <h2 style={{ fontSize: 19, margin: '0 0 10px', fontWeight: 600 }}>Your first 90 days</h2>
         {roadmap.map((t, i) => (
-          <div key={t} style={{ display: 'flex', gap: 10, padding: '9px 0', borderTop: i ? `1px solid ${paletteSecondary}` : 'none', fontSize: 11 }}>
-            <span style={{ fontFamily: MONO, color: paletteAccent, fontSize: 10 }}>{`0${i + 1}`}</span>
-            <span style={{ opacity: 0.85 }}>{t}</span>
+          <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 0', borderTop: i ? `1px solid ${paletteSecondary}` : 'none', fontSize: 11 }}>
+            <span style={{ fontFamily: MONO, color: paletteAccent, fontSize: 10 }}>{String(i + 1).padStart(2, '0')}</span>
+            <span style={{ opacity: 0.85 }}>{t.body}</span>
           </div>
         ))}
       </div>
@@ -136,8 +126,8 @@ export default function CoFounderBuilderPreview({ data = {} }) {
         <h2 style={{ fontSize: 19, margin: '0 0 12px', fontWeight: 600 }}>The offer, plainly</h2>
         <div style={{ border: `1px solid ${paletteSecondary}`, borderRadius: 10, padding: '14px 16px' }}>
           {equity.map((t, i) => (
-            <div key={t} style={{ display: 'flex', gap: 9, padding: '8px 0', borderTop: i ? `1px solid ${paletteSecondary}` : 'none', fontSize: 10.5, opacity: 0.85 }}>
-              <span style={{ fontFamily: MONO, color: paletteAccent }}>→</span><span>{t}</span>
+            <div key={i} style={{ display: 'flex', gap: 9, padding: '8px 0', borderTop: i ? `1px solid ${paletteSecondary}` : 'none', fontSize: 10.5, opacity: 0.85 }}>
+              <span style={{ fontFamily: MONO, color: paletteAccent }}>→</span><span>{t.body}</span>
             </div>
           ))}
         </div>

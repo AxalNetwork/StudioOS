@@ -1,3 +1,8 @@
+// Co-Founder Quest — miniaturized preview of brandtemplates/Co-Founder Quest/.
+// timing / built / mission_cards / ideal / first90 / equity / team / steps come
+// from the same accessor renderCoFounderQuest reads.
+import { templateContent } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SERIF = '"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
@@ -15,7 +20,9 @@ export default function CoFounderQuestPreview({ data = {} }) {
     paletteSecondary = '#d4d7de',
     paletteAccent = '#ad524d',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'co-founder-quest');
 
   const label = { fontSize: 8, fontWeight: 600, letterSpacing: '.18em', textTransform: 'uppercase', color: paletteAccent };
   const h2 = { fontFamily: SERIF, fontWeight: 400, fontSize: 20, lineHeight: 1.15, margin: '6px 0 0' };
@@ -25,17 +32,14 @@ export default function CoFounderQuestPreview({ data = {} }) {
   const btn = { display: 'inline-block', fontSize: 10, fontWeight: 600, borderRadius: 10, padding: '9px 16px' };
   const softBox = { border: `1px solid ${paletteSecondary}`, background: 'rgba(0,0,0,0.025)', borderRadius: 8, padding: 14 };
 
-  const built = [
-    ['Product', 'Agent orchestration runtime in production. Workflow builder, eval harness, and connectors to Salesforce, Snowflake, and Slack.'],
-    ['Traction', '6 paying pilots with mid-market ops and RevOps teams over the last 4 months. One customer expanded from 2 to 12 seats in 60 days. No churn yet.'],
-    ['Team', 'Two founders: one technical (systems, infra), one GTM (enterprise sales, pricing).'],
-    ['Runway', '18 months at current burn on a pre-seed round. Revenue covers ~30% of burn.'],
-  ];
-  const needCards = [
-    ['Product architecture', 'Own the workflow model, the eval loop, and how agent outputs become trusted writes.'],
-    ['Technical leadership', 'Make tradeoffs in hours, not weeks. Ship to production weekly. Hire the first 2–3 engineers.'],
-    ['Founder energy', 'Not a CTO hire. A co-founder in the room every day, on customer calls, in the codebase.'],
-  ];
+  const timing = c.list('timing');
+  const built = c.list('built');
+  const needCards = c.list('mission_cards');
+  const ideal = c.list('ideal');
+  const first90 = c.list('first90');
+  const equity = c.list('equity');
+  const team = c.list('team');
+  const steps = c.list('steps');
 
   return (
     <div data-testid="template-preview-co-founder-quest" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: SANS, overflow: 'hidden' }}>
@@ -63,8 +67,7 @@ export default function CoFounderQuestPreview({ data = {} }) {
       <div style={twoCol}>
         <div><p style={{ ...label, margin: 0 }}>Timing</p><h2 style={h2}>Why this matters now</h2></div>
         <div style={{ display: 'grid', gap: 8 }}>
-          <p style={body}>The models are good enough. What is still broken is the layer between "smart model" and "system an ops lead trusts to touch production data." That gap is the opportunity.</p>
-          <p style={body}>We have a shipped product, paying customers, and a clear sense of what the next 12 months need to look like. The window is open.</p>
+          {timing.map((t, i) => <p key={i} style={body}>{t.body}</p>)}
         </div>
       </div>
       <hr style={hr} />
@@ -73,10 +76,10 @@ export default function CoFounderQuestPreview({ data = {} }) {
       <div style={twoCol}>
         <div><p style={{ ...label, margin: 0 }}>Progress</p><h2 style={h2}>What we have built</h2></div>
         <div style={{ display: 'grid', gap: 10 }}>
-          {built.map(([k, v]) => (
-            <div key={k}>
-              <p style={{ fontSize: 10.5, fontWeight: 600, margin: 0 }}>{k}</p>
-              <p style={{ ...body, marginTop: 2 }}>{v}</p>
+          {built.map((b, i) => (
+            <div key={i}>
+              <p style={{ fontSize: 10.5, fontWeight: 600, margin: 0 }}>{b.label}</p>
+              <p style={{ ...body, marginTop: 2 }}>{b.body}</p>
             </div>
           ))}
         </div>
@@ -87,32 +90,28 @@ export default function CoFounderQuestPreview({ data = {} }) {
       <div style={{ padding: '26px 32px' }}>
         <p style={{ ...label, margin: 0 }}>The gap</p>
         <h2 style={{ ...h2, fontSize: 24 }}>What we need</h2>
-        <p style={{ ...body, marginTop: 8, maxWidth: 480 }}>The honest part. We are strong on infra and GTM. We need someone who owns product end-to-end: what we build, how it feels, and how fast it improves.</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 16 }}>
-          {needCards.map(([t, d]) => (
-            <div key={t} style={{ border: `1px solid ${paletteSecondary}`, borderRadius: 8, padding: 12, background: paletteBg }}>
-              <p style={{ fontFamily: SERIF, fontSize: 13, margin: 0 }}>{t}</p>
-              <p style={{ ...body, fontSize: 10, marginTop: 6 }}>{d}</p>
+        <p style={{ ...body, marginTop: 8, maxWidth: 480 }}>The honest part — where {brandName} needs a partner, not a hire.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(3, needCards.length))},1fr)`, gap: 10, marginTop: 16 }}>
+          {needCards.map((n, i) => (
+            <div key={i} style={{ border: `1px solid ${paletteSecondary}`, borderRadius: 8, padding: 12, background: paletteBg }}>
+              <p style={{ fontFamily: SERIF, fontSize: 13, margin: 0 }}>{n.title}</p>
+              <p style={{ ...body, fontSize: 10, marginTop: 6 }}>{n.body}</p>
             </div>
           ))}
         </div>
         <div style={{ marginTop: 12, border: `1px solid ${paletteAccent}33`, background: `${paletteAccent}0d`, borderRadius: 8, padding: 14 }}>
           <p style={{ fontFamily: SERIF, fontSize: 14, margin: 0 }}>The ideal profile</p>
-          {['You have shipped a 0→1 product to paying customers before, ideally at a seed/Series A startup.',
-            'You can write production TypeScript or Python, design distributed systems, and argue strategy in the same afternoon.',
-            'You care about reliability and evals more than the latest model release.'].map((t) => (
-            <p key={t} style={{ ...body, marginTop: 6, paddingLeft: 12, position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 0, top: 6, width: 4, height: 4, borderRadius: 999, background: paletteAccent }} />{t}
+          {ideal.map((t, i) => (
+            <p key={i} style={{ ...body, marginTop: 6, paddingLeft: 12, position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 0, top: 6, width: 4, height: 4, borderRadius: 999, background: paletteAccent }} />{t.body}
             </p>
           ))}
         </div>
         <div style={{ marginTop: 10, ...softBox, background: paletteBg }}>
           <p style={{ fontFamily: SERIF, fontSize: 14, margin: 0 }}>Your first 90 days</p>
-          {['Weeks 1–4: ship alongside us on a live customer workflow. Name on a production deploy in week one.',
-            'Weeks 5–8: own the eval and reliability stack end-to-end.',
-            'Weeks 9–12: lead the architecture for workflow authoring and co-write the seed deck.'].map((t) => (
-            <p key={t} style={{ ...body, marginTop: 6, paddingLeft: 12, position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 0, top: 6, width: 4, height: 4, borderRadius: 999, background: paletteAccent }} />{t}
+          {first90.map((t, i) => (
+            <p key={i} style={{ ...body, marginTop: 6, paddingLeft: 12, position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 0, top: 6, width: 4, height: 4, borderRadius: 999, background: paletteAccent }} />{t.body}
             </p>
           ))}
         </div>
@@ -125,9 +124,12 @@ export default function CoFounderQuestPreview({ data = {} }) {
         <div style={{ display: 'grid', gap: 8 }}>
           <p style={body}>No cofounder tiers. Open conversation about numbers from the first call — no games, no "we'll figure it out later."</p>
           <div style={softBox}>
-            <p style={{ fontSize: 10.5, fontWeight: 600, margin: 0 }}>Equity: 15–22% of common, depending on timing and scope.</p>
-            <p style={{ ...body, fontSize: 10, marginTop: 4 }}>Vesting: 4 years, 1-year cliff, standard double-trigger acceleration.</p>
-            <p style={{ ...body, fontSize: 10, marginTop: 4 }}>Cash: $140–180k base today, stepping to market rate at seed and again at Series A.</p>
+            {equity.map((e, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '5px 0', borderTop: i ? `1px solid ${paletteSecondary}` : 'none', fontSize: 10.5 }}>
+                <span style={{ fontWeight: 600 }}>{e.key}</span>
+                <span style={{ color: paletteAccent }}>{e.value}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -137,14 +139,12 @@ export default function CoFounderQuestPreview({ data = {} }) {
       <div style={twoCol}>
         <div><p style={{ ...label, margin: 0 }}>Who we are</p><h2 style={h2}>The team so far</h2></div>
         <div style={{ display: 'grid', gap: 10 }}>
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 600, margin: 0 }}>Alex — CEO</p>
-            <p style={{ ...body, marginTop: 2 }}>Previously led platform engineering at a growth-stage AI company. Deep systems thinker. Obsessed with reliability.</p>
-          </div>
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 600, margin: 0 }}>Jordan — GTM / Operations</p>
-            <p style={{ ...body, marginTop: 2 }}>Built and closed enterprise deals at two previous startups, one exit. Knows the buyer. Knows the pain.</p>
-          </div>
+          {team.map((m, i) => (
+            <div key={i}>
+              <p style={{ fontSize: 11, fontWeight: 600, margin: 0 }}>{m.name}</p>
+              <p style={{ ...body, marginTop: 2 }}>{m.body}</p>
+            </div>
+          ))}
         </div>
       </div>
       <hr style={hr} />
@@ -156,9 +156,9 @@ export default function CoFounderQuestPreview({ data = {} }) {
         <p style={{ ...body, marginTop: 8 }}>If this resonates, send us a note. No résumé required. Tell us what you have built, what you want to build next, and why {brandName}.</p>
         <div style={{ ...softBox, marginTop: 12 }}>
           <p style={{ fontSize: 10.5, fontWeight: 600, margin: 0 }}>What happens next</p>
-          <p style={{ ...body, fontSize: 10, marginTop: 4 }}>1. 30-min intro call with both founders within a week.</p>
-          <p style={{ ...body, fontSize: 10, marginTop: 3 }}>2. A 3–4 hour working session on a real problem from our backlog.</p>
-          <p style={{ ...body, fontSize: 10, marginTop: 3 }}>3. References both ways, plus a paid 1–2 week trial if useful.</p>
+          {steps.map((st, i) => (
+            <p key={i} style={{ ...body, fontSize: 10, marginTop: 4 }}>{i + 1}. {st.body}</p>
+          ))}
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
           <div style={{ flex: 1, border: `1px solid ${paletteSecondary}`, borderRadius: 10, padding: '9px 12px', fontSize: 10, opacity: 0.55 }}>you@example.com</div>

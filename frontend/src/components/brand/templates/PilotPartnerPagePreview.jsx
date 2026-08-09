@@ -1,6 +1,10 @@
 // Preview: Pilot Partner Page — Swiss 4/8-col label-left pilot recruiter.
 // Faithful miniature of brandtemplates/Pilot Partner Page/ as rendered by
-// renderPilotPartnerPage() in cloudflare-worker/src/services/landingTemplates.ts.
+// renderPilotPartnerPage() in cloudflare-worker/src/services/landingTemplates.ts,
+// including its content_json sections (glance / who / not_for / includes /
+// steps), which read through the same accessor that renderer uses.
+import { templateContent } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SANS = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif';
@@ -19,7 +23,9 @@ export default function PilotPartnerPagePreview({ data = {} }) {
     paletteSecondary = '#e7e4dd',
     paletteAccent = '#25984d',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'pilot-partner-page');
 
   const hairline = `1px solid ${paletteSecondary}`;
   const label = { fontFamily: MONO, fontSize: 7.5, letterSpacing: '0.18em', textTransform: 'uppercase', color: paletteAccent };
@@ -34,34 +40,11 @@ export default function PilotPartnerPagePreview({ data = {} }) {
     </div>
   );
 
-  const glance = [
-    ['Commitment', '~2 hrs / week'],
-    ['Length', '6 weeks'],
-    ['Cost', 'No fee'],
-    ['Output', 'Joint findings memo'],
-  ];
-  const who = [
-    ['Has the pain', 'Lives the problem we solve, today.'],
-    ['Can decide', 'One owner who can say yes within the team.'],
-    ['Will engage', 'Shows up weekly and tells us the truth.'],
-  ];
-  const notFor = [
-    ['Needs it finished', 'Looking for a polished product — not a working pilot.'],
-    ["Can't give the time", "Won't have someone showing up weekly with real feedback."],
-    ['No path to a yes', "Can't say yes internally within the pilot window."],
-  ];
-  const includes = [
-    ['Hands-on setup', 'We configure the product around your real workflow.'],
-    ['Weekly sessions', 'Direct line to the founders, every week.'],
-    ['Priority shaping', 'Your feedback steers what we build next.'],
-    ['Closing memo', 'A written read-out you can act on.'],
-  ];
-  const steps = [
-    ['Day 0', 'Fit call'],
-    ['Wk 1', 'Setup'],
-    ['Wk 2–5', 'Run & learn'],
-    ['Wk 6', 'Memo & next steps'],
-  ];
+  const glance = c.list('glance');
+  const who = c.list('who');
+  const notFor = c.list('not_for');
+  const includes = c.list('includes');
+  const steps = c.list('steps');
 
   return (
     <div data-testid="template-preview-pilot-partner-page" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: SANS, overflow: 'hidden', lineHeight: 1.55 }}>
@@ -83,15 +66,15 @@ export default function PilotPartnerPagePreview({ data = {} }) {
           <div style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 32, lineHeight: 1.04, letterSpacing: '-0.02em', margin: '0 0 10px' }}>{headline}</div>
           <p style={{ margin: '0 0 14px', fontSize: 11.5, opacity: 0.78 }}>{subheadline}</p>
           <span style={pill}>{ctaText}</span>
-          <div style={{ ...label, opacity: 0.6, color: paletteInk, marginTop: 12 }}>Next kickoff — within 2 weeks of fit call</div>
+          <div style={{ ...label, opacity: 0.6, color: paletteInk, marginTop: 12 }}>Rolling intake — we reply within 2 business days</div>
         </div>
       </div>
       {/* At a glance — dashed-row card */}
       <Sec lbl="At a glance" title="The shape of the pilot">
         <div style={{ border: hairline, borderRadius: 9, padding: '2px 14px' }}>
-          {glance.map(([k, v], i) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '9px 0', borderTop: i ? `1px dashed ${paletteSecondary}` : 'none', fontSize: 10.5 }}>
-              <span>{k}</span><span style={{ fontFamily: MONO, fontSize: 9.5, color: paletteAccent }}>{v}</span>
+          {glance.map((g, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '9px 0', borderTop: i ? `1px dashed ${paletteSecondary}` : 'none', fontSize: 10.5 }}>
+              <span>{g.label}</span><span style={{ fontFamily: MONO, fontSize: 9.5, color: paletteAccent }}>{g.value}</span>
             </div>
           ))}
         </div>
@@ -99,10 +82,10 @@ export default function PilotPartnerPagePreview({ data = {} }) {
       {/* 01 Who it's for */}
       <Sec lbl="01 — Who it's for" title="A good pilot partner">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 9 }}>
-          {who.map(([t, b]) => (
-            <div key={t} style={{ border: hairline, borderRadius: 8, padding: 12, background: `${paletteSecondary}33` }}>
-              <h3 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 12.5, margin: '0 0 4px' }}>{t}</h3>
-              <p style={{ margin: 0, fontSize: 9.5, opacity: 0.72 }}>{b}</p>
+          {who.map((x, i) => (
+            <div key={i} style={{ border: hairline, borderRadius: 8, padding: 12, background: `${paletteSecondary}33` }}>
+              <h3 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 12.5, margin: '0 0 4px' }}>{x.title}</h3>
+              <p style={{ margin: 0, fontSize: 9.5, opacity: 0.72 }}>{x.body}</p>
             </div>
           ))}
         </div>
@@ -110,10 +93,10 @@ export default function PilotPartnerPagePreview({ data = {} }) {
       {/* 02 Who this isn't for */}
       <Sec lbl="02 — Who this isn't for" title="Save us both the time">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 9 }}>
-          {notFor.map(([t, b]) => (
-            <div key={t} style={{ border: hairline, borderRadius: 8, padding: 12, background: `${paletteSecondary}33` }}>
-              <h3 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 12.5, margin: '0 0 4px' }}>{t}</h3>
-              <p style={{ margin: 0, fontSize: 9.5, opacity: 0.72 }}>{b}</p>
+          {notFor.map((x, i) => (
+            <div key={i} style={{ border: hairline, borderRadius: 8, padding: 12, background: `${paletteSecondary}33` }}>
+              <h3 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 12.5, margin: '0 0 4px' }}>{x.title}</h3>
+              <p style={{ margin: 0, fontSize: 9.5, opacity: 0.72 }}>{x.body}</p>
             </div>
           ))}
         </div>
@@ -121,11 +104,11 @@ export default function PilotPartnerPagePreview({ data = {} }) {
       {/* 03 Numbered includes grid */}
       <Sec lbl="03 — What it includes" title="What you get">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: paletteSecondary, border: hairline, borderRadius: 8, overflow: 'hidden' }}>
-          {includes.map(([t, b], i) => (
-            <div key={t} style={{ background: paletteBg, padding: '13px 12px' }}>
+          {includes.map((x, i) => (
+            <div key={i} style={{ background: paletteBg, padding: '13px 12px' }}>
               <div style={{ fontFamily: MONO, fontSize: 8, color: paletteAccent }}>{String(i + 1).padStart(2, '0')}</div>
-              <h3 style={{ fontSize: 11, margin: '5px 0 3px', fontWeight: 600 }}>{t}</h3>
-              <p style={{ margin: 0, fontSize: 9.5, opacity: 0.72 }}>{b}</p>
+              <h3 style={{ fontSize: 11, margin: '5px 0 3px', fontWeight: 600 }}>{x.title}</h3>
+              <p style={{ margin: 0, fontSize: 9.5, opacity: 0.72 }}>{x.body}</p>
             </div>
           ))}
         </div>
@@ -133,10 +116,10 @@ export default function PilotPartnerPagePreview({ data = {} }) {
       {/* 04 Process step strip */}
       <Sec lbl="04 — Process" title="From hello to results">
         <div style={{ display: 'flex' }}>
-          {steps.map(([k, v], i) => (
-            <div key={k} style={{ flex: 1, borderLeft: i ? hairline : 'none', padding: i ? '0 10px' : '0 10px 0 0' }}>
-              <div style={{ fontFamily: MONO, fontSize: 8, color: paletteAccent }}>{k}</div>
-              <div style={{ fontSize: 10, marginTop: 4 }}>{v}</div>
+          {steps.map((st, i) => (
+            <div key={i} style={{ flex: 1, borderLeft: i ? hairline : 'none', padding: i ? '0 10px' : '0 10px 0 0' }}>
+              <div style={{ fontFamily: MONO, fontSize: 8, color: paletteAccent }}>{st.label}</div>
+              <div style={{ fontSize: 10, marginTop: 4 }}>{st.value}</div>
             </div>
           ))}
         </div>

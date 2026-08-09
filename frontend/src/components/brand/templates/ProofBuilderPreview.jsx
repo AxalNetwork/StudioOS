@@ -1,4 +1,8 @@
 // In-house original design — no brandtemplates/ source (see TEMPLATE_SOURCES); ported from the worker's renderProofBuilder.
+// steps / transformation / metrics / testimonials come from the same accessor
+// renderProofBuilder reads, so preview == published page.
+import { templateContent } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SERIF = '"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
@@ -16,7 +20,9 @@ export default function ProofBuilderPreview({ data = {} }) {
     paletteSecondary = '#e2e5e1',
     paletteAccent = '#1f7a52',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'proof-builder');
   const soft = { color: paletteInk, opacity: 0.7 };
   const eyebrow = { fontSize: 8, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase', color: paletteAccent };
   const secHead = (e, h) => (
@@ -26,6 +32,10 @@ export default function ProofBuilderPreview({ data = {} }) {
     </div>
   );
   const pad = { padding: '0 32px' };
+  const steps = c.list('steps');
+  const transformation = c.list('transformation');
+  const metrics = c.list('metrics');
+  const testimonials = c.list('testimonials');
   return (
     <div data-testid="template-preview-proof-builder" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: SANS, overflow: 'hidden' }}>
       {/* Nav */}
@@ -65,16 +75,12 @@ export default function ProofBuilderPreview({ data = {} }) {
       {/* How it works */}
       <div style={{ ...pad, borderTop: `1px solid ${paletteSecondary}`, paddingTop: 24, paddingBottom: 24 }}>
         {secHead('How it works', 'Claims you can verify')}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-          {[
-            ['Show the problem', 'We name the pain precisely — the way the people living it would.'],
-            ['Show the change', "What's different, demonstrated rather than asserted."],
-            ['Show the receipts', 'Quotes, usage, and outcomes you can trace back to a source.'],
-          ].map(([t, b], i) => (
-            <div key={t}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, steps.length))},1fr)`, gap: 16 }}>
+          {steps.map((st, i) => (
+            <div key={i}>
               <div style={{ fontFamily: SERIF, fontSize: 20, color: paletteAccent }}>{i + 1}</div>
-              <div style={{ fontFamily: SERIF, fontSize: 13, margin: '3px 0' }}>{t}</div>
-              <div style={{ fontSize: 9.5, lineHeight: 1.55, ...soft }}>{b}</div>
+              <div style={{ fontFamily: SERIF, fontSize: 13, margin: '3px 0' }}>{st.title}</div>
+              <div style={{ fontSize: 9.5, lineHeight: 1.55, ...soft }}>{st.body}</div>
             </div>
           ))}
         </div>
@@ -83,25 +89,28 @@ export default function ProofBuilderPreview({ data = {} }) {
       {/* Before & after two-pane */}
       <div style={{ ...pad, borderTop: `1px solid ${paletteSecondary}`, paddingTop: 24, paddingBottom: 24 }}>
         {secHead('Before & after', 'What actually changes')}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <div style={{ border: `1px solid ${paletteSecondary}`, borderRadius: 10, padding: 14, background: '#fff' }}>
-            <div style={{ fontFamily: SERIF, fontSize: 13, marginBottom: 5 }}>Today</div>
-            <div style={{ fontSize: 9.5, lineHeight: 1.55, ...soft }}>The work is manual, scattered, and hard to trust. People route around the tools — and the evidence lives in someone's head.</div>
-          </div>
-          <div style={{ border: `1px solid ${paletteAccent}33`, borderRadius: 10, padding: 14, background: `${paletteAccent}0d` }}>
-            <div style={{ fontFamily: SERIF, fontSize: 13, marginBottom: 5 }}>With it</div>
-            <div style={{ fontSize: 9.5, lineHeight: 1.55, ...soft }}>One clear flow, less busywork, and a trail of proof at every step — so the next person doesn't have to take your word for it.</div>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(2, transformation.length))},1fr)`, gap: 16 }}>
+          {transformation.map((t, i) => (
+            <div
+              key={i}
+              style={i === 1
+                ? { border: `1px solid ${paletteAccent}33`, borderRadius: 10, padding: 14, background: `${paletteAccent}0d` }
+                : { border: `1px solid ${paletteSecondary}`, borderRadius: 10, padding: 14, background: '#fff' }}
+            >
+              <div style={{ fontFamily: SERIF, fontSize: 13, marginBottom: 5 }}>{t.title}</div>
+              <div style={{ fontSize: 9.5, lineHeight: 1.55, ...soft }}>{t.body}</div>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Signal metrics */}
       <div style={{ ...pad, borderTop: `1px solid ${paletteSecondary}`, paddingTop: 22, paddingBottom: 22 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-          {[['Live', 'In real customer hands'], ['Weekly', 'New signal coming in'], ['Traceable', 'Every claim has a source']].map(([v, l]) => (
-            <div key={v}>
-              <div style={{ fontFamily: SERIF, fontSize: 24, color: paletteAccent }}>{v}</div>
-              <div style={{ fontSize: 9.5, marginTop: 2, ...soft }}>{l}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, metrics.length))},1fr)`, gap: 16 }}>
+          {metrics.map((m, i) => (
+            <div key={i}>
+              <div style={{ fontFamily: SERIF, fontSize: 24, color: paletteAccent }}>{m.value}</div>
+              <div style={{ fontSize: 9.5, marginTop: 2, ...soft }}>{m.label}</div>
             </div>
           ))}
         </div>
@@ -110,14 +119,11 @@ export default function ProofBuilderPreview({ data = {} }) {
       {/* Testimonials */}
       <div style={{ ...pad, borderTop: `1px solid ${paletteSecondary}`, paddingTop: 24, paddingBottom: 24 }}>
         {secHead('In their words', 'What people tell us')}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          {[
-            ['"It did in an afternoon what used to take us a week — and we could show our team exactly why."', 'Early customer · operations'],
-            ['"The difference is you can actually check the claims. That\'s rare, and it\'s why we stayed."', 'Design partner · founder'],
-          ].map(([q, w]) => (
-            <div key={w} style={{ border: `1px solid ${paletteSecondary}`, borderRadius: 10, padding: 14, background: '#fff' }}>
-              <div style={{ fontFamily: SERIF, fontSize: 12, lineHeight: 1.45, marginBottom: 8 }}>{q}</div>
-              <div style={{ fontSize: 9, ...soft }}>{w}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(2, testimonials.length))},1fr)`, gap: 14 }}>
+          {testimonials.map((t, i) => (
+            <div key={i} style={{ border: `1px solid ${paletteSecondary}`, borderRadius: 10, padding: 14, background: '#fff' }}>
+              <div style={{ fontFamily: SERIF, fontSize: 12, lineHeight: 1.45, marginBottom: 8 }}>{t.quote}</div>
+              <div style={{ fontSize: 9, ...soft }}>{t.who}</div>
             </div>
           ))}
         </div>

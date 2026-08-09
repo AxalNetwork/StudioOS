@@ -1,5 +1,10 @@
 // Capital Ready Kit — miniaturized preview of brandtemplates/Capital Ready Kit/
 // Mirrors renderCapitalReadyKit palette substitution: accent = signal, secondary = fills.
+// Every section that renderer builds from content_json (raise_summary / why_now
+// / traction / round_details / use_of_funds / team) reads through the same
+// accessor here, so this preview and the published page show identical copy.
+import { templateContent, pct } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SERIF = '"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
@@ -16,7 +21,9 @@ export default function CapitalReadyKitPreview({ data = {} }) {
     paletteSecondary = '#3a382f',
     paletteAccent = '#c7e83f',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'capital-ready-kit');
 
   const hairline = paletteSecondary;
   const muted = `${paletteInk}99`;
@@ -29,34 +36,12 @@ export default function CapitalReadyKitPreview({ data = {} }) {
     </div>
   );
 
-  const heroStats = [
-    { k: 'Raising', v: '$4,000,000', s: 'Seed · priced' },
-    { k: 'Committed', v: '62%', s: '$2,480,000 soft-circled' },
-    { k: 'Lead', v: 'Soft-circled', s: 'Tier-1, named at close' },
-    { k: 'Close', v: 'Aug 29, 2026', s: 'Final allocation' },
-  ];
-  const whyNow = [
-    { n: '01', t: 'Models now reason inside the loop', d: 'Frontier models clear sub-100ms inference — fast enough to sit on the order path.' },
-    { n: '02', t: 'Funds are unbundling the platform team', d: '47% of sub-$5B funds plan to retire an internal execution platform within 24 months.' },
-    { n: '03', t: 'Execution-quality rules force an audit layer', d: 'SEC Rule 605 expansion makes hand-rolled logging uneconomic below $5B AUM.' },
-  ];
-  const traction = [
-    { k: 'ARR', v: '$2.4M', s: '+38% MoM' },
-    { k: 'Paying funds', v: '11', s: '3 added in Q2' },
-    { k: 'Notional / mo', v: '$420M', s: 'Trailing 30d' },
-    { k: 'Net retention', v: '164%', s: 'TTM, cohort-weighted' },
-  ];
-  const funds = [
-    { pct: 50, l: 'Engineering', n: '8 hires — runtime, execution, infra.' },
-    { pct: 25, l: 'Go-to-market', n: 'Enterprise AE + solutions engineering.' },
-    { pct: 15, l: 'Research', n: 'Strategy library + model fine-tunes.' },
-    { pct: 10, l: 'Compliance & ops', n: 'SOC 2 Type II, FINRA prep.' },
-  ];
-  const team = [
-    { n: 'Maya Okafor', r: 'Co-founder, CEO', b: '7 yrs Citadel Securities — execution. Led order-routing for a $40B equities book.' },
-    { n: 'Daniel Reiss', r: 'Co-founder, CTO', b: 'Jane Street (5 yrs) → Anthropic (inference infra). Co-author, 2 NeurIPS papers.' },
-    { n: 'Priya Anand', r: 'Head of Research', b: 'PhD Statistics, Stanford. 9 yrs Two Sigma — systematic equities.' },
-  ];
+  const heroStats = c.list('raise_summary');
+  const whyNow = c.list('why_now');
+  const traction = c.list('traction');
+  const roundDetails = c.list('round_details');
+  const funds = c.list('use_of_funds');
+  const team = c.list('team');
 
   return (
     <div data-testid="template-preview-capital-ready-kit" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: MONO, overflow: 'hidden' }}>
@@ -67,13 +52,9 @@ export default function CapitalReadyKitPreview({ data = {} }) {
             ? <img src={logoUrl} alt="" style={{ width: 18, height: 18, objectFit: 'contain' }} />
             : <div style={{ width: 18, height: 18, background: paletteAccent, color: paletteBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SERIF, fontSize: 11 }}>{brandName.charAt(0)}</div>}
           <span style={{ fontSize: 10, letterSpacing: '0.12em' }}>{brandName.toUpperCase()}</span>
-          <span style={{ fontSize: 8, color: muted }}>/ SEED · H2 2026</span>
+          <span style={{ fontSize: 8, color: muted }}>/ INVESTOR BRIEF</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 8, color: muted }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: paletteAccent }} />
-            Final allocation · 38% remaining
-          </span>
           <span style={{ background: paletteAccent, color: paletteBg, padding: '5px 9px', fontSize: 8, fontWeight: 600, letterSpacing: '0.05em' }}>{ctaText} →</span>
         </div>
       </div>
@@ -81,20 +62,18 @@ export default function CapitalReadyKitPreview({ data = {} }) {
       {/* HERO */}
       <div style={{ padding: '34px 28px', borderBottom: `1px solid ${hairline}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, ...label }}>
-          <span>01 / Hero</span>
+          <span>01 / Investor brief · raising now</span>
           <div style={{ flex: 1, height: 1, background: hairline }} />
-          <span>Updated Jun 18, 2026</span>
         </div>
         <h1 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 36, lineHeight: 0.98, letterSpacing: '-0.01em', margin: 0 }}>
           {headline.replace(/\.\s*$/, '')}<em style={{ color: paletteAccent }}>.</em>
         </h1>
         <p style={{ marginTop: 14, maxWidth: 460, fontSize: 11, lineHeight: 1.6, color: muted }}>{subheadline}</p>
-        <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
-          {heroStats.map((s) => (
-            <div key={s.k} style={{ background: paletteBg, padding: '12px 12px 14px' }}>
-              <div style={label}>{s.k}</div>
-              <div style={{ fontFamily: SERIF, fontSize: 17, marginTop: 6 }}>{s.v}</div>
-              <div style={{ fontSize: 8, color: muted, marginTop: 3 }}>{s.s}</div>
+        <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, heroStats.length))},1fr)`, gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
+          {heroStats.map((s, i) => (
+            <div key={i} style={{ background: paletteBg, padding: '12px 12px 14px' }}>
+              <div style={label}>{s.label}</div>
+              <div style={{ fontFamily: SERIF, fontSize: 17, marginTop: 6, color: paletteAccent }}>{s.value}</div>
             </div>
           ))}
         </div>
@@ -104,11 +83,11 @@ export default function CapitalReadyKitPreview({ data = {} }) {
       <div style={{ padding: '26px 28px', borderBottom: `1px solid ${hairline}` }}>
         {sectionHead('03', 'Why now')}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
-          {whyNow.map((x) => (
-            <div key={x.n} style={{ background: paletteBg, padding: 14 }}>
-              <div style={{ fontSize: 9, color: muted }}>{x.n}</div>
-              <div style={{ fontFamily: SERIF, fontSize: 14, marginTop: 8, lineHeight: 1.2 }}>{x.t}</div>
-              <p style={{ marginTop: 6, fontSize: 9, lineHeight: 1.55, color: muted }}>{x.d}</p>
+          {whyNow.map((x, i) => (
+            <div key={i} style={{ background: paletteBg, padding: 14 }}>
+              <div style={{ fontSize: 9, color: paletteAccent }}>{String(i + 1).padStart(2, '0')}</div>
+              <div style={{ fontFamily: SERIF, fontSize: 14, marginTop: 8, lineHeight: 1.2 }}>{x.title}</div>
+              <p style={{ marginTop: 6, fontSize: 9, lineHeight: 1.55, color: muted }}>{x.body}</p>
             </div>
           ))}
         </div>
@@ -117,17 +96,13 @@ export default function CapitalReadyKitPreview({ data = {} }) {
       {/* TRACTION */}
       <div style={{ padding: '26px 28px', borderBottom: `1px solid ${hairline}` }}>
         {sectionHead('04', 'Traction')}
-        <div style={{ display: 'grid', gridTemplateColumns: '5fr 7fr', gap: 18 }}>
-          <p style={{ fontFamily: SERIF, fontSize: 18, lineHeight: 1.25, margin: 0 }}>$1.2B notional executed through the platform in the last 90 days.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
-            {traction.map((s) => (
-              <div key={s.k} style={{ background: paletteBg, padding: 11 }}>
-                <div style={label}>{s.k}</div>
-                <div style={{ fontFamily: SERIF, fontSize: 16, marginTop: 5 }}>{s.v}</div>
-                <div style={{ fontSize: 8, color: paletteAccent, marginTop: 3 }}>{s.s}</div>
-              </div>
-            ))}
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, traction.length))},1fr)`, gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
+          {traction.map((s, i) => (
+            <div key={i} style={{ background: paletteBg, padding: '13px 12px' }}>
+              <div style={{ fontFamily: SERIF, fontSize: 20, color: paletteAccent }}>{s.value}</div>
+              <div style={{ ...label, marginTop: 5 }}>{s.label}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -136,39 +111,23 @@ export default function CapitalReadyKitPreview({ data = {} }) {
         {sectionHead('05', 'Round details')}
         <div style={{ display: 'grid', gridTemplateColumns: '7fr 5fr', gap: 14 }}>
           <div style={{ border: `1px solid ${hairline}`, padding: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={label}>Target raise</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: muted }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: paletteAccent }} />Status · Final allocation
-              </span>
-            </div>
-            <div style={{ fontFamily: SERIF, fontSize: 30, marginTop: 8 }}>$4,000,000</div>
-            <div style={{ marginTop: 12, height: 5, background: paletteSecondary }}>
-              <div style={{ height: '100%', width: '62%', background: paletteAccent }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 8, color: muted }}>
-              <span>$2,480,000 soft-circled</span><span>$1,520,000 remaining (38%)</span>
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
-            {[['Stage', 'Seed · priced'], ['Instrument', 'Series Seed'], ['Pre-money', '$28M'], ['Min check', '$250K']].map(([k, v]) => (
-              <div key={k} style={{ background: paletteBg, padding: 10 }}>
-                <div style={label}>{k}</div>
-                <div style={{ fontFamily: SERIF, fontSize: 12, marginTop: 4 }}>{v}</div>
+            <div style={{ fontFamily: SERIF, fontSize: 16, marginBottom: 4 }}>Round details</div>
+            {roundDetails.map((r, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderTop: i ? `1px solid ${hairline}` : 0, fontSize: 9.5 }}>
+                <span style={{ color: muted }}>{r.label}</span>
+                <span style={{ color: paletteAccent }}>{r.value}</span>
               </div>
             ))}
           </div>
-        </div>
-        <div style={{ marginTop: 16 }}>
-          <div style={{ ...label, marginBottom: 8 }}>06 · Use of funds</div>
-          <div style={{ display: 'grid', gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
-            {funds.map((r) => (
-              <div key={r.l} style={{ display: 'grid', gridTemplateColumns: '50px 110px 1fr 110px', alignItems: 'center', gap: 10, background: paletteBg, padding: '9px 12px' }}>
-                <div style={{ fontFamily: SERIF, fontSize: 15 }}>{r.pct}%</div>
-                <div style={{ fontSize: 9, letterSpacing: '0.04em' }}>{r.l}</div>
-                <div style={{ fontSize: 8.5, color: muted }}>{r.n}</div>
-                <div style={{ height: 3, background: paletteSecondary }}>
-                  <div style={{ height: '100%', width: `${r.pct}%`, background: paletteAccent }} />
+          <div style={{ border: `1px solid ${hairline}`, padding: 16 }}>
+            <div style={{ fontFamily: SERIF, fontSize: 16, marginBottom: 10 }}>Use of funds</div>
+            {funds.map((r, i) => (
+              <div key={i} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, marginBottom: 4 }}>
+                  <span>{r.label}</span><span style={{ color: muted }}>{pct(r.pct)}%</span>
+                </div>
+                <div style={{ height: 4, background: paletteSecondary, borderRadius: 999 }}>
+                  <div style={{ height: '100%', width: `${pct(r.pct)}%`, background: paletteAccent, borderRadius: 999 }} />
                 </div>
               </div>
             ))}
@@ -180,12 +139,12 @@ export default function CapitalReadyKitPreview({ data = {} }) {
       <div style={{ padding: '26px 28px', borderBottom: `1px solid ${hairline}` }}>
         {sectionHead('07', 'Team')}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
-          {team.map((p) => (
-            <div key={p.n} style={{ background: paletteBg, padding: 12 }}>
-              <div style={{ width: 34, height: 34, background: paletteSecondary }} />
-              <div style={{ fontFamily: SERIF, fontSize: 13, marginTop: 8 }}>{p.n}</div>
-              <div style={{ ...label, marginTop: 2 }}>{p.r}</div>
-              <p style={{ marginTop: 6, fontSize: 8.5, lineHeight: 1.55, color: muted }}>{p.b}</p>
+          {team.map((p, i) => (
+            <div key={i} style={{ background: paletteBg, padding: 12 }}>
+              <div style={{ width: 34, height: 34, borderRadius: '50%', background: `${paletteAccent}26`, border: `1px solid ${paletteAccent}55` }} />
+              <div style={{ fontFamily: SERIF, fontSize: 13, marginTop: 8 }}>{p.name}</div>
+              <div style={{ ...label, marginTop: 2 }}>{p.role}</div>
+              <p style={{ marginTop: 6, fontSize: 8.5, lineHeight: 1.55, color: muted }}>{p.bio}</p>
             </div>
           ))}
         </div>
@@ -195,13 +154,13 @@ export default function CapitalReadyKitPreview({ data = {} }) {
       <div style={{ padding: '30px 28px 34px' }}>
         <div style={{ margin: '0 auto', maxWidth: 460, textAlign: 'center', border: `1px solid ${paletteAccent}55`, background: `${paletteAccent}0f`, padding: '24px 26px' }}>
           <div style={{ ...label, color: paletteAccent }}>08 / Get in</div>
-          <div style={{ fontFamily: SERIF, fontSize: 22, lineHeight: 1.05, marginTop: 10 }}>Warm intros first. Qualified inbound second.</div>
-          <p style={{ marginTop: 8, fontSize: 9, color: muted }}>Funds writing $250K+ — we reply within 2 business days.</p>
+          <div style={{ fontFamily: SERIF, fontSize: 22, lineHeight: 1.05, marginTop: 10 }}>{ctaText}</div>
+          <p style={{ marginTop: 8, fontSize: 9, color: muted }}>Leave your email for the data room and a 30-minute intro with the founders.</p>
           <div style={{ marginTop: 14, display: 'flex', gap: 8, justifyContent: 'center' }}>
             <div style={{ flex: 1, maxWidth: 210, borderBottom: `1px solid ${hairline}`, padding: '7px 4px', fontSize: 9, color: muted, textAlign: 'left' }}>you@fund.com</div>
             <div style={{ background: paletteAccent, color: paletteBg, padding: '8px 14px', fontSize: 9, fontWeight: 600 }}>{ctaText} →</div>
           </div>
-          <div style={{ marginTop: 12, fontSize: 8, color: muted }}>invest@axal.co · Dataroom shared after first call</div>
+          <div style={{ marginTop: 12, fontSize: 8, color: muted }}>{brandName} · Built with Axal VC</div>
         </div>
       </div>
     </div>
