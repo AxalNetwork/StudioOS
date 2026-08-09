@@ -1,6 +1,10 @@
 // Preview: Distribution Deck — light blueprint partnership memo.
 // Faithful miniature of brandtemplates/Distribution Deck/ as rendered by
-// renderDistributionDeck() in cloudflare-worker/src/services/landingTemplates.ts.
+// renderDistributionDeck() in cloudflare-worker/src/services/landingTemplates.ts,
+// including its content_json sections (side_facts / overlap / channel_value /
+// rollout), which read through the same accessor that renderer uses.
+import { templateContent, pct as toPct } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SANS = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif';
@@ -17,7 +21,9 @@ export default function DistributionDeckPreview({ data = {} }) {
     paletteSecondary = '#e9e8e2',
     paletteAccent = '#0072d5',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'distribution-deck');
 
   const hairline = `1px solid ${paletteSecondary}`;
   const mono = (size = 7) => ({ fontFamily: MONO, fontSize: size, letterSpacing: '0.14em', textTransform: 'uppercase' });
@@ -29,28 +35,10 @@ export default function DistributionDeckPreview({ data = {} }) {
     </div>
   );
 
-  const sideFacts = [
-    ['Partner type', 'Platform'],
-    ['Addressable overlap', 'High'],
-    ['Revenue model', 'Rev-share'],
-    ['Time to value', 'Weeks'],
-  ];
-  const overlap = [
-    ['Enterprise', 'Strong', 72],
-    ['Mid-market', 'Core', 58],
-    ['SMB', 'Emerging', 34],
-  ];
-  const cards = [
-    ['+ARPU', 'Lift per shared account'],
-    ['Lower', 'Blended CAC'],
-    ['Higher', 'Retention together'],
-    ['Faster', 'Time to revenue'],
-  ];
-  const opts = [
-    ['Referral handoff', 'Lightest lift — a clean handoff between teams.', 'Eng lift: low', '2–4 wks'],
-    ['Embedded surface', 'The default — it lives inside your product.', 'Eng lift: med', '6–8 wks'],
-    ['Native rebuild', 'Deepest — fully co-built and co-branded.', 'Eng lift: high', '12+ wks'],
-  ];
+  const sideFacts = c.list('side_facts');
+  const overlap = c.list('overlap');
+  const cards = c.list('channel_value');
+  const opts = c.list('rollout');
 
   return (
     <div data-testid="template-preview-distribution-deck" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: SANS, overflow: 'hidden', lineHeight: 1.55 }}>
@@ -80,10 +68,10 @@ export default function DistributionDeckPreview({ data = {} }) {
           <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 600, background: themeColor, color: '#fff', borderRadius: 5, padding: '7px 13px' }}>{ctaText}</span>
         </div>
         <div style={{ border: hairline, borderRadius: 8, padding: '2px 13px' }}>
-          {sideFacts.map(([k, v], i) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '9px 0', borderTop: i ? hairline : 'none', fontSize: 10 }}>
-              <span>{k}</span>
-              <span style={{ fontFamily: MONO, fontSize: 9.5, color: paletteAccent }}>{v}</span>
+          {sideFacts.map((f, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '9px 0', borderTop: i ? hairline : 'none', fontSize: 10 }}>
+              <span>{f.label}</span>
+              <span style={{ fontFamily: MONO, fontSize: 9.5, color: paletteAccent }}>{f.value}</span>
             </div>
           ))}
         </div>
@@ -102,13 +90,13 @@ export default function DistributionDeckPreview({ data = {} }) {
             </tr>
           </thead>
           <tbody>
-            {overlap.map(([seg, base, pct]) => (
-              <tr key={seg}>
-                <td style={{ padding: '8px 8px', borderBottom: hairline }}>{seg}</td>
-                <td style={{ padding: '8px 8px', borderBottom: hairline }}>{base}</td>
+            {overlap.map((o, i) => (
+              <tr key={i}>
+                <td style={{ padding: '8px 8px', borderBottom: hairline }}>{o.segment}</td>
+                <td style={{ padding: '8px 8px', borderBottom: hairline }}>{o.base}</td>
                 <td style={{ padding: '8px 8px', borderBottom: hairline, width: 180 }}>
                   <div style={{ height: 5, borderRadius: 99, background: paletteSecondary, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: paletteAccent }} />
+                    <div style={{ height: '100%', width: `${toPct(o.pct)}%`, background: paletteAccent }} />
                   </div>
                 </td>
               </tr>
@@ -120,11 +108,11 @@ export default function DistributionDeckPreview({ data = {} }) {
       <div style={{ padding: '30px 28px', borderBottom: hairline }}>
         {eyebrow('03', 'Channel value')}
         <h2 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em' }}>The unit economics of the channel</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: paletteSecondary, border: hairline }}>
-          {cards.map(([v, l]) => (
-            <div key={l} style={{ background: paletteBg, padding: '14px 12px' }}>
-              <div style={{ fontFamily: MONO, fontSize: 16, color: paletteAccent }}>{v}</div>
-              <div style={{ fontSize: 9.5, opacity: 0.7, marginTop: 4 }}>{l}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, cards.length))},1fr)`, gap: 1, background: paletteSecondary, border: hairline }}>
+          {cards.map((cv, i) => (
+            <div key={i} style={{ background: paletteBg, padding: '14px 12px' }}>
+              <div style={{ fontFamily: MONO, fontSize: 16, color: paletteAccent }}>{cv.value}</div>
+              <div style={{ fontSize: 9.5, opacity: 0.7, marginTop: 4 }}>{cv.label}</div>
             </div>
           ))}
         </div>
@@ -133,13 +121,13 @@ export default function DistributionDeckPreview({ data = {} }) {
       <div style={{ padding: '30px 28px', borderBottom: hairline }}>
         {eyebrow('04', 'Rollout')}
         <h2 style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em' }}>Three ways to integrate</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: paletteSecondary, border: hairline }}>
-          {opts.map(([title, body, lift, time]) => (
-            <div key={title} style={{ background: paletteBg, padding: '15px 13px' }}>
-              <h3 style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700 }}>{title}</h3>
-              <p style={{ margin: '0 0 10px', fontSize: 9.5, opacity: 0.72 }}>{body}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(3, opts.length))},1fr)`, gap: 1, background: paletteSecondary, border: hairline }}>
+          {opts.map((o, i) => (
+            <div key={i} style={{ background: paletteBg, padding: '15px 13px' }}>
+              <h3 style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700 }}>{o.title}</h3>
+              <p style={{ margin: '0 0 10px', fontSize: 9.5, opacity: 0.72 }}>{o.body}</p>
               <div style={{ fontFamily: MONO, fontSize: 8, borderTop: hairline, paddingTop: 8, display: 'flex', justifyContent: 'space-between', opacity: 0.7 }}>
-                <span>{lift}</span><span>{time}</span>
+                <span>{o.lift}</span><span>{o.time}</span>
               </div>
             </div>
           ))}

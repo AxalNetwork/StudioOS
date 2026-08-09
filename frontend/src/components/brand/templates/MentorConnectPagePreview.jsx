@@ -1,4 +1,8 @@
 // Ported from brandtemplates/Mentor Connect Page/ — narrative serif mentor letter.
+// building / stuck / why / ask_options / timeline come from the same accessor
+// renderMentorConnectPage reads, so preview == published page.
+import { templateContent } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SERIF = '"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
@@ -17,7 +21,9 @@ export default function MentorConnectPagePreview({ data = {} }) {
     paletteSecondary = '#e2ddd5',
     paletteAccent = '#b05139',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'mentor-connect-page');
   const soft = { color: paletteInk, opacity: 0.65 };
   const monoLabel = { fontFamily: MONO, fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.18em', ...soft };
   const Section = ({ label, title, children }) => (
@@ -31,12 +37,16 @@ export default function MentorConnectPagePreview({ data = {} }) {
       </div>
     </div>
   );
-  const arrow = (text) => (
-    <div key={text} style={{ display: 'flex', gap: 8 }}>
+  const arrow = (key, text) => (
+    <div key={key} style={{ display: 'flex', gap: 8 }}>
       <span style={{ fontFamily: MONO, fontSize: 9, color: paletteAccent, paddingTop: 2 }}>→</span>
       <span>{text}</span>
     </div>
   );
+  const stuck = c.list('stuck');
+  const askOptions = c.list('ask_options');
+  const timeline = c.list('timeline');
+
   return (
     <div data-testid="template-preview-mentor-connect-page" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: SANS, overflow: 'hidden' }}>
       {/* Nav */}
@@ -66,26 +76,26 @@ export default function MentorConnectPagePreview({ data = {} }) {
       </div>
 
       <Section label="01 — Building" title="What we're building">
-        <p style={{ margin: 0 }}>
-          We turn messy, recurring decisions into simple, trustworthy workflows for small ops teams — a lightweight workflow set up in minutes, with a clear audit trail instead of a Slack thread and a spreadsheet.
-        </p>
+        <p style={{ margin: 0 }}>{c.t('building')}</p>
       </Section>
 
       <Section label="02 — Stuck" title="Where we're stuck">
         <div style={{ display: 'grid', gap: 8 }}>
-          {arrow("Pricing. Pilots love the product, but we can't tell if a seat-based or usage-based plan would actually convert.")}
-          {arrow('Positioning. "Workflow engine" gets nods from engineers; "decision tool" resonates with ops leads. Both feel half-right.')}
-          {arrow("First-ten-customers playbook. Warm intros convert but volume is low — double down, or test a new channel?")}
+          {stuck.map((st, i) => arrow(i, <><span style={{ color: paletteInk, opacity: 1 }}>{st.label}.</span> {st.body}</>))}
         </div>
+      </Section>
+
+      <Section label="03 — Why you" title="Why we're asking you">
+        <p style={{ margin: 0 }}>{c.t('why')}</p>
       </Section>
 
       <Section label="04 — Ask" title="What help would be most useful">
         <div style={{ border: `1px solid ${paletteSecondary}`, borderRadius: 6, background: '#fff', padding: 14 }}>
           <div style={monoLabel}>Pick whichever is easiest</div>
           <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-            <div><span style={{ color: paletteInk, opacity: 1 }}>A.</span> A 20-minute call where we walk through the two open questions above.</div>
-            <div><span style={{ color: paletteInk, opacity: 1 }}>B.</span> A short written reaction — even one paragraph on pricing would help.</div>
-            <div><span style={{ color: paletteInk, opacity: 1 }}>C.</span> One intro to a founder who's solved a similar problem.</div>
+            {askOptions.map((o, i) => (
+              <div key={i}><span style={{ color: paletteInk, opacity: 1 }}>{o.key}.</span> {o.body}</div>
+            ))}
           </div>
         </div>
         <div style={{ marginTop: 8, fontSize: 10 }}>Any one of these is more than enough. No prep needed on your side.</div>
@@ -93,14 +103,10 @@ export default function MentorConnectPagePreview({ data = {} }) {
 
       <Section label="05 — Context" title="Background and progress">
         <div style={{ display: 'grid', gap: 6 }}>
-          {[
-            ['2024 Q3', 'Started building with two design partners.'],
-            ['2024 Q4', 'First paid pilots. Three signed LOIs.'],
-            ['Now', 'Teams active weekly. Two engineers, one designer, mostly self-funded.'],
-          ].map(([y, t]) => (
-            <div key={y} style={{ display: 'flex', gap: 12 }}>
-              <span style={{ fontFamily: MONO, fontSize: 8.5, width: 46, flexShrink: 0, paddingTop: 2, ...soft }}>{y}</span>
-              <span>{t}</span>
+          {timeline.map((t, i) => (
+            <div key={i} style={{ display: 'flex', gap: 12 }}>
+              <span style={{ fontFamily: MONO, fontSize: 8.5, width: 46, flexShrink: 0, paddingTop: 2, ...soft }}>{t.year}</span>
+              <span>{t.body}</span>
             </div>
           ))}
         </div>

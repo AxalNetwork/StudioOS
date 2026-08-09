@@ -1,6 +1,10 @@
 // Preview: Partner Pipeline Pro — financial-tech distribution brief.
 // Faithful miniature of brandtemplates/Partner Pipeline Pro/ as rendered by
-// renderPartnerPipelinePro() in cloudflare-worker/src/services/landingTemplates.ts.
+// renderPartnerPipelinePro() in cloudflare-worker/src/services/landingTemplates.ts,
+// including its content_json sections (glance / overlap_nums / levers / options
+// / timeline / quote / best_fit / not_fit), read through the same accessor.
+import { templateContent } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SANS = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif';
@@ -18,7 +22,9 @@ export default function PartnerPipelineProPreview({ data = {} }) {
     paletteSecondary = '#dbd7d0',
     paletteAccent = '#ef852e',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'partner-pipeline-pro');
 
   const hairline = `1px solid ${paletteSecondary}`;
   const slabel = (n, t) => (
@@ -30,36 +36,13 @@ export default function PartnerPipelineProPreview({ data = {} }) {
   );
   const btn = { display: 'inline-block', fontSize: 10, fontWeight: 600, background: themeColor, color: '#fff', borderRadius: 5, padding: '8px 15px' };
 
-  const glance = [
-    ['Partner type', 'Platform'],
-    ['Addressable overlap', 'High'],
-    ['ARPU lift', 'Net new'],
-    ['Revenue timing', 'Quarter one'],
-  ];
-  const nums = [
-    ['61%', 'Shared ICP'],
-    ['High', 'Geographic fit'],
-    ['Strong', 'Income match'],
-    ['Aligned', 'Buying preference'],
-  ];
-  const levers = [
-    ['ARPU', 'Flat', 'Higher', '+lift'],
-    ['Retention', 'Standard', 'Stickier', '+pts'],
-    ['CAC', 'Full', 'Shared', '−cost'],
-  ];
-  const options = [
-    ['Lightest', 'Referral', 'Clean handoff, minimal lift.'],
-    ['Default', 'Embedded', 'It lives inside your product surface.'],
-    ['Deepest', 'Native', 'Fully co-built and co-branded.'],
-  ];
-  const timeline = [
-    ['Wk 0', 'Scoping'],
-    ['Wk 4', 'Build'],
-    ['Wk 8', 'Pilot'],
-    ['Wk 14', 'Scale'],
-  ];
-  const bestFit = ['You already serve our shared ICP', 'A revenue line you want to grow', 'A team that can ship a pilot this quarter'];
-  const notFit = ['Logo hunting, not distribution', 'No room for a partner rev-share', "Can't name the overlap in one sentence"];
+  const glance = c.list('glance');
+  const nums = c.list('overlap_nums');
+  const levers = c.list('levers');
+  const options = c.list('options');
+  const timeline = c.list('timeline');
+  const bestFit = c.list('best_fit');
+  const notFit = c.list('not_fit');
 
   return (
     <div data-testid="template-preview-partner-pipeline-pro" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: SANS, overflow: 'hidden', lineHeight: 1.55 }}>
@@ -84,9 +67,9 @@ export default function PartnerPipelineProPreview({ data = {} }) {
           <span style={btn}>{ctaText}</span>
         </div>
         <div style={{ border: hairline, borderRadius: 8, padding: '2px 13px' }}>
-          {glance.map(([k, v], i) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '8px 0', borderTop: i ? hairline : 'none', fontSize: 10 }}>
-              <span>{k}</span><span style={{ fontFamily: MONO, fontSize: 9, color: paletteAccent }}>{v}</span>
+          {glance.map((g, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '8px 0', borderTop: i ? hairline : 'none', fontSize: 10 }}>
+              <span>{g.label}</span><span style={{ fontFamily: MONO, fontSize: 9, color: paletteAccent }}>{g.value}</span>
             </div>
           ))}
         </div>
@@ -96,11 +79,11 @@ export default function PartnerPipelineProPreview({ data = {} }) {
         {slabel('01', 'Customer overlap')}
         <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 19, margin: '0 0 4px', letterSpacing: '-0.01em' }}>The same customers, twice the value</h2>
         <p style={{ margin: '0 0 14px', fontSize: 10.5, opacity: 0.76 }}>We don't have to convince you the market exists — you already serve it. Here's the overlap.</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: paletteSecondary, border: hairline, borderRadius: 8, overflow: 'hidden' }}>
-          {nums.map(([v, l]) => (
-            <div key={l} style={{ background: paletteBg, padding: '14px 12px' }}>
-              <div style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 19, color: paletteAccent }}>{v}</div>
-              <div style={{ fontSize: 9, opacity: 0.7, marginTop: 4 }}>{l}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, nums.length))},1fr)`, gap: 1, background: paletteSecondary, border: hairline, borderRadius: 8, overflow: 'hidden' }}>
+          {nums.map((n, i) => (
+            <div key={i} style={{ background: paletteBg, padding: '14px 12px' }}>
+              <div style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 19, color: paletteAccent }}>{n.value}</div>
+              <div style={{ fontSize: 9, opacity: 0.7, marginTop: 4 }}>{n.label}</div>
             </div>
           ))}
         </div>
@@ -118,12 +101,12 @@ export default function PartnerPipelineProPreview({ data = {} }) {
             </tr>
           </thead>
           <tbody>
-            {levers.map(([lever, base, w, delta]) => (
-              <tr key={lever}>
-                <td style={{ padding: '8px 8px', borderBottom: `1px dashed ${paletteSecondary}` }}>{lever}</td>
-                <td style={{ padding: '8px 8px', borderBottom: `1px dashed ${paletteSecondary}` }}>{base}</td>
-                <td style={{ padding: '8px 8px', borderBottom: `1px dashed ${paletteSecondary}` }}>{w}</td>
-                <td style={{ padding: '8px 8px', borderBottom: `1px dashed ${paletteSecondary}`, color: paletteAccent, fontFamily: MONO, fontSize: 9.5 }}>{delta}</td>
+            {levers.map((lv, i) => (
+              <tr key={i}>
+                <td style={{ padding: '8px 8px', borderBottom: `1px dashed ${paletteSecondary}` }}>{lv.lever}</td>
+                <td style={{ padding: '8px 8px', borderBottom: `1px dashed ${paletteSecondary}` }}>{lv.baseline}</td>
+                <td style={{ padding: '8px 8px', borderBottom: `1px dashed ${paletteSecondary}` }}>{lv.with}</td>
+                <td style={{ padding: '8px 8px', borderBottom: `1px dashed ${paletteSecondary}`, color: paletteAccent, fontFamily: MONO, fontSize: 9.5 }}>{lv.delta}</td>
               </tr>
             ))}
           </tbody>
@@ -134,21 +117,28 @@ export default function PartnerPipelineProPreview({ data = {} }) {
         {slabel('03', 'Integration & rollout')}
         <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 19, margin: '0 0 12px', letterSpacing: '-0.01em' }}>Pick the path your risk team will sign</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 9 }}>
-          {options.map(([pin, t, b], i) => (
-            <div key={t} style={{ border: i === 1 ? `1px solid ${paletteAccent}` : hairline, boxShadow: i === 1 ? `0 0 0 1px ${paletteAccent}` : 'none', background: i === 1 ? `${paletteAccent}0d` : 'transparent', borderRadius: 9, padding: 13 }}>
-              <div style={{ fontFamily: MONO, fontSize: 7, color: paletteAccent, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{pin}</div>
-              <h3 style={{ margin: '5px 0 3px', fontSize: 12, fontWeight: 700 }}>{t}</h3>
-              <p style={{ margin: 0, opacity: 0.72, fontSize: 9.5 }}>{b}</p>
+          {options.map((o, i) => (
+            <div key={i} style={{ border: i === 1 ? `1px solid ${paletteAccent}` : hairline, boxShadow: i === 1 ? `0 0 0 1px ${paletteAccent}` : 'none', background: i === 1 ? `${paletteAccent}0d` : 'transparent', borderRadius: 9, padding: 13 }}>
+              <div style={{ fontFamily: MONO, fontSize: 7, color: paletteAccent, letterSpacing: '0.12em', textTransform: 'uppercase' }}>{o.pin}</div>
+              <h3 style={{ margin: '5px 0 3px', fontSize: 12, fontWeight: 700 }}>{o.title}</h3>
+              <p style={{ margin: 0, opacity: 0.72, fontSize: 9.5 }}>{o.body}</p>
             </div>
           ))}
         </div>
         <div style={{ display: 'flex', marginTop: 16 }}>
-          {timeline.map(([k, v], i) => (
-            <div key={k} style={{ flex: 1, borderLeft: i ? hairline : 'none', padding: i ? '0 10px' : '0 10px 0 0' }}>
-              <div style={{ fontFamily: MONO, fontSize: 8, color: paletteAccent }}>{k}</div>
-              <div style={{ fontSize: 10, marginTop: 3 }}>{v}</div>
+          {timeline.map((t, i) => (
+            <div key={i} style={{ flex: 1, borderLeft: i ? hairline : 'none', padding: i ? '0 10px' : '0 10px 0 0' }}>
+              <div style={{ fontFamily: MONO, fontSize: 8, color: paletteAccent }}>{t.label}</div>
+              <div style={{ fontSize: 10, marginTop: 3 }}>{t.value}</div>
             </div>
           ))}
+        </div>
+      </div>
+      {/* 04 Quote */}
+      <div style={{ padding: '24px 28px', borderBottom: hairline }}>
+        <div style={{ borderLeft: `3px solid ${paletteAccent}`, paddingLeft: 16, maxWidth: 520 }}>
+          <p style={{ fontFamily: SERIF, fontSize: 15, lineHeight: 1.35, margin: 0 }}>"{c.t('quote')}"</p>
+          <div style={{ fontSize: 9.5, opacity: 0.6, marginTop: 7 }}>{c.t('quote_by')}</div>
         </div>
       </div>
       {/* 05 Audience fit — two-pane */}
@@ -158,11 +148,11 @@ export default function PartnerPipelineProPreview({ data = {} }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: paletteSecondary, border: hairline, borderRadius: 8, overflow: 'hidden' }}>
           <div style={{ background: paletteBg, padding: '14px 13px' }}>
             <h3 style={{ margin: '0 0 7px', fontSize: 11, color: paletteAccent, fontWeight: 700 }}>Best fit</h3>
-            <ul style={{ margin: 0, paddingLeft: 13, fontSize: 9.5, opacity: 0.78 }}>{bestFit.map((t) => <li key={t} style={{ marginBottom: 3 }}>{t}</li>)}</ul>
+            <ul style={{ margin: 0, paddingLeft: 13, fontSize: 9.5, opacity: 0.78 }}>{bestFit.map((t, i) => <li key={i} style={{ marginBottom: 3 }}>{t.body}</li>)}</ul>
           </div>
           <div style={{ background: paletteBg, padding: '14px 13px' }}>
             <h3 style={{ margin: '0 0 7px', fontSize: 11, fontWeight: 700 }}>Not a fit (yet)</h3>
-            <ul style={{ margin: 0, paddingLeft: 13, fontSize: 9.5, opacity: 0.78 }}>{notFit.map((t) => <li key={t} style={{ marginBottom: 3 }}>{t}</li>)}</ul>
+            <ul style={{ margin: 0, paddingLeft: 13, fontSize: 9.5, opacity: 0.78 }}>{notFit.map((t, i) => <li key={i} style={{ marginBottom: 3 }}>{t.body}</li>)}</ul>
           </div>
         </div>
       </div>

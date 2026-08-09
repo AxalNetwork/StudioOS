@@ -1,5 +1,10 @@
 // Capital Storyteller — miniaturized preview of brandtemplates/Capital Storyteller/
 // Numbered confidential memo: diamond-bullet eyebrow, "01 — ..." hairline rules, bento stats.
+// Section content (raise_summary / thesis / market / traction / round_details /
+// use_of_funds / team) comes from the same accessor renderCapitalStoryteller
+// reads, so this preview matches the published page.
+import { templateContent, pct as toPct } from '../../../lib/brand/templateContent.js';
+
 export const NATURAL_WIDTH = 720;
 
 const SERIF = '"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
@@ -17,7 +22,9 @@ export default function CapitalStorytellerPreview({ data = {} }) {
     paletteSecondary = '#26292c',
     paletteAccent = '#f2a618',
     logoUrl = null,
+    content = null,
   } = data;
+  const c = templateContent(content, 'capital-storyteller');
 
   const hairline = paletteSecondary;
   const muted = `${paletteInk}8c`;
@@ -27,18 +34,19 @@ export default function CapitalStorytellerPreview({ data = {} }) {
       <span style={mono}>{labelTxt}</span>
     </div>
   );
-  const stat = (k, v) => (
-    <div key={k} style={{ background: paletteBg, padding: 12 }}>
+  const stat = (key, k, v) => (
+    <div key={key} style={{ background: paletteBg, padding: 12 }}>
       <div style={mono}>{k}</div>
-      <div style={{ fontFamily: SERIF, fontSize: 17, marginTop: 6 }}>{v}</div>
+      <div style={{ fontFamily: SERIF, fontSize: 17, marginTop: 6, color: paletteAccent }}>{v}</div>
     </div>
   );
 
-  const team = [
-    ['Maya Okafor', 'CEO', "Built Stripe Issuing's policy engine (now $9B GMV/yr). MIT."],
-    ['Daniel Reyes', 'CTO', "Led Anthropic's internal eval infra — the suite gating Claude releases. Stanford."],
-    ['Priya Shah', 'Head of Eng', "Built Datadog APM's distributed-trace pipeline (1M+ spans/sec). CMU."],
-  ];
+  const raise = c.list('raise_summary');
+  const market = c.list('market');
+  const traction = c.list('traction');
+  const roundDetails = c.list('round_details');
+  const funds = c.list('use_of_funds');
+  const team = c.list('team');
 
   return (
     <div data-testid="template-preview-capital-storyteller" style={{ width: 720, background: paletteBg, color: paletteInk, fontFamily: SANS, overflow: 'hidden' }}>
@@ -53,7 +61,7 @@ export default function CapitalStorytellerPreview({ data = {} }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ ...mono, display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: paletteAccent }} />Round open · $6M seed
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: paletteAccent }} />Round open
           </span>
           <span style={{ border: `1px solid ${paletteInk}`, background: paletteInk, color: paletteBg, padding: '5px 10px', fontSize: 9, fontWeight: 500, borderRadius: 2 }}>{ctaText} →</span>
         </div>
@@ -65,17 +73,22 @@ export default function CapitalStorytellerPreview({ data = {} }) {
           <span style={{ width: 6, height: 6, transform: 'rotate(45deg)', background: paletteAccent, display: 'inline-block' }} />
           <span style={mono}>Confidential investor brief</span>
           <span style={{ width: 32, height: 1, background: hairline }} />
-          <span style={mono}>v.2026.06</span>
         </div>
-        <h1 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 38, lineHeight: 1.02, margin: 0, maxWidth: 560 }}>
-          {headline.includes('enterprises')
-            ? <>The agent runtime <em style={{ color: muted }}>enterprises</em> ship to production.</>
-            : headline}
-        </h1>
+        <h1 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 38, lineHeight: 1.02, margin: 0, maxWidth: 560 }}>{headline}</h1>
         <p style={{ marginTop: 14, maxWidth: 440, fontSize: 11, lineHeight: 1.6, color: muted }}>{subheadline}</p>
-        <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
-          {stat('Raising', '$6M')}{stat('Stage', 'Seed')}{stat('Lead', 'In conversation')}{stat('Close', 'Q3 2026')}
+        <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, raise.length))},1fr)`, gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
+          {raise.map((it, i) => stat(i, it.label, it.value))}
         </div>
+      </div>
+
+      {/* 01 — THE STORY */}
+      {rule('01 — The story')}
+      <div style={{ display: 'grid', gridTemplateColumns: '4fr 8fr', gap: 20, padding: '22px 28px', borderBottom: `1px solid ${hairline}` }}>
+        <div>
+          <div style={{ ...mono, marginBottom: 6 }}>Thesis</div>
+          <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 20, lineHeight: 1.15, margin: 0 }}>The story behind {brandName}</h2>
+        </div>
+        <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.65, color: muted }}>{c.t('thesis')}</p>
       </div>
 
       {/* 02 — WHY NOW */}
@@ -83,16 +96,13 @@ export default function CapitalStorytellerPreview({ data = {} }) {
       <div style={{ display: 'grid', gridTemplateColumns: '4fr 8fr', gap: 20, padding: '22px 28px', borderBottom: `1px solid ${hairline}` }}>
         <div>
           <div style={{ ...mono, marginBottom: 6 }}>Timing</div>
-          <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 20, lineHeight: 1.15, margin: 0 }}>Agents moved from demo to budget line.</h2>
+          <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 20, lineHeight: 1.15, margin: 0 }}>Why the window is open now</h2>
         </div>
         <div>
-          {[
-            ['$47B', 'projected enterprise agent spend by 2027 (Gartner forecast, Mar 2026).'],
-            ['73%', 'of enterprise agent pilots stall on governance, not capability (a16z survey, n=412).'],
-          ].map(([k, v], i) => (
-            <div key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 14, padding: '8px 0', borderBottom: i === 0 ? `1px solid ${hairline}` : 'none' }}>
-              <span style={{ fontFamily: SERIF, fontSize: 26, color: paletteAccent }}>{k}</span>
-              <span style={{ fontSize: 10, color: muted }}>{v}</span>
+          {market.map((it, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 14, padding: '8px 0', borderBottom: i < market.length - 1 ? `1px solid ${hairline}` : 'none' }}>
+              <span style={{ fontFamily: SERIF, fontSize: 22, color: paletteAccent, flex: '0 0 auto' }}>{it.value}</span>
+              <span style={{ fontSize: 10, color: muted }}>{it.label}</span>
             </div>
           ))}
         </div>
@@ -103,18 +113,13 @@ export default function CapitalStorytellerPreview({ data = {} }) {
       <div style={{ display: 'grid', gridTemplateColumns: '4fr 8fr', gap: 20, padding: '22px 28px', borderBottom: `1px solid ${hairline}` }}>
         <div>
           <div style={{ ...mono, marginBottom: 6 }}>Numbers</div>
-          <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 20, lineHeight: 1.15, margin: 0 }}>Compounding, not coasting.</h2>
+          <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 20, lineHeight: 1.15, margin: 0 }}>Signal so far</h2>
         </div>
         <div style={{ border: `1px solid ${hairline}` }}>
-          {[
-            ['ARR', '$2.1M', '+38% MoM (trailing 3mo)'],
-            ['Logos', '14', 'incl. 3 of top 10 US banks'],
-            ['Net retention', '164%', 'trailing 6 months'],
-          ].map(([k, v, n], i, a) => (
-            <div key={k} style={{ display: 'grid', gridTemplateColumns: '90px 80px 1fr', alignItems: 'center', padding: '8px 12px', borderBottom: i < a.length - 1 ? `1px solid ${hairline}` : 'none' }}>
-              <span style={mono}>{k}</span>
-              <span style={{ fontFamily: SERIF, fontSize: 15 }}>{v}</span>
-              <span style={{ fontSize: 9, color: muted, textAlign: 'right' }}>{n}</span>
+          {traction.map((it, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '110px 1fr', alignItems: 'center', padding: '8px 12px', borderBottom: i < traction.length - 1 ? `1px solid ${hairline}` : 'none' }}>
+              <span style={{ fontFamily: SERIF, fontSize: 15, color: paletteAccent }}>{it.value}</span>
+              <span style={{ fontSize: 9.5, color: muted }}>{it.label}</span>
             </div>
           ))}
         </div>
@@ -124,21 +129,26 @@ export default function CapitalStorytellerPreview({ data = {} }) {
       {rule('04 — Round · 05 — Use of funds')}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, padding: '22px 28px', borderBottom: `1px solid ${hairline}` }}>
         <div>
-          <div style={{ ...mono, marginBottom: 8 }}>Terms — clean priced seed</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
-            {stat('Raise', '$6M')}{stat('Post-money cap', '$30M')}{stat('Lead committed', '$2.5M')}{stat('Allocation left', '$1.8M')}
+          <div style={{ ...mono, marginBottom: 8 }}>Round details</div>
+          <div style={{ border: `1px solid ${hairline}` }}>
+            {roundDetails.map((it, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 12px', borderTop: i ? `1px solid ${hairline}` : 'none', fontSize: 10 }}>
+                <span style={{ color: muted }}>{it.label}</span>
+                <span style={{ fontFamily: SERIF, fontSize: 12, color: paletteAccent }}>{it.value}</span>
+              </div>
+            ))}
           </div>
         </div>
         <div>
-          <div style={{ ...mono, marginBottom: 8 }}>Allocation — 24 months of runway</div>
-          {[['Engineering', 55], ['Go-to-market', 30], ['Infra & R&D', 15]].map(([name, pct]) => (
-            <div key={name} style={{ marginBottom: 10 }}>
+          <div style={{ ...mono, marginBottom: 8 }}>Use of funds</div>
+          {funds.map((it, i) => (
+            <div key={i} style={{ marginBottom: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontFamily: SERIF, fontSize: 13 }}>{name}</span>
-                <span style={mono}>{pct}%</span>
+                <span style={{ fontFamily: SERIF, fontSize: 13 }}>{it.label}</span>
+                <span style={mono}>{toPct(it.pct)}%</span>
               </div>
               <div style={{ marginTop: 4, height: 2, background: hairline }}>
-                <div style={{ height: '100%', width: `${pct}%`, background: paletteAccent }} />
+                <div style={{ height: '100%', width: `${toPct(it.pct)}%`, background: paletteAccent }} />
               </div>
             </div>
           ))}
@@ -149,14 +159,14 @@ export default function CapitalStorytellerPreview({ data = {} }) {
       {rule('06 — Team')}
       <div style={{ padding: '22px 28px', borderBottom: `1px solid ${hairline}` }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: hairline, border: `1px solid ${hairline}` }}>
-          {team.map(([n, r, b]) => (
-            <div key={n} style={{ background: paletteBg, padding: 12 }}>
+          {team.map((p, i) => (
+            <div key={i} style={{ background: paletteBg, padding: 12 }}>
               <div style={{ width: 28, height: 28, border: `1px solid ${hairline}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: SERIF, fontSize: 11 }}>
-                {n.split(' ').map((x) => x[0]).join('')}
+                {String(p.name || '').trim().split(/\s+/).map((x) => x[0]).join('').slice(0, 2)}
               </div>
-              <div style={{ fontFamily: SERIF, fontSize: 13, marginTop: 8 }}>{n}</div>
-              <div style={{ ...mono, marginTop: 2 }}>{r}</div>
-              <p style={{ marginTop: 6, fontSize: 8.5, lineHeight: 1.55, color: muted }}>{b}</p>
+              <div style={{ fontFamily: SERIF, fontSize: 13, marginTop: 8 }}>{p.name}</div>
+              <div style={{ ...mono, marginTop: 2 }}>{p.role}</div>
+              <p style={{ marginTop: 6, fontSize: 8.5, lineHeight: 1.55, color: muted }}>{p.bio}</p>
             </div>
           ))}
         </div>
@@ -166,10 +176,10 @@ export default function CapitalStorytellerPreview({ data = {} }) {
       {rule('07 — Next')}
       <div style={{ padding: '28px 28px 32px', textAlign: 'center' }}>
         <h2 style={{ fontFamily: SERIF, fontWeight: 400, fontSize: 26, lineHeight: 1.05, margin: '0 auto', maxWidth: 420 }}>
-          Warm intro <em style={{ color: muted }}>is the fastest path</em>.
+          {ctaText}
         </h2>
         <p style={{ margin: '10px auto 0', maxWidth: 380, fontSize: 9.5, color: muted }}>
-          Best fit: B2B / AI infra funds writing $500K–$3M seed checks.
+          Leave your email — we'll send the memo and the data room.
         </p>
         <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'center' }}>
           <div style={{ width: 190, borderBottom: `1px solid ${hairline}`, padding: '7px 4px', fontFamily: MONO, fontSize: 9, color: muted, textAlign: 'left' }}>you@fund.com</div>

@@ -37,7 +37,11 @@ const render = (Comp, data = {}) => renderToStaticMarkup(React.createElement(Com
 const STRUCTURAL_MARKERS = {
   'capital-ready-kit': 'Use of funds',
   'capital-storyteller': 'Confidential',
-  'seed-stage-spark': 'Powering agents at',
+  // Was "Powering agents at" — that logo wall listed real third-party brands
+  // (Ramp, Linear, Notion…) that no founder's page ever renders and the worker
+  // has no counterpart for, so it was dropped when the preview moved onto the
+  // shared content model. The bar chart is this design's real signature.
+  'seed-stage-spark': 'Growth by period',
   'distribution-deck': 'distribution case for',
   'pilot-partner-page': 'isn', // the "Who this isn't/isn’t for" anti-persona section
   'partner-hub': 'customer wins twice',
