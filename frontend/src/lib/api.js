@@ -3283,6 +3283,29 @@ export const spinoutLab = {
       body: JSON.stringify({ milestone_key }),
     }),
   exit: () => request('/spinout-lab/exit', { method: 'POST' }),
+
+  // Studio Ops (/spinout-lab/studio-ops) — the founder's weekly operating
+  // cadence and closeout review. Distinct from `api.studioOps*` below, which
+  // drives the STUDIO's admin workflow console at /api/studioops.
+  //
+  // Only these two founder-authored things are stored server-side. The page's
+  // objective, commitments, execution health and blockers are all derived from
+  // `state()` plus the week catalog, so they cannot drift from the workspace.
+  //
+  // `lock: true` on saveStudioOpsCadence is what records the Week-2
+  // `studio_ops_cadence_set` deliverable — saving a draft records nothing.
+  studioOps: () => request('/spinout-lab/studio-ops'),
+  saveStudioOpsCadence: (cadence, { lock = false } = {}) =>
+    request('/spinout-lab/studio-ops/cadence', {
+      method: 'PUT',
+      body: JSON.stringify({ cadence, lock }),
+    }),
+  saveStudioOpsReview: (review, { complete = false } = {}) =>
+    request('/spinout-lab/studio-ops/review', {
+      method: 'PUT',
+      body: JSON.stringify({ review, complete }),
+    }),
+
   // Public — real graduate companies for the "Graduate companies." section
   // (renders on the logged-out marketing page too).
   graduates: () => request('/spinout-lab/graduates'),
