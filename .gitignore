@@ -74,6 +74,14 @@ backend/app.db
 backend/*.db
 backend/*.sqlite
 backend/*.sqlite3
+# Catch-all: a dev DATABASE_URL pointed anywhere else in the tree (repo root,
+# frontend/) during local reproduction shouldn't leave untracked cruft either.
+/*.db
+/*.sqlite
+/*.sqlite3
+frontend/*.db
+frontend/*.sqlite
+frontend/*.sqlite3
 
 # ---- Per-user activity exports (contain PII; regenerable by the backend) ----
 users/*/activity.md
