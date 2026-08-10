@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
-import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
@@ -386,7 +386,7 @@ function abbreviateLabel(label) {
   return parts.map((w) => w[0].toUpperCase()).join('').slice(0, 3) || label[0].toUpperCase();
 }
 
-function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
+function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
   const navLocation = useLocation();
   const [query, setQuery] = useState('');
   // Persisted open-state per group key. We seed once from
@@ -441,21 +441,59 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
 
   return (
     <nav className="flex-1 py-3 overflow-y-auto" aria-label="Primary navigation" data-tour="sidebar-nav">
-      {!collapsed && (
-        <div className="px-3 pb-2">
-          <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search…"
-              aria-label="Search sidebar"
-              className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:placeholder:text-gray-500"
-            />
+      <div className="px-3 pb-2">
+        {!collapsed ? (
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search…"
+                aria-label="Search sidebar"
+                className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              />
+            </div>
+            {onCollapse && (
+              <button
+                type="button"
+                onClick={onCollapse}
+                className="hidden lg:inline-flex flex-none items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+              >
+                <ChevronLeft size={15} />
+              </button>
+            )}
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="lg:hidden flex-none inline-flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Close menu"
+                title="Close menu"
+              >
+                <X size={15} />
+              </button>
+            )}
           </div>
-        </div>
-      )}
+        ) : (
+          onCollapse && (
+            <div className="flex justify-center pt-0.5">
+              <button
+                type="button"
+                onClick={onCollapse}
+                className="hidden lg:inline-flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Expand sidebar"
+                title="Expand sidebar"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          )
+        )}
+      </div>
       {groups.map((group) => {
         const visibleItems = q
           ? group.items.filter((it) => it.label.toLowerCase().includes(q))
@@ -765,25 +803,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                   {ROLE_LABELS[activeRole]} View
                 </span>
               )}
-              <button
-                className={`${effectiveCollapsed ? '' : 'ml-auto'} hidden lg:inline-flex text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800`}
-                onClick={toggleSidebarCollapsed}
-                aria-label={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                aria-expanded={!effectiveCollapsed}
-                title={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              >
-                {effectiveCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-              </button>
-              <button
-                className="lg:hidden ml-auto text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-                onClick={() => setSidebarOpen(false)}
-                aria-label="Close menu"
-                title="Close menu"
-              >
-                <X size={18} />
-              </button>
             </div>
-            <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} />
+            <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} onCollapse={toggleSidebarCollapsed} onClose={() => setSidebarOpen(false)} />
             <div className={`${effectiveCollapsed ? 'px-2' : 'px-5'} py-3 border-t border-gray-200 dark:border-gray-800`}>
               {user && (
                 effectiveCollapsed ? (
