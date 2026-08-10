@@ -853,6 +853,17 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <div data-app-main data-density-target className="p-4 md:p-6 max-w-7xl mx-auto">
               {children}
             </div>
+            <footer className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
+              <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                <span>
+                  © Copyright {new Date().getFullYear()}, Axal VC Management LLC. Axal VC Holdings LLC. All rights reserved.
+                </span>
+                <div className="flex items-center gap-4">
+                  <Link to="/terms" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Terms of service</Link>
+                  <Link to="/privacy" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Privacy policy</Link>
+                </div>
+              </div>
+            </footer>
           </main>
         </div>
       </div>
