@@ -786,13 +786,68 @@ export default function SpinoutLabStartupPage() {
               {[
                 { k: 'name', label: 'Company name', required: true },
                 { k: 'description', label: 'One-line description' },
-                { k: 'sector', label: 'Sector' },
+              ].map((f) => (
+                <div key={f.k}>
+                  <label htmlFor={`edit-${f.k}`} className={`${LBL} block mb-1`}>
+                    {f.label}{f.required && <span className="text-rose-500"> *</span>}
+                  </label>
+                  <input
+                    id={`edit-${f.k}`}
+                    type={f.type || 'text'}
+                    value={editForm[f.k]}
+                    placeholder={f.placeholder}
+                    data-testid={`input-edit-${f.k}`}
+                    onChange={(e) => setEditForm((s) => ({ ...s, [f.k]: e.target.value }))}
+                    className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100"
+                  />
+                </div>
+              ))}
+              {/* Sector dropdown */}
+              <div>
+                <label htmlFor="edit-sector" className={`${LBL} block mb-1`}>Sector</label>
+                <select
+                  id="edit-sector"
+                  value={editForm.sector}
+                  data-testid="input-edit-sector"
+                  onChange={(e) => setEditForm((s) => ({ ...s, sector: e.target.value }))}
+                  className="w-full h-9 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-[13px] text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+                >
+                  <option value="">Select a sector…</option>
+                  {[
+                    'AI & Machine Learning',
+                    'Data & Analytics',
+                    'SaaS & Business Software',
+                    'Cloud, Developer Tools & Infrastructure',
+                    'Cybersecurity',
+                    'FinTech',
+                    'Web3 & Blockchain',
+                    'HealthTech',
+                    'Life Sciences & Biotech',
+                    'Climate, Energy & Industrial Tech',
+                    'Deep Tech & Advanced Computing',
+                    'Robotics, Hardware & IoT',
+                    'Semiconductors & Computing Hardware',
+                    'Mobility, Logistics & Supply Chain Tech',
+                    'PropTech, ConstructionTech & Smart Cities',
+                    'Commerce, Marketplaces & RetailTech',
+                    'Consumer Internet, Media & Gaming',
+                    'Future of Work, HRTech & EdTech',
+                    'LegalTech, GovTech & Public-Sector Tech',
+                    'AgTech & FoodTech',
+                    'SpaceTech & DefenseTech',
+                    'Other Tech',
+                  ].map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+              {[
                 { k: 'hq', label: 'Headquarters' },
                 { k: 'website', label: 'Website', type: 'url', placeholder: 'https://' },
               ].map((f) => (
                 <div key={f.k}>
                   <label htmlFor={`edit-${f.k}`} className={`${LBL} block mb-1`}>
-                    {f.label}{f.required && <span className="text-rose-500"> *</span>}
+                    {f.label}
                   </label>
                   <input
                     id={`edit-${f.k}`}
