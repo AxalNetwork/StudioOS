@@ -49,6 +49,8 @@ export default function SignalsPage({ user }) {
       setData(list);
       setKpis(k);
     } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[SignalsPage] load failed:', e);
       setError(e.message || 'Failed to load signals.');
     } finally {
       setLoading(false);
