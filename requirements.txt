@@ -8,7 +8,7 @@ aiosignal==1.4.0
     # via aiohttp
 alembic==1.18.5
     # via repl-nix-workspace
-annotated-doc==0.0.4
+annotated-doc==0.0.5
     # via fastapi
 annotated-types==0.8.0
     # via pydantic
@@ -39,7 +39,7 @@ cryptography==50.0.0
     #   http-ece
     #   py-vapid
     #   pywebpush
-fastapi==0.140.0
+fastapi==0.141.1
     # via repl-nix-workspace
 frozenlist==1.8.0
     # via
@@ -121,7 +121,7 @@ pydantic==2.13.4
     #   fastapi
     #   repl-nix-workspace
     #   sqlmodel
-pydantic-core==2.46.4
+pydantic-core==2.47.0
     # via pydantic
 pyjwt==2.13.0
     # via repl-nix-workspace
@@ -173,7 +173,7 @@ uritemplate==4.2.0
     # via google-api-python-client
 urllib3==2.7.0
     # via requests
-uvicorn==0.51.0
+uvicorn==0.52.1
     # via repl-nix-workspace
 yarl==1.24.5
     # via aiohttp
