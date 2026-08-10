@@ -17,9 +17,9 @@ import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
   Menu, X,
-  LogOut, Shield,
+  Shield,
   ChevronDown, ChevronLeft, ChevronRight, Eye, ArrowLeft, Sparkles,
-  Search
+  Search, Gift
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInvestorTier } from './sidebarConfig';
 import PaywallModal, { openPaywall } from './components/PaywallModal';
@@ -384,6 +384,66 @@ function abbreviateLabel(label) {
     return !/^(and|the|of|a|to|for|on|in|my)$/i.test(w);
   });
   return parts.map((w) => w[0].toUpperCase()).join('').slice(0, 3) || label[0].toUpperCase();
+}
+
+// Carta-style user dropdown — top-right of the global header.
+function UserDropdown({ user, onLogout }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const keydown = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', keydown);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', keydown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-50 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <span className="max-w-[160px] truncate">{user?.name || user?.email || 'Account'}</span>
+        <ChevronDown size={13} className={`flex-shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1.5 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1.5 z-50"
+          role="menu"
+        >
+          <Link to="/settings" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            User Settings
+          </Link>
+          <Link to="/tickets" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Support
+          </Link>
+          <Link to="/docs" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Documentation
+          </Link>
+          <Link to="/products" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Plans and pricing
+          </Link>
+          <div className="my-1 border-t border-gray-100 dark:border-gray-800" role="separator" />
+          <button type="button" onClick={() => { setOpen(false); onLogout(); }}
+            className="w-full flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Log Out
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
@@ -782,6 +842,44 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           />
         )}
 
+        {/* ── Carta-style global top header ─────────────────────────────── */}
+        <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <button
+              className="lg:hidden text-gray-500 dark:text-gray-400 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu size={18} />
+            </button>
+            <img src="/axal-mark.png" alt="Axal VC" className="h-7 w-7 rounded-md object-cover flex-shrink-0" />
+            <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 hidden sm:block">Axal VC</span>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            {isImpersonating && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                Impersonating {user.name}
+              </span>
+            )}
+            {isAdmin && activeRole !== 'admin' && (
+              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[activeRole]}`}>
+                {ROLE_LABELS[activeRole]} View
+              </span>
+            )}
+            <Suspense fallback={<span className="inline-block w-8 h-8" />}>
+              <NotificationBell userId={user?.id} />
+            </Suspense>
+            <Link
+              to="/settings/referrals"
+              className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
+            >
+              <Gift size={14} />
+              Refer &amp; Earn
+            </Link>
+            <UserDropdown user={user} onLogout={onLogout} />
+          </div>
+        </header>
+
         <div className="flex flex-1 overflow-hidden">
           <aside className={`
             fixed ${sidebarOpen ? 'lg:relative' : ''}
@@ -790,51 +888,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             transform transition-transform duration-200
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}
           `}>
-            <div className={`flex items-center gap-2 ${effectiveCollapsed ? 'px-2 justify-center' : 'px-5'} py-4 border-b border-gray-200 dark:border-gray-800`}>
-              <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-cover flex-shrink-0" />
-              {!effectiveCollapsed && (
-                <div>
-                  <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">Axal VC</div>
-                  <div className="text-[10px] text-gray-500 dark:text-gray-400">StudioOS v1.0</div>
-                </div>
-              )}
-              {!effectiveCollapsed && isAdmin && activeRole !== 'admin' && (
-                <span className={`ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[activeRole]}`}>
-                  {ROLE_LABELS[activeRole]} View
-                </span>
-              )}
-            </div>
             <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} onCollapse={toggleSidebarCollapsed} onClose={() => setSidebarOpen(false)} />
-            <div className={`${effectiveCollapsed ? 'px-2' : 'px-5'} py-3 border-t border-gray-200 dark:border-gray-800`}>
-              {user && (
-                effectiveCollapsed ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <span
-                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ROLE_COLORS[user.role] || 'bg-gray-100 text-gray-600'}`}
-                      title={`${user.name} — ${user.email}`}
-                    >
-                      {(user.name || user.email || '?').slice(0, 1).toUpperCase()}
-                    </span>
-                    <button onClick={onLogout} className="text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors" title="Sign out" aria-label="Sign out">
-                      <LogOut size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-gray-900 dark:text-gray-100 font-medium truncate">{user.name}</div>
-                      <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{user.email}</div>
-                      <span className={`inline-block mt-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${ROLE_COLORS[user.role] || 'bg-gray-100 text-gray-600'}`}>
-                        {ROLE_LABELS[user.role] || user.role}
-                      </span>
-                    </div>
-                    <button onClick={onLogout} className="text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors" title="Sign out">
-                      <LogOut size={14} />
-                    </button>
-                  </div>
-                )
-              )}
-            </div>
           </aside>
 
           {sidebarOpen && (
@@ -842,35 +896,6 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           )}
 
           <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
-            <header className={`sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between gap-3 ${sidebarOpen ? 'lg:hidden' : ''}`}>
-              <div className="flex items-center gap-2.5 lg:hidden">
-                <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-contain flex-shrink-0" />
-                <div>
-                  <div className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight">Axal VC</div>
-                  <div className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">StudioOS v1.0</div>
-                </div>
-              </div>
-              <div className="hidden lg:block flex-1">
-                {isImpersonating && (
-                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                    Impersonating {user.name}
-                  </span>
-                )}
-              </div>
-              {isImpersonating && (
-                <span className="lg:hidden text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                  Impersonating {user.name}
-                </span>
-              )}
-              <div className="flex items-center gap-1 ml-auto">
-                <Suspense fallback={<span className="inline-block w-9 h-9" />}>
-                  <NotificationBell userId={user?.id} />
-                </Suspense>
-                <button className="text-gray-600 dark:text-gray-300 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
-                  <Menu size={20} />
-                </button>
-              </div>
-            </header>
             <div data-app-main data-density-target className="p-4 md:p-6 max-w-7xl mx-auto">
               {children}
             </div>

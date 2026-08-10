@@ -7,7 +7,7 @@ import {
   User, ShieldCheck, Bell, Lock,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard, UserCog,
-  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Share2,
+  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Share2, Activity,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
@@ -135,6 +135,8 @@ const PARTNER_NOTIFICATION_EVENTS = [
   { key: 'partner_kyc_block', label: 'A founder you backed is blocked on KYC' },
 ];
 
+const ActivityPage = lazy(() => import('./ActivityPage'));
+
 // Task #1 — Settings expansion (tabbed). Nine tabs per the audit-plan brief.
 // `roles` controls visibility per signed-in role; absence = visible to all.
 const SECTIONS = [
@@ -151,6 +153,7 @@ const SECTIONS = [
   // item (admin/founder/partner/investor); hidden for advisor.
   { id: 'referrals', label: 'Referrals', icon: Share2, roles: ['admin', 'founder', 'partner', 'investor'] },
   { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'activity', label: 'Activity Log', icon: Activity },
 ];
 
 // ---------- Page ------------------------------------------------------------
@@ -340,6 +343,11 @@ export default function SettingsPage() {
             </Suspense>
           )}
           {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
+          {safeActive === 'activity' && (
+            <Suspense fallback={<div className="py-8 text-center text-gray-500 dark:text-gray-400 text-sm">Loading…</div>}>
+              <ActivityPage />
+            </Suspense>
+          )}
         </div>
       </div>
     </div>

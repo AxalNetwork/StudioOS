@@ -68,7 +68,6 @@ export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
@@ -154,10 +153,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/tickets', icon: Ticket, label: 'Support' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 
@@ -199,7 +194,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'build', label: 'Build', items: [
       // Command Center merges four founder Build destinations — Founder Portal
@@ -301,10 +295,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/tickets', icon: Ticket, label: 'Support' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/docs', icon: BookOpen, label: 'Docs' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 
@@ -358,7 +348,6 @@ export const SIDEBAR_GROUPS = {
   partner: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/services', icon: Package, label: 'My Services' },
@@ -415,10 +404,6 @@ export const SIDEBAR_GROUPS = {
     // The whole single-item group is removed from the partner nav.
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/tickets', icon: Ticket, label: 'Support' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 
@@ -456,7 +441,6 @@ export const SIDEBAR_GROUPS = {
       // allocation, apply). Everyone else gets the founder program. An LP's
       // relationship with the Lab is the fund, not the 4-week curriculum.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: ['/spinout-lab', '/spinout-lab/investor-workspace'] },
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     // Task — investor sidebar restructured around the investment lifecycle IA:
     // Network → Pipeline → Portfolio → Funds → Research. Network & Research
@@ -508,21 +492,12 @@ export const SIDEBAR_GROUPS = {
       { to: '/trust', icon: Lock, label: 'Trust & Identity' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
-      // "Integrations" merged into Settings (/settings/integrations); the
-      // /integrations route redirects there. Removed from the investor nav.
-      // Advisors, Partners, Jobs and Articles were trimmed from the investor
-      // Account group — they remain reachable by URL for other roles.
-      { to: '/activity', icon: Activity, label: 'Activity' },
-      { to: '/docs', icon: BookOpen, label: 'Docs' },
-      { to: '/tickets', icon: MessageSquare, label: 'Support' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 
   advisor: [
     { key: 'home', label: 'Home', items: [
       { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     // Task #23 — each Advisor workspace is its own sidebar group so its
     // sub-sections are visible directly (mirrors the founder/partner/investor
@@ -564,13 +539,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/advisors', icon: UserCircle, label: 'Advisor Directory' },
       { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/tickets', icon: Ticket, label: 'Support' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 
@@ -585,17 +556,10 @@ export const SIDEBAR_GROUPS = {
       // Task #13 — surface the Spin-Out Lab program to explorers so they can
       // see the full 28-day pipeline before committing.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      // Explorer completion incentive — where the one-time 30-day-license
-      // promo code from the Personal Advisor gets redeemed.
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/profile', icon: UserCircle, label: 'My Profile' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/tickets', icon: MessageSquare, label: 'Support' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 };
