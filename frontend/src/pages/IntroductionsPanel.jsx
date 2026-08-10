@@ -78,7 +78,7 @@ function CreditSummary({ credits, onHistoryToggle, historyOpen }) {
         </div>
         <div className="flex flex-col items-stretch gap-2">
           <Link
-            to="/products#introduction-packs"
+            to="/plans-and-pricing#introduction-packs"
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium"
           >
             <Package size={14} /> Buy credits
@@ -483,7 +483,7 @@ export default function IntroductionsPanel() {
             {(outOfCredits.packs || []).map((p) => (
               <Link
                 key={p.key}
-                to="/products#introduction-packs"
+                to="/plans-and-pricing#introduction-packs"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium"
               >
                 <Package size={12} /> {p.label} — ${(p.amount_cents / 100).toLocaleString()}

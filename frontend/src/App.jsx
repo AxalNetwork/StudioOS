@@ -4,6 +4,7 @@ import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirecte
 import { Routes, Route, NavLink, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
+import { ActiveCompanyContext, useActiveCompany as _useActiveCompany } from './contexts/ActiveCompanyContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
 import ViewModeContext from './contexts/ViewModeContext';
@@ -19,7 +20,7 @@ import {
   Menu, X,
   Shield,
   ChevronDown, ChevronLeft, ChevronRight, Eye, ArrowLeft, Sparkles,
-  Search, Gift
+  Search, Gift, Building2, Plus
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInvestorTier } from './sidebarConfig';
 import PaywallModal, { openPaywall } from './components/PaywallModal';
@@ -93,6 +94,7 @@ const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
 const AdminReferEarnPayouts = lazy(() => import('./pages/admin/ReferEarnPayouts'));
 const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
+const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
@@ -430,9 +432,9 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Documentation
           </Link>
-          <Link to="/products" onClick={() => setOpen(false)}
+          <Link to="/plans-and-pricing" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Plans and pricing
+            Plans &amp; Pricing
           </Link>
           <div className="my-1 border-t border-gray-100 dark:border-gray-800" role="separator" />
           <button type="button" onClick={() => { setOpen(false); onLogout(); }}
@@ -441,6 +443,126 @@ function UserDropdown({ user, onLogout }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- Company Switcher -------------------------------------------------
+// Context is imported from ./contexts/ActiveCompanyContext and provided by
+// ProtectedLayout. CompanySwitcher fetches all the user's company memberships
+// from the membership-scoped /company/memberships endpoint (not the public
+// company directory), populates the context, and lets the user switch between
+// them. "Add a new company" is disabled until task #5 ships.
+
+function CompanySwitcher({ collapsed }) {
+  const { company, setCompany, companies, setCompanies } = _useActiveCompany();
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const ref = useRef(null);
+
+  // Fetch all companies the current user is a member of.
+  useEffect(() => {
+    api.listMyCompanies()
+      .then(list => {
+        const arr = Array.isArray(list) ? list : [];
+        setCompanies(arr);
+        // Set the primary company (is_primary_admin=true comes first from the API)
+        // as active if nothing is selected yet.
+        if (arr.length > 0 && !company) setCompany(arr[0]);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const displayName = loading ? '…' : (company?.company_name ?? 'My Company');
+  const abbr = (displayName === '…' ? '…' :
+    displayName.replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?');
+
+  const dropdownContent = (
+    <div className={
+      collapsed
+        ? 'absolute left-full top-0 ml-2 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden min-w-[200px]'
+        : 'absolute left-3 right-3 top-full mt-1 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden'
+    }>
+      {loading && <div className="px-3 py-2.5 text-xs text-gray-500">Loading…</div>}
+      {!loading && companies.length === 0 && (
+        <div className="px-3 py-2.5 text-xs text-gray-500">No company yet.</div>
+      )}
+      {!loading && companies.map((co) => {
+        const coAbbr = (co.company_name || '?').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+        const isActive = company?.id === co.id;
+        return (
+          <button
+            key={co.uid ?? co.id}
+            type="button"
+            onClick={() => { setCompany(co); setOpen(false); }}
+            className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs text-left transition-colors ${
+              isActive
+                ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50 dark:bg-violet-900/30'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}
+          >
+            <div className="w-5 h-5 rounded bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[9px] font-bold flex items-center justify-center flex-none">
+              {coAbbr}
+            </div>
+            <span className="truncate flex-1">{co.company_name}</span>
+            {isActive && <span className="flex-none">✓</span>}
+          </button>
+        );
+      })}
+      <div className={companies.length > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}>
+        <button
+          type="button"
+          disabled
+          title="Creating additional companies is coming soon"
+          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-400 dark:text-gray-600 cursor-not-allowed"
+        >
+          <Plus size={12} />
+          Add a new company
+        </button>
+      </div>
+    </div>
+  );
+
+  if (collapsed) {
+    return (
+      <div ref={ref} className="relative flex justify-center py-2 px-1 border-b border-gray-200 dark:border-gray-700 flex-none">
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          title={displayName}
+          className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-xs font-bold flex items-center justify-center hover:bg-violet-200 dark:hover:bg-violet-900/60 transition-colors"
+        >
+          {abbr}
+        </button>
+        {open && dropdownContent}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex-none">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition-colors text-left"
+      >
+        <div className="w-6 h-6 rounded bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[10px] font-bold flex items-center justify-center flex-none">
+          {abbr}
+        </div>
+        <span className="flex-1 text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{displayName}</span>
+        <ChevronDown size={12} className={`flex-none text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && dropdownContent}
     </div>
   );
 }
@@ -499,8 +621,9 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onC
     : openKeys;
 
   return (
-    <nav className="flex-1 py-3 overflow-y-auto" aria-label="Primary navigation" data-tour="sidebar-nav">
-      <div className="px-3 pb-2">
+    <div className="flex flex-col flex-1 min-h-0">
+      <CompanySwitcher collapsed={collapsed} />
+      <div className="px-3 pb-2 pt-2 flex-none">
         {!collapsed ? (
           <div className="flex items-center gap-1.5">
             <div className="relative flex-1">
@@ -553,6 +676,7 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onC
           )
         )}
       </div>
+      <nav className="flex-1 overflow-y-auto min-h-0 py-2" aria-label="Primary navigation" data-tour="sidebar-nav">
       {groups.map((group) => {
         const visibleItems = q
           ? group.items.filter((it) => it.label.toLowerCase().includes(q))
@@ -665,6 +789,26 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onC
         );
       })}
     </nav>
+    <div className="flex-none border-t border-gray-200 dark:border-gray-700">
+      <NavLink
+        to="/company-settings"
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          collapsed
+            ? `flex flex-col items-center gap-0.5 px-1 py-2.5 text-[10px] w-full transition-colors ${isActive ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
+            : `flex items-center gap-3 px-5 py-2.5 text-sm w-full transition-colors ${isActive ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
+        }
+        title={collapsed ? 'Company Settings' : undefined}
+      >
+        <Building2 size={collapsed ? 18 : 16} />
+        {collapsed ? (
+          <span className="truncate w-full text-center">Co.</span>
+        ) : (
+          <span className="truncate">Company Settings</span>
+        )}
+      </NavLink>
+    </div>
+    </div>
   );
 }
 
@@ -741,6 +885,11 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
 }
 
 function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId }) {
+  // Active-company context state — owned here so descendants (CompanySwitcher,
+  // CompanySettingsPage, etc.) share the same reference without prop drilling.
+  const [activeCompany, setActiveCompany] = useState(null);
+  const [companyList, setCompanyList] = useState([]);
+
   // Task #31 — Honor the user's "Sidebar default" appearance preference on
   // first paint AND when the async appearance load completes (so the
   // server-side preference wins over the cached default on a fresh device).
@@ -828,6 +977,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   );
 
   return (
+    <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
     <ViewModeContext.Provider value={viewModeContextValue}>
       <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
         {isAdmin && (
@@ -925,6 +1075,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <StepUpModal />
       </Suspense>
     </ViewModeContext.Provider>
+    </ActiveCompanyContext.Provider>
   );
 }
 
@@ -1679,9 +1830,12 @@ function AppInner() {
       {/* Products — catalog + checkout + explorer promo redemption. Open to
           every signed-in role incl. 'exploring' (that's where the Personal
           Advisor's one-time 30-day-license codes get redeemed). */}
-      <Route path="/products" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+      <Route path="/plans-and-pricing" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
       {/* Product slide-over deep link — same page, pre-opens the detail panel. */}
-      <Route path="/products/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+      <Route path="/plans-and-pricing/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+      {/* Legacy /products redirects — keep for any saved links or external references. */}
+      <Route path="/products" element={<Navigate to="/plans-and-pricing" replace />} />
+      <Route path="/products/:productId" element={<Navigate to="/plans-and-pricing" replace />} />
       {/* One-time cart checkout + post-checkout confirmation (auth-protected). */}
       <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
@@ -1826,6 +1980,7 @@ function AppInner() {
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
       <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferralsPage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />
+      <Route path="/company-settings" element={guard(['admin', 'founder', 'partner'], <Suspense fallback={null}><CompanySettingsPage /></Suspense>)} />
       {/* Integrations now lives inside Settings; /integrations redirects there
           (preserving any ?query= so OAuth-return states still show). Available
           to every authenticated profile, matching the all-roles Settings tab. */}

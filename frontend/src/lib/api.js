@@ -2058,6 +2058,7 @@ export const api = {
 
   // Company Profiles (Growth & Expansion Track — Task 1)
   companyMe: () => request('/company/me'),
+  listMyCompanies: () => request('/company/memberships'),
   getCompany: (uid) => request(`/company/${uid}`),
   listCompanies: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();

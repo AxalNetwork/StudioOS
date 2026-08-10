@@ -436,22 +436,22 @@ export default function ProductsPage() {
 
   const handleOpenProduct = useCallback((product) => {
     setModalIntent(null);
-    navigate(`/products/${encodeURIComponent(product.id)}`);
+    navigate(`/plans-and-pricing/${encodeURIComponent(product.id)}`);
   }, [navigate]);
 
   const handlePreviewBundle = useCallback((product, { qty } = {}) => {
     setModalIntent({ qty: qty || 1, checkout: false });
-    navigate(`/products/${encodeURIComponent(product.id)}`);
+    navigate(`/plans-and-pricing/${encodeURIComponent(product.id)}`);
   }, [navigate]);
 
   const handleSubscribeBundle = useCallback((product, { qty } = {}) => {
     setModalIntent({ qty: qty || 1, checkout: true });
-    navigate(`/products/${encodeURIComponent(product.id)}`);
+    navigate(`/plans-and-pricing/${encodeURIComponent(product.id)}`);
   }, [navigate]);
 
   const handleCloseProduct = useCallback(() => {
     setModalIntent(null);
-    navigate('/products');
+    navigate('/plans-and-pricing');
   }, [navigate]);
 
   // Add a one-time item to the cart.
@@ -478,7 +478,7 @@ export default function ProductsPage() {
       when: new Date().toISOString(),
       free: !!result?.free,
     });
-    navigate('/products');
+    navigate('/plans-and-pricing');
     refreshUnlocks();
   }, [navigate, refreshUnlocks]);
 
