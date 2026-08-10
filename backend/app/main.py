@@ -471,6 +471,12 @@ app.include_router(users.router, prefix="/api")
 app.include_router(market_intel.router, prefix="/api")
 app.include_router(matches.router, prefix="/api")
 app.include_router(_investor_signals.router, prefix="/api")
+# Founder Signals (/signals page) — dev parity for the Worker's /api/signals.
+# Registered because the page's very first request (GET /api/signals/filters)
+# 404'd in dev without it. NOT the same feature as investor_signals above.
+from backend.app.api.routes import signals as _signals  # noqa: E402
+
+app.include_router(_signals.router, prefix="/api")
 app.include_router(advisory.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
