@@ -136,7 +136,15 @@ export default function RegisterPage() {
     },
     founder: {
       title: 'Submit your pitch',
-      desc: "We'll score your venture within 72 hours. Free to join — no password to remember, we'll email you a secure sign-in link.",
+      // Founder-journey audit — this used to promise a fixed scoring
+      // turnaround measured in hours. Nothing enforces any such SLA: a fresh
+      // signup holds in the exploring review queue until an admin sends the
+      // binding agreement, and scoring is SELF-SERVE (the founder runs it from
+      // /scoring / the Lab) once the workspace opens — nobody scores the
+      // venture for them, on any clock. Promise what the system actually does.
+      // The guard test (founder_journey_guards.test.mjs) greps this file for
+      // timed-SLA copy, which is why the old wording isn't quoted here.
+      desc: "Free to join — after a short profile review, your workspace opens with self-serve venture scoring and the Spin-Out Lab tools. No password to remember; we'll email you a secure sign-in link.",
     },
   };
   const activeLane = lane && laneCopy[lane] ? laneCopy[lane] : null;
