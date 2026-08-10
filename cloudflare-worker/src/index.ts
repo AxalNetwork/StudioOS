@@ -1226,6 +1226,21 @@ export default {
         if (now.getUTCHours() === 14 && now.getUTCMinutes() === 0) {
           try { await Jobs.enqueue(env, 'flagged_score_digest', {}); } catch {}
         }
+        // Founder Signals live ingestion — nightly at 04:20 UTC. Fetches real
+        // evidence from the free public sources (HN/Algolia, Stack Exchange,
+        // GitHub, Federal Register, SEC EDGAR FTS) and persists promoted
+        // signals + their evidence into D1, replacing the illustrative seed
+        // corpus on the /signals page. Idempotent; a failed night just leaves
+        // yesterday's real data (or the labeled examples) in place.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+          try {
+            const { runRefresh } = await import('./services/signals/engine');
+            const r = await runRefresh(env);
+            console.info(`[cron] signals ingested promoted=${r.promoted} held=${r.held} evidence=${r.evidence_written}`);
+          } catch (e) {
+            console.error('[cron] signals ingestion failed', e);
+          }
+        }
         // Task #4 — Investor Signals aggregation every 6h at HH:05.
         // Cron fires every minute; gate on hour%6==0 + minute==5 so the
         // aggregator runs four times a day (00:05, 06:05, 12:05, 18:05 UTC).

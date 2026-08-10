@@ -114,10 +114,12 @@ export const EVIDENCE_KINDS = [
   'fundamentals', // market cap, revenue, headcount from a profile API
   'market_data', // price/volume trend used only as context, never as the lead
   'news', // recent company / sector headlines
-  'filing', // 10-K / 20-F / annual report / IR deck language
+  'filing', // 10-K / 20-F / regulatory or rulemaking text (SEC, Federal Register)
   'registry', // public corporate registry / incorporation data
   'earnings', // earnings-call / guidance language
   'hiring', // public job-posting velocity (workflow-demand proxy)
+  'discussion', // practitioner discussion (HN / Stack Exchange) — language convergence
+  'developer', // repository / open-source activity (maintenance, not stars)
 ] as const;
 export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
 
@@ -260,5 +262,7 @@ export interface SignalKpis {
   top_sectors: Array<{ sector: string; count: number }>;
   avg_confidence: number;
   freshest_updated_at: string | null;
-  last_refreshed_at: string;
+  // null until a live ingestion has actually run — the UI must say "not yet
+  // run", never dress the example corpus up with a fresh timestamp.
+  last_refreshed_at: string | null;
 }

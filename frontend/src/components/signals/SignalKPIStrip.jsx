@@ -73,7 +73,13 @@ export default function SignalKPIStrip({ kpis, loading }) {
       <Kpi icon={Clock} label="Freshness">
         <div className="flex flex-col">
           <span className="font-medium">Newest {timeAgo(kpis.freshest_updated_at)}</span>
-          <span className="text-xs text-gray-500 dark:text-gray-400">Refreshed {timeAgo(kpis.last_refreshed_at)}</span>
+          {/* null = no live ingestion has ever run. Say so — never dress the
+              example corpus up with a fabricated refresh time. */}
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            {kpis.last_refreshed_at
+              ? `Refreshed ${timeAgo(kpis.last_refreshed_at)}`
+              : 'Live ingestion not yet run'}
+          </span>
         </div>
       </Kpi>
     </div>

@@ -1,21 +1,30 @@
 /**
  * Signals — seeded sample dataset.
  *
- * Purpose: give the UI real, credible-looking signals to render before any live
- * ingestion has run, and give tests a deterministic corpus. Every company here
- * is a REAL public company and every signal is a plausible founder thesis, but
- * the specific evidence lines are illustrative scaffolding — the live adapters
- * (services/signals/sources.ts) replace them once a refresh runs.
+ * Purpose: give the UI a labeled, deterministic EXAMPLE corpus before any live
+ * ingestion has run, and give tests a stable fixture. Every company here is a
+ * REAL public company and every signal is a plausible founder thesis, but the
+ * evidence lines are illustrative scaffolding — the engine marks anything
+ * served from this file `data_state: 'illustrative'` and the UI discloses it.
+ * The live pipeline (services/signals/ingest.ts) replaces this corpus in D1
+ * with real fetched evidence the first time a refresh runs.
  *
- * Timestamps are generated relative to "now" at read time so freshness scores
- * stay meaningful in the demo. Companies are normalized through the same band
- * helpers the live adapters use, so seed + live data are interchangeable.
+ * Timestamps are anchored to a FIXED date, not to "now" at read time. The old
+ * read-time recompute meant seed evidence could never age — every page load
+ * re-dressed the same examples as fresh observations, which is exactly the
+ * dishonesty the audit flagged. Anchored timestamps age like real ones: the
+ * longer no ingestion runs, the staler (and lower-confidence) the examples
+ * honestly score.
  */
 import type { NormalizedCompany, Signal } from './types';
 import { capBand, employeeBand, maturityFrom } from './sources';
 
+/** The corpus's authoring date. Never move this forward without re-reviewing
+ *  every evidence line against the public record it paraphrases. */
+export const SEED_ANCHOR = '2026-08-01T00:00:00.000Z';
+
 function daysAgo(n: number): string {
-  return new Date(Date.now() - n * 86400000).toISOString();
+  return new Date(Date.parse(SEED_ANCHOR) - n * 86400000).toISOString();
 }
 
 // Raw company facts (public, slow-moving). Market caps are order-of-magnitude

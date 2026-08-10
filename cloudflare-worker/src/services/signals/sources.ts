@@ -99,11 +99,55 @@ export const SOURCE_REGISTRY: SignalSource[] = [
     tier: 'free',
     quality_weight: 0.45,
     freshness_halflife_days: 21,
-    homepage: 'https://www.google.com/search?q=careers',
+    homepage: 'https://news.ycombinator.com/submitted?id=whoishiring',
     enabled: true,
     // TODO(premium): LinkedIn Talent Insights / Revelio Labs for headcount &
     // role-mix deltas — a strong workflow-digitization demand proxy.
-    notes: 'Job-posting counts as a workflow-demand proxy. Coarse; low weight.',
+    notes: 'Hiring mentions in HN "Who is hiring?" threads (Algolia API, keyless). Coarse demand proxy; low weight.',
+  },
+  {
+    key: 'federal_register',
+    name: 'Federal Register (US rulemaking)',
+    kind: 'filing',
+    tier: 'free',
+    quality_weight: 0.9, // primary-source regulatory text — near-EDGAR trust
+    freshness_halflife_days: 120,
+    homepage: 'https://www.federalregister.gov/developers/documentation/api/v1',
+    enabled: true,
+    notes: 'Official US rulemaking documents via the free, keyless Federal Register API.',
+  },
+  {
+    key: 'hn_discussion',
+    name: 'Hacker News discussion',
+    kind: 'discussion',
+    tier: 'free',
+    quality_weight: 0.5, // language convergence, never sufficient alone
+    freshness_halflife_days: 14,
+    homepage: 'https://hn.algolia.com/api',
+    enabled: true,
+    notes: 'Practitioner threads via the free, keyless Algolia HN Search API. Deduplicated; point-thresholded.',
+  },
+  {
+    key: 'stackexchange_questions',
+    name: 'Stack Exchange question activity',
+    kind: 'discussion',
+    tier: 'free',
+    quality_weight: 0.55, // real practitioner friction, tag-scoped
+    freshness_halflife_days: 30,
+    homepage: 'https://api.stackexchange.com/docs',
+    enabled: true,
+    notes: 'Question volume + accepted-answer gaps via the keyless Stack Exchange API (300 req/day/IP quota).',
+  },
+  {
+    key: 'github_activity',
+    name: 'GitHub repository activity',
+    kind: 'developer',
+    tier: 'free',
+    quality_weight: 0.6, // behavioural, weighted on recency of pushes not stars
+    freshness_halflife_days: 45,
+    homepage: 'https://docs.github.com/en/rest/search',
+    enabled: true,
+    notes: 'Repository search via the keyless GitHub REST API (10 searches/min unauthenticated). Ranked by recent pushes, never stars.',
   },
 ];
 
@@ -170,15 +214,17 @@ export interface SourceAdapter {
   readonly source: SignalSource;
   /** Fetch + normalize company profiles for the given symbols. */
   fetchCompanies?(env: Env, symbols: string[]): Promise<NormalizedCompany[]>;
-  /** Fetch recent evidence items (news/filings/hiring) for a company/sector. */
-  fetchEvidence?(env: Env, query: { symbol?: string; sector?: string }): Promise<EvidenceItem[]>;
+  /** Fetch recent evidence items for a topic. `terms` are the signal-derived
+   *  search queries (see ingest.ts); `symbol`/`sector` remain for the older
+   *  company-scoped adapters. */
+  fetchEvidence?(env: Env, query: { terms?: string[]; symbol?: string; sector?: string }): Promise<EvidenceItem[]>;
 }
 
 const CACHE_TTL = 30 * 60; // 30 min — matches services/market-data.ts posture
 const FETCH_TIMEOUT = 4000;
 const UA = 'Mozilla/5.0 (compatible; AxalStudioOS/1.0; +https://axal.vc)';
 
-async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+export async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
   try {
@@ -188,7 +234,7 @@ async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Respon
   }
 }
 
-async function readCache<T>(env: Env, key: string): Promise<T | null> {
+export async function readCache<T>(env: Env, key: string): Promise<T | null> {
   try {
     const raw = await env.RATE_LIMITS.get(`signals:src:${key}`);
     return raw ? (JSON.parse(raw) as T) : null;
@@ -197,7 +243,7 @@ async function readCache<T>(env: Env, key: string): Promise<T | null> {
   }
 }
 
-async function writeCache(env: Env, key: string, value: unknown): Promise<void> {
+export async function writeCache(env: Env, key: string, value: unknown): Promise<void> {
   try {
     await env.RATE_LIMITS.put(`signals:src:${key}`, JSON.stringify(value), { expirationTtl: CACHE_TTL });
   } catch {

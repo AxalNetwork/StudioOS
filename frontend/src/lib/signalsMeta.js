@@ -9,7 +9,7 @@
 import {
   Sparkles, Globe2, Users, ShieldAlert, Workflow, TrendingUp,
   Layers, Boxes, Merge, FileText, Newspaper, LineChart, Landmark,
-  Building2, Briefcase, HelpCircle,
+  Building2, Briefcase, HelpCircle, MessagesSquare, GitBranch,
 } from 'lucide-react';
 
 export const SIGNAL_TYPE_META = {
@@ -36,6 +36,10 @@ export const EVIDENCE_KIND_META = {
   registry: { label: 'Registry', icon: Landmark, tone: 'indigo' },
   earnings: { label: 'Earnings', icon: TrendingUp, tone: 'emerald' },
   hiring: { label: 'Hiring', icon: Briefcase, tone: 'rose' },
+  // Live-pipeline kinds (services/signals/adapters.ts): practitioner
+  // discussion (HN / Stack Exchange) and repository activity (GitHub).
+  discussion: { label: 'Discussion', icon: MessagesSquare, tone: 'sky' },
+  developer: { label: 'Developer activity', icon: GitBranch, tone: 'violet' },
 };
 
 export function evidenceKindMeta(kind) {
