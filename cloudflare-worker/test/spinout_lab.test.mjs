@@ -6,8 +6,8 @@
  * happy-path flow start → milestone (×4) → auto-advance → milestone
  * (week-2 set) → … → week-4 milestone (auto-exit) against a mocked D1
  * sql() helper, exercising the same exported logic functions the wire
- * handlers wrap. No new test deps — same node:test + tsc.transpileModule
- * pattern used by `projects.test.mjs`.
+ * handlers wrap. No new test deps — same node:test + type-erasure pattern
+ * used by `projects.test.mjs` (see `_transpile-ts.mjs`).
  *
  * Run with:  node --test cloudflare-worker/test/spinout_lab.test.mjs
  */
@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { transpileTs } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -112,11 +113,7 @@ async function loadModule() {
     };
   })();`;
 
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js')))
-    .default;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
 
   return new Function(`${outputText}; return __out;`)();
 }

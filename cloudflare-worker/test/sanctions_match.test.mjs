@@ -10,8 +10,8 @@
  *   6. diacritic-insensitive normalisation → hits
  *
  * Drives the EXACT source bytes that ship to Cloudflare via the same
- * tsc.transpileModule + new-Function pattern used by the other
- * worker test files (see `trust_intro.test.mjs`).
+ * type-erasure + new-Function pattern used by the other worker test files
+ * (see `trust_intro.test.mjs` and `_transpile-ts.mjs`).
  *
  * Run with: node --test cloudflare-worker/test/sanctions_match.test.mjs
  */
@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { transpileTs } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -51,10 +52,7 @@ async function loadMatcher() {
   }
   const tsBody = `${sliceFn('normalizeName')}\n${sliceFn('levenshtein')}\n${sliceFn('fuzzyMatchEntities')}`;
   const wrapped = `const __out = (() => { ${tsBody}; return { normalizeName, levenshtein, fuzzyMatchEntities }; })();`;
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
   return new Function(`${outputText}; return __out;`)();
 }
 

@@ -25,6 +25,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { transpileTs } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -93,14 +94,11 @@ async function loadHelper() {
   }
   assert.notEqual(end, -1, 'failed to balance braces around helper');
 
-  // Wrap in an IIFE so tsc keeps the function declaration (a bare top-level
-  // function is elided by transpileModule when there are no module imports).
+  // Wrap in an IIFE so the declaration stays reachable: `new Function` returns
+  // it by name, and a bare top-level function would not be in scope there.
   const tsBody = src.slice(start, end).replace(/^export\s+/, '');
   const wrapped = `const __helper = (() => { ${tsBody}; return resolveFounderIdForCreate; })();`;
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
 
   const mod = new Function(`${outputText}; return __helper;`);
   return mod();
@@ -219,7 +217,6 @@ async function loadGetByIdHandler() {
   }
   assert.notEqual(close, -1, 'failed to balance /:id handler braces');
   const body = src.slice(bodyOpen + 1, close); // contains TS annotations → must transpile
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
   const wrapped = `const __run = async (c, __deps) => {
     // Every helper the handler source calls must be destructured here: the
     // handler is string-extracted and Function-evaluated, so anything missing
@@ -229,9 +226,7 @@ async function loadGetByIdHandler() {
     const { requireAuth, getSQL, ensureProjectDataRoomColumns, ensureProjectRevenueProofColumns, ensureProjectProductDemoColumns, ensureFounderCompanyColumn, canAccessFounderResource, canAccessProject } = __deps;
     ${body}
   };`;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
   return new Function(`${outputText}; return __run;`)();
 }
 
@@ -329,7 +324,6 @@ async function loadSpinoutDeckHandler() {
     "projects.post('/:projectId/spinout-deck', async (c) => {",
     "projects.post('/:projectId/spinout-deck', …)",
   );
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
   const wrapped = `const __run = async (c, __deps) => {
     // See the note on the /:id harness above — keep this list in step with the
     // handler's call sites, or the test dies with a ReferenceError instead of
@@ -340,9 +334,7 @@ async function loadSpinoutDeckHandler() {
     }
     ${body}
   };`;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
   return new Function(`${outputText}; return __run;`)();
 }
 

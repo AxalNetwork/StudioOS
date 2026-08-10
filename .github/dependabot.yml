@@ -107,4 +107,15 @@ updates:
       python:
         patterns: ['*']
         update-types: ['minor', 'patch']
+    ignore:
+      # pydantic-core is not an independently choosable dependency: every
+      # pydantic release pins the ABI-matched core build with `==` (2.13.4
+      # requires exactly 2.46.4). requirements.txt is a flat `uv export`, so
+      # dependabot sees the transitive pin as its own top-level line and bumps
+      # it alone — which makes the file unresolvable and takes out both python
+      # CI jobs (`pip install -r` and `pip-audit -r` each die with
+      # ResolutionImpossible). That has now happened twice: fixed in #255, then
+      # reintroduced verbatim three days later by the python group in #284.
+      # Leave it to follow pydantic; re-export with uv when pydantic moves.
+      - dependency-name: pydantic-core
     labels: ['deps', 'dev-backend']

@@ -6,7 +6,7 @@
  *   2. budget exhaustion returns refusal
  *   3. embedding cache hit on second identical input
  *
- * Loads `cloudflare-worker/src/services/aiRouter.ts` via tsc.transpileModule
+ * Loads `cloudflare-worker/src/services/aiRouter.ts` through `_transpile-ts.mjs`
  * (same pattern as projects.test.mjs) so we exercise the exact source bytes
  * shipped to Cloudflare. Provides in-memory mocks for `env.AI` (Workers AI),
  * `env.AI_SPEND` (KV), and `env.DB` (D1).
@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { transpileTs } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -30,10 +31,7 @@ async function loadRouter() {
     .replace(/^import type[^;]+;\s*$/m, '')
     .replace(/^export\s+(const|let|function|async\s+function|class|interface|type|enum)\b/gm, '$1')
     .replace(/^export\s+\{[^}]*\};?\s*$/gm, '');
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
-  const { outputText } = ts.transpileModule(stripped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(stripped);
   // Re-export the public surface via an IIFE wrapper.
   const wrapped = `${outputText}\nreturn { run, ROUTE, estimateCostUsd, loadAiUsageReport, __resetForTest };`;
   return new Function(wrapped)();

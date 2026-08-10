@@ -14,9 +14,9 @@
  *       emits a warn log
  *   (i) encryptOrFallback null in → null out
  *
- * The helpers are pure TS so we transpile the source on the fly with the
- * same tsc.transpileModule pattern used by `spinout_lab.test.mjs` — no
- * new test deps. The cryptoBox dependency is also transpiled.
+ * The helpers are pure TS so we erase the types on the fly with the same
+ * `_transpile-ts.mjs` helper used by `spinout_lab.test.mjs` — no new test
+ * deps. The cryptoBox dependency is also transpiled.
  *
  * Run with:
  *   node --test cloudflare-worker/test/wellbeing_post.test.mjs
@@ -27,21 +27,9 @@ import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
-import { createRequire } from 'node:module';
+import { transpileTs as transpile } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const require_ = createRequire(import.meta.url);
-const ts = require_('typescript');
-
-function transpile(src) {
-  return ts.transpileModule(src, {
-    compilerOptions: {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.NodeJs,
-    },
-  }).outputText;
-}
 
 async function loadHelpers() {
   const helpersSrc = await readFile(

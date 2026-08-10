@@ -27,6 +27,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { transpileTs } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -94,10 +95,7 @@ async function loadHelpers() {
     `mapPairwiseStatus, mapPartnerDealStatus ` +
     `}; })();`;
 
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
   return new Function(`${outputText}; return __out;`)();
 }
 
@@ -292,10 +290,7 @@ async function loadRouter({ documents = [], esign = [], pairwise = [], partner =
 
   const wrapped = `const __out = (async () => { ${tsBody}; return await loadAllContracts(__sql); })();`;
 
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
   const __sql = makeSql();
   return await new Function('__sql', `${outputText}; return __out;`)(__sql);
 }

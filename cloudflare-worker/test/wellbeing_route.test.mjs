@@ -20,21 +20,9 @@ import { readFile, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
-import { createRequire } from 'node:module';
+import { transpileTs as transpile } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const require_ = createRequire(import.meta.url);
-const ts = require_('typescript');
-
-function transpile(src) {
-  return ts.transpileModule(src, {
-    compilerOptions: {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.NodeJs,
-    },
-  }).outputText;
-}
 
 /**
  * Minimal in-memory D1 stub. We only implement the prepared-statement
