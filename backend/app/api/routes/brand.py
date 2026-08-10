@@ -1177,11 +1177,17 @@ def _pick_utm(v: Any) -> Optional[Dict[str, str]]:
     return out or None
 
 
+def _sanitize_for_log(value: Any, max_len: int = 200) -> str:
+    s = str(value or "")
+    s = re.sub(r"[\r\n\t\x00-\x1f\x7f]+", " ", s)
+    return s.strip()[:max_len]
+
+
 @router.post("/landing/{slug}/waitlist")
 def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Session = Depends(get_session)):
     # Sanitize user-controlled path value before writing to logs to prevent
     # log injection / forged log lines via control characters.
-    safe_slug = re.sub(r"[\r\n\t\x00-\x1f\x7f]+", " ", (slug or "")).strip()[:200]
+    safe_slug = _sanitize_for_log(slug, max_len=200)
     # Honeypot — answer 200 so a bot can't distinguish the trap from success
     # (a 400 teaches it to adapt). Nothing is written. Mirrors the worker.
     if (payload.company_website or "").strip():
