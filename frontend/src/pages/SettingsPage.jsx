@@ -6,7 +6,7 @@ import { useToast } from '../components/useToast';
 import {
   User, ShieldCheck, Bell, Lock,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
-  Plus, X, KeyRound, Palette, Plug, CreditCard, UserCog,
+  Plus, X, KeyRound, Palette, Plug, CreditCard,
   Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Activity,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
@@ -137,9 +137,8 @@ const ActivityPage = lazy(() => import('./ActivityPage'));
 // Task #1 — Settings expansion (tabbed). Nine tabs per the audit-plan brief.
 // `roles` controls visibility per signed-in role; absence = visible to all.
 const SECTIONS = [
-  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'account', label: 'Account', icon: User },
   { id: 'onboarding', label: 'Onboarding', icon: CheckCircle2 },
-  { id: 'account', label: 'Account', icon: UserCog },
   { id: 'security', label: 'Security', icon: ShieldCheck },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'privacy', label: 'Privacy', icon: Lock },
@@ -160,7 +159,7 @@ const SECTIONS = [
 const PATH_TO_SECTION = {
   notifications: 'notifications',
   onboarding: 'onboarding',
-  profile: 'profile',
+  profile: 'account',
   account: 'account',
   security: 'security',
   privacy: 'privacy',
@@ -168,10 +167,10 @@ const PATH_TO_SECTION = {
   billing: 'billing',
   appearance: 'appearance',
   // Back-compat: old deep links still resolve to a sensible new tab.
-  jurisdictions: 'profile',
+  jurisdictions: 'account',
   email: 'account',
   auth: 'security',
-  role: 'profile',
+  role: 'account',
 };
 
 export default function SettingsPage() {
@@ -303,11 +302,9 @@ export default function SettingsPage() {
         </nav>
 
         <div className="space-y-6">
-          {safeActive === 'profile' && (
-            <ProfileTabs data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
-          )}
           {safeActive === 'account' && (
             <>
+              <ProfileTabs data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
               <EmailSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
               <AccountDeletionCard data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
             </>
