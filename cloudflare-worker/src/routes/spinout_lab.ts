@@ -272,6 +272,216 @@ async function latestApplication(env: Env, userId: number): Promise<ApplicationR
   }
 }
 
+// ---------------------------------------------------------------------------
+// Studio Ops — the founder's weekly operating cadence and closeout review.
+//
+// Serves /spinout-lab/studio-ops. NOT the same feature as /api/studioops,
+// which is the studio's admin workflow console; see the header of
+// services/studioOpsCadence.ts for why they are separate stores.
+//
+// Only the two founder-authored things are persisted (cadence, review).
+// Everything else the page renders — the week's objective, its commitments,
+// execution health, blockers — is derived client-side from the week catalog
+// and the real milestone rows already on /state, so there is no second copy of
+// the week's progress to fall out of step with the workspace.
+//
+// Every read and write below is scoped to `user.id`. There is no route here
+// that returns, or writes, another founder's cadence.
+// ---------------------------------------------------------------------------
+
+let _studioOpsSchemaReady = false;
+/** Self-heal on a cold isolate (sql/spinout_lab_studio_ops.sql is canonical). */
+async function ensureStudioOpsSchema(env: Env): Promise<void> {
+  if (_studioOpsSchemaReady) return;
+  await env.DB.exec(
+    'CREATE TABLE IF NOT EXISTS spinout_lab_studio_ops ('
+    + 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+    + 'user_id INTEGER NOT NULL, '
+    + 'week INTEGER NOT NULL, '
+    + "cadence TEXT NOT NULL DEFAULT '[]', "
+    + 'cadence_locked_at TEXT, '
+    + "review TEXT NOT NULL DEFAULT '{}', "
+    + 'review_completed_at TEXT, '
+    + "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+    + "updated_at TEXT NOT NULL DEFAULT (datetime('now'))"
+    + ')',
+  );
+  await env.DB.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_spinout_lab_studio_ops_user_week '
+    + 'ON spinout_lab_studio_ops(user_id, week)',
+  );
+  _studioOpsSchemaReady = true;
+}
+
+type StudioOpsRow = {
+  week: number;
+  cadence: string;
+  cadence_locked_at: string | null;
+  review: string;
+  review_completed_at: string | null;
+};
+
+/** The caller's current program week, clamped to the 1-4 sprint. */
+async function currentWeek(env: Env, userId: number): Promise<number> {
+  const row = await env.DB.prepare(
+    'SELECT spinout_lab_week FROM users WHERE id = ?',
+  ).bind(userId).first<{ spinout_lab_week: number | null }>();
+  const w = Number(row?.spinout_lab_week ?? 1);
+  return Number.isFinite(w) ? Math.min(4, Math.max(1, w)) : 1;
+}
+
+async function loadStudioOps(env: Env, userId: number, week: number) {
+  const {
+    seedCadence, emptyReview, parseCadence, parseReview, readJsonColumn,
+  } = await import('../services/studioOpsCadence');
+
+  const row = await env.DB.prepare(
+    'SELECT week, cadence, cadence_locked_at, review, review_completed_at '
+    + 'FROM spinout_lab_studio_ops WHERE user_id = ? AND week = ?',
+  ).bind(userId, week).first<StudioOpsRow>();
+
+  if (row) {
+    const parsed = parseCadence(readJsonColumn(row.cadence, []));
+    return {
+      week,
+      cadence: parsed.ok ? parsed.value : seedCadence(null),
+      cadence_locked: Boolean(row.cadence_locked_at),
+      cadence_locked_at: row.cadence_locked_at,
+      review: parseReview(readJsonColumn(row.review, emptyReview())),
+      review_completed: Boolean(row.review_completed_at),
+      review_completed_at: row.review_completed_at,
+      saved: true,
+    };
+  }
+
+  // No row for this week yet: offer the previous week's rhythm (demoted to
+  // Proposed by seedCadence) so re-affirming is one click, and the starter
+  // cadence when there is no previous week either. Nothing is written here —
+  // an unsaved suggestion must not read back as a commitment the founder made.
+  const prior = await env.DB.prepare(
+    'SELECT cadence FROM spinout_lab_studio_ops '
+    + 'WHERE user_id = ? AND week < ? ORDER BY week DESC LIMIT 1',
+  ).bind(userId, week).first<{ cadence: string }>();
+  const priorParsed = prior ? parseCadence(readJsonColumn(prior.cadence, [])) : null;
+
+  return {
+    week,
+    cadence: seedCadence(priorParsed?.ok ? priorParsed.value : null),
+    cadence_locked: false,
+    cadence_locked_at: null,
+    review: emptyReview(),
+    review_completed: false,
+    review_completed_at: null,
+    saved: false,
+  };
+}
+
+// GET /studio-ops — the caller's cadence + closeout for their current week.
+spinoutLab.get('/studio-ops', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    await ensureStudioOpsSchema(c.env);
+    const week = await currentWeek(c.env, user.id);
+    return c.json({ ok: true, ...(await loadStudioOps(c.env, user.id, week)) });
+  } catch (e) {
+    console.error('[spinout-lab/studio-ops] load failed:', (e as Error).message);
+    return c.json({ error: 'Could not load your operating cadence.' }, 503);
+  }
+});
+
+type CadenceBody = { cadence?: unknown; lock?: unknown };
+
+// PUT /studio-ops/cadence — save the week's rhythm, optionally locking it.
+//
+// Locking is what records `studio_ops_cadence_set`: the Week-2 deliverable is
+// "cadence set", and a draft the founder is still editing is not that. Saving
+// without locking deliberately records nothing.
+spinoutLab.put('/studio-ops/cadence', async (c) => {
+  const user = await requireAuth(c);
+  const body = (await c.req.json().catch(() => ({}))) as CadenceBody;
+  const { parseCadence, lockCadence } = await import('../services/studioOpsCadence');
+
+  const parsed = parseCadence(body.cadence);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+
+  try {
+    await ensureStudioOpsSchema(c.env);
+    const week = await currentWeek(c.env, user.id);
+    const wantsLock = body.lock === true;
+    const items = wantsLock ? lockCadence(parsed.value) : parsed.value;
+
+    await c.env.DB.prepare(
+      'INSERT INTO spinout_lab_studio_ops (user_id, week, cadence, cadence_locked_at, updated_at) '
+      + "VALUES (?, ?, ?, ?, datetime('now')) "
+      + 'ON CONFLICT(user_id, week) DO UPDATE SET '
+      + 'cadence = excluded.cadence, '
+      // COALESCE keeps the ORIGINAL lock timestamp: editing a locked cadence
+      // must not silently restamp when the rhythm was committed to.
+      + 'cadence_locked_at = COALESCE(spinout_lab_studio_ops.cadence_locked_at, excluded.cadence_locked_at), '
+      + "updated_at = datetime('now')",
+    ).bind(
+      user.id, week, JSON.stringify(items),
+      wantsLock ? new Date().toISOString() : null,
+    ).run();
+
+    // Best-effort, and deliberately after the write: a founder's cadence must
+    // not fail to save because the milestone insert did. `recordMilestone` is
+    // idempotent, so re-locking never double-records.
+    if (wantsLock) {
+      try {
+        const sql = getSQL(c.env);
+        await recordMilestone(sql, user.id, 'studio_ops_cadence_set');
+        await sql.end();
+      } catch (e) {
+        console.error('[spinout-lab/studio-ops] milestone failed:', (e as Error).message);
+      }
+    }
+
+    return c.json({ ok: true, ...(await loadStudioOps(c.env, user.id, week)) });
+  } catch (e) {
+    console.error('[spinout-lab/studio-ops] cadence save failed:', (e as Error).message);
+    return c.json({ error: 'Could not save your operating cadence. Please try again.' }, 500);
+  }
+});
+
+type ReviewBody = { review?: unknown; complete?: unknown };
+
+// PUT /studio-ops/review — save the week's closeout, optionally completing it.
+spinoutLab.put('/studio-ops/review', async (c) => {
+  const user = await requireAuth(c);
+  const body = (await c.req.json().catch(() => ({}))) as ReviewBody;
+  const { parseReview, reviewHasContent } = await import('../services/studioOpsCadence');
+
+  const review = parseReview(body.review);
+  const wantsComplete = body.complete === true;
+  // An empty closeout marked "complete" is a checkbox, not a review — the
+  // point of the ritual is the writing, so refuse rather than record it.
+  if (wantsComplete && !reviewHasContent(review)) {
+    return c.json({ error: 'Write at least one line before completing the review.' }, 400);
+  }
+
+  try {
+    await ensureStudioOpsSchema(c.env);
+    const week = await currentWeek(c.env, user.id);
+    await c.env.DB.prepare(
+      'INSERT INTO spinout_lab_studio_ops (user_id, week, review, review_completed_at, updated_at) '
+      + "VALUES (?, ?, ?, ?, datetime('now')) "
+      + 'ON CONFLICT(user_id, week) DO UPDATE SET '
+      + 'review = excluded.review, '
+      + 'review_completed_at = COALESCE(spinout_lab_studio_ops.review_completed_at, excluded.review_completed_at), '
+      + "updated_at = datetime('now')",
+    ).bind(
+      user.id, week, JSON.stringify(review),
+      wantsComplete ? new Date().toISOString() : null,
+    ).run();
+
+    return c.json({ ok: true, ...(await loadStudioOps(c.env, user.id, week)) });
+  } catch (e) {
+    console.error('[spinout-lab/studio-ops] review save failed:', (e as Error).message);
+    return c.json({ error: 'Could not save your weekly review. Please try again.' }, 500);
+  }
+});
+
 spinoutLab.get('/state', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);

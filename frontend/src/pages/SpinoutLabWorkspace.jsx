@@ -107,10 +107,12 @@ export const TOOL_INFO = {
   // Compliance CALENDAR — recurring filings, reminder pings, advisor
   // deep-links — stays at /compliance. Same split as Market Intel.
   compliance: { label: 'Compliance', to: '/spinout-lab/compliance', desc: 'Week 4 readiness & obligations', icon: ShieldCheck },
-  // Studio Ops is a studio-wide surface, not a lab-gated feature — `ungated`
-  // keeps its deliverable button visible without touching unlocked_features.
-  // Founders reach it via the command center tab (/studio-ops redirects there).
-  'studio-ops': { label: 'Studio Ops', to: '/build/command-center?tab=studio-ops', desc: 'Weekly cadence and accountability', icon: CalendarCheck, ungated: true },
+  // The founder's weekly operating cadence — a dedicated Lab page (design:
+  // Studio_Ops.dc), NOT the studio's admin operations console that lives on
+  // Command Center's Operations tab. `ungated` keeps its deliverable button
+  // visible without touching unlocked_features (the cadence is worth setting
+  // from Week 1 even though its milestone belongs to Week 2).
+  'studio-ops': { label: 'Studio Ops', to: '/spinout-lab/studio-ops', desc: 'Weekly cadence and accountability', icon: CalendarCheck, ungated: true },
 };
 
 // Four program weeks. `chips` are the timeline summary chips (done derives
