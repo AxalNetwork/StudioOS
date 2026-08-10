@@ -126,6 +126,40 @@ r.get('/company/me', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// /company/memberships — every company the caller belongs to.
+//
+// MUST stay above `/company/:uid`: Hono matches in declaration order, so
+// registering it later would let the param route claim uid="memberships" and
+// answer 404 instead. Same reason `/company/me` sits above it.
+//
+// `/company/me` answers with the single primary company; the sidebar's company
+// switcher needs the whole list, in the same order `/company/me` picks its
+// winner from (primary admin first, then oldest link), so `list[0]` is the same
+// company `/company/me` would have returned.
+r.get('/company/memberships', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const links = await c.env.DB.prepare(
+      `SELECT * FROM user_company_links WHERE user_id = ?
+       ORDER BY is_primary_admin DESC, created_at ASC`
+    ).bind(user.id).all<Link>();
+    const out: any[] = [];
+    for (const link of links.results || []) {
+      const company = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?')
+        .bind(link.company_id).first<Company>();
+      // A link whose company row is gone is skipped rather than surfaced as a
+      // null entry — the switcher renders straight from this array.
+      if (!company) continue;
+      out.push({
+        ...(await detailDto(c.env, company, user)),
+        my_role: link.role_in_company,
+        is_primary_admin: !!link.is_primary_admin,
+      });
+    }
+    return c.json(out);
+  } catch (e) { return mapError(c, e); }
+});
+
 // /company/create
 r.post('/company/create', async (c) => {
   try {

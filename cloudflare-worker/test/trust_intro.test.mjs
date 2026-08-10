@@ -12,7 +12,7 @@
  *   5. happy path → founder receives a 'contract_sign_request' notify
  *      call (which CRITICAL_CATEGORIES routes to notifications_inbox).
  *
- * Same source-extraction + tsc.transpileModule pattern used by
+ * Same source-extraction + type-erasure pattern used by
  * `projects.test.mjs` / `spinout_lab.test.mjs` so we test the EXACT
  * source bytes that ship to Cloudflare. No new test deps.
  *
@@ -23,6 +23,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { transpileTs } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -54,10 +55,7 @@ async function loadLogic() {
 
   const tsBody = src.slice(start, end).replace(/^export\s+/, '');
   const wrapped = `const __logic = (() => { ${tsBody}; return requestIntroLogic; })();`;
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
   return new Function(`${outputText}; return __logic;`)();
 }
 
