@@ -10,7 +10,8 @@
 // components are self-contained (they fetch their own data) — see
 // pages/Dashboard.jsx for the same mounts.
 import React from 'react';
-import { Compass } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Compass, Rocket } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
 import ProfileFitSection from '../components/profile/ProfileFitSection';
@@ -24,7 +25,14 @@ import ProfileFitSection from '../components/profile/ProfileFitSection';
 const LANE_COPY = {
   founder: {
     label: 'Founder',
-    next: 'reviews your venture profile and sends a membership agreement to sign. Once signed, your workspace opens with the Spin-Out Lab tools.',
+    next: 'reviews your venture profile and sends a membership agreement to sign. Once signed, a short venture setup opens your workspace with the Spin-Out Lab tools.',
+    // Founder-journey audit — review used to be pure dead time for the founder
+    // lane: nothing venture-shaped to do until an admin acted. The Spin-Out Lab
+    // application is reachable in this holding state (the /spinout-lab route
+    // admits any signed-in role) and is exactly what the admissions engine
+    // reviews — so pointing at it turns the wait into the founder's actual
+    // next step without weakening the review gate.
+    cta: { to: '/spinout-lab', label: 'Apply to the Spin-Out Lab' },
   },
   investor: {
     label: 'Investor',
@@ -70,6 +78,17 @@ export default function ExploringDashboard() {
         {' '}In the meantime, keep chatting with your Personal Advisor below — the
         more we know, the better the fit.
       </div>
+
+      {/* Lane-specific real next step while under review (see LANE_COPY). */}
+      {lane?.cta && (
+        <Link
+          to={lane.cta.to}
+          data-testid="exploring-lane-cta"
+          className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold"
+        >
+          <Rocket size={15} /> {lane.cta.label}
+        </Link>
+      )}
 
       {/* Personal Advisor — keeps collecting answers; its role detector
           refreshes the stored role suggestion while the user waits. */}
