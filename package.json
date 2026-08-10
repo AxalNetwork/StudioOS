@@ -41,25 +41,25 @@
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.1",
     "@tailwindcss/vite": "^4.3.3",
-    "@vitejs/plugin-react": "^6.0.4",
+    "@vitejs/plugin-react": "^6.0.5",
     "autoprefixer": "^10.5.4",
     "fuse.js": "^7.5.0",
-    "lucide-react": "^1.24.0",
+    "lucide-react": "^1.28.0",
     "pptxgenjs": "^4.0.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-is": "^19.2.8",
     "react-markdown": "^10.1.0",
-    "react-router-dom": "^7.18.1",
+    "react-router-dom": "^7.18.2",
     "react-window": "^2.3.0",
     "recharts": "^3.10.1",
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.3.0",
-    "vite": "^8.1.4"
+    "vite": "^8.2.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0",
+    "@playwright/test": "^1.62.1",
     "wrangler": "^4.118.0"
   }
 }
