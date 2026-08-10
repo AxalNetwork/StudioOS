@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.3.1",
-    "hono": "^4.12.30",
+    "hono": "^4.12.34",
     "jose": "^6.2.4",
     "mimetext": "^3.0.28",
     "otpauth": "^9.5.1",
