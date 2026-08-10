@@ -7,7 +7,7 @@ import {
   User, ShieldCheck, Bell, Lock,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard, UserCog,
-  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Share2, Activity,
+  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Activity,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
@@ -17,9 +17,6 @@ import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import BillingDashboard from '../components/BillingDashboard';
-// Task #4 — Referrals lives inside Settings as its own section; lazy-loaded so
-// its heavier deps (QR code, Stripe Connect panel) stay out of the settings chunk.
-const ReferralsPage = lazy(() => import('./ReferralsPage'));
 // Task — the full Integrations marketplace is embedded into the Settings
 // Integrations section; lazy so its provider/OAuth deps stay out of the
 // settings chunk (mirrors the ReferralsPage embed above).
@@ -151,7 +148,6 @@ const SECTIONS = [
   // Task #4 — the merged Referrals workspace (Refer & Earn + Payouts) now lives
   // here as a section. Gated to the roles that carried the standalone /refer
   // item (admin/founder/partner/investor); hidden for advisor.
-  { id: 'referrals', label: 'Referrals', icon: Share2, roles: ['admin', 'founder', 'partner', 'investor'] },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'activity', label: 'Activity Log', icon: Activity },
 ];
@@ -170,7 +166,6 @@ const PATH_TO_SECTION = {
   privacy: 'privacy',
   integrations: 'integrations',
   billing: 'billing',
-  referrals: 'referrals',
   appearance: 'appearance',
   // Back-compat: old deep links still resolve to a sensible new tab.
   jurisdictions: 'profile',
@@ -337,11 +332,6 @@ export default function SettingsPage() {
           {safeActive === 'onboarding' && <OnboardingSettingsTab />}
           {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab />}
           {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
-          {safeActive === 'referrals' && allowedIds.has('referrals') && (
-            <Suspense fallback={<div className="text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</div>}>
-              <ReferralsPage embedded />
-            </Suspense>
-          )}
           {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
           {safeActive === 'activity' && (
             <Suspense fallback={<div className="py-8 text-center text-gray-500 dark:text-gray-400 text-sm">Loading…</div>}>

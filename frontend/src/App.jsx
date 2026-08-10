@@ -92,6 +92,7 @@ const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
 const AdminReferEarnPayouts = lazy(() => import('./pages/admin/ReferEarnPayouts'));
+const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
@@ -304,12 +305,10 @@ function DashboardRedirect() {
   return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
 }
 
-// Task #4 — Referrals moved into Settings. Legacy /refer (and /payouts) redirect
-// into the Settings "Referrals" section, preserving the ?tab= sub-tab so a
-// /refer?tab=payouts or /payouts bookmark still lands on the Payouts tab.
+// Legacy /refer redirects to the standalone /referrals page, preserving ?tab=.
 function ReferRedirect() {
   const loc = useLocation();
-  return <Navigate to={{ pathname: '/settings/referrals', search: loc.search }} replace />;
+  return <Navigate to={{ pathname: '/referrals', search: loc.search }} replace />;
 }
 
 // Integrations merged into Settings. Legacy /integrations (and
@@ -870,7 +869,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               <NotificationBell userId={user?.id} />
             </Suspense>
             <Link
-              to="/settings/referrals"
+              to="/referrals"
               className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
             >
               <Gift size={14} />
@@ -1824,15 +1823,14 @@ function AppInner() {
       {/* Task #1 — RAISE Workspaces: legacy /raise (Raise Pipeline) now lives in
           the Capital workspace pipeline tab. */}
       <Route path="/raise" element={<Navigate to="/raise/capital/pipeline" replace />} />
-      {/* Task #4 — Referrals now lives inside Settings; /refer redirects there
-          (preserving ?tab=), same role access as before. */}
+      {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
+      <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferralsPage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />
       {/* Integrations now lives inside Settings; /integrations redirects there
           (preserving any ?query= so OAuth-return states still show). Available
           to every authenticated profile, matching the all-roles Settings tab. */}
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
-      {/* Task #4 — /payouts redirects to the Payouts sub-tab of the Settings Referrals section. */}
-      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/settings/referrals?tab=payouts" replace />)} />
+      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals?tab=payouts" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=studio-ops" replace /> : <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
