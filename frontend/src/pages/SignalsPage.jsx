@@ -18,6 +18,8 @@ import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
  * point founders toward?"); the mode toggle changes ordering + copy only.
  */
 export default function SignalsPage({ user }) {
+  // eslint-disable-next-line no-console
+  console.log('[SignalsPage] rendering — user role:', user?.role);
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
   const mode = String(user?.role || '').toLowerCase() === 'advisor' ? 'advisor' : 'founder';
 

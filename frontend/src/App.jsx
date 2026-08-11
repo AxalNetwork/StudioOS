@@ -2119,6 +2119,42 @@ function AdminDocsPathGuard() {
   );
 }
 
+// Top-level safety net for AppInner itself. RouteErrorBoundary already
+// protects every component rendered inside <Routes>; this boundary catches
+// the rarer case where AppInner's own hooks or top-of-render expressions
+// throw (e.g. a bad hook call, a context consumer outside its provider).
+// Without it those crashes blank the entire page with no visible message.
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    try {
+      // eslint-disable-next-line no-console
+      console.error('[AppErrorBoundary] top-level crash:', error, info?.componentStack);
+    } catch { /* ignore */ }
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const msg = this.state.error?.message || String(this.state.error);
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif', padding: '2rem' }}>
+        <div style={{ maxWidth: 520, border: '1px solid #fca5a5', borderRadius: 12, background: '#fff1f2', padding: '1.5rem' }}>
+          <strong style={{ display: 'block', marginBottom: '0.5rem', color: '#991b1b' }}>App failed to start</strong>
+          <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#7f1d1d', margin: 0 }}>{msg}</pre>
+          <button onClick={() => window.location.reload()} style={{ marginTop: '1rem', padding: '0.5rem 1rem', background: '#1f2937', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 export default function App() {
   // T20 — AuthProvider must be inside <BrowserRouter> (it uses
   // useLocation to throttle /me re-syncs to one per route change).
@@ -2126,7 +2162,9 @@ export default function App() {
   return (
     <AuthProvider>
       <SettingsProvider>
+        <AppErrorBoundary>
         <AppInner />
+        </AppErrorBoundary>
         {/* Task #28 — global "always-on" mounts live OUTSIDE <Routes>,
             so a render-time throw inside any of them blanks the entire
             app (every route, including /login). Wrap each in a
