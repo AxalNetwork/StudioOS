@@ -28,6 +28,12 @@ export interface Snapshot {
   monthly_churn_pct?: number | null;
   active_users?: number | null;
   new_users?: number | null;
+  /** Board-reporting metrics (migration 173). */
+  net_burn?: number | null;
+  cash_balance?: number | null;
+  headcount?: number | null;
+  nrr_pct?: number | null;
+  paying_accounts?: number | null;
 }
 
 function n(v: unknown): number | null {
@@ -152,6 +158,26 @@ export function annualRetentionPct(monthlyChurnPct: number | null): number | nul
   return round(Math.pow(1 - c / 100, 12) * 100, 1);
 }
 
+/**
+ * Months of runway at the current burn.
+ *
+ * Derived, never stored: the design labels runway "Derived" for a
+ * reason, and a stored copy would drift from the cash and burn printed
+ * beside it in the same board pack.
+ *
+ * Null — not Infinity, and not some large sentinel — when burn is zero
+ * or negative. A profitable month does not mean infinite runway; it
+ * means runway is not the right question, and a board pack claiming
+ * ∞ months would be read as a claim rather than as an absence.
+ */
+export function runwayMonths(cash: number | null, netBurn: number | null): number | null {
+  const c = n(cash), b = n(netBurn);
+  if (c === null || b === null) return null;
+  if (b <= 0) return null;
+  if (c < 0) return 0;
+  return round(c / b, 1);
+}
+
 export interface MetricsSummary {
   as_of: string | null;
   mrr: number | null;
@@ -166,6 +192,14 @@ export interface MetricsSummary {
   cac_payback_months: number | null;
   monthly_churn_pct: number | null;
   annual_retention_pct: number | null;
+  /** Board-reporting metrics, straight off the latest snapshot. */
+  net_burn: number | null;
+  cash_balance: number | null;
+  headcount: number | null;
+  nrr_pct: number | null;
+  paying_accounts: number | null;
+  /** cash ÷ net burn. Derived, never stored. */
+  runway_months: number | null;
   /** Count of snapshots the summary was derived from. */
   snapshot_count: number;
   /** Metrics that could not be computed, and why — shown, not hidden. */
@@ -228,6 +262,18 @@ export function summarise(rows: Snapshot[]): MetricsSummary {
     unavailable.push({ metric: 'annual_retention_pct', reason: 'Needs a monthly churn rate between 0 and 100 on the latest snapshot.' });
   }
 
+  const netBurn = latest ? n(latest.net_burn) : null;
+  const cashBalance = latest ? n(latest.cash_balance) : null;
+  const runway = runwayMonths(cashBalance, netBurn);
+  if (runway === null) {
+    unavailable.push({
+      metric: 'runway_months',
+      reason: netBurn !== null && netBurn <= 0
+        ? 'The latest snapshot is not burning cash, so runway does not apply.'
+        : 'Needs both cash on hand and a positive net burn on the latest snapshot.',
+    });
+  }
+
   return {
     as_of: latest ? latest.snapshot_date : null,
     mrr, arr,
@@ -239,6 +285,12 @@ export function summarise(rows: Snapshot[]): MetricsSummary {
     cac_payback_months: payback,
     monthly_churn_pct: churn,
     annual_retention_pct: retention,
+    net_burn: netBurn,
+    cash_balance: cashBalance,
+    headcount: latest ? n(latest.headcount) : null,
+    nrr_pct: latest ? n(latest.nrr_pct) : null,
+    paying_accounts: latest ? n(latest.paying_accounts) : null,
+    runway_months: runway,
     snapshot_count: s.length,
     unavailable,
   };

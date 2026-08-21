@@ -1488,6 +1488,11 @@ type MetricsSnapshot = {
   monthly_churn_pct: number | null;
   active_users: number | null;
   new_users: number | null;
+  net_burn: number | null;
+  cash_balance: number | null;
+  headcount: number | null;
+  nrr_pct: number | null;
+  paying_accounts: number | null;
   notes: string | null;
   source: string | null;
   created_by: number | null;
@@ -1505,6 +1510,11 @@ type SerializedSnap = {
   monthly_churn_pct: number | null;
   active_users: number | null;
   new_users: number | null;
+  net_burn: number | null;
+  cash_balance: number | null;
+  headcount: number | null;
+  nrr_pct: number | null;
+  paying_accounts: number | null;
   notes: string | null;
   source: string | null;
   created_at: string;
@@ -1527,6 +1537,8 @@ export async function ensureMetricsSnapshotsSchema(env: Env): Promise<void> {
           + ` snapshot_date TEXT NOT NULL,`
           + ` mrr REAL, arr REAL, cac REAL, ltv REAL, monthly_churn_pct REAL,`
           + ` active_users INTEGER, new_users INTEGER,`
+          + ` net_burn REAL, cash_balance REAL, headcount INTEGER,`
+          + ` nrr_pct REAL, paying_accounts INTEGER,`
           + ` notes TEXT, source TEXT,`
           + ` created_by INTEGER REFERENCES users(id),`
           + ` created_at TEXT NOT NULL DEFAULT (datetime('now'))`
@@ -1539,6 +1551,11 @@ export async function ensureMetricsSnapshotsSchema(env: Env): Promise<void> {
       const required: Array<[string, string]> = [
         ['arr', 'REAL'], ['cac', 'REAL'], ['ltv', 'REAL'],
         ['monthly_churn_pct', 'REAL'], ['new_users', 'INTEGER'],
+        // Board-reporting metrics (migration 173). Runway is deliberately
+        // absent: it is derived from cash ÷ net_burn, and a stored copy
+        // would drift from the two numbers printed beside it.
+        ['net_burn', 'REAL'], ['cash_balance', 'REAL'], ['headcount', 'INTEGER'],
+        ['nrr_pct', 'REAL'], ['paying_accounts', 'INTEGER'],
       ];
       for (const [col, decl] of required) {
         if (!have.has(col)) {
@@ -1565,6 +1582,11 @@ function serializeSnap(s: MetricsSnapshot): SerializedSnap {
     monthly_churn_pct: s.monthly_churn_pct ?? null,
     active_users: s.active_users,
     new_users: s.new_users ?? null,
+    net_burn: s.net_burn ?? null,
+    cash_balance: s.cash_balance ?? null,
+    headcount: s.headcount ?? null,
+    nrr_pct: s.nrr_pct ?? null,
+    paying_accounts: s.paying_accounts ?? null,
     notes: s.notes,
     source: s.source,
     created_at: s.created_at,
@@ -1617,15 +1639,27 @@ progress.post('/metrics/:projectId', async (c) => {
   const churn = numOrNull(body?.monthly_churn_pct);
   const activeUsers = numOrNull(body?.active_users);
   const newUsers = numOrNull(body?.new_users);
+  // Board-reporting metrics (migration 173). Runway is NOT accepted from
+  // the client — it is derived from cash and burn in saasMetrics, so that
+  // the three numbers cannot disagree inside one board pack.
+  const netBurn = numOrNull(body?.net_burn);
+  const cashBalance = numOrNull(body?.cash_balance);
+  const headcount = numOrNull(body?.headcount);
+  const nrrPct = numOrNull(body?.nrr_pct);
+  const payingAccounts = numOrNull(body?.paying_accounts);
   const notes = body?.notes ? String(body.notes).slice(0, 4000) : null;
   const source = body?.source ? String(body.source).slice(0, 80) : 'manual';
   try {
     const r = await c.env.DB.prepare(
       `INSERT INTO metrics_snapshots
          (project_id, snapshot_date, mrr, arr, cac, ltv, monthly_churn_pct,
-          active_users, new_users, notes, source, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-    ).bind(projectId, snapshotDate, mrr, arr, cac, ltv, churn, activeUsers, newUsers, notes, source, user.id).run();
+          active_users, new_users, net_burn, cash_balance, headcount,
+          nrr_pct, paying_accounts, notes, source, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    ).bind(
+      projectId, snapshotDate, mrr, arr, cac, ltv, churn, activeUsers, newUsers,
+      netBurn, cashBalance, headcount, nrrPct, payingAccounts, notes, source, user.id,
+    ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?')
       .bind(r.meta.last_row_id).first<MetricsSnapshot>();
     return c.json(serializeSnap(fresh as MetricsSnapshot));
@@ -1663,6 +1697,11 @@ progress.put('/metrics/snapshot/:id', async (c) => {
     ['monthly_churn_pct', body.monthly_churn_pct !== undefined ? numOrNull(body.monthly_churn_pct) : undefined],
     ['active_users', body.active_users !== undefined ? numOrNull(body.active_users) : undefined],
     ['new_users', body.new_users !== undefined ? numOrNull(body.new_users) : undefined],
+    ['net_burn', body.net_burn !== undefined ? numOrNull(body.net_burn) : undefined],
+    ['cash_balance', body.cash_balance !== undefined ? numOrNull(body.cash_balance) : undefined],
+    ['headcount', body.headcount !== undefined ? numOrNull(body.headcount) : undefined],
+    ['nrr_pct', body.nrr_pct !== undefined ? numOrNull(body.nrr_pct) : undefined],
+    ['paying_accounts', body.paying_accounts !== undefined ? numOrNull(body.paying_accounts) : undefined],
     ['notes', body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : undefined],
   ];
   const sets: string[] = [];

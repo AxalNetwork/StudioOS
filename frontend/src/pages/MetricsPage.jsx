@@ -13,12 +13,21 @@ const FIELDS = [
   { key: 'monthly_churn_pct', label: 'Monthly churn', unit: '%' },
   { key: 'active_users', label: 'Active users', unit: '' },
   { key: 'new_users', label: 'New users (period)', unit: '' },
+  // The five numbers an investor update leads with. Runway is absent on
+  // purpose — it is derived from cash and burn on the worker, so the
+  // three cannot disagree inside one board pack.
+  { key: 'net_burn', label: 'Net burn', unit: '$', hint: 'Per month. Positive means burning.' },
+  { key: 'cash_balance', label: 'Cash on hand', unit: '$', hint: 'Used with burn to work out runway' },
+  { key: 'headcount', label: 'Headcount', unit: '' },
+  { key: 'nrr_pct', label: 'Net revenue retention', unit: '%', hint: '119 means 119%' },
+  { key: 'paying_accounts', label: 'Paying accounts', unit: '' },
 ];
 
 function emptySnapshot() {
   return {
     snapshot_date: new Date().toISOString().slice(0, 10),
-    mrr: '', arr: '', cac: '', ltv: '', monthly_churn_pct: '', active_users: '', new_users: '', notes: '',
+    mrr: '', arr: '', cac: '', ltv: '', monthly_churn_pct: '', active_users: '', new_users: '',
+    net_burn: '', cash_balance: '', headcount: '', nrr_pct: '', paying_accounts: '', notes: '',
   };
 }
 
@@ -413,6 +422,18 @@ function DerivedKpiBoard({ summary }) {
     { k: 'CAC payback', v: fmtMo(summary.cac_payback_months), sub: 'revenue basis' },
     { k: 'Annual retention', v: summary.annual_retention_pct == null ? '—' : `${summary.annual_retention_pct}%`,
       sub: summary.monthly_churn_pct != null ? `${summary.monthly_churn_pct}%/mo compounded` : 'from monthly churn' },
+    // Runway is the only derived one of these; the rest are read straight
+    // off the latest snapshot and shown here so the board numbers sit
+    // together rather than being buried in the history table.
+    { k: 'Runway', v: fmtMo(summary.runway_months),
+      sub: summary.net_burn != null ? `at $${Number(summary.net_burn).toLocaleString()}/mo burn` : 'needs cash and burn',
+      tone: summary.runway_months == null ? null : summary.runway_months >= 12 ? 'pos' : 'neg' },
+    { k: 'Net burn', v: fmtMoney(summary.net_burn), sub: 'per month' },
+    { k: 'Net revenue retention', v: summary.nrr_pct == null ? '—' : `${Number(summary.nrr_pct).toFixed(1)}%`,
+      sub: '100%+ means expansion beats churn',
+      tone: summary.nrr_pct == null ? null : summary.nrr_pct >= 100 ? 'pos' : 'neg' },
+    { k: 'Paying accounts', v: summary.paying_accounts == null ? '—' : Number(summary.paying_accounts).toLocaleString(),
+      sub: summary.headcount != null ? `${summary.headcount} on the team` : null },
   ];
 
   return (

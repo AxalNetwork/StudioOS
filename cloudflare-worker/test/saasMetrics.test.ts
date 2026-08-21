@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 
 import {
   growthPct, cmgrPct, ltvCac, cacPaybackMonths, burnMultiple, ruleOf40,
-  annualRetentionPct, summarise, sparkline, sortSeries,
+  annualRetentionPct, runwayMonths, summarise, sparkline, sortSeries,
   type Snapshot,
 } from '../src/services/saasMetrics.ts';
 
@@ -191,4 +191,85 @@ test('sparkline keeps gaps as null rather than interpolating', () => {
 
 test('sparkline can read any numeric field', () => {
   assert.deepEqual(sparkline(SERIES, 'active_users').map(p => p.value), [100, 118, 140]);
+});
+
+// ---------- runway (migration 173) ----------
+
+test('runway is cash over burn', () => {
+  assert.equal(runwayMonths(1_911_800, 158_000), 12.1);
+});
+
+test('a company that is not burning has no runway figure, not an infinite one', () => {
+  // A profitable month does not mean infinite runway; it means runway is
+  // not the right question. A board pack printing an ∞ would be read as a
+  // claim rather than as an absence.
+  assert.equal(runwayMonths(1_000_000, 0), null);
+  assert.equal(runwayMonths(1_000_000, -25_000), null);
+});
+
+test('runway needs both halves', () => {
+  assert.equal(runwayMonths(null, 158_000), null);
+  assert.equal(runwayMonths(1_000_000, null), null);
+  assert.equal(runwayMonths(NaN as unknown as number, 158_000), null);
+});
+
+test('an overdrawn balance is zero months, not a negative runway', () => {
+  assert.equal(runwayMonths(-5_000, 100_000), 0);
+});
+
+test('summarise carries the board metrics and derives runway from them', () => {
+  const s = summarise([
+    { snapshot_date: '2026-07-01', mrr: 96_000, net_burn: 150_000, cash_balance: 2_100_000 },
+    {
+      snapshot_date: '2026-08-01', mrr: 105_000,
+      net_burn: 158_000, cash_balance: 1_911_800,
+      headcount: 24, nrr_pct: 119, paying_accounts: 152,
+    },
+  ]);
+  assert.equal(s.net_burn, 158_000);
+  assert.equal(s.cash_balance, 1_911_800);
+  assert.equal(s.headcount, 24);
+  assert.equal(s.nrr_pct, 119);
+  assert.equal(s.paying_accounts, 152);
+  assert.equal(s.runway_months, 12.1, 'derived, not read from a stored column');
+});
+
+test('a missing runway says which half is missing', () => {
+  const noCash = summarise([{ snapshot_date: '2026-08-01', mrr: 105_000, net_burn: 158_000 }]);
+  assert.equal(noCash.runway_months, null);
+  assert.match(
+    noCash.unavailable.find(u => u.metric === 'runway_months')!.reason,
+    /cash on hand/i,
+  );
+
+  const profitable = summarise([
+    { snapshot_date: '2026-08-01', mrr: 105_000, net_burn: -20_000, cash_balance: 1_000_000 },
+  ]);
+  assert.equal(profitable.runway_months, null);
+  assert.match(
+    profitable.unavailable.find(u => u.metric === 'runway_months')!.reason,
+    /not burning cash/i,
+  );
+});
+
+test('board metrics are null on a series that never reported them', () => {
+  // The five columns are additive, so every pre-existing snapshot has
+  // them empty. That must read as absent, never as zero headcount.
+  const s = summarise(SERIES);
+  assert.equal(s.net_burn, null);
+  assert.equal(s.headcount, null);
+  assert.equal(s.nrr_pct, null);
+  assert.equal(s.paying_accounts, null);
+  assert.equal(s.runway_months, null);
+});
+
+test('sparkline reads the board metrics too', () => {
+  assert.deepEqual(
+    sparkline([
+      { snapshot_date: '2026-06-01', headcount: 21 },
+      { snapshot_date: '2026-07-01', headcount: 23 },
+      { snapshot_date: '2026-08-01', headcount: 24 },
+    ], 'headcount').map(p => p.value),
+    [21, 23, 24],
+  );
 });
