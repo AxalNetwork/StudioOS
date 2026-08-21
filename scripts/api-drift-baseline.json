@@ -65,8 +65,6 @@
     "POST /api/trust/nda/sign",
     "PUT /api/marketplace/providers/me"
   ],
-  "missing_method": [
-    "GET /api/pipeline/votes/:p"
-  ],
+  "missing_method": [],
   "error_envelope": []
 }
