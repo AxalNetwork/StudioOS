@@ -12,10 +12,29 @@
  *     priced-round investors; founders / option pool = common.
  */
 
+import {
+  convertInstruments, needsExtendedConversion,
+  type ConvertibleIn, type SafeBasis, type InstrumentKind,
+} from './safeConversion';
+
 type Holder = { holder: string; type: string; shares: number; pct?: number };
 type Founder = { name: string; shares: number };
-type SafeIn = { name: string; amount: number; cap?: number; discount?: number };
-type RoundIn = { name: string; pre_money: number; investment: number; post_round_pool_pct?: number };
+/**
+ * Build queue #120 — `basis`, `instrument`, `interest_rate` and
+ * `issue_date` are OPTIONAL additions. A SAFE that omits them is a
+ * pre-money (YC v1) SAFE and takes the original inline code path, so
+ * every saved `result_json` blob stays byte-identical.
+ */
+type SafeIn = {
+  name: string; amount: number; cap?: number; discount?: number;
+  basis?: SafeBasis; instrument?: InstrumentKind;
+  interest_rate?: number; issue_date?: string;
+};
+type RoundIn = {
+  name: string; pre_money: number; investment: number; post_round_pool_pct?: number;
+  /** Used only for note interest accrual. */
+  conversion_date?: string;
+};
 export type Inputs = {
   founders?: Founder[];
   option_pool_pct?: number;
@@ -63,6 +82,23 @@ export function validateInputs(inputs: Inputs): string[] {
     }
     const d = Number(s?.discount || 0);
     if (!(d >= 0 && d <= 0.9)) errs.push(`SAFE '${s?.name ?? '?'}' discount must be 0..0.9.`);
+    // Build queue #120 — optional post-money / note fields.
+    if (s?.basis != null && s.basis !== 'pre_money' && s.basis !== 'post_money') {
+      errs.push(`SAFE '${s?.name ?? '?'}' basis must be 'pre_money' or 'post_money'.`);
+    }
+    if (s?.instrument != null && s.instrument !== 'safe' && s.instrument !== 'note') {
+      errs.push(`'${s?.name ?? '?'}' instrument must be 'safe' or 'note'.`);
+    }
+    if (s?.interest_rate != null) {
+      const r = Number(s.interest_rate);
+      if (!(r >= 0 && r <= 0.5)) errs.push(`Note '${s?.name ?? '?'}' interest rate must be 0..0.5.`);
+      // Interest with no start date silently accrues nothing, which
+      // reads as a bug to the founder who entered a rate.
+      if (r > 0 && !s.issue_date) errs.push(`Note '${s?.name ?? '?'}' has an interest rate but no issue date.`);
+    }
+    if (s?.issue_date != null && s.issue_date !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(String(s.issue_date))) {
+      errs.push(`Note '${s?.name ?? '?'}' issue date must be YYYY-MM-DD.`);
+    }
   }
   for (const r of inputs.rounds || []) {
     if (!r?.name) errs.push('Every round needs a name.');
@@ -159,23 +195,56 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
       }
     }
 
-    // 2) Convert SAFEs.
+    // 2) Convert SAFEs and notes.
+    //
+    // The legacy inline path below is preserved EXACTLY for scenarios
+    // that use only plain pre-money SAFEs, because saved result_json
+    // blobs and CSV exports are contractually byte-identical with the
+    // FastAPI engine. Post-money SAFEs and notes need a fixed-point
+    // solve that path cannot express, so they route to
+    // services/safeConversion.ts instead.
     const safePrefs: Record<string, number> = {};
-    for (const s of pendingSafes) {
-      const cap = Number(s.cap || 0);
-      const disc = Number(s.discount || 0);
-      const capPrice = cap ? safeDiv(cap, sharesPre) : Infinity;
-      const discPrice = disc ? pricePerShare * (1 - disc) : Infinity;
-      const conv = Math.min(capPrice, discPrice);
-      const binding = capPrice <= discPrice ? 'cap' : (disc ? 'discount' : '—');
-      if (!Number.isFinite(conv) || conv <= 0) {
-        warnings.push(`SAFE '${s.name}' has no cap and no discount; skipped.`);
-        continue;
+    if (needsExtendedConversion(pendingSafes as ConvertibleIn[])) {
+      const conv = convertInstruments(
+        pendingSafes as ConvertibleIn[], sharesPre, pricePerShare, round.conversion_date,
+      );
+      for (const w of conv.warnings) warnings.push(w);
+      for (const h of conv.holders) {
+        addOrMerge(ledger, h.name, 'safe', h.shares);
+        // Liquidation preference follows the money actually put in,
+        // which for a note includes accrued interest.
+        safePrefs[h.name] = (safePrefs[h.name] || 0) + h.converting_amount;
+        const label = h.instrument === 'note' ? 'Note' : 'SAFE';
+        const basisLabel = h.basis === 'post_money' ? 'post-money' : 'pre-money';
+        const interest = h.accrued_interest > 0
+          ? ` (incl. $${h.accrued_interest.toFixed(2)} accrued interest)` : '';
+        events.push(
+          `${label} '${h.name}' converted (${basisLabel}): ${h.shares.toLocaleString()} shares ` +
+          `@ $${h.price_per_share.toFixed(4)} (binding: ${h.binding})${interest}`,
+        );
       }
-      const shares = roundShares(Number(s.amount) / conv);
-      addOrMerge(ledger, s.name, 'safe', shares);
-      safePrefs[s.name] = (safePrefs[s.name] || 0) + Number(s.amount);
-      events.push(`SAFE '${s.name}' converted: ${shares.toLocaleString()} shares @ $${conv.toFixed(4)} (binding: ${binding})`);
+      if (conv.over_subscribed) {
+        events.push(
+          `WARNING: post-money caps promise ${(conv.post_money_fraction * 100).toFixed(1)}% of the company — these terms cannot all be honoured.`,
+        );
+      }
+    } else {
+      for (const s of pendingSafes) {
+        const cap = Number(s.cap || 0);
+        const disc = Number(s.discount || 0);
+        const capPrice = cap ? safeDiv(cap, sharesPre) : Infinity;
+        const discPrice = disc ? pricePerShare * (1 - disc) : Infinity;
+        const conv = Math.min(capPrice, discPrice);
+        const binding = capPrice <= discPrice ? 'cap' : (disc ? 'discount' : '—');
+        if (!Number.isFinite(conv) || conv <= 0) {
+          warnings.push(`SAFE '${s.name}' has no cap and no discount; skipped.`);
+          continue;
+        }
+        const shares = roundShares(Number(s.amount) / conv);
+        addOrMerge(ledger, s.name, 'safe', shares);
+        safePrefs[s.name] = (safePrefs[s.name] || 0) + Number(s.amount);
+        events.push(`SAFE '${s.name}' converted: ${shares.toLocaleString()} shares @ $${conv.toFixed(4)} (binding: ${binding})`);
+      }
     }
     pendingSafes = [];
 
