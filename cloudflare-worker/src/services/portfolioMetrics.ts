@@ -94,16 +94,20 @@ export function xirr(flows: Array<{ date: string; amount: number }>): number | n
   const HI = 10;      // +1000%: anything above this is noise, not a return
   let lo = LO, hi = HI;
   let fLo = npvAt(lo, parsed, t0);
-  let fHi = npvAt(hi, parsed, t0);
-  if (!Number.isFinite(fLo) || !Number.isFinite(fHi)) return null;
-  if (fLo * fHi > 0) return null; // no root bracketed in range
+  // The upper bracket's NPV is needed only to confirm a root is bracketed
+  // before the loop starts. Inside the loop the sign test is always taken
+  // against fLo, so the upper value is never re-read — hence a const, and
+  // no dead store when `hi` moves.
+  const fHiInitial = npvAt(hi, parsed, t0);
+  if (!Number.isFinite(fLo) || !Number.isFinite(fHiInitial)) return null;
+  if (fLo * fHiInitial > 0) return null; // no root bracketed in range
 
   for (let i = 0; i < 200; i++) {
     const mid = (lo + hi) / 2;
     const fMid = npvAt(mid, parsed, t0);
     if (!Number.isFinite(fMid)) return null;
     if (Math.abs(fMid) < 1e-9 || (hi - lo) < 1e-9) return round4(mid);
-    if (fLo * fMid < 0) { hi = mid; fHi = fMid; }
+    if (fLo * fMid < 0) hi = mid;
     else { lo = mid; fLo = fMid; }
   }
   return round4((lo + hi) / 2);
