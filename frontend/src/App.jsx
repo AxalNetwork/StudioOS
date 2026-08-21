@@ -98,6 +98,7 @@ const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
 const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
+const DueDiligenceRequestsPage = lazy(() => import('./pages/DueDiligenceRequestsPage'));
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
@@ -1791,6 +1792,11 @@ function AppInner() {
       <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       {/* Task #83 — de-admin Due Diligence: investor/advisor-facing alias of the same pages (no /admin framing). */}
       <Route path="/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      {/* Build queue #128 — subject-facing request inbox. Founders included by design:
+          this surface exposes only the requests addressed to them, never case data
+          (the "founders NEVER read DD" invariant lives in the worker). React Router
+          ranks the static segment above /:uid, so this never shadows a case UID. */}
+      <Route path="/due-diligence/requests" element={guard(['founder', 'admin', 'partner', 'investor', 'advisor'], <DueDiligenceRequestsPage />)} />
       <Route path="/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       <Route path="/scoring" element={guard(labRoles(['admin', 'partner', 'investor']), <ScoringPage />)} />
       <Route path="/projects" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <ProjectsPage />)} />

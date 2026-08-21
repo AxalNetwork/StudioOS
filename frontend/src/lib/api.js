@@ -2945,6 +2945,18 @@ export const dd = {
     fd.append('file', file);
     return request(`/dd/cases/${uid}/sections/${sectionId}/nda`, { method: 'POST', body: fd });
   },
+  // Build queue #128 — working checklists + information requests.
+  updateItem: (uid, itemId, patch) =>
+    request(`/dd/cases/${uid}/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  createRequest: (uid, data) =>
+    request(`/dd/cases/${uid}/requests`, { method: 'POST', body: JSON.stringify(data) }),
+  reviewRequest: (uid, id) =>
+    request(`/dd/cases/${uid}/requests/${id}`, { method: 'PATCH', body: JSON.stringify({ state: 'reviewed' }) }),
+  // Subject-facing surface: the ONLY dd calls a founder may make. The
+  // payload carries no case internals — see routes/dd.ts invariant.
+  myRequests: () => request('/dd/requests/mine'),
+  respondRequest: (id, data) =>
+    request(`/dd/requests/${id}/respond`, { method: 'PATCH', body: JSON.stringify(data) }),
 };
 
 // Task #2 (AU) — Admin Publication Exports.
