@@ -2718,6 +2718,17 @@ export const api = {
   positionsList: () => request('/positions'),
   positionsByProject: (projectUid) => request(`/positions/${projectUid}`),
   positionCreate: (data) => request('/positions', { method: 'POST', body: JSON.stringify(data) }),
+  // Build queue #125 — real portfolio performance. `analytics` returns
+  // gross-of-fees TVPI/DPI/RVPI/MOIC/IRR computed from positions, marks,
+  // and realisations, with mark_coverage so the UI can flag how much of
+  // NAV is still carried at cost.
+  positionsAnalytics: (asOf) => request(`/positions/analytics${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`),
+  positionsKpiCompliance: (cadence = 'quarterly') =>
+    request(`/positions/kpi-compliance?cadence=${encodeURIComponent(cadence)}`),
+  positionMarkCreate: (projectUid, data) =>
+    request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
+  positionDistributionCreate: (projectUid, data) =>
+    request(`/positions/${projectUid}/distributions`, { method: 'POST', body: JSON.stringify(data) }),
 
   // ---------- Contacts (inbound relationship hub) ----------
   contactsList: (opts = {}) => {

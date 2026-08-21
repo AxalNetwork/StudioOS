@@ -95,8 +95,15 @@ privateData.get('/portfolio/metrics', async (c) => {
     // (re-open inside metrics calc below — `portfolio` is the masked list)
     const portfolioCount = portfolio.length;
 
-    const tvpi = Number(called[0].total) > 0 ? Math.round(Number(committed[0].total) / Number(called[0].total) * 100) / 100 : 0;
-    return c.json({ role: roleLabel, deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: Number(committed[0].total), total_called: Number(called[0].total), tvpi, portfolio_companies: portfolioCount }, portfolio });
+    // Build queue #125 — this was shipped as `tvpi`, but committed/called
+    // is a CALL RATIO, not a multiple: it says how much of the fund is
+    // still uncalled and contains no value term at all. Renamed to what
+    // it measures (no frontend consumed the old key). Real TVPI comes
+    // from GET /api/positions/analytics, which has marks behind it.
+    const calledPct = Number(committed[0].total) > 0
+      ? Math.round(Number(called[0].total) / Number(committed[0].total) * 100) / 100
+      : null;
+    return c.json({ role: roleLabel, deals, total_deals: deals.length, active_deals: deals.filter((d: any) => ['applied', 'scored', 'active'].includes(d.status)).length, fund_metrics: { total_committed: Number(committed[0].total), total_called: Number(called[0].total), called_pct: calledPct, portfolio_companies: portfolioCount }, portfolio });
   }
 
   const allProjects = await sql`SELECT * FROM projects WHERE deleted_at IS NULL`;
