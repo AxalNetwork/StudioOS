@@ -29,6 +29,260 @@ function StatusPill({ status }) {
   return <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${map[status] || 'bg-gray-100 text-gray-700'}`}>{status}</span>;
 }
 
+const ROFR_TONE = {
+  not_started: 'bg-gray-100 text-gray-700',
+  notice_served: 'bg-amber-100 text-amber-800',
+  partially_exercised: 'bg-amber-100 text-amber-800',
+  company_exercised: 'bg-red-100 text-red-700',
+  investors_exercised: 'bg-red-100 text-red-700',
+  waived: 'bg-emerald-100 text-emerald-800',
+  expired: 'bg-emerald-100 text-emerald-800',
+};
+
+/**
+ * The two questions a seller has about a secondary they have listed:
+ * whether they are allowed to sell, and what they would actually take
+ * home. Both answers come from the worker — the arithmetic and the
+ * ROFR state machine live in services/secondaryProceeds.ts, so this
+ * panel renders a result rather than computing one.
+ */
+function SettlementPanel({ listing, onClose }) {
+  const [rofr, setRofr] = useState(null);
+  const [proceeds, setProceeds] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  // Fee terms are negotiated per sale, so they start empty rather than
+  // at a house default a seller might mistake for their actual deal.
+  const [terms, setTerms] = useState({
+    gross: '', costBasis: '', transferFeePct: '', flatFees: '', carryPct: '', withholdingPct: '',
+  });
+  const [notice, setNotice] = useState({
+    notice_date: '', window_days: '30', company_elected: '', investors_elected: '', waived: false,
+  });
+  useEscapeClose(onClose);
+
+  const loadRofr = async () => {
+    try {
+      const r = await api.liquidityRofr(listing.id);
+      setRofr(r);
+      if (r?.notice) {
+        setNotice({
+          notice_date: r.notice.notice_date || '',
+          window_days: String(r.notice.window_days ?? 30),
+          company_elected: r.notice.company_elected ? String(r.notice.company_elected) : '',
+          investors_elected: r.notice.investors_elected ? String(r.notice.investors_elected) : '',
+          waived: !!r.notice.waived,
+        });
+      }
+    } catch (e) { setErr(e.message || 'Could not load the ROFR status'); }
+  };
+  useEffect(() => { loadRofr(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [listing.id]);
+
+  const pctOrNull = (v) => {
+    const n = Number(v);
+    // The worker rejects a whole number (2 for 2%) rather than applying
+    // 200%, so send the fraction the seller means.
+    return v === '' || !Number.isFinite(n) ? null : n / 100;
+  };
+  const centsOrNull = (v) => {
+    const n = Number(v);
+    return v === '' || !Number.isFinite(n) ? null : Math.round(n * 100);
+  };
+
+  const runProceeds = async () => {
+    setBusy(true); setErr('');
+    try {
+      setProceeds(await api.liquidityProceeds(listing.id, {
+        gross_cents: centsOrNull(terms.gross) ?? undefined,
+        cost_basis_cents: centsOrNull(terms.costBasis),
+        flat_fees_cents: centsOrNull(terms.flatFees) ?? 0,
+        transfer_fee_pct: pctOrNull(terms.transferFeePct),
+        carry_pct: pctOrNull(terms.carryPct),
+        withholding_pct: pctOrNull(terms.withholdingPct),
+      }));
+    } catch (e) { setErr(e.message || 'Could not compute proceeds'); }
+    setBusy(false);
+  };
+
+  const saveNotice = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.liquidityUpdateRofr(listing.id, {
+        notice_date: notice.notice_date || null,
+        window_days: Number(notice.window_days) || 30,
+        shares_offered: Number(listing.shares) || 0,
+        company_elected: Number(notice.company_elected) || 0,
+        investors_elected: Number(notice.investors_elected) || 0,
+        waived: notice.waived,
+      });
+      setRofr((prev) => ({ ...(prev || {}), ...r }));
+    } catch (e) { setErr(e.message || 'Could not save the notice'); }
+    setBusy(false);
+  };
+
+  const status = rofr?.status;
+  const field = 'w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg dark:bg-gray-900 dark:border-gray-700';
+  const label = 'block text-[10px] uppercase tracking-wide text-gray-500 mb-1';
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-gray-900 rounded-xl max-w-2xl w-full my-8 p-5 space-y-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Settlement</div>
+            <div className="text-xs text-gray-500">
+              {listing.subsidiary_name} · {Number(listing.shares).toLocaleString()} shares · ask {fmt(listing.asking_price_cents)}
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Close"><X size={16} className="text-gray-400" /></button>
+        </div>
+
+        {err && (
+          <div className="text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2 flex items-start gap-2">
+            <AlertTriangle size={12} className="mt-0.5 shrink-0" /> {err}
+          </div>
+        )}
+
+        {/* ---------- ROFR ---------- */}
+        <section>
+          <div className="text-xs font-semibold text-gray-900 mb-2 dark:text-gray-100">Right of first refusal</div>
+          {!status ? (
+            <div className="text-xs text-gray-400">Loading…</div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${ROFR_TONE[status.state] || 'bg-gray-100 text-gray-700'}`}>
+                  {status.state.replace(/_/g, ' ')}
+                </span>
+                <span className={`text-[11px] font-medium ${status.clear_to_transfer ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {status.clear_to_transfer ? 'Clear to transfer' : 'Not clear to transfer'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">{status.summary}</p>
+              <div className="text-[11px] text-gray-500">
+                {Number(status.transferable_shares).toLocaleString()} of {Number(listing.shares).toLocaleString()} shares may transfer
+                {status.deadline ? ` · window closes ${status.deadline}` : ''}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2 mt-3">
+            <div>
+              <label className={label} htmlFor="rofr-notice-date">Notice served</label>
+              <input id="rofr-notice-date" type="date" className={field} value={notice.notice_date}
+                onChange={(e) => setNotice({ ...notice, notice_date: e.target.value })} />
+            </div>
+            <div>
+              <label className={label} htmlFor="rofr-window">Window (days)</label>
+              <input id="rofr-window" type="number" min="1" className={field} value={notice.window_days}
+                onChange={(e) => setNotice({ ...notice, window_days: e.target.value })} />
+            </div>
+            <div>
+              <label className={label} htmlFor="rofr-company">Company elected (shares)</label>
+              <input id="rofr-company" type="number" min="0" className={field} value={notice.company_elected}
+                onChange={(e) => setNotice({ ...notice, company_elected: e.target.value })} />
+            </div>
+            <div>
+              <label className={label} htmlFor="rofr-investors">Investors elected (shares)</label>
+              <input id="rofr-investors" type="number" min="0" className={field} value={notice.investors_elected}
+                onChange={(e) => setNotice({ ...notice, investors_elected: e.target.value })} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 mt-2 text-xs text-gray-700 dark:text-gray-300">
+            <input type="checkbox" checked={notice.waived}
+              onChange={(e) => setNotice({ ...notice, waived: e.target.checked })} />
+            Written waiver received
+          </label>
+          <button onClick={saveNotice} disabled={busy}
+            className="mt-2 px-3 py-1.5 text-xs bg-gray-900 text-white rounded-lg disabled:opacity-50">
+            Save notice
+          </button>
+        </section>
+
+        {/* ---------- proceeds ---------- */}
+        <section className="border-t border-gray-100 dark:border-gray-800 pt-4">
+          <div className="text-xs font-semibold text-gray-900 mb-1 dark:text-gray-100">What you would take home</div>
+          <p className="text-[11px] text-gray-500 mb-2">
+            Percentages as whole numbers (2 means 2%). Carry is charged on the gain over your cost
+            basis, so without a basis on file it is skipped rather than guessed.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className={label} htmlFor="pr-gross">Sale price ($)</label>
+              <input id="pr-gross" type="number" className={field} value={terms.gross}
+                placeholder={String(Math.round((listing.asking_price_cents || 0) / 100))}
+                onChange={(e) => setTerms({ ...terms, gross: e.target.value })} />
+            </div>
+            <div>
+              <label className={label} htmlFor="pr-basis">Cost basis ($)</label>
+              <input id="pr-basis" type="number" className={field} value={terms.costBasis}
+                onChange={(e) => setTerms({ ...terms, costBasis: e.target.value })} />
+            </div>
+            <div>
+              <label className={label} htmlFor="pr-flat">Legal / admin ($)</label>
+              <input id="pr-flat" type="number" className={field} value={terms.flatFees}
+                onChange={(e) => setTerms({ ...terms, flatFees: e.target.value })} />
+            </div>
+            <div>
+              <label className={label} htmlFor="pr-transfer">Transfer fee (%)</label>
+              <input id="pr-transfer" type="number" step="0.01" className={field} value={terms.transferFeePct}
+                onChange={(e) => setTerms({ ...terms, transferFeePct: e.target.value })} />
+            </div>
+            <div>
+              <label className={label} htmlFor="pr-carry">Carry (%)</label>
+              <input id="pr-carry" type="number" step="0.01" className={field} value={terms.carryPct}
+                onChange={(e) => setTerms({ ...terms, carryPct: e.target.value })} />
+            </div>
+            <div>
+              <label className={label} htmlFor="pr-withholding">Withholding (%)</label>
+              <input id="pr-withholding" type="number" step="0.01" className={field} value={terms.withholdingPct}
+                onChange={(e) => setTerms({ ...terms, withholdingPct: e.target.value })} />
+            </div>
+          </div>
+          <button onClick={runProceeds} disabled={busy}
+            className="mt-2 px-3 py-1.5 text-xs bg-violet-600 text-white rounded-lg disabled:opacity-50">
+            {busy ? 'Working…' : 'Calculate'}
+          </button>
+
+          {proceeds && (
+            <div className="mt-3">
+              <table className="w-full text-xs">
+                <tbody>
+                  {proceeds.lines.map((l) => (
+                    <tr key={l.key} className="border-t border-gray-100 dark:border-gray-800">
+                      <td className="py-1.5 text-gray-700 dark:text-gray-300">
+                        {l.label}
+                        {l.note && <div className="text-[10px] text-gray-400">{l.note}</div>}
+                      </td>
+                      <td className={`text-right tabular-nums ${l.amount_cents < 0 ? 'text-red-600' : 'text-gray-900 dark:text-gray-100'}`}>
+                        {l.amount_cents < 0 ? '−' : ''}{fmt(Math.abs(l.amount_cents))}
+                      </td>
+                      <td className="text-right tabular-nums text-gray-500 w-20">{fmt(l.balance_cents)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-gray-300 dark:border-gray-700">
+                    <td className="py-1.5 font-semibold text-gray-900 dark:text-gray-100">Net to you</td>
+                    <td />
+                    <td className="text-right font-semibold tabular-nums text-emerald-700">{fmt(proceeds.net_cents)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div className="text-[11px] text-gray-500 mt-1">
+                {proceeds.gain_cents != null && <>Gain {fmt(proceeds.gain_cents)}</>}
+                {proceeds.multiple != null && <> · {proceeds.multiple.toFixed(2)}× on basis</>}
+                {proceeds.net_ratio != null && <> · you keep {(proceeds.net_ratio * 100).toFixed(1)}% of gross</>}
+              </div>
+              {proceeds.warnings?.map((w, i) => (
+                <div key={i} className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1 mt-1">{w}</div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function MatchesPanel({ listingId, onClose, currentUser }) {
   const [matches, setMatches] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -197,6 +451,7 @@ export default function LiquidityPage({ currentUser }) {
   const [portfolio, setPortfolio] = useState(null);
   const [events, setEvents] = useState(null);
   const [showMatches, setShowMatches] = useState(null);
+  const [showSettlement, setShowSettlement] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
   const [err, setErr] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -365,6 +620,10 @@ export default function LiquidityPage({ currentUser }) {
                   <div className="flex items-center gap-2">
                     {l.ai_valuation_cents != null && <span className="text-violet-700">AI {fmt(l.ai_valuation_cents)}</span>}
                     <StatusPill status={l.status} />
+                    <button onClick={() => setShowSettlement(l)}
+                      className="px-2 py-1 text-[11px] bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg flex items-center gap-1 dark:bg-gray-800 dark:text-gray-200">
+                      <ShieldCheck size={11} /> Settlement
+                    </button>
                   </div>
                 </div>
               ))}
@@ -431,6 +690,9 @@ export default function LiquidityPage({ currentUser }) {
       {showMatches && (
         <MatchesPanel listingId={showMatches} currentUser={currentUser}
           onClose={(refresh) => { setShowMatches(null); if (refresh) load(); }} />
+      )}
+      {showSettlement && (
+        <SettlementPanel listing={showSettlement} onClose={() => setShowSettlement(null)} />
       )}
     </div>
   );

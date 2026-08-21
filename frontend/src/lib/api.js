@@ -1947,6 +1947,13 @@ export const api = {
     request('/liquidity/execute-exit', { method: 'POST', body: JSON.stringify(data) }),
   liquidityMyPortfolio: () => request('/liquidity/my-portfolio'),
   liquidityEvents: () => request('/liquidity/events'),
+  // Settlement side of a secondary — seller or admin only. Proceeds is a
+  // calculator (nothing is stored); the ROFR notice is real state.
+  liquidityProceeds: (id, terms = {}) =>
+    request(`/liquidity/listings/${id}/proceeds`, { method: 'POST', body: JSON.stringify(terms) }),
+  liquidityRofr: (id) => request(`/liquidity/listings/${id}/rofr`),
+  liquidityUpdateRofr: (id, data) =>
+    request(`/liquidity/listings/${id}/rofr`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // ---------- VC Funds / LP Portal / Distributions ----------
   fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
