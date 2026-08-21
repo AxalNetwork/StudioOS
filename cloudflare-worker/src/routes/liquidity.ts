@@ -159,24 +159,27 @@ liquidity.post('/execute-exit', async (c) => {
     executed_price_cents: priceCents,
   });
 
-  // Distribute returns to seller's LP record (if any).
-  // Mock real settlement: increment `returns` on all of the seller's LP rows
-  // proportional to share of the price (simple split equally for now).
-  try {
-    const lps = await c.env.DB.prepare(
-      `SELECT id FROM limited_partners WHERE user_id = ?`
-    ).bind(listing.user_id).all<{ id: number }>();
-    const rows = lps.results || [];
-    if (rows.length) {
-      const perLp = Math.floor(priceCents / rows.length);
-      const stmts = rows.map(r =>
-        c.env.DB.prepare(
-          `UPDATE limited_partners SET returns = returns + ?, updated_at = datetime('now') WHERE id = ?`
-        ).bind(perLp / 100, r.id) // returns column stored in dollars; convert
-      );
-      await c.env.DB.batch(stmts);
-    }
-  } catch (e) { console.error('LP distribution failed', e); }
+  // Build queue #123 — REMOVED: a mock credit to limited_partners.returns.
+  //
+  // This block used to split the sale price equally across every LP row
+  // belonging to the seller and add it to `returns`, described as "mock
+  // real settlement". The write was not mock. `limited_partners.returns`
+  // is read by routes/funds.ts (the /lp-portal performance rollup) to
+  // compute the DPI and TVPI that real LPs are shown:
+  //
+  //     tvpi = (invested + returns + distributions) / invested
+  //     dpi  = (returns + distributions) / invested
+  //
+  // So a simulated exit permanently inflated real LP-facing performance
+  // figures — and did it by splitting proceeds across unrelated funds,
+  // which the comment further down this same handler correctly calls
+  // dangerous. The endpoint already tells the operator to run
+  // POST /api/funds/distributions/execute with an explicit fund_id;
+  // that remains the ONLY path that credits an LP ledger.
+  //
+  // Consequence, and it is the correct one: until a real distribution is
+  // executed against the right fund, DPI stays where it was. An honest
+  // zero beats a fabricated multiple in an LP report.
 
   // Mark accepted match if any
   if (body.buyer_user_id) {
