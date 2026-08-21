@@ -96,7 +96,9 @@ export async function request(path, options = {}) {
       const isPublicEndpoint = path.startsWith('/partner-onboard')
         || path.startsWith('/esign/sign')
         || path.startsWith('/public/')
-        || path.startsWith('/decks/share/');
+        || path.startsWith('/decks/share/')
+        // Build queue #120 — public audience-scoped cap-table link.
+        || path.startsWith('/captable/share/');
       if (res.status === 401 && !path.startsWith('/auth/') && !isPublicEndpoint) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -150,6 +152,7 @@ export async function request(path, options = {}) {
           || currentPath.startsWith('/esign/')
           || currentPath.startsWith('/deck/share/')
           || currentPath.startsWith('/share/deck/')
+          || currentPath.startsWith('/share/captable/')
           || currentPath.startsWith('/insights')
           || currentPath.startsWith('/settings/email/')
           // Task #5 — Public event surface (no auth)
@@ -2103,6 +2106,14 @@ export const api = {
   exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
   // Task #5 — live cap table (Carta-synced + manually-promoted rows).
   liveCapTable: () => request('/captable/live'),
+  // Build queue #120 — audience-scoped share links. The raw token is
+  // returned exactly once at mint time; only its hash is stored, so a
+  // link that is lost cannot be recovered, only replaced.
+  capTableShareCreate: (uid, data) =>
+    request(`/captable/scenarios/${uid}/share`, { method: 'POST', body: JSON.stringify(data) }),
+  capTableShareList: (uid) => request(`/captable/scenarios/${uid}/shares`),
+  capTableShareRevoke: (id) => request(`/captable/shares/${id}`, { method: 'DELETE' }),
+  capTableShared: (token) => request(`/captable/share/${token}`),
 
   // ---------- Task #6 — Founder subscription tier (FREE / GROWTH / STUDIO) ----------
   // 402 `tier_required` responses are auto-handled by `request` above (it

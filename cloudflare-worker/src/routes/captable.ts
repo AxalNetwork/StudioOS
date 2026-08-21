@@ -22,6 +22,57 @@ import {
   type AccessUser,
 } from '../services/captableAccess';
 import { ensureCapTableVariantColumn } from '../services/captableSchema';
+import {
+  mintShareToken, verifyShareToken, claimShareToken, sha256Hex, hashViewerField,
+} from '../services/shareLink';
+import {
+  redactForAudience, isShareAudience, AUDIENCE_SCOPE, type ShareAudience,
+} from '../services/captableShare';
+
+/**
+ * Build queue #120 — lazy bootstrap for the share tables. Canonical
+ * record is migration 170; this self-heals a database that has the
+ * deploy but not the migration yet, matching the pattern used by
+ * ensureCapTableVariantColumn above. Cached per isolate.
+ */
+let _shareSchemaReady = false;
+async function ensureCapTableShareSchema(env: Env): Promise<void> {
+  if (_shareSchemaReady) return;
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS captable_share_tokens (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       scenario_uid TEXT NOT NULL,
+       audience TEXT NOT NULL DEFAULT 'summary',
+       token_hash TEXT NOT NULL UNIQUE,
+       expires_at TEXT NOT NULL,
+       used_at TEXT,
+       view_limit INTEGER NOT NULL DEFAULT 1,
+       view_count INTEGER NOT NULL DEFAULT 0,
+       last_viewed_at TEXT,
+       label TEXT,
+       revoked_at TEXT,
+       created_by INTEGER,
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_captable_share_hash ON captable_share_tokens(token_hash)`,
+    `CREATE INDEX IF NOT EXISTS idx_captable_share_scenario ON captable_share_tokens(scenario_uid, created_at)`,
+    `CREATE TABLE IF NOT EXISTS captable_share_views (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       share_token_id INTEGER NOT NULL,
+       scenario_uid TEXT NOT NULL,
+       ip_hash TEXT,
+       ua_fingerprint TEXT,
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_captable_share_views_token ON captable_share_views(share_token_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_captable_share_views_scenario ON captable_share_views(scenario_uid, created_at)`,
+  ];
+  for (const s of stmts) {
+    try { await env.DB.prepare(s).run(); }
+    catch (e) { console.warn('[captable] share schema bootstrap:', (e as Error).message); }
+  }
+  _shareSchemaReady = true;
+}
 
 const captable = new Hono<{ Bindings: Env }>();
 
@@ -371,6 +422,165 @@ captable.get('/scenarios/:uid/export.csv', async (c) => {
       'Content-Disposition': `attachment; filename="captable-${safeName}.csv"`,
     },
   });
+});
+
+// =====================================================================
+// Build queue #120 — audience-scoped share links.
+//
+// ROUTE ORDER MATTERS: `/share/:token` and the scenario-scoped share
+// endpoints are registered here, ABOVE the `/:projectId` catch-all
+// further down this file. Hono matches in registration order, so moving
+// these below it would route `/api/captable/share/abc` into the
+// project handler and 404 (or worse, treat "share" as a project id).
+// =====================================================================
+
+const SHARE_TTL_HOURS_DEFAULT = 168;   // 7 days
+const SHARE_TTL_HOURS_MAX = 24 * 90;   // 90 days
+const SHARE_VIEW_LIMIT_MAX = 500;
+
+/** POST /api/captable/scenarios/:uid/share — mint an audience-scoped link. */
+captable.post('/scenarios/:uid/share', async (c) => {
+  try {
+  const user = await requireAuth(c);
+  await ensureCapTableShareSchema(c.env);
+  const uid = c.req.param('uid');
+  // Sharing is a WRITE-level act: it hands the cap table to an outsider,
+  // so scenario READ access is deliberately not enough. Reuses the
+  // existing gate so project-bound scenarios follow project write rules.
+  await ensureScenarioWriteOr404(c.env, uid, user);
+
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const audience: ShareAudience = isShareAudience(body.audience) ? body.audience : 'summary';
+  const ttlHours = Math.min(
+    SHARE_TTL_HOURS_MAX,
+    Math.max(1, Number(body.expires_in_hours) || SHARE_TTL_HOURS_DEFAULT),
+  );
+  const viewLimit = Math.min(
+    SHARE_VIEW_LIMIT_MAX,
+    Math.max(1, Number(body.view_limit) || 25),
+  );
+  const label = body.label ? String(body.label).slice(0, 120) : null;
+
+  const minted = await mintShareToken(c.env, `captable:${uid}:${audience}`, ttlHours * 3600, user.email);
+  await c.env.DB.prepare(
+    `INSERT INTO captable_share_tokens (scenario_uid, audience, token_hash, expires_at, view_limit, label, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    uid, audience, await sha256Hex(minted.token), minted.expires_at, viewLimit, label, user.id,
+  ).run();
+
+  return c.json({
+    token: minted.token,
+    audience,
+    expires_at: minted.expires_at,
+    expires_in_seconds: minted.expires_in_seconds,
+    view_limit: viewLimit,
+    share_path: `/share/captable/${minted.token}`,
+    scope: AUDIENCE_SCOPE[audience],
+  }, 201);
+  } catch (e) { return asJsonError(c, e); }
+});
+
+/** GET /api/captable/scenarios/:uid/shares — live links for this scenario. */
+captable.get('/scenarios/:uid/shares', async (c) => {
+  try {
+  const user = await requireAuth(c);
+  await ensureCapTableShareSchema(c.env);
+  const uid = c.req.param('uid');
+  await ensureScenarioWriteOr404(c.env, uid, user);
+  const rows = await c.env.DB.prepare(
+    `SELECT id, audience, expires_at, used_at, view_limit, view_count, last_viewed_at,
+            label, revoked_at, created_at
+       FROM captable_share_tokens
+      WHERE scenario_uid = ? ORDER BY created_at DESC LIMIT 100`,
+  ).bind(uid).all<Record<string, unknown>>();
+  // The token itself is unrecoverable by design — only its hash was
+  // stored — so the list shows status, never a re-copyable link.
+  return c.json({ items: rows.results || [] });
+  } catch (e) { return asJsonError(c, e); }
+});
+
+/** DELETE /api/captable/shares/:id — revoke a link before it expires. */
+captable.delete('/shares/:id', async (c) => {
+  try {
+  const user = await requireAuth(c);
+  await ensureCapTableShareSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const tok = await c.env.DB.prepare(
+    'SELECT id, scenario_uid FROM captable_share_tokens WHERE id = ?',
+  ).bind(id).first<{ id: number; scenario_uid: string }>();
+  if (!tok) return c.json({ detail: 'Not found' }, 404);
+  await ensureScenarioWriteOr404(c.env, tok.scenario_uid, user);
+  // Revoke by expiring rather than deleting, so the view history stays
+  // attributable to a link the owner can still see they created.
+  await c.env.DB.prepare(
+    `UPDATE captable_share_tokens
+        SET revoked_at = datetime('now'), expires_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(id).run();
+  return c.json({ ok: true, id });
+  } catch (e) { return asJsonError(c, e); }
+});
+
+/**
+ * GET /api/captable/share/:token — PUBLIC. No auth.
+ *
+ * Redaction runs server-side before serialisation (services/
+ * captableShare.ts), so data the audience may not see never reaches the
+ * browser at all rather than being hidden by the client.
+ */
+captable.get('/share/:token', async (c) => {
+  await ensureCapTableShareSchema(c.env);
+  const token = c.req.param('token');
+  const verified = await verifyShareToken(c.env, token);
+  if ('error' in verified) {
+    // 410 for a link that WAS valid and has aged out, 403 for one that
+    // never was — a viewer can act on the difference.
+    return verified.error === 'expired'
+      ? c.json({ detail: 'This link has expired. Ask for a fresh one.' }, 410)
+      : c.json({ detail: 'This link is not valid.' }, 403);
+  }
+  const m = /^captable:([A-Za-z0-9_-]+):(summary|investor|full)$/.exec(String(verified.k));
+  if (!m) return c.json({ detail: 'This link is not valid.' }, 403);
+  const [, uid, audienceRaw] = m;
+  const audience = audienceRaw as ShareAudience;
+
+  const claim = await claimShareToken(c.env, 'captable_share_tokens', await sha256Hex(token));
+  if (!claim.ok) {
+    return claim.reason === 'exhausted_or_expired'
+      ? c.json({ detail: 'This link has been used its maximum number of times, or has expired.' }, 410)
+      : c.json({ detail: 'This link is not valid.' }, 403);
+  }
+
+  const row = await c.env.DB.prepare(
+    'SELECT uid, name, result_json FROM cap_table_scenarios WHERE uid = ?',
+  ).bind(uid).first<{ uid: string; name: string; result_json: string | null }>();
+  if (!row) return c.json({ detail: 'This cap table is no longer available.' }, 404);
+
+  let result: SimulateResult | null = null;
+  try { result = row.result_json ? JSON.parse(row.result_json) as SimulateResult : null; }
+  catch { result = null; }
+
+  // Best-effort impression log; never block or fail the read on it.
+  try {
+    const tok = await c.env.DB.prepare(
+      'SELECT id FROM captable_share_tokens WHERE token_hash = ? LIMIT 1',
+    ).bind(await sha256Hex(token)).first<{ id: number }>();
+    if (tok) {
+      await c.env.DB.prepare(
+        `INSERT INTO captable_share_views (share_token_id, scenario_uid, ip_hash, ua_fingerprint)
+         VALUES (?, ?, ?, ?)`,
+      ).bind(
+        tok.id, uid,
+        await hashViewerField(c.env, c.req.header('cf-connecting-ip') || null),
+        await hashViewerField(c.env, c.req.header('user-agent') || null),
+      ).run();
+    }
+  } catch (e) {
+    console.warn('[captable] share view log failed:', (e as Error).message);
+  }
+
+  return c.json(redactForAudience(result, audience, row.name || 'Cap table'));
 });
 
 /**

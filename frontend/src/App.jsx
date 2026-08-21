@@ -99,6 +99,7 @@ const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
 const DueDiligenceRequestsPage = lazy(() => import('./pages/DueDiligenceRequestsPage'));
+const SharedCapTablePage = lazy(() => import('./pages/SharedCapTablePage'));
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
@@ -1742,6 +1743,9 @@ function AppInner() {
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
+      {/* Build queue #120 — public, audience-scoped cap-table link. No auth:
+          the payload is redacted server-side for the link's audience. */}
+      <Route path="/share/captable/:token" element={<SharedCapTablePage />} />
       <Route path="/share/deck/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #2 — public, HMAC-token-gated print target consumed only by
           the Cloudflare Browser Rendering session that drives server-side
