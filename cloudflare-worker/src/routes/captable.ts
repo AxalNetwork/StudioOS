@@ -28,6 +28,9 @@ import {
 import {
   redactForAudience, isShareAudience, AUDIENCE_SCOPE, type ShareAudience,
 } from '../services/captableShare';
+import {
+  safeHarbourStatus, triggerChecklist, commonToPreferredRatio, type TriggerKind,
+} from '../services/valuation409a';
 
 /**
  * Build queue #120 — lazy bootstrap for the share tables. Canonical
@@ -594,6 +597,241 @@ captable.get('/share/:token', async (c) => {
  * Read-only — admin sees own rows only here (their privileged read of other
  * tenants is intentionally NOT exposed at this surface).
  */
+// ---------------------------------------------------------------------------
+// 409A safe harbour
+//
+// services/valuation409a.ts decides whether a company's option grants sit
+// behind a §409A presumption of reasonableness. It is pure — no clock, no
+// storage — so these routes supply both: the appraisals and material
+// events from D1 (migration 172), and today's date.
+//
+// The valuation table is HISTORY, never overwritten. An auditor asks what
+// the FMV was on a grant date, not what it is today, and the current
+// status is just the latest row by valuation_date.
+//
+// Access rides on the project, exactly like a cap table scenario:
+// founders on their own project, plus admins and partners. Reading a
+// company's FMV is reading its cap table by another route, so the two
+// gates have to agree.
+//
+// These are registered above `/:projectId`. Their paths carry two
+// segments so Hono would not confuse them today, but the catch-all below
+// makes that a matter of luck rather than design.
+// ---------------------------------------------------------------------------
+
+let valuation409aSchemaReady = false;
+async function ensure409aSchema(env: Env): Promise<void> {
+  if (valuation409aSchemaReady) return;
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS valuations_409a (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+       valuation_date TEXT NOT NULL,
+       fmv_per_share REAL NOT NULL,
+       provider TEXT,
+       method TEXT,
+       preferred_price_per_share REAL,
+       report_url TEXT,
+       notes TEXT,
+       created_by INTEGER REFERENCES users(id),
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+  ).run();
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS valuation_409a_events (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+       kind TEXT NOT NULL,
+       occurred_on TEXT NOT NULL,
+       note TEXT,
+       created_by INTEGER REFERENCES users(id),
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+  ).run();
+  valuation409aSchemaReady = true;
+}
+
+const TRIGGER_KINDS = new Set<TriggerKind>([
+  'priced_round', 'material_change', 'secondary_transaction',
+  'acquisition_discussion', 'financial_restatement',
+]);
+const VALUATION_METHODS = new Set([
+  'income', 'market', 'asset', 'obm', 'backsolve', 'other',
+]);
+
+/** Read-gate a project the same way a project-bound scenario is read-gated. */
+async function ensureProjectReadAccess(env: Env, projectId: number, user: AuthUser) {
+  const proj = await loadProject(env, projectId);
+  if (!proj) throw new HttpError(404, 'Project not found');
+  if (!canReadProject(user as AccessUser, proj)) {
+    throw new HttpError(403, "You don't have access to that project");
+  }
+}
+
+function isoDateOrThrow(value: unknown, field: string): string {
+  const s = String(value ?? '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(s))) {
+    throw new HttpError(400, `${field} must be an ISO date (YYYY-MM-DD)`);
+  }
+  return s;
+}
+
+// GET /api/captable/409a/:projectId — status, history and trigger checklist.
+captable.get('/409a/:projectId', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const projectId = parseInt(c.req.param('projectId'), 10);
+    if (!Number.isFinite(projectId)) throw new HttpError(400, 'Invalid project id');
+    await ensureProjectReadAccess(c.env, projectId, user as AuthUser);
+    await ensure409aSchema(c.env);
+
+    const [valuations, events] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT * FROM valuations_409a WHERE project_id = ?
+          ORDER BY valuation_date DESC, id DESC LIMIT 50`,
+      ).bind(projectId).all(),
+      c.env.DB.prepare(
+        `SELECT * FROM valuation_409a_events WHERE project_id = ?
+          ORDER BY occurred_on DESC, id DESC LIMIT 100`,
+      ).bind(projectId).all(),
+    ]);
+
+    const history = (valuations.results || []) as any[];
+    const eventRows = ((events.results || []) as any[]).map((e) => ({
+      kind: e.kind as TriggerKind,
+      occurred_on: String(e.occurred_on).slice(0, 10),
+      note: e.note ?? null,
+    }));
+    // Latest by valuation_date — the appraisal currently in force.
+    const current = history[0]
+      ? {
+          valuation_date: String(history[0].valuation_date).slice(0, 10),
+          fmv_per_share: Number(history[0].fmv_per_share),
+          provider: history[0].provider ?? null,
+          method: history[0].method ?? null,
+        }
+      : null;
+
+    const today = new Date().toISOString().slice(0, 10);
+    return c.json({
+      ok: true,
+      project_id: projectId,
+      as_of: today,
+      current,
+      status: safeHarbourStatus(current, eventRows, today),
+      triggers: triggerChecklist(current, eventRows, today),
+      // Null rather than a fabricated ratio when either side is missing.
+      common_to_preferred: commonToPreferredRatio(
+        history[0]?.fmv_per_share ?? null,
+        history[0]?.preferred_price_per_share ?? null,
+      ),
+      history,
+      events: events.results || [],
+    });
+  } catch (e) { return asJsonError(c, e); }
+});
+
+// POST /api/captable/409a/:projectId — record an appraisal.
+captable.post('/409a/:projectId', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const projectId = parseInt(c.req.param('projectId'), 10);
+    if (!Number.isFinite(projectId)) throw new HttpError(400, 'Invalid project id');
+    await ensureProjectWriteAccess(c.env, projectId, user as AuthUser);
+    await ensure409aSchema(c.env);
+
+    const body: any = await c.req.json().catch(() => ({}));
+    const valuationDate = isoDateOrThrow(body?.valuation_date, 'valuation_date');
+    const fmv = Number(body?.fmv_per_share);
+    // Zero is rejected along with negatives and junk: a zero FMV would
+    // report every grant as free and is never a real appraisal result.
+    if (!Number.isFinite(fmv) || fmv <= 0) {
+      throw new HttpError(400, 'fmv_per_share must be a positive number');
+    }
+    const method = body?.method ? String(body.method) : null;
+    if (method && !VALUATION_METHODS.has(method)) {
+      throw new HttpError(400, `method must be one of ${[...VALUATION_METHODS].join(', ')}`);
+    }
+    const preferred = body?.preferred_price_per_share == null
+      ? null : Number(body.preferred_price_per_share);
+    if (preferred !== null && (!Number.isFinite(preferred) || preferred <= 0)) {
+      throw new HttpError(400, 'preferred_price_per_share must be a positive number when supplied');
+    }
+
+    const res = await c.env.DB.prepare(
+      `INSERT INTO valuations_409a
+         (project_id, valuation_date, fmv_per_share, provider, method,
+          preferred_price_per_share, report_url, notes, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       RETURNING id`,
+    ).bind(
+      projectId, valuationDate, fmv,
+      body?.provider ? String(body.provider).slice(0, 200) : null,
+      method, preferred,
+      body?.report_url ? String(body.report_url).slice(0, 1000) : null,
+      body?.notes ? String(body.notes).slice(0, 2000) : null,
+      user.id,
+    ).first<{ id: number }>();
+
+    return c.json({ ok: true, id: res?.id ?? null }, 201);
+  } catch (e) { return asJsonError(c, e); }
+});
+
+// POST /api/captable/409a/:projectId/events — record a material event.
+captable.post('/409a/:projectId/events', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const projectId = parseInt(c.req.param('projectId'), 10);
+    if (!Number.isFinite(projectId)) throw new HttpError(400, 'Invalid project id');
+    await ensureProjectWriteAccess(c.env, projectId, user as AuthUser);
+    await ensure409aSchema(c.env);
+
+    const body: any = await c.req.json().catch(() => ({}));
+    const kind = String(body?.kind || '') as TriggerKind;
+    if (!TRIGGER_KINDS.has(kind)) {
+      throw new HttpError(400, `kind must be one of ${[...TRIGGER_KINDS].join(', ')}`);
+    }
+    const occurredOn = isoDateOrThrow(body?.occurred_on, 'occurred_on');
+
+    const res = await c.env.DB.prepare(
+      `INSERT INTO valuation_409a_events (project_id, kind, occurred_on, note, created_by)
+       VALUES (?, ?, ?, ?, ?) RETURNING id`,
+    ).bind(
+      projectId, kind, occurredOn,
+      body?.note ? String(body.note).slice(0, 2000) : null,
+      user.id,
+    ).first<{ id: number }>();
+
+    return c.json({ ok: true, id: res?.id ?? null }, 201);
+  } catch (e) { return asJsonError(c, e); }
+});
+
+// DELETE /api/captable/409a/:projectId/events/:id — undo a mis-entered event.
+//
+// Events only, never valuations. A wrong event date silently changes
+// whether grants are covered, so it has to be correctable; an appraisal
+// is a document that existed, and deleting one destroys the answer to
+// "what was the FMV when you granted these options".
+captable.delete('/409a/:projectId/events/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const projectId = parseInt(c.req.param('projectId'), 10);
+    const eventId = parseInt(c.req.param('id'), 10);
+    if (!Number.isFinite(projectId) || !Number.isFinite(eventId)) {
+      throw new HttpError(400, 'Invalid id');
+    }
+    await ensureProjectWriteAccess(c.env, projectId, user as AuthUser);
+    await ensure409aSchema(c.env);
+    // project_id in the WHERE clause, not just the event id — otherwise
+    // anyone with write access to any project could delete any event.
+    const res = await c.env.DB.prepare(
+      `DELETE FROM valuation_409a_events WHERE id = ? AND project_id = ?`,
+    ).bind(eventId, projectId).run();
+    if (!Number(res?.meta?.changes || 0)) throw new HttpError(404, 'Event not found');
+    return c.json({ ok: true });
+  } catch (e) { return asJsonError(c, e); }
+});
+
 captable.get('/live', async (c) => {
   const user = await requireAuth(c);
   const integration = await c.env.DB.prepare(

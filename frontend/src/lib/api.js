@@ -2116,6 +2116,15 @@ export const api = {
   deleteCapTableScenario: (uid) =>
     request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
   exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
+  // 409A safe harbour — appraisals on file plus the material events that
+  // can end the presumption before the 12 months are up.
+  get409a: (projectId) => request(`/captable/409a/${projectId}`),
+  record409a: (projectId, data) =>
+    request(`/captable/409a/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  record409aEvent: (projectId, data) =>
+    request(`/captable/409a/${projectId}/events`, { method: 'POST', body: JSON.stringify(data) }),
+  delete409aEvent: (projectId, id) =>
+    request(`/captable/409a/${projectId}/events/${id}`, { method: 'DELETE' }),
   // Task #5 — live cap table (Carta-synced + manually-promoted rows).
   liveCapTable: () => request('/captable/live'),
   // Build queue #120 — audience-scoped share links. The raw token is
