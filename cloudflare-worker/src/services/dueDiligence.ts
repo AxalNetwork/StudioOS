@@ -57,6 +57,156 @@ export function sectionsFor(subjectType: DDSubjectType): SectionDef[] {
   return SECTION_CATALOG.filter(s => s.applies_to.includes(subjectType));
 }
 
+// ---------- Checklist catalog (build queue #128) ----------
+//
+// A per-case working checklist seeded at case-open time, scoped to the
+// case's sections and the chosen template depth. Depth is CUMULATIVE:
+// 'standard' includes every 'lite' item, 'deep' includes everything —
+// so a deeper template never loses the cheaper checks.
+//
+// Item keys are namespaced `<section_key>.<slug>` and unique across the
+// catalog (dd_checklist_items has UNIQUE(case_id, item_key); the test
+// in test/dd_checklists_requests.test.ts pins uniqueness + referential
+// integrity against SECTION_CATALOG).
+
+export type ChecklistDepth = 'lite' | 'standard' | 'deep';
+
+export const DEPTH_RANK: Record<ChecklistDepth, number> = { lite: 0, standard: 1, deep: 2 };
+
+export interface ChecklistItemDef {
+  key: string;          // '<section_key>.<slug>'
+  section_key: string;  // must exist in SECTION_CATALOG
+  title: string;
+  depth: ChecklistDepth; // tier that introduces the item
+}
+
+const item = (section_key: string, slug: string, depth: ChecklistDepth, title: string): ChecklistItemDef =>
+  ({ key: `${section_key}.${slug}`, section_key, title, depth });
+
+export const CHECKLIST_CATALOG: ReadonlyArray<ChecklistItemDef> = [
+  // corporate_legal
+  item('corporate_legal', 'formation_good_standing', 'lite',     'Certificate of formation + good standing verified'),
+  item('corporate_legal', 'cap_table_current',       'lite',     'Cap table current and reconciled to signed instruments'),
+  item('corporate_legal', 'ip_assignment',           'standard', 'IP assignments executed by all founders and contractors'),
+  item('corporate_legal', 'material_contracts',      'standard', 'Material contracts reviewed (customers, vendors, leases)'),
+  item('corporate_legal', 'litigation_check',        'standard', 'No pending or threatened litigation, disputes, or liens'),
+  item('corporate_legal', 'equity_grants_83b',       'deep',     'Equity grants papered; 83(b) elections on file'),
+  item('corporate_legal', 'charter_bylaws_consents', 'deep',     'Charter, bylaws, and board/member consents complete'),
+  item('corporate_legal', 'prior_financings',        'deep',     'Prior financing docs (SAFEs/notes) reviewed for conversion terms'),
+  item('corporate_legal', 'related_party',           'deep',     'Related-party transactions disclosed and papered'),
+  // financial_health
+  item('financial_health', 'bank_runway',            'lite',     'Bank balance + monthly burn confirmed; runway computed'),
+  item('financial_health', 'financials_provided',    'lite',     'P&L and balance sheet provided for trailing 12 months'),
+  item('financial_health', 'revenue_recognition',    'standard', 'Revenue recognition policy sane; deferred revenue identified'),
+  item('financial_health', 'liabilities_debt',       'standard', 'Debt, convertibles, and contingent liabilities scheduled'),
+  item('financial_health', 'budget_model',           'standard', 'Operating budget/model reviewed against actuals'),
+  item('financial_health', 'qoe_lite',               'deep',     'Quality-of-earnings pass on top customers and one-offs'),
+  item('financial_health', 'tax_filings',            'deep',     'Tax filings current (income, payroll, sales/VAT)'),
+  item('financial_health', 'payables_receivables',   'deep',     'AP/AR aging reviewed; concentration and disputes noted'),
+  item('financial_health', 'audit_or_review',        'deep',     'Audited/reviewed statements or bank-data verification'),
+  // founder_integrity
+  item('founder_integrity', 'identity_verified',     'lite',     'Government ID verified for each key person'),
+  item('founder_integrity', 'background_claims',     'lite',     'Bio claims (degrees, roles, exits) spot-verified'),
+  item('founder_integrity', 'references',            'standard', 'Off-list references completed (2+ per founder)'),
+  item('founder_integrity', 'litigation_bankruptcy', 'standard', 'Personal litigation/bankruptcy/judgment search clean'),
+  item('founder_integrity', 'prior_ventures',        'standard', 'Prior ventures and cap-table conduct reviewed'),
+  item('founder_integrity', 'criminal_check',        'deep',     'Criminal-record check completed where lawful'),
+  item('founder_integrity', 'media_deep',            'deep',     'Deep adverse-media and social screen'),
+  item('founder_integrity', 'conflicts',             'deep',     'Conflicts of interest and outside commitments disclosed'),
+  item('founder_integrity', 'credential_docs',       'deep',     'Primary documents for credentials collected'),
+  // product_tech
+  item('product_tech', 'demo_live',                  'lite',     'Working product demoed against claimed functionality'),
+  item('product_tech', 'stack_overview',             'lite',     'Architecture/stack overview and hosting map obtained'),
+  item('product_tech', 'code_ownership',             'standard', 'Code ownership clean (no unlicensed or agency-owned core)'),
+  item('product_tech', 'oss_licenses',               'standard', 'OSS license scan — no copyleft contamination in core'),
+  item('product_tech', 'security_basics',            'standard', 'Security basics: access control, backups, secrets handling'),
+  item('product_tech', 'code_review',                'deep',     'Independent code review / architecture session'),
+  item('product_tech', 'scalability',                'deep',     'Scalability + infrastructure cost curve assessed'),
+  item('product_tech', 'data_model',                 'deep',     'Data model + migration risk reviewed'),
+  item('product_tech', 'key_person_risk',            'deep',     'Bus-factor / key-engineer dependency assessed'),
+  // market_traction
+  item('market_traction', 'metrics_verified',        'lite',     'Core traction metrics verified from source systems'),
+  item('market_traction', 'customer_list',           'lite',     'Customer/user list with cohorts provided'),
+  item('market_traction', 'retention_cohorts',       'standard', 'Retention cohorts reviewed (logo + revenue)'),
+  item('market_traction', 'pipeline_quality',        'standard', 'Sales pipeline quality + conversion rates sanity-checked'),
+  item('market_traction', 'reference_calls',         'standard', 'Customer reference calls completed (3+)'),
+  item('market_traction', 'unit_economics',          'deep',     'Unit economics (CAC/LTV/payback) rebuilt from raw data'),
+  item('market_traction', 'churn_drivers',           'deep',     'Churn drivers analyzed; concentration risk quantified'),
+  item('market_traction', 'growth_accounting',       'deep',     'Growth accounting (new/expansion/contraction/churn) rebuilt'),
+  item('market_traction', 'contract_terms',          'deep',     'Top-10 customer contract terms reviewed'),
+  // market_position
+  item('market_position', 'competitor_map',          'lite',     'Competitor map + differentiation reviewed'),
+  item('market_position', 'tam_sanity',              'lite',     'TAM/SAM sizing sanity-checked bottom-up'),
+  item('market_position', 'moat_assessment',         'standard', 'Moat assessment: switching costs, network effects, IP'),
+  item('market_position', 'pricing_power',           'standard', 'Pricing power vs alternatives evidenced'),
+  item('market_position', 'gtm_channels',            'standard', 'Go-to-market channel economics reviewed'),
+  item('market_position', 'expert_calls',            'deep',     'Industry expert calls completed (2+)'),
+  item('market_position', 'regulatory_dependency',   'deep',     'Regulatory / platform-dependency risks mapped'),
+  item('market_position', 'win_loss',                'deep',     'Win/loss analysis against named competitors'),
+  item('market_position', 'category_timing',         'deep',     'Category timing thesis stress-tested'),
+  // compliance_aml
+  item('compliance_aml', 'sanctions_screen',         'lite',     'OFAC/EU/UK sanctions screen clean (entity + key persons)'),
+  item('compliance_aml', 'jurisdiction_check',       'lite',     'Operating jurisdictions carry no embargo/high-risk flags'),
+  item('compliance_aml', 'pep_screen',               'standard', 'PEP screen on beneficial owners'),
+  item('compliance_aml', 'source_of_funds',          'standard', 'Source of funds/wealth documented where applicable'),
+  item('compliance_aml', 'licenses_required',        'standard', 'Required industry licenses identified and held'),
+  item('compliance_aml', 'adverse_regulatory',       'deep',     'Regulator actions / enforcement history searched'),
+  item('compliance_aml', 'data_privacy',             'deep',     'Privacy regime obligations (GDPR/CCPA) assessed'),
+  item('compliance_aml', 'export_controls',          'deep',     'Export-control exposure (EAR/ITAR) assessed'),
+  item('compliance_aml', 'aml_program',              'deep',     'Counterparty AML program reviewed (regulated industries)'),
+  // reputation_press
+  item('reputation_press', 'adverse_media',          'lite',     'Adverse-media screen on entity + key persons'),
+  item('reputation_press', 'web_footprint',          'lite',     'Web/social footprint consistent with claims'),
+  item('reputation_press', 'press_history',          'standard', 'Press history reviewed for disputes or retractions'),
+  item('reputation_press', 'employee_reviews',       'standard', 'Employee-review signal (Glassdoor et al.) reviewed'),
+  item('reputation_press', 'controversy_history',    'deep',     'Media around past litigation/controversies assessed'),
+  item('reputation_press', 'community_standing',     'deep',     'Standing in relevant developer/industry communities'),
+  item('reputation_press', 'social_conduct',         'deep',     'Public social conduct of key persons reviewed'),
+  // cyber_posture
+  item('cyber_posture', 'domain_hygiene',            'lite',     'Domain/DNS hygiene (SPF, DKIM, DMARC) verified'),
+  item('cyber_posture', 'breach_history',            'lite',     'Known-breach / credential-dump exposure checked'),
+  item('cyber_posture', 'access_mfa',                'standard', 'MFA + access control on critical systems confirmed'),
+  item('cyber_posture', 'data_handling',             'standard', 'Customer-data handling + encryption practices reviewed'),
+  item('cyber_posture', 'vendor_security',           'standard', 'Critical vendor/security dependencies mapped'),
+  item('cyber_posture', 'pentest_evidence',          'deep',     'Recent pentest or vulnerability scan evidence'),
+  item('cyber_posture', 'incident_response',         'deep',     'Incident-response + backup/restore process tested'),
+  item('cyber_posture', 'compliance_certs',          'deep',     'SOC 2 / ISO 27001 posture (or roadmap) reviewed'),
+  // kyb_entity
+  item('kyb_entity', 'registry_match',               'lite',     'Registry record matches provided legal name + number'),
+  item('kyb_entity', 'active_status',                'lite',     'Entity active / in good standing in home registry'),
+  item('kyb_entity', 'ubo_mapped',                   'standard', 'Ultimate beneficial owners mapped (25%+ holders)'),
+  item('kyb_entity', 'registered_agent',             'standard', 'Registered address + agent verified'),
+  item('kyb_entity', 'corporate_tree',               'standard', 'Corporate tree / parent-subsidiary structure documented'),
+  item('kyb_entity', 'officers_verified',            'deep',     'Officers/directors cross-checked against filings'),
+  item('kyb_entity', 'charges_liens',                'deep',     'Charges / liens / UCC filings searched'),
+  item('kyb_entity', 'trade_history',                'deep',     'Operating history + trade references verified'),
+  // kyc_individual
+  item('kyc_individual', 'id_document',              'lite',     'Government ID document verified (authenticity check)'),
+  item('kyc_individual', 'liveness_match',           'lite',     'Liveness/selfie match to ID completed'),
+  item('kyc_individual', 'address_proof',            'standard', 'Proof of address current (<3 months)'),
+  item('kyc_individual', 'sanctions_pep',            'standard', 'Individual sanctions + PEP screen clean'),
+  item('kyc_individual', 'tax_residency',            'deep',     'Tax residency + TIN collected (W-9/W-8)'),
+  item('kyc_individual', 'adverse_media_person',     'deep',     'Individual adverse-media deep screen'),
+  item('kyc_individual', 'source_of_wealth',         'deep',     'Source-of-wealth narrative corroborated'),
+  // accreditation
+  item('accreditation', 'self_cert',                 'lite',     'Accreditation self-certification on file'),
+  item('accreditation', 'category_documented',       'lite',     'Qualifying category (accredited/QP/QIB) documented'),
+  item('accreditation', 'evidence_verified',         'standard', 'Third-party evidence: income/assets/license verified'),
+  item('accreditation', 'entity_qualification',      'standard', 'Entity qualification (QP/QIB/accredited entity) assessed'),
+  item('accreditation', 'reverification_cycle',      'deep',     'Re-verification date set per policy cycle'),
+  item('accreditation', 'professional_letter',       'deep',     'Professional letter (CPA/attorney/RIA) obtained'),
+];
+
+/**
+ * Items to seed for a case: the sections that apply to the subject type,
+ * at every depth tier up to and including the requested one.
+ */
+export function checklistFor(subjectType: DDSubjectType, depth: ChecklistDepth): ChecklistItemDef[] {
+  const rank = DEPTH_RANK[depth] ?? DEPTH_RANK.standard;
+  const sectionKeys = new Set(sectionsFor(subjectType).map(s => s.key));
+  return CHECKLIST_CATALOG.filter(i => sectionKeys.has(i.section_key) && DEPTH_RANK[i.depth] <= rank);
+}
+
 // ---------- Connector catalog ----------
 
 export type ConnectorKey =
