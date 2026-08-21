@@ -2756,6 +2756,15 @@ export const api = {
   raiseRoundSave: (data) => request('/contacts/raise-round', { method: 'PUT', body: JSON.stringify(data) }),
   raiseUpdates: (projectId) => request(projectId ? `/contacts/raise-updates?project_id=${projectId}` : '/contacts/raise-updates'),
   raiseUpdateCreate: (data) => request('/contacts/raise-updates', { method: 'POST', body: JSON.stringify(data) }),
+  // Build queue #129 — Round Manager. Closes are tranches of the single
+  // active round; pro-rata entitlements are computed server-side per
+  // request (services/roundMath.ts) so they cannot drift from round size.
+  raiseCloses: (projectId) => request(projectId ? `/contacts/raise-closes?project_id=${projectId}` : '/contacts/raise-closes'),
+  raiseCloseCreate: (data) => request('/contacts/raise-closes', { method: 'POST', body: JSON.stringify(data) }),
+  raiseCloseUpdate: (id, data) => request(`/contacts/raise-closes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  raiseProRata: (projectId) => request(projectId ? `/contacts/raise-pro-rata?project_id=${projectId}` : '/contacts/raise-pro-rata'),
+  raiseProRataCreate: (data) => request('/contacts/raise-pro-rata', { method: 'POST', body: JSON.stringify(data) }),
+  raiseProRataUpdate: (id, data) => request(`/contacts/raise-pro-rata/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
