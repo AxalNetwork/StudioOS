@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, Play, FileDown, Send, RefreshCw, Shield, AlertTriangle, CheckCircle2, ClipboardList, Mail, Upload } from 'lucide-react';
+import { ArrowLeft, Play, FileDown, Send, RefreshCw, Shield, AlertTriangle, CheckCircle2, ClipboardList, Mail, Upload, ListChecks, Inbox, ChevronDown, ChevronRight } from 'lucide-react';
 import { dd } from '../lib/api';
 import { reportError } from '../lib/log';
 import { useToast } from '../components/useToast';
@@ -47,6 +47,7 @@ export default function AdminDueDiligenceCasePage() {
   const [verdictModal, setVerdictModal] = useState(null);
   const [assignModal, setAssignModal] = useState(null);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
   const [inviteBanner, setInviteBanner] = useState(null);
   const sectionRefs = useRef({});
   const inviteConsumedRef = useRef(false);
@@ -162,6 +163,9 @@ export default function AdminDueDiligenceCasePage() {
           </div>
           <div className="text-sm text-gray-500 mt-1">
             <span className="capitalize">{cs.subject_type}</span> · case <span className="font-mono">{cs.uid}</span>
+            {cs.template_depth && (
+              <> · <span className="capitalize inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 font-medium align-middle">{cs.template_depth} template</span></>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -210,6 +214,7 @@ export default function AdminDueDiligenceCasePage() {
         </div>
       )}
 
+      <ChecklistProgress checklist={data.checklist || []} />
       <FindingHeatmap sections={data.sections} findings={data.findings} />
       <ReviewerQueue reviewers={data.reviewers} sections={data.sections} />
 
@@ -243,6 +248,12 @@ export default function AdminDueDiligenceCasePage() {
                   <span className="font-medium">Reviewer:</span> {s.reviewer_notes}
                 </div>
               )}
+              <SectionChecklist
+                items={(data.checklist || []).filter(i => i.section_id === s.id)}
+                onUpdate={async (itemId, patch) => {
+                  try { await dd.updateItem(uid, itemId, patch); await load(); }
+                  catch (e) { push(e.message || 'Checklist update failed', 'error'); throw e; }
+                }} />
               {sectionFindings.length > 0 ? (
                 <ul className="space-y-1.5 mt-2">
                   {sectionFindings.map(f => (
@@ -289,6 +300,23 @@ export default function AdminDueDiligenceCasePage() {
           </table>
         )}
       </div>
+
+      {!cs.scoped && (
+        <RequestsPanel requests={data.requests || []} sections={data.sections}
+          onCompose={() => setComposeOpen(true)}
+          onReview={async (id) => {
+            try { await dd.reviewRequest(uid, id); push('Request marked reviewed', 'success'); load(); }
+            catch (e) { push(e.message || 'Failed', 'error'); }
+          }} />
+      )}
+
+      {composeOpen && (
+        <ComposeRequestModal sections={data.sections} onClose={() => setComposeOpen(false)}
+          onSave={async (payload) => {
+            try { await dd.createRequest(uid, payload); push('Request sent to the subject', 'success'); setComposeOpen(false); load(); }
+            catch (e) { push(e.message || 'Failed', 'error'); }
+          }} />
+      )}
 
       {verdictModal && (
         <VerdictModal section={verdictModal} caseUid={uid}
@@ -607,6 +635,252 @@ function AuditDrawer({ uid, onClose }) {
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+// ---------- Build queue #128 — checklists + information requests ----------
+
+const ITEM_STATUS_META = {
+  pending: { label: 'Pending', cls: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300' },
+  pass: { label: 'Pass', cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
+  flag: { label: 'Flag', cls: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' },
+  fail: { label: 'Fail', cls: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' },
+  n_a: { label: 'N/A', cls: 'bg-gray-100 dark:bg-gray-700 text-gray-400' },
+};
+
+// Case-level completion strip: one segmented bar over every checklist
+// item, mirroring the design's "Case completion" block. Severity lives
+// on the sections/flags below — this only answers "how far along".
+function ChecklistProgress({ checklist }) {
+  if (!checklist || checklist.length === 0) return null;
+  const total = checklist.length;
+  const by = (st) => checklist.filter(i => i.status === st).length;
+  const done = by('pass') + by('fail') + by('n_a') + by('flag');
+  const segs = [
+    ['pass', by('pass'), 'bg-emerald-500'],
+    ['flag', by('flag'), 'bg-amber-400'],
+    ['fail', by('fail'), 'bg-red-500'],
+    ['n_a', by('n_a'), 'bg-gray-300 dark:bg-gray-600'],
+  ].filter(([, n]) => n > 0);
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Case completion</h2>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+          <span>{done} of {total} items worked</span>
+          <span>{by('flag') + by('fail') > 0 ? `${by('flag') + by('fail')} flagged/failed` : 'no open flags'}</span>
+        </div>
+        <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden flex">
+          {segs.map(([k, n, cls]) => (
+            <div key={k} className={cls} style={{ width: `${(n / total) * 100}%` }} title={`${ITEM_STATUS_META[k].label}: ${n}`} />
+          ))}
+        </div>
+        <div className="flex gap-4 flex-wrap mt-2">
+          {[['pass', 'bg-emerald-500'], ['flag', 'bg-amber-400'], ['fail', 'bg-red-500'], ['n_a', 'bg-gray-300 dark:bg-gray-600'], ['pending', 'bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600']].map(([k, cls]) => (
+            <span key={k} className="inline-flex items-center gap-1.5 text-[10px] text-gray-500">
+              <span className={`w-2.5 h-2.5 rounded-sm ${cls}`} /> {ITEM_STATUS_META[k].label} ({by(k)})
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Per-section working checklist. Collapsed by default unless something
+// is flagged/failed — the section card stays scannable while flags stay
+// impossible to miss. Every control PATCHes immediately; the score
+// recompute happens server-side on each write.
+function SectionChecklist({ items, onUpdate }) {
+  const hasHot = items.some(i => i.status === 'flag' || i.status === 'fail');
+  const [open, setOpen] = useState(hasHot);
+  if (!items || items.length === 0) return null;
+  const done = items.filter(i => i.status !== 'pending').length;
+  return (
+    <div className="mb-2 border border-gray-100 dark:border-gray-700/60 rounded-lg overflow-hidden">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-900/40 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-900/70">
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        <ListChecks size={13} className="text-violet-600" />
+        <span className="font-medium">Checklist</span>
+        <span className="text-gray-400">{done}/{items.length} worked</span>
+        {hasHot && <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-semibold">needs attention</span>}
+      </button>
+      {open && (
+        <ul className="divide-y divide-gray-100 dark:divide-gray-700/40">
+          {items.map(it => <ChecklistItemRow key={it.id} item={it} onUpdate={onUpdate} />)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ChecklistItemRow({ item, onUpdate }) {
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [note, setNote] = useState(item.note || '');
+  const [saving, setSaving] = useState(false);
+  const patch = async (p) => {
+    setSaving(true);
+    try { await onUpdate(item.id, p); } catch { /* toast handled by caller */ }
+    finally { setSaving(false); }
+  };
+  const showSeverity = item.status === 'flag' || item.status === 'fail';
+  return (
+    <li className={`px-3 py-2 text-xs ${item.status === 'n_a' ? 'opacity-60' : ''}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={item.status} disabled={saving} onChange={(e) => patch({ status: e.target.value })}
+          className={`text-[11px] font-semibold px-1.5 py-1 rounded border-0 ${ITEM_STATUS_META[item.status]?.cls || ITEM_STATUS_META.pending.cls}`}>
+          {Object.entries(ITEM_STATUS_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+        </select>
+        <span className="flex-1 min-w-[180px] text-gray-800 dark:text-gray-200">{item.title}</span>
+        <span className="text-[9px] uppercase tracking-wider text-gray-400">{item.depth}</span>
+        {showSeverity && (
+          <select value={item.severity || ''} disabled={saving} onChange={(e) => patch({ severity: e.target.value || null })}
+            className={`text-[10px] font-bold px-1.5 py-1 rounded ${item.severity ? SEV_STYLES[item.severity] : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>
+            <option value="">severity…</option>
+            {['info', 'low', 'medium', 'high', 'critical'].map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
+        <input type="date" value={item.due_date || ''} disabled={saving}
+          onChange={(e) => patch({ due_date: e.target.value || null })}
+          className="text-[10px] px-1.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300" />
+        <button type="button" onClick={() => setNoteOpen(o => !o)}
+          className={`text-[10px] px-1.5 py-1 rounded ${item.note ? 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300' : 'text-gray-400 hover:text-violet-600'}`}>
+          {item.note ? 'note ●' : 'note'}
+        </button>
+      </div>
+      {noteOpen && (
+        <div className="mt-2 flex gap-2">
+          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Evidence note (encrypted at rest)…"
+            className="flex-1 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-900" />
+          <button type="button" disabled={saving} onClick={async () => { await patch({ note }); setNoteOpen(false); }}
+            className="self-end px-2.5 py-1.5 text-[11px] bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-60">Save</button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+const REQ_STATE_META = {
+  requested: { label: 'Requested', cls: 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300' },
+  received: { label: 'Received', cls: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' },
+  reviewed: { label: 'Reviewed', cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
+};
+
+// Case-wide correspondence with the subject. INVARIANT (mirrors the
+// worker): a request never carries diligence content — it only says
+// "please provide X". Hidden entirely from scoped reviewers.
+function RequestsPanel({ requests, sections, onCompose, onReview }) {
+  const sectionTitle = (id) => sections.find(s => s.id === id)?.title || null;
+  return (
+    <div className="mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 inline-flex items-center gap-1.5">
+          <Inbox size={14} className="text-violet-600" /> Information requests
+        </h2>
+        <button onClick={onCompose}
+          className="text-xs px-2.5 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 font-semibold hover:bg-violet-100 dark:hover:bg-violet-900/40">
+          + Compose request
+        </button>
+      </div>
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+        {requests.length === 0 ? (
+          <div className="p-6 text-sm text-gray-500 text-center">
+            Nothing requested yet. Everything the team is waiting on from the subject lives here — one list, no attachments over email.
+          </div>
+        ) : (
+          <ul className="divide-y divide-gray-100 dark:divide-gray-700/40">
+            {requests.map(r => (
+              <li key={r.id} className="px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-start gap-2">
+                  <div className="flex-1 min-w-[220px]">
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{r.title}</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">
+                      asked {r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}
+                      {sectionTitle(r.section_id) && <> · {sectionTitle(r.section_id)}</>}
+                    </div>
+                    {r.details && <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{r.details}</div>}
+                    {(r.response_note || r.response_url) && (
+                      <div className="mt-2 text-xs bg-gray-50 dark:bg-gray-900/40 rounded p-2">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">Response:</span>{' '}
+                        {r.response_note && <span className="text-gray-600 dark:text-gray-400">{r.response_note}</span>}
+                        {r.response_url && (
+                          <a href={r.response_url} target="_blank" rel="noopener noreferrer" className="text-violet-600 hover:underline ml-1 break-all">{r.response_url}</a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${REQ_STATE_META[r.state]?.cls || REQ_STATE_META.requested.cls}`}>
+                      {REQ_STATE_META[r.state]?.label || r.state}
+                    </span>
+                    {r.state !== 'reviewed' && (
+                      <button onClick={() => onReview(r.id)}
+                        className="text-[11px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
+                        Mark reviewed
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ComposeRequestModal({ sections, onClose, onSave }) {
+  useEscapeClose(onClose);
+  const [title, setTitle] = useState('');
+  const [details, setDetails] = useState('');
+  const [sectionId, setSectionId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setBusy(true);
+    try { await onSave({ title: title.trim(), details: details.trim() || undefined, section_id: sectionId ? Number(sectionId) : undefined }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <form onSubmit={submit} onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Request information</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          The subject sees exactly this text and responds with a note or a link. Requests never expose the case, its score, or its findings.
+        </p>
+        <label className="block text-sm mb-3">
+          <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">What do you need?</div>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} autoFocus
+            placeholder="e.g. Trailing-12-month P&L and balance sheet"
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900" />
+        </label>
+        <label className="block text-sm mb-3">
+          <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Details (optional)</div>
+          <textarea rows={3} value={details} onChange={(e) => setDetails(e.target.value)} maxLength={4000}
+            placeholder="Format, period, and any specifics…"
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900" />
+        </label>
+        <label className="block text-sm mb-4">
+          <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Section (optional)</div>
+          <select value={sectionId} onChange={(e) => setSectionId(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900">
+            <option value="">Case-wide</option>
+            {sections.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+          </select>
+        </label>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
+          <button type="submit" disabled={busy || !title.trim()}
+            className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 disabled:opacity-60">
+            {busy ? 'Sending…' : 'Send request'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
