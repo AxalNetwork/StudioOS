@@ -41,6 +41,8 @@ export default function MetricsPage() {
   const [projectId, setProjectId] = useState(null);
   const [snapshots, setSnapshots] = useState([]);
   const [signals, setSignals] = useState(null);
+  // Build queue #121 — derived KPIs computed server-side from the series.
+  const [summary, setSummary] = useState(null);
   const [adding, setAdding] = useState(null);
   const [error, setError] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -87,12 +89,16 @@ export default function MetricsPage() {
     if (!projectId) return;
     try {
       setError(null);
-      const [r1, r2] = await Promise.all([
+      const [r1, r2, r3] = await Promise.all([
         api.listMetricsSnapshots(projectId),
         api.getProgressSignals(projectId),
+        // Derived KPIs are additive: a failure here must not blank the
+        // snapshot table the founder came for.
+        api.metricsSummary(projectId).catch(() => null),
       ]);
       setSnapshots(r1.snapshots || []);
       setSignals(r2);
+      setSummary(r3);
     } catch (e) {
       // 404 here means the selected project was deleted out from under us
       // (or the user lost access). Recover by clearing state — don't
@@ -210,6 +216,8 @@ export default function MetricsPage() {
       </div>
 
       {error && <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg px-4 py-3 text-sm"><AlertCircle size={16} className="mt-0.5" />{error}</div>}
+
+      {hasProjects && <DerivedKpiBoard summary={summary} />}
 
       {!hasProjects && (
         <div className="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center dark:bg-gray-900 dark:border-gray-700">
@@ -377,5 +385,73 @@ function SnapshotModal({ value, onChange, onSave, onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+
+// Build queue #121 — derived KPI board.
+//
+// Every figure here is computed server-side from the snapshot series
+// (cloudflare-worker/src/services/saasMetrics.ts), never from a value
+// typed into a deck field. A metric that cannot be computed renders as
+// an em-dash AND lists what it needs — a blank KPI that says nothing
+// reads as either a zero or a bug, and both are worse than a sentence.
+function DerivedKpiBoard({ summary }) {
+  if (!summary) return null;
+  const fmtMoney = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
+  const fmtPct = (v) => (v == null ? '—' : `${Number(v) >= 0 ? '+' : ''}${Number(v).toFixed(1)}%`);
+  const fmtX = (v) => (v == null ? '—' : `${Number(v).toFixed(2)}x`);
+  const fmtMo = (v) => (v == null ? '—' : `${Number(v).toFixed(1)} mo`);
+
+  const cards = [
+    { k: 'MRR', v: fmtMoney(summary.mrr), sub: summary.arr != null ? `${fmtMoney(summary.arr)} ARR` : null },
+    { k: 'MRR growth', v: fmtPct(summary.mrr_growth_pct), sub: 'vs previous snapshot',
+      tone: summary.mrr_growth_pct == null ? null : summary.mrr_growth_pct >= 0 ? 'pos' : 'neg' },
+    { k: 'Compound growth', v: fmtPct(summary.cmgr_pct), sub: 'per period, whole series' },
+    { k: 'LTV : CAC', v: fmtX(summary.ltv_cac), sub: '3x+ is the usual floor',
+      tone: summary.ltv_cac == null ? null : summary.ltv_cac >= 3 ? 'pos' : 'neg' },
+    { k: 'CAC payback', v: fmtMo(summary.cac_payback_months), sub: 'revenue basis' },
+    { k: 'Annual retention', v: summary.annual_retention_pct == null ? '—' : `${summary.annual_retention_pct}%`,
+      sub: summary.monthly_churn_pct != null ? `${summary.monthly_churn_pct}%/mo compounded` : 'from monthly churn' },
+  ];
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Derived KPIs</h2>
+        <span className="text-xs text-gray-500">
+          {summary.snapshot_count > 0
+            ? `From ${summary.snapshot_count} snapshot${summary.snapshot_count === 1 ? '' : 's'}${summary.as_of ? ` · latest ${summary.as_of}` : ''}`
+            : 'No snapshots yet'}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {cards.map((c) => (
+          <div key={c.k} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3.5">
+            <div className="text-[10px] uppercase tracking-wider text-gray-500">{c.k}</div>
+            <div className={`text-xl font-bold mt-1 tabular-nums ${
+              c.tone === 'pos' ? 'text-emerald-600 dark:text-emerald-400'
+                : c.tone === 'neg' ? 'text-rose-600 dark:text-rose-400'
+                : 'text-gray-900 dark:text-gray-100'
+            }`}>{c.v}</div>
+            {c.sub && <div className="text-[10px] text-gray-500 mt-0.5">{c.sub}</div>}
+          </div>
+        ))}
+      </div>
+      {(summary.unavailable || []).length > 0 && (
+        <details className="rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/60 px-4 py-2.5">
+          <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
+            {summary.unavailable.length} metric{summary.unavailable.length === 1 ? '' : 's'} need more data
+          </summary>
+          <ul className="mt-2 space-y-1">
+            {summary.unavailable.map((u) => (
+              <li key={u.metric} className="text-xs text-gray-600 dark:text-gray-400">
+                <span className="font-medium text-gray-800 dark:text-gray-200">{u.metric.replace(/_/g, ' ')}</span> — {u.reason}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
   );
 }

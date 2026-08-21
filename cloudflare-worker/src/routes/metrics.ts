@@ -48,6 +48,8 @@ metrics.get('/:projectId/series', (c) => {
   const qs = new URL(c.req.url).search;
   return relay(c, `/metrics/${c.req.param('projectId')}/series${qs}`);
 });
+// Build queue #121 — derived KPI summary (services/saasMetrics.ts).
+metrics.get('/:projectId/summary', (c) => relay(c, `/metrics/${c.req.param('projectId')}/summary`));
 metrics.put('/snapshot/:id', (c) => relay(c, `/metrics/snapshot/${c.req.param('id')}`));
 metrics.delete('/snapshot/:id', (c) => relay(c, `/metrics/${c.req.param('id')}`));
 

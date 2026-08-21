@@ -52,6 +52,7 @@ import {
   type PainGroupRow,
 } from '../services/painGroups';
 import { syncStripeForUser } from '../integrations/providers/stripe';
+import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Snapshot as SaasSnapshot } from '../services/saasMetrics';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -1743,6 +1744,41 @@ progress.get('/metrics/:projectId/series', async (c) => {
     console.error('[progress] metrics series:', (e as Error).message);
   }
   return c.json({ project_id: projectId, metric: safeMetric, granularity, series });
+});
+
+/**
+ * Build queue #121 — GET /metrics/:projectId/summary
+ *
+ * Derived KPIs computed from the snapshot series (services/saasMetrics.ts)
+ * rather than from anything a founder typed into a deck field. Returns
+ * `unavailable[]` alongside the numbers: a blank KPI tells the founder
+ * exactly which input it needs instead of reading as a zero or a bug.
+ */
+progress.get('/metrics/:projectId/summary', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+  await ensureMetricsSnapshotsSchema(c.env);
+
+  let rows: SaasSnapshot[] = [];
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT snapshot_date, mrr, arr, cac, ltv, monthly_churn_pct, active_users, new_users
+         FROM metrics_snapshots WHERE project_id = ?
+         ORDER BY snapshot_date ASC, id ASC LIMIT 500`,
+    ).bind(projectId).all<SaasSnapshot>();
+    rows = res.results || [];
+  } catch (e) {
+    console.error('[progress] metrics summary:', (e as Error).message);
+  }
+  return c.json({
+    project_id: projectId,
+    ...summariseSaasMetrics(rows),
+    mrr_series: saasSparkline(rows, 'mrr'),
+  });
 });
 
 progress.post('/metrics/:projectId/import-stripe', async (c) => {

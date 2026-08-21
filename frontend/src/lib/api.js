@@ -966,6 +966,10 @@ export const api = {
   listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
   createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
+  // Build queue #121 — derived KPIs (growth, LTV:CAC, payback, retention)
+  // computed server-side from the snapshot series, with `unavailable[]`
+  // explaining any metric that could not be computed.
+  metricsSummary: (projectId) => request(`/progress/metrics/${projectId}/summary`),
   importMetricsFromStripe: (projectId) => request(`/progress/metrics/${projectId}/import-stripe`, { method: 'POST' }),
   getProgressSignals: (projectId) => request(`/progress/signals/${projectId}`),
   getLifecycle: (projectId) => request(`/progress/lifecycle/${projectId}`),
