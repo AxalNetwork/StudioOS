@@ -1043,6 +1043,7 @@ export const api = {
   submitQuote: (needId, data) => request(`/needs/${needId}/quotes`, { method: 'POST', body: JSON.stringify(data) }),
   listQuotesForNeed: (needId) => request(`/needs/${needId}/quotes`),
   myQuotes: () => request('/quotes/me'),
+  quotesAnalytics: () => request('/quotes/analytics'),
   acceptQuote: (id) => request(`/quotes/${id}/accept`, { method: 'POST' }),
   rejectQuote: (id) => request(`/quotes/${id}/reject`, { method: 'POST' }),
   withdrawQuote: (id) => request(`/quotes/${id}/withdraw`, { method: 'POST' }),
