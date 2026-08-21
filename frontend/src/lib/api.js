@@ -96,7 +96,9 @@ export async function request(path, options = {}) {
       const isPublicEndpoint = path.startsWith('/partner-onboard')
         || path.startsWith('/esign/sign')
         || path.startsWith('/public/')
-        || path.startsWith('/decks/share/');
+        || path.startsWith('/decks/share/')
+        // Build queue #120 — public audience-scoped cap-table link.
+        || path.startsWith('/captable/share/');
       if (res.status === 401 && !path.startsWith('/auth/') && !isPublicEndpoint) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -150,6 +152,7 @@ export async function request(path, options = {}) {
           || currentPath.startsWith('/esign/')
           || currentPath.startsWith('/deck/share/')
           || currentPath.startsWith('/share/deck/')
+          || currentPath.startsWith('/share/captable/')
           || currentPath.startsWith('/insights')
           || currentPath.startsWith('/settings/email/')
           // Task #5 — Public event surface (no auth)
@@ -963,6 +966,10 @@ export const api = {
   listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
   createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
+  // Build queue #121 — derived KPIs (growth, LTV:CAC, payback, retention)
+  // computed server-side from the snapshot series, with `unavailable[]`
+  // explaining any metric that could not be computed.
+  metricsSummary: (projectId) => request(`/progress/metrics/${projectId}/summary`),
   importMetricsFromStripe: (projectId) => request(`/progress/metrics/${projectId}/import-stripe`, { method: 'POST' }),
   getProgressSignals: (projectId) => request(`/progress/signals/${projectId}`),
   getLifecycle: (projectId) => request(`/progress/lifecycle/${projectId}`),
@@ -1036,6 +1043,7 @@ export const api = {
   submitQuote: (needId, data) => request(`/needs/${needId}/quotes`, { method: 'POST', body: JSON.stringify(data) }),
   listQuotesForNeed: (needId) => request(`/needs/${needId}/quotes`),
   myQuotes: () => request('/quotes/me'),
+  quotesAnalytics: () => request('/quotes/analytics'),
   acceptQuote: (id) => request(`/quotes/${id}/accept`, { method: 'POST' }),
   rejectQuote: (id) => request(`/quotes/${id}/reject`, { method: 'POST' }),
   withdrawQuote: (id) => request(`/quotes/${id}/withdraw`, { method: 'POST' }),
@@ -1939,6 +1947,13 @@ export const api = {
     request('/liquidity/execute-exit', { method: 'POST', body: JSON.stringify(data) }),
   liquidityMyPortfolio: () => request('/liquidity/my-portfolio'),
   liquidityEvents: () => request('/liquidity/events'),
+  // Settlement side of a secondary — seller or admin only. Proceeds is a
+  // calculator (nothing is stored); the ROFR notice is real state.
+  liquidityProceeds: (id, terms = {}) =>
+    request(`/liquidity/listings/${id}/proceeds`, { method: 'POST', body: JSON.stringify(terms) }),
+  liquidityRofr: (id) => request(`/liquidity/listings/${id}/rofr`),
+  liquidityUpdateRofr: (id, data) =>
+    request(`/liquidity/listings/${id}/rofr`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // ---------- VC Funds / LP Portal / Distributions ----------
   fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
@@ -2101,8 +2116,25 @@ export const api = {
   deleteCapTableScenario: (uid) =>
     request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
   exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
+  // 409A safe harbour — appraisals on file plus the material events that
+  // can end the presumption before the 12 months are up.
+  get409a: (projectId) => request(`/captable/409a/${projectId}`),
+  record409a: (projectId, data) =>
+    request(`/captable/409a/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  record409aEvent: (projectId, data) =>
+    request(`/captable/409a/${projectId}/events`, { method: 'POST', body: JSON.stringify(data) }),
+  delete409aEvent: (projectId, id) =>
+    request(`/captable/409a/${projectId}/events/${id}`, { method: 'DELETE' }),
   // Task #5 — live cap table (Carta-synced + manually-promoted rows).
   liveCapTable: () => request('/captable/live'),
+  // Build queue #120 — audience-scoped share links. The raw token is
+  // returned exactly once at mint time; only its hash is stored, so a
+  // link that is lost cannot be recovered, only replaced.
+  capTableShareCreate: (uid, data) =>
+    request(`/captable/scenarios/${uid}/share`, { method: 'POST', body: JSON.stringify(data) }),
+  capTableShareList: (uid) => request(`/captable/scenarios/${uid}/shares`),
+  capTableShareRevoke: (id) => request(`/captable/shares/${id}`, { method: 'DELETE' }),
+  capTableShared: (token) => request(`/captable/share/${token}`),
 
   // ---------- Task #6 — Founder subscription tier (FREE / GROWTH / STUDIO) ----------
   // 402 `tier_required` responses are auto-handled by `request` above (it
@@ -2718,6 +2750,17 @@ export const api = {
   positionsList: () => request('/positions'),
   positionsByProject: (projectUid) => request(`/positions/${projectUid}`),
   positionCreate: (data) => request('/positions', { method: 'POST', body: JSON.stringify(data) }),
+  // Build queue #125 — real portfolio performance. `analytics` returns
+  // gross-of-fees TVPI/DPI/RVPI/MOIC/IRR computed from positions, marks,
+  // and realisations, with mark_coverage so the UI can flag how much of
+  // NAV is still carried at cost.
+  positionsAnalytics: (asOf) => request(`/positions/analytics${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`),
+  positionsKpiCompliance: (cadence = 'quarterly') =>
+    request(`/positions/kpi-compliance?cadence=${encodeURIComponent(cadence)}`),
+  positionMarkCreate: (projectUid, data) =>
+    request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
+  positionDistributionCreate: (projectUid, data) =>
+    request(`/positions/${projectUid}/distributions`, { method: 'POST', body: JSON.stringify(data) }),
 
   // ---------- Contacts (inbound relationship hub) ----------
   contactsList: (opts = {}) => {
@@ -2745,6 +2788,15 @@ export const api = {
   raiseRoundSave: (data) => request('/contacts/raise-round', { method: 'PUT', body: JSON.stringify(data) }),
   raiseUpdates: (projectId) => request(projectId ? `/contacts/raise-updates?project_id=${projectId}` : '/contacts/raise-updates'),
   raiseUpdateCreate: (data) => request('/contacts/raise-updates', { method: 'POST', body: JSON.stringify(data) }),
+  // Build queue #129 — Round Manager. Closes are tranches of the single
+  // active round; pro-rata entitlements are computed server-side per
+  // request (services/roundMath.ts) so they cannot drift from round size.
+  raiseCloses: (projectId) => request(projectId ? `/contacts/raise-closes?project_id=${projectId}` : '/contacts/raise-closes'),
+  raiseCloseCreate: (data) => request('/contacts/raise-closes', { method: 'POST', body: JSON.stringify(data) }),
+  raiseCloseUpdate: (id, data) => request(`/contacts/raise-closes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  raiseProRata: (projectId) => request(projectId ? `/contacts/raise-pro-rata?project_id=${projectId}` : '/contacts/raise-pro-rata'),
+  raiseProRataCreate: (data) => request('/contacts/raise-pro-rata', { method: 'POST', body: JSON.stringify(data) }),
+  raiseProRataUpdate: (id, data) => request(`/contacts/raise-pro-rata/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {

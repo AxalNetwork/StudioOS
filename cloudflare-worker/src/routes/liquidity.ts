@@ -15,6 +15,7 @@ import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
 import { enqueueJob } from '../services/queue';
 import { Listings, Matches, LiquidityEvents } from '../models/liquidity';
+import { computeNetProceeds, rofrStatus } from '../services/secondaryProceeds';
 import { logActivity } from './partnernet';
 
 const liquidity = new Hono<{ Bindings: Env }>();
@@ -159,24 +160,27 @@ liquidity.post('/execute-exit', async (c) => {
     executed_price_cents: priceCents,
   });
 
-  // Distribute returns to seller's LP record (if any).
-  // Mock real settlement: increment `returns` on all of the seller's LP rows
-  // proportional to share of the price (simple split equally for now).
-  try {
-    const lps = await c.env.DB.prepare(
-      `SELECT id FROM limited_partners WHERE user_id = ?`
-    ).bind(listing.user_id).all<{ id: number }>();
-    const rows = lps.results || [];
-    if (rows.length) {
-      const perLp = Math.floor(priceCents / rows.length);
-      const stmts = rows.map(r =>
-        c.env.DB.prepare(
-          `UPDATE limited_partners SET returns = returns + ?, updated_at = datetime('now') WHERE id = ?`
-        ).bind(perLp / 100, r.id) // returns column stored in dollars; convert
-      );
-      await c.env.DB.batch(stmts);
-    }
-  } catch (e) { console.error('LP distribution failed', e); }
+  // Build queue #123 — REMOVED: a mock credit to limited_partners.returns.
+  //
+  // This block used to split the sale price equally across every LP row
+  // belonging to the seller and add it to `returns`, described as "mock
+  // real settlement". The write was not mock. `limited_partners.returns`
+  // is read by routes/funds.ts (the /lp-portal performance rollup) to
+  // compute the DPI and TVPI that real LPs are shown:
+  //
+  //     tvpi = (invested + returns + distributions) / invested
+  //     dpi  = (returns + distributions) / invested
+  //
+  // So a simulated exit permanently inflated real LP-facing performance
+  // figures — and did it by splitting proceeds across unrelated funds,
+  // which the comment further down this same handler correctly calls
+  // dangerous. The endpoint already tells the operator to run
+  // POST /api/funds/distributions/execute with an explicit fund_id;
+  // that remains the ONLY path that credits an LP ledger.
+  //
+  // Consequence, and it is the correct one: until a real distribution is
+  // executed against the right fund, DPI stays where it was. An honest
+  // zero beats a fabricated multiple in an LP report.
 
   // Mark accepted match if any
   if (body.buyer_user_id) {
@@ -246,6 +250,202 @@ liquidity.get('/events', async (c) => {
   }
   const items = await LiquidityEvents.listRecent(c.env, 100);
   return c.json({ ok: true, items });
+});
+
+// ---------------------------------------------------------------------------
+// Proceeds + ROFR — the two questions a seller actually has
+//
+//   "What do I take home?"  -> computeNetProceeds
+//   "Am I allowed to sell?" -> rofrStatus
+//
+// Both engines live in services/secondaryProceeds.ts and are covered by
+// test/secondaryProceeds.test.ts. These routes are the only way to reach
+// them.
+//
+// ACCESS: listing owner or admin, and nothing wider. A proceeds
+// breakdown states the seller's cost basis and their net take; a broker
+// arranging the sale has no business reading either. The marketplace
+// and matching endpoints above stay open to partners/investors because
+// they carry the asking price only.
+//
+// UNITS: this file's contract is integer cents, and the engines work in
+// dollars. Rather than leak a second unit into the API, cents are
+// converted on the way in and the engine's dollar output is converted
+// back to cents on the way out. Every field crossing the wire is
+// therefore `_cents`. The engine rounds to 2dp before we multiply by
+// 100, so the round trip is exact.
+// ---------------------------------------------------------------------------
+
+let rofrSchemaReady = false;
+async function ensureRofrSchema(env: Env): Promise<void> {
+  if (rofrSchemaReady) return;
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS secondary_rofr_notices (
+       listing_id        INTEGER PRIMARY KEY REFERENCES secondary_listings(id) ON DELETE CASCADE,
+       notice_date       TEXT,
+       window_days       INTEGER NOT NULL DEFAULT 30,
+       shares_offered    REAL NOT NULL DEFAULT 0,
+       company_elected   REAL NOT NULL DEFAULT 0,
+       investors_elected REAL NOT NULL DEFAULT 0,
+       waived            INTEGER NOT NULL DEFAULT 0,
+       notes             TEXT,
+       created_by        INTEGER REFERENCES users(id),
+       created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+       updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+  ).run();
+  rofrSchemaReady = true;
+}
+
+/** The listing, if this user is allowed to see its private side. 404 either way. */
+async function ownedListingOr404(c: any, id: number) {
+  const user = await requireAuth(c);
+  const listing: any = await c.env.DB.prepare(
+    `SELECT * FROM secondary_listings WHERE id = ?`,
+  ).bind(id).first();
+  // Same 404 for "no such listing" and "not yours" — a different status
+  // would confirm the listing exists to someone who cannot read it.
+  if (!listing) return { listing: null, user };
+  if (user.role !== 'admin' && listing.user_id !== user.id) return { listing: null, user };
+  return { listing, user };
+}
+
+const centsToDollars = (cents: number) => Math.round(Number(cents) || 0) / 100;
+const dollarsToCents = (dollars: number) => Math.round((Number(dollars) || 0) * 100);
+
+// POST /api/liquidity/listings/:id/proceeds — model the seller's net wire.
+//
+// A calculator, not stored state: fee terms are negotiated per sale and
+// a seller wants to try several. Nothing is written.
+liquidity.post('/listings/:id/proceeds', async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid listing id' }, 400);
+  const { listing } = await ownedListingOr404(c, id);
+  if (!listing) return c.json({ error: 'Listing not found' }, 404);
+
+  const body: any = await c.req.json().catch(() => ({}));
+  // Default to the asking price, but let the seller model a different
+  // number — the point of the tool is answering "what if they offer X".
+  const grossCents = body?.gross_cents != null
+    ? Math.max(0, Math.round(Number(body.gross_cents) || 0))
+    : Number(listing.asking_price_cents) || 0;
+
+  const result = computeNetProceeds({
+    gross: centsToDollars(grossCents),
+    costBasis: body?.cost_basis_cents == null ? null : centsToDollars(body.cost_basis_cents),
+    transferFeePct: body?.transfer_fee_pct ?? null,
+    flatFees: body?.flat_fees_cents == null ? 0 : centsToDollars(body.flat_fees_cents),
+    carryPct: body?.carry_pct ?? null,
+    withholdingPct: body?.withholding_pct ?? null,
+  });
+
+  return c.json({
+    ok: true,
+    listing_id: id,
+    gross_cents: dollarsToCents(result.gross),
+    net_cents: dollarsToCents(result.net),
+    gain_cents: result.gain === null ? null : dollarsToCents(result.gain),
+    net_ratio: result.net_ratio,
+    multiple: result.multiple,
+    lines: result.lines.map((l) => ({
+      key: l.key,
+      label: l.label,
+      amount_cents: dollarsToCents(l.amount),
+      balance_cents: dollarsToCents(l.balance),
+      note: l.note ?? null,
+    })),
+    warnings: result.warnings,
+  });
+});
+
+// GET /api/liquidity/listings/:id/rofr — where the right stands today.
+liquidity.get('/listings/:id/rofr', async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid listing id' }, 400);
+  const { listing } = await ownedListingOr404(c, id);
+  if (!listing) return c.json({ error: 'Listing not found' }, 404);
+
+  await ensureRofrSchema(c.env);
+  const notice: any = await c.env.DB.prepare(
+    `SELECT * FROM secondary_rofr_notices WHERE listing_id = ?`,
+  ).bind(id).first();
+
+  const today = new Date().toISOString().slice(0, 10);
+  // No notice on file still gets a status, and that status is
+  // 'not_started' / not clear to transfer. Returning nothing here would
+  // leave the UI to invent a default, and the safe default is the one
+  // the engine already encodes.
+  const status = rofrStatus({
+    notice_date: notice?.notice_date ?? null,
+    window_days: notice?.window_days ?? null,
+    shares_offered: Number(notice?.shares_offered ?? listing.shares ?? 0),
+    company_elected: notice?.company_elected ?? 0,
+    investors_elected: notice?.investors_elected ?? 0,
+    waived: !!notice?.waived,
+  }, today);
+
+  return c.json({ ok: true, listing_id: id, as_of: today, notice: notice || null, status });
+});
+
+// PUT /api/liquidity/listings/:id/rofr — serve a notice, record elections
+// or a waiver. Upsert: one live notice per listing.
+liquidity.put('/listings/:id/rofr', async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(id)) return c.json({ error: 'Invalid listing id' }, 400);
+  const { listing, user } = await ownedListingOr404(c, id);
+  if (!listing) return c.json({ error: 'Listing not found' }, 404);
+
+  const body: any = await c.req.json().catch(() => ({}));
+  const noticeDate = body?.notice_date ? String(body.notice_date).slice(0, 10) : null;
+  if (noticeDate && Number.isNaN(Date.parse(noticeDate))) {
+    return c.json({ error: 'notice_date must be an ISO date (YYYY-MM-DD)' }, 400);
+  }
+  const windowDays = Math.max(1, Math.round(Number(body?.window_days) || 30));
+  const offered = Math.max(0, Number(body?.shares_offered) || Number(listing.shares) || 0);
+  const companyElected = Math.max(0, Number(body?.company_elected) || 0);
+  const investorsElected = Math.max(0, Number(body?.investors_elected) || 0);
+  // Elections are what the company and investors actually signed for. A
+  // total above the offered block is a data-entry error, and silently
+  // clamping it would hide the mistake behind a plausible number.
+  if (companyElected + investorsElected > offered) {
+    return c.json({
+      error: `Elections total ${companyElected + investorsElected} shares but only ${offered} were offered`,
+    }, 400);
+  }
+
+  await ensureRofrSchema(c.env);
+  await c.env.DB.prepare(
+    `INSERT INTO secondary_rofr_notices
+       (listing_id, notice_date, window_days, shares_offered, company_elected,
+        investors_elected, waived, notes, created_by, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(listing_id) DO UPDATE SET
+       notice_date = excluded.notice_date,
+       window_days = excluded.window_days,
+       shares_offered = excluded.shares_offered,
+       company_elected = excluded.company_elected,
+       investors_elected = excluded.investors_elected,
+       waived = excluded.waived,
+       notes = excluded.notes,
+       updated_at = datetime('now')`,
+  ).bind(
+    id, noticeDate, windowDays, offered, companyElected, investorsElected,
+    body?.waived ? 1 : 0, body?.notes ? String(body.notes).slice(0, 2000) : null, user.id,
+  ).run();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const status = rofrStatus({
+    notice_date: noticeDate, window_days: windowDays, shares_offered: offered,
+    company_elected: companyElected, investors_elected: investorsElected,
+    waived: !!body?.waived,
+  }, today);
+
+  await logActivity(c.env, user.id, 'secondary_rofr_updated', {
+    entityType: 'secondary_listing', entityId: id,
+    metadata: { state: status.state, clear_to_transfer: status.clear_to_transfer },
+  }).catch(() => {});
+
+  return c.json({ ok: true, listing_id: id, as_of: today, status });
 });
 
 export default liquidity;

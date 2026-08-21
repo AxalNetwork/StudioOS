@@ -11,6 +11,10 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, isPartner, isFounder, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import {
+  analysePipeline, weightedPipeline, analyseDelivery,
+  type QuoteRow as QuoteAnalyticsRow, type EngagementRow as EngagementAnalyticsRow,
+} from '../services/bdAnalytics';
 
 // Mirror FastAPI VALID_CATEGORIES (kept loose for forward-compat).
 const VALID_CATEGORIES = new Set([
@@ -304,6 +308,49 @@ quotesRouter.get('/me', async (c) => {
     const items: any[] = [];
     for (const q of rows.results || []) items.push(await quoteDto(c.env, q));
     return c.json({ items });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Build queue #122 — GET /api/quotes/analytics
+ *
+ * BD pipeline analytics for a service partner: win rate, weighted
+ * forecast, cycle time, and delivery health, computed in
+ * services/bdAnalytics.ts. Scoped exactly like /quotes/me — a partner
+ * sees only their own quotes; admin sees all.
+ *
+ * The win rate's denominator is decided quotes only. Open and withdrawn
+ * are returned separately so the UI can show what was excluded rather
+ * than presenting a bare percentage.
+ */
+quotesRouter.get('/analytics', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isPartner(user) && !isAdmin(user)) {
+      return c.json({ pipeline: null, forecast: null, delivery: null });
+    }
+    const admin = isAdmin(user);
+    const quotes = admin
+      ? await c.env.DB.prepare(
+          'SELECT status, price AS amount, created_at, decided_at FROM quotes ORDER BY created_at DESC LIMIT 1000',
+        ).all<QuoteAnalyticsRow>()
+      : await c.env.DB.prepare(
+          'SELECT status, price AS amount, created_at, decided_at FROM quotes WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1000',
+        ).bind(user.partner_id ?? -1).all<QuoteAnalyticsRow>();
+    const engagements = admin
+      ? await c.env.DB.prepare(
+          'SELECT status, price AS amount FROM engagements ORDER BY created_at DESC LIMIT 1000',
+        ).all<EngagementAnalyticsRow>().catch(() => ({ results: [] as EngagementAnalyticsRow[] }))
+      : await c.env.DB.prepare(
+          'SELECT status, price AS amount FROM engagements WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1000',
+        ).bind(user.partner_id ?? -1).all<EngagementAnalyticsRow>().catch(() => ({ results: [] as EngagementAnalyticsRow[] }));
+
+    const q = quotes.results || [];
+    return c.json({
+      pipeline: analysePipeline(q),
+      forecast: weightedPipeline(q),
+      delivery: analyseDelivery(engagements.results || []),
+    });
   } catch (e) { return mapError(c, e); }
 });
 

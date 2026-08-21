@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import { RoundClosesPanel, ProRataPanel } from './raise/RoundClosesPanel';
 
 // Raise Pipeline v1 — active-round header, add/import investors, drag-between-
 // stages kanban, prospect drawer linked to the underlying Contacts-hub record,
@@ -112,6 +113,8 @@ export default function RaisePipelinePage({ embedded = false }) {
   const [err, setErr] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [dragOverStage, setDragOverStage] = useState(null);
+  // Round Manager (#129) — ladder | closes | prorata
+  const [roundTab, setRoundTab] = useState('ladder');
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
@@ -225,7 +228,30 @@ export default function RaisePipelinePage({ embedded = false }) {
         <>
           <RoundHeader info={roundInfo} prospectCount={items.length} onEdit={() => setShowRoundEdit(true)} />
 
-          {loading ? (
+          {/* Round Manager (#129) — the ladder is the default view; closes
+              and pro-rata are the two mechanics a rolling round needs and
+              the pipeline could not previously express. */}
+          <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-gray-800">
+            {[
+              { id: 'ladder', label: 'Investor ladder' },
+              { id: 'closes', label: 'Closes & tranches' },
+              { id: 'prorata', label: 'Pro-rata' },
+            ].map((t) => (
+              <button key={t.id} type="button" onClick={() => setRoundTab(t.id)}
+                className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  roundTab === t.id
+                    ? 'border-violet-600 text-violet-700 dark:text-violet-300'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {roundTab === 'closes' && <RoundClosesPanel projectId={projectId} onError={setErr} />}
+          {roundTab === 'prorata' && <ProRataPanel projectId={projectId} onError={setErr} />}
+
+          {roundTab === 'ladder' && (loading ? (
             <div className="text-sm text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</div>
           ) : (
             <div className="overflow-x-auto pb-2 -mx-1 px-1">
@@ -268,10 +294,12 @@ export default function RaisePipelinePage({ embedded = false }) {
                 ))}
               </div>
             </div>
-          )}
+          ))}
 
-          <UpdatesPanel projectId={projectId} updates={updates}
-            onPosted={(u) => setUpdates((prev) => [u, ...prev])} />
+          {roundTab === 'ladder' && (
+            <UpdatesPanel projectId={projectId} updates={updates}
+              onPosted={(u) => setUpdates((prev) => [u, ...prev])} />
+          )}
         </>
       )}
 

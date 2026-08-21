@@ -157,13 +157,23 @@ function buildRouteTable() {
   // Only attribute verbs declared on the identifier that is actually mounted.
   // A file may define several routers and export one; counting all of them
   // would over-approximate and hide exactly the drift we're looking for.
-  function crawl(file, prefix, depth) {
+  //
+  // `mountedIdent` is the local name used at the mount site. A file can
+  // export several routers by name — routes/needs.ts exports `needs`
+  // (default), `quotesRouter`, and `engagementsRouter`, each mounted at a
+  // different prefix. Resolving only the DEFAULT export made every route
+  // on a named-export router invisible to this guard, so drift on
+  // /api/quotes and /api/engagements could never be detected. When the
+  // mounted name is a router declared in the file, attribute to that.
+  function crawl(file, prefix, depth, mountedIdent) {
     const key = `${file}|${prefix}`;
     if (depth > 8 || visited.has(key) || !existsSync(file)) return;
     visited.add(key);
     const src = readFileSync(file, 'utf8');
     const imports = importMap(src, dirname(file));
-    const ident = defaultExportIdent(src);
+    const declaresMounted = mountedIdent
+      && new RegExp(`(?:const|let|var)\\s+${mountedIdent}\\s*=`).test(src);
+    const ident = declaresMounted ? mountedIdent : defaultExportIdent(src);
     if (!ident) return;
 
     const verbRe = new RegExp(`(\\w+)\\s*\\.\\s*(${HTTP_VERBS})\\(\\s*['"\`]([^'"\`]*)['"\`]`, 'g');
@@ -178,7 +188,7 @@ function buildRouteTable() {
     while ((m = mountRe.exec(src)) !== null) {
       if (m[1] !== ident) continue;
       const target = imports.get(m[3]);
-      if (target) crawl(target, prefix + (m[2] === '/' ? '' : m[2]), depth + 1);
+      if (target) crawl(target, prefix + (m[2] === '/' ? '' : m[2]), depth + 1, m[3]);
     }
   }
 
@@ -196,7 +206,7 @@ function buildRouteTable() {
   while ((m = mountRe.exec(idx)) !== null) {
     const file = imports.get(m[2]);
     mounts.push(m[1]);
-    if (file) crawl(file, m[1], 0);
+    if (file) crawl(file, m[1], 0, m[2]);
     else unresolved.push(`${m[1]} -> ${m[2]}`);
   }
 
