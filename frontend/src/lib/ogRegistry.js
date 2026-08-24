@@ -259,6 +259,110 @@ const ROUTES = [
     type: 'website',
     section: 'company',
   },
+
+  // ---- Legal & compliance -------------------------------------------------
+  // Footer-linked from every public page, so after the marketing pages these
+  // are the most-crawled URLs on the site — and the ones most often pasted
+  // into a chat when someone asks what the terms are.
+  {
+    path: '/terms',
+    title: 'Terms of Service',
+    description:
+      'The agreement governing use of the Axal VC platform — definitions and parties, acceptance and acknowledgments, and the scope of what the platform does.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/privacy',
+    title: 'Privacy Policy',
+    description:
+      'How Axal VC collects, uses, and protects Non-Public Personal Information, and the privacy role each of the three operating entities plays.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/risk-disclosures',
+    title: 'Risk Disclosures & Disclaimers',
+    description:
+      'Investing in private, early-stage companies carries a high degree of risk and suits only sophisticated investors who can afford to lose their entire investment.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/pricing/investor',
+    title: 'Investor plans',
+    description:
+      'Plans for investors and LPs, and what each tier includes. The investor-side counterpart to the main pricing page.',
+    type: 'website',
+    section: 'company',
+  },
+
+  // ---- Auth entry points --------------------------------------------------
+  // /register is a genuinely shared link rather than just a form: referral
+  // landings arrive as /register?ref=… (see the apex routing notes in
+  // wrangler.toml), so it gets previewed in chat clients far more often than
+  // its place in the nav suggests.
+  {
+    path: '/register',
+    title: 'Create your account',
+    description:
+      'Join the Axal VC network as a founder, investor, advisor, or service partner.',
+    type: 'website',
+    section: 'company',
+  },
+  {
+    path: '/login',
+    title: 'Sign in',
+    description: 'Sign in to Axal VC StudioOS.',
+    type: 'website',
+    section: 'company',
+  },
+
+  // ---- Audience landing pages (/lp/*) ------------------------------------
+  // Full public marketing pages — PublicNav, PublicFooter, hero, metrics
+  // strip, FAQ — not app surfaces that happen to be ungated. They are built
+  // to be shared, and until now every one of them previewed as the homepage.
+  // Copy below is taken from each page's own hero.
+  {
+    path: '/lp/investor',
+    title: 'The most disciplined dealflow in frontier tech',
+    description:
+      'Every company scored, verified, and sanctions-screened before it reaches your desk. We screen everything so you see only what matters.',
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/lp/founder',
+    title: 'Build something worth funding',
+    description:
+      'From idea to investor-ready in 28 days. One platform covering everything — legal, product, team, and capital.',
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/lp/partner',
+    title: 'Join the network that builds',
+    description:
+      "Axal VC's Global Venture Partner Network connects service providers, investors, advisors, and operators with the best early-stage companies in frontier technology.",
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/lp/customer-discovery',
+    title: "We're building what you need",
+    description:
+      "Customer discovery for Axal VC's next product cycle. If you're a founder, operator, or investor, we want 20 minutes of your time.",
+    type: 'website',
+    section: 'product',
+  },
+  {
+    path: '/lp/spinout-demo-day',
+    title: 'Spin-Out Lab Demo Day',
+    description:
+      'Evidence-led and founder-honest — no polished pitches, just real companies showing real work at the end of a 28-day sprint.',
+    type: 'website',
+    section: 'spinout-lab',
+  },
 ];
 
 export const OG_ROUTES = ROUTES;
