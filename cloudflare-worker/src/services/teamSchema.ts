@@ -2,10 +2,8 @@
  * Task #10 (LD) — Lazy bootstrap for team_members.
  *
  * Mirrors `ensurePartnerDirectoryColumns()` / `ensureMarketIntelSchema()`:
- * migration 066 is the canonical apply path, but per replit.md several
- * recent migrations (056, 060/partial, 062-064) landed un-applied on
- * prod. Running a CREATE TABLE IF NOT EXISTS on the cold path defends
- * the public + admin team routes against that recurring gotcha.
+ * migration 066 is the canonical production apply path. The lazy fallback is
+ * retained for development and preview databases that have not run migrations.
  *
  * Cached per isolate (no re-execution on every hot request).
  */
@@ -15,6 +13,10 @@ let _ready = false;
 
 export async function ensureTeamMembersSchema(env: Env): Promise<void> {
   if (_ready) return;
+  if (env.ENVIRONMENT === 'production') {
+    _ready = true;
+    return;
+  }
   try {
     await env.DB.batch([
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS team_members (

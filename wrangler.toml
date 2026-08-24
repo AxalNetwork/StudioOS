@@ -54,66 +54,210 @@ pattern        = "app.axal.vc"
 custom_domain  = true
 
 # ---------- Apex routing ----------
-# The Worker is the DEFAULT for the entire apex. This single wildcard
-# replaces the ~40 hand-maintained path carve-outs this block used to
-# carry.
-#
-# WHY THIS SHAPE. The previous table inverted the safe default: GitHub
-# Pages owned `axal.vc` and every app path had to be allowlisted here by
-# hand, so any path nobody remembered to add fell through to Pages and
-# 404'd. That single mechanism is the shared root cause of Tasks #5, #15,
-# #20, #33, #36, #37, #68 and #83 — each a production incident closed by
-# appending one more pattern to this list. A wildcard retires the whole
-# category instead of the individual instances, and there is nothing left
-# to forget.
-#
-# WHAT IS ON THE OTHER SIDE: nothing. There is no Jekyll site and never
-# has been — no `_config.yml` or `Gemfile` in the worktree or anywhere in
-# git history — and no `/blogs` content; that path existed only in the
-# prose of the comments this change removes. GitHub Pages was serving the
-# committed `docs/` SPA build, which is the same artifact the [assets]
-# binding below serves. So the wildcard changes WHICH HOST serves the
-# SPA, not what gets served. CLOUDFLARE-CUTOVER.md holds the full
-# inventory, its evidence, and the two things it could not verify.
-#
-# DEPLOYING THIS IS THE CUTOVER, not a staging step for one. The apex is
-# already proxied through Cloudflare, so the moment this route is live the
-# Worker intercepts the apex ahead of the Pages origin — no DNS change is
-# required for it to take effect, and none would make it take effect any
-# sooner. To roll back: delete this route and redeploy. Pages remains a
-# working origin until its DNS is repointed, so the rollback is complete.
+# Keep the production route table deliberately narrow while the full-apex
+# cutover remains under observation. GitHub Pages retains the root/fallback
+# shell; these Worker routes cover app/API surfaces and hashed assets.
+# Do not add `axal.vc/*` until CLOUDFLARE-CUTOVER.md's stabilisation gate passes.
 [[routes]]
-pattern    = "axal.vc/*"
+pattern    = "axal.vc/.well-known/security.txt"
 zone_name  = "axal.vc"
-
-# `/api/*` and `/assets/*` are already subsumed by the wildcard above.
-# They are restated here so their intent stays explicit and greppable,
-# and so narrowing the wildcard later cannot silently drop them.
-#
-# `/api/*` is the load-bearing one. If the apex ever stops reaching this
-# Worker, GitHub Pages answers GET with 404 and POST with 405, and every
-# authenticated page breaks at once — the SPA calls `/api` relative.
-#
-# `/assets/*` is Task #15's fix for the recurring post-login blank page.
-# Worker-served HTML references build-specific hashed filenames; when
-# `/assets/*` resolved against a DIFFERENT `docs/` build on Pages those
-# hashes 404'd and React never booted. The wildcard fixes that more
-# thoroughly than the carve-out did: one host now serves both the HTML
-# and the hashes it references, so the two cannot skew at all. The
-# retention window in scripts/build-frontend.mjs was compensating for the
-# same skew and becomes belt-and-braces rather than load-bearing.
-#
-# Both names also appear in [assets].run_worker_first below. That is a
-# SEPARATE mechanism and both are needed: routes decide whether a request
-# reaches this Worker at all, run_worker_first decides whether the fetch
-# handler runs before the static-asset lookup. Without the latter the SPA
-# fallback swallows `/api/*` and returns index.html instead of invoking
-# the Hono router.
+[[routes]]
+pattern    = "axal.vc/deck/print-export"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/admin/refer-earn"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/share/deck"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-service-partners"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/due-diligence"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-investors"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-advisors"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-founders"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/communities"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/spinout-lab"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/dashboard"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/directory"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/insights"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/register"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/products"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/articles"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/landing"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/contact"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/circles"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/authors"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/events"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/invite"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/studio"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/admin"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/about"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/refer"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/login"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/jobs"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/deck"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/app"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/lp"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/p"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/deck/print-export/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/admin/refer-earn/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/share/deck/*"
+zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/api/*"
 zone_name  = "axal.vc"
 [[routes]]
 pattern    = "axal.vc/assets/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-service-partners/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/due-diligence/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-investors/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-founders/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/for-advisors/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/communities/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/spinout-lab/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/directory/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/dashboard/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/insights/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/articles/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/products/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/register/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/authors/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/landing/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/circles/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/contact/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/events/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/studio/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/invite/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/about/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/admin/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/login/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/refer/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/jobs/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/deck/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/app/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/lp/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/p/*"
 zone_name  = "axal.vc"
 
 # ---------- Static Assets (SPA) ----------
@@ -483,15 +627,207 @@ custom_domain  = true
 # Apex routing — the Worker is the default for the entire apex. See the
 # top-level [[routes]] block for the full rationale, the incident history
 # this retires, and the rollback path. `/api/*` and `/assets/*` are
-# subsumed by the wildcard and restated only for explicitness.
+# is intentionally explicit until the full-apex stabilisation gate passes.
 [[env.production.routes]]
-pattern    = "axal.vc/*"
+pattern    = "axal.vc/.well-known/security.txt"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/deck/print-export"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/admin/refer-earn"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/share/deck"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-service-partners"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/due-diligence"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-investors"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-advisors"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-founders"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/communities"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/spinout-lab"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/dashboard"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/directory"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/insights"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/register"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/products"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/articles"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/landing"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/contact"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/circles"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/authors"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/events"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/invite"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/studio"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/admin"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/about"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/refer"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/login"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/jobs"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/deck"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/app"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/lp"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/p"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/deck/print-export/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/admin/refer-earn/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/share/deck/*"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/api/*"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/assets/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-service-partners/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/due-diligence/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-investors/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-founders/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/for-advisors/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/communities/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/spinout-lab/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/directory/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/dashboard/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/insights/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/articles/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/products/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/register/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/authors/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/landing/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/circles/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/contact/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/events/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/studio/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/invite/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/about/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/admin/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/login/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/refer/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/jobs/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/deck/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/app/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/lp/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/p/*"
 zone_name  = "axal.vc"
 
 [env.production.vars]

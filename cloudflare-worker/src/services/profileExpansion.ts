@@ -788,6 +788,12 @@ export function computeCompletionPct(personal: PersonalProfileRead, corporate: C
 let migrated = false;
 export async function ensureProfileExpansionSchema(env: Env): Promise<void> {
   if (migrated) return;
+  // Production migrations own this users-adjacent schema. Do not run a series
+  // of ALTER/CREATE statements while serving a public profile on a cold edge.
+  if (env.ENVIRONMENT === 'production') {
+    migrated = true;
+    return;
+  }
   const cols: Array<[string, string]> = [
     ['display_name', 'TEXT'],
     ['headline', 'TEXT'],

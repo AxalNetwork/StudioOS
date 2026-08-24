@@ -970,8 +970,14 @@ import { assertJwtSecretStrength, assertScoringHmacSecret } from './auth';
 // fetch entry point because workers have no startup hook; the cold-start
 // penalty is one cheap PRAGMA + two CREATE/ALTER ... IF NOT EXISTS calls.
 let _investorSchemaReady = false;
+let _investorSchemaBootstrap: Promise<void> | null = null;
 async function ensureInvestorSchema(env: Env): Promise<void> {
   if (_investorSchemaReady) return;
+  // A cold isolate can receive several requests before its first D1 operation
+  // settles. Share the migration work inside that isolate rather than issuing
+  // overlapping CREATE/ALTER/rebuild statements for every concurrent request.
+  if (_investorSchemaBootstrap) return _investorSchemaBootstrap;
+  _investorSchemaBootstrap = (async () => {
   try {
     await env.DB.exec(
       "CREATE TABLE IF NOT EXISTS investors (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL, user_id INTEGER, investor_type TEXT NOT NULL DEFAULT 'angel', accreditation_status TEXT NOT NULL DEFAULT 'unverified', check_size_min REAL, check_size_max REAL, sector_focus TEXT, stage_focus TEXT, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
@@ -1020,7 +1026,11 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
     if (investorRebuildOk) _investorSchemaReady = true;
   } catch (e) {
     console.error('[boot] ensureInvestorSchema failed:', (e as Error).message);
+  } finally {
+    _investorSchemaBootstrap = null;
   }
+  })();
+  return _investorSchemaBootstrap;
 }
 
 // Task #74 — Mentor→Advisor rename. Idempotent, runs at most once per isolate.
@@ -1031,8 +1041,13 @@ async function ensureInvestorSchema(env: Env): Promise<void> {
 // existence-checked + try/catch so a partially-migrated prod DB can never abort
 // the boot path.
 let _advisorSchemaReady = false;
+let _advisorSchemaBootstrap: Promise<void> | null = null;
 async function ensureAdvisorSchema(env: Env): Promise<void> {
   if (_advisorSchemaReady) return;
+  // See ensureInvestorSchema: concurrent first requests must not race the
+  // live-DDL migration path against each other.
+  if (_advisorSchemaBootstrap) return _advisorSchemaBootstrap;
+  _advisorSchemaBootstrap = (async () => {
   try {
     // (a) relax the users.role CHECK so 'advisor' is accepted before any flip.
     // Latch-on-success only (mirrors ensureExploringSchema): a failed rebuild
@@ -1085,7 +1100,52 @@ async function ensureAdvisorSchema(env: Env): Promise<void> {
     if (advisorRebuildOk) _advisorSchemaReady = true;
   } catch (e) {
     console.error('[boot] ensureAdvisorSchema failed:', (e as Error).message);
+  } finally {
+    _advisorSchemaBootstrap = null;
   }
+  })();
+  return _advisorSchemaBootstrap;
+}
+
+/**
+ * Role-schema repairs are deliberately available for stale development
+ * databases, but they include live users-table rebuilds and must never delay
+ * static delivery or anonymous read traffic on a fresh production isolate.
+ * Role-dependent routes retain the blocking guard below; the feature routes
+ * that mutate or consume the exploring schema also call their own narrow
+ * bootstrap functions.
+ */
+const ROLE_SCHEMA_SAFE_ANONYMOUS_READS: readonly (string | RegExp)[] = [
+  '/api/public/stats',
+  '/api/public/circles',
+  '/api/public/partners',
+  '/api/public/status',
+  '/api/public/changelog',
+  /^\/api\/public\/events(?:\.ics|\/[^/]+(?:\/ics)?)?$/,
+  /^\/api\/public\/invite\/[^/]+$/,
+  /^\/api\/public\/jobs(?:\/[^/]+)?$/,
+  /^\/api\/public\/verify\/[^/]+$/,
+  /^\/api\/public\/u\/[^/]+$/,
+  /^\/api\/public\/startup\/[^/]+$/,
+  /^\/api\/public\/p\/[^/]+$/,
+  /^\/api\/public\/authors\/[^/]+$/,
+  /^\/api\/public\/team(?:\/[^/]+\/photo)?$/,
+  /^\/api\/public\/network\/[^/]+\/photo$/,
+];
+
+function requiresBlockingRoleSchemaBootstrap(pathname: string, method: string): boolean {
+  if (!pathname.startsWith('/api/')) return false;
+  if (
+    pathname === '/api/health' ||
+    pathname === '/api/track' ||
+    pathname === '/api/client-error'
+  ) {
+    return false;
+  }
+  const isSafeAnonymousRead = ROLE_SCHEMA_SAFE_ANONYMOUS_READS.some((route) =>
+    typeof route === 'string' ? route === pathname : route.test(pathname),
+  );
+  return !(method === 'GET' && isSafeAnonymousRead);
 }
 
 export default {
@@ -1101,8 +1161,8 @@ export default {
     // longer serves. A clean 404 lets the client boot-watchdog (index.html)
     // and the stale-chunk recovery (main.jsx) reload onto the current build
     // instead of blanking.
+    const { pathname } = new URL(request.url);
     if (request.method === 'GET' && env.ASSETS) {
-      const { pathname } = new URL(request.url);
       if (pathname.startsWith('/assets/')) {
         const assetRes = await env.ASSETS.fetch(request);
         const ctype = assetRes.headers.get('content-type') || '';
@@ -1118,6 +1178,13 @@ export default {
         return assetRes;
       }
     }
+    // Static asset fallback and public page rendering need neither JWT secrets
+    // nor role-schema repairs. With an apex-wide route, running those D1
+    // migrations before a document/manifest response made cold traffic contend
+    // on the users table and contributed to edge 504s.
+    if (!pathname.startsWith('/api/')) {
+      return app.fetch(request, env, ctx);
+    }
     try {
       assertJwtSecretStrength(env);
       // T9 — SCORING_HMAC_SECRET is hard-required in production so the
@@ -1131,22 +1198,19 @@ export default {
         { status: 503, headers: { 'content-type': 'application/json' } },
       );
     }
-    // Phase 0.1 — block the FIRST request per isolate on the role-split
-    // migration so RBAC + schema rebuild are deterministic before any
-    // protected route runs (architect blocking-fix). Subsequent requests
-    // hit the in-memory `_investorSchemaReady` short-circuit (zero cost).
-    if (!_investorSchemaReady && env.DB) {
-      await ensureInvestorSchema(env);
-    }
-    if (!_advisorSchemaReady && env.DB) {
-      await ensureAdvisorSchema(env);
-    }
-    // Task #9 — relax the users.role CHECK for 'exploring' + create the
-    // user_role_review side table BEFORE any request can hit the
-    // /api/profiling/save holding-state flip. Same isolate-once pattern
-    // as the two ensures above.
-    if (!exploringSchemaReady() && env.DB) {
-      await ensureExploringSchema(env);
+    // Block role-dependent APIs on the migration safety net only. Health,
+    // verified anonymous public reads, and telemetry endpoints are safe without
+    // these schemas and must stay responsive during cold starts and D1 contention.
+    if (requiresBlockingRoleSchemaBootstrap(pathname, request.method) && env.DB) {
+      if (!_investorSchemaReady) {
+        await ensureInvestorSchema(env);
+      }
+      if (!_advisorSchemaReady) {
+        await ensureAdvisorSchema(env);
+      }
+      if (!exploringSchemaReady()) {
+        await ensureExploringSchema(env);
+      }
     }
     return app.fetch(request, env, ctx);
   },

@@ -78,6 +78,12 @@ publicRoutes.get('/stats', async (c) => {
 let _marketingSchemaReady = false;
 async function ensureMarketingSchema(env: Env): Promise<void> {
   if (_marketingSchemaReady) return;
+  // Production migrations own these tables. A cold status read must not run a
+  // five-statement DDL batch before returning its public health information.
+  if (env.ENVIRONMENT === 'production') {
+    _marketingSchemaReady = true;
+    return;
+  }
   try {
     await env.DB.batch([
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS status_incidents (

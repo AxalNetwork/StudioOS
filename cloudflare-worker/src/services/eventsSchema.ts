@@ -142,6 +142,12 @@ const STATEMENTS: string[] = [
 
 export async function ensureEventsSchema(env: Env): Promise<boolean> {
   if (_ready) return true;
+  // Production migrations own this schema. Running 19 DDL statements from a
+  // cold request can contend with unrelated reads and exhaust the edge budget.
+  if (env.ENVIRONMENT === 'production') {
+    _ready = true;
+    return true;
+  }
   try {
     for (const ddl of STATEMENTS) {
       try {
