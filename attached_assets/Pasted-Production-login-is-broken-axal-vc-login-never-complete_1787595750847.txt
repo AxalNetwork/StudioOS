@@ -1,0 +1,48 @@
+Production login is broken: axal.vc/login/ never completes a login — the user reports it "keeps refreshing." I can't reach axal.vc from Claude Code's environment (egress-blocked) to see it directly, so this needs your live access to confirm and fix.
+
+## Diagnosis (from code, not yet live-confirmed)
+
+The committed build on main is internally consistent — docs/login/index.html's referenced hashes (api-*.js, index-*.js, react-vendor-*.js, etc.) all exist in the committed docs/assets/. Nothing in the repo itself is broken.
+
+But your 504-mitigation deploy earlier (ce2a0195-...) was very likely run as a direct `wrangler deploy` rather than the root `npm run deploy` wrapper — nothing in that session touched or rebuilt docs/. If so, the LIVE assets binding may still be serving an older/mismatched docs/ snapshot than what main currently has, which means the HTML for /login references JS chunk hashes that don't resolve at /assets/* on the live edge.
+
+This repo has TWO client-side auto-recovery mechanisms for exactly that failure (main.jsx's chunk-error handler, and an inline boot watchdog in docs/index.html) — both are deliberately one-shot (sessionStorage + a ?__reboot= URL guard), so they can't loop forever; they try once and then fail to a clean blank/broken state. A user manually mashing reload against that dead end reads exactly as "keeps refreshing, never logs in."
+
+## Step 1 — confirm before fixing (~1 min)
+
+Fetch the live page and check whether its referenced asset hashes actually resolve:
+
+  curl -s https://axal.vc/login/ | grep -oE '/assets/[A-Za-z0-9_.-]+\.(js|css)' | sort -u
+
+For each hash returned, confirm it 200s with the right content-type (not an HTML fallback):
+
+  curl -sI https://axal.vc/assets/<hash>.js
+
+If any of those 404, or return text/html instead of javascript — that confirms the asset-skew hypothesis. Also worth a quick look in a real browser: DevTools Network tab on /login/, any /assets/*.js request showing 404; or Console for "ChunkLoadError" / "vite:preloadError".
+
+If assets DO resolve cleanly and the page still won't complete login, this isn't asset skew — check instead whether the auth cookie set on login has a Domain that doesn't match the page's origin, and whether localStorage.getItem('token') actually holds a value right after a login attempt (open DevTools Application tab). Report back what you find either way before I'd want you to guess further.
+
+## Step 2 — the fix, if Step 1 confirms asset skew
+
+Pull latest main, then deploy through the FULL pipeline, not a raw wrangler deploy:
+
+  git fetch origin main && git checkout main && git pull origin main
+  npm run deploy
+
+That's `npm run build` (fresh docs/) → `predeploy` (node scripts/migrate-d1.mjs --remote — expected, applies any pending D1 migrations, should be a no-op given main's migrations are already applied) → `wrangler deploy --env production` → `postdeploy` (node scripts/check-spa-live.mjs, a real post-deploy smoke check against both axal.vc and app.axal.vc). Let check-spa-live.mjs actually run and report its result — don't skip it or treat a deploy as done without it passing. This is very likely what got skipped last time.
+
+Do NOT touch the route table as part of this — still the same 67 explicit routes, unrelated to this bug, and the apex wildcard stays disabled per the open stabilisation gate in CLOUDFLARE-CUTOVER.md.
+
+## Step 3 — verify
+
+Re-run Step 1's asset-hash check post-deploy. Load /login/ in a fresh/incognito browser context and confirm the form actually renders and a real login completes (lands on /studio or wherever, doesn't bounce back). 
+
+## Step 4 — fallback if Step 2 doesn't fix it
+
+This is a live outage — don't leave it broken while investigating further. Roll back the Worker to the last known-good version from before today's changes:
+
+  72bddaa7-716b-42eb-95d6-97f77c157bb5  (version 417)
+
+That costs nothing against the 504 mitigation — the wildcard was never re-enabled today, so that fix isn't actively protecting anything live right now anyway. Roll back first, confirm login works again, THEN resume root-causing with production stable.
+
+Report back: what Step 1 found, what you did, and current login status.

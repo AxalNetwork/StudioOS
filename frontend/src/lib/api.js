@@ -68,6 +68,72 @@ export function setSuppressAuthRedirect(v) {
   _suppressAuthRedirect = !!v;
 }
 
+// Directory-style URLs are normalised by some static origins (for example,
+// `/login` becomes `/login/`). Auth redirects must use the same public-route
+// boundary for both forms, otherwise an anonymous settings probe restarts the
+// login page before its lazy route can settle.
+export function isPublicPath(pathname) {
+  const currentPath = typeof pathname === 'string' && pathname
+    ? (pathname.replace(/\/+$/, '') || '/')
+    : '/';
+  return currentPath === '/'
+    || currentPath === '/login'
+    || currentPath === '/register'
+    || currentPath === '/verify-email'
+    || currentPath === '/spinout-lab'
+    // Printable Program Brief — public brochure page; /spinout-lab/apply
+    // is intentionally NOT listed (auth-only, a 401 there should bounce).
+    || currentPath === '/spinout-lab/brief'
+    // Audience product pages (For Founders / Investors & LPs / Service
+    // Partners / Advisors) — public marketing surfaces. A background
+    // settings/me 401 for an anonymous visitor must not bounce them to
+    // /login (mirrors /spinout-lab above).
+    || currentPath === '/for-founders'
+    || currentPath === '/for-investors'
+    || currentPath === '/for-service-partners'
+    || currentPath === '/for-advisors'
+    // Audience-specific marketing landing pages (/lp/founder,
+    // /lp/investor, /lp/partner, /lp/customer-discovery,
+    // /lp/spinout-demo-day). Public surfaces: a background
+    // settings/me 401 for an anonymous visitor must not bounce
+    // them to /login.
+    || currentPath.startsWith('/lp/')
+    || currentPath === '/directory'
+    // Task #9 — Public Network layer: Circles (+ /communities redirect).
+    // Public marketing surfaces: a background settings/me 401 for an
+    // anonymous visitor must not bounce them to /login.
+    || currentPath === '/circles'
+    || currentPath === '/communities'
+    || currentPath === '/roadmap'
+    || currentPath === '/about'
+    || currentPath === '/contact'
+    // Task #5 — /articles is the public Articles hub (Browse tab is the
+    // default, anonymous-visible surface). Keep it reachable for signed-
+    // out visitors when a background fetch (settings/me) 401s. The
+    // auth-only sub-routes (/articles/mine, /articles/draft,
+    // /articles/edit/:id) are intentionally NOT listed so a genuine
+    // session expiry there still bounces to /login.
+    || currentPath === '/articles'
+    || currentPath.startsWith('/pricing/')
+    || currentPath.startsWith('/partner-onboarding/')
+    || currentPath.startsWith('/partners/onboard')
+    || currentPath.startsWith('/esign/')
+    || currentPath.startsWith('/deck/share/')
+    || currentPath.startsWith('/share/deck/')
+    || currentPath.startsWith('/share/captable/')
+    || currentPath.startsWith('/insights')
+    || currentPath.startsWith('/settings/email/')
+    // Task #5 — Public event surface (no auth)
+    || currentPath === '/events'
+    || currentPath.startsWith('/events/')
+    // Public job board surface (no auth): /jobs (feed) and
+    // /jobs/:slug (detail) must stay reachable for anonymous
+    // visitors when a background settings/me 401 fires.
+    || currentPath === '/jobs'
+    || currentPath.startsWith('/jobs/')
+    || currentPath.startsWith('/invite/');
+}
+
 export async function request(path, options = {}) {
   try {
     // FormData uploads must NOT carry an explicit Content-Type — the browser
@@ -108,66 +174,11 @@ export async function request(path, options = {}) {
         // now-expired session (otherwise axal.vc/ bounces them to
         // /login the moment useAuthSync probes /auth/me).
         const currentPath = window.location.pathname;
-        const isPublicPath = currentPath === '/'
-          || currentPath === '/login'
-          || currentPath === '/register'
-          || currentPath === '/verify-email'
-          || currentPath === '/spinout-lab'
-          // Printable Program Brief — public brochure page; /spinout-lab/apply
-          // is intentionally NOT listed (auth-only, a 401 there should bounce).
-          || currentPath === '/spinout-lab/brief'
-          // Audience product pages (For Founders / Investors & LPs / Service
-          // Partners / Advisors) — public marketing surfaces. A background
-          // settings/me 401 for an anonymous visitor must not bounce them to
-          // /login (mirrors /spinout-lab above).
-          || currentPath === '/for-founders'
-          || currentPath === '/for-investors'
-          || currentPath === '/for-service-partners'
-          || currentPath === '/for-advisors'
-          // Audience-specific marketing landing pages (/lp/founder,
-          // /lp/investor, /lp/partner, /lp/customer-discovery,
-          // /lp/spinout-demo-day). Public surfaces: a background
-          // settings/me 401 for an anonymous visitor must not bounce
-          // them to /login.
-          || currentPath.startsWith('/lp/')
-          || currentPath === '/directory'
-          // Task #9 — Public Network layer: Circles (+ /communities redirect).
-          // Public marketing surfaces: a background settings/me 401 for an
-          // anonymous visitor must not bounce them to /login.
-          || currentPath === '/circles'
-          || currentPath === '/communities'
-          || currentPath === '/roadmap'
-          || currentPath === '/about'
-          || currentPath === '/contact'
-          // Task #5 — /articles is the public Articles hub (Browse tab is the
-          // default, anonymous-visible surface). Keep it reachable for signed-
-          // out visitors when a background fetch (settings/me) 401s. The
-          // auth-only sub-routes (/articles/mine, /articles/draft,
-          // /articles/edit/:id) are intentionally NOT listed so a genuine
-          // session expiry there still bounces to /login.
-          || currentPath === '/articles'
-          || currentPath.startsWith('/pricing/')
-          || currentPath.startsWith('/partner-onboarding/')
-          || currentPath.startsWith('/partners/onboard')
-          || currentPath.startsWith('/esign/')
-          || currentPath.startsWith('/deck/share/')
-          || currentPath.startsWith('/share/deck/')
-          || currentPath.startsWith('/share/captable/')
-          || currentPath.startsWith('/insights')
-          || currentPath.startsWith('/settings/email/')
-          // Task #5 — Public event surface (no auth)
-          || currentPath === '/events'
-          || currentPath.startsWith('/events/')
-          // Public job board surface (no auth): /jobs (feed) and
-          // /jobs/:slug (detail) must stay reachable for anonymous
-          // visitors when a background settings/me 401 fires.
-          || currentPath === '/jobs'
-          || currentPath.startsWith('/jobs/')
-          || currentPath.startsWith('/invite/');
+        const publicPath = isPublicPath(currentPath);
         // `_suppressAuthRedirect` is set only while the catch-all 404 page is
         // mounted (an unknown URL), so a logged-out visitor there sees the 404
         // instead of being bounced to /login by this background 401.
-        if (!isPublicPath && !_suppressAuthRedirect) {
+        if (!publicPath && !_suppressAuthRedirect) {
           // Task #10 — capture the bounce BEFORE the hard navigation tears the
           // tab down. The reportError beacon uses keepalive so it still lands
           // even though we're about to leave the page; this is what makes a
