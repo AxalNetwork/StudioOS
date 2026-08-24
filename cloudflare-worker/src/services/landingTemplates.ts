@@ -6,7 +6,22 @@
  * JS is required for rendering.
  */
 
-export const TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit', 'capital-storyteller', 'seed-stage-spark', 'distribution-deck', 'pilot-partner-page', 'partner-hub', 'partner-pipeline-pro', 'co-founder-builder', 'co-founder-canvas', 'cofounder-connect', 'co-founder-quest', 'mentor-connect', 'mentor-connect-page', 'builders-launchpad'] as const;
+/**
+ * Honeypot field name, shared by the form renderer below and the capture route
+ * (routes/brand.ts) that rejects on it.
+ *
+ * Lives HERE, not in brand.ts, because brand.ts already imports this module —
+ * defining it there and importing it back would be a cycle.
+ *
+ * Deliberately plausible: a bot's heuristic is "does this look like a field
+ * worth filling", so `company_website` gets filled where a name like
+ * `honeypot_do_not_fill` would be skipped. Exported so the renderer, the route
+ * and the tests all use one string — a rename that hit only one side would
+ * silently disable the trap, which is how this defence usually rots.
+ */
+export const HONEYPOT_FIELD = 'company_website';
+
+export const TEMPLATE_KEYS = ['minimal', 'bold-hero', 'video-first', 'editorial', 'product-mock', 'advisor-connect', 'proof-builder', 'capital-ready-kit', 'capital-storyteller', 'seed-stage-spark', 'distribution-deck', 'pilot-partner-page', 'partner-hub', 'partner-pipeline-pro', 'co-founder-builder', 'co-founder-canvas', 'cofounder-connect', 'co-founder-quest', 'mentor-connect', 'mentor-connect-page', 'builders-launchpad', 'customer-acquisition', 'customer-audience'] as const;
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
 
 export interface TemplateMeta {
@@ -71,6 +86,16 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
     usesHero: false,
     usesProduct: false,
   },
+  // NOT part of the "ported" batch above, despite sitting next to it — and
+  // despite having been labeled as such until an August 2026 fidelity audit
+  // caught it. No `brandtemplates/` directory has ever existed for "Proof
+  // Builder" (checked against the repo's full history). It's kept as an
+  // original, in-house template targeting the customer audience — not
+  // removed, but its provenance is honestly `null` below, not a fabricated
+  // source. (It was the catalog's ONLY customer entry until the two
+  // `customer-*` templates were added from `.dc` design handoffs; it remains
+  // the only one with no supplied source of either kind.) See
+  // TEMPLATE_SOURCES for the authoritative map.
   {
     key: 'proof-builder',
     label: 'Proof Builder',
@@ -108,6 +133,10 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
   },
   {
     key: 'distribution-deck',
+    // Posts `partner`, not `investor`: the design is a partnership memo
+    // (customer-overlap tables, channel economics, integration options,
+    // "Discuss distribution fit"). It was mis-filed as an investor deck from
+    // the name, which routed its signups to Capital instead of Marketplace.
     label: 'Distribution Deck',
     description: 'Blueprint partnership memo — overlap tables, channel value, rollout.',
     thumbnailPlaceholder: 'distribution-deck',
@@ -188,9 +217,30 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
   },
   {
     key: 'builders-launchpad',
+    // Posts `cofounder`, not `customer`: despite the launch-y name the design
+    // is a technical co-founder brief (hiring badge, shipped-vs-missing lists,
+    // equity terms, "Join as technical co-founder"). Mis-filed as a customer
+    // launch teaser, it routed applicants to Discovery instead of Co-founder
+    // Match.
     label: "Builder's Launchpad",
-    description: 'Dark terminal launch teaser — quick facts, status badges, shell CTA.',
+    description: 'Dark terminal co-founder brief — quick facts, build status, apply CTA.',
     thumbnailPlaceholder: 'builders-launchpad',
+    usesHero: false,
+    usesProduct: false,
+  },
+  {
+    key: 'customer-acquisition',
+    label: 'Customer Acquisition Page',
+    description: 'Full acquisition funnel — problem cost, product shot, why-now, and TWO ways in (waitlist or demo).',
+    thumbnailPlaceholder: 'customer-acquisition',
+    usesHero: false,
+    usesProduct: true,
+  },
+  {
+    key: 'customer-audience',
+    label: 'Customer Audience Page',
+    description: 'One page, several buyers — a segment switcher retargets the pitch, proof and form per audience.',
+    thumbnailPlaceholder: 'customer-audience',
     usesHero: false,
     usesProduct: false,
   },
@@ -199,6 +249,90 @@ export const TEMPLATE_REGISTRY: TemplateMeta[] = [
 export const TEMPLATE_MAP = new Map<string, TemplateMeta>(
   TEMPLATE_REGISTRY.map((t) => [t.key, t]),
 );
+
+/**
+ * Source-of-truth provenance for every template key: which real upload under
+ * the repo's `brandtemplates/` directory (if any) its content and structure
+ * were recreated from. `null` means the key has NO `brandtemplates/` project
+ * behind it — either an original in-house design, or one recreated from a
+ * `.dc` design handoff in `attached_assets/`. Which of those it is, is
+ * answered by TEMPLATE_DESIGN_SOURCES below: a key that is null in BOTH maps
+ * is in-house and must not claim otherwise in its label, description, or
+ * comments.
+ *
+ * Added after an August 2026 fidelity audit found `proof-builder` claiming
+ * "ported" status (grouped with genuinely-ported templates in both this
+ * file's TEMPLATE_REGISTRY comment and the frontend catalog's header
+ * comment) despite no `brandtemplates/` directory for it ever existing.
+ *
+ * This is now the ONE place that answers "does this template correspond to
+ * a real uploaded design, and which one" — everything else (labels,
+ * descriptions, code comments) should defer to it rather than restate
+ * provenance informally. `landing_template_provenance.test.ts` enforces it
+ * mechanically against the actual `brandtemplates/` directory listing on
+ * every run, so a future addition/removal can't silently drift the way
+ * proof-builder did.
+ *
+ * The 5 generic styles (minimal/bold-hero/video-first/editorial/product-mock)
+ * are deliberately absent: they've never claimed brandtemplates/ provenance,
+ * so there's nothing to verify.
+ */
+export const TEMPLATE_SOURCES: { [key in Exclude<TemplateKey, 'minimal' | 'bold-hero' | 'video-first' | 'editorial' | 'product-mock'>]: string | null } = {
+  'advisor-connect': 'Advisor Connect',
+  'proof-builder': null, // original in-house design — see doc comment above
+  'capital-ready-kit': 'Capital Ready Kit',
+  'capital-storyteller': 'Capital Storyteller',
+  'seed-stage-spark': 'Seed Stage Spark',
+  'distribution-deck': 'Distribution Deck',
+  'pilot-partner-page': 'Pilot Partner Page',
+  'partner-hub': 'Partner Hub',
+  'partner-pipeline-pro': 'Partner Pipeline Pro',
+  'co-founder-builder': 'Co-Founder Builder',
+  'co-founder-canvas': 'Co-Founder Canvas',
+  'cofounder-connect': 'Co-founder Connect',
+  'co-founder-quest': 'Co-Founder Quest',
+  'mentor-connect': 'Mentor Connect',
+  'mentor-connect-page': 'Mentor Connect Page',
+  'builders-launchpad': "Builder's Launchpad",
+  // Recreated from a `.dc` design handoff, not a brandtemplates/ project —
+  // see TEMPLATE_DESIGN_SOURCES.
+  'customer-acquisition': null,
+  'customer-audience': null,
+};
+
+/**
+ * The OTHER kind of supplied source: a `.dc` design handoff under
+ * `attached_assets/`, the same format the Brand & Landing page itself was
+ * specified in (`attached_assets/Brand_&_Landing_Page.dc_*.html`). These are
+ * design documents rather than runnable projects, so they never appear under
+ * `brandtemplates/` and TEMPLATE_SOURCES records them as null.
+ *
+ * Keeping them in a SECOND map rather than overloading TEMPLATE_SOURCES is
+ * deliberate: TEMPLATE_SOURCES' null is load-bearing (it is what proof-builder's
+ * August 2026 provenance correction turns on), and silently widening it to
+ * mean "no project source, but maybe some other source" would erase exactly
+ * the distinction that audit established. A key absent from BOTH maps'
+ * non-null values is in-house.
+ *
+ * Paths are repo-relative and verified to exist by
+ * `landing_template_provenance.test.ts`, same as the directories above.
+ */
+export const TEMPLATE_DESIGN_SOURCES: Record<string, string> = {
+  'customer-acquisition': 'attached_assets/Customer_Acquisition_Landing_Page.dc.html',
+  'customer-audience': 'attached_assets/Customer_Audience_Landing_Page.dc.html',
+};
+
+/**
+ * `brandtemplates/` directory names that are byte-identical duplicate
+ * uploads of another directory, not distinct templates — excluded from
+ * "every directory maps to a TEMPLATE_SOURCES value" in the provenance test.
+ * Verified with a full recursive diff (every file, not just the main page)
+ * on 2026-08-07: `Capital Ready Kit 2` is a re-upload of `Capital Ready Kit`
+ * with a different folder name and nothing else different.
+ */
+export const TEMPLATE_SOURCE_DUPLICATE_DIRS: Record<string, string> = {
+  'Capital Ready Kit 2': 'Capital Ready Kit',
+};
 
 function escapeHtml(s: string | null | undefined): string {
   if (!s) return '';
@@ -268,9 +402,66 @@ interface BrandKit {
   nonce?: string;
   heroMediaUrl?: string | null;
   productScreenshotUrl?: string | null;
+  /** Absolute canonical URL of this page, when the caller knows it. */
+  canonical?: string | null;
+  /** Absolute https image URL for the social card, when one is available. */
+  socialImage?: string | null;
 }
 
-function buildBrandKit(row: any, opts: { slug?: string; token?: string; noindex?: boolean; nonce?: string }): BrandKit {
+/**
+ * Open Graph / Twitter Card / canonical block, shared by every renderer.
+ *
+ * WHY A HELPER. Each of the 21 renderers inlines its own `<head>` as a
+ * template literal, so before this existed the head was copy-pasted 21 times
+ * and carried NO social metadata at all — a shared /landing/:slug link
+ * rendered in Slack, iMessage, WhatsApp or X as a bare URL with no title,
+ * no description and no image. Founders are told to share these pages, so
+ * that was the single highest-impact gap on the public surface. Emitting the
+ * tags from one function means the next field lands in one place, not 21.
+ *
+ * A note on `og:image`: there is no per-page card generation. The repo's
+ * OG pipeline (scripts/generate-og-images.mjs) is build-time, renders a
+ * fixed key registry with headless Chromium, and ships committed PNGs for
+ * the MARKETING site — it cannot produce a card per founder page at request
+ * time, and the Worker has no image renderer. So the card image is the
+ * founder's own uploaded logo when they have one, and is omitted otherwise
+ * (an absent og:image degrades to a text-only card, which is correct;
+ * pointing at a wrong or generic image would be worse). Generated per-page
+ * cards need an image-rendering path that does not exist yet.
+ */
+function socialMeta(bk: BrandKit, a: { h: string; b: string; c: string }): string {
+  // A preview must never be indexed or unfurled — it is a private draft link.
+  if (bk.noindex) return '';
+  const title = bk.name;
+  const desc = a.b || '';
+  const out = [
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:title" content="${title}" />`,
+    `<meta property="og:site_name" content="${title}" />`,
+  ];
+  if (desc) out.push(`<meta property="og:description" content="${desc}" />`);
+  if (bk.canonical) {
+    out.push(`<meta property="og:url" content="${escapeHtml(bk.canonical)}" />`);
+    out.push(`<link rel="canonical" href="${escapeHtml(bk.canonical)}" />`);
+  }
+  if (bk.socialImage) {
+    out.push(`<meta property="og:image" content="${escapeHtml(bk.socialImage)}" />`);
+    out.push(`<meta name="twitter:image" content="${escapeHtml(bk.socialImage)}" />`);
+    // A logo is square-ish; summary (not summary_large_image) is the honest
+    // card shape for it, and avoids X cropping a logo into a letterbox.
+    out.push(`<meta name="twitter:card" content="summary" />`);
+  } else {
+    out.push(`<meta name="twitter:card" content="summary" />`);
+  }
+  out.push(`<meta name="twitter:title" content="${title}" />`);
+  if (desc) out.push(`<meta name="twitter:description" content="${desc}" />`);
+  return out.join('\n');
+}
+
+function buildBrandKit(
+  row: any,
+  opts: { slug?: string; token?: string; noindex?: boolean; nonce?: string; canonical?: string | null },
+): BrandKit {
   const color = hex6(row.theme_color, '#7c3aed');
   const bgColor = hex6(row.palette_bg, '#fafafa');
   const inkColor = hex6(row.palette_ink, '#0f172a');
@@ -287,11 +478,19 @@ function buildBrandKit(row: any, opts: { slug?: string; token?: string; noindex?
     : (row.logo_svg || svgLogoInline(row.name, color));
   const slug = opts.slug || '';
   const apiWaitlist = opts.slug ? `/api/brand/landing/${encodeURIComponent(opts.slug)}/waitlist` : '';
+  // The social card can only use an ABSOLUTE https image — a crawler fetching
+  // the card has no origin to resolve `/uploads/x.png` against. validMediaUrl
+  // deliberately allows same-origin paths (they're fine inside the document),
+  // so re-check here rather than reusing it.
+  const rawLogo = typeof row.logo_url === 'string' ? row.logo_url.trim() : '';
+  const socialImage = /^https:\/\/\S+$/.test(rawLogo) ? rawLogo : null;
   return {
     color, bgColor, inkColor, secondary, accent, fontPairing, logoMarkup, logoInline, name, slug,
     apiWaitlist, noindex: !!opts.noindex, nonce: opts.nonce,
     heroMediaUrl: validMediaUrl(row.hero_media_url),
     productScreenshotUrl: validMediaUrl(row.product_screenshot_url),
+    canonical: opts.canonical || null,
+    socialImage,
   };
 }
 
@@ -533,11 +732,12 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
       itemFields: [
         { key: 'name', label: 'Name / role', kind: 'text' },
         { key: 'role', label: 'Detail', kind: 'text' },
+        { key: 'bio', label: 'Credential (one line)', kind: 'text' },
       ],
       default: [
-        { name: 'Founder', role: 'Sets the vision and owns the product.' },
-        { name: 'Co-founder', role: 'Leads build and the technical roadmap.' },
-        { name: 'Early team', role: 'Operators close to the customer.' },
+        { name: 'Founder', role: 'Sets the vision and owns the product.', bio: 'Years in this exact problem, before starting the company.' },
+        { name: 'Co-founder', role: 'Leads build and the technical roadmap.', bio: 'Shipped the hard technical part of this before, elsewhere.' },
+        { name: 'Early team', role: 'Operators close to the customer.', bio: 'Came from the industry this sells into, not a resume template.' },
       ],
     },
   ],
@@ -609,6 +809,19 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
         { label: 'Reserve', pct: '10' },
       ],
     },
+    {
+      key: 'team', label: 'Team', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'name', label: 'Name / role', kind: 'text' },
+        { key: 'role', label: 'Detail', kind: 'text' },
+        { key: 'bio', label: 'Credential (one line)', kind: 'text' },
+      ],
+      default: [
+        { name: 'Founder', role: 'Vision, product, and the story.', bio: 'Built and sold in this exact market before.' },
+        { name: 'Co-founder', role: 'Engineering and the technical roadmap.', bio: 'Shipped the hard infrastructure piece elsewhere, at scale.' },
+        { name: 'Early team', role: 'Go-to-market and first customers.', bio: 'Ran the playbook this company needs, somewhere else first.' },
+      ],
+    },
   ],
   'seed-stage-spark': [
     {
@@ -647,6 +860,32 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
         { label: 'Q2', pct: '52' },
         { label: 'Q3', pct: '71' },
         { label: 'Q4', pct: '100' },
+      ],
+    },
+    {
+      key: 'team', label: 'Team', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'name', label: 'Name / role', kind: 'text' },
+        { key: 'role', label: 'Detail', kind: 'text' },
+        { key: 'bio', label: 'Credential (one line)', kind: 'text' },
+      ],
+      default: [
+        { name: 'Founder', role: 'Vision, product, and the story.', bio: 'Built and sold in this exact market before.' },
+        { name: 'Co-founder', role: 'Engineering and the technical roadmap.', bio: 'Shipped the hard infrastructure piece elsewhere, at scale.' },
+        { name: 'Early team', role: 'Go-to-market and first customers.', bio: 'Ran the playbook this company needs, somewhere else first.' },
+      ],
+    },
+    {
+      key: 'round_details', label: 'Round details', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'label', label: 'Label', kind: 'text' },
+        { key: 'value', label: 'Value', kind: 'text' },
+      ],
+      default: [
+        { label: 'Stage', value: 'Seed' },
+        { label: 'Instrument', value: 'SAFE' },
+        { label: 'Runway', value: '~18 months' },
+        { label: 'Close', value: 'Rolling' },
       ],
     },
   ],
@@ -732,6 +971,18 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
       ],
     },
     {
+      key: 'not_for', label: "Who this isn't for", kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Needs it finished', body: "Looking for a polished, finished product — not a working pilot." },
+        { title: "Can't give the time", body: "Won't have someone showing up weekly with real feedback." },
+        { title: 'No path to a yes', body: "Can't say yes internally within the pilot window if it works." },
+      ],
+    },
+    {
       key: 'includes', label: 'What it includes', kind: 'groupList', max: 6,
       itemFields: [
         { key: 'title', label: 'Title', kind: 'text' },
@@ -787,6 +1038,19 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
     {
       key: 'shared_fit', label: 'Shared fit', kind: 'textarea',
       default: `We start where our ideal customers already overlap — so the pilot proves value fast and the economics are obvious to both teams.`,
+    },
+    {
+      key: 'value_to_partner', label: 'Value to partner', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Account coverage', body: 'We show up inside accounts you already own — not around them.' },
+        { title: 'Faster cycles', body: 'Shared context means less re-explaining, faster yes or no.' },
+        { title: 'Lower lift', body: 'We do the integration work; you keep the relationship.' },
+        { title: 'Co-branded proof', body: 'Joint case studies and data you can take to your own team.' },
+      ],
     },
     {
       key: 'models', label: 'Ways to work together', kind: 'groupList', max: 3,
@@ -886,6 +1150,27 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
     {
       key: 'quote_by', label: 'Quote attribution', kind: 'text',
       default: `VP, Strategic Partnerships`,
+    },
+    {
+      key: 'best_fit', label: 'Best fit', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'text' },
+      ],
+      default: [
+        { body: 'You already sell to the same accounts we do.' },
+        { body: 'Your reps can position a second product with no new headcount.' },
+        { body: "You want a revenue line that doesn't need new pipeline." },
+      ],
+    },
+    {
+      key: 'not_fit', label: 'Not a fit yet', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'body', label: 'Item', kind: 'text' },
+      ],
+      default: [
+        { body: 'No existing relationship with this customer base.' },
+        { body: 'Mid a platform migration — bad timing for a new integration.' },
+      ],
     },
   ],
   'co-founder-builder': [
@@ -1371,6 +1656,215 @@ export const LANDING_CONTENT_SCHEMA: Record<TemplateKey, ContentField[]> = {
         { body: 'v1, stable enough to depend on.' },
       ],
     },
+    {
+      key: 'equity', label: 'Equity & collaboration', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'body', label: 'Term', kind: 'textarea' },
+      ],
+      default: [
+        { body: 'Equity: meaningful — expect double digits, negotiated directly, no games.' },
+        { body: 'Vesting: standard 4-year schedule, 1-year cliff.' },
+        { body: "Salary: modest now, market-rate the moment we're funded to pay it." },
+        { body: 'Location: remote-friendly, with occasional in-person time for the hard weeks.' },
+      ],
+    },
+  ],
+  'customer-acquisition': [
+    {
+      key: 'problem_lead', label: 'The problem, in one line', kind: 'textarea',
+      default: `Async work broke the status update, and nothing replaced it.`,
+    },
+    {
+      key: 'costs', label: 'What it costs today', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Figure', kind: 'text' },
+        { key: 'label', label: 'What it measures', kind: 'text' },
+      ],
+      default: [
+        { value: '4.2 hrs', label: 'lost per person each week to work nobody should have to do' },
+        { value: '62%', label: 'of updates get repeated in a meeting after already being written' },
+        { value: '3.4', label: 'separate tools consulted to answer a single question' },
+      ],
+    },
+    {
+      key: 'product_lead', label: 'What it does', kind: 'textarea',
+      default: `One place for the work. The summary writes itself.`,
+    },
+    {
+      key: 'feature_notes', label: 'Feature notes', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'Reads the tools you already run', body: 'No migration and no parallel system to keep alive.' },
+        { title: 'Outcomes, not chatter', body: 'Threads resolve into decisions with an owner and a date.' },
+        { title: 'Written for the reader', body: 'Everyone gets the slice that touches their work.' },
+      ],
+    },
+    {
+      key: 'why_now', label: 'Why now', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Heading', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+      ],
+      default: [
+        { title: 'Built for how work happens now', body: 'The tools in this space were designed for a different shape of team and bolted the rest on later.' },
+        { title: 'The cost of coordination moved', body: 'The overhead is finally big enough that teams will pay to remove it.' },
+        { title: 'Early access shapes what ships', body: 'The first cohort gets direct input on the roadmap and keeps its pricing.' },
+      ],
+    },
+    {
+      key: 'quote', label: 'Customer quote', kind: 'textarea',
+      default: `We cancelled two standing meetings in the first week. The digest covered what they were for.`,
+    },
+    {
+      key: 'quote_by', label: 'Quote attribution', kind: 'text',
+      default: `Early customer · operations`,
+    },
+    {
+      key: 'conversion', label: 'Ways in', kind: 'groupList', max: 2,
+      itemFields: [
+        { key: 'title', label: 'Option', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+        { key: 'foot', label: 'Small print', kind: 'text' },
+      ],
+      default: [
+        { title: 'Join the waitlist', body: 'Access opens by fit rather than signup order, so tell us a little about your team.', foot: 'No credit card. Unsubscribe in one click.' },
+        { title: 'Book a demo', body: 'Twenty minutes with the founder, on your own data. Skip the queue entirely.', foot: 'No sales call — the founder runs these.' },
+      ],
+    },
+    {
+      key: 'faqs', label: 'Questions', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'q', label: 'Question', kind: 'text' },
+        { key: 'a', label: 'Answer', kind: 'textarea' },
+      ],
+      default: [
+        { q: 'When does access actually open?', a: 'Rolling. We onboard in order of fit rather than signup order, so a later signup with the right shape may come first.' },
+        { q: 'What does it cost?', a: 'Free through early access. Pricing is set with the first cohort rather than announced to them, and early teams keep their rate.' },
+        { q: 'What happens right after I sign up?', a: 'One email confirming your place. Then nothing until we have something real to show you.' },
+        { q: 'Can I bring my whole team?', a: 'Yes — access is granted per workspace rather than per seat.' },
+      ],
+    },
+  ],
+  'customer-audience': [
+    {
+      key: 'segments', label: 'Audience segments', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'label', label: 'Switcher label', kind: 'text' },
+        { key: 'headline', label: 'Headline for this audience', kind: 'text' },
+        { key: 'subhead', label: 'Subheadline for this audience', kind: 'textarea' },
+        { key: 'o1', label: 'Week-one outcome 1', kind: 'text' },
+        { key: 'o2', label: 'Week-one outcome 2', kind: 'text' },
+        { key: 'o3', label: 'Week-one outcome 3', kind: 'text' },
+        { key: 'stat_value', label: 'Headline stat', kind: 'text' },
+        { key: 'stat_label', label: 'Stat caption', kind: 'text' },
+      ],
+      default: [
+        {
+          label: 'Operations leads',
+          headline: 'Stop reconstructing what changed since yesterday.',
+          subhead: 'Every update your team already wrote, assembled into one read. No status meeting, no chasing, no second version of the truth.',
+          o1: 'A single daily digest replacing the standing status meeting',
+          o2: 'Every decision logged with an owner and a date',
+          o3: 'Connected to the tools you already run',
+          stat_value: '4.2 hrs', stat_label: 'returned per person, per week',
+        },
+        {
+          label: 'Engineering managers',
+          headline: 'Your engineers should not be writing status reports.',
+          subhead: 'Pull the update straight from the work and give leadership the read without taxing the team.',
+          o1: 'Sprint state assembled from the tracker, not from standup',
+          o2: 'Blockers surfaced the day they appear, not at retro',
+          o3: 'A leadership-readable summary nobody had to write',
+          stat_value: '6.1 hrs', stat_label: 'of reporting overhead removed per sprint',
+        },
+        {
+          label: 'Founders',
+          headline: 'Know what your company did this week without asking anyone.',
+          subhead: 'Past the point where you see everything, this keeps you current without turning you into the bottleneck.',
+          o1: 'A weekly company read assembled from actual work',
+          o2: 'Investor-ready progress notes with no separate write-up',
+          o3: 'Early warning when a workstream stops moving',
+          stat_value: '1 read', stat_label: 'replaces the round of check-in calls',
+        },
+      ],
+    },
+    {
+      key: 'problem_lead', label: 'What breaks today', kind: 'textarea',
+      default: `The information already exists. It is just spread across four tools and one person's memory.`,
+    },
+    {
+      key: 'pains', label: 'Pains', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'title', label: 'Title', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'text' },
+      ],
+      default: [
+        { title: 'The update gets written twice', body: 'Once where the work happened, again where somebody asks what happened.' },
+        { title: 'Decisions have no home', body: 'They land mid-thread, get scrolled past, and resurface as the same argument later.' },
+        { title: 'Nobody reads the long version', body: 'The weekly summary is thorough, unread, and stale by the time it is sent.' },
+      ],
+    },
+    {
+      key: 'how_lead', label: 'How it works', kind: 'textarea',
+      default: `Three steps, and none of them are "write an update".`,
+    },
+    {
+      key: 'steps', label: 'Steps', kind: 'groupList', max: 3,
+      itemFields: [
+        { key: 'title', label: 'Step', kind: 'text' },
+        { key: 'body', label: 'Detail', kind: 'textarea' },
+        { key: 'shot', label: 'Screenshot caption', kind: 'text' },
+      ],
+      default: [
+        { title: 'Connect what you already use', body: 'Read-only access, and nothing changes about how the team works.', shot: 'Connect screen' },
+        { title: 'It watches the work, not the people', body: 'Changes are captured where they happen and resolved into decisions.', shot: 'Activity view' },
+        { title: 'Everyone gets their slice', body: 'One digest, tailored per reader — not a firehose of everything that moved.', shot: 'Digest view' },
+      ],
+    },
+    {
+      key: 'quote', label: 'Customer quote', kind: 'textarea',
+      default: `We cancelled two standing meetings in the first week. The digest already covered what they were for.`,
+    },
+    {
+      key: 'quote_by', label: 'Quote attribution', kind: 'text',
+      default: `VP Operations · 140-person team`,
+    },
+    {
+      key: 'metrics', label: 'Proof metrics', kind: 'groupList', max: 4,
+      itemFields: [
+        { key: 'value', label: 'Figure', kind: 'text' },
+        { key: 'label', label: 'What it measures', kind: 'text' },
+      ],
+      default: [
+        { value: '2', label: 'recurring meetings removed in the first month' },
+        { value: '91%', label: 'of the team open the digest daily' },
+        { value: '0', label: 'status updates written by hand' },
+      ],
+    },
+    {
+      key: 'conv_lead', label: 'Conversion heading', kind: 'textarea',
+      default: `Get it running on your team.`,
+    },
+    {
+      key: 'conv_body', label: 'Conversion detail', kind: 'textarea',
+      default: `We onboard by team shape rather than signup order. Setup takes under twenty minutes and does not touch your existing workflow.`,
+    },
+    {
+      key: 'faqs', label: 'Questions', kind: 'groupList', max: 6,
+      itemFields: [
+        { key: 'q', label: 'Question', kind: 'text' },
+        { key: 'a', label: 'Answer', kind: 'textarea' },
+      ],
+      default: [
+        { q: 'When does access open?', a: 'Rolling. We onboard by team shape rather than signup order, so a later signup with the right fit may come first.' },
+        { q: 'What does it cost?', a: 'Free through early access. Pricing is set with the first cohort, and early teams keep their rate.' },
+        { q: 'What do you connect to?', a: 'The common trackers, chat tools and code hosts — read-only, scoped to what you choose.' },
+        { q: 'Does my team have to change how they work?', a: 'No. If it requires a new habit, it will not survive contact with a busy week.' },
+      ],
+    },
   ],
 };
 
@@ -1504,11 +1998,38 @@ function selectedAudience(row: any): string {
   return (AUDIENCE_KEYS as readonly string[]).includes(a) ? a : 'customer';
 }
 
+/**
+ * Honeypot input, rendered inside every public capture form.
+ *
+ * MUST live in the static markup, not be injected by script: the bots this
+ * catches parse the served HTML and fill every input they find. One that
+ * never runs our JS would never see a JS-created field (and one that posts
+ * straight to the API skips the form entirely — that is the rate limiter's
+ * job, not this one).
+ *
+ * Hidden four ways because any single one is defeatable: off-screen
+ * positioning (not `display:none`, which the cruder scrapers specifically
+ * skip), `aria-hidden` so screen readers ignore it, `tabindex="-1"` so it is
+ * unreachable by keyboard, and `autocomplete="off"` so no password manager
+ * helpfully fills it for a real user — a false positive here silently drops a
+ * genuine lead, which is worse than missing a bot.
+ *
+ * The field name is shared with the route via HONEYPOT_FIELD so a rename can
+ * never disable the trap on one side only.
+ */
+function honeypotField(): string {
+  return `
+        <div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true">
+          <label for="${HONEYPOT_FIELD}">Company website (leave blank)</label>
+          <input id="${HONEYPOT_FIELD}" type="text" name="${HONEYPOT_FIELD}" tabindex="-1" autocomplete="off" />
+        </div>`;
+}
+
 // One waitlist form for the selected audience. `a.c` (the CTA) is already
 // HTML-escaped by buildAudienceData.
 function audienceForm(a: { h: string; b: string; c: string }): string {
   return `
-      <form id="wl-form">
+      <form id="wl-form">${honeypotField()}
         <label for="email" class="sr">Email</label>
         <input id="email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit">${a.c}</button>
@@ -1540,11 +2061,20 @@ function singleWaitlistScript(apiWaitlist: string, audience: string, nonce?: str
   if(!api) return;
   var f=document.getElementById('wl-form'), m=document.getElementById('wl-msg');
   if(!f) return;
+  // Attribution, read once at load: which campaign sent this visitor, and what
+  // page linked here. Allowlisted client-side too so a crafted querystring
+  // can't push arbitrary keys at the API (which allowlists again server-side).
+  var utm={}, qs=new URLSearchParams(location.search);
+  ['utm_source','utm_medium','utm_campaign','utm_term','utm_content'].forEach(function(k){
+    var v=qs.get(k); if(v) utm[k]=String(v).slice(0,120);
+  });
+  var ref=document.referrer||'';
   f.addEventListener('submit',function(e){
     e.preventDefault();
     var email=f.email.value.trim(); if(!email) return;
     var btn=f.querySelector('button'); btn.disabled=true;
-    fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'omit',body:JSON.stringify({email:email,source:'landing',audience:${JSON.stringify(audience)}})})
+    var trap=f.elements[${JSON.stringify(HONEYPOT_FIELD)}];
+    fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'omit',body:JSON.stringify({email:email,source:'landing',audience:${JSON.stringify(audience)},utm:utm,referrer:ref.slice(0,300),${JSON.stringify(HONEYPOT_FIELD)}:trap?trap.value:''})})
       .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})})
       .then(function(x){
         if(x.ok){ m.className='wl-ok'; m.textContent="You're on the list. We'll be in touch."; f.reset(); }
@@ -1582,6 +2112,11 @@ export const TEMPLATE_SIGNATURE_PALETTES: Record<string, {
   'mentor-connect': { theme_color: '#c56a3e', palette_bg: '#fbfaf8', palette_ink: '#16100c', palette_secondary: '#e2ddd7', palette_accent: '#c56a3e' },
   'mentor-connect-page': { theme_color: '#b05139', palette_bg: '#fcfaf6', palette_ink: '#221811', palette_secondary: '#e2ddd5', palette_accent: '#b05139' },
   'builders-launchpad': { theme_color: '#dcb400', palette_bg: '#090e11', palette_ink: '#e8ecee', palette_secondary: '#2c343a', palette_accent: '#dcb400' },
+  // Both `.dc` sources ship the same Inter/Instrument-Serif purple system;
+  // they are told apart by structure (dark funnel hero vs light segment
+  // switcher), not by hue — see their renderers.
+  'customer-acquisition': { theme_color: '#6b46c1', palette_bg: '#ffffff', palette_ink: '#141118', palette_secondary: '#e2e8f0', palette_accent: '#6b46c1' },
+  'customer-audience': { theme_color: '#6b46c1', palette_bg: '#ffffff', palette_ink: '#1a202c', palette_secondary: '#e2e8f0', palette_accent: '#6b46c1' },
 };
 
 // ── Template: Minimal (the original layout) ──────────────────────
@@ -1597,6 +2132,7 @@ function renderMinimal(bk: BrandKit, aud: Record<string, { h: string; b: string;
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   body { margin:0; font-family: ${fontStack(fontPairing)}; background: ${bgColor}; color: ${inkColor}; }
@@ -1645,6 +2181,7 @@ function renderBoldHero(bk: BrandKit, aud: Record<string, { h: string; b: string
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   body { margin:0; font-family: ${fontStack(fontPairing)}; background: ${bgColor}; color: ${inkColor}; }
@@ -1703,6 +2240,7 @@ function renderVideoFirst(bk: BrandKit, aud: Record<string, { h: string; b: stri
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   body { margin:0; font-family: ${fontStack(fontPairing)}; background: ${bgColor}; color: ${inkColor}; }
@@ -1758,6 +2296,7 @@ function renderEditorial(bk: BrandKit, aud: Record<string, { h: string; b: strin
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   body { margin:0; font-family: ${fontStack(fontPairing)}; background: ${bgColor}; color: ${inkColor}; line-height: 1.6; }
@@ -1807,6 +2346,7 @@ function renderProductMock(bk: BrandKit, aud: Record<string, { h: string; b: str
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   body { margin:0; font-family: ${fontStack(fontPairing)}; background: ${bgColor}; color: ${inkColor}; }
@@ -1869,6 +2409,7 @@ function renderAdvisorConnect(bk: BrandKit, aud: Record<string, { h: string; b: 
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   *{box-sizing:border-box;}
@@ -1993,7 +2534,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="cta" id="join">
       <h2>${a.c}</h2>
       <p>Leave your email and we'll send a short brief plus a link to book an intro call.</p>
-      <form id="wl-form">
+      <form id="wl-form">${honeypotField()}
         <label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn">${a.c}</button>
@@ -2027,6 +2568,7 @@ function renderProofBuilder(bk: BrandKit, aud: Record<string, { h: string; b: st
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: light; }
   *{box-sizing:border-box;}
@@ -2152,7 +2694,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="cta" id="join">
       <h2>${a.c}</h2>
       <p>Join the early list. We'll share what we're seeing and bring you in as we open access.</p>
-      <form id="wl-form">
+      <form id="wl-form">${honeypotField()}
         <label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn">${a.c}</button>
@@ -2187,6 +2729,7 @@ function renderCapitalReadyKit(bk: BrandKit, aud: Record<string, { h: string; b:
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root { color-scheme: dark; }
   *{box-sizing:border-box;}
@@ -2236,6 +2779,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .member .av{width:46px;height:46px;border-radius:50%;background:${accent}26;border:1px solid ${accent}55;margin-bottom:14px;}
   .member h3{font-family:${serif};font-size:18px;font-weight:400;margin:0 0 4px;}
   .member p{margin:0;opacity:.65;font-size:13px;}
+  .member .bio{margin-top:6px;opacity:.85;}
   .cta{border:1px solid ${accent}55;background:${accent}12;border-radius:22px;padding:54px;margin:64px 0;text-align:center;}
   .cta h2{font-family:${serif};font-size:clamp(28px,3.8vw,44px);margin:0 0 10px;font-weight:400;}
   .cta p{opacity:.8;margin:0 0 26px;font-size:16px;}
@@ -2305,14 +2849,14 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <section>
       <div class="sec-head"><div class="eyebrow">Team</div><h2>Who's building ${brand}</h2></div>
       <div class="team">
-        ${c.list('team').map((it) => `<div class="member"><div class="av"></div><h3>${it.t('name')}</h3><p>${it.t('role')}</p></div>`).join('')}
+        ${c.list('team').map((it) => `<div class="member"><div class="av"></div><h3>${it.t('name')}</h3><p class="role">${it.t('role')}</p><p class="bio">${it.t('bio')}</p></div>`).join('')}
       </div>
     </section>
 
     <div class="cta" id="intro">
       <h2>${a.c}</h2>
       <p>Leave your email for the data room and a 30-minute intro with the founders.</p>
-      <form id="wl-form">
+      <form id="wl-form">${honeypotField()}
         <label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@fund.com" required />
         <button type="submit" class="btn">${a.c}</button>
@@ -2346,6 +2890,7 @@ function renderCapitalStoryteller(bk: BrandKit, aud: Record<string, { h: string;
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root{color-scheme:dark;}*{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -2383,6 +2928,11 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .two h3{font-family:${PORT_SERIF};font-weight:400;font-size:20px;margin:0 0 16px;}
   .term{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-top:1px solid ${secondary};font-size:14px;}
   .term:first-of-type{border-top:0;}.term .v{color:${accent};font-family:${PORT_MONO};}
+  .team{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};margin-top:8px;}
+  .team .cell{background:${bgColor};padding:26px 22px;}
+  .team .cell h3{font-family:${PORT_SERIF};font-weight:400;font-size:18px;margin:0 0 8px;}
+  .team .cell p{opacity:.68;font-size:14px;margin:0;}
+  .team .cell .bio{margin-top:6px;opacity:.85;}
   .cta{padding:80px 0 88px;text-align:center;}
   .cta h2{font-size:clamp(32px,4.4vw,52px);}
   .cta p{opacity:.78;margin:0 auto 28px;max-width:52ch;}
@@ -2392,7 +2942,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .wl-ok,.wl-err{margin-top:14px;font-size:13px;min-height:18px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
   footer{display:flex;justify-content:space-between;padding:28px 0;font-size:11px;opacity:.5;flex-wrap:wrap;gap:8px;font-family:${PORT_MONO};letter-spacing:.08em;text-transform:uppercase;}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
-  @media(max-width:820px){.raise,.bento,.two{grid-template-columns:1fr;}}
+  @media(max-width:820px){.raise,.bento,.two,.team{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
     <div class="brand"><span class="mark">${logoMarkup}</span><b>${name}</b> <span class="mono conf">· Confidential</span></div>
@@ -2439,10 +2989,17 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         </div>
       </div>
     </section>
+    <section>
+      <div class="num"><span>05 — Team</span><div class="ln"></div></div>
+      <h2>Who's behind ${brand}</h2>
+      <div class="team">
+        ${c.list('team').map((it) => `<div class="cell"><h3>${it.t('name')}</h3><p class="role">${it.t('role')}</p><p class="bio">${it.t('bio')}</p></div>`).join('')}
+      </div>
+    </section>
     <div class="cta">
       <h2>${a.c}</h2>
       <p>Leave your email for the full data room and a 30-minute intro with the founding team.</p>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@fund.com" required />
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -2464,6 +3021,7 @@ function renderSeedStageSpark(bk: BrandKit, aud: Record<string, { h: string; b: 
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root{color-scheme:dark;}*{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -2501,6 +3059,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .pill{border:1px solid ${secondary};border-radius:14px;padding:24px;background:${secondary}26;}
   .pill .v{font-family:${PORT_MONO};font-size:30px;color:${accent};}
   .pill h3{font-size:16px;margin:12px 0 6px;}.pill p{margin:0;opacity:.7;font-size:14px;}
+  .pill .bio{margin-top:6px;opacity:.9;}
   .bars{display:flex;align-items:flex-end;gap:14px;height:160px;margin-top:10px;}
   .bars .b{flex:1;background:${accent};border-radius:6px 6px 0 0;position:relative;opacity:.85;}
   .bars .b span{position:absolute;bottom:-22px;left:0;right:0;text-align:center;font-family:${PORT_MONO};font-size:10px;opacity:.6;}
@@ -2542,10 +3101,22 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         ${c.list('traction_bars').map((it) => `<div class="b" style="height:${it.pct('pct')}%"><span>${it.t('label')}</span></div>`).join('')}
       </div>
     </section>
+    <section>
+      <div class="eyebrow">03 / Team</div><h2>Who's building ${brand}</h2>
+      <div class="pillars">
+        ${c.list('team').map((it) => `<div class="pill"><h3>${it.t('name')}</h3><p class="role">${it.t('role')}</p><p class="bio">${it.t('bio')}</p></div>`).join('')}
+      </div>
+    </section>
+    <section>
+      <div class="eyebrow">04 / Round</div><h2>Round details</h2>
+      <div class="metrics">
+        ${c.list('round_details').map((it) => `<div class="cell"><div class="v">${it.t('value')}</div><div class="l">${it.t('label')}</div></div>`).join('')}
+      </div>
+    </section>
     <div class="cta" id="raise">
       <h2>${a.c}</h2>
       <p>We're sharing the deck and metrics with a small group of seed investors. Add your email.</p>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@fund.com" required />
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -2559,7 +3130,14 @@ ${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
 // ── Template: Distribution Deck (Task #25) — light blueprint partnership memo ──
 function renderDistributionDeck(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, name } = bk;
-  const a = aud.investor; const brand = name || 'our company'; const btnInk = contrastText(color);
+  // Was `aud.investor` — a leftover from before this template's audience was
+  // corrected to 'partner' (see the catalog fix and singleWaitlistScript's
+  // 'partner' tag below). Distribution Deck is a partnership memo; nothing
+  // about it addresses an investor. Left uncorrected, the page displayed
+  // investor-audience copy while tagging every submitted lead 'partner' —
+  // whatever headline/body/CTA the founder wrote for partners never actually
+  // rendered.
+  const a = aud.partner; const brand = name || 'our company'; const btnInk = contrastText(color);
   const ctaInk = contrastText(inkColor);
   const c = landingContent(row, 'distribution-deck');
   return `<!doctype html>
@@ -2568,6 +3146,7 @@ function renderDistributionDeck(bk: BrandKit, aud: Record<string, { h: string; b
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -2665,7 +3244,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </section>
     <section class="ctaSec" id="next"><div class="wrap two" style="padding:0;max-width:none;">
       <div><h2>${a.c}</h2><p>Send your overlap assumptions and we'll come back with a modelled channel plan — no slideware.</p></div>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@partner.com" required />
         <button type="submit" class="btn">${a.c}</button>
         <div id="wl-msg" aria-live="polite"></div>
@@ -2673,7 +3252,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </div></section>
     <footer><span>${logoChip(bk, 18, 5)} ${name} · Distribution brief</span><span>Built with Axal VC</span></footer>
   </div>
-${singleWaitlistScript(bk.apiWaitlist, 'investor', bk.nonce)}
+${singleWaitlistScript(bk.apiWaitlist, 'partner', bk.nonce)}
 </body></html>`;
 }
 
@@ -2689,6 +3268,7 @@ function renderPilotPartnerPage(bk: BrandKit, aud: Record<string, { h: string; b
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -2765,14 +3345,21 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </section>
     <hr/>
     <section class="sec">
-      <div class="head"><div class="label">02 — What it includes</div><div class="t">What you get</div></div>
+      <div class="head"><div class="label">02 — Who this isn't for</div><div class="t">Save us both the time</div></div>
+      <div class="who">
+        ${c.list('not_for').map((it) => `<div class="c"><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
+      </div>
+    </section>
+    <hr/>
+    <section class="sec">
+      <div class="head"><div class="label">03 — What it includes</div><div class="t">What you get</div></div>
       <div class="incl">
         ${c.list('includes').map((it, i) => `<div class="c"><div class="n">${String(i + 1).padStart(2, '0')}</div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
       </div>
     </section>
     <hr/>
     <section class="sec">
-      <div class="head"><div class="label">03 — Process</div><div class="t">From hello to results</div></div>
+      <div class="head"><div class="label">04 — Process</div><div class="t">From hello to results</div></div>
       <div class="steps">
         ${c.list('steps').map((it) => `<div class="s"><div class="k">${it.t('label')}</div><div class="v">${it.t('value')}</div></div>`).join('')}
       </div>
@@ -2781,7 +3368,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   <section class="ctaSec" id="apply"><div class="wrap in">
     <h2>${a.c}</h2>
     <div><p>Tell us where it hurts. If there's a fit, we'll set up a 30-minute call this week.</p>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@company.com" required />
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -2804,6 +3391,7 @@ function renderPartnerHub(bk: BrandKit, aud: Record<string, { h: string; b: stri
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.65;-webkit-font-smoothing:antialiased;}
@@ -2833,6 +3421,9 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .why .c{background:${bgColor};padding:26px 22px;}
   .why .n{font-family:${PORT_MONO};font-size:12px;color:${accent};}
   .why h3{font-family:${PORT_SERIF};font-weight:400;font-size:19px;margin:10px 0 6px;}.why p{margin:0;opacity:.74;font-size:14px;}
+  .value{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:${secondary};border:1px solid ${secondary};border-radius:14px;overflow:hidden;}
+  .value .c{background:${bgColor};padding:22px 18px;}
+  .value h3{font-family:${PORT_SERIF};font-weight:400;font-size:17px;margin:0 0 6px;}.value p{margin:0;opacity:.74;font-size:13px;}
   .models{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
   .model{border:1px solid ${secondary};border-radius:14px;padding:24px;box-shadow:0 10px 30px ${inkColor}0d;}
   .model .tag{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:${accent};font-weight:700;}
@@ -2853,7 +3444,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .wl-ok,.wl-err{font-size:13px;min-height:18px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
   footer{display:flex;justify-content:space-between;padding:24px 0;font-size:12px;opacity:.55;flex-wrap:wrap;gap:8px;}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
-  @media(max-width:840px){.stats,.why,.models{grid-template-columns:1fr;}.split,.ctaSec .in{grid-template-columns:1fr;}}
+  @media(max-width:840px){.stats,.why,.models,.value{grid-template-columns:1fr;}.split,.ctaSec .in{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
     <div class="brand">${logoChip(bk, 26, 6)}<b>${name}</b></div>
@@ -2879,6 +3470,12 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div><div class="eyebrow">Shared fit</div><h2>The same customer wins twice</h2></div>
       <p>${c.t('shared_fit')}</p>
     </div></section>
+    <section>
+      <div class="eyebrow">Value to partner</div><h2 style="margin-bottom:24px;">What's in it for you</h2>
+      <div class="value">
+        ${c.list('value_to_partner').map((it) => `<div class="c"><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
+      </div>
+    </section>
     <section id="models"><div class="eyebrow">Models</div><h2 style="margin-bottom:24px;">Three ways to work together</h2>
       <div class="models">
         ${c.list('models').map((it) => `<div class="model"><div class="tag">${it.t('tag')}</div><h3>${it.t('title')}</h3><ul><li>${it.t('li1')}</li><li>${it.t('li2')}</li><li>${it.t('li3')}</li></ul></div>`).join('')}
@@ -2893,7 +3490,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div><h2>${a.c}</h2><p>Tell us about your customers and we'll come back with a concrete partnership shape.</p>
       <ul><li>Who your customers are</li><li>The overlap you see</li><li>What a win looks like</li></ul>
     </div>
-    <div class="card"><form id="wl-form">
+    <div class="card"><form id="wl-form">${honeypotField()}
       <label for="wl-email" class="sr">Email</label>
       <input id="wl-email" type="email" name="email" placeholder="you@partner.com" required />
       <button type="submit" class="btn">${a.c}</button>
@@ -2916,6 +3513,7 @@ function renderPartnerPipelinePro(bk: BrandKit, aud: Record<string, { h: string;
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -2961,6 +3559,10 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .timeline .k{font-family:${PORT_MONO};font-size:11px;color:${accent};}.timeline .v{font-size:14px;margin-top:6px;}
   .quote{border-left:3px solid ${accent};padding-left:20px;}
   .quote p{font-family:${PORT_SERIF};font-size:clamp(20px,2.4vw,26px);margin:0 0 10px;}.quote .w{font-size:13px;opacity:.6;}
+  .fit2{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:${secondary};border:1px solid ${secondary};border-radius:10px;overflow:hidden;}
+  .fitcol{background:${bgColor};padding:22px 20px;}
+  .fitcol h3{margin:0 0 10px;font-size:15px;}.fitcol.good h3{color:${accent};}
+  .fitcol ul{margin:0;padding-left:18px;font-size:14px;opacity:.78;}.fitcol li{margin-bottom:6px;}
   .ctaBox{border:1px dashed ${secondary};border-radius:14px;padding:30px;margin-top:8px;}
   .ctaBox h2{margin-bottom:8px;}
   form{display:flex;gap:10px;flex-wrap:wrap;max-width:460px;margin-top:8px;}
@@ -2969,7 +3571,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   .wl-ok,.wl-err{font-size:13px;min-height:18px;margin-top:10px;}.wl-ok{color:${accent};}.wl-err{opacity:.85;}
   footer{display:flex;justify-content:space-between;padding:22px 0;font-size:11px;opacity:.55;font-family:${PORT_MONO};flex-wrap:wrap;gap:8px;}
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);}
-  @media(max-width:840px){.hero{grid-template-columns:1fr;}.nums,.opts{grid-template-columns:1fr;}}
+  @media(max-width:840px){.hero{grid-template-columns:1fr;}.nums,.opts,.fit2{grid-template-columns:1fr;}}
 </style></head><body>
   <nav><div class="wrap row">
     <div class="brand">${logoChip(bk, 26, 6)}<b>${name}</b><span class="tag">Distribution brief</span></div>
@@ -3016,10 +3618,18 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div class="slabel"><span class="n">04</span><span class="ln"></span><span class="t">Proof of demand</span></div>
       <div class="quote"><p>"${c.t('quote')}"</p><div class="w">${c.t('quote_by')}</div></div>
     </section>
+    <section>
+      <div class="slabel"><span class="n">05</span><span class="ln"></span><span class="t">Audience fit</span></div>
+      <h2>Where this works — and where it doesn't yet</h2>
+      <div class="fit2">
+        <div class="fitcol good"><h3>Best fit</h3><ul>${c.list('best_fit').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul></div>
+        <div class="fitcol"><h3>Not a fit (yet)</h3><ul>${c.list('not_fit').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul></div>
+      </div>
+    </section>
     <div class="ctaBox" id="fit">
       <h2>${a.c}</h2>
       <p class="lead">Send your overlap assumptions ahead and we'll bring a modelled channel plan to a working session.</p>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@partner.com" required />
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -3042,6 +3652,7 @@ function renderCoFounderBuilder(bk: BrandKit, aud: Record<string, { h: string; b
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.6;-webkit-font-smoothing:antialiased;}
@@ -3151,7 +3762,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   <section class="ctaSec" id="apply"><div class="grid"></div><div class="in wrap">
     <h2>${a.c}</h2>
     <p>No CV theater — we'd rather read your code. Drop your email and we'll send the brief and a time.</p>
-    <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+    <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
       <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
       <button type="submit" class="btn">${a.c}</button></form>
     <div id="wl-msg" aria-live="polite"></div>
@@ -3173,6 +3784,7 @@ function renderCoFounderCanvas(bk: BrandKit, aud: Record<string, { h: string; b:
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
@@ -3294,7 +3906,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <div class="cta" id="talk">
       <h2>Let's <em>talk</em>.</h2>
       <ol class="steps">${c.list('steps').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn acc">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -3318,6 +3930,7 @@ function renderCofounderConnect(bk: BrandKit, aud: Record<string, { h: string; b
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
@@ -3437,7 +4050,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
   <section class="ctaSec" id="talk"><div class="wrap">
     <h2>Let's <em>talk</em> about building this together.</h2>
     <ol class="steps">${c.list('steps').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
-    <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+    <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
       <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
       <button type="submit" class="btn">${a.c}</button></form>
     <div id="wl-msg" aria-live="polite"></div>
@@ -3459,6 +4072,7 @@ function renderCoFounderQuest(bk: BrandKit, aud: Record<string, { h: string; b: 
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
@@ -3565,7 +4179,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div class="label">Join the build</div>
       <h2>Let's find out if it clicks</h2>
       <ol class="steps">${c.list('steps').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn acc">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -3588,6 +4202,7 @@ function renderMentorConnect(bk: BrandKit, aud: Record<string, { h: string; b: s
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
@@ -3672,7 +4287,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
       <div class="eyebrow">The ask</div>
       <h2>${a.c}</h2>
       <p>Thirty minutes, whenever suits you. A one-line "not this quarter" is a complete reply.</p>
-      <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+      <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
         <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
         <button type="submit" class="btn">${a.c}</button></form>
       <div id="wl-msg" aria-live="polite"></div>
@@ -3694,6 +4309,7 @@ function renderMentorConnectPage(bk: BrandKit, aud: Record<string, { h: string; 
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   *{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};line-height:1.7;-webkit-font-smoothing:antialiased;}
@@ -3764,7 +4380,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <div class="card">
           ${c.list('ask_options').map((it) => `<div class="opt"><span class="k">${it.t('key')}</span><span>${it.t('body')}</span></div>`).join('')}
         </div>
-        <form id="wl-form" style="margin-top:16px;"><label for="wl-email" class="sr">Email</label>
+        <form id="wl-form" style="margin-top:16px;">${honeypotField()}<label for="wl-email" class="sr">Email</label>
           <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
           <button type="submit" class="btn acc">${a.c}</button></form>
         <div id="wl-msg" aria-live="polite"></div>
@@ -3791,7 +4407,12 @@ ${singleWaitlistScript(bk.apiWaitlist, 'mentor', bk.nonce)}
 // ── Template: Builder's Launchpad (Task #25) — dark terminal launch teaser ──
 function renderBuildersLaunchpad(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
   const { color, bgColor, inkColor, secondary, accent, name } = bk;
-  const a = aud.customer; const brand = name || 'our company'; const btnInk = contrastText(color);
+  // Was `aud.customer` — the same leftover as Distribution Deck above.
+  // Builder's Launchpad is a technical co-founder recruiting page; nothing
+  // about it addresses a customer. Left uncorrected, a founder's cofounder-
+  // audience headline/body/CTA never rendered — visitors saw the generic
+  // customer copy while every submission was tagged 'cofounder' regardless.
+  const a = aud.cofounder; const brand = name || 'our company'; const btnInk = contrastText(color);
   const c = landingContent(row, 'builders-launchpad');
   const ok = '#7bbf5a', warn = accent, danger = '#d9544e';
   return `<!doctype html>
@@ -3800,6 +4421,7 @@ function renderBuildersLaunchpad(bk: BrandKit, aud: Record<string, { h: string; 
 <title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
 <meta name="description" content="${a.b}" />
 ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
 <style>
   :root{color-scheme:dark;}*{box-sizing:border-box;}
   body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_MONO};line-height:1.65;font-size:15px;-webkit-font-smoothing:antialiased;}
@@ -3884,8 +4506,14 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
         <ol class="road">${c.list('road').map((it) => `<li>${it.t('body')}</li>`).join('')}</ol>
       </div>
     </section>
+    <section>
+      <div class="side"><div class="idx">04</div><div class="lbl">Equity &amp; collaboration</div></div>
+      <div><h2>The offer</h2>
+        <ul class="state">${c.list('equity').map((it) => `<li>${it.t('body')}</li>`).join('')}</ul>
+      </div>
+    </section>
     <section id="apply">
-      <div class="side"><div class="idx">04</div><div class="lbl">Get access</div></div>
+      <div class="side"><div class="idx">05</div><div class="lbl">Get access</div></div>
       <div><h2>${a.c}</h2>
         <div class="term">
           <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="name">~/join.sh</span></div>
@@ -3894,7 +4522,7 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
             <p class="ln">› drop your email below and you're on the list.</p>
           </div>
           <div class="foot">
-            <form id="wl-form"><label for="wl-email" class="sr">Email</label>
+            <form id="wl-form">${honeypotField()}<label for="wl-email" class="sr">Email</label>
               <input id="wl-email" type="email" name="email" placeholder="you@email.com" required />
               <button type="submit" class="btn">${a.c}</button></form>
           </div>
@@ -3904,11 +4532,376 @@ ${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     </section>
     <footer><span>${logoChip(bk, 18, 5)} ${name}</span><span>commit ${(name||'axal').toLowerCase().slice(0,4)}0x9f3a · Built with Axal VC</span></footer>
   </div>
-${singleWaitlistScript(bk.apiWaitlist, 'customer', bk.nonce)}
+${singleWaitlistScript(bk.apiWaitlist, 'cofounder', bk.nonce)}
 </body></html>`;
 }
 
 // ── Dispatcher ───────────────────────────────────────────────────
+// ── Customer Acquisition Page ──────────────────────────────────────────────
+// Recreated from attached_assets/Customer_Acquisition_Landing_Page.dc.html
+// (see TEMPLATE_DESIGN_SOURCES). Its signature is the funnel: a dark hero band,
+// the cost of the problem in figures, a product-screenshot frame, numbered
+// why-now rows, then TWO conversion cards side by side — waitlist and demo —
+// rather than one CTA. The waitlist card owns the real capture form; the demo
+// card is a mailto/anchor prompt, since booking has no backend here.
+function renderCustomerAcquisition(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud[selectedAudience(row)] || aud.customer;
+  const c = landingContent(row, 'customer-acquisition');
+  const btnInk = contrastText(color);
+  const band = inkColor; // the design's near-black hero/footer slab
+  const bandInk = bgColor;
+  const conv = c.list('conversion');
+  const shot = validMediaUrl(row.product_screenshot_url);
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};-webkit-font-smoothing:antialiased;}
+  a{color:${color};text-decoration:none;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 40px;}
+  .ser{font-family:${PORT_SERIF};font-weight:400;letter-spacing:-.015em;}
+  .lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;opacity:.55;}
+  .band{background:${band};color:${bandInk};}
+  .band .wrap{padding-top:26px;padding-bottom:74px;}
+  .nav{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:56px;flex-wrap:wrap;}
+  .brand{display:flex;align-items:center;gap:11px;font-size:15px;font-weight:800;letter-spacing:-.015em;}
+  .brand .mark{width:30px;height:30px;border-radius:9px;overflow:hidden;display:flex;}
+  .brand .mark :is(svg,img){width:100%!important;height:100%!important;border-radius:0!important;}
+  .ghost{padding:8px 16px;border-radius:9px;border:1px solid ${bandInk}33;font-size:12.5px;font-weight:600;color:${bandInk}dd;text-decoration:none;}
+  h1{font-size:clamp(38px,5.6vw,59px);line-height:1.06;margin:0;}
+  .lede{font-size:16.5px;opacity:.62;line-height:1.68;margin:22px 0 0;max-width:520px;}
+  .btn{display:inline-block;padding:14px 26px;border-radius:11px;background:${color};color:${btnInk};font-size:14.5px;font-weight:800;text-decoration:none;border:0;cursor:pointer;font-family:inherit;}
+  .btn2{display:inline-block;padding:14px 26px;border-radius:11px;border:1px solid ${bandInk}3d;color:${bandInk};font-size:14.5px;font-weight:700;text-decoration:none;}
+  section{padding:74px 0 0;}
+  .two{display:grid;grid-template-columns:1.15fr 1fr;gap:44px;align-items:start;}
+  .cost{display:flex;align-items:baseline;gap:14px;padding-bottom:12px;border-bottom:1px solid ${secondary};margin-bottom:12px;}
+  .cost .v{font-size:20px;font-weight:800;letter-spacing:-.02em;color:${accent};flex:none;min-width:64px;}
+  .cost .k{font-size:13.5px;opacity:.6;line-height:1.55;}
+  .shot{margin-top:34px;border:1px solid ${secondary};border-radius:16px;overflow:hidden;background:${inkColor}05;}
+  .shot .bar{display:flex;align-items:center;gap:7px;padding:11px 16px;border-bottom:1px solid ${secondary};background:${bgColor};}
+  .shot .dot{width:9px;height:9px;border-radius:50%;background:${secondary};}
+  .shot .body{min-height:280px;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;}
+  .shot img{display:block;width:100%;height:auto;}
+  .notes{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:22px;}
+  .notes h3{font-size:13.5px;font-weight:700;margin:0;}
+  .notes p{font-size:13px;opacity:.6;line-height:1.62;margin:5px 0 0;}
+  .why{display:flex;gap:28px;padding:26px 0;border-top:1px solid ${secondary};max-width:820px;}
+  .why .n{font-size:26px;color:${accent};flex:none;min-width:44px;line-height:1;}
+  .why h3{font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.35;margin:0;}
+  .why p{font-size:14.5px;opacity:.6;line-height:1.72;margin:8px 0 0;max-width:600px;}
+  blockquote{margin:0;border-left:2px solid ${accent};padding-left:22px;}
+  blockquote p{font-size:20px;line-height:1.5;margin:0;}
+  blockquote cite{display:block;font-style:normal;font-size:12px;opacity:.5;margin-top:12px;}
+  .conv{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch;margin-top:28px;}
+  .card{border:1px solid ${secondary};border-radius:16px;padding:30px 32px;display:flex;flex-direction:column;}
+  .card.alt{border-color:${accent}55;background:${accent}0d;}
+  .card h3{font-size:19px;font-weight:800;letter-spacing:-.02em;margin:0;}
+  .card p{font-size:14px;opacity:.6;line-height:1.68;margin:8px 0 0;}
+  .card .foot{font-size:12px;opacity:.45;margin-top:auto;padding-top:16px;}
+  form{display:flex;flex-direction:column;gap:10px;margin-top:22px;}
+  input{width:100%;padding:13px 15px;border-radius:10px;border:1px solid ${secondary};background:${inkColor}05;font-size:14px;color:${inkColor};outline:none;font-family:inherit;}
+  input:focus{border-color:${accent};}
+  .faq{display:grid;grid-template-columns:1fr 1fr;gap:14px 44px;max-width:960px;}
+  .faq .q{padding:20px 0;border-top:1px solid ${secondary};}
+  .faq h3{font-size:15px;font-weight:700;letter-spacing:-.01em;margin:0;}
+  .faq p{font-size:14px;opacity:.6;line-height:1.72;margin:8px 0 0;}
+  .end{background:${band};color:${bandInk};border-radius:20px;padding:44px 48px;display:flex;align-items:center;gap:30px;flex-wrap:wrap;margin:74px 0 0;}
+  .end .ser{font-size:30px;line-height:1.2;max-width:420px;}
+  footer{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 0 80px;flex-wrap:wrap;font-size:12px;opacity:.5;}
+  footer .mark{width:22px;height:22px;border-radius:7px;overflow:hidden;display:flex;}
+  footer .mark :is(svg,img){width:100%!important;height:100%!important;border-radius:0!important;}
+  .wl-ok,.wl-err{margin-top:12px;font-size:12.5px;min-height:18px;}
+  .wl-ok{color:${accent};}
+  .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+  @media(max-width:860px){.wrap{padding:0 26px;}.two,.conv,.notes,.faq{grid-template-columns:1fr;}.end{padding:32px 26px;}}
+</style>
+</head>
+<body>
+  <div class="band">
+    <div class="wrap">
+      <nav class="nav">
+        <div class="brand"><span class="mark">${logoMarkup}</span><span>${name}</span></div>
+        <a class="ghost" href="#join">${a.c}</a>
+      </nav>
+      <div style="max-width:660px">
+        <h1 class="ser">${a.h}</h1>
+        <p class="lede">${a.b}</p>
+        <div style="display:flex;gap:11px;margin-top:34px;flex-wrap:wrap">
+          <a class="btn" href="#join">${a.c}</a>
+          <a class="btn2" href="#join">See both options</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="lbl" style="margin-bottom:22px">The problem today</div>
+      <div class="two">
+        <div class="ser" style="font-size:33px;line-height:1.28">${c.t('problem_lead')}</div>
+        <div style="padding-top:6px">
+          ${c.list('costs').map((it) => `<div class="cost"><div class="v">${it.t('value')}</div><div class="k">${it.t('label')}</div></div>`).join('')}
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="lbl" style="margin-bottom:22px">What it does</div>
+      <div class="ser" style="font-size:29px;line-height:1.3;max-width:640px">${c.t('product_lead')}</div>
+      <div class="shot">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="body">${shot
+          ? `<img src="${escapeHtml(shot)}" alt="${name} product screenshot" />`
+          : `<div><div class="lbl" style="color:${accent};opacity:1">Product screenshot</div><div style="font-size:13px;opacity:.5;margin-top:8px;max-width:320px;line-height:1.6">Add a product screenshot in the builder — a real interface capture converts better than an illustration.</div></div>`}</div>
+      </div>
+      <div class="notes">
+        ${c.list('feature_notes').map((it) => `<div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
+      </div>
+    </section>
+
+    <section>
+      <div class="lbl" style="margin-bottom:26px">Why now</div>
+      ${c.list('why_now').map((it, i) => `<div class="why"><div class="n ser">${String(i + 1).padStart(2, '0')}</div><div><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div></div>`).join('')}
+    </section>
+
+    <section>
+      <div class="lbl" style="margin-bottom:22px">In their words</div>
+      <blockquote><p class="ser">${c.t('quote')}</p><cite>${c.t('quote_by')}</cite></blockquote>
+    </section>
+
+    <section id="join">
+      <div class="lbl" style="margin-bottom:8px">Two ways in</div>
+      <div class="conv">
+        ${conv.map((it, i) => (i === 0
+    ? `<div class="card"><h3>${it.t('title')}</h3><p>${it.t('body')}</p>
+        <form id="wl-form">${honeypotField()}
+          <label for="wl-email" class="sr">Email</label>
+          <input id="wl-email" type="email" name="email" placeholder="Work email" required />
+          <button type="submit" class="btn">${a.c}</button>
+        </form>
+        <div id="wl-msg" aria-live="polite"></div>
+        <div class="foot">${it.t('foot')}</div></div>`
+    : `<div class="card alt"><h3>${it.t('title')}</h3><p>${it.t('body')}</p>
+        <div style="margin-top:22px"><a class="btn" href="#wl-email">${it.t('title')}</a></div>
+        <div class="foot">${it.t('foot')}</div></div>`)).join('')}
+      </div>
+    </section>
+
+    <section>
+      <div class="lbl" style="margin-bottom:22px">Questions</div>
+      <div class="faq">
+        ${c.list('faqs').map((it) => `<div class="q"><h3>${it.t('q')}</h3><p>${it.t('a')}</p></div>`).join('')}
+      </div>
+    </section>
+
+    <div class="end">
+      <div style="min-width:0;flex:1">
+        <div class="ser">${a.c}</div>
+        <div style="font-size:13.5px;opacity:.55;line-height:1.65;margin-top:10px;max-width:430px">${a.b}</div>
+      </div>
+      <div style="flex:none"><a class="btn" href="#wl-email">${a.c}</a></div>
+    </div>
+
+    <footer>
+      <span style="display:flex;align-items:center;gap:9px"><span class="mark">${logoMarkup}</span>${name}</span>
+      <span>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></span>
+    </footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, selectedAudience(row), bk.nonce)}
+</body>
+</html>`;
+}
+
+// ── Customer Audience Page ─────────────────────────────────────────────────
+// Recreated from attached_assets/Customer_Audience_Landing_Page.dc.html
+// (see TEMPLATE_DESIGN_SOURCES). Its signature is the audience switcher: one
+// page that retargets its headline, week-one outcomes and headline stat per
+// buyer segment. The source did that with component state; here it is pure
+// CSS (radio inputs + :checked sibling rules), so it keeps working under the
+// page's strict CSP with no extra script.
+function renderCustomerAudience(bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any): string {
+  const { color, bgColor, inkColor, secondary, accent, logoMarkup, name } = bk;
+  const a = aud[selectedAudience(row)] || aud.customer;
+  const c = landingContent(row, 'customer-audience');
+  const btnInk = contrastText(color);
+  const segs = c.list('segments');
+  // One :checked rule per segment index — the whole switcher, no JS.
+  const segRules = segs.map((_, i) => `#sw${i}:checked~.tabs label[for="sw${i}"]{background:${color};color:${btnInk};font-weight:700;}`
+    + `#sw${i}:checked~.panels>.panel:nth-child(${i + 1}){display:grid;}`).join('');
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${name}${bk.noindex ? ' (Preview)' : ''}</title>
+<meta name="description" content="${a.b}" />
+${bk.noindex ? '<meta name="robots" content="noindex, nofollow" />' : ''}
+${socialMeta(bk, a)}
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:${bgColor};color:${inkColor};font-family:${PORT_SANS};-webkit-font-smoothing:antialiased;}
+  a{color:${color};text-decoration:none;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 40px;}
+  .ser{font-family:${PORT_SERIF};font-weight:400;letter-spacing:-.015em;}
+  .lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.13em;opacity:.5;}
+  .hero{background:${inkColor}05;border-bottom:1px solid ${secondary};}
+  .hero .wrap{padding-top:26px;padding-bottom:64px;}
+  .nav{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:50px;flex-wrap:wrap;}
+  .brand{display:flex;align-items:center;gap:11px;font-size:15px;font-weight:800;letter-spacing:-.015em;}
+  .brand .mark{width:30px;height:30px;border-radius:9px;overflow:hidden;display:flex;}
+  .brand .mark :is(svg,img){width:100%!important;height:100%!important;border-radius:0!important;}
+  .btn{display:inline-block;padding:14px 26px;border-radius:11px;background:${color};color:${btnInk};font-size:14.5px;font-weight:800;text-decoration:none;border:0;cursor:pointer;font-family:inherit;}
+  .btn.sm{padding:8px 16px;border-radius:9px;font-size:12.5px;font-weight:700;}
+  .btn2{display:inline-block;padding:14px 26px;border-radius:11px;border:1px solid ${secondary};background:${bgColor};color:${inkColor};font-size:14.5px;font-weight:700;text-decoration:none;}
+  .sw{position:absolute;opacity:0;pointer-events:none;}
+  .tabs{display:inline-flex;gap:4px;padding:4px;background:${bgColor};border:1px solid ${secondary};border-radius:12px;flex-wrap:wrap;margin-bottom:30px;}
+  .tabs label{padding:9px 17px;border-radius:9px;font-size:13px;font-weight:600;opacity:.75;cursor:pointer;}
+  .panels>.panel{display:none;grid-template-columns:1.25fr 1fr;gap:52px;align-items:start;}
+  ${segRules}
+  h1{font-size:clamp(34px,5vw,54px);line-height:1.08;margin:0;}
+  .lede{font-size:16.5px;opacity:.6;line-height:1.7;margin:20px 0 0;max-width:520px;}
+  .oc{border:1px solid ${secondary};border-radius:16px;background:${bgColor};padding:24px 26px;}
+  .oc .row{display:flex;gap:13px;align-items:flex-start;margin-bottom:14px;font-size:13.5px;opacity:.72;line-height:1.62;}
+  .oc .tick{width:17px;height:17px;border-radius:6px;background:${accent}22;color:${accent};display:flex;align-items:center;justify-content:center;flex:none;font-size:11px;font-weight:800;}
+  .oc .stat{margin-top:20px;padding-top:16px;border-top:1px solid ${secondary};display:flex;align-items:baseline;gap:10px;}
+  .oc .stat .v{font-size:22px;font-weight:800;letter-spacing:-.025em;color:${accent};}
+  .oc .stat .k{font-size:12.5px;opacity:.6;line-height:1.5;}
+  section{padding:70px 0 0;}
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:34px;}
+  .pain{border-top:2px solid ${accent};padding-top:16px;}
+  .pain h3{font-size:14px;font-weight:700;letter-spacing:-.01em;margin:0;}
+  .pain p{font-size:13.5px;opacity:.6;line-height:1.68;margin:7px 0 0;}
+  .step{border:1px solid ${secondary};border-radius:14px;overflow:hidden;background:${bgColor};}
+  .step .shot{height:120px;background:${inkColor}08;display:flex;align-items:center;justify-content:center;border-bottom:1px solid ${secondary};font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:${accent};}
+  .step .in{padding:18px 20px;}
+  .step h3{font-size:14.5px;font-weight:700;letter-spacing:-.01em;margin:0;display:inline;}
+  .step p{font-size:13px;opacity:.6;line-height:1.65;margin:8px 0 0;}
+  .proof{background:${inkColor}05;border:1px solid ${secondary};border-radius:18px;padding:40px 44px;display:grid;grid-template-columns:1.3fr 1fr;gap:44px;align-items:center;}
+  .proof .q{font-size:25px;line-height:1.44;margin:0;}
+  .proof cite{display:block;font-style:normal;font-size:12.5px;opacity:.5;margin-top:16px;}
+  .m{display:flex;align-items:baseline;gap:12px;padding-bottom:12px;border-bottom:1px solid ${secondary};margin-bottom:14px;}
+  .m .v{font-size:21px;font-weight:800;letter-spacing:-.025em;color:${accent};flex:none;min-width:62px;}
+  .m .k{font-size:12.5px;opacity:.6;line-height:1.5;}
+  .conv{border:1px solid ${secondary};border-radius:18px;padding:42px 46px;display:grid;grid-template-columns:1.15fr 1fr;gap:46px;align-items:center;}
+  form{display:flex;flex-direction:column;gap:10px;}
+  input{width:100%;padding:13px 15px;border-radius:10px;border:1px solid ${secondary};background:${inkColor}05;font-size:14px;color:${inkColor};outline:none;font-family:inherit;}
+  input:focus{border-color:${accent};}
+  .faq{display:grid;grid-template-columns:1fr 1fr;gap:12px 44px;max-width:940px;}
+  .faq .q2{padding:20px 0;border-top:1px solid ${secondary};}
+  .faq h3{font-size:15px;font-weight:700;letter-spacing:-.01em;margin:0;}
+  .faq p{font-size:14px;opacity:.6;line-height:1.72;margin:8px 0 0;}
+  footer{border-top:1px solid ${secondary};margin-top:66px;padding:26px 0 76px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12.5px;opacity:.55;}
+  footer .mark{width:24px;height:24px;border-radius:8px;overflow:hidden;display:flex;}
+  footer .mark :is(svg,img){width:100%!important;height:100%!important;border-radius:0!important;}
+  .wl-ok,.wl-err{margin-top:12px;font-size:12.5px;min-height:18px;}
+  .wl-ok{color:${accent};}
+  .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+  @media(max-width:880px){.wrap{padding:0 26px;}.panels>.panel,.three,.proof,.conv,.faq{grid-template-columns:1fr!important;}}
+</style>
+</head>
+<body>
+  <div class="hero">
+    <div class="wrap">
+      <nav class="nav">
+        <div class="brand"><span class="mark">${logoMarkup}</span><span>${name}</span></div>
+        <a class="btn sm" href="#join">${a.c}</a>
+      </nav>
+      <div class="lbl" style="margin-bottom:12px">Built for</div>
+      ${segs.map((_, i) => `<input class="sw" type="radio" name="seg" id="sw${i}"${i === 0 ? ' checked' : ''} />`).join('')}
+      <div class="tabs">${segs.map((it, i) => `<label for="sw${i}">${it.t('label')}</label>`).join('')}</div>
+      <div class="panels">
+        ${segs.map((it) => `<div class="panel">
+          <div>
+            <h1 class="ser">${it.t('headline') || a.h}</h1>
+            <p class="lede">${it.t('subhead') || a.b}</p>
+            <div style="display:flex;gap:11px;margin-top:30px;flex-wrap:wrap">
+              <a class="btn" href="#join">${a.c}</a>
+              <a class="btn2" href="#how">See how it works</a>
+            </div>
+          </div>
+          <div class="oc">
+            <div class="lbl" style="margin-bottom:16px">What you get in week one</div>
+            ${[it.t('o1'), it.t('o2'), it.t('o3')].filter(Boolean).map((o) => `<div class="row"><span class="tick">&#10003;</span><span>${o}</span></div>`).join('')}
+            <div class="stat"><span class="v">${it.t('stat_value')}</span><span class="k">${it.t('stat_label')}</span></div>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <section>
+      <div class="lbl" style="margin-bottom:20px">What breaks today</div>
+      <div class="ser" style="font-size:32px;line-height:1.28;max-width:660px">${c.t('problem_lead')}</div>
+      <div class="three">
+        ${c.list('pains').map((it) => `<div class="pain"><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div>`).join('')}
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="lbl" style="margin-bottom:20px">How it works</div>
+      <div class="ser" style="font-size:29px;line-height:1.3;max-width:560px">${c.t('how_lead')}</div>
+      <div class="three">
+        ${c.list('steps').map((it, i) => `<div class="step"><div class="shot">${it.t('shot')}</div><div class="in"><span class="ser" style="font-size:19px;color:${accent};margin-right:9px">${String(i + 1).padStart(2, '0')}</span><h3>${it.t('title')}</h3><p>${it.t('body')}</p></div></div>`).join('')}
+      </div>
+    </section>
+
+    <section>
+      <div class="proof">
+        <div>
+          <p class="q ser">${c.t('quote')}</p>
+          <cite>${c.t('quote_by')}</cite>
+        </div>
+        <div>
+          ${c.list('metrics').map((it) => `<div class="m"><div class="v">${it.t('value')}</div><div class="k">${it.t('label')}</div></div>`).join('')}
+        </div>
+      </div>
+    </section>
+
+    <section id="join">
+      <div class="conv">
+        <div>
+          <div class="lbl" style="margin-bottom:12px">Get early access</div>
+          <div class="ser" style="font-size:29px;line-height:1.26;max-width:400px">${c.t('conv_lead')}</div>
+          <p style="font-size:14px;opacity:.6;line-height:1.7;margin:12px 0 0;max-width:420px">${c.t('conv_body')}</p>
+        </div>
+        <div>
+          <form id="wl-form">${honeypotField()}
+            <label for="wl-email" class="sr">Email</label>
+            <input id="wl-email" type="email" name="email" placeholder="Work email" required />
+            <button type="submit" class="btn">${a.c}</button>
+          </form>
+          <div id="wl-msg" aria-live="polite"></div>
+          <div style="font-size:12px;opacity:.45;margin-top:14px;line-height:1.55">No credit card, no sales call. Unsubscribe in one click.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="lbl" style="margin-bottom:20px">Questions</div>
+      <div class="faq">
+        ${c.list('faqs').map((it) => `<div class="q2"><h3>${it.t('q')}</h3><p>${it.t('a')}</p></div>`).join('')}
+      </div>
+    </section>
+
+    <footer>
+      <span style="display:flex;align-items:center;gap:10px"><span class="mark">${logoMarkup}</span>${name}</span>
+      <span>Built with <a href="https://axal.vc" rel="noopener">Axal VC</a></span>
+    </footer>
+  </div>
+${singleWaitlistScript(bk.apiWaitlist, selectedAudience(row), bk.nonce)}
+</body>
+</html>`;
+}
+
 const RENDERERS: Record<TemplateKey, (bk: BrandKit, aud: Record<string, { h: string; b: string; c: string }>, row: any) => string> = {
   minimal: renderMinimal,
   'bold-hero': renderBoldHero,
@@ -3931,6 +4924,8 @@ const RENDERERS: Record<TemplateKey, (bk: BrandKit, aud: Record<string, { h: str
   'mentor-connect': renderMentorConnect,
   'mentor-connect-page': renderMentorConnectPage,
   'builders-launchpad': renderBuildersLaunchpad,
+  'customer-acquisition': renderCustomerAcquisition,
+  'customer-audience': renderCustomerAudience,
 };
 
 export function renderLandingTemplate(

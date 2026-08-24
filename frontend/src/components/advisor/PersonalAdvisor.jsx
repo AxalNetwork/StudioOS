@@ -1176,6 +1176,7 @@ function CtaButtons({ cta, onCtaClick }) {
 function AdvisorTicketPanel({ onFiled, onClose }) {
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState('medium');
+  const [type, setType] = useState('task');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -1192,6 +1193,7 @@ function AdvisorTicketPanel({ onFiled, onClose }) {
       const ticket = await api.createTicket({
         title: trimmed,
         priority,
+        type,
         description: description.trim() || undefined,
       });
       onFiled(ticket);
@@ -1244,6 +1246,17 @@ function AdvisorTicketPanel({ onFiled, onClose }) {
             <option value="medium">Medium</option>
             <option value="high">High</option>
             <option value="urgent">Urgent</option>
+          </select>
+          <label className="text-[11px] text-gray-600 dark:text-gray-400">Type</label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            disabled={submitting}
+            className="flex-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-2 py-1.5 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          >
+            <option value="task">Task</option>
+            <option value="bug">Bug</option>
+            <option value="feature">Feature</option>
           </select>
         </div>
         <textarea

@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { transpileTs } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -41,10 +42,7 @@ async function loadClassifier() {
   });
   const tsBody = pieces.join('\n');
   const wrapped = `const __out = (() => { ${tsBody}; return { classify, CLIENT_ERRORS, GRANT_ERRORS }; })();`;
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
   return new Function(`${outputText}; return __out;`)();
 }
 

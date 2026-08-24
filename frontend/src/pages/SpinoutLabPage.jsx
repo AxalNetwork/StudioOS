@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Loader2, ArrowRight, FlaskConical, Globe, Circle, Lock, Unlock, FileText, BadgeCheck } from "lucide-react";
 import { spinoutLab } from "../lib/api";
@@ -7,15 +7,79 @@ import { reportError } from "../lib/log";
 import SpinoutLabMarketingPage from "./SpinoutLabMarketingPage";
 import SpinoutLabWorkspace from "./SpinoutLabWorkspace";
 
+// ---------- Cohort window helpers (client-side, mirrors Worker math) ----------
+// Base anchor: May 2026 = Cohort 1 (Cohort 4 = Aug 2026 confirms the sequence).
+const COHORT_BASE = { year: 2026, month: 5, num: 1 };
+const COHORT_TZ = 'America/New_York'; // Delaware time — DST-correct via Intl
+
+/** UTC ms of a Delaware wall-clock datetime. Two-pass to handle DST correctly. */
+function _wallToUtcMs(year, month, day, h = 0, m = 0, s = 0) {
+  const wallAsUtc = Date.UTC(year, month - 1, day, h, m, s);
+  const _localAt = (utcMs) => {
+    const p = {};
+    for (const part of new Intl.DateTimeFormat('en-US', {
+      timeZone: COHORT_TZ,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(new Date(utcMs))) p[part.type] = part.value;
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  };
+  const offset1 = _localAt(wallAsUtc) - wallAsUtc;
+  let guess = wallAsUtc - offset1;
+  return wallAsUtc - (_localAt(guess) - guess);
+}
+
+/** Ordinal cohort number for a given year/month. */
+export function cohortNumFor(year, month) {
+  return (year - COHORT_BASE.year) * 12 + (month - COHORT_BASE.month) + COHORT_BASE.num;
+}
+
+/**
+ * Resolve the cohort currently open for applications.
+ * Deadline = 7 days before the 1st of the cohort month at 23:59:59 ET
+ * (day -6 in Date.UTC semantics — mirrors resolveApplicationTarget in
+ * cloudflare-worker/src/services/cohortApplications.ts).
+ * Workspace access is granted automatically at midnight Delaware time on the
+ * 1st of the cohort month by the Worker's cohort-timing cron.
+ */
+export function resolveOpenCohort(nowMs = Date.now()) {
+  const p = {};
+  for (const part of new Intl.DateTimeFormat('en-US', {
+    timeZone: COHORT_TZ, year: 'numeric', month: '2-digit',
+  }).formatToParts(new Date(nowMs))) p[part.type] = part.value;
+  let year = Number(p.year), month = Number(p.month);
+  // Advance until we find a cycle whose application window is still open.
+  for (let i = 0; i < 24; i++) {
+    const closeMs = _wallToUtcMs(year, month, -6, 23, 59, 59); // day -6 = 7 days before 1st
+    if (closeMs > nowMs) break;
+    month += 1;
+    if (month > 12) { month = 1; year += 1; }
+  }
+  const closeMs = _wallToUtcMs(year, month, -6, 23, 59, 59);
+  const startMs = _wallToUtcMs(year, month, 1, 0, 0, 0);
+  return { year, month, cohortNum: cohortNumFor(year, month), closeMs, startMs };
+}
+// ---------------------------------------------------------------------------
+
 // Pipeline cards mirror the "Spin-Out Lab" design handoff
-// (attached_assets/Spin-Out_Lab.dc_*.html): five compact phases with the
-// program's descriptive items. Milestones auto-complete from real product
-// actions (lib/spinoutLabHooks.js) — there is no manual checklist on this
-// page. Items default to Delaware wording; pipelineItemsFor() swaps the
-// jurisdiction-specific lines.
+// (attached_assets/Spin-Out_Lab.dc_*.html), with one correction: the handoff
+// drew FIVE phases over 30 days, but the program the product actually runs is
+// FOUR weeks / 28 days (PROGRAM_DAYS in lib/scoringViewModel.js and in the
+// worker's spinoutDeckData.ts). Each phase now maps 1:1 onto a real backend
+// week, so `backendWeek` is unique per phase — previously Pitch and Fund both
+// claimed week 4, which lit two cards as "active" at once for any founder in
+// their final week.
+//
+// The handoff's separate "Structure" phase is folded into Fund: incorporation,
+// 83(b) and the cap table happen in Week 4 ("Incorporate & Capital"), the same
+// week as the raise — not in a week of their own.
+//
+// Milestones auto-complete from real product actions (lib/spinoutLabHooks.js)
+// — there is no manual checklist on this page. Items default to Delaware
+// wording; pipelineItemsFor() swaps the jurisdiction-specific lines.
 export const PIPELINE_PHASES = [
   {
-    name: "Validate", days: "Days 1–5",
+    name: "Validate", days: "Days 1–7",
     backendWeek: 1, color: "violet",
     items: [
       "Problem/solution definition workshop",
@@ -25,63 +89,52 @@ export const PIPELINE_PHASES = [
     ],
   },
   {
-    name: "Structure", days: "Days 6–12",
-    backendWeek: 2, color: "blue",
-    // items[0] and items[2] are jurisdiction-specific — see pipelineItemsFor().
-    items: [
-      "Delaware C-Corp incorporation",
-      "Co-founder equity split and vesting schedule",
-      "83(b) election filing",
-      "IP assignment agreements",
-    ],
-  },
-  {
-    name: "Build", days: "Days 13–19",
-    backendWeek: 3, color: "teal",
+    name: "Build", days: "Days 8–14",
+    backendWeek: 2, color: "teal",
     items: [
       "MVP scope definition",
+      "90-day OKRs and product roadmap",
       "Prototype or landing page live",
-      "First design sprint (3 days)",
-      "Advisor onboarding (1–2 advisors)",
+      "Brand v1 and pitch deck v1 drafted",
     ],
   },
   {
-    name: "Pitch", days: "Days 20–25",
-    backendWeek: 4, color: "amber",
+    name: "Pitch", days: "Days 15–21",
+    backendWeek: 3, color: "amber",
     items: [
-      "Pitch deck (12 slides, venture-standard)",
-      "Financial model (3-year projection)",
-      "Cap table modeling",
+      "First venture-readiness score",
+      "Advisor matching and office-hours cadence",
+      "Co-founder match",
       "Warm intro prep with partner network",
     ],
   },
   {
-    name: "Fund", days: "Days 26–30",
+    name: "Fund", days: "Days 22–28",
     backendWeek: 4, color: "pink",
+    // items[0] and items[1] are jurisdiction-specific — see pipelineItemsFor().
     items: [
-      "Partner pitch sessions (3–5 investors)",
-      "Term sheet review support",
-      "First close or bridge round",
+      "Delaware C-Corp incorporation",
+      "83(b) election filing",
+      "Cap table, founder vesting and IP assignment",
+      "Partner pitch sessions and term sheet review",
       "Graduate: venture-ready company",
     ],
   },
 ];
 
-// Jurisdiction-specific wording for the Structure phase (design handoff:
-// juris.incLine / juris.filingInc). Only selectable jurisdictions need
-// entries; anything else falls back to the Delaware default items.
-const JURISDICTION_PIPELINE_LINES = {
-  de: { incLine: "Delaware C-Corp incorporation", filingLine: "83(b) election filing" },
-  wy: { incLine: "Wyoming C-Corp incorporation", filingLine: "83(b) election filing" },
-};
-
+// Jurisdiction-specific wording for the incorporation lines (design handoff:
+// juris.incLine / juris.filingInc). Unknown or "Soon" keys fall back to
+// the Delaware record via labJurisdiction().
+//
+// These live on Fund rather than a separate "Structure" phase because
+// incorporation and capital happen in the SAME program week — Week 4
+// ("Incorporate & Capital"). See PIPELINE_PHASES above.
 export function pipelineItemsFor(phase, jurisdictionKey) {
-  if (phase.name !== "Structure") return phase.items;
-  const j = JURISDICTION_PIPELINE_LINES[jurisdictionKey];
-  if (!j) return phase.items;
+  if (phase.name !== "Fund") return phase.items;
+  const j = labJurisdiction(jurisdictionKey);
   const items = [...phase.items];
   items[0] = j.incLine;
-  items[2] = j.filingLine;
+  items[1] = j.filingInc;
   return items;
 }
 
@@ -123,10 +176,13 @@ const DIconAdvisor = () => <svg width="20" height="20" viewBox="0 0 24 24" fill=
 const DIconDataroom = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>;
 const DIconBadge = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="9" r="6"/><path d="M9 14.5 8 22l4-2 4 2-1-7.5"/></svg>;
 
+// Rows [0] (entity) and [2] (equity filing) are jurisdiction-derived in the
+// design handoff — render via deliverablesFor(jurisdictionKey); this base
+// array carries the Delaware record's wording.
 export const DELIVERABLES = [
-  { icon: <DIconCorp />, name: "Delaware C-Corp", desc: "Delaware C-Corp formation handled and filed." },
+  { icon: <DIconCorp />, name: "Delaware C-Corp", desc: "Fully incorporated entity with EIN and registered agent." },
   { icon: <DIconCap />, name: "Vesting Cap Table", desc: "Founder equity with 4-year vest, 1-year cliff on Carta." },
-  { icon: <DIconFile83 />, name: "83(b) Election", desc: "Section 83(b) election generated, tracked, and filed." },
+  { icon: <DIconFile83 />, name: "83(b) Election", desc: "Filed within the 30-day IRS window, archived in your data room." },
   { icon: <DIconDeck />, name: "Pitch Deck", desc: "12-slide venture-standard deck, designed and reviewed." },
   { icon: <DIconModel />, name: "Financial Model", desc: "3-year P&L, revenue model, and unit economics." },
   { icon: <DIconIntro />, name: "Warm Introductions", desc: "5–10 curated intros to the Axal VC investor network." },
@@ -179,10 +235,31 @@ function fmtRaised(n) {
   return `$${Math.round(v)}`;
 }
 
+/**
+ * Parse a SQLite timestamp.
+ *
+ * `datetime('now')` returns "YYYY-MM-DD HH:MM:SS" in UTC — no `T`, no `Z`.
+ * That string is not a valid ISO-8601 date-time, so `new Date()` handling of
+ * it is implementation-defined: V8 accepts it and reads it as LOCAL time,
+ * Safari returns Invalid Date. Both are wrong for a UTC value, and the local
+ * reading is the more dangerous one because it silently shifts every rendered
+ * date by the viewer's offset.
+ *
+ * Normalises the separator, then appends `Z` unless the string already carries
+ * a zone. Returns null rather than an Invalid Date so callers can fall back to
+ * omitting the date instead of printing "Invalid Date" at a founder.
+ */
+export function parseSqliteUtc(s) {
+  if (s == null || s === '') return null;
+  const raw = String(s);
+  const iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const d = new Date(/[Zz]$|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : `${iso}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function gradDateLabel(iso) {
-  if (!iso) return null;
-  const d = new Date(String(iso).replace(' ', 'T'));
-  if (Number.isNaN(d.getTime())) return null;
+  const d = parseSqliteUtc(iso);
+  if (!d) return null;
   return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 }
 
@@ -192,15 +269,114 @@ function gradCohortLabel(cohort) {
   return /^\d+$/.test(s) ? `Cohort ${s}` : s;
 }
 
+// Full jurisdiction metadata table from the design handoff (Spin-Out
+// Lab.dc.html `jurisdictions`): entity + equity-filing wording that the
+// hero chips, pipeline Structure lines, and deliverables derive from.
 export const LAB_JURISDICTIONS = [
-  { key: 'de', label: 'Delaware, USA' },
-  { key: 'wy', label: 'Wyoming, USA' },
-  { key: 'sg', label: 'Singapore', soon: true },
-  { key: 'uk', label: 'London, UK', soon: true },
-  { key: 'ee', label: 'Estonia', soon: true },
-  { key: 'ae', label: 'Dubai, UAE', soon: true },
-  { key: 'ca', label: 'Alberta, Canada', soon: true },
+  {
+    key: 'de', label: 'Delaware, USA', entity: 'Delaware C-Corp',
+    incLine: 'Delaware C-Corp incorporation', entityDesc: 'Fully incorporated entity with EIN and registered agent.',
+    filingBadge: '83(b) Filed', filingName: '83(b) Election', filingInc: '83(b) election filing',
+    filingDesc: 'Filed within the 30-day IRS window, archived in your data room.',
+  },
+  {
+    key: 'wy', label: 'Wyoming, USA', entity: 'Wyoming C-Corp',
+    incLine: 'Wyoming C-Corp incorporation', entityDesc: 'Fully incorporated Wyoming entity with EIN and registered agent.',
+    filingBadge: '83(b) Filed', filingName: '83(b) Election', filingInc: '83(b) election filing',
+    filingDesc: 'Filed within the 30-day IRS window, archived in your data room.',
+  },
+  {
+    key: 'sg', label: 'Singapore', soon: true, entity: 'Singapore Pte Ltd',
+    incLine: 'Singapore Pte Ltd incorporation', entityDesc: 'Private Limited entity with ACRA registration and a company secretary.',
+    filingBadge: 'ACRA Lodged', filingName: 'ACRA Share Allotment', filingInc: 'ACRA share allotment lodgement',
+    filingDesc: 'Founder shares allotted and lodged with ACRA within the statutory window.',
+  },
+  {
+    key: 'uk', label: 'London, UK', soon: true, entity: 'UK Ltd',
+    incLine: 'UK Ltd incorporation', entityDesc: 'Private Limited company filed with Companies House.',
+    filingBadge: 'EMI Registered', filingName: 'EMI Option Scheme', filingInc: 'EMI option scheme setup',
+    filingDesc: 'HMRC-valued EMI scheme registered for founders and early hires.',
+  },
+  {
+    key: 'ee', label: 'Estonia', soon: true, entity: 'Estonia OÜ',
+    incLine: 'Estonia OÜ incorporation', entityDesc: 'Private Limited (OÜ) via e-Residency with Business Register entry.',
+    filingBadge: 'Registry Filed', filingName: 'e-Residency Registry', filingInc: 'Business Register entry',
+    filingDesc: 'Founder holdings entered in the Estonian Business Register.',
+  },
+  {
+    key: 'ae', label: 'Dubai, UAE', soon: true, entity: 'ADGM entity',
+    incLine: 'ADGM incorporation', entityDesc: 'ADGM company with registered agent.',
+    filingBadge: 'ADGM Filed', filingName: 'ADGM Share Filing', filingInc: 'ADGM share filing',
+    filingDesc: 'Founder shares filed with the ADGM registrar.',
+  },
+  {
+    key: 'ca', label: 'Alberta, Canada', soon: true, entity: 'Alberta Corp',
+    incLine: 'Alberta Corp incorporation', entityDesc: 'Canadian corporation with registered agent.',
+    filingBadge: 'CRA Filed', filingName: 'Section 7 Filing', filingInc: 'Section 7 equity filing',
+    filingDesc: 'Founder equity documented under CRA rules.',
+  },
 ];
+
+// Design fallback: an unknown key — or a "Soon" jurisdiction that can't be
+// selected yet — resolves to the Delaware record.
+export function labJurisdiction(key) {
+  const j = LAB_JURISDICTIONS.find((x) => x.key === key);
+  return !j || j.soon ? LAB_JURISDICTIONS[0] : j;
+}
+
+// Hero outcome chips (design: outcomeBadges) — 4 chips, two of them
+// jurisdiction-derived.
+export function outcomeBadgesFor(jurisdictionKey) {
+  const j = labJurisdiction(jurisdictionKey);
+  return [j.entity, 'Vesting Cap Table', j.filingBadge, 'Pitch Deck Ready'];
+}
+
+// DELIVERABLES with rows [0] (entity) and [2] (equity filing) swapped in
+// from the selected jurisdiction's record (design: deliverables).
+export function deliverablesFor(jurisdictionKey) {
+  const j = labJurisdiction(jurisdictionKey);
+  const rows = [...DELIVERABLES];
+  rows[0] = { ...rows[0], name: j.entity, desc: j.entityDesc };
+  rows[2] = { ...rows[2], name: j.filingName, desc: j.filingDesc };
+  return rows;
+}
+
+// Jurisdiction selector bar (design: "Incorporation jurisdiction" chips).
+// Client-state only — the selection restyles copy across the program view.
+// Shared by the signed-in Dashboard and the logged-out marketing page.
+export function JurisdictionBar({ value, onChange }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-3 px-4 mb-8 shadow-sm">
+      <div className="flex items-center gap-2">
+        <Globe className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+        <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Incorporation jurisdiction</span>
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {LAB_JURISDICTIONS.map((j) => (
+          j.soon ? (
+            <button key={j.key} disabled className="h-[34px] px-3 rounded-lg bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 text-[13px] font-semibold opacity-60 cursor-not-allowed flex items-center gap-1.5">
+              {j.label} <span className="text-[9px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded px-1.5 py-0.5">Soon</span>
+            </button>
+          ) : (
+            <button
+              key={j.key}
+              type="button"
+              onClick={() => onChange(j.key)}
+              className={`h-[34px] px-3 rounded-lg text-[13px] font-semibold transition-colors border ${
+                value === j.key
+                  ? 'bg-violet-600 text-white border-violet-600'
+                  : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
+              }`}
+            >
+              {j.label}
+            </button>
+          )
+        ))}
+      </div>
+      <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto hidden md:inline">Entity & equity filing update across the program →</span>
+    </div>
+  );
+}
 
 export function GraduatesSection() {
   // null = loading, 'error' = fetch failed, [] = no graduates yet
@@ -304,11 +480,25 @@ export function GraduatesSection() {
 
 // Hero stats panel — LIVE data from GET /spinout-lab/stats (public; the
 // hero also renders on the logged-out marketing page). Companies built and
-// total raised are real; the "30 days" row is the program's promise, not a
+// total raised are real; the "28 days" row is the program's promise, not a
 // measurement. The raised row always shows: "$0" when there is no funding
 // recorded yet (dev has no funding columns; production sums
 // projects.total_funding).
-export function HeroStatsPanel() {
+/**
+ * The Lab's three headline outcome numbers, live from the public
+ * `GET /spinout-lab/stats`.
+ *
+ * Shared because two surfaces quote them — the marketing hero and the
+ * printable Program Brief — and the brief used to carry its own hardcoded
+ * copies ("12 companies", "$2.4M") that no query produced. Two literals
+ * claiming a track record are a liability the moment the real one moves, and
+ * a brief is the artifact most likely to be forwarded to an investor.
+ *
+ * `companies`/`raised` are null while loading and on failure; both callers
+ * render an em-dash rather than a zero, because "0 companies built" is a
+ * worse thing to print than "we couldn't load this".
+ */
+export function useSpinoutStats() {
   // null = loading, 'error' = fetch failed, object = loaded
   const [stats, setStats] = useState(null);
 
@@ -329,14 +519,48 @@ export function HeroStatsPanel() {
   }, []);
 
   const loaded = stats && stats !== 'error' ? stats : null;
-  const companies = loaded ? Number(loaded.companies) || 0 : null;
-  const raised = loaded ? (fmtRaised(loaded.total_raised) ?? '$0') : null;
+  return {
+    companies: loaded ? Number(loaded.companies) || 0 : null,
+    raised: loaded ? (fmtRaised(loaded.total_raised) ?? '$0') : null,
+  };
+}
+
+/** Label for the companies-built stat, singular-correct. */
+export function companiesLabel(companies) {
+  return companies === null ? '—' : `${companies} ${companies === 1 ? 'company' : 'companies'}`;
+}
+
+/**
+ * The open cohort's number and application deadline, formatted in Delaware
+ * time. Shared so the marketing CTA and the printable brief can never quote
+ * different dates for the same cohort — the brief had "Cohort 4 · closes
+ * August 1, 2026" frozen in source, which was simply past by the time anyone
+ * read it. Returns null if the cohort math throws, which both callers render
+ * as a generic "next cohort" line rather than a wrong one.
+ */
+export function openCohortCopy(nowMs = Date.now()) {
+  try {
+    const c = resolveOpenCohort(nowMs);
+    if (!c) return null;
+    return {
+      cohortNum: c.cohortNum,
+      deadlineLabel: new Date(c.closeMs).toLocaleDateString('en-US', {
+        month: 'long', day: 'numeric', year: 'numeric', timeZone: COHORT_TZ,
+      }),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function HeroStatsPanel() {
+  const { companies, raised } = useSpinoutStats();
 
   return (
     <div className="flex flex-col gap-[1px] min-w-[230px] bg-white/10 border border-white/20 rounded-[16px] overflow-hidden">
       <div className="p-4 px-5 flex flex-col gap-0.5">
         <div className="tabular-nums text-[26px] font-extrabold tracking-tight">
-          {companies === null ? '—' : `${companies} ${companies === 1 ? 'company' : 'companies'}`}
+          {companiesLabel(companies)}
         </div>
         <div className="text-[12.5px] text-[#a89fce]">Built to date</div>
       </div>
@@ -345,7 +569,7 @@ export function HeroStatsPanel() {
         <div className="text-[12.5px] text-[#a89fce]">Total capital raised by graduates</div>
       </div>
       <div className="p-4 px-5 flex flex-col gap-0.5 border-t border-white/10">
-        <div className="tabular-nums text-[26px] font-extrabold tracking-tight">30 days</div>
+        <div className="tabular-nums text-[26px] font-extrabold tracking-tight">28 days</div>
         <div className="text-[12.5px] text-[#a89fce]">Average time to incorporation</div>
       </div>
     </div>
@@ -377,8 +601,8 @@ export function CohortTrackerSection() {
   // Subtitle facts are derived from the live members — no invented numbers.
   const cohortLabel = gradCohortLabel(active.find((m) => m.cohort)?.cohort ?? null);
   const earliestStart = active
-    .map((m) => (m.started_at ? new Date(String(m.started_at).replace(' ', 'T')) : null))
-    .filter((d) => d && !Number.isNaN(d.getTime()))
+    .map((m) => parseSqliteUtc(m.started_at))
+    .filter(Boolean)
     .sort((a, b) => a - b)[0];
 
   return (
@@ -469,11 +693,49 @@ export function CohortTrackerSection() {
   );
 }
 
-export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
+// LP-facing counterpart to ApplyCtaSection. An investor browsing the program
+// is a prospective source of capital, not a cohort applicant, so the call to
+// action points at the LP workspace instead of the founder application.
+export function LpCtaSection() {
   return (
     <section className="rounded-[20px] p-10 text-center relative overflow-hidden text-white" style={{ background: 'radial-gradient(900px 300px at 85% 120%,rgba(196,181,253,.35),transparent 60%),linear-gradient(115deg,#5b21b6,#7c3aed)' }}>
-      <h2 className="m-0 text-[32px] font-black tracking-[-.03em]">Apply to Cohort 4.</h2>
-      <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]">Applications close August 1, 2026. 8 spots available.</p>
+      <h2 className="m-0 text-[32px] font-black tracking-[-.03em]">Back the graduates.</h2>
+      <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]">
+        Axal VC Spin-Out Fund I invests exclusively in Lab graduates — underwritten by 28 days of
+        observed execution data, not a pitch.
+      </p>
+      <div className="flex gap-3 justify-center flex-wrap">
+        <Link to="/spinout-lab/investor-workspace" data-testid="link-lp-workspace" className="h-11 px-5.5 rounded-[11px] bg-white dark:bg-gray-100 text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white transition-colors">
+          Open LP Workspace <span className="text-[16px]" aria-hidden="true">→</span>
+        </Link>
+        <a href={LAB_CONTACT_HREF} className="h-11 px-5.5 rounded-[11px] border border-white/40 bg-transparent text-white text-[14px] font-semibold flex items-center hover:bg-white/10 transition-colors">
+          Talk to the GP
+        </a>
+      </div>
+      <p className="mt-6 text-[12px] text-[#c4b5fd]">Participation is limited to accredited investors and reviewed individually.</p>
+    </section>
+  );
+}
+
+export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
+  // Resolve the currently-open cohort client-side (mirrors Worker math).
+  // Deadline = 7 days before the 1st of the cohort month at 23:59:59 ET.
+  // Workspace access is automatically granted at midnight Delaware time on
+  // the 1st by the Worker's cohort-timing cron — no client action needed.
+  const cohort = useMemo(() => openCohortCopy(), []);
+
+  const headline = cohort
+    ? `Apply to Cohort ${cohort.cohortNum}.`
+    : 'Apply to the next cohort.';
+
+  const sub = cohort
+    ? `Applications close ${cohort.deadlineLabel}. 8 spots available.`
+    : 'Applications are now open. 8 spots available.';
+
+  return (
+    <section className="rounded-[20px] p-10 text-center relative overflow-hidden text-white" style={{ background: 'radial-gradient(900px 300px at 85% 120%,rgba(196,181,253,.35),transparent 60%),linear-gradient(115deg,#5b21b6,#7c3aed)' }}>
+      <h2 className="m-0 text-[32px] font-black tracking-[-.03em]">{headline}</h2>
+      <p className="tabular-nums my-3 mb-6 text-[15px] text-[#e9d5ff]">{sub}</p>
       <div className="flex gap-3 justify-center flex-wrap">
         <Link to={applyHref} className="h-11 px-5.5 rounded-[11px] bg-white dark:bg-gray-100 text-[#6d28d9] text-[14px] font-bold flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white transition-colors">
           Apply Now <span className="text-[16px]" aria-hidden="true">→</span>
@@ -483,6 +745,84 @@ export function ApplyCtaSection({ applyHref = LAB_APPLY_HREF }) {
         </a>
       </div>
       <p className="mt-6 text-[12px] text-[#c4b5fd]">Spin-Out Lab is open to all Axal VC users. Acceptance is selective. No equity taken by Axal VC.</p>
+    </section>
+  );
+}
+
+/**
+ * Standing acknowledgement of the founder's own application.
+ *
+ * `GET /spinout-lab/state` has always returned the founder's latest
+ * `spinout_applications` row, and this page has always thrown it away — so a
+ * founder who applied on Tuesday came back on Thursday to the same marketing
+ * page and the same "Apply Now" button, with nothing anywhere confirming their
+ * application exists. Pressing it again is not merely redundant: the apply
+ * endpoint 409s a second pending application, so the only feedback the product
+ * gave them was an error.
+ *
+ * Pending REPLACES the apply CTA (re-applying is the thing that 409s).
+ * Refused sits ABOVE it, because a refused founder genuinely may re-apply —
+ * the insert only guards against a second *pending* row.
+ */
+export function ApplicationStatusSection({ application }) {
+  const status = String(application?.status || '').toLowerCase();
+  if (status !== 'pending' && status !== 'refused') return null;
+
+  const submitted = parseSqliteUtc(application.created_at);
+  const decided = parseSqliteUtc(application.decided_at);
+  const fmt = (d) => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  const pending = status === 'pending';
+  const tone = pending
+    ? { ring: 'ring-amber-300/70 dark:ring-amber-400/30', chip: 'bg-amber-100 text-amber-900 dark:bg-amber-400/15 dark:text-amber-300', dot: 'bg-amber-500' }
+    : { ring: 'ring-gray-300/70 dark:ring-gray-600/40', chip: 'bg-gray-100 text-gray-700 dark:bg-gray-700/40 dark:text-gray-300', dot: 'bg-gray-400' };
+
+  return (
+    <section
+      data-testid="application-status"
+      data-status={status}
+      className={`rounded-[20px] p-8 bg-white dark:bg-gray-800 ring-1 ${tone.ring} shadow-sm`}
+    >
+      <div className="flex items-center gap-2.5 mb-3">
+        <span className={`h-2 w-2 rounded-full ${tone.dot}`} aria-hidden="true" />
+        <span className={`text-[11px] font-bold uppercase tracking-[.08em] px-2 py-0.5 rounded-full ${tone.chip}`}>
+          {pending ? 'In review' : 'Not this cohort'}
+        </span>
+      </div>
+
+      <h2 className="m-0 text-[24px] font-black tracking-[-.02em] text-gray-900 dark:text-gray-50">
+        {pending ? 'Your application is in review.' : 'You weren’t selected for this cohort.'}
+      </h2>
+
+      <p className="mt-2.5 text-[14.5px] leading-relaxed text-gray-600 dark:text-gray-300">
+        {pending ? (
+          <>
+            We have your application{application.company_name ? <> for <strong className="font-semibold text-gray-900 dark:text-gray-100">{application.company_name}</strong></> : null}
+            {submitted ? <>, submitted {fmt(submitted)}</> : null}. Every application is read by a
+            program manager, and you’ll get an email either way — you don’t need to apply again.
+          </>
+        ) : (
+          <>
+            {decided ? <>We reviewed your application on {fmt(decided)}. </> : null}
+            Cohorts are capped at 8 companies, so strong applications get turned down for space
+            alone. You’re welcome to apply again below.
+          </>
+        )}
+      </p>
+
+      {application.cohort ? (
+        <p className="mt-4 text-[12.5px] text-gray-500 dark:text-gray-400">
+          Applied to <span className="font-semibold text-gray-700 dark:text-gray-200">{application.cohort}</span>
+        </p>
+      ) : null}
+
+      {pending ? (
+        <div className="mt-6 flex gap-3 flex-wrap">
+          <a href={LAB_CONTACT_HREF} className="h-10 px-4 rounded-[10px] border border-gray-300 dark:border-gray-600 text-[13.5px] font-semibold text-gray-700 dark:text-gray-200 flex items-center hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+            Talk to a Program Manager
+          </a>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -507,7 +847,7 @@ export function CongratulationsScreen({ cohort, onStart, starting, startError })
               Congratulations — you're in.
             </h1>
             <p className="mt-4 mb-8 text-[16px] text-[#cbc4e8] font-medium leading-relaxed">
-              You've been admitted to the Spin-Out Lab. Over the next 30 days you'll go
+              You've been admitted to the Spin-Out Lab. Over the next 28 days you'll go
               from idea to incorporated — customer discovery, MVP scope,
               venture-readiness scoring, and Delaware C-Corp formation.
             </p>
@@ -541,16 +881,15 @@ export function CongratulationsScreen({ cohort, onStart, starting, startError })
 // browsable) and shows the "All weeks unlocked · N days remaining" badge
 // from the workspace design handoff. Founders never receive this prop, so
 // real locking rules are untouched.
-export function Dashboard({ state, previewAllUnlocked = false }) {
+export function Dashboard({ state, previewAllUnlocked = false, investorView = false }) {
   const week = Math.max(1, Math.min(4, state.week || 1));
   const completedKeys = new Set((state.milestones || []).map((m) => m.key));
   const isIncorporated = completedKeys.has("incorporation_completed");
-  
-  const startedAt = state.started_at;
-  const startedAtStr = startedAt ? new Date(startedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "Recently";
+
   // Reference design: Delaware + Wyoming selectable, the rest "Soon".
   // Client-side selection only — incorporation itself is Delaware-first.
   const [jurisdiction, setJurisdiction] = useState('de');
+  const juris = labJurisdiction(jurisdiction);
 
   return (
     <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 font-sans text-gray-900 dark:text-gray-100 flex flex-col">
@@ -566,10 +905,10 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
               <h1 className="m-0 text-3xl font-extrabold tracking-tight">Spin-Out Lab</h1>
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" style={{animation: 'wsPulse 2s infinite'}}></span>
-                {state.cohort || 'Cohort 3'} · Active
+                {state.cohort || (() => { try { const c = resolveOpenCohort(); return `Cohort ${c.cohortNum}`; } catch { return 'Next Cohort'; } })()} · Applications Open
               </span>
             </div>
-            <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 30 days. Started {startedAtStr}.</p>
+            <p className="mt-2.5 ml-[52px] text-[15px] text-gray-500 dark:text-gray-400">From idea to incorporated in 28 days.</p>
           </div>
           <div className="flex gap-2.5 items-center flex-wrap">
             {previewAllUnlocked && (
@@ -593,57 +932,29 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
         </div>
 
         {/* JURISDICTION SELECTOR */}
-        <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-3 px-4 mb-8 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-            <span className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Incorporation jurisdiction</span>
-          </div>
-          <div className="flex gap-1.5 flex-wrap">
-            {LAB_JURISDICTIONS.map((j) => (
-              j.soon ? (
-                <button key={j.key} disabled className="h-[34px] px-3 rounded-lg bg-white dark:bg-gray-900 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800 text-[13px] font-semibold opacity-60 flex items-center gap-1.5">
-                  {j.label} <span className="text-[9px] font-bold uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 rounded px-1.5 py-0.5">Soon</span>
-                </button>
-              ) : (
-                <button
-                  key={j.key}
-                  type="button"
-                  onClick={() => setJurisdiction(j.key)}
-                  className={`h-[34px] px-3 rounded-lg text-[13px] font-semibold transition-colors border ${
-                    jurisdiction === j.key
-                      ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-500/30'
-                      : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  {j.label}
-                </button>
-              )
-            ))}
-          </div>
-          <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto hidden md:inline">Entity & equity filing update across the program →</span>
-        </div>
+        <JurisdictionBar value={jurisdiction} onChange={setJurisdiction} />
 
         {/* HERO SECTION */}
         <section className="rounded-[20px] p-[38px] md:p-[40px] mb-10 overflow-hidden relative text-white" style={{ background: 'radial-gradient(1200px 400px at 12% -20%,rgba(139,92,246,.5),transparent 60%),linear-gradient(115deg,#1e1b3a 0%,#2a1d54 55%,#3b1d6e 100%)' }}>
           <div className="flex flex-wrap gap-10 justify-between items-center relative z-10">
             <div className="min-w-[300px] flex-1">
-              <div className="tabular-nums text-[76px] leading-[0.9] font-black tracking-[-0.04em] text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg,#fff,#c4b5fd)', WebkitBackgroundClip: 'text' }}>30 days</div>
-              <p className="my-3.5 mb-5 text-[16px] text-[#cbc4e8] font-medium">Idea <span className="text-[#8b5cf6]">→</span> Delaware C-Corp <span className="text-[#8b5cf6]">→</span> Funded</p>
+              <div className="tabular-nums text-[76px] leading-[0.9] font-black tracking-[-0.04em] text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(90deg,#fff,#c4b5fd)', WebkitBackgroundClip: 'text' }}>28 days</div>
+              <p className="my-3.5 mb-5 text-[16px] text-[#cbc4e8] font-medium">Idea <span className="text-[#8b5cf6]">→</span> {juris.entity} <span className="text-[#8b5cf6]">→</span> Funded</p>
               <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">3 warm introductions</span>
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">Pitch deck</span>
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">Vesting cap table</span>
+                {outcomeBadgesFor(jurisdiction).map((b) => (
+                  <span key={b} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/10 border border-white/20 text-[12.5px] font-semibold text-[#ede9fe]">{b}</span>
+                ))}
               </div>
             </div>
             <HeroStatsPanel />
           </div>
         </section>
 
-        {/* 30-DAY PIPELINE */}
+        {/* 28-DAY PIPELINE */}
         <section className="mb-12">
           <div className="flex items-baseline justify-between mb-1.5">
-            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">The 30-day pipeline</h2>
-            <span className="text-[12.5px] text-gray-400">5 phases · sequential gates</span>
+            <h2 className="m-0 text-[20px] font-extrabold tracking-[-.02em]">The 28-day pipeline</h2>
+            <span className="text-[12.5px] text-gray-400">4 phases · sequential gates</span>
           </div>
           <p className="m-0 mb-5 text-[13.5px] text-gray-500">Each phase ends at a gate. Companies advance only on completion.</p>
 
@@ -702,7 +1013,7 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
         <section className="mb-12">
           <h2 className="m-0 mb-5 text-[20px] font-extrabold tracking-[-.02em]">What you leave with.</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
-            {DELIVERABLES.map((d, i) => (
+            {deliverablesFor(jurisdiction).map((d, i) => (
               <div key={i} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] p-5 shadow-sm">
                 <div className="w-10 h-10 rounded-[11px] bg-violet-50 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 flex items-center justify-center mb-3.5">
                   {d.icon}
@@ -720,8 +1031,29 @@ export function Dashboard({ state, previewAllUnlocked = false }) {
         {/* GRADUATE COMPANIES */}
         <GraduatesSection />
 
-        {/* APPLICATION CTA */}
-        <ApplyCtaSection applyHref="/spinout-lab/apply" />
+        {/* APPLICATION CTA — investors get the LP route, not the founder one.
+            POST /spinout-lab/apply hard-403s any role outside founder/exploring
+            (spinout_lab.ts), so showing "Apply Now" to an investor would be a
+            dead end.
+
+            An investor's own /spinout-lab now resolves to the LP & Investor
+            Workspace before this page is ever mounted (see the route in
+            App.jsx), so in normal navigation this branch does not fire. It
+            stays because the rule it encodes — never offer a cohort
+            application to someone whose role the apply endpoint refuses — is a
+            property of THIS page, and should hold for anything that renders it
+            directly rather than depending on the router getting it right. */}
+        {investorView ? <LpCtaSection /> : (
+          <>
+            {/* A founder mid-review gets their own status instead of a button
+                that 409s. Refused founders get BOTH — the acknowledgement and
+                the CTA — because only a *pending* row blocks re-application. */}
+            <ApplicationStatusSection application={state?.application} />
+            {String(state?.application?.status || '').toLowerCase() === 'pending'
+              ? null
+              : <ApplyCtaSection applyHref="/spinout-lab/apply" />}
+          </>
+        )}
 
       </main>
     </div>
@@ -802,10 +1134,21 @@ export default function SpinoutLabPage() {
     );
   }
 
+  const isAdmin = user?.role === 'admin';
+
   // Active (or graduated) founders get the real workspace: week timeline,
   // deliverables checklist, and the unlocked-tools grid, all at /spinout-lab.
+  // Admins always get previewAllUnlocked so every week and tool is accessible
+  // for product review, regardless of milestone progress.
   if (state && (state.active || state.is_incorporated)) {
-    return <SpinoutLabWorkspace state={state} />;
+    return <SpinoutLabWorkspace state={state} previewAllUnlocked={isAdmin} />;
+  }
+
+  // Admins without an active enrollment still need to review the workspace.
+  // Synthesise a minimal Week 1 state so the workspace renders fully unlocked.
+  if (isAdmin) {
+    const adminPreviewState = { active: true, week: 1, days_remaining: 28, milestones: [], unlocked_features: [] };
+    return <SpinoutLabWorkspace state={adminPreviewState} previewAllUnlocked />;
   }
 
   // If we couldn't load state at all, don't guess — the program overview
@@ -829,6 +1172,7 @@ export default function SpinoutLabPage() {
   }
 
   // Everyone else (not applied / application pending) sees the program
-  // overview with the Apply CTA.
-  return <Dashboard state={state || {}} />;
+  // overview with the Apply CTA — except investors, whose route into the
+  // program is the LP fund, not a cohort application.
+  return <Dashboard state={state || {}} investorView={user?.role === 'investor'} />;
 }

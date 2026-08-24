@@ -61,7 +61,7 @@ export default function ShareDeckCTA({
   if (embedded) {
     const v = isCommercial
       ? { btn: 'bg-emerald-500 hover:bg-emerald-400', accent: '#34D399', border: 'rgba(52,211,153,0.40)' }
-      : { btn: 'bg-[#2C4BE0] hover:bg-[#3B58E8]', accent: '#6E86FF', border: 'rgba(110,134,255,0.45)' };
+      : { btn: 'bg-[#6B46C1] hover:bg-[#7C55D4]', accent: '#A78BFA', border: 'rgba(167,139,250,0.45)' };
     const projShort = projectName && projectName.length > 40
       ? `${projectName.slice(0, 39).trimEnd()}…`
       : projectName;

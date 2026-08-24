@@ -163,7 +163,6 @@ export const PRODUCT_PAGES = {
             limit: '1 workspace',
             detail: 'Free accounts run one active startup workspace at a time.',
           },
-          'AI scoring (5 runs / month)': { limit: '5 runs / mo' },
         },
       }),
       mapTierToProductPlan(tierById(FOUNDER_TIERS, 'growth'), {
@@ -180,10 +179,6 @@ export const PRODUCT_PAGES = {
           },
         },
         extraFeatures: [
-          {
-            text: 'Eligible for warm investor introductions',
-            detail: 'Qualified Pro founders are introduced to investors under a three-way NDA.',
-          },
           { text: 'AI pitch deck reviewer', soon: true },
         ],
       }),
@@ -211,7 +206,7 @@ export const PRODUCT_PAGES = {
       },
       {
         q: 'How do investor introductions work?',
-        a: 'Introductions are earned, not bought. Qualified founders on Pro are introduced to investors on the Axal VC network under a three-way NDA — never cold outreach or a paid list.',
+        a: 'Introductions are earned, not bought, and are not gated by plan — any founder on the network is eligible. An investor requests the intro, and it proceeds under a three-way NDA once you accept — never cold outreach or a paid list.',
       },
       {
         q: 'Is the AI pitch deck reviewer available today?',

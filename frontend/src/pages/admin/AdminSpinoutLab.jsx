@@ -7,27 +7,81 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Check, X, RefreshCw, Search, FlaskConical, Users, Inbox, ExternalLink,
-  Lock, Unlock, ChevronRight, Calendar, Building2, CircleDashed, Eye,
+  Lock, Unlock, ChevronRight, Calendar, Building2, CircleDashed, Eye, Clock,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import AdminCohortTiming from './AdminCohortTiming';
+import AdminCohortApplications from './AdminCohortApplications';
 
-// Presentational labels only — the catalog itself (keys, weeks, unlock
-// lists) always comes from the server so it can never drift from the
-// founder-side source of truth.
-const MILESTONE_LABELS = {
-  project_created: 'Startup project created',
-  customer_interview_logged_1: 'Customer interview #1 logged',
-  customer_interview_logged_2: 'Customer interview #2 logged',
-  customer_interview_logged_3: 'Customer interview #3 logged',
-  okrs_created: 'Quarterly OKRs created',
-  brand_basics_filled: 'Brand basics filled in',
-  pitch_deck_drafted: 'Pitch deck drafted',
-  scoring_run_completed: 'AI scoring run completed',
-  advisor_meeting_booked: 'Advisor meeting booked',
-  cofounder_request_sent: 'Co-founder intro request sent',
-  incorporation_completed: 'Incorporation completed',
-};
+// ---------------------------------------------------------------------------
+// Deliverables shown in the admin milestones panel (all 4 weeks).
+// Each item references one or more milestone keys; multi-key items show
+// "In Progress" when partially complete.  `eitherOr` marks required_any
+// pairs.  `optional` items show a muted badge instead of a required dot.
+// ---------------------------------------------------------------------------
+const WEEK_DELIVERABLES = [
+  {
+    week: 1,
+    items: [
+      { label: 'Create startup record', keys: ['project_created'], toolLabel: 'Open Startups' },
+      {
+        label: 'Log 5 customer interviews',
+        keys: [
+          'customer_interview_logged_1',
+          'customer_interview_logged_2',
+          'customer_interview_logged_3',
+          'customer_interview_logged_4',
+          'customer_interview_logged_5',
+        ],
+        toolLabel: 'Open Customer Discovery',
+      },
+      { label: 'Size TAM / SAM with citations', keys: ['market_sizing_completed'], toolLabel: 'Open Market Intel' },
+      { label: 'Complete skills, values & archetype assessment', keys: ['profiling_completed'], toolLabel: 'Open Profiling' },
+      { label: 'Finalize ICP definition and validation criteria', keys: ['icp_defined'], toolLabel: 'Open Customer Discovery' },
+      { label: 'Export or share initial Market Intel research', keys: ['market_research_shared'], toolLabel: 'Open Market Intel' },
+    ],
+  },
+  {
+    week: 2,
+    items: [
+      { label: 'Scope the MVP', keys: ['mvp_scoped'], toolLabel: 'Open Roadmap' },
+      { label: 'Set 3+ OKRs (90-day)', keys: ['okrs_created'], toolLabel: 'Open Roadmap' },
+      { label: 'Design landing pages', keys: ['landing_page_created'], toolLabel: 'Open Brand & Landing Pages' },
+      { label: 'Draft pitch deck v1', keys: ['pitch_deck_drafted'], toolLabel: 'Open Pitch Deck Builder' },
+      { label: 'Studio Ops cadence set', keys: ['studio_ops_cadence_set'], toolLabel: 'Open Studio Ops' },
+      { label: 'Draft Brand v1 (tagline, value prop, visual direction)', keys: ['brand_basics_filled'], toolLabel: 'Open Brand & Landing Pages' },
+      { label: 'Map first 3 customer discovery follow-ups', keys: ['discovery_followups_mapped'], toolLabel: 'Open Customer Discovery' },
+    ],
+  },
+  {
+    week: 3,
+    items: [
+      { label: 'Run venture-readiness score', keys: ['scoring_run_completed'], toolLabel: 'Open Scoring Engine' },
+      { label: 'Establish advisor cadence', keys: ['advisor_meeting_booked'], toolLabel: 'Open Advisors', eitherOr: true },
+      { label: 'Decide co-founder track', keys: ['cofounder_request_sent'], toolLabel: 'Open Co-founder Match', eitherOr: true },
+      { label: 'Book a session in Office Hours', keys: ['office_hours_booked'], toolLabel: 'Open Office Hours' },
+      { label: 'Bring revenue proof', keys: ['revenue_proof_added'], toolLabel: 'Open Revenue' },
+      { label: 'Generate investor-ready revenue summary', keys: ['revenue_summary_generated'], toolLabel: 'Open Revenue' },
+      { label: 'Score ≥70% confidence across 5+ dimensions', keys: ['scoring_confidence_70'], toolLabel: 'Open Scoring Engine', optional: true, optionalLabel: 'Optional · boosts readiness' },
+    ],
+  },
+  {
+    week: 4,
+    items: [
+      { label: 'Incorporate the entity', keys: ['incorporation_completed'], toolLabel: 'Open Incorporate' },
+      { label: 'File incorporation docs and receive EIN', keys: ['ein_received'], toolLabel: 'Open Incorporate' },
+      { label: 'Issue founder stock with vesting', keys: ['founder_stock_issued'], toolLabel: 'Open Cap Table' },
+      { label: 'File 83(b) election', keys: ['section83b_filed'], toolLabel: 'Open 83(b) Election' },
+      { label: 'Sign co-founder agreement (or solo declaration)', keys: ['cofounder_agreement_signed'], toolLabel: 'Open Co-founder Agreement' },
+      { label: 'Lock the fundraise ask', keys: ['fundraise_ask_locked'], toolLabel: 'Open Capital' },
+      { label: 'Fill in Use of Funds', keys: ['use_of_funds_filled'], toolLabel: 'Open Use of Funds' },
+      { label: 'Secure ≥3 warm investor intros', keys: ['investor_intros_secured'], toolLabel: 'Open Capital' },
+      { label: 'Lock cap table with dilution modeling', keys: ['captable_locked'], toolLabel: 'Open Cap Table' },
+      { label: 'Build data room with ≥8 key artifacts', keys: ['data_room_built'], toolLabel: 'Open Capital' },
+    ],
+  },
+];
 
 // Mirrors the workspace TOOL_INFO labels (pages/SpinoutLabWorkspace.jsx).
 const FEATURE_LABELS = {
@@ -464,51 +518,62 @@ function ParticipantsSection({ participants, catalog, loading, onOpenWorkspace, 
                 {/* Week-by-week milestone checklist */}
                 <div data-testid="participant-milestones">
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Milestones</div>
-                  <div className="space-y-4">
-                    {(catalog || []).map((w) => {
-                      const anyMet = (w.required_any || []).some((k) => doneKeys.has(k));
-                      return (
-                        <div key={w.week}>
-                          <div className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
-                            <Calendar size={12} className="text-gray-400" /> Week {w.week}
-                            {selected.status !== 'admitted' && selected.week === w.week && selected.status === 'active' && (
-                              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">· current</span>
-                            )}
-                          </div>
-                          <ul className="space-y-1">
-                            {(w.required_all || []).map((k) => (
-                              <li key={k} className="flex items-center gap-2 text-sm">
-                                {doneKeys.has(k)
-                                  ? <Check size={14} className="text-emerald-500 shrink-0" />
-                                  : <CircleDashed size={14} className="text-gray-300 dark:text-gray-600 shrink-0" />}
-                                <span className={doneKeys.has(k) ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'}>
-                                  {MILESTONE_LABELS[k] || k}
+                  <div className="space-y-5">
+                    {WEEK_DELIVERABLES.map((wDef) => (
+                      <div key={wDef.week}>
+                        <div className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+                          <Calendar size={12} className="text-gray-400" />
+                          Week {wDef.week}
+                          {selected.status !== 'admitted' && selected.week === wDef.week && selected.status === 'active' && (
+                            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">· current</span>
+                          )}
+                        </div>
+                        <ul className="space-y-2">
+                          {wDef.items.map((item) => {
+                            const doneCount = item.keys.filter((k) => doneKeys.has(k)).length;
+                            const total = item.keys.length;
+                            const isDone = doneCount === total;
+                            const isPartial = doneCount > 0 && doneCount < total;
+                            return (
+                              <li key={item.keys[0]} className="flex items-start gap-2 text-sm">
+                                <span className="mt-0.5 shrink-0">
+                                  {isDone
+                                    ? <Check size={14} className="text-emerald-500" />
+                                    : isPartial
+                                      ? <Clock size={14} className="text-amber-400" />
+                                      : <CircleDashed size={14} className="text-gray-300 dark:text-gray-600" />}
+                                </span>
+                                <span className="flex-1 min-w-0">
+                                  <span className={isDone ? 'text-gray-800 dark:text-gray-200' : isPartial ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}>
+                                    {item.label}
+                                    {total > 1 && (
+                                      <span className="ml-1 text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+                                        {doneCount}/{total}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <span className="ml-1.5 inline-flex flex-wrap gap-1 align-middle">
+                                    {item.eitherOr && (
+                                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-violet-200 dark:border-violet-800/50 text-violet-500 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20 whitespace-nowrap">
+                                        either / or
+                                      </span>
+                                    )}
+                                    {item.optional && (
+                                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                                        {item.optionalLabel || 'Optional'}
+                                      </span>
+                                    )}
+                                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border border-gray-100 dark:border-gray-800 text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 whitespace-nowrap">
+                                      {item.toolLabel}
+                                    </span>
+                                  </span>
                                 </span>
                               </li>
-                            ))}
-                            {(w.required_any || []).length > 0 && (
-                              <li className="text-sm">
-                                <div className={`flex items-center gap-2 ${anyMet ? '' : ''}`}>
-                                  {anyMet
-                                    ? <Check size={14} className="text-emerald-500 shrink-0" />
-                                    : <CircleDashed size={14} className="text-gray-300 dark:text-gray-600 shrink-0" />}
-                                  <span className={anyMet ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500'}>
-                                    Any one of:
-                                  </span>
-                                </div>
-                                <ul className="ml-6 mt-0.5 space-y-0.5">
-                                  {(w.required_any || []).map((k) => (
-                                    <li key={k} className={`text-xs ${doneKeys.has(k) ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>
-                                      {MILESTONE_LABELS[k] || k}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </li>
-                            )}
-                          </ul>
-                        </div>
-                      );
-                    })}
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -551,6 +616,66 @@ function ParticipantsSection({ participants, catalog, loading, onOpenWorkspace, 
 // ---------------------------------------------------------------------------
 // Page shell
 // ---------------------------------------------------------------------------
+/**
+ * Catch-up issuance for graduates who finished before graduation started
+ * issuing certificates automatically.
+ *
+ * Graduating now issues the credential on the spot, so this exists only for
+ * the backlog. It is idempotent — it runs the same per-founder path the live
+ * hook does and skips anyone already holding one — so pressing it twice is
+ * harmless, and it is bounded per call, which is why it reports `remaining`
+ * instead of claiming the queue is drained.
+ */
+function CertificateBackfillRow() {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function run() {
+    setBusy(true);
+    setError(null);
+    try {
+      setResult(await api.spinoutCertificateBackfill(100));
+    } catch (e) {
+      reportError('admin:certificate-backfill', e);
+      setError('Backfill failed. See logs.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="mt-5 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex flex-wrap items-center justify-between gap-3"
+      data-testid="certificate-backfill"
+    >
+      <div className="min-w-0">
+        <div className="text-[13px] font-bold text-gray-900 dark:text-gray-100">Graduation certificates</div>
+        <div className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5">
+          Issued automatically on graduation. Run this once to cover graduates who finished before that existed.
+        </div>
+        {result ? (
+          <div className="text-[11.5px] text-gray-600 dark:text-gray-300 mt-1.5 tabular-nums" data-testid="backfill-result">
+            Issued {result.issued} of {result.scanned} scanned
+            {result.skipped ? <> · {result.skipped} skipped</> : null}
+            {result.remaining ? <> · <span className="font-semibold">{result.remaining}+ still pending — run again</span></> : null}
+          </div>
+        ) : null}
+        {error ? <div className="text-[11.5px] text-red-600 dark:text-red-400 mt-1.5">{error}</div> : null}
+      </div>
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy}
+        data-testid="button-backfill-certificates"
+        className="flex-none h-9 px-3.5 rounded-lg border border-gray-300 dark:border-gray-600 text-[12.5px] font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+      >
+        {busy ? 'Issuing…' : 'Backfill certificates'}
+      </button>
+    </div>
+  );
+}
+
 export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
   const navigate = useNavigate();
   const [section, setSection] = useState('applications');
@@ -641,18 +766,43 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
             <span className="text-[10px] font-bold bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-full px-1.5 py-0.5">{participants.length}</span>
           )}
         </button>
+        <button
+          role="tab"
+          aria-selected={section === 'timing'}
+          onClick={() => setSection('timing')}
+          data-testid="tab-timing"
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 ${section === 'timing' ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        >
+          <Calendar size={14} /> Timing
+        </button>
+        <button
+          role="tab"
+          aria-selected={section === 'cycles'}
+          onClick={() => setSection('cycles')}
+          data-testid="tab-cycles"
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 ${section === 'cycles' ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+        >
+          <CircleDashed size={14} /> Cycles
+        </button>
       </div>
 
       {section === 'applications' ? (
         <ApplicationsSection apps={apps} loading={loading} onDecided={load} />
+      ) : section === 'timing' ? (
+        <AdminCohortTiming />
+      ) : section === 'cycles' ? (
+        <AdminCohortApplications />
       ) : (
-        <ParticipantsSection
-          participants={participants}
-          catalog={catalog}
-          loading={loading}
-          onOpenWorkspace={openWorkspace}
-          openingId={openingId}
-        />
+        <>
+          <ParticipantsSection
+            participants={participants}
+            catalog={catalog}
+            loading={loading}
+            onOpenWorkspace={openWorkspace}
+            openingId={openingId}
+          />
+          <CertificateBackfillRow />
+        </>
       )}
     </div>
   );

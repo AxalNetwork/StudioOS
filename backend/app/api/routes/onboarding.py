@@ -29,17 +29,20 @@ the SPA against the worker, not against this mirror).
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from backend.app.api.routes.auth import get_current_user
 from backend.app.database import get_session
-from backend.app.models.entities import User
+from backend.app.models.entities import Project, User, UserRole
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 
@@ -68,6 +71,12 @@ def _ensure_schema(session: Session) -> None:
             """
         ))
         session.commit()
+        # codeql[py/unused-global-variable] -- _migrated is read via the `global _migrated` guard at the top of this same function (`if
+        # _migrated: return`); the write here is what a LATER, separate call's read observes. CodeQL's
+        # dead-store analysis does not model a global's value persisting across separate invocations of
+        # the function that sets it, so it sees this write as never consumed. It is: this flag exists
+        # specifically to make the schema-migration idempotent-but-skippable after the first successful
+        # request in this process.
         _migrated = True
     except Exception:
         session.rollback()
@@ -230,7 +239,98 @@ def complete(
             "VALUES (:uid, :flow, 0, 0, CURRENT_TIMESTAMP)"
         ), params={"uid": user.id, "flow": payload.flow})
     session.commit()
-    return {"ok": True, "completed_at": True}
+
+    projection = None
+    if payload.flow == "founder":
+        projection = _project_founder_onboarding(session, user)
+    return {"ok": True, "completed_at": True, **({"projection": projection} if projection else {})}
+
+
+# Mirrors cloudflare-worker/src/services/onboardingProjection.ts. Keep the
+# field mapping and the never-clobber rule identical — see that file for why
+# `stage`, `journey`, `primary_need`, `notes` and `linkedin` are left out.
+_ONBOARDING_TO_PROJECT = {
+    "tagline": "tagline",
+    "problem": "problem_statement",
+    "solution": "solution",
+    "why_now": "why_now",
+}
+
+
+def _clean(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s or None
+
+
+def _project_founder_onboarding(session: Session, user: User) -> Optional[str]:
+    """Write the founder's stored answers onto their project record.
+
+    Until this existed, `onboarding_progress.data` was written on every step
+    and read back only by the wizard rehydrating itself, so a founder's
+    problem / solution / why-now became unreachable the moment they finished —
+    and the next surface asked for all three again as empty textareas.
+
+    Best-effort by contract: onboarding is already complete when this runs, and
+    no projection failure may strand a founder in the wizard.
+    """
+    try:
+        if user.role != UserRole.FOUNDER or not user.founder_id:
+            return "skipped"
+        row = session.exec(text(
+            "SELECT data FROM onboarding_progress WHERE user_id=:uid"
+        ), params={"uid": user.id}).first()
+        raw = row[0] if row else None
+        try:
+            answers = json.loads(raw) if raw else None
+        except (TypeError, ValueError):
+            answers = None
+        if not isinstance(answers, dict):
+            return "skipped"
+
+        name = _clean(answers.get("company_name"))
+        if not name:  # projects.name is NOT NULL
+            return "skipped"
+
+        # The dev SQLModel lags the D1 schema — it has no `tagline` (migration
+        # 069) and no `deleted_at`. Writing to a column the model doesn't
+        # declare is silently dropped on commit, so filter the mapping to what
+        # actually exists rather than pretending it landed.
+        mapping = {s: c for s, c in _ONBOARDING_TO_PROJECT.items() if hasattr(Project, c)}
+
+        project = session.exec(
+            select(Project)
+            .where(Project.founder_id == user.founder_id)
+            .order_by(Project.created_at.asc(), Project.id.asc())
+        ).first()
+
+        if project is None:
+            project = Project(name=name, founder_id=user.founder_id)
+            for src, col in mapping.items():
+                setattr(project, col, _clean(answers.get(src)))
+            session.add(project)
+            session.commit()
+            return "created"
+
+        # Fill only what is still blank — onboarding is the weakest source of
+        # truth here, and must never revert an edit the founder made later.
+        touched = False
+        for src, col in mapping.items():
+            value = _clean(answers.get(src))
+            if value and not _clean(getattr(project, col, None)):
+                setattr(project, col, value)
+                touched = True
+        if not touched:
+            return "noop"
+        project.updated_at = datetime.utcnow()
+        session.add(project)
+        session.commit()
+        return "filled"
+    except Exception as exc:  # noqa: BLE001 — never block completion
+        session.rollback()
+        logger.warning("onboarding project projection failed: %s", exc)
+        return "error"
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +361,7 @@ _CHECKLIST_CATALOG: Dict[str, list] = {
         {"key": "ef.plaid", "label": "Connect Plaid (verify cash)", "route": "/settings/integrations"},
         {"key": "ef.captable", "label": "Connect or upload cap table", "route": "/build/captable"},
         {"key": "ef.financials", "label": "Populate financial model", "route": "/build/financials"},
-        {"key": "ef.83b", "label": "Confirm 83(b) status", "route": "/incorporate/83b"},
+        {"key": "ef.83b", "label": "Confirm 83(b) status", "route": "/spinout-lab/83b"},
         {"key": "ef.ip", "label": "Confirm IP assignments signed", "route": "/compliance"},
         {"key": "ef.okrs", "label": "Add 3 quarterly OKRs", "route": "/build/roadmap"},
         {"key": "ef.scoring", "label": "Run scoring with verified evidence", "route": "/projects"},
@@ -337,6 +437,12 @@ def _ensure_checklist_schema(session: Session) -> None:
             """
         ))
         session.commit()
+        # codeql[py/unused-global-variable] -- _checklist_migrated is read via the `global _checklist_migrated` guard at the top of this
+        # same function (`if _checklist_migrated: return`); the write here is what a LATER, separate
+        # call's read observes. CodeQL's dead-store analysis does not model a global's value persisting
+        # across separate invocations of the function that sets it, so it sees this write as never
+        # consumed. It is: this flag exists specifically to make the schema-migration idempotent-but-
+        # skippable after the first successful request in this process.
         _checklist_migrated = True
     except Exception:
         session.rollback()

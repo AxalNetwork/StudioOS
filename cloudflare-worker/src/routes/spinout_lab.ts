@@ -272,6 +272,216 @@ async function latestApplication(env: Env, userId: number): Promise<ApplicationR
   }
 }
 
+// ---------------------------------------------------------------------------
+// Studio Ops — the founder's weekly operating cadence and closeout review.
+//
+// Serves /spinout-lab/studio-ops. NOT the same feature as /api/studioops,
+// which is the studio's admin workflow console; see the header of
+// services/studioOpsCadence.ts for why they are separate stores.
+//
+// Only the two founder-authored things are persisted (cadence, review).
+// Everything else the page renders — the week's objective, its commitments,
+// execution health, blockers — is derived client-side from the week catalog
+// and the real milestone rows already on /state, so there is no second copy of
+// the week's progress to fall out of step with the workspace.
+//
+// Every read and write below is scoped to `user.id`. There is no route here
+// that returns, or writes, another founder's cadence.
+// ---------------------------------------------------------------------------
+
+let _studioOpsSchemaReady = false;
+/** Self-heal on a cold isolate (sql/spinout_lab_studio_ops.sql is canonical). */
+async function ensureStudioOpsSchema(env: Env): Promise<void> {
+  if (_studioOpsSchemaReady) return;
+  await env.DB.exec(
+    'CREATE TABLE IF NOT EXISTS spinout_lab_studio_ops ('
+    + 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+    + 'user_id INTEGER NOT NULL, '
+    + 'week INTEGER NOT NULL, '
+    + "cadence TEXT NOT NULL DEFAULT '[]', "
+    + 'cadence_locked_at TEXT, '
+    + "review TEXT NOT NULL DEFAULT '{}', "
+    + 'review_completed_at TEXT, '
+    + "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+    + "updated_at TEXT NOT NULL DEFAULT (datetime('now'))"
+    + ')',
+  );
+  await env.DB.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_spinout_lab_studio_ops_user_week '
+    + 'ON spinout_lab_studio_ops(user_id, week)',
+  );
+  _studioOpsSchemaReady = true;
+}
+
+type StudioOpsRow = {
+  week: number;
+  cadence: string;
+  cadence_locked_at: string | null;
+  review: string;
+  review_completed_at: string | null;
+};
+
+/** The caller's current program week, clamped to the 1-4 sprint. */
+async function currentWeek(env: Env, userId: number): Promise<number> {
+  const row = await env.DB.prepare(
+    'SELECT spinout_lab_week FROM users WHERE id = ?',
+  ).bind(userId).first<{ spinout_lab_week: number | null }>();
+  const w = Number(row?.spinout_lab_week ?? 1);
+  return Number.isFinite(w) ? Math.min(4, Math.max(1, w)) : 1;
+}
+
+async function loadStudioOps(env: Env, userId: number, week: number) {
+  const {
+    seedCadence, emptyReview, parseCadence, parseReview, readJsonColumn,
+  } = await import('../services/studioOpsCadence');
+
+  const row = await env.DB.prepare(
+    'SELECT week, cadence, cadence_locked_at, review, review_completed_at '
+    + 'FROM spinout_lab_studio_ops WHERE user_id = ? AND week = ?',
+  ).bind(userId, week).first<StudioOpsRow>();
+
+  if (row) {
+    const parsed = parseCadence(readJsonColumn(row.cadence, []));
+    return {
+      week,
+      cadence: parsed.ok ? parsed.value : seedCadence(null),
+      cadence_locked: Boolean(row.cadence_locked_at),
+      cadence_locked_at: row.cadence_locked_at,
+      review: parseReview(readJsonColumn(row.review, emptyReview())),
+      review_completed: Boolean(row.review_completed_at),
+      review_completed_at: row.review_completed_at,
+      saved: true,
+    };
+  }
+
+  // No row for this week yet: offer the previous week's rhythm (demoted to
+  // Proposed by seedCadence) so re-affirming is one click, and the starter
+  // cadence when there is no previous week either. Nothing is written here —
+  // an unsaved suggestion must not read back as a commitment the founder made.
+  const prior = await env.DB.prepare(
+    'SELECT cadence FROM spinout_lab_studio_ops '
+    + 'WHERE user_id = ? AND week < ? ORDER BY week DESC LIMIT 1',
+  ).bind(userId, week).first<{ cadence: string }>();
+  const priorParsed = prior ? parseCadence(readJsonColumn(prior.cadence, [])) : null;
+
+  return {
+    week,
+    cadence: seedCadence(priorParsed?.ok ? priorParsed.value : null),
+    cadence_locked: false,
+    cadence_locked_at: null,
+    review: emptyReview(),
+    review_completed: false,
+    review_completed_at: null,
+    saved: false,
+  };
+}
+
+// GET /studio-ops — the caller's cadence + closeout for their current week.
+spinoutLab.get('/studio-ops', async (c) => {
+  const user = await requireAuth(c);
+  try {
+    await ensureStudioOpsSchema(c.env);
+    const week = await currentWeek(c.env, user.id);
+    return c.json({ ok: true, ...(await loadStudioOps(c.env, user.id, week)) });
+  } catch (e) {
+    console.error('[spinout-lab/studio-ops] load failed:', (e as Error).message);
+    return c.json({ error: 'Could not load your operating cadence.' }, 503);
+  }
+});
+
+type CadenceBody = { cadence?: unknown; lock?: unknown };
+
+// PUT /studio-ops/cadence — save the week's rhythm, optionally locking it.
+//
+// Locking is what records `studio_ops_cadence_set`: the Week-2 deliverable is
+// "cadence set", and a draft the founder is still editing is not that. Saving
+// without locking deliberately records nothing.
+spinoutLab.put('/studio-ops/cadence', async (c) => {
+  const user = await requireAuth(c);
+  const body = (await c.req.json().catch(() => ({}))) as CadenceBody;
+  const { parseCadence, lockCadence } = await import('../services/studioOpsCadence');
+
+  const parsed = parseCadence(body.cadence);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+
+  try {
+    await ensureStudioOpsSchema(c.env);
+    const week = await currentWeek(c.env, user.id);
+    const wantsLock = body.lock === true;
+    const items = wantsLock ? lockCadence(parsed.value) : parsed.value;
+
+    await c.env.DB.prepare(
+      'INSERT INTO spinout_lab_studio_ops (user_id, week, cadence, cadence_locked_at, updated_at) '
+      + "VALUES (?, ?, ?, ?, datetime('now')) "
+      + 'ON CONFLICT(user_id, week) DO UPDATE SET '
+      + 'cadence = excluded.cadence, '
+      // COALESCE keeps the ORIGINAL lock timestamp: editing a locked cadence
+      // must not silently restamp when the rhythm was committed to.
+      + 'cadence_locked_at = COALESCE(spinout_lab_studio_ops.cadence_locked_at, excluded.cadence_locked_at), '
+      + "updated_at = datetime('now')",
+    ).bind(
+      user.id, week, JSON.stringify(items),
+      wantsLock ? new Date().toISOString() : null,
+    ).run();
+
+    // Best-effort, and deliberately after the write: a founder's cadence must
+    // not fail to save because the milestone insert did. `recordMilestone` is
+    // idempotent, so re-locking never double-records.
+    if (wantsLock) {
+      try {
+        const sql = getSQL(c.env);
+        await recordMilestone(sql, user.id, 'studio_ops_cadence_set');
+        await sql.end();
+      } catch (e) {
+        console.error('[spinout-lab/studio-ops] milestone failed:', (e as Error).message);
+      }
+    }
+
+    return c.json({ ok: true, ...(await loadStudioOps(c.env, user.id, week)) });
+  } catch (e) {
+    console.error('[spinout-lab/studio-ops] cadence save failed:', (e as Error).message);
+    return c.json({ error: 'Could not save your operating cadence. Please try again.' }, 500);
+  }
+});
+
+type ReviewBody = { review?: unknown; complete?: unknown };
+
+// PUT /studio-ops/review — save the week's closeout, optionally completing it.
+spinoutLab.put('/studio-ops/review', async (c) => {
+  const user = await requireAuth(c);
+  const body = (await c.req.json().catch(() => ({}))) as ReviewBody;
+  const { parseReview, reviewHasContent } = await import('../services/studioOpsCadence');
+
+  const review = parseReview(body.review);
+  const wantsComplete = body.complete === true;
+  // An empty closeout marked "complete" is a checkbox, not a review — the
+  // point of the ritual is the writing, so refuse rather than record it.
+  if (wantsComplete && !reviewHasContent(review)) {
+    return c.json({ error: 'Write at least one line before completing the review.' }, 400);
+  }
+
+  try {
+    await ensureStudioOpsSchema(c.env);
+    const week = await currentWeek(c.env, user.id);
+    await c.env.DB.prepare(
+      'INSERT INTO spinout_lab_studio_ops (user_id, week, review, review_completed_at, updated_at) '
+      + "VALUES (?, ?, ?, ?, datetime('now')) "
+      + 'ON CONFLICT(user_id, week) DO UPDATE SET '
+      + 'review = excluded.review, '
+      + 'review_completed_at = COALESCE(spinout_lab_studio_ops.review_completed_at, excluded.review_completed_at), '
+      + "updated_at = datetime('now')",
+    ).bind(
+      user.id, week, JSON.stringify(review),
+      wantsComplete ? new Date().toISOString() : null,
+    ).run();
+
+    return c.json({ ok: true, ...(await loadStudioOps(c.env, user.id, week)) });
+  } catch (e) {
+    console.error('[spinout-lab/studio-ops] review save failed:', (e as Error).message);
+    return c.json({ error: 'Could not save your weekly review. Please try again.' }, 500);
+  }
+});
+
 spinoutLab.get('/state', async (c) => {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
@@ -284,14 +494,52 @@ spinoutLab.get('/state', async (c) => {
   let cohort: string | null = null;
   try {
     const rows = (await sql`
-      SELECT spinout_lab_admitted, spinout_lab_cohort FROM users WHERE id = ${user.id}
+      SELECT spinout_lab_admitted, spinout_lab_cohort FROM user_spinout_flags WHERE user_id = ${user.id}
     `) as Array<{ spinout_lab_admitted: number | null; spinout_lab_cohort: string | null }>;
     admitted = Number(rows[0]?.spinout_lab_admitted ?? 0) === 1;
     cohort = rows[0]?.spinout_lab_cohort ?? null;
   } catch { /* columns not yet migrated */ }
   await sql.end();
   const application = await latestApplication(c.env, user.id);
-  return c.json({ ...state, admitted, cohort, application });
+  // Cohort timing gate — added at the wire layer (same rule as the
+  // admission fields above: never inside getLabState, so the exact-slice
+  // test harness stays intact). Null for legacy founders whose sprint
+  // predates the calendar system. `unlocked_features` is re-capped by the
+  // gate's max_week so calendar/freeze enforcement is server-side.
+  let cohortTiming: import('../services/cohortTiming').CohortGate | null = null;
+  try {
+    const { getCohortGate } = await import('../services/cohortTiming');
+    cohortTiming = await getCohortGate(c.env, user.id);
+  } catch { /* tables not yet migrated */ }
+  // Task #5 — application-window info (wire-layer only, never in
+  // getLabState): which cohort a new application would land in and when
+  // its window closes, so the apply page can show real deadlines.
+  let applicationWindow: Record<string, unknown> | null = null;
+  try {
+    const { resolveApplicationTarget, monthLabel } = await import('../services/cohortApplications');
+    const t = resolveApplicationTarget(Date.now());
+    if (t.ok) {
+      applicationWindow = {
+        year: t.year, month: t.month,
+        label: monthLabel(t.year, t.month),
+        opens_at: new Date(t.window.openMs).toISOString(),
+        closes_at: new Date(t.window.closeMs).toISOString(),
+        starts_at: new Date(t.window.startMs).toISOString(),
+      };
+    }
+  } catch { /* service not available */ }
+  const payload: Record<string, unknown> = {
+    ...state, admitted, cohort, application,
+    cohort_timing: cohortTiming,
+    application_window: applicationWindow,
+    server_time: new Date().toISOString(),
+  };
+  if (cohortTiming) {
+    const cap = Math.min(state.week, cohortTiming.max_week);
+    payload.week = cap;
+    payload.unlocked_features = unlockedFeaturesThrough(cap);
+  }
+  return c.json(payload);
 });
 
 // POST /apply — submit a cohort application. Signed-in founders only, so no
@@ -305,6 +553,7 @@ type ApplyBody = {
   stage?: unknown;
   jurisdiction?: unknown;
   cohort?: unknown;
+  target_cycle?: unknown; // Task #5 — optional {year, month} the applicant is targeting
 };
 
 spinoutLab.post('/apply', async (c) => {
@@ -322,12 +571,35 @@ spinoutLab.post('/apply', async (c) => {
   const incorporated = (typeof body.incorporated === 'string' && body.incorporated.toLowerCase() === 'yes') ? 'yes' : 'no';
   const stage = (typeof body.stage === 'string' ? body.stage : '').trim().slice(0, 100) || null;
   const jurisdiction = (typeof body.jurisdiction === 'string' ? body.jurisdiction : '').trim().slice(0, 100) || null;
-  const cohort = ((typeof body.cohort === 'string' && body.cohort.trim()) || 'Cohort 4').slice(0, 50);
+  // Task #5 — hard deadline enforcement at the API. Applications close
+  // 7 days before the 1st at 23:59:59 America/New_York (DST-correct).
+  // A submission targeting a closed cycle is rejected outright; without
+  // an explicit target it lands in the earliest still-open cycle.
+  let targetCycle: { year: number; month: number } | null = null;
+  let targetLabel: string | null = null;
+  try {
+    const { resolveApplicationTarget, monthLabel } = await import('../services/cohortApplications');
+    const raw = body.target_cycle as { year?: unknown; month?: unknown } | undefined;
+    const requested = raw && Number.isFinite(Number(raw.year)) && Number.isFinite(Number(raw.month))
+      ? { year: Number(raw.year), month: Number(raw.month) } : null;
+    const t = resolveApplicationTarget(Date.now(), requested);
+    if (!t.ok) {
+      return c.json({
+        error: `Applications for the ${monthLabel(t.closed.year, t.closed.month)} cohort are closed — you're eligible for the ${monthLabel(t.next.year, t.next.month)} cohort.`,
+        next_cycle: { year: t.next.year, month: t.next.month, label: monthLabel(t.next.year, t.next.month), closes_at: new Date(t.next.window.closeMs).toISOString() },
+      }, 403);
+    }
+    targetCycle = { year: t.year, month: t.month };
+    targetLabel = monthLabel(t.year, t.month);
+  } catch { /* deadline service unavailable — legacy behavior */ }
+
+  const cohort = (targetLabel && `${targetLabel} Cohort`)
+    || ((typeof body.cohort === 'string' && body.cohort.trim()) || 'Cohort 4').slice(0, 50);
 
   await ensureApplicationsTable(c.env);
   try {
     const u = await c.env.DB.prepare(
-      `SELECT spinout_lab_admitted FROM users WHERE id = ?`,
+      `SELECT spinout_lab_admitted FROM user_spinout_flags WHERE user_id = ?`,
     ).bind(user.id).first<{ spinout_lab_admitted: number | null }>();
     if (Number(u?.spinout_lab_admitted ?? 0) === 1) {
       return c.json({ error: 'You are already admitted to the Lab' }, 409);
@@ -349,6 +621,20 @@ spinoutLab.post('/apply', async (c) => {
   ).bind(user.id, company, idea, incorporated, stage, jurisdiction, cohort, user.id).run();
   if ((ins.meta?.changes ?? 1) === 0) {
     return c.json({ error: 'You already have an application in review' }, 409);
+  }
+
+  // Task #5 — pin the application to its target cycle so the close/
+  // capacity/activation jobs know exactly which pool it belongs to.
+  if (targetCycle) {
+    try {
+      const { ensureCohortAppSchema, ensureCycleWithWindow, assignApplicationToCycle } = await import('../services/cohortApplications');
+      await ensureCohortAppSchema(c.env);
+      const cyc = await ensureCycleWithWindow(c.env, targetCycle.year, targetCycle.month);
+      const appRow = await latestApplication(c.env, user.id);
+      if (cyc && appRow) await assignApplicationToCycle(c.env, Number((appRow as { id: number }).id), user.id, cyc.id);
+    } catch (e) {
+      console.error('[spinout-lab/apply] cycle assignment failed', e);
+    }
   }
 
   let emailed = false;
@@ -382,10 +668,55 @@ spinoutLab.post('/milestone', async (c) => {
   const user = await requireAuth(c);
   const body = (await c.req.json().catch(() => ({}))) as MilestoneBody;
   const key = typeof body.milestone_key === 'string' ? body.milestone_key : '';
+  // Cohort week gating — enforced at the wire layer (keeps the pure
+  // recordMilestone logic sliceable by the test harness). A founder may
+  // only record milestones for weeks at or below their gate's max_week:
+  // calendar-locked future weeks and weeks beyond a failed (frozen) week
+  // are rejected with 423 Locked.
+  try {
+    const { getCohortGate } = await import('../services/cohortTiming');
+    const gate = await getCohortGate(c.env, user.id);
+    if (gate) {
+      // A failed (frozen) founder can record NOTHING — not even the frozen
+      // week — otherwise recordMilestone's auto-advance loop could bump
+      // users.spinout_lab_week and bypass the freeze at the data layer.
+      // Unfreezing requires an admin grace extension or force-pass.
+      if (gate.frozen) {
+        return c.json({
+          error: `Your sprint is paused at Week ${gate.frozen_week} pending admin review — deliverables can't be recorded until an admin grants a grace extension or an override.`,
+          locked: true, max_week: gate.max_week,
+        }, 423);
+      }
+      const keyWeek = weekForKey((key ?? '').trim());
+      if (keyWeek && keyWeek > gate.max_week) {
+        const why = gate.frozen
+          ? `Your sprint is paused at Week ${gate.frozen_week} pending admin review.`
+          : `Week ${keyWeek} unlocks on schedule — it is locked until ${gate.weeks.find((w) => w.week === keyWeek)?.unlock_at ?? 'its unlock time'} UTC.`;
+        return c.json({ error: `Week ${keyWeek} is locked. ${why}`, locked: true, max_week: gate.max_week }, 423);
+      }
+    }
+  } catch { /* gate unavailable (pre-migration) — legacy behavior */ }
   const sql = getSQL(c.env);
   const r = await recordMilestone(sql, user.id, key);
   await sql.end();
   if (!r.ok) return c.json({ error: r.error }, r.status);
+
+  // Graduation issues the credential. `incorporation_completed` is already
+  // the definition of "graduated" everywhere else (public graduate list,
+  // /stats, week-4 gating), so keying issuance on the same row avoids
+  // inventing a second, competing definition.
+  //
+  // Deliberately after recordMilestone and outside its transaction: a founder
+  // finishing the program must not have their completion rejected because a
+  // certificate insert failed. issueOnGraduation never throws and is
+  // idempotent, and the backfill picks up anything it missed.
+  if (key === 'incorporation_completed') {
+    try {
+      const { issueOnGraduation } = await import('../services/certificateIssuance');
+      await issueOnGraduation(c.env, user.id);
+    } catch { /* issuance is best-effort — never blocks graduation */ }
+  }
+
   return c.json(r.state);
 });
 
@@ -423,10 +754,11 @@ spinoutLab.get('/graduates', async (c) => {
   let rows: GraduateRow[] = [];
   try {
     const res = await c.env.DB.prepare(
-      `SELECT m.user_id, m.completed_at, u.spinout_lab_cohort AS cohort,
+      `SELECT m.user_id, m.completed_at, usf.spinout_lab_cohort AS cohort,
               p.uid, p.name, p.sector, p.stage, p.status, p.total_funding, p.last_funding_round
        FROM spinout_lab_milestones m
        JOIN users u ON u.id = m.user_id
+       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
        LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
        WHERE m.milestone_key = 'incorporation_completed'
        ORDER BY m.completed_at DESC, p.id ASC`,
@@ -569,9 +901,10 @@ spinoutLab.get('/cohort', async (c) => {
   try {
     const res = await c.env.DB.prepare(
       `SELECT u.id AS user_id, u.spinout_lab_week AS week,
-              u.spinout_lab_started_at AS started_at, u.spinout_lab_cohort AS cohort,
+              u.spinout_lab_started_at AS started_at, usf.spinout_lab_cohort AS cohort,
               p.name, p.sector
        FROM users u
+       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
        LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
        WHERE u.spinout_lab_active = 1
        ORDER BY u.spinout_lab_started_at ASC, p.id ASC`,
@@ -603,9 +936,10 @@ spinoutLab.get('/cohort', async (c) => {
   try {
     const res = await c.env.DB.prepare(
       `SELECT m.user_id, m.completed_at, u.spinout_lab_started_at AS started_at,
-              u.spinout_lab_cohort AS cohort, p.name, p.sector
+              usf.spinout_lab_cohort AS cohort, p.name, p.sector
        FROM spinout_lab_milestones m
        JOIN users u ON u.id = m.user_id
+       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
        LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
        WHERE m.milestone_key = 'incorporation_completed'
          AND datetime(m.completed_at) >= datetime('now', '-45 days')
@@ -639,6 +973,231 @@ spinoutLab.get('/cohort', async (c) => {
     if (gradSeen.size >= 8) break;
   }
   return c.json(members);
+});
+
+// GET /fund-metrics — auth-gated: live program + raise numbers for the LP &
+// Investor Workspace. Program figures come from real graduate rows (the same
+// week-4 `incorporation_completed` signal /stats uses, plus on-time timing
+// against `spinout_lab_started_at`); raise figures aggregate the Spin-Out
+// fund's own `limited_partners` rows. Aggregation lives in
+// services/spinoutFundMetrics.ts (pure, tested); this handler only queries.
+// Each block carries `available` so the SPA can fall back to its
+// operator-maintained model with honest provenance instead of rendering
+// zeros as facts. Never throws — a missing table answers `available: false`.
+spinoutLab.get('/fund-metrics', async (c) => {
+  const user = await requireAuth(c);
+  const { summarizeGraduates, summarizeLpRows } = await import('../services/spinoutFundMetrics');
+
+  let program: import('../services/spinoutFundMetrics').ProgramSummary = {
+    available: false, graduates: 0, on_time_pct: null, alumni_raised: null,
+    entrants: null, incorporation_pct: null, verified_discovery_pct: null,
+    revenue_proof_pct: null, formation_velocity_days: null,
+    graduation_to_investment_pct: null,
+  };
+  try {
+    // One row per graduate (a founder with the week-4 incorporation
+    // milestone), carrying the evidence each studio-throughput tile needs.
+    // Correlated subqueries rather than joins: a founder with 18 interviews
+    // and 3 portfolio positions must stay ONE row, or every aggregate would
+    // be multiplied by the fan-out. `ORDER BY p.id` keeps the first project
+    // per user deterministic, matching GET /stats.
+    const res = await c.env.DB.prepare(
+      `SELECT m.user_id, m.completed_at, u.spinout_lab_started_at AS started_at,
+              p.total_funding, p.revenue, p.mrr, p.paying_customers,
+              p.paid_pilot_status,
+              (SELECT COUNT(*) FROM discovery_interviews di
+                WHERE di.project_id = p.id) AS interview_count,
+              (SELECT COUNT(*) FROM portfolio_positions pp
+                WHERE pp.project_id = p.id) AS backed
+       FROM spinout_lab_milestones m
+       JOIN users u ON u.id = m.user_id
+       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
+       WHERE m.milestone_key = 'incorporation_completed'
+       ORDER BY m.user_id ASC, p.id ASC`,
+    ).all<import('../services/spinoutFundMetrics').GraduateTimingRow>();
+
+    // The incorporation-rate DENOMINATOR: everyone who ever started the Lab.
+    // Counted separately (not derivable from the graduate rows) and left null
+    // on failure, so the rate degrades to "unmeasured" rather than to a
+    // fabricated 100%.
+    let entrants: number | null = null;
+    try {
+      const e = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM users WHERE spinout_lab_started_at IS NOT NULL`,
+      ).first<{ n: number }>();
+      const n = Number(e?.n ?? NaN);
+      if (Number.isFinite(n)) entrants = n;
+    } catch { /* column predates the Lab migrations */ }
+
+    program = summarizeGraduates(res.results ?? [], SPRINT_DAYS, entrants);
+  } catch { /* tables predate the Lab migrations */ }
+
+  // The fund this workspace reports on — resolved by slug, not name, for the
+  // same rename-safety reason the SPA's SPINOUT_FUND_SLUG comment gives.
+  //
+  // Raise aggregates (committed, soft-circled, LP count, median ticket) are
+  // capital-side facts, so they are scoped beyond bare authentication:
+  // admin/partner/investor roles see them, as does any caller who actually
+  // holds an LP row in this fund. Everyone else gets `available: false` and
+  // the SPA's operator-maintained figures — exactly what such a viewer saw
+  // before this endpoint existed, so nothing is newly exposed to founders or
+  // guests. The program block above stays role-free: it is the same
+  // graduate-level data the public GET /stats already serves.
+  let fund: Record<string, unknown> = { available: false };
+  try {
+    const { Funds } = await import('../models/funds');
+    const row = await Funds.bySlug(c.env, 'spinout-fund-i');
+    let entitled = ['admin', 'partner', 'investor'].includes(user?.role);
+    if (row && !entitled) {
+      const mine = await c.env.DB.prepare(
+        `SELECT 1 FROM limited_partners WHERE fund_id = ? AND (user_id = ? OR LOWER(email) = LOWER(?)) LIMIT 1`,
+      ).bind(row.id, user.id, user.email ?? '').first();
+      entitled = !!mine;
+    }
+    if (row && entitled) {
+      const lps = await c.env.DB.prepare(
+        `SELECT commitment_amount, lpa_signed FROM limited_partners WHERE fund_id = ?`,
+      ).bind(row.id).all<import('../services/spinoutFundMetrics').LpCommitmentRow>();
+      fund = {
+        available: true,
+        fund_id: row.id,
+        name: row.name,
+        slug: row.slug,
+        // Fund size (target) is the v2 `fund_size_cents` column —
+        // `total_commitment` is aggregated LP commitments, which would make
+        // the raise bar read 100% by definition. Null falls back to the
+        // operator-stated target in the SPA.
+        target: Number(row.fund_size_cents || 0) > 0 ? Number(row.fund_size_cents) / 100 : null,
+        ...summarizeLpRows(lps.results ?? []),
+      };
+    }
+  } catch { /* fund tables absent or pre-slug */ }
+
+  return c.json({ ok: true, program, fund });
+});
+
+// ---------------------------------------------------------------------------
+// LP applications — the Spin-Out Fund I request-for-access flow.
+//
+// The workspace's application step used to be a dead end: no endpoint, so the
+// page routed applicants through support and said so. These two routes are
+// that endpoint.
+//
+// SECURITY MODEL. An application is an expression of interest, NOT an
+// entitlement. Nothing reads this table to decide what a viewer may see — the
+// access ladder derives from `limited_partners` rows via lpAccessState(), and a
+// submitted application only moves a viewer from 'visitor' to 'pending', which
+// unlocks nothing at all. That is what makes it safe for the applicant to be
+// the author of their own row: the worst a hostile submitter achieves is
+// telling the GP they are interested. Every read and write below is scoped to
+// `user.id` — no route here returns anyone else's application.
+// ---------------------------------------------------------------------------
+
+const LP_FUND_SLUG = 'spinout-fund-i';
+
+/** Self-heal on a cold isolate (migration 165 is the canonical DDL). */
+let _lpAppSchemaReady = false;
+async function ensureLpApplicationsSchema(env: Env): Promise<void> {
+  if (_lpAppSchemaReady) return;
+  await env.DB.exec(
+    'CREATE TABLE IF NOT EXISTS lp_applications ('
+    + 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+    + 'user_id INTEGER NOT NULL, '
+    + "fund_slug TEXT NOT NULL DEFAULT 'spinout-fund-i', "
+    + 'investor_type TEXT NOT NULL, '
+    + 'target_commitment REAL, '
+    + "preference_areas TEXT NOT NULL DEFAULT '[]', "
+    + 'accredited INTEGER NOT NULL DEFAULT 0, '
+    + 'note TEXT, '
+    + "status TEXT NOT NULL DEFAULT 'pending', "
+    + 'reviewed_by INTEGER, '
+    + 'reviewed_at TEXT, '
+    + 'review_note TEXT, '
+    + "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+    + "updated_at TEXT NOT NULL DEFAULT (datetime('now'))"
+    + ')',
+  );
+  await env.DB.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_lp_applications_user_fund '
+    + 'ON lp_applications(user_id, fund_slug)',
+  );
+  _lpAppSchemaReady = true;
+}
+
+// GET /lp-application — the caller's own application, or null.
+spinoutLab.get('/lp-application', async (c) => {
+  const user = await requireAuth(c);
+  const { presentLpApplication } = await import('../services/lpApplications');
+  try {
+    await ensureLpApplicationsSchema(c.env);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM lp_applications WHERE user_id = ? AND fund_slug = ?',
+    ).bind(user.id, LP_FUND_SLUG).first<any>();
+    return c.json({ ok: true, application: presentLpApplication(row) });
+  } catch {
+    // A store that cannot be read must not read as "never applied" — that
+    // would invite a duplicate submission and show the form to someone who
+    // already used it. Say so instead.
+    return c.json({ error: 'Could not load your application status.' }, 503);
+  }
+});
+
+// POST /lp-application — submit or update the caller's own application.
+//
+// Upsert on (user_id, fund_slug): re-submitting edits the existing row rather
+// than stacking duplicates in the GP's queue. An application already APPROVED
+// or DECLINED is not re-openable by the applicant — that is the GP's decision
+// to revisit, so a resubmission after review is refused with a 409 rather than
+// silently resetting the row to pending.
+spinoutLab.post('/lp-application', async (c) => {
+  const user = await requireAuth(c);
+  const { validateLpApplication, presentLpApplication } = await import('../services/lpApplications');
+
+  let body: unknown = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+  const parsed = validateLpApplication(body);
+  if (!parsed.ok) {
+    return c.json({ error: parsed.errors.join(' '), errors: parsed.errors }, 400);
+  }
+
+  try {
+    await ensureLpApplicationsSchema(c.env);
+    const existing = await c.env.DB.prepare(
+      'SELECT status FROM lp_applications WHERE user_id = ? AND fund_slug = ?',
+    ).bind(user.id, LP_FUND_SLUG).first<{ status: string }>();
+    if (existing && (existing.status === 'approved' || existing.status === 'declined')) {
+      return c.json({
+        error: `Your application has already been ${existing.status}. Contact the fund team to revisit it.`,
+        status: existing.status,
+      }, 409);
+    }
+
+    const v = parsed.value;
+    await c.env.DB.prepare(
+      'INSERT INTO lp_applications '
+      + '(user_id, fund_slug, investor_type, target_commitment, preference_areas, accredited, note, status, updated_at) '
+      + "VALUES (?, ?, ?, ?, ?, 1, ?, 'pending', datetime('now')) "
+      + 'ON CONFLICT(user_id, fund_slug) DO UPDATE SET '
+      + 'investor_type = excluded.investor_type, '
+      + 'target_commitment = excluded.target_commitment, '
+      + 'preference_areas = excluded.preference_areas, '
+      + 'accredited = excluded.accredited, '
+      + 'note = excluded.note, '
+      + "status = 'pending', "
+      + "updated_at = datetime('now')",
+    ).bind(
+      user.id, LP_FUND_SLUG, v.investor_type, v.target_commitment,
+      JSON.stringify(v.preference_areas), v.note,
+    ).run();
+
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM lp_applications WHERE user_id = ? AND fund_slug = ?',
+    ).bind(user.id, LP_FUND_SLUG).first<any>();
+    return c.json({ ok: true, application: presentLpApplication(row) });
+  } catch (e) {
+    console.error('[spinout-lab] lp-application submit failed:', (e as Error).message);
+    return c.json({ error: 'Could not submit your application. Please try again.' }, 500);
+  }
 });
 
 export default spinoutLab;

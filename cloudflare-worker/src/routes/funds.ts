@@ -17,8 +17,23 @@ import { enqueueJob } from '../services/queue';
 import { Distributions } from '../models/distributions';
 import { logActivity } from './partnernet';
 import { clampLimit } from '../util/pagination';
+import { ensureFundGpColumns } from '../services/fundGpSchema';
 
 const funds = new Hono<{ Bindings: Env }>();
+
+/** GP narrative for a period. Prose is authored, never generated. */
+interface PeriodNarrative {
+  letter?: string[];
+  developments?: Array<{ date: string; title: string; body: string }>;
+  outlook?: string[];
+  subsequent?: Array<{ d: string; e: string }>;
+}
+
+const parseJson = <T,>(raw: unknown, fallback: T): T => {
+  if (typeof raw !== 'string' || !raw) return fallback;
+  try { return JSON.parse(raw) as T; } catch { return fallback; }
+};
+
 
 // ---------- vc_funds CRUD ----------
 funds.get('/', async (c) => {
@@ -31,6 +46,9 @@ funds.get('/', async (c) => {
 funds.get('/lp-portal', async (c) => {
   // LP-only self-view: own commitments, capital calls, distributions, performance.
   const user = await requireAuth(c);
+  // listByUser selects the fund's GP-of-record and service-provider columns so a
+  // quarterly report can name the responsible fiduciary without an admin call.
+  await ensureFundGpColumns(c.env);
   const my = await LPs.listByUser(c.env, user.id);
   const lpRows: any[] = my.results || [];
 
@@ -58,6 +76,7 @@ funds.get('/lp-portal', async (c) => {
       lp_id: lp.id,
       fund_id: lp.fund_id,
       fund_name: lp.fund_name,
+      fund_slug: lp.fund_slug ?? null,
       commitment: invested + Math.max(0, Number(lp.commitment_amount || 0) - invested),
       invested_amount: invested,
       returns: returns,
@@ -65,6 +84,7 @@ funds.get('/lp-portal', async (c) => {
       tvpi: Number(tvpi.toFixed(3)),
       dpi: Number(dpi.toFixed(3)),
       lpa_signed: !!lp.lpa_signed,
+      commitment_date: lp.commitment_date ?? null,
     };
   });
 
@@ -74,8 +94,77 @@ funds.get('/lp-portal', async (c) => {
     capital_calls: calls.results || [],
     distributions: distRows,
     performance: perfByLp,
+    // The signer and the firms an LP-facing document names, per fund the caller
+    // actually holds. Absent values stay null — the document says "not
+    // recorded" rather than naming a fiduciary the database has not been told
+    // about. See migration 163.
+    funds: fundFacts(lpRows),
+    // Who the report is for. The caller's own account, echoed so the document
+    // never has to guess a name from a session the renderer cannot see.
+    recipient: { name: user.name ?? null, email: user.email ?? null },
+    // ISSUED periods only, for the funds this caller actually holds. The report
+    // archive lists these; a draft period is the GP's working copy and is not an
+    // LP-facing document until it is issued.
+    report_periods: await issuedPeriods(c.env, lpRows.map((r: any) => r.fund_id)),
   });
 });
+
+/** Issued reporting periods for the given funds, newest first. */
+async function issuedPeriods(env: Env, fundIds: number[]) {
+  const ids = [...new Set(fundIds.filter((n) => Number.isFinite(n)))];
+  if (!ids.length) return [];
+  const marks = ids.map(() => '?').join(',');
+  // `notes` carries the GP's letter and commentary for the period. It travels
+  // with an ISSUED period on purpose: that letter is the document. `snapshot_json`
+  // is deliberately NOT selected — it is the GP's frozen working copy of
+  // fund-level figures, and the LP's report is rendered from the same live model
+  // the workspace shows them.
+  const r = await env.DB.prepare(
+    `SELECT id, fund_id, period, period_start, period_end, issued_at, status, notes
+       FROM fund_report_periods
+      WHERE fund_id IN (${marks}) AND status = 'issued'
+      ORDER BY period_end DESC LIMIT 40`
+  ).bind(...ids).all().catch(() => ({ results: [] }));
+  return (r.results || []).map((row: any) => ({
+    ...row,
+    notes: undefined,
+    narrative: parseJson<PeriodNarrative>(row?.notes, {}),
+  }));
+}
+
+/**
+ * Per-fund GP-of-record + provider facts, keyed by fund id, from rows that
+ * already carry them (LPs.listByUser joins vc_funds). Shared by the LP self-view
+ * and the GP's per-LP report endpoint so both documents state the same thing.
+ */
+function fundFacts(rows: any[]) {
+  const out: Record<string, any> = {};
+  for (const r of rows) {
+    if (out[r.fund_id]) continue;
+    out[r.fund_id] = {
+      fund_id: r.fund_id,
+      name: r.fund_name ?? null,
+      slug: r.fund_slug ?? null,
+      vintage_year: r.fund_vintage ?? null,
+      management_fee: r.management_fee ?? null,
+      carried_interest: r.carried_interest ?? null,
+      gp: {
+        name: r.gp_name ?? null,
+        title: r.gp_title ?? null,
+        email: r.gp_email ?? null,
+        entity: r.gp_entity ?? null,
+      },
+      providers: {
+        fund_admin: r.fund_admin ?? null,
+        auditor: r.auditor ?? null,
+        legal_counsel: r.legal_counsel ?? null,
+        custodian: r.custodian ?? null,
+        valuation_policy: r.valuation_policy ?? null,
+      },
+    };
+  }
+  return out;
+}
 
 funds.get('/syndication', async (c) => {
   // Lightweight co-invest opportunities: open marketplace listings + pending capital calls.
@@ -222,6 +311,186 @@ funds.get('/:id/lps', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const r = await LPs.listByFund(c.env, id);
   return c.json({ ok: true, items: r.results || [] });
+});
+
+// ---------- quarterly reporting periods ----------
+//
+// A period row is what makes a quarterly report REPRODUCIBLE. The capital
+// account can be reconstructed as-of any date from dated capital_calls and
+// fund_distributions rows, but portfolio MARKS cannot — position values live in
+// an operator-maintained model with no history — so a report re-rendered next
+// year under an old heading would silently carry today's marks. Issuing a period
+// freezes the fund-level figures into `snapshot_json`, and the GP's own
+// commentary into `notes`, so every later download of that period is the
+// document that was actually sent.
+//
+// Until a period is issued, every report generated for it is a DRAFT: the
+// renderer marks it as such, because a report with no GP letter is not a report
+// a fiduciary has stood behind.
+
+const shapePeriod = (row: any) => ({
+  ...row,
+  narrative: parseJson<PeriodNarrative>(row?.notes, {}),
+  snapshot: parseJson<Record<string, unknown> | null>(row?.snapshot_json, null),
+});
+
+funds.get('/:id/report-periods', async (c) => {
+  await requireAdmin(c);
+  await ensureFundGpColumns(c.env);
+  const fundId = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(fundId)) return c.json({ error: 'bad id' }, 400);
+  const r = await c.env.DB.prepare(
+    `SELECT * FROM fund_report_periods WHERE fund_id = ? ORDER BY period_end DESC LIMIT 40`
+  ).bind(fundId).all().catch(() => ({ results: [] }));
+  return c.json({ ok: true, items: (r.results || []).map(shapePeriod) });
+});
+
+/**
+ * Create or update a reporting period, and optionally issue it.
+ *
+ * Issuing is one-way on purpose: once `status = 'issued'`, the snapshot and the
+ * narrative are the record of what LPs received. A later edit would rewrite
+ * history under a document already in an LP's inbox, so the route refuses it
+ * and asks for a correcting period instead.
+ */
+funds.post('/:id/report-periods', async (c) => {
+  const admin = await requireAdmin(c);
+  await ensureFundGpColumns(c.env);
+  const fundId = parseInt(c.req.param('id'), 10);
+  if (!Number.isFinite(fundId)) return c.json({ error: 'bad id' }, 400);
+
+  const body = await c.req.json().catch(() => ({} as any));
+  const period = String(body?.period || '').trim();
+  const periodStart = String(body?.period_start || '').trim();
+  const periodEnd = String(body?.period_end || '').trim();
+  if (!period || !periodStart || !periodEnd) {
+    return c.json({ error: 'period, period_start and period_end are required' }, 400);
+  }
+  if (periodEnd < periodStart) return c.json({ error: 'period_end precedes period_start' }, 400);
+
+  const existing: any = await c.env.DB.prepare(
+    `SELECT * FROM fund_report_periods WHERE fund_id = ? AND period = ?`
+  ).bind(fundId, period).first();
+  if (existing?.status === 'issued') {
+    return c.json({ error: 'period already issued — issue a correcting period instead' }, 409);
+  }
+
+  const notes = body?.narrative === undefined
+    ? (existing?.notes ?? null)
+    : JSON.stringify(body.narrative ?? {});
+  const issue = body?.issue === true;
+  // The snapshot is only meaningful at issue: a draft is always re-rendered
+  // from live figures, which is what makes it a draft.
+  const snapshot = issue ? JSON.stringify(body?.snapshot ?? {}) : (existing?.snapshot_json ?? null);
+
+  if (existing) {
+    await c.env.DB.prepare(
+      `UPDATE fund_report_periods
+          SET period_start = ?, period_end = ?, notes = ?, snapshot_json = ?,
+              status = ?, issued_at = ?, issued_by = ?, updated_at = datetime('now')
+        WHERE id = ?`
+    ).bind(
+      periodStart, periodEnd, notes, snapshot,
+      issue ? 'issued' : 'draft',
+      issue ? new Date().toISOString() : null,
+      issue ? admin.id : null,
+      existing.id,
+    ).run();
+  } else {
+    await c.env.DB.prepare(
+      `INSERT INTO fund_report_periods
+         (fund_id, period, period_start, period_end, notes, snapshot_json, status, issued_at, issued_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      fundId, period, periodStart, periodEnd, notes, snapshot,
+      issue ? 'issued' : 'draft',
+      issue ? new Date().toISOString() : null,
+      issue ? admin.id : null,
+    ).run();
+  }
+
+  const row: any = await c.env.DB.prepare(
+    `SELECT * FROM fund_report_periods WHERE fund_id = ? AND period = ?`
+  ).bind(fundId, period).first();
+  return c.json({ ok: true, period: row ? shapePeriod(row) : null }, existing ? 200 : 201);
+});
+
+/**
+ * GP view of ONE limited partner's reporting data, in the same shape
+ * `/lp-portal` returns for the caller's own position — so the quarterly-report
+ * renderer is one code path whether an LP downloads their own statement or the
+ * GP produces it on their behalf.
+ *
+ * Admin-only, and deliberately narrow: it answers for a single named LP of a
+ * single named fund, so it cannot be used to enumerate the LP register (that is
+ * already what GET /:id/lps is for, under the same gate).
+ */
+funds.get('/:id/lp-report/:lpId', async (c) => {
+  await requireAdmin(c);
+  await ensureFundGpColumns(c.env);
+  const fundId = parseInt(c.req.param('id'), 10);
+  const lpId = parseInt(c.req.param('lpId'), 10);
+  if (!Number.isFinite(fundId) || !Number.isFinite(lpId)) {
+    return c.json({ error: 'bad id' }, 400);
+  }
+
+  // One row, and it must belong to the named fund: an LP id from another fund
+  // would otherwise render under this fund's letterhead.
+  const lp: any = await c.env.DB.prepare(
+    `SELECT lp.*,
+            COALESCE(u.name,  lp.name)  AS lp_display_name,
+            COALESCE(u.email, lp.email) AS lp_display_email,
+            f.name AS fund_name, f.status AS fund_status, f.carried_interest, f.management_fee,
+            f.slug AS fund_slug, f.vintage_year AS fund_vintage,
+            f.gp_name, f.gp_title, f.gp_email, f.gp_entity,
+            f.fund_admin, f.auditor, f.legal_counsel, f.custodian, f.valuation_policy
+       FROM limited_partners lp
+       JOIN vc_funds f ON f.id = lp.fund_id
+       LEFT JOIN users u ON u.id = lp.user_id
+      WHERE lp.id = ? AND lp.fund_id = ?`
+  ).bind(lpId, fundId).first();
+  if (!lp) return c.json({ error: 'not found' }, 404);
+
+  const calls = await c.env.DB.prepare(
+    `SELECT * FROM capital_calls WHERE limited_partner_id = ? ORDER BY created_at DESC LIMIT 50`
+  ).bind(lpId).all().catch(() => ({ results: [] }));
+
+  const dists: any[] = (await c.env.DB.prepare(
+    `SELECT d.*, f.name AS fund_name
+       FROM fund_distributions d JOIN vc_funds f ON f.id = d.fund_id
+      WHERE d.lp_id = ? ORDER BY d.created_at DESC LIMIT 200`
+  ).bind(lpId).all().catch(() => ({ results: [] }))).results || [];
+
+  // Same arithmetic as /lp-portal — kept identical on purpose so the GP's copy
+  // of a statement and the LP's own copy can never disagree.
+  const distSumDollars = dists.reduce((s: number, d: any) => s + Number(d.amount_cents || 0) / 100, 0);
+  const invested = Number(lp.invested_amount || 0);
+  const returns = Number(lp.returns || 0);
+  const tvpi = invested > 0 ? (invested + returns + distSumDollars) / invested : 0;
+  const dpi = invested > 0 ? (returns + distSumDollars) / invested : 0;
+
+  return c.json({
+    ok: true,
+    lp_holdings: [lp],
+    capital_calls: calls.results || [],
+    distributions: dists,
+    performance: [{
+      lp_id: lp.id,
+      fund_id: lp.fund_id,
+      fund_name: lp.fund_name,
+      fund_slug: lp.fund_slug ?? null,
+      commitment: invested + Math.max(0, Number(lp.commitment_amount || 0) - invested),
+      invested_amount: invested,
+      returns,
+      distributions_dollars: distSumDollars,
+      tvpi: Number(tvpi.toFixed(3)),
+      dpi: Number(dpi.toFixed(3)),
+      lpa_signed: !!lp.lpa_signed,
+      commitment_date: lp.commitment_date ?? null,
+    }],
+    funds: fundFacts([lp]),
+    recipient: { name: lp.lp_display_name ?? null, email: lp.lp_display_email ?? null },
+  });
 });
 
 funds.post('/:id/lps', async (c) => {

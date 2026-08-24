@@ -491,17 +491,42 @@ CREATE TABLE IF NOT EXISTS tickets (
     description TEXT,
     priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+    -- Task #9 — first-class ticket type; mapped to GitHub labels bug/feature/task.
+    type TEXT NOT NULL DEFAULT 'task',
     submitted_by TEXT,
     assigned_to TEXT,
     user_id INTEGER REFERENCES users(id),
     project_id INTEGER REFERENCES projects(id),
     github_issue_number INTEGER,
     github_issue_url TEXT,
+    -- Task #9 — JSON snapshots of the linked issue's labels/assignees so the
+    -- list view renders without a live GitHub fetch. Refreshed by the webhook,
+    -- pull-sync, and detail hydration.
+    github_labels TEXT,
+    github_assignees TEXT,
+    -- Stale-event guard: the issue's updated_at as of the last applied
+    -- inbound webhook event; older deliveries are dropped.
+    github_updated_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_tickets_user ON tickets(user_id);
+
+-- Task #9 — ticket ↔ GitHub sync idempotency/audit sidecar. `event_key` is
+-- UNIQUE: inbound rows use the X-GitHub-Delivery GUID (`gh:<guid>`) so webhook
+-- redeliveries are no-ops; outbound rows record what we pushed and when.
+CREATE TABLE IF NOT EXISTS ticket_sync_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id INTEGER,
+    github_issue_number INTEGER,
+    direction TEXT NOT NULL CHECK (direction IN ('outbound', 'inbound')),
+    event_key TEXT UNIQUE NOT NULL,
+    payload_hash TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_sync_events_ticket ON ticket_sync_events(ticket_id);
 
 CREATE TABLE IF NOT EXISTS activity_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

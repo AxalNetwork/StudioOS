@@ -576,7 +576,9 @@ The relationship between you and the Company is contractual; neither party is an
 ### 16.6 Notices
 
 All notices must be sent to:
-- **To the Company:** support@axal.vc or legal@axal.vc
+- **To the Company:** support@axal.vc or legal@axal.vc, or by mail to
+  Axal VC Management LLC, 16192 Coastal Hwy, Lewes, DE 19958, United
+  States
 - **To You:** Your registered email address or account contact information
 
 Notice is effective when sent (email), personally delivered, or upon receipt by certified mail.

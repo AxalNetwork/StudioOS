@@ -1703,7 +1703,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
                     <div className="text-xs text-gray-600 mt-1">Preferred jurisdiction: <span className="font-medium text-gray-900 dark:text-gray-100">{profile.existing_jurisdiction}</span></div>
                   )}
                   {profile.company_established === 0 && (
-                    <p className="text-xs text-amber-700 mt-2">This founder has not yet incorporated. The Axal VC 30-Day Spin-Out Engine will handle formation as part of their Closing Binder.</p>
+                    <p className="text-xs text-amber-700 mt-2">This founder has not yet incorporated. The Axal VC 28-Day Spin-Out Engine will handle formation as part of their Closing Binder.</p>
                   )}
                 </div>
               )}

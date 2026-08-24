@@ -329,6 +329,11 @@ def trust_summary(
     user: User = Depends(get_current_user),
 ):
     out: dict = {"role": getattr(user.role, "value", user.role), "ndas": list_nda_status(session, user)}
+    # `user.partner_id` / `user.investor_id` are already truthy here, so the
+    # only HTTPException `_require_*_row` can raise is its 404 — the linked
+    # row was deleted but the FK on `users` was not cleaned up. Omitting that
+    # section from the summary is correct; failing the whole Trust Center over
+    # a stale link is not.
     if user.partner_id:
         try:
             p = _require_partner_row(session, user)
@@ -339,6 +344,7 @@ def trust_summary(
                 "sumsub_available": sumsub_available(),
             }
         except HTTPException:
+            # Best-effort — see the comment above this section.
             pass
     if user.investor_id:
         try:
@@ -352,6 +358,7 @@ def trust_summary(
                 "has_document": inv.accreditation_document_id is not None,
             }
         except HTTPException:
+            # Best-effort — see the comment above this section.
             pass
     return out
 

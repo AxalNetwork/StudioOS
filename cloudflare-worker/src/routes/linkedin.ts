@@ -309,8 +309,7 @@ linkedin.get('/oauth/callback', async (c) => {
     console.error('[LINKEDIN] userinfo threw:', e?.message || e);
     return redirectBack(c.env, 'error', returnTo, 'identity_unavailable' satisfies LinkedInCallbackCode);
   } finally {
-    // Discard the token — we never persist it.
-    accessToken = '';
+    // Token is only used for this request and is never persisted.
   }
 
   // Attach to the user row.

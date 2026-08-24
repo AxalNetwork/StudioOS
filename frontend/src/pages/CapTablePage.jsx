@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
+import SafeHarbourPanel from './captable/SafeHarbourPanel';
 import {
   PieChart as PieIcon, Trash2, Plus, Save, Download, RefreshCw, FileText, AlertCircle,
   PencilOff, ExternalLink, CheckCircle2, Copy, GitCompare,
@@ -479,6 +480,8 @@ export default function CapTablePage({ embedded = false }) {
         error={liveError}
         onRefresh={loadLive}
       />
+
+      <SafeHarbourPanel projectId={selectedProjectId ? Number(selectedProjectId) : null} />
 
       <div className="grid grid-cols-12 gap-4">
         {/* -------- LEFT: inputs -------- */}

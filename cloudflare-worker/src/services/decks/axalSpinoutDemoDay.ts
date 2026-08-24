@@ -1,7 +1,7 @@
 /**
  * axalSpinoutDemoDay.ts — Task #15
  *
- * Builds the Axal 30-day Spin-Out Lab "Demo Day" deck payload from
+ * Builds the Axal 28-day Spin-Out Lab "Demo Day" deck payload from
  * canonical Lab data. 14 fixed sections in the spec-required order:
  *
  *   cover · problem · validation · market · solution · roadmap ·
@@ -50,6 +50,7 @@ import { ensureSkillProfileSchema } from '../skillProfileSchema';
 import { parseUseOfFundsValue } from '../../util/useOfFunds';
 import { simulate, type Inputs, type SimulateResult } from '../captable';
 import { ensureCapTableVariantColumn } from '../captableSchema';
+import { ensureCompetitorSchema } from '../competitorSchema';
 
 /**
  * Task #1 — Load admin-managed mentor/partner network profiles.
@@ -326,9 +327,12 @@ export type SpinoutDemoDayData = {
     quarter: string;
     now: string[]; next: string[]; later: string[];
   };
+  // The Brand SLIDE was dropped; what survives of this block feeds other
+  // slides — `tagline` is the thesis fallback on the rendered deck and the
+  // three flags drive the cap-table readiness checklist. Its old eyebrow /
+  // headline / vision were rebuilt on every deck load and read by nothing.
   brand: {
-    eyebrow: string; headline: string;
-    tagline: string; vision: string;
+    tagline: string;
     brand_kit_ready: boolean;
     pitch_deck_ready: boolean;
     incorporated: boolean;
@@ -407,6 +411,33 @@ export type SpinoutDemoDayData = {
   product_demo: {
     eyebrow: string; headline: string; body: string;
     loop_url: string; live_url: string; screenshot_url: string; caption: string;
+  };
+  // Competitive landscape — the project's latest COMPLETED Competitor
+  // Analysis (Market Intel). `present` is false when no completed analysis
+  // exists for the project, in which case the deck mapper emits template
+  // sample rows + a gap. `rows` are the top competitors (by position /
+  // relevance); `gaps` / `wedge` come from the generated report's
+  // output_json. All fields degrade to empty arrays / '' — never fabricated.
+  competitor: {
+    present: boolean;
+    headline: string;
+    rows: Array<{ name: string; category: string; stage: string; gap: string }>;
+    gaps: string[];
+    wedge: string;
+  };
+  // Traction — the project's ACTUAL revenue proof (validation.revenue_proof /
+  // projects.revenue,mrr). `present` is true only when the project has logged
+  // REAL revenue proof (status paid / pilot_paid). We deliberately carry NO
+  // monthly series: financial_models.computed_json.months[] is a FORECAST
+  // (projectFinancials derives it from units/price/growth/churn), not realized
+  // revenue, so charting it as monthly traction would present projections as
+  // fact. There is no actual monthly history anywhere in the schema — the deck
+  // mapper renders an honest zero-baseline trend and flags the gap.
+  traction: {
+    present: boolean;
+    mrr: number | null;
+    total_revenue: number | null;
+    paying_customers: number | null;
   };
 };
 
@@ -573,6 +604,86 @@ async function loadSimSegments(env: Env, projectId: number): Promise<Array<[stri
     return segmentsFromSimResult(result);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Load the project's newest COMPLETED Competitor Analysis (Market Intel) and
+ * shape it into the deck's `competitor` block: the top competitors plus the
+ * generated report's gaps / wedge.
+ *
+ * SCOPING mirrors routes/competitors.ts: analyses are owned by `user_id` and
+ * carry an OPTIONAL `project_id`. We prefer the project-scoped analysis; when
+ * none exists we fall back to the founder's newest completed analysis that has
+ * no project attached (`project_id IS NULL`) — never another project's — so the
+ * slide is populated for founders who ran a general analysis before linking it.
+ *
+ * Returns `{ present: false, … }` on any miss (no completed analysis, table
+ * absent) so the deck mapper renders template rows + a gap. Never throws.
+ */
+type CompetitorReport = { gaps?: unknown; wedge?: unknown };
+async function loadCompetitorLandscape(
+  env: Env,
+  userId: number,
+  projectId: number,
+): Promise<SpinoutDemoDayData['competitor']> {
+  const empty: SpinoutDemoDayData['competitor'] = {
+    present: false, headline: '', rows: [], gaps: [], wedge: '',
+  };
+  try {
+    await ensureCompetitorSchema(env);
+    // Newest completed analysis: project-scoped first, then the founder's
+    // project-less analyses. Both constrained to this user so we never read
+    // another founder's landscape.
+    const analysis = await env.DB.prepare(
+      `SELECT id FROM competitor_analyses
+        WHERE user_id = ? AND status = 'complete'
+          AND (project_id = ? OR project_id IS NULL)
+        ORDER BY (project_id = ?) DESC, created_at DESC LIMIT 1`,
+    ).bind(userId, projectId, projectId).first<{ id: string }>();
+    if (!analysis?.id) return empty;
+
+    const [cands, outRow] = await Promise.all([
+      env.DB.prepare(
+        `SELECT name, category, summary, details_json
+           FROM competitor_candidates WHERE analysis_id = ?
+          ORDER BY position ASC, relevance_score DESC LIMIT 4`,
+      ).bind(analysis.id).all<{
+        name: string | null; category: string | null;
+        summary: string | null; details_json: string | null;
+      }>(),
+      env.DB.prepare(
+        `SELECT output_json FROM competitor_analysis_outputs WHERE analysis_id = ?`,
+      ).bind(analysis.id).first<{ output_json: string | null }>(),
+    ]);
+
+    let report: CompetitorReport = {};
+    try { report = JSON.parse(outRow?.output_json || '{}') as CompetitorReport; } catch { /* keep {} */ }
+    const reportGaps = Array.isArray(report.gaps)
+      ? report.gaps.map((g) => String(g).trim()).filter(Boolean)
+      : [];
+    const wedge = typeof report.wedge === 'string' ? report.wedge.trim() : '';
+
+    const rows = (cands?.results || []).map((c, i) => {
+      let details: Record<string, unknown> = {};
+      try { details = JSON.parse(c.details_json || '{}') as Record<string, unknown>; } catch { /* {} */ }
+      // Category as a display word (Direct / Adjacent), stage from details when
+      // present, and a one-line weakness from the report's per-index gap, then
+      // the candidate summary. Trimmed to ~90 chars for the slide.
+      const rawCat = String(c.category || '').trim().toLowerCase();
+      const category = rawCat === 'direct' ? 'Direct' : rawCat === 'adjacent' ? 'Adjacent' : (rawCat ? rawCat[0].toUpperCase() + rawCat.slice(1) : DASH);
+      const stageRaw = String((details.stage ?? details.traction ?? '') as string).trim();
+      const stage = stageRaw ? stageRaw.slice(0, 40) : DASH;
+      const gapSrc = String(reportGaps[i] || c.summary || '').trim();
+      const gap = gapSrc ? gapSrc.slice(0, 90) : DASH;
+      return { name: String(c.name || '').trim() || DASH, category, stage, gap };
+    }).filter((r) => r.name !== DASH);
+
+    if (!rows.length) return empty;
+    return { present: true, headline: '', rows, gaps: reportGaps, wedge };
+  } catch (err) {
+    console.warn('[axalSpinoutDemoDay] loadCompetitorLandscape failed', err);
+    return empty;
   }
 }
 
@@ -881,6 +992,11 @@ export async function fillAxalSpinoutDemoDay(
   // scenario (preferred over the holders table on Slide 08).
   const simSegments = await loadSimSegments(env, projectId);
 
+  // Competitive landscape — newest completed Competitor Analysis (Market
+  // Intel). Empty (present:false) when the founder has not run one; the deck
+  // mapper then renders template rows + a gap.
+  const competitor = await loadCompetitorLandscape(env, userId, projectId);
+
   // ------ Task #14: activity log (last 30 days of Lab events) ---------
   // Aggregates milestones + interviews + advisor answers by day so the
   // Cover ActivityLog30Day primitive can render an honest pulse. Dates
@@ -928,9 +1044,26 @@ export async function fillAxalSpinoutDemoDay(
   const painThemes = (await computePainThemes(env, projectId, interviewsList)).slice(0, 6);
 
   // ------ Task #14: ratings distribution + revenue proof --------------
-  const ratings = interviewsList
-    .map((it) => (it.validation_rating == null ? null : Number(it.validation_rating)))
-    .filter((n): n is number => n != null && isFinite(n) && n >= 0 && n <= 5);
+  // A 6-BUCKET HISTOGRAM indexed by rating, not a per-interview list: the
+  // declared type is "0–5 distribution of founder validation_rating values"
+  // (see SpinoutDemoDayData.validation.ratings) and the deck mapper reads it
+  // that way — `ratedN` sums the buckets to get the number of rated
+  // interviews, and `fitN = ratings[4] + ratings[5]` counts the 4★ and 5★ ones
+  // (spinoutDeckData.ts:297-298).
+  //
+  // This used to emit the flat list `[5,4,5,3]`. Consumed as a histogram that
+  // made `ratedN` the SUM OF THE SCORES (17 "rated interviews" from 4), and
+  // `fitN` the ratings of interviews #5 and #6 read as 4★/5★ counts — so a
+  // project with fewer than six rated interviews always reported ZERO
+  // solution-fit, and the funnel's conversion percentage was meaningless.
+  // Every founder's Validation slide carried those numbers to investors.
+  const ratings = [0, 0, 0, 0, 0, 0];
+  for (const it of interviewsList) {
+    if (it.validation_rating == null) continue;
+    const n = Number(it.validation_rating);
+    if (!isFinite(n) || n < 0 || n > 5) continue;
+    ratings[Math.round(n)] += 1;
+  }
 
   // Task #2 — structured revenue proof. Founder edits the four fields
   // (total_revenue, mrr, paying_customers, first_payment_date) +
@@ -973,6 +1106,19 @@ export async function fillAxalSpinoutDemoDay(
       ...(amount ? { amount, label, signed } : {}),
     };
   })();
+
+  // ------ Traction: ACTUAL revenue proof only --------------------------
+  // `present` is true only when the founder has logged REAL revenue proof
+  // (status paid / pilot_paid). We carry no monthly series on purpose: the
+  // financial model's computed months are a forecast, not realized revenue,
+  // and there is no actual monthly history in the schema. The deck mapper
+  // renders an honest zero-baseline trend and flags the missing history.
+  const traction: SpinoutDemoDayData['traction'] = {
+    present: revenueProof.status === 'paid' || revenueProof.status === 'pilot_paid',
+    mrr: revenueProof.mrr,
+    total_revenue: revenueProof.total_revenue,
+    paying_customers: revenueProof.paying_customers,
+  };
 
   // ------ Task #1: mentor profiles + skill coverage + network --------
   // Real, admin-managed roster from network_profiles (loaded above).
@@ -1099,11 +1245,16 @@ export async function fillAxalSpinoutDemoDay(
     },
 
     cover: {
-      eyebrow: 'Axal VC · 30-Day Spin-Out Lab · Demo Day',
+      eyebrow: 'Axal VC · 28-Day Spin-Out Lab · Demo Day',
       headline: orDash(p.tagline) !== DASH ? String(p.tagline) : `${projectName} — Demo Day`,
-      sub: orDash(p.vision) !== DASH
-        ? String(p.vision)
-        : 'A pre-incorporation thesis, sharpened across 30 days of Discovery, OKRs, Scoring and Cap-Table prep.',
+      // EMPTY when the founder has not written a vision — never a canned
+      // sentence. The deck mapper uses this as a thesis source, and an
+      // unconditional literal here made `thesisSrc` always truthy, so the
+      // "add a one-line thesis" gap could never fire and a project with no
+      // tagline and no vision exported as NOT-draft with filler as its thesis
+      // (spinoutDeckData.ts:258-260). The cover slide supplies its own display
+      // fallback; absence has to stay visible to the gap logic.
+      sub: orDash(p.vision) !== DASH ? String(p.vision) : '',
       location: `Presented ${presentedOn} · Axal Network`,
       activity_log: activityLog,
     },
@@ -1170,10 +1321,7 @@ export async function fillAxalSpinoutDemoDay(
     },
 
     brand: {
-      eyebrow: '06 · Brand',
-      headline: orDash(p.tagline) !== DASH ? String(p.tagline) : 'How we show up.',
       tagline: orDash(p.tagline),
-      vision: orDash(p.vision),
       brand_kit_ready: doneMap.has('brand_kit'),
       pitch_deck_ready: doneMap.has('pitch_deck_v1'),
       incorporated: doneMap.has('incorporation_completed'),
@@ -1252,7 +1400,7 @@ export async function fillAxalSpinoutDemoDay(
       eyebrow: '12 · Axal signal',
       headline: labActive
         ? `Week ${week} of 4 — ${remaining} days remaining.`
-        : 'Built across 30 days of Lab work.',
+        : 'Built across 28 days of Lab work.',
       body: orDash(score?.ai_notes),
       lab_weeks: labWeeks,
     },
@@ -1267,6 +1415,10 @@ export async function fillAxalSpinoutDemoDay(
     },
 
     product_demo: productDemo,
+
+    competitor,
+
+    traction,
   };
 }
 

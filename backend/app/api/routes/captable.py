@@ -14,6 +14,7 @@ creator; admin can read all.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import Any, Optional
 
@@ -77,6 +78,12 @@ def _ensure_schema(session: Session) -> None:
         session.commit()
     except Exception:
         session.rollback()
+    # codeql[py/unused-global-variable] -- _schema_ready is read via the `global _schema_ready` guard at the top of this same function
+    # (`if _schema_ready: return`); the write here is what a LATER, separate call's read observes.
+    # CodeQL's dead-store analysis does not model a global's value persisting across separate
+    # invocations of the function that sets it, so it sees this write as never consumed. It is: this
+    # flag exists specifically to make the schema-migration idempotent-but-skippable after the first
+    # successful request in this process.
     _schema_ready = True
 
 
@@ -470,8 +477,11 @@ def export_csv(
     s = _read_or_404(session, uid, user)
     result = json.loads(s.result_json) if s.result_json else simulate(json.loads(s.inputs_json))
     csv = to_csv(result)
+    # Mirror the Worker's filename sanitization — Starlette encodes headers as
+    # latin-1, so a scenario name with e.g. an em dash would 500 the export.
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", s.name or "scenario")
     return PlainTextResponse(
         content=csv,
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="captable-{s.name}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="captable-{safe_name}.csv"'},
     )

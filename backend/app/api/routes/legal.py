@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 from sqlalchemy.exc import IntegrityError
 from backend.app.database import get_session
-from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User, Section83bTracker, Incorporation
+from backend.app.models.entities import Document, Entity, Project, DocumentType, DocumentStatus, User, UserRole, Section83bTracker, Incorporation
 from backend.app.schemas.scoring import DocumentCreate
 from backend.app.api.routes.auth import get_current_user
 from backend.app.api.deps import require_role, ensure_founder_access, is_privileged
@@ -2141,6 +2141,39 @@ def _incorporate_checkout(
     }
 
 
+@router.get("/incorporate/orders")
+def _incorporate_orders(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Dev parity with the Worker: owner-scoped list of non-pending
+    incorporation orders (used by the Spin-Out Lab Incorporate page to
+    rehydrate paid state)."""
+    rows = session.exec(
+        select(Incorporation)
+        .where(Incorporation.user_id == user.id)
+        .where(Incorporation.status != "pending_payment")
+        .order_by(Incorporation.created_at.desc())
+        .limit(20)
+    ).all()
+    return {
+        "orders": [
+            {
+                "id": r.id,
+                "project_id": r.project_id,
+                "status": r.status,
+                "jurisdiction_id": r.jurisdiction_id,
+                "company_name": r.company_name,
+                "amount_cents": r.amount_cents,
+                "currency": r.currency,
+                "paid_at": r.paid_at.isoformat() if r.paid_at else None,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
+
+
 @router.get("/incorporate/status")
 def _incorporate_status(
     id: int,
@@ -2246,7 +2279,29 @@ def incorporate_project(project_id: int, jurisdiction: str = "Delaware", session
 
 @router.get("/entities")
 def list_entities(session: Session = Depends(get_session), user: User = Depends(get_current_user)):
-    return session.exec(select(Entity).order_by(Entity.created_at.desc())).all()
+    """Dev mirror of the worker's scoped `GET /api/legal/entities`.
+
+    This used to return every Entity row to any logged-in user — every
+    incorporated company's name, jurisdiction, incorporation date and
+    parent chain. `entities` has no owner column, so ownership is derived
+    through `Project.entity_id`.
+
+    Deliberately NOT `is_privileged()`: that helper still counts investors
+    as staff for legacy read paths, and an investor has no masked entity
+    view to fall back on. This matches the worker, which admits only
+    admin/partner and then the owning founder.
+    """
+    if user.role in (UserRole.ADMIN, UserRole.PARTNER):
+        return session.exec(select(Entity).order_by(Entity.created_at.desc())).all()
+    if user.role != UserRole.FOUNDER or not user.founder_id:
+        return []
+    owned = select(Project.entity_id).where(
+        Project.founder_id == user.founder_id,
+        Project.entity_id.is_not(None),
+    )
+    return session.exec(
+        select(Entity).where(Entity.id.in_(owned)).order_by(Entity.created_at.desc())
+    ).all()
 
 
 @router.post("/spinout/{project_id}")
@@ -2411,7 +2466,11 @@ def cofounder_agreement(
     session.commit()
     session.refresh(doc)
 
-    # Persist to object storage (consistent with /incorporate/wizard).
+    # Persist to object storage (consistent with /incorporate/wizard). The doc
+    # already exists with `content` populated inline, so a failure here is not
+    # data loss — it just leaves the inline copy in place instead of moving to
+    # R2/S3. Still logged: a broken storage path would silently affect every
+    # doc generated from here on, and nothing else would ever surface it.
     try:
         from backend.app.services.file_storage import store_contract_bytes
         obj = store_contract_bytes(doc.uid, rendered.encode("utf-8"), "text/plain")
@@ -2422,8 +2481,8 @@ def cofounder_agreement(
         doc.content = None
         session.add(doc)
         session.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("legal: object-storage persist failed for cofounder-agreement doc %s: %s", doc.uid, exc)
 
     return {
         "ok": True,
@@ -2573,6 +2632,9 @@ def create_83b_tracker(
     session.add(doc)
     session.commit()
     session.refresh(doc)
+    # Persist to object storage, same trade-off as the cofounder-agreement
+    # path above: the doc already exists with `content` inline, so a failure
+    # here leaves that inline copy in place rather than losing the document.
     try:
         from backend.app.services.file_storage import store_contract_bytes
         obj = store_contract_bytes(doc.uid, rendered.encode("utf-8"), "text/plain")
@@ -2583,8 +2645,8 @@ def create_83b_tracker(
         doc.content = None
         session.add(doc)
         session.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("legal: object-storage persist failed for 83(b) doc %s: %s", doc.uid, exc)
 
     tracker = Section83bTracker(
         project_id=project.id,
@@ -2614,7 +2676,12 @@ def create_83b_tracker(
             return {"ok": True, "reused": True, "tracker": _tracker_dto(existing)}
         raise
 
-    # Calendar/notification ping (Task 0.2 notify subsystem).
+    # Calendar/notification ping (Task 0.2 notify subsystem). notify() already
+    # isolates and logs its own per-channel delivery failures (Slack/email/ws),
+    # so an exception escaping past it means something broke in the call above
+    # (a bad arg, a lookup failure) rather than a downed webhook. That is worth
+    # surfacing — this is the founder's only reminder of a real 30-day IRS
+    # filing deadline — but must not fail the tracker creation itself.
     try:
         from backend.app.services.notify import notify
         notify(
@@ -2625,7 +2692,7 @@ def create_83b_tracker(
                 f"You have 30 days from {grant.isoformat()} to mail your 83(b) election to the IRS. "
                 f"Use USPS Certified Mail with Return Receipt Requested and upload the PS Form 3800 receipt."
             ),
-            link="/incorporate/83b",
+            link="/spinout-lab/83b",
             payload={
                 "tracker_id": tracker.id,
                 "project_id": project.id,
@@ -2634,8 +2701,8 @@ def create_83b_tracker(
             },
             channels=("in_app", "email"),
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("legal: 83(b) deadline notify failed for tracker %s: %s", tracker.id, exc)
 
     return {"ok": True, "reused": False, "tracker": _tracker_dto(tracker), "election_document_id": doc.id}
 

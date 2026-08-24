@@ -21,7 +21,7 @@ const METRICS = [
   { value: 38, label: 'Spin-Outs Completed' },
   { value: 1200, label: 'Deals Scored', suffix: '+' },
   { value: 200, label: 'Venture Partners', suffix: '+' },
-  { value: 30, label: 'Days Average' },
+  { value: 28, label: 'Days Average' },
 ];
 
 const PAIN_POINTS = [
@@ -46,7 +46,7 @@ const SOLUTION_PILLARS = [
   {
     icon: Rocket,
     title: 'Spin-Out Lab',
-    desc: '30-day structured sprint: idea to Delaware C-Corp with cap table, 83(b) election, and pitch deck. Advisor-guided, milestone-driven.',
+    desc: '28-day structured sprint: idea to Delaware C-Corp with cap table, 83(b) election, and pitch deck. Advisor-guided, milestone-driven.',
     tag: 'Flagship',
   },
   {
@@ -155,7 +155,7 @@ const FAQS = [
   },
   {
     q: 'Is this an accelerator?',
-    a: 'No. Axal VC is a venture studio and operating platform. The Spin-Out Lab is a structured 30-day sprint with dedicated advisors, advisors, and capital access — not a cohort-based accelerator with demo days and mass batches.',
+    a: 'No. Axal VC is a venture studio and operating platform. The Spin-Out Lab is a structured 28-day sprint with dedicated advisors, advisors, and capital access — not a cohort-based accelerator with demo days and mass batches.',
   },
   {
     q: 'What does it cost?',
@@ -170,7 +170,7 @@ const FAQS = [
     a: "Apply anyway. We assess founder-market fit, not idea maturity. If you are not ready for the Lab, we will tell you exactly what to do first and when to reapply.",
   },
   {
-    q: 'What happens after 30 days?',
+    q: 'What happens after 28 days?',
     a: 'You leave with a Delaware C-Corp (or equivalent), cap table, 83(b) election, pitch deck, venture-readiness score, and three warm investor intros — if you qualify. Alumni access to the network is lifetime.',
   },
 ];
@@ -190,7 +190,7 @@ export default function FounderHomePage() {
             <span className="text-[#6D5BFF]">Worth Funding.</span>
           </>
         }
-        sub="From idea to investor-ready in 30 days. One platform covering everything — legal, product, team, and capital."
+        sub="From idea to investor-ready in 28 days. One platform covering everything — legal, product, team, and capital."
         ctaPrimary={{ label: 'Submit Your Pitch', href: '/register?lane=founder' }}
         ctaSecondary={{ label: 'See the Spin-Out Lab', href: '/spinout-lab' }}
         pills={['AI', 'Blockchain', 'Quantum', 'Frontier Software', 'Web3']}

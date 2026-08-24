@@ -1,0 +1,102 @@
+Now I have the full picture of the original Incorporate design. Here's the Replit prompt.
+
+## Replit prompt
+
+The **Incorporate** page (`frontend/src/pages/SpinoutLabPage.jsx` or wherever incorporation lives — confirm the exact file) is currently missing most of the original Claude Design UI and is not correctly wired to backend data. Rebuild it to exactly match the original design spec below.
+
+### Source of truth
+
+The original design lives in the attached `Incorporate.dc.html` file. Read it in full — it defines the exact layout, copy, states, and interactions this page must have. Do not simplify or reinterpret it.
+
+### What's currently wrong
+
+The live page currently shows only a jurisdiction-selection wizard flow (goals → compare jurisdictions → company details → pay & file → done) with generic Q&A cards, and separately a State Filing Tracker with all steps greyed out/disabled and no visible entity recommendation, payment card, or document workspace tied together on one page. This does not match the original single-page "Incorporate" workspace design, which is a persistent operational dashboard, not a multi-step wizard. The wizard flow should be replaced entirely by the structure below.
+
+### Required page structure (rebuild to match exactly)
+
+**1. Header**
+- Back to Workspace link, building icon badge, "Incorporate" title with green "Active" status pill
+- Subtitle: "Entity decisioning and formation — recommend, pay once, generate, file, and finish investor-ready."
+- Right side: current lifecycle phase pill (e.g. "Deciding") and "Unlocked · Wk 4" badge
+
+**2. Quick actions bar**
+- Share, Export, Copy link, "Preview as investor" (opens investor preview modal)
+
+**3. Formation lifecycle progress bar**
+- 6-step horizontal tracker: Decide → Pay → Review docs → File → Await approval → Complete
+- Each step shows a numbered/checkmark circle, connecting line colored by progress, and label under each step
+- "You are [deciding/paying/reviewing/filing/waiting/completed]" text above the tracker, phase name in accent color
+
+**4. Recommendation banner + payment card (side-by-side, ~1.5fr/1fr split)**
+
+- **Recommendation banner** (dark purple gradient card):
+  - "Recommended entity" label + confidence badge ("High confidence")
+  - Large entity name (e.g. "Delaware C-Corp")
+  - Summary paragraph explaining why (pulled from company's actual data: financing type, founder count, IP posture, jurisdiction)
+  - Row of factor tags (e.g. "Equity-financed", "2 founders", "Deep-tech IP", "Raising a SAFE round", "US-based")
+  - Conditional warning box (amber) when a risk flag applies (e.g. university IP detected) with specific guidance text
+
+- **Payment card**:
+  - "One-time incorporation package" label + status pill (Paid / Awaiting payment)
+  - Large total price (e.g. "$1,310") with "one-time · USD"
+  - Fee breakdown lines: service fee, state filing fee, registered agent (included), optional add-ons (e.g. expedited processing)
+  - If paid: green confirmation box with paid date and "workflow unlocked"
+  - If unpaid: "Pay $[total] & unlock filing" button, plus disclaimer "Payment unlocks document generation and filing. Not legal advice."
+
+**5. Entity decision · recommendation with override card**
+- Explanation text: "Auto-selected from your Spin-Out data. Override if your plans differ — we capture why."
+- "Overridden → [Entity]" badge shown when user has selected something other than the recommendation
+- Three selectable entity cards side-by-side (C-Corp, Public Benefit Corp, LLC), each showing:
+  - Radio selector, entity name, "Recommended" badge on the actual recommended one
+  - A "fit" description paragraph
+  - 3 bullet points each with a check or warning icon (pros/cons)
+- Below the cards: a rationale box explaining why the other options weren't chosen, and (if overridden) a warning about how the override changes financing/equity setup
+
+**6. Formation execution · document workspace card**
+- Disabled/dimmed with "Unlocks after payment" badge when unpaid
+- Table with columns: Document, Source data, Status, Action
+- Rows (from the original): Certificate of Incorporation, Bylaws, Incorporator statement, Initial board consent, Founder IP assignment — each with autogen note, source data label, status pill (Ready/Needs review/Needs signature/Locked/Complete), and an action button (Preview/Review/Sign/View, or "Locked" when unpaid)
+- Below the table: two side-by-side info boxes — "Registered agent" (Axal-managed, fee schedule) and "EIN application" (SS-4 prefill status)
+
+**7. State filing tracker card**
+- 5-step vertical tracker: Documents prepared → Submitted to Delaware → Processing → Formation approved → EIN issued
+- Each step shows done/current/pending state, title, detail line, and estimated/actual time
+- This entire card should be dimmed/inactive until payment is made — but must show real, correctly-colored progress once active (this is currently rendering fully greyed out even where it shouldn't be)
+
+**8. Special handling · University IP assignment card** (conditional)
+- Only shows when the company's founder/IP data triggers it (e.g. university affiliation detected)
+- Amber-bordered card with warning icon, "Required before filing docs sign" badge
+- Explanation text referencing the specific founder affiliation and IP posture
+- 3-step checklist: Confirm IP origin, Tech-transfer contact, Execute assignment — each with status (Done/In progress/To do)
+
+**9. Completion console · downstream outputs card**
+- Two side-by-side output cards: "Cap Table" (unlocks entity + share structure after approval) and "Co-founder Agreement" (execution unlocks once entity governing law is set) — each with icon, title, detail, and status pill (Ready/Pending/After approval)
+
+**10. Investor preview modal**
+- Opens on "Preview as investor" click
+- Dark card showing: Legal entity name, state, filing status, EIN, registered agent — the clean summary an investor would see in a data room
+- Dismissible
+
+### Backend integration requirements
+
+1. Confirm the backend schema for company incorporation data supports: selected entity type, override flag + reason, payment status + timestamp, lifecycle phase, document statuses (per document), filing step statuses + dates, university/IP flag + checklist step statuses, and downstream output unlock states (Cap Table, Co-founder Agreement).
+2. The entity recommendation and its factor tags/warning must be computed from the company's **real** onboarding/profile data (financing type, founder count, IP posture, jurisdiction, customer base) — not hardcoded to "NovaCraft AI" or any other placeholder. Confirm which fields actually exist and wire the recommendation logic to them.
+3. "Pay & unlock filing" must call a real payment/checkout flow (or the correct mocked payment endpoint used elsewhere in the Lab) and on success update payment status, unlock the document workspace and filing tracker, and advance the lifecycle phase.
+4. Document actions (Preview/Review/Sign) must open the correct real documents/flows, not dead buttons.
+5. The university IP special-handling card must only render when the backend actually flags this condition for the company (not permanently shown) — confirm the flag/detection logic exists or add it.
+6. Cap Table and Co-founder Agreement unlock states here must reflect the same shared state used on those actual pages — no duplicated/independent status tracking.
+7. Persist entity override selection and reason to the backend, and reflect it correctly on reload.
+
+### Constraints
+
+- Replace the current jurisdiction-wizard flow entirely — the original design is a single persistent dashboard page, not a step-by-step wizard.
+- Do not leave the filing tracker or document workspace permanently disabled — they must correctly toggle based on real payment status.
+- Do not hardcode entity recommendation, company name, or financial figures — pull from real company data.
+- Match the visual structure closely: gradient recommendation banner, 6-step lifecycle tracker, 3-card entity comparison, document table, vertical filing tracker, conditional IP warning card, and investor preview modal.
+- After implementing, verify live: toggle payment status, override the entity selection, confirm the filing tracker and document table unlock correctly, open the investor preview, and confirm the university IP card only appears when the underlying condition is actually true — and confirm all states persist correctly on reload.
+
+Sources
+[1] Screenshot-2026-08-03-at-6.35.27-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/7851bafa-1cca-434c-8cbd-4f3223dccfdc/Screenshot-2026-08-03-at-6.35.27-PM.jpeg?AWSAccessKeyId=ASIA2F3EMEYE3FPFUDUC&Signature=dzMxLtilw5nbOCBdNnzjXq83Tvo%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEDAaCXVzLWVhc3QtMSJHMEUCIEm8qKycjFi6n6ZyAbwDsHx2n%2FBdmM%2FgNlK2JK2s95XHAiEAmZXfbdflvfuXaZ9FBHHmT2%2B9hENQ7eBCKCk59S5hvVkq%2FAQI%2Bf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDA9RlduUfopKWjEACirQBDU4cAqk92fnyz47U0OgGzxAD4MM4GyIK1xIc0%2Fe4eKnot3Fqr8c0ZSVSFBqPGlXRrsXEqv9g4WlFoeurlSfTThtEllQLKqAjRWIXnXygrNcvQsgOElBlGOLFzAJxRrmfSaBpzP%2BW9P99qz6kD0YVeeQGuBhzV5fc2HtUlKtcXCGmSPlr8L0CONAiTqbYyvWBFGGcKzJfPdtObB1NF8LYoOq6MbfHReUx77WRtAcxLQGn8PGU09gMtb74r4tVDMlNkENAvq33EqdGrQzfx%2FWwirSj63H5iGTFCLhZZJkjckgoGnYWAW9TK9hsHqjVyDUEG0FKCZYQGJ5IkLLSyobi8qhAaOjcCoBR7OfiDv4EEWTbyd%2B45ci5dld6AWHJTif11rU9My%2FKeVMW722%2FGHaJsp9%2BUp4IT%2Flut3Kk2bCkjqg0srcflbhsUvAgMhtWRqwJOD79vWvoqvEoa3xRzec9W3BjU6tXGBwc8XnnTnYMVvY2VFf7T%2BuquFJOKN6QjTbUzTpGamsi2DR1WVyE%2BELIlMGqxsI4njXkYB%2FeMZ%2FASU%2BwOiFv%2FEZ4oy6ZGx7eJ9cNF1vcrn3PIezypIxWl%2FPp2pTBnz5ak9yac3ODLjQwguu8o3%2F%2Bpi7ylRdqDbe1%2FuEnqazr3E8KtjGB765BugnG1EpqX5NEElcpN2ZREaCCgzaetbBX0Kj6OkcG112KuBlLpY9PYJcgr%2Bp0eTMdOB8DwMmILMPt34cVtleJpEFjninSW4nxyEbNg%2FYnCpzq2OThS%2B4uuGH%2BO2y18F6sXw2bb0wxvXC0wY6mAF2n1Uux2qnRks03nHtrOdm7sKeuwvx5WCRInuL7bpabIkKjWp78W0%2BflEgyEkvbxZHNDm0HPpx6RAcr53pfiWEEsCY%2BMmCc%2BtgE9iCOwWzamZEVdokY4DxiuwdkXG0bTpTy6KksKCzHAeyHujNiT7AQ%2FzysWLONsVTfPmZhcA52L9ZUttWcxOgKTlf%2B%2F57buc%2FoasSaPz6jQ%3D%3D&Expires=1785776281
+[2] Screenshot-2026-08-03-at-6.35.08-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/87ec35e1-0810-4d9b-81f6-2e3f41c32284/Screenshot-2026-08-03-at-6.35.08-PM.jpeg?AWSAccessKeyId=ASIA2F3EMEYE3FPFUDUC&Signature=uM%2FWndo2F2S%2F7lPvc3SwkZHW69U%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEDAaCXVzLWVhc3QtMSJHMEUCIEm8qKycjFi6n6ZyAbwDsHx2n%2FBdmM%2FgNlK2JK2s95XHAiEAmZXfbdflvfuXaZ9FBHHmT2%2B9hENQ7eBCKCk59S5hvVkq%2FAQI%2Bf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDA9RlduUfopKWjEACirQBDU4cAqk92fnyz47U0OgGzxAD4MM4GyIK1xIc0%2Fe4eKnot3Fqr8c0ZSVSFBqPGlXRrsXEqv9g4WlFoeurlSfTThtEllQLKqAjRWIXnXygrNcvQsgOElBlGOLFzAJxRrmfSaBpzP%2BW9P99qz6kD0YVeeQGuBhzV5fc2HtUlKtcXCGmSPlr8L0CONAiTqbYyvWBFGGcKzJfPdtObB1NF8LYoOq6MbfHReUx77WRtAcxLQGn8PGU09gMtb74r4tVDMlNkENAvq33EqdGrQzfx%2FWwirSj63H5iGTFCLhZZJkjckgoGnYWAW9TK9hsHqjVyDUEG0FKCZYQGJ5IkLLSyobi8qhAaOjcCoBR7OfiDv4EEWTbyd%2B45ci5dld6AWHJTif11rU9My%2FKeVMW722%2FGHaJsp9%2BUp4IT%2Flut3Kk2bCkjqg0srcflbhsUvAgMhtWRqwJOD79vWvoqvEoa3xRzec9W3BjU6tXGBwc8XnnTnYMVvY2VFf7T%2BuquFJOKN6QjTbUzTpGamsi2DR1WVyE%2BELIlMGqxsI4njXkYB%2FeMZ%2FASU%2BwOiFv%2FEZ4oy6ZGx7eJ9cNF1vcrn3PIezypIxWl%2FPp2pTBnz5ak9yac3ODLjQwguu8o3%2F%2Bpi7ylRdqDbe1%2FuEnqazr3E8KtjGB765BugnG1EpqX5NEElcpN2ZREaCCgzaetbBX0Kj6OkcG112KuBlLpY9PYJcgr%2Bp0eTMdOB8DwMmILMPt34cVtleJpEFjninSW4nxyEbNg%2FYnCpzq2OThS%2B4uuGH%2BO2y18F6sXw2bb0wxvXC0wY6mAF2n1Uux2qnRks03nHtrOdm7sKeuwvx5WCRInuL7bpabIkKjWp78W0%2BflEgyEkvbxZHNDm0HPpx6RAcr53pfiWEEsCY%2BMmCc%2BtgE9iCOwWzamZEVdokY4DxiuwdkXG0bTpTy6KksKCzHAeyHujNiT7AQ%2FzysWLONsVTfPmZhcA52L9ZUttWcxOgKTlf%2B%2F57buc%2FoasSaPz6jQ%3D%3D&Expires=1785776281
+[3] Screenshot-2026-08-03-at-6.35.34-PM.jpeg https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/images/515796799/4c8895d6-5f8f-4cf4-adc3-01e2d161f007/Screenshot-2026-08-03-at-6.35.34-PM.jpeg?AWSAccessKeyId=ASIA2F3EMEYE3FPFUDUC&Signature=eioMOiC9dvePPlB1YWWhqXdDkic%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEDAaCXVzLWVhc3QtMSJHMEUCIEm8qKycjFi6n6ZyAbwDsHx2n%2FBdmM%2FgNlK2JK2s95XHAiEAmZXfbdflvfuXaZ9FBHHmT2%2B9hENQ7eBCKCk59S5hvVkq%2FAQI%2Bf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDA9RlduUfopKWjEACirQBDU4cAqk92fnyz47U0OgGzxAD4MM4GyIK1xIc0%2Fe4eKnot3Fqr8c0ZSVSFBqPGlXRrsXEqv9g4WlFoeurlSfTThtEllQLKqAjRWIXnXygrNcvQsgOElBlGOLFzAJxRrmfSaBpzP%2BW9P99qz6kD0YVeeQGuBhzV5fc2HtUlKtcXCGmSPlr8L0CONAiTqbYyvWBFGGcKzJfPdtObB1NF8LYoOq6MbfHReUx77WRtAcxLQGn8PGU09gMtb74r4tVDMlNkENAvq33EqdGrQzfx%2FWwirSj63H5iGTFCLhZZJkjckgoGnYWAW9TK9hsHqjVyDUEG0FKCZYQGJ5IkLLSyobi8qhAaOjcCoBR7OfiDv4EEWTbyd%2B45ci5dld6AWHJTif11rU9My%2FKeVMW722%2FGHaJsp9%2BUp4IT%2Flut3Kk2bCkjqg0srcflbhsUvAgMhtWRqwJOD79vWvoqvEoa3xRzec9W3BjU6tXGBwc8XnnTnYMVvY2VFf7T%2BuquFJOKN6QjTbUzTpGamsi2DR1WVyE%2BELIlMGqxsI4njXkYB%2FeMZ%2FASU%2BwOiFv%2FEZ4oy6ZGx7eJ9cNF1vcrn3PIezypIxWl%2FPp2pTBnz5ak9yac3ODLjQwguu8o3%2F%2Bpi7ylRdqDbe1%2FuEnqazr3E8KtjGB765BugnG1EpqX5NEElcpN2ZREaCCgzaetbBX0Kj6OkcG112KuBlLpY9PYJcgr%2Bp0eTMdOB8DwMmILMPt34cVtleJpEFjninSW4nxyEbNg%2FYnCpzq2OThS%2B4uuGH%2BO2y18F6sXw2bb0wxvXC0wY6mAF2n1Uux2qnRks03nHtrOdm7sKeuwvx5WCRInuL7bpabIkKjWp78W0%2BflEgyEkvbxZHNDm0HPpx6RAcr53pfiWEEsCY%2BMmCc%2BtgE9iCOwWzamZEVdokY4DxiuwdkXG0bTpTy6KksKCzHAeyHujNiT7AQ%2FzysWLONsVTfPmZhcA52L9ZUttWcxOgKTlf%2B%2F57buc%2FoasSaPz6jQ%3D%3D&Expires=1785776281
+[4] Incorporate.dc.html https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/515796799/e20cc379-88d0-4e92-9ef8-f7111d9560a1/Incorporate.dc.html?AWSAccessKeyId=ASIA2F3EMEYE3FPFUDUC&Signature=xnbC2gmMhR0U5dzQVC4oYg5kWZQ%3D&x-amz-security-token=IQoJb3JpZ2luX2VjEDAaCXVzLWVhc3QtMSJHMEUCIEm8qKycjFi6n6ZyAbwDsHx2n%2FBdmM%2FgNlK2JK2s95XHAiEAmZXfbdflvfuXaZ9FBHHmT2%2B9hENQ7eBCKCk59S5hvVkq%2FAQI%2Bf%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FARABGgw2OTk3NTMzMDk3MDUiDA9RlduUfopKWjEACirQBDU4cAqk92fnyz47U0OgGzxAD4MM4GyIK1xIc0%2Fe4eKnot3Fqr8c0ZSVSFBqPGlXRrsXEqv9g4WlFoeurlSfTThtEllQLKqAjRWIXnXygrNcvQsgOElBlGOLFzAJxRrmfSaBpzP%2BW9P99qz6kD0YVeeQGuBhzV5fc2HtUlKtcXCGmSPlr8L0CONAiTqbYyvWBFGGcKzJfPdtObB1NF8LYoOq6MbfHReUx77WRtAcxLQGn8PGU09gMtb74r4tVDMlNkENAvq33EqdGrQzfx%2FWwirSj63H5iGTFCLhZZJkjckgoGnYWAW9TK9hsHqjVyDUEG0FKCZYQGJ5IkLLSyobi8qhAaOjcCoBR7OfiDv4EEWTbyd%2B45ci5dld6AWHJTif11rU9My%2FKeVMW722%2FGHaJsp9%2BUp4IT%2Flut3Kk2bCkjqg0srcflbhsUvAgMhtWRqwJOD79vWvoqvEoa3xRzec9W3BjU6tXGBwc8XnnTnYMVvY2VFf7T%2BuquFJOKN6QjTbUzTpGamsi2DR1WVyE%2BELIlMGqxsI4njXkYB%2FeMZ%2FASU%2BwOiFv%2FEZ4oy6ZGx7eJ9cNF1vcrn3PIezypIxWl%2FPp2pTBnz5ak9yac3ODLjQwguu8o3%2F%2Bpi7ylRdqDbe1%2FuEnqazr3E8KtjGB765BugnG1EpqX5NEElcpN2ZREaCCgzaetbBX0Kj6OkcG112KuBlLpY9PYJcgr%2Bp0eTMdOB8DwMmILMPt34cVtleJpEFjninSW4nxyEbNg%2FYnCpzq2OThS%2B4uuGH%2BO2y18F6sXw2bb0wxvXC0wY6mAF2n1Uux2qnRks03nHtrOdm7sKeuwvx5WCRInuL7bpabIkKjWp78W0%2BflEgyEkvbxZHNDm0HPpx6RAcr53pfiWEEsCY%2BMmCc%2BtgE9iCOwWzamZEVdokY4DxiuwdkXG0bTpTy6KksKCzHAeyHujNiT7AQ%2FzysWLONsVTfPmZhcA52L9ZUttWcxOgKTlf%2B%2F57buc%2FoasSaPz6jQ%3D%3D&Expires=1785776281

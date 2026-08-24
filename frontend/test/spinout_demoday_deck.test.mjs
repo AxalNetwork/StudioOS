@@ -115,20 +115,45 @@ test('hydrate is prototype-pollution safe (dotted path + JSON.parse payload)', (
   assert.equal(render({ 'cover.__proto__.polluted': 'x' }), render(EMPTY), 'forbidden dotted key changed the render');
 });
 
-test('SLIDES registry — canonical 11 slides in order, incl Product demo + Review the deal', () => {
+test('SLIDES registry — canonical 11 slides in order (validation → Problem, cap table → Ask)', () => {
   assert.equal(SLIDES.length, 11, 'expected exactly 11 slides');
   const ids = SLIDES.map((s) => s.id);
   assert.deepEqual(ids, [
-    'cover', 'problem', 'validation', 'market', 'solution',
-    'product_demo', 'roadmap', 'team_network', 'cap_table', 'ask',
+    'cover', 'problem', 'solution', 'product_demo', 'market',
+    'competitive', 'traction', 'roadmap', 'team_network', 'ask',
     'review_the_deal',
   ], 'slide ids / order changed');
-  // Product demo sits at slot 6 (index 5); Review the deal closes the deck.
-  assert.equal(ids[5], 'product_demo', 'Product demo must be slide 6');
   assert.equal(SLIDES[SLIDES.length - 1].id, 'review_the_deal', 'Review the deal must be the last slide');
-  for (const gone of ['axal_signal', 'team_readiness', 'mentor_network', 'brand']) {
+  // Validation and Cap Table are merged into Problem and Ask; the old
+  // standalone slides (and older drops) must stay absent.
+  for (const gone of ['validation', 'cap_table', 'axal_signal', 'team_readiness', 'mentor_network', 'brand']) {
     assert.ok(!ids.includes(gone), `${gone} slide must be absent`);
   }
   // The rendered deck emits exactly one frame per slide.
   assert.equal(countFrames(render(EMPTY)), 11, 'rendered deck should emit 11 slide frames');
+});
+
+test('merged slides render the absorbed sections in place', () => {
+  const html = render(EMPTY);
+  // Problem carries the discovery funnel strip (validation.* read in place).
+  assert.ok(html.includes(SAMPLE_DATA.validation.funnelLabel), 'Problem slide missing validation funnel label');
+  assert.ok(html.includes(SAMPLE_DATA.validation.conversion[0]), 'Problem slide missing conversion stat');
+  // Ask carries the cap-table donut labels (captable.* read in place).
+  assert.ok(html.includes(SAMPLE_DATA.captable.donutLabel), 'Ask slide missing cap-table donut label');
+  // Was a hardcoded English sentence from the pre-rebuild Ask slide. Asserting
+  // the label comes from the data and the count is computed from the items is
+  // the same contract — the merged cap table must state its completion — but it
+  // survives a rewording and fails if either side stops being data-driven.
+  // renderToStaticMarkup escapes &, so compare against the escaped form —
+  // "FOUNDER & ENTITY SETUP" reaches the DOM as "FOUNDER &amp; ENTITY SETUP".
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  assert.ok(html.includes(esc(SAMPLE_DATA.captable.checklistLabel)), 'Ask slide missing entity setup label');
+  const settled = SAMPLE_DATA.captable.items.filter(([, st]) => st === 'done').length;
+  assert.ok(
+    html.includes(`${settled} of ${SAMPLE_DATA.captable.items.length} complete`),
+    'Ask slide missing entity setup completion count',
+  );
+  // New slides render their sample content.
+  assert.ok(html.includes(SAMPLE_DATA.competitive.tableLabel), 'Competitive slide missing landscape table');
+  assert.ok(html.includes(SAMPLE_DATA.traction.mixLabel), 'Traction slide missing revenue mix');
 });

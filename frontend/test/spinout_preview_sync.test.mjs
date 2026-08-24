@@ -45,10 +45,12 @@ const SPINOUT = TEMPLATES.axal_spinout_demoday;
 const INNER_H = 1080;
 const DEFAULT_SCALE = 0.18;
 
-// Slide ids/order are locked by spinout_demoday_deck.test.mjs; ask = index 8.
+// Slide ids/order are locked by spinout_demoday_deck.test.mjs; ask = index 9
+// (validation merged into Problem, cap table merged into Ask, Competitive +
+// Traction added).
 const COVER_IDX = 0;
 const PROBLEM_IDX = 1;
-const ASK_IDX = 8;
+const ASK_IDX = 9;
 
 // Placeholder pains: count column is the em-dash DASH sentinel.
 const PLACEHOLDER_PAINS = {
@@ -89,13 +91,13 @@ test('slide 2 uses the pain-frequency label', () => {
 
 test('a later slide (Ask) gets the neutral "Slide N preview — {title}" label', () => {
   const meta = spinoutPreviewMeta({ activeIdx: ASK_IDX, activeSlide: { title: 'The Ask' }, fields: {} });
-  assert.equal(meta.label, 'Slide 9 preview — The Ask');
+  assert.equal(meta.label, 'Slide 10 preview — The Ask');
   assert.match(meta.caption, /Live preview of this slide/);
 });
 
 test('neutral label falls back to "Untitled" when the slide has no title', () => {
   const meta = spinoutPreviewMeta({ activeIdx: ASK_IDX, activeSlide: null, fields: {} });
-  assert.equal(meta.label, 'Slide 9 preview — Untitled');
+  assert.equal(meta.label, 'Slide 10 preview — Untitled');
 });
 
 // ── Slide-2 caption flips on real vs placeholder pains ──────────────

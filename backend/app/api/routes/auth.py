@@ -1,3 +1,4 @@
+import logging
 import os
 import pyotp
 import jwt
@@ -17,6 +18,8 @@ from backend.app.services.email_service import (
     get_verification_url,
     send_verification_email,
 )
+
+logger = logging.getLogger("studioos.auth")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -50,7 +53,7 @@ def _check_rate_limit(email: str):
         if locked_until and now < locked_until:
             remaining = int((locked_until - now).total_seconds())
             raise HTTPException(status_code=429, detail=f"Too many attempts. Try again in {remaining} seconds.")
-        if locked_until and now >= locked_until:
+        if locked_until:
             _login_attempts[key] = (0, None)
 
 
@@ -185,6 +188,8 @@ def get_current_user(authorization: Optional[str] = Header(None), session: Sessi
         try:
             session.rollback()
         except Exception:
+            # The rollback itself failing means the connection is already
+            # dead — there is no further recovery available at this layer.
             pass
         min_iat = 0
 
@@ -227,6 +232,8 @@ def get_current_user(authorization: Optional[str] = Header(None), session: Sessi
             try:
                 session.rollback()
             except Exception:
+                # As above: a failed rollback means the connection is already
+                # dead, nothing further to do here.
                 pass
 
     return user
@@ -291,6 +298,11 @@ def _register_rate_limit(ip: str, email: str) -> None:
 @router.post("/register")
 def register(req: RegisterRequest, request: Request, session: Session = Depends(get_session)):
     # Phase C4 — honeypot drop. Treat as 200 success so bots can't infer.
+    # The audit-log write is observability only, not the point of this branch:
+    # the response must stay identical whether or not it succeeds, so a DB
+    # hiccup here is swallowed rather than surfaced to the caller. Still
+    # logged, since a persistently failing write would mean honeypot trips
+    # go unrecorded without anyone noticing.
     if req.axl_hp:
         try:
             session.add(ActivityLog(
@@ -299,8 +311,8 @@ def register(req: RegisterRequest, request: Request, session: Session = Depends(
                 actor="honeypot",
             ))
             session.commit()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("auth: honeypot activity-log write failed: %s", exc)
         return {
             "message": "Verification email sent",
             "email": req.email,
@@ -771,6 +783,10 @@ def get_me(user: User = Depends(get_current_user)):
         "role": user.role,
         "is_active": user.is_active,
         "created_at": user.created_at.isoformat(),
+        # Parity with the Worker's /auth/me: the frontend uses founder_id for
+        # ownership-scoped UX (e.g. lab milestone marking on own project).
+        "founder_id": getattr(user, "founder_id", None),
+        "partner_id": getattr(user, "partner_id", None),
         "kyc_status": getattr(user, "kyc_status", None) or "not_started",
         # 'limited' = browse-only access without KYC (admin grant). Null = normal.
         "access_level": getattr(user, "access_level", None),

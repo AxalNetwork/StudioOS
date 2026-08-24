@@ -52,11 +52,25 @@ products.post('/redeem', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as { code?: unknown }));
   const code = String(body?.code || '').trim();
-  if (!code) return c.json({ ok: false, reason: 'not_found' }, 400);
+  // `error` alongside `reason`: the SPA's request() helper throws on a non-2xx
+  // and builds the thrown message from error/detail/message. Without one of
+  // those keys the caller only ever sees "Request failed" and the stable
+  // `reason` never reaches the user. Both are sent — `reason` stays the machine
+  // contract, `error` is what a human reads.
+  if (!code) return c.json({ ok: false, reason: 'not_found', error: 'Enter a code to redeem.' }, 400);
 
   const result = await redeemExplorerPromo(c.env, user.id, code);
   if (!result.ok) {
-    return c.json({ ok: false, reason: result.reason }, 400);
+    const REASON_TEXT: Record<string, string> = {
+      not_found: "That code isn't recognised.",
+      already_redeemed: 'That code has already been redeemed.',
+      expired: 'That code has expired.',
+    };
+    return c.json({
+      ok: false,
+      reason: result.reason,
+      error: REASON_TEXT[String(result.reason)] || "That code can't be applied.",
+    }, 400);
   }
 
   // Best-effort activity trail — mirrors the advisor_field_filled pattern;

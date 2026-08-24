@@ -48,6 +48,7 @@ MILESTONES = [
             "projects",
             "customer-discovery",
             "market-intelligence",
+            "profiling",
         ],
     },
     {
@@ -60,7 +61,7 @@ MILESTONES = [
         "week": 3,
         "required_all": ["scoring_run_completed"],
         "required_any": ["advisor_meeting_booked", "cofounder_request_sent"],
-        "unlocked_features": ["cofounder-match", "advisors", "office-hours", "scoring"],
+        "unlocked_features": ["cofounder-match", "advisors", "office-hours", "scoring", "revenue"],
     },
     {
         "week": 4,
@@ -73,19 +74,62 @@ MILESTONES = [
             "cofounder-agreement",
             "capital",
             "compliance",
+            "use-of-funds",
         ],
     },
 ]
 
+# Deliverable-only milestones: recorded per user like gating milestones and
+# surfaced on the workspace checklist, but NOT part of the week-advance gate
+# (_week_met ignores them). Fired by the owning module on real completion
+# events — the checklist is never manually checkable. Mirror of
+# OPTIONAL_MILESTONES in cloudflare-worker/src/services/spinoutLabCatalog.ts.
+OPTIONAL_MILESTONES = {
+    1: [
+        "customer_interview_logged_4",
+        "customer_interview_logged_5",
+        "market_sizing_completed",
+        "profiling_completed",
+        "icp_defined",
+        "market_research_shared",
+    ],
+    2: [
+        "mvp_scoped",
+        "landing_page_created",
+        "studio_ops_cadence_set",
+        "discovery_followups_mapped",
+    ],
+    3: [
+        "office_hours_booked",
+        "revenue_proof_added",
+        "revenue_summary_generated",
+        "scoring_confidence_70",
+    ],
+    4: [
+        "ein_received",
+        "founder_stock_issued",
+        "section83b_filed",
+        "cofounder_agreement_signed",
+        "fundraise_ask_locked",
+        "use_of_funds_filled",
+        "investor_intros_secured",
+        "captable_locked",
+        "data_room_built",
+    ],
+}
+
 VALID_MILESTONE_KEYS = {
     k for w in MILESTONES for k in [*w["required_all"], *w["required_any"]]
-}
+} | {k for keys in OPTIONAL_MILESTONES.values() for k in keys}
 
 
 def _week_for_key(key: str) -> Optional[int]:
     for w in MILESTONES:
         if key in w["required_all"] or key in w["required_any"]:
             return w["week"]
+    for week, keys in OPTIONAL_MILESTONES.items():
+        if key in keys:
+            return week
     return None
 
 
@@ -378,12 +422,54 @@ def list_cohort(session: Session = Depends(get_session)):
     return members
 
 
+def _application_window() -> Optional[dict]:
+    """Dev parity with resolveApplicationTarget in cohortApplications.ts.
+    Deadline = 7 days before the 1st of the cohort month at 23:59:59 ET.
+    Uses a fixed UTC-4 (EDT) offset — close enough for the dev preview; the
+    Worker uses DST-correct Intl math in production.
+    """
+    from datetime import timedelta
+    COHORT_BASE_YEAR, COHORT_BASE_MONTH, COHORT_BASE_NUM = 2026, 5, 1
+    ET = timedelta(hours=-4)  # EDT approximation
+    now_utc = datetime.now(timezone.utc)
+    now_et = now_utc + ET
+    year, month = now_et.year, now_et.month
+    for _ in range(24):
+        # Deadline = midnight on 1st - 7 days + 23:59:59 = 23rd at 23:59:59
+        first_of_month_et = datetime(year, month, 1, tzinfo=timezone(ET))
+        close_et = first_of_month_et - timedelta(days=7) + timedelta(hours=23, minutes=59, seconds=59)
+        if close_et > now_et.replace(tzinfo=timezone(ET)):
+            cohort_num = (year - COHORT_BASE_YEAR) * 12 + (month - COHORT_BASE_MONTH) + COHORT_BASE_NUM
+            month_label = datetime(year, month, 1).strftime('%B %Y')
+            prev_month = month - 1 or 12
+            prev_year = year if month > 1 else year - 1
+            return {
+                "year": year,
+                "month": month,
+                "label": month_label,
+                "cohort_num": cohort_num,
+                "opens_at": datetime(prev_year, prev_month, 1, tzinfo=timezone.utc).isoformat(),
+                "closes_at": close_et.isoformat(),
+                "starts_at": datetime(year, month, 1, tzinfo=timezone.utc).isoformat(),
+            }
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    return None
+
+
 @router.get("/state")
 def get_state(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    return _state(session, user)
+    state = _state(session, user)
+    try:
+        state["application_window"] = _application_window()
+    except Exception:
+        state["application_window"] = None
+    return state
 
 
 @router.post("/start")
@@ -507,6 +593,106 @@ def apply_to_cohort(
     if getattr(result, "rowcount", 1) == 0:
         raise HTTPException(status_code=409, detail="You already have an application in review")
     return {"ok": True, "emailed": False, "application": _latest_application(session, user.id)}
+
+
+@router.get("/fund-metrics")
+def fund_metrics(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Dev-parity mirror of the Worker's GET /spinout-lab/fund-metrics.
+
+    Program block: real graduate rows (week-4 `incorporation_completed`),
+    with on-time computed against `spinout_lab_started_at`. Dev projects
+    carry no funding column, so `alumni_raised` is null here (the Worker
+    sums projects.total_funding).
+
+    Fund block — DEV DIVERGENCES, deliberate: the dev schema has no
+    `vc_funds.slug` (migration 163 is D1-only) so the fund resolves by
+    name; and no `limited_partners.lpa_signed` (funds_v2 is D1-only) so
+    every positive commitment counts as committed and `soft_circled` is 0.
+    Both blocks carry `available` so the SPA falls back to its
+    operator-maintained model instead of rendering gaps as facts.
+    """
+    program = {"available": False, "graduates": 0, "on_time_pct": None, "alumni_raised": None}
+    try:
+        rows = session.exec(
+            text(
+                "SELECT m.user_id, MIN(m.completed_at) AS completed_at, u.spinout_lab_started_at "
+                "FROM spinout_lab_milestones m JOIN users u ON u.id = m.user_id "
+                "WHERE m.milestone_key = 'incorporation_completed' "
+                "GROUP BY m.user_id, u.spinout_lab_started_at"
+            )
+        ).all()
+        measurable = on_time = 0
+        for _uid, completed_at, started_at in rows:
+            try:
+                done = completed_at if isinstance(completed_at, datetime) else datetime.fromisoformat(str(completed_at))
+                start = started_at if isinstance(started_at, datetime) else datetime.fromisoformat(str(started_at))
+            except (TypeError, ValueError):
+                continue  # a data gap must not read as a late graduation
+            if done >= start:
+                measurable += 1
+                if (done - start).days <= SPRINT_DAYS:
+                    on_time += 1
+        # available=True whenever the query succeeded — a genuine zero-graduate
+        # state is a live fact; only the except (tables absent) answers False.
+        program = {
+            "available": True,
+            "graduates": len(rows),
+            "on_time_pct": round(on_time / measurable * 100) if measurable else None,
+            "alumni_raised": None,
+        }
+    except Exception:
+        session.rollback()  # tables predate the Lab migrations
+
+    # Raise aggregates are capital-side facts — scoped beyond bare auth, same
+    # rule as the Worker: admin/partner/investor roles, or a caller who holds
+    # an LP row in this fund. Others fall back to the operator-maintained model.
+    fund = {"available": False}
+    try:
+        role = str(getattr(user, "role", "") or "").lower().replace("userrole.", "")
+        entitled = role in ("admin", "partner", "investor")
+        frow = session.exec(
+            text(
+                "SELECT id, name, total_commitment FROM vc_funds "
+                "WHERE LOWER(name) LIKE 'spin-out fund%' OR LOWER(name) LIKE 'spinout fund%' "
+                "ORDER BY id LIMIT 1"
+            )
+        ).first()
+        if frow and not entitled:
+            entitled = bool(session.exec(
+                text(
+                    "SELECT 1 FROM limited_partners WHERE fund_id = :fid AND "
+                    "(user_id = :uid OR LOWER(email) = LOWER(:em)) LIMIT 1"
+                ).bindparams(fid=frow[0], uid=user.id, em=user.email or "")
+            ).first())
+        if frow and entitled:
+            fund_id, fund_name, _total_commitment = frow
+            lp_rows = session.exec(
+                text("SELECT commitment_amount FROM limited_partners WHERE fund_id = :fid").bindparams(fid=fund_id)
+            ).all()
+            tickets = sorted(float(r[0]) for r in lp_rows if r[0] and float(r[0]) > 0)
+            n = len(tickets)
+            median = None if not n else (tickets[n // 2] if n % 2 else (tickets[n // 2 - 1] + tickets[n // 2]) / 2)
+            fund = {
+                "available": True,
+                "fund_id": fund_id,
+                "name": fund_name,
+                "slug": None,
+                # Dev has no fund_size_cents column, and total_commitment is
+                # aggregated LP commitments — not a target. Null lets the SPA
+                # keep its operator-stated target as the denominator.
+                "target": None,
+                "committed": sum(tickets),
+                "soft_circled": 0,
+                "lp_count": len(lp_rows),
+                "median_commitment": median,
+            }
+    except Exception:
+        session.rollback()
+
+    return {"ok": True, "program": program, "fund": fund}
 
 
 @router.post("/exit")

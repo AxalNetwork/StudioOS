@@ -111,12 +111,23 @@ class ProjectUpdate(BaseModel):
     why_now: Optional[str] = None
     tam: Optional[float] = None
     sam: Optional[float] = None
+    som: Optional[float] = None
     users_count: Optional[int] = None
     revenue: Optional[float] = None
     growth_signals: Optional[str] = None
+    # Structured revenue-proof fields (Worker parity — Task #2 there). The
+    # lab Revenue page edits these; validation mirrors the Worker coercion.
+    mrr: Optional[float] = None
+    paying_customers: Optional[int] = None
+    first_payment_date: Optional[str] = None
+    paid_pilot_status: Optional[str] = None
     cost_to_mvp: Optional[float] = None
     funding_needed: Optional[float] = None
     use_of_funds: Optional[str] = None
+    # Use of Funds planning metadata (JSON) — Worker parity (migration 158).
+    use_of_funds_meta: Optional[str] = None
+    # Spin-Out Lab Incorporate workspace state (JSON) — Worker parity (migration 159).
+    incorporation_meta: Optional[str] = None
     # Task #31 — Product demo source for the Spin-Out Demo Day deck.
     product_demo_video_url: Optional[str] = None
     product_demo_live_url: Optional[str] = None
@@ -167,9 +178,10 @@ class DocumentCreate(BaseModel):
 
 
 class TicketCreate(BaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = None
-    priority: str = "medium"
+    priority: str = Field("medium", pattern="^(low|medium|high|urgent)$")
+    type: str = Field("task", pattern="^(bug|feature|task)$")
     project_id: Optional[int] = None
 
 

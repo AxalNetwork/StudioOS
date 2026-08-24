@@ -22,8 +22,6 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field as PydField, field_validator
-
-VALID_HYPOTHESIS_STATUSES = {"validated", "invalidated", "inconclusive"}
 from sqlalchemy import text
 from sqlmodel import Session, select
 
@@ -50,6 +48,8 @@ from backend.app.services.pain_groups import (
 )
 from backend.app.services import email_service
 
+VALID_HYPOTHESIS_STATUSES = {"validated", "invalidated", "inconclusive"}
+
 router = APIRouter(prefix="/progress", tags=["Discovery / Roadmap / Metrics"])
 
 logger = logging.getLogger("studioos.progress")
@@ -69,6 +69,17 @@ def _ensure_can_edit(project: Project, user: User) -> None:
     if user.role == UserRole.ADMIN:
         return
     if user.role == UserRole.FOUNDER and can_access_founder_resource(user, project.founder_id):
+        return
+    # Active Spin-Out Lab members log interviews/OKRs as program deliverables
+    # regardless of account role (admitted users keep e.g. 'exploring').
+    # Deliberately an EXPLICIT ownership comparison, not
+    # can_access_founder_resource(): that predicate treats partner/investor as
+    # privileged readers, which must never widen into cross-project writes.
+    if (
+        int(getattr(user, "spinout_lab_active", 0) or 0) == 1
+        and project.founder_id is not None
+        and user.founder_id == project.founder_id
+    ):
         return
     raise HTTPException(status_code=403, detail="Read-only for non-founder roles")
 
@@ -141,6 +152,8 @@ def _compute_lifecycle_signals(session: Session, project_id: int) -> dict:
         "monthly_churn_pct": None,
         "new_users": None,
         "active_prospects": 0,
+        "mvp_features_count": 0,
+        "has_launch_activity": False,
     }
     try:
         row = session.exec(text(
@@ -176,6 +189,21 @@ def _compute_lifecycle_signals(session: Session, project_id: int) -> dict:
         out["active_prospects"] = int(row["n"]) if row and row.get("n") is not None else 0
     except Exception:
         logger.debug("lifecycle: raise_prospects count failed", exc_info=True)
+    try:
+        row = session.exec(text(
+            "SELECT COUNT(*) AS n FROM mvp_features WHERE project_id = :pid"
+        ), params={"pid": project_id}).mappings().first()
+        out["mvp_features_count"] = int(row["n"]) if row and row.get("n") is not None else 0
+    except Exception:
+        logger.debug("lifecycle: mvp_features count failed", exc_info=True)
+    try:
+        row = session.exec(text(
+            "SELECT COUNT(*) AS n FROM activity_logs "
+            "WHERE project_id = :pid AND action IN ('launch', 'product_launch', 'go_live')"
+        ), params={"pid": project_id}).mappings().first()
+        out["has_launch_activity"] = bool(row and int(row.get("n") or 0) > 0)
+    except Exception:
+        logger.debug("lifecycle: activity_logs launch lookup failed", exc_info=True)
     return out
 
 
@@ -184,6 +212,10 @@ def _infer_stage_from_signals(s: dict) -> str:
         return "raise"
     if (s["latest_mrr"] or 0) > 0:
         return "grow"
+    if s.get("has_launch_activity"):
+        return "launch"
+    if (s.get("mvp_features_count") or 0) > 0:
+        return "build"
     if s["landing_published"] and s["interview_count"] >= 5:
         return "validate"
     return "idea"
@@ -351,6 +383,18 @@ class HypothesisItem(BaseModel):
         return v
 
 
+_VALID_ICP_FIT = {"strong", "partial", "none"}
+
+
+def _norm_icp_fit(raw) -> Optional[str]:
+    """Mirror the Worker's asIcpFit(): unknown values become None ("not yet
+    assessed") rather than being stored verbatim."""
+    if raw is None or raw == "":
+        return None
+    s = str(raw).strip().lower()
+    return s if s in _VALID_ICP_FIT else None
+
+
 class InterviewIn(BaseModel):
     interviewee_name: str
     interviewee_role: Optional[str] = None
@@ -358,6 +402,11 @@ class InterviewIn(BaseModel):
     notes: str = ""
     hypotheses: list[HypothesisItem] = []
     pains: list[str] = []
+    # Assessment fields (Worker parity — D1 migrations 072 / 074 / 161).
+    icp_fit: Optional[str] = None
+    featured: bool = False
+    validation_rating: Optional[int] = None
+    validation_comment: Optional[str] = None
 
 
 def _serialize_interview(i: Interview) -> dict:
@@ -370,6 +419,10 @@ def _serialize_interview(i: Interview) -> dict:
         "notes": i.notes,
         "hypotheses": json.loads(i.hypotheses_json or "[]"),
         "pains": json.loads(i.pains_json or "[]"),
+        "icp_fit": getattr(i, "icp_fit", None),
+        "featured": bool(getattr(i, "featured", False)),
+        "validation_rating": getattr(i, "validation_rating", None),
+        "validation_comment": getattr(i, "validation_comment", None),
         "created_at": i.created_at.isoformat() if i.created_at else None,
         "updated_at": i.updated_at.isoformat() if i.updated_at else None,
     }
@@ -408,6 +461,10 @@ def create_interview(
         notes=body.notes,
         hypotheses_json=json.dumps([h.model_dump() for h in body.hypotheses]),
         pains_json=json.dumps(body.pains),
+        icp_fit=_norm_icp_fit(body.icp_fit),
+        featured=bool(body.featured),
+        validation_rating=body.validation_rating,
+        validation_comment=body.validation_comment,
         created_by=user.id,
     )
     session.add(i)
@@ -436,6 +493,18 @@ def update_interview(
     i.notes = body.notes
     i.hypotheses_json = json.dumps([h.model_dump() for h in body.hypotheses])
     i.pains_json = json.dumps(body.pains)
+    # Preserve-on-omit, mirroring the Worker: these fields have non-None
+    # defaults, so a partial payload that predates them would otherwise clear
+    # a founder's assessment on every re-save.
+    sent = body.model_fields_set
+    if "icp_fit" in sent:
+        i.icp_fit = _norm_icp_fit(body.icp_fit)
+    if "featured" in sent:
+        i.featured = bool(body.featured)
+    if "validation_rating" in sent:
+        i.validation_rating = body.validation_rating
+    if "validation_comment" in sent:
+        i.validation_comment = body.validation_comment
     i.updated_at = datetime.utcnow()
     session.add(i)
     session.commit()
@@ -488,6 +557,21 @@ def _ensure_waitlist_crm_schema(session: Session) -> None:
     if _WAITLIST_CRM_READY:
         return
     for s in [
+        # The base table is normally created lazily by brand.py; on a fresh DB
+        # where no brand endpoint ever ran, the CRM list would 500 without it.
+        """
+        CREATE TABLE IF NOT EXISTS waitlist_signups (
+            id BIGSERIAL PRIMARY KEY,
+            project_id INTEGER NOT NULL,
+            landing_page_id INTEGER,
+            email TEXT NOT NULL,
+            name TEXT,
+            source TEXT,
+            ip_hash TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS audience TEXT",
         "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS crm_status TEXT DEFAULT 'new'",
         "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS invited_at TEXT",
         "ALTER TABLE waitlist_signups ADD COLUMN IF NOT EXISTS followed_up_at TEXT",
@@ -500,6 +584,12 @@ def _ensure_waitlist_crm_schema(session: Session) -> None:
             session.commit()
         except Exception:
             session.rollback()
+    # codeql[py/unused-global-variable] -- _WAITLIST_CRM_READY is read via the `global _WAITLIST_CRM_READY` guard at the top of this
+    # same function (`if _WAITLIST_CRM_READY: return`); the write here is what a LATER, separate
+    # call's read observes. CodeQL's dead-store analysis does not model a global's value persisting
+    # across separate invocations of the function that sets it, so it sees this write as never
+    # consumed. It is: this flag exists specifically to make the schema-migration idempotent-but-
+    # skippable after the first successful request in this process.
     _WAITLIST_CRM_READY = True
 
 
@@ -618,8 +708,8 @@ def _waitlist_outreach(kind: str, project_id: int, signup_id: int, session: Sess
     # Gmail) is a SOFT path that still records the CRM action.
     email_sent = False
     email_reason: Optional[str] = None
-    if email_service._is_gmail_configured():
-        ok = email_service._send_html_email(
+    if email_service.is_gmail_configured():
+        ok = email_service.send_html_email(
             to_email=signup["email"], subject=subject, html_body=html,
             plain_text=plain, sender_label=product_name, reply_to="support@axal.vc",
         )
@@ -669,13 +759,31 @@ def list_waitlist_customers(
     p = _get_project_or_404(session, project_id)
     _ensure_can_view(p, user)
     _ensure_waitlist_crm_schema(session)
-    # Justification: concatenates a module-constant SELECT with a static WHERE clause; all
-    # values are bound params, dev-only FastAPI not exposed to user input
+    # Mirrors the worker: the list view JOINs the source landing page so the
+    # Discovery panel can show WHICH template each lead signed up through.
+    # Kept separate from _WAITLIST_SELECT — the by-id loaders reuse that
+    # fragment with unqualified columns that a JOIN would make ambiguous.
+    # Justification: static SQL with bound params only; dev-only FastAPI.
     rows = session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-        _WAITLIST_SELECT + " WHERE project_id = :pid AND audience = 'customer' "
-        "ORDER BY created_at DESC, id DESC LIMIT 500"
+        "SELECT w.id, w.project_id, w.email, w.name, w.source, w.audience, w.created_at, "
+        "w.crm_status, w.invited_at, w.followed_up_at, w.promoted_at, w.promoted_interview_id, "
+        "lp.template_kit AS landing_template_kit, lp.name AS landing_page_name "
+        "FROM waitlist_signups w "
+        "LEFT JOIN landing_pages lp ON lp.id = w.landing_page_id "
+        "WHERE w.project_id = :pid AND w.audience = 'customer' "
+        "ORDER BY w.created_at DESC, w.id DESC LIMIT 500"
     ), params={"pid": project_id}).mappings().all()
-    return {"project_id": project_id, "signups": [_serialize_signup(r) for r in rows]}
+    return {
+        "project_id": project_id,
+        "signups": [
+            {
+                **_serialize_signup(r),
+                "landing_template_kit": r.get("landing_template_kit"),
+                "landing_page_name": r.get("landing_page_name"),
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.post("/discovery/{project_id}/waitlist/{signup_id}/promote")
@@ -721,10 +829,24 @@ def promote_waitlist_customer(
     session.refresh(i)
 
     now_iso = datetime.utcnow().isoformat()
-    session.exec(text(
+    # Atomic claim (mirrors the Worker): only the request that flips the NULL
+    # promoted_interview_id wins; a concurrent loser deletes its interview and
+    # returns the winner's, so a double-click never creates duplicates.
+    claim = session.exec(text(
         "UPDATE waitlist_signups SET crm_status = 'promoted', promoted_at = :ts, "
-        "promoted_interview_id = :iid WHERE id = :sid AND project_id = :pid"
+        "promoted_interview_id = :iid WHERE id = :sid AND project_id = :pid "
+        "AND promoted_interview_id IS NULL"
     ), params={"ts": now_iso, "iid": i.id, "sid": signup_id, "pid": project_id})
+    if getattr(claim, "rowcount", 1) == 0:
+        session.delete(i)
+        session.commit()
+        lost = _load_customer_signup(session, project_id, signup_id)
+        winner = session.get(Interview, lost.get("promoted_interview_id")) if lost else None
+        return {
+            "signup": _serialize_signup(lost) if lost else None,
+            "interview": _serialize_interview(winner) if winner else None,
+            "already_promoted": True,
+        }
     session.add(ActivityLog(
         action="waitlist_promoted",
         details=f"Project {p.name}: promoted {signup['email']} to interview",
@@ -1407,7 +1529,6 @@ def _revenue_slider(latest: Optional[MetricsSnapshot]) -> tuple[float, dict]:
         return 0.0, {"reason": "no_revenue"}
     # log scale: $1k=4, $10k=6, $100k=8, $1M+=10
     import math
-    score = max(0.0, min(10.0, 4.0 + math.log10(max(mrr, 1.0)) * 2.0 - 2.0 * math.log10(1000)/math.log10(10)))
     # Simplification: 4 + 2*(log10(mrr) - log10(1000)) → $1k=4, $10k=6, $100k=8, $1M=10
     score = max(0.0, min(10.0, 4.0 + 2.0 * (math.log10(max(mrr, 1.0)) - 3.0)))
     churn = latest.monthly_churn_pct or 0

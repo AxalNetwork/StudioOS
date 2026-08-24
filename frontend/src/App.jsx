@@ -1,18 +1,26 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
-import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
+import { ActiveCompanyContext, useActiveCompany as _useActiveCompany } from './contexts/ActiveCompanyContext';
+// ViewModeContext lives in its own module so App.jsx exports only React
+// components — mixing component + hook exports breaks Vite Fast Refresh.
+import ViewModeContext from './contexts/ViewModeContext';
+// Single source of truth for "which role is this session browsing as". The
+// shell picks the sidebar from it and the router picks route elements from it;
+// when those two disagree the nav offers one thing and the route serves another.
+import { resolveActiveRole } from './lib/activeRole';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
 import SafeMount from './components/SafeMount';
 import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
   Menu, X,
-  LogOut, Shield,
+  Shield,
   ChevronDown, ChevronLeft, ChevronRight, Eye, ArrowLeft, Sparkles,
-  Search
+  Search, Gift, Building2, Plus
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInvestorTier } from './sidebarConfig';
 import PaywallModal, { openPaywall } from './components/PaywallModal';
@@ -36,7 +44,9 @@ const LegalPage = lazy(() => import('./pages/LegalPage'));
 const IncorporatePage = lazy(() => import('./pages/IncorporatePage'));
 const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage'));
 const CofounderAgreementPage = lazy(() => import('./pages/CofounderAgreementPage'));
-const Section83bPage = lazy(() => import('./pages/Section83bPage'));
+const SpinoutLab83bPage = lazy(() => import('./pages/SpinoutLab83bPage'));
+const SpinoutLabCompliancePage = lazy(() => import('./pages/SpinoutLabCompliancePage'));
+const SpinoutLabStudioOpsPage = lazy(() => import('./pages/SpinoutLabStudioOpsPage'));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 const WellbeingPage = lazy(() => import('./pages/WellbeingPage'));
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
@@ -59,6 +69,7 @@ const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 // Task #9 — 'exploring' holding-state surfaces.
 const ExploringDashboard = lazy(() => import('./pages/ExploringDashboard'));
 const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
+const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminSpinoutLab = lazy(() => import('./pages/admin/AdminSpinoutLab'));
@@ -83,11 +94,39 @@ const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
 const AdminReferEarnPayouts = lazy(() => import('./pages/admin/ReferEarnPayouts'));
+const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
+const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
+const DueDiligenceRequestsPage = lazy(() => import('./pages/DueDiligenceRequestsPage'));
+const SharedCapTablePage = lazy(() => import('./pages/SharedCapTablePage'));
 const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
+// The investor journey's two pages. Separate lazy imports (rather than reaching
+// the workspace through FundOpsWorkspace) so /spinout-lab and
+// /spinout-lab/investor-workspace serve them directly without pulling the whole
+// Fund Ops shell — and so a founder never downloads either chunk.
+const SpinoutLabInvestorPage = lazy(() => import('./pages/SpinoutLabInvestorPage'));
+const SpinoutLabLpWorkspacePage = lazy(() => import('./pages/SpinoutLabLpWorkspacePage'));
+const SpinoutLabStartupPage = lazy(() => import('./pages/SpinoutLabStartupPage'));
+const SpinoutLabDiscoveryPage = lazy(() => import('./pages/SpinoutLabDiscoveryPage'));
+const SpinoutLabMarketPage = lazy(() => import('./pages/SpinoutLabMarketPage'));
+const SpinoutLabRoadmapPage = lazy(() => import('./pages/SpinoutLabRoadmapPage'));
+const SpinoutLabProfilingPage = lazy(() => import('./pages/SpinoutLabProfilingPage'));
+const SpinoutLabScoringPage = lazy(() => import('./pages/SpinoutLabScoringPage'));
+const SpinoutLabAdvisorsPage = lazy(() => import('./pages/SpinoutLabAdvisorsPage'));
+const SpinoutLabRevenuePage = lazy(() => import('./pages/SpinoutLabRevenuePage'));
+const SpinoutLabUseOfFundsPage = lazy(() => import('./pages/SpinoutLabUseOfFundsPage'));
+const SpinoutLabIncorporatePage = lazy(() => import('./pages/SpinoutLabIncorporatePage'));
+const SpinoutLabCapitalPage = lazy(() => import('./pages/SpinoutLabCapitalPage'));
+const SpinoutLabCapTablePage = lazy(() => import('./pages/SpinoutLabCapTablePage'));
+const SpinoutLabPitchDeckPage = lazy(() => import('./pages/SpinoutLabPitchDeckPage'));
+const SpinoutLabBrandPage = lazy(() => import('./pages/SpinoutLabBrandPage'));
+const SpinoutLabOfficeHoursPage = lazy(() => import('./pages/SpinoutLabOfficeHoursPage'));
+const SpinoutLabCofounderAgreementPage = lazy(() => import('./pages/SpinoutLabCofounderAgreementPage'));
+const SpinoutLabCofounderMatchPage = lazy(() => import('./pages/SpinoutLabCofounderMatchPage'));
+const SpinoutLabCertificatePage = lazy(() => import('./pages/SpinoutLabCertificatePage'));
 const SpinoutLabApplyPage = lazy(() => import('./pages/SpinoutLabApplyPage'));
 const SpinoutLabBriefPage = lazy(() => import('./pages/SpinoutLabBriefPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
@@ -155,6 +194,7 @@ const DemoPage = lazy(() => import('./pages/DemoPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
 const PublicRoadmapPage = lazy(() => import('./pages/PublicRoadmapPage'));
+const PublicCertificateVerifyPage = lazy(() => import('./pages/PublicCertificateVerifyPage'));
 const MonitoringPage = lazy(() => import('./pages/MonitoringPage'));
 const LiquidityPage = lazy(() => import('./pages/LiquidityPage'));
 const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
@@ -270,12 +310,10 @@ function DashboardRedirect() {
   return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
 }
 
-// Task #4 — Referrals moved into Settings. Legacy /refer (and /payouts) redirect
-// into the Settings "Referrals" section, preserving the ?tab= sub-tab so a
-// /refer?tab=payouts or /payouts bookmark still lands on the Payouts tab.
+// Legacy /refer redirects to the standalone /referrals page, preserving ?tab=.
 function ReferRedirect() {
   const loc = useLocation();
-  return <Navigate to={{ pathname: '/settings/referrals', search: loc.search }} replace />;
+  return <Navigate to={{ pathname: '/referrals', search: loc.search }} replace />;
 }
 
 // Integrations merged into Settings. Legacy /integrations (and
@@ -287,15 +325,13 @@ function IntegrationsRedirect() {
   return <Navigate to={{ pathname: '/settings/integrations', search: loc.search }} replace />;
 }
 
-const ViewModeContext = createContext(null);
-export const useViewMode = () => useContext(ViewModeContext);
 
 function getSidebarGroups(role, primaryPersonaId, user) {
   const base = SIDEBAR_GROUPS[role] || SIDEBAR_GROUPS.founder;
   // Apply tier gating per group (stub passes everything through today;
   // Phase C will swap `hasTier` for the real subscription check).
   const groups = base
-    .map((g) => ({ ...g, items: filterItemsByTier(g.items, user) }))
+    .map((g) => ({ ...g, items: filterItemsByTier(g.items) }))
     .filter((g) => (g.items || []).length > 0);
 
   // Persona-specific deep-links surface as their own collapsible group
@@ -354,7 +390,187 @@ function abbreviateLabel(label) {
   return parts.map((w) => w[0].toUpperCase()).join('').slice(0, 3) || label[0].toUpperCase();
 }
 
-function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
+// Carta-style user dropdown — top-right of the global header.
+function UserDropdown({ user, onLogout }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const keydown = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('keydown', keydown);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', keydown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-gray-50 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <span className="max-w-[160px] truncate">{user?.name || user?.email || 'Account'}</span>
+        <ChevronDown size={13} className={`flex-shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1.5 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1.5 z-50"
+          role="menu"
+        >
+          <Link to="/settings" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            User Settings
+          </Link>
+          <Link to="/tickets" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Support
+          </Link>
+          <Link to="/docs" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Documentation
+          </Link>
+          <Link to="/plans-and-pricing" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Plans &amp; Pricing
+          </Link>
+          <div className="my-1 border-t border-gray-100 dark:border-gray-800" role="separator" />
+          <button type="button" onClick={() => { setOpen(false); onLogout(); }}
+            className="w-full flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Log Out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Company Switcher -------------------------------------------------
+// Context is imported from ./contexts/ActiveCompanyContext and provided by
+// ProtectedLayout. CompanySwitcher fetches all the user's company memberships
+// from the membership-scoped /company/memberships endpoint (not the public
+// company directory), populates the context, and lets the user switch between
+// them. "Add a new company" is disabled until task #5 ships.
+
+function CompanySwitcher({ collapsed }) {
+  const { company, setCompany, companies, setCompanies } = _useActiveCompany();
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const ref = useRef(null);
+
+  // Fetch all companies the current user is a member of.
+  useEffect(() => {
+    api.listMyCompanies()
+      .then(list => {
+        const arr = Array.isArray(list) ? list : [];
+        setCompanies(arr);
+        // Set the primary company (is_primary_admin=true comes first from the API)
+        // as active if nothing is selected yet.
+        if (arr.length > 0 && !company) setCompany(arr[0]);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const displayName = loading ? '…' : (company?.company_name ?? 'My Company');
+  const abbr = (displayName === '…' ? '…' :
+    displayName.replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?');
+
+  const dropdownContent = (
+    <div className={
+      collapsed
+        ? 'absolute left-full top-0 ml-2 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden min-w-[200px]'
+        : 'absolute left-3 right-3 top-full mt-1 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden'
+    }>
+      {loading && <div className="px-3 py-2.5 text-xs text-gray-500">Loading…</div>}
+      {!loading && companies.length === 0 && (
+        <div className="px-3 py-2.5 text-xs text-gray-500">No company yet.</div>
+      )}
+      {!loading && companies.map((co) => {
+        const coAbbr = (co.company_name || '?').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+        const isActive = company?.id === co.id;
+        return (
+          <button
+            key={co.uid ?? co.id}
+            type="button"
+            onClick={() => { setCompany(co); setOpen(false); }}
+            className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs text-left transition-colors ${
+              isActive
+                ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50 dark:bg-violet-900/30'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+            }`}
+          >
+            <div className="w-5 h-5 rounded bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[9px] font-bold flex items-center justify-center flex-none">
+              {coAbbr}
+            </div>
+            <span className="truncate flex-1">{co.company_name}</span>
+            {isActive && <span className="flex-none">✓</span>}
+          </button>
+        );
+      })}
+      <div className={companies.length > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}>
+        <button
+          type="button"
+          disabled
+          title="Creating additional companies is coming soon"
+          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-400 dark:text-gray-600 cursor-not-allowed"
+        >
+          <Plus size={12} />
+          Add a new company
+        </button>
+      </div>
+    </div>
+  );
+
+  if (collapsed) {
+    return (
+      <div ref={ref} className="relative flex justify-center py-2 px-1 border-b border-gray-200 dark:border-gray-700 flex-none">
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          title={displayName}
+          className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-xs font-bold flex items-center justify-center hover:bg-violet-200 dark:hover:bg-violet-900/60 transition-colors"
+        >
+          {abbr}
+        </button>
+        {open && dropdownContent}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex-none">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition-colors text-left"
+      >
+        <div className="w-6 h-6 rounded bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[10px] font-bold flex items-center justify-center flex-none">
+          {abbr}
+        </div>
+        <span className="flex-1 text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{displayName}</span>
+        <ChevronDown size={12} className={`flex-none text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && dropdownContent}
+    </div>
+  );
+}
+
+function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
   const navLocation = useLocation();
   const [query, setQuery] = useState('');
   // Persisted open-state per group key. We seed once from
@@ -408,22 +624,62 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
     : openKeys;
 
   return (
-    <nav className="flex-1 py-3 overflow-y-auto" aria-label="Primary navigation" data-tour="sidebar-nav">
-      {!collapsed && (
-        <div className="px-3 pb-2">
-          <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search…"
-              aria-label="Search sidebar"
-              className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:placeholder:text-gray-500"
-            />
+    <div className="flex flex-col flex-1 min-h-0">
+      <CompanySwitcher collapsed={collapsed} />
+      <div className="px-3 pb-2 pt-2 flex-none">
+        {!collapsed ? (
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search…"
+                aria-label="Search sidebar"
+                className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              />
+            </div>
+            {onCollapse && (
+              <button
+                type="button"
+                onClick={onCollapse}
+                className="hidden lg:inline-flex flex-none items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+              >
+                <ChevronLeft size={15} />
+              </button>
+            )}
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="lg:hidden flex-none inline-flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Close menu"
+                title="Close menu"
+              >
+                <X size={15} />
+              </button>
+            )}
           </div>
-        </div>
-      )}
+        ) : (
+          onCollapse && (
+            <div className="flex justify-center pt-0.5">
+              <button
+                type="button"
+                onClick={onCollapse}
+                className="hidden lg:inline-flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Expand sidebar"
+                title="Expand sidebar"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          )
+        )}
+      </div>
+      <nav className="flex-1 overflow-y-auto min-h-0 py-2" aria-label="Primary navigation" data-tour="sidebar-nav">
       {groups.map((group) => {
         const visibleItems = q
           ? group.items.filter((it) => it.label.toLowerCase().includes(q))
@@ -536,6 +792,26 @@ function SidebarNav({ groups, role, onNavigate, user, collapsed }) {
         );
       })}
     </nav>
+    <div className="flex-none border-t border-gray-200 dark:border-gray-700">
+      <NavLink
+        to="/company-settings"
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          collapsed
+            ? `flex flex-col items-center gap-0.5 px-1 py-2.5 text-[10px] w-full transition-colors ${isActive ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
+            : `flex items-center gap-3 px-5 py-2.5 text-sm w-full transition-colors ${isActive ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
+        }
+        title={collapsed ? 'Company Settings' : undefined}
+      >
+        <Building2 size={collapsed ? 18 : 16} />
+        {collapsed ? (
+          <span className="truncate w-full text-center">Co.</span>
+        ) : (
+          <span className="truncate">Company Settings</span>
+        )}
+      </NavLink>
+    </div>
+    </div>
   );
 }
 
@@ -612,6 +888,11 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
 }
 
 function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId }) {
+  // Active-company context state — owned here so descendants (CompanySwitcher,
+  // CompanySettingsPage, etc.) share the same reference without prop drilling.
+  const [activeCompany, setActiveCompany] = useState(null);
+  const [companyList, setCompanyList] = useState([]);
+
   // Task #31 — Honor the user's "Sidebar default" appearance preference on
   // first paint AND when the async appearance load completes (so the
   // server-side preference wins over the cached default on a fresh device).
@@ -678,7 +959,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     }
   }, []);
   const isAdmin = (realUser || user)?.role === 'admin';
-  const activeRole = isImpersonating ? user?.role : (isAdmin ? viewMode : user?.role);
+  const activeRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
@@ -699,6 +980,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   );
 
   return (
+    <ActiveCompanyContext.Provider value={{ company: activeCompany, setCompany: setActiveCompany, companies: companyList, setCompanies: setCompanyList }}>
     <ViewModeContext.Provider value={viewModeContextValue}>
       <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
         {isAdmin && (
@@ -712,6 +994,44 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           />
         )}
 
+        {/* ── Carta-style global top header ─────────────────────────────── */}
+        <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <button
+              className="lg:hidden text-gray-500 dark:text-gray-400 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu size={18} />
+            </button>
+            <img src="/axal-mark.png" alt="Axal VC" className="h-7 w-7 rounded-md object-cover flex-shrink-0" />
+            <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 hidden sm:block">Axal VC</span>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            {isImpersonating && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                Impersonating {user.name}
+              </span>
+            )}
+            {isAdmin && activeRole !== 'admin' && (
+              <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[activeRole]}`}>
+                {ROLE_LABELS[activeRole]} View
+              </span>
+            )}
+            <Suspense fallback={<span className="inline-block w-8 h-8" />}>
+              <NotificationBell userId={user?.id} />
+            </Suspense>
+            <Link
+              to="/referrals"
+              className="hidden sm:inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors whitespace-nowrap"
+            >
+              <Gift size={14} />
+              Refer &amp; Earn
+            </Link>
+            <UserDropdown user={user} onLogout={onLogout} />
+          </div>
+        </header>
+
         <div className="flex flex-1 overflow-hidden">
           <aside className={`
             fixed ${sidebarOpen ? 'lg:relative' : ''}
@@ -720,68 +1040,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             transform transition-transform duration-200
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}
           `}>
-            <div className={`flex items-center gap-2 ${effectiveCollapsed ? 'px-2 justify-center' : 'px-5'} py-4 border-b border-gray-200 dark:border-gray-800`}>
-              <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-cover flex-shrink-0" />
-              {!effectiveCollapsed && (
-                <div>
-                  <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">Axal VC</div>
-                  <div className="text-[10px] text-gray-500 dark:text-gray-400">StudioOS v1.0</div>
-                </div>
-              )}
-              {!effectiveCollapsed && isAdmin && activeRole !== 'admin' && (
-                <span className={`ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[activeRole]}`}>
-                  {ROLE_LABELS[activeRole]} View
-                </span>
-              )}
-              <button
-                className={`${effectiveCollapsed ? '' : 'ml-auto'} hidden lg:inline-flex text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800`}
-                onClick={toggleSidebarCollapsed}
-                aria-label={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                aria-expanded={!effectiveCollapsed}
-                title={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              >
-                {effectiveCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-              </button>
-              <button
-                className="lg:hidden ml-auto text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-                onClick={() => setSidebarOpen(false)}
-                aria-label="Close menu"
-                title="Close menu"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} />
-            <div className={`${effectiveCollapsed ? 'px-2' : 'px-5'} py-3 border-t border-gray-200 dark:border-gray-800`}>
-              {user && (
-                effectiveCollapsed ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <span
-                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ROLE_COLORS[user.role] || 'bg-gray-100 text-gray-600'}`}
-                      title={`${user.name} — ${user.email}`}
-                    >
-                      {(user.name || user.email || '?').slice(0, 1).toUpperCase()}
-                    </span>
-                    <button onClick={onLogout} className="text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors" title="Sign out" aria-label="Sign out">
-                      <LogOut size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-gray-900 dark:text-gray-100 font-medium truncate">{user.name}</div>
-                      <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{user.email}</div>
-                      <span className={`inline-block mt-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full ${ROLE_COLORS[user.role] || 'bg-gray-100 text-gray-600'}`}>
-                        {ROLE_LABELS[user.role] || user.role}
-                      </span>
-                    </div>
-                    <button onClick={onLogout} className="text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors" title="Sign out">
-                      <LogOut size={14} />
-                    </button>
-                  </div>
-                )
-              )}
-            </div>
+            <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} onCollapse={toggleSidebarCollapsed} onClose={() => setSidebarOpen(false)} />
           </aside>
 
           {sidebarOpen && (
@@ -789,38 +1048,20 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           )}
 
           <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
-            <header className={`sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between gap-3 ${sidebarOpen ? 'lg:hidden' : ''}`}>
-              <div className="flex items-center gap-2.5 lg:hidden">
-                <img src="/axal-mark.png" alt="Axal VC" className="h-8 w-8 rounded-lg object-contain flex-shrink-0" />
-                <div>
-                  <div className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight">Axal VC</div>
-                  <div className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">StudioOS v1.0</div>
-                </div>
-              </div>
-              <div className="hidden lg:block flex-1">
-                {isImpersonating && (
-                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                    Impersonating {user.name}
-                  </span>
-                )}
-              </div>
-              {isImpersonating && (
-                <span className="lg:hidden text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
-                  Impersonating {user.name}
-                </span>
-              )}
-              <div className="flex items-center gap-1 ml-auto">
-                <Suspense fallback={<span className="inline-block w-9 h-9" />}>
-                  <NotificationBell userId={user?.id} />
-                </Suspense>
-                <button className="text-gray-600 dark:text-gray-300 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
-                  <Menu size={20} />
-                </button>
-              </div>
-            </header>
             <div data-app-main data-density-target className="p-4 md:p-6 max-w-7xl mx-auto">
               {children}
             </div>
+            <footer className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
+              <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
+                <span>
+                  © Copyright {new Date().getFullYear()}, Axal VC Management LLC. Axal VC Holdings LLC. All rights reserved.
+                </span>
+                <div className="flex items-center gap-4">
+                  <Link to="/terms" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Terms of service</Link>
+                  <Link to="/privacy" className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors">Privacy policy</Link>
+                </div>
+              </div>
+            </footer>
           </main>
         </div>
       </div>
@@ -837,6 +1078,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
         <StepUpModal />
       </Suspense>
     </ViewModeContext.Provider>
+    </ActiveCompanyContext.Provider>
   );
 }
 
@@ -1005,7 +1247,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // /onboarding/partner "Your firm" form. The chatbot saves the persona
   // into partner_profiles for admin review, which is everything the form
   // used to collect plus more. Founders and investors keep their existing
-  // wizards (founders' 30-day Spin-Out Lab is gated separately via
+  // wizards (founders' 28-day Spin-Out Lab is gated separately via
   // users.spinout_lab_active and is unaffected by this map).
   const wizardForRole = { founder: '/onboarding/founder', investor: '/onboarding/investor' };
   const myWizard = wizardForRole[user.role];
@@ -1194,6 +1436,16 @@ function AppInner() {
     const origToken = localStorage.getItem('realToken');
     const origUser = safeReadJSON('realUser');
     localStorage.setItem('token', origToken);
+    // Cohort Timing task — close the impersonation audit session
+    // (best-effort, fired AFTER the admin token is restored so the call
+    // authenticates as the admin; dev backend has no session id).
+    try {
+      const impSessionId = localStorage.getItem('impersonationSessionId');
+      if (impSessionId) {
+        localStorage.removeItem('impersonationSessionId');
+        api.adminImpersonateEnd(impSessionId).catch(() => {});
+      }
+    } catch { /* storage unavailable */ }
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     setUser(origUser);
@@ -1298,24 +1550,117 @@ function AppInner() {
   // role they held before admission (e.g. 'exploring' users accepted into a
   // cohort). The workspace UI still week-gates the tool cards; this only
   // stops RoleGuard from bouncing an active lab member off a lab tool route.
-  const labRoles = (roles) =>
-    user && user.spinout_lab_active === 1 && !roles.includes(user.role)
-      ? [...roles, user.role]
-      : roles;
+  //
+  // Admin users browsing via the "View as" switcher (not impersonation) have
+  // effectiveRole = viewMode, not 'admin'. We add viewMode to the list so
+  // RoleGuard doesn't redirect them while they're previewing another role.
+  const labRoles = (roles) => {
+    const result = [...roles];
+    if (user && user.spinout_lab_active === 1 && !result.includes(user.role)) {
+      result.push(user.role);
+    }
+    if (user?.role === 'admin' && !isImpersonating && viewMode && !result.includes(viewMode)) {
+      result.push(viewMode);
+    }
+    return result;
+  };
 
   // Task #9 — authoring is open to any authenticated user (no role gate).
   const authOnly = (component) => <RequireAuth {...authProps}>{component}</RequireAuth>;
+
+  // The role the session is browsing as. Same helper the shell uses to pick the
+  // sidebar (ProtectedLayout), so the nav and the routes cannot disagree about
+  // who the viewer is — which is exactly how an admin previewing Investor View
+  // ended up with an "Investor View" chip above the FOUNDER Spin-Out Lab.
+  const effectiveRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-400">Loading…</div>}>
 <RouteErrorBoundary>
 <Routes>
       <Route path="/" element={user ? <Navigate to={ROLE_DEFAULT_PATH[user.role] || '/studio'} replace /> : <LandingPage />} />
-      {/* /spinout-lab doubles as a public marketing page (logged out) and the
-          founder Lab workspace (logged in). Logged-in visitors get the normal
-          app shell — sidebar and all — like every other authenticated page;
-          logged-out visitors get the bare marketing surface. */}
-      <Route path="/spinout-lab" element={user ? authOnly(<SpinoutLabPage />) : <SpinoutLabPage />} />
+      {/* /spinout-lab is THREE surfaces behind one path, because "Spin-Out Lab"
+          means something different depending on who is asking:
+
+            - logged out            → the public marketing page
+            - investor / LP         → the FUND-I SALES PAGE (SpinoutLabInvestorPage):
+                                      the conviction step. What founders do
+                                      inside the Lab, the operating stack, why
+                                      the model matters in an AI-native
+                                      environment, Axal's underwriting edge,
+                                      and the studio proof — every CTA routes
+                                      into the deeper LP & Investor Workspace
+                                      below, where the fund terms, raise
+                                      status, reporting and the application
+                                      flow live. An LP's relationship with the
+                                      Lab is the fund, not the 4-week founder
+                                      curriculum.
+            - everyone else         → the founder Lab (marketing → application
+                                      → the 4-week workspace, per enrollment)
+
+          Branched at the ROUTE, not inside SpinoutLabPage, for two reasons:
+          SpinoutLabPage loads founder-scoped Lab state on mount, so an investor
+          would fire a request that is not theirs to make; and all three pages
+          are lazy, so an investor never downloads the founder chunk (or vice
+          versa). Logged-in visitors get the normal app shell either way. */}
+      <Route
+        path="/spinout-lab"
+        element={
+          user
+            ? authOnly(effectiveRole === 'investor'
+                ? <SpinoutLabInvestorPage />
+                : <SpinoutLabPage />)
+            : <SpinoutLabPage />
+        }
+      />
+      {/* Spin-Out Lab · LP & Investor Workspace — the DEEPER second step of the
+          investor journey (fund overview, terms, tiers, underwriting data,
+          reporting archive, allocation, and the apply / request-access flow).
+          First-class route under /spinout-lab so the journey stays in one
+          namespace: /spinout-lab → /spinout-lab/investor-workspace. The same
+          component is also a Fund Ops tab at /funds/lp-workspace (embedded
+          there, standalone here) — one component behind both routes, so the
+          two surfaces cannot drift. Role-gated like the Fund Ops route: this
+          content is for investors and admins only. */}
+      <Route path="/spinout-lab/investor-workspace" element={guard(['admin', 'investor'], <SpinoutLabLpWorkspacePage />)} />
+      {/* Lab tool page — the founder's company record (design: workspace tool
+          pages). labRoles admits the active lab member's own role; admins can
+          open it for support. */}
+      <Route path="/spinout-lab/startup" element={guard(labRoles(['admin']), <SpinoutLabStartupPage />)} />
+      <Route path="/spinout-lab/discovery" element={guard(labRoles(['admin']), <SpinoutLabDiscoveryPage />)} />
+      <Route path="/spinout-lab/market" element={guard(labRoles(['admin']), <SpinoutLabMarketPage />)} />
+      <Route path="/spinout-lab/roadmap" element={guard(labRoles(['admin']), <SpinoutLabRoadmapPage />)} />
+      <Route path="/spinout-lab/profiling" element={guard(labRoles(['admin']), <SpinoutLabProfilingPage />)} />
+      <Route path="/spinout-lab/scoring" element={guard(labRoles(['admin']), <SpinoutLabScoringPage />)} />
+      <Route path="/spinout-lab/advisors" element={guard(labRoles(['admin']), <SpinoutLabAdvisorsPage />)} />
+      <Route path="/spinout-lab/revenue" element={guard(labRoles(['admin']), <SpinoutLabRevenuePage />)} />
+      <Route path="/spinout-lab/use-of-funds" element={guard(labRoles(['admin']), <SpinoutLabUseOfFundsPage />)} />
+      <Route path="/spinout-lab/incorporate" element={guard(labRoles(['admin']), <SpinoutLabIncorporatePage />)} />
+      <Route path="/spinout-lab/capital" element={guard(labRoles(['admin']), <SpinoutLabCapitalPage />)} />
+      <Route path="/spinout-lab/captable" element={guard(labRoles(['admin']), <SpinoutLabCapTablePage />)} />
+      <Route path="/spinout-lab/pitch-deck" element={guard(labRoles(['admin']), <SpinoutLabPitchDeckPage />)} />
+      {/* New Brand & Landing Pages tool (design: Brand & Landing Page.dc) —
+          replaces /build/brand as the founders' entry point, so it keeps the
+          same roles as the old route (any founder, plus active lab members). */}
+      <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), <SpinoutLabBrandPage />)} />
+      <Route path="/spinout-lab/cofounder-agreement" element={guard(labRoles(['admin']), <SpinoutLabCofounderAgreementPage />)} />
+      {/* Co-founder Match tool page (design: Co-founder Match.dc) — the Lab
+          decision console; /cofounder stays the full browse/connections/NDA
+          surface and is linked from the page header. */}
+      <Route path="/spinout-lab/cofounder-match" element={guard(labRoles(['admin', 'founder']), <SpinoutLabCofounderMatchPage />)} />
+      {/* Graduation Certificate (design: Graduation Certificate.dc) — the
+          Week-4 credential, conferred on the incorporation_completed
+          milestone and downloadable as a vector A4-landscape PDF. */}
+      <Route path="/spinout-lab/certificate" element={guard(labRoles(['admin', 'founder']), <SpinoutLabCertificatePage />)} />
+      {/* Office Hours tool page (design: Office Hours.dc) — founder-side
+          partner session booking; /office-hours stays the advisor console. */}
+      <Route path="/spinout-lab/office-hours" element={guard(labRoles(['admin']), <SpinoutLabOfficeHoursPage />)} />
+      {/* Studio Ops tool page (design: Studio_Ops.dc) — the FOUNDER's weekly
+          operating cadence: focus, execution tracker, blockers, closeout.
+          Dedicated Lab page; deliberately NOT the studio's admin operations
+          console (StudioOpsPage), which stays on Command Center's Operations
+          tab and the legacy /studio-ops redirect. */}
+      <Route path="/spinout-lab/studio-ops" element={guard(labRoles(['admin']), <SpinoutLabStudioOpsPage />)} />
       {/* Cohort application form — signed-in founders only (contact info
           comes from the account); logged-out visitors are sent to register
           with the spinout-lab product intent. */}
@@ -1357,7 +1702,9 @@ function AppInner() {
           passes. Investor-only nav is curated above (NAV_BY_ROLE.investor)
           so we get a tighter capital-allocator surface; per-route guards
           stay permissive so deep links keep working during the split. */}
-      <Route path="/studio" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Dashboard />)} />
+      {/* Spin-Out Lab members (role `exploring`, lab-active) build their skills +
+          values profile in Studio too — the lab Profiling page reads from it. */}
+      <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <Dashboard />)} />
       {/* Task #9 — holding-state dashboard for chat-onboarded users awaiting admin role review. */}
       <Route path="/exploring" element={guard(['admin', 'exploring'], <ExploringDashboard />)} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
@@ -1396,6 +1743,9 @@ function AppInner() {
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
+      {/* Build queue #120 — public, audience-scoped cap-table link. No auth:
+          the payload is redacted server-side for the link's audience. */}
+      <Route path="/share/captable/:token" element={<SharedCapTablePage />} />
       <Route path="/share/deck/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #2 — public, HMAC-token-gated print target consumed only by
           the Cloudflare Browser Rendering session that drives server-side
@@ -1409,6 +1759,7 @@ function AppInner() {
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
       <Route path="/admin/exploring" element={guard(['admin'], <AdminExploring />)} />
+      <Route path="/admin/lp-applications" element={guard(['admin'], <AdminLpApplications />)} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}
@@ -1445,6 +1796,11 @@ function AppInner() {
       <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       {/* Task #83 — de-admin Due Diligence: investor/advisor-facing alias of the same pages (no /admin framing). */}
       <Route path="/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
+      {/* Build queue #128 — subject-facing request inbox. Founders included by design:
+          this surface exposes only the requests addressed to them, never case data
+          (the "founders NEVER read DD" invariant lives in the worker). React Router
+          ranks the static segment above /:uid, so this never shadows a case UID. */}
+      <Route path="/due-diligence/requests" element={guard(['founder', 'admin', 'partner', 'investor', 'advisor'], <DueDiligenceRequestsPage />)} />
       <Route path="/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
       <Route path="/scoring" element={guard(labRoles(['admin', 'partner', 'investor']), <ScoringPage />)} />
       <Route path="/projects" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <ProjectsPage />)} />
@@ -1476,7 +1832,11 @@ function AppInner() {
       <Route path="/incorporate" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <IncorporatePage />)} />
       <Route path="/incorporate/success" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <IncorporateSuccessPage />)} />
       <Route path="/incorporate/cofounder-agreement" element={guard(labRoles(['admin', 'founder', 'partner']), <CofounderAgreementPage />)} />
-      <Route path="/incorporate/83b" element={guard(labRoles(['admin', 'founder', 'partner']), <Section83bPage />)} />
+      <Route path="/spinout-lab/83b" element={guard(labRoles(['admin']), <SpinoutLab83bPage />)} />
+      <Route path="/spinout-lab/compliance" element={guard(labRoles(['admin']), <SpinoutLabCompliancePage />)} />
+      {/* 83(b) moved into the Lab (Week 4 deliverable). Old Incorporate
+          path kept as a redirect so existing links and bookmarks survive. */}
+      <Route path="/incorporate/83b" element={<Navigate to="/spinout-lab/83b" replace />} />
       <Route path="/compliance" element={guard(labRoles(['admin', 'founder', 'partner']), <CompliancePage />)} />
       <Route path="/wellbeing" element={guard(['admin', 'founder'], <WellbeingPage />)} />
       <Route path="/wellbeing/expert-dashboard" element={guard(['admin', 'founder', 'partner', 'advisor'], <ExpertEditorPage />)} />
@@ -1487,9 +1847,12 @@ function AppInner() {
       {/* Products — catalog + checkout + explorer promo redemption. Open to
           every signed-in role incl. 'exploring' (that's where the Personal
           Advisor's one-time 30-day-license codes get redeemed). */}
-      <Route path="/products" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+      <Route path="/plans-and-pricing" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
       {/* Product slide-over deep link — same page, pre-opens the detail panel. */}
-      <Route path="/products/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+      <Route path="/plans-and-pricing/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+      {/* Legacy /products redirects — keep for any saved links or external references. */}
+      <Route path="/products" element={<Navigate to="/plans-and-pricing" replace />} />
+      <Route path="/products/:productId" element={<Navigate to="/plans-and-pricing" replace />} />
       {/* One-time cart checkout + post-checkout confirmation (auth-protected). */}
       <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
@@ -1503,7 +1866,7 @@ function AppInner() {
           role but redirect a founder into the matching tab so old deep links
           keep resolving. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], <TeamBuildingPage />)} />
-      <Route path="/build/command-center" element={guard(['admin', 'founder'], <CommandCenterPage />)} />
+      <Route path="/build/command-center" element={guard(labRoles(['admin', 'founder']), <CommandCenterPage />)} />
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
       <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
@@ -1547,6 +1910,9 @@ function AppInner() {
       <Route path="/funds" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       <Route path="/funds/capital-calls" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       <Route path="/lp-portal" element={guard(['admin', 'investor'], <LPPortalPage />)} />
+      {/* Spin-Out Fund I LP participation workspace — a Fund Ops tab, so it
+          renders inside the same investor shell as the other fund surfaces. */}
+      <Route path="/funds/lp-workspace" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
       <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
       {/* Task #19 — the founder sidebar no longer surfaces "Founder Portal"
@@ -1628,15 +1994,15 @@ function AppInner() {
       {/* Task #1 — RAISE Workspaces: legacy /raise (Raise Pipeline) now lives in
           the Capital workspace pipeline tab. */}
       <Route path="/raise" element={<Navigate to="/raise/capital/pipeline" replace />} />
-      {/* Task #4 — Referrals now lives inside Settings; /refer redirects there
-          (preserving ?tab=), same role access as before. */}
+      {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
+      <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferralsPage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />
+      <Route path="/company-settings" element={guard(['admin', 'founder', 'partner'], <Suspense fallback={null}><CompanySettingsPage /></Suspense>)} />
       {/* Integrations now lives inside Settings; /integrations redirects there
           (preserving any ?query= so OAuth-return states still show). Available
           to every authenticated profile, matching the all-roles Settings tab. */}
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
-      {/* Task #4 — /payouts redirects to the Payouts sub-tab of the Settings Referrals section. */}
-      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/settings/referrals?tab=payouts" replace />)} />
+      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals?tab=payouts" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
       <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=studio-ops" replace /> : <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
@@ -1698,6 +2064,8 @@ function AppInner() {
       <Route path="/demo" element={<DemoPage />} />
       <Route path="/status" element={<StatusPage />} />
       <Route path="/changelog" element={<ChangelogPage />} />
+      {/* Public credential verification — unauthenticated by design. */}
+      <Route path="/verify/:token" element={<PublicCertificateVerifyPage />} />
       <Route path="/roadmap" element={<PublicRoadmapPage />} />
       <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
@@ -1761,6 +2129,42 @@ function AdminDocsPathGuard() {
   );
 }
 
+// Top-level safety net for AppInner itself. RouteErrorBoundary already
+// protects every component rendered inside <Routes>; this boundary catches
+// the rarer case where AppInner's own hooks or top-of-render expressions
+// throw (e.g. a bad hook call, a context consumer outside its provider).
+// Without it those crashes blank the entire page with no visible message.
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    try {
+      // eslint-disable-next-line no-console
+      console.error('[AppErrorBoundary] top-level crash:', error, info?.componentStack);
+    } catch { /* ignore */ }
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const msg = this.state.error?.message || String(this.state.error);
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'sans-serif', padding: '2rem' }}>
+        <div style={{ maxWidth: 520, border: '1px solid #fca5a5', borderRadius: 12, background: '#fff1f2', padding: '1.5rem' }}>
+          <strong style={{ display: 'block', marginBottom: '0.5rem', color: '#991b1b' }}>App failed to start</strong>
+          <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#7f1d1d', margin: 0 }}>{msg}</pre>
+          <button onClick={() => window.location.reload()} style={{ marginTop: '1rem', padding: '0.5rem 1rem', background: '#1f2937', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 export default function App() {
   // T20 — AuthProvider must be inside <BrowserRouter> (it uses
   // useLocation to throttle /me re-syncs to one per route change).
@@ -1768,7 +2172,9 @@ export default function App() {
   return (
     <AuthProvider>
       <SettingsProvider>
+        <AppErrorBoundary>
         <AppInner />
+        </AppErrorBoundary>
         {/* Task #28 — global "always-on" mounts live OUTSIDE <Routes>,
             so a render-time throw inside any of them blanks the entire
             app (every route, including /login). Wrap each in a

@@ -11,7 +11,7 @@
 //     global /legalcap list, which is not filtered per-LP).
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Banknote, Calculator, FileBarChart, Landmark, PhoneCall, RefreshCw, TrendingUp } from 'lucide-react';
+import { Banknote, Calculator, FileBarChart, Landmark, PhoneCall, RefreshCw, Rocket, TrendingUp } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 import WorkspaceTabs, { WorkspaceHeader } from '../components/WorkspaceTabs';
@@ -20,6 +20,7 @@ import { AdminFundsView } from './FundsPage';
 import LPReportingPage from './LPReportingPage';
 import FundPerformancePage from './FundPerformancePage';
 import FundAccountingPage from './FundAccountingPage';
+import SpinoutLabLpWorkspacePage from './SpinoutLabLpWorkspacePage';
 
 const fmtMoney = (v) => (v == null || v === '' ? '—' : `$${Number(v).toLocaleString()}`);
 const fmtDate = (v) => (v ? String(v).slice(0, 10) : '—');
@@ -134,7 +135,12 @@ export default function FundOpsWorkspace() {
   const { pathname } = useLocation();
   const { role } = useAuth();
   const isAdmin = role === 'admin';
-  const active = pathname.includes('/performance')
+  // Checked FIRST: '/funds/lp-workspace' contains none of the other markers
+  // today, but leading with it means a future rename can't silently shadow the
+  // tab into the 'funds' fallback.
+  const active = pathname.includes('/lp-workspace')
+    ? 'lpworkspace'
+    : pathname.includes('/performance')
     ? 'performance'
     : pathname.includes('/accounting')
     ? 'accounting'
@@ -150,6 +156,9 @@ export default function FundOpsWorkspace() {
     { to: '/funds/accounting', label: 'Accounting', icon: Calculator },
     { to: '/lp-reports', label: 'LP Reporting', icon: FileBarChart },
     { to: '/funds/capital-calls', label: 'Capital Calls', icon: PhoneCall },
+    // Spin-Out Fund I LP participation — the one tab here whose primary
+    // audience is the investor rather than the studio admin.
+    { to: '/funds/lp-workspace', label: 'LP Workspace', icon: Rocket },
   ];
 
   return (
@@ -177,6 +186,7 @@ export default function FundOpsWorkspace() {
       {active === 'accounting' && <FundAccountingPage embedded />}
       {active === 'reports' && <LPReportingPage embedded />}
       {active === 'calls' && <CapitalCallsPanel isAdmin={isAdmin} />}
+      {active === 'lpworkspace' && <SpinoutLabLpWorkspacePage embedded />}
     </div>
   );
 }

@@ -947,19 +947,21 @@ admin.post('/users/:user_id/notes', async (c) => {
 
 // POST /api/admin/users/:user_id/resend-verification — re-send the email
 // verification link for users who haven't completed verification.
-// Task #7 — Spin-Out Lab cohort admission. Lazy column ensure mirrors
-// ensureProfileColumns above (duplicate-column errors are expected).
+// Task #7 — Spin-Out Lab cohort admission. Uses a sidecar table because
+// users hit D1's 100-column ALTER TABLE limit (migration 154).
 let spinoutAdmissionSchemaMigrated = false;
 async function ensureSpinoutAdmissionColumns(env: Env): Promise<void> {
   if (spinoutAdmissionSchemaMigrated) return;
-  const stmts = [
-    `ALTER TABLE users ADD COLUMN spinout_lab_admitted INTEGER DEFAULT 0`,
-    `ALTER TABLE users ADD COLUMN spinout_lab_cohort TEXT`,
-    `ALTER TABLE users ADD COLUMN registration_product TEXT`,
-  ];
-  for (const s of stmts) {
-    try { await env.DB.prepare(s).run(); } catch {}
-  }
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS user_spinout_flags (
+        user_id INTEGER PRIMARY KEY,
+        spinout_lab_admitted INTEGER NOT NULL DEFAULT 0,
+        spinout_lab_cohort TEXT,
+        registration_product TEXT
+      )`
+    ).run();
+  } catch {}
   spinoutAdmissionSchemaMigrated = true;
 }
 
@@ -977,7 +979,8 @@ admin.post('/users/:user_id/spinout-admit', async (c) => {
 
   await ensureSpinoutAdmissionColumns(c.env);
   const target: any = await c.env.DB.prepare(
-    `SELECT id, email, name, role, spinout_lab_admitted, spinout_lab_active, is_incorporated FROM users WHERE id = ?`
+    `SELECT u.id, u.email, u.name, u.role, usf.spinout_lab_admitted, u.spinout_lab_active, u.is_incorporated
+     FROM users u LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id WHERE u.id = ?`
   ).bind(userId).first();
   if (!target) return c.json({ error: 'User not found' }, 404);
   if (target.role === 'admin') return c.json({ error: 'Admins cannot be admitted to the Lab' }, 400);
@@ -987,8 +990,10 @@ admin.post('/users/:user_id/spinout-admit', async (c) => {
 
   const alreadyAdmitted = Number(target.spinout_lab_admitted) === 1;
   await c.env.DB.prepare(
-    `UPDATE users SET spinout_lab_admitted = 1, spinout_lab_cohort = ? WHERE id = ?`
-  ).bind(cohort, userId).run();
+    `INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort)
+     VALUES (?, 1, ?)
+     ON CONFLICT(user_id) DO UPDATE SET spinout_lab_admitted = 1, spinout_lab_cohort = excluded.spinout_lab_cohort`
+  ).bind(userId, cohort).run();
 
   let emailed = false;
   if (!alreadyAdmitted) {
@@ -1076,15 +1081,89 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
     return c.json({ error: 'Application was already decided' }, 409);
   }
 
+  // Task #5 — keep the cycle pool (cohort_applicants) in lockstep with the
+  // legacy decision so close/capacity counts and the activation job see the
+  // same truth: accepted → 'approved' (the cron activates the workspace at
+  // the cohort start), refused → 'rejected'. Tables may not exist yet in
+  // older dev DBs — best-effort.
+  try {
+    await c.env.DB.prepare(
+      `UPDATE cohort_applicants SET status = ?, decided_at = datetime('now'), decided_by = ?, decision_reason = 'Legacy admin decision'
+        WHERE application_id = ? AND status NOT IN ('activated', 'rolled_forward')`,
+    ).bind(decision === 'accepted' ? 'approved' : 'rejected', `admin:${adminUser.id}`, appId).run();
+  } catch { /* cohort_applicants not yet migrated */ }
+
   const cohort = cohortOverride || app.cohort || 'Cohort 4';
   const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+  // Idempotency shared with the cohort decide route: claim the same
+  // decision-email ledger key so the two admin surfaces can't each send the
+  // candidate the same decision email. Ledger tables may not exist in older
+  // dev DBs — treat a failed claim probe as "not yet sent" (best-effort).
+  let emailClaimed = true;
+  // The cycle this application is pinned to, when the cycle tables exist.
+  // Needed twice below: for the shared decision-email ledger claim, and — on
+  // accept — for the activation that keeps this route in step with the cron.
+  let cycle: { id: number; start_at: string } | null = null;
+  try {
+    const caRow = await c.env.DB.prepare(
+      `SELECT ca.cohort_cycle_id AS cycle_id, cc.start_at
+         FROM cohort_applicants ca JOIN cohort_cycles cc ON cc.id = ca.cohort_cycle_id
+        WHERE ca.application_id = ? ORDER BY ca.id DESC LIMIT 1`,
+    ).bind(appId).first<{ cycle_id: number; start_at: string }>();
+    if (caRow) {
+      cycle = { id: Number(caRow.cycle_id), start_at: String(caRow.start_at) };
+      const { claimDecisionEmail } = await import('../services/cohortApplications');
+      emailClaimed = await claimDecisionEmail(
+        c.env, app.user_id, cycle.id,
+        decision === 'accepted' ? 'approved' : 'rejected',
+      );
+    }
+  } catch { /* ledger not yet migrated — proceed with send */ }
   let emailed = false;
   if (decision === 'accepted') {
     await ensureSpinoutAdmissionColumns(c.env);
     await c.env.DB.prepare(
-      `UPDATE users SET spinout_lab_admitted = 1, spinout_lab_cohort = ? WHERE id = ?`,
-    ).bind(cohort, app.user_id).run();
-    try {
+      `INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort)
+       VALUES (?, 1, ?)
+       ON CONFLICT(user_id) DO UPDATE SET spinout_lab_admitted = 1, spinout_lab_cohort = excluded.spinout_lab_cohort`,
+    ).bind(app.user_id, cohort).run();
+
+    // Land the founder in the SAME state activateDueCycles would have.
+    //
+    // This route used to stop at `admitted = 1`, leaving `spinout_lab_active`
+    // at 0 — so the founder saw the "Start Week 1" screen and `startLab()`
+    // stamped `spinout_lab_started_at` with their CLICK time, which could be
+    // weeks off their cohort. That drift is not cosmetic: `getCohortGate`
+    // resolves a founder's cycle by `start_at <= started_at < end_at`, so an
+    // early starter resolves to the PREVIOUS month's cycle (whose week
+    // windows have already expired, unlocking all four weeks at once) or to
+    // no cycle at all, and the admin review/at-risk queues — which count
+    // participants by `started_at BETWEEN cycle.start_at AND cycle.end_at` —
+    // stop seeing them entirely.
+    //
+    // Binding `started_at` to the cycle's own start instant is what the cron
+    // does, and it is what makes the two admin tabs interchangeable. The
+    // `spinout_lab_active = 0` guard mirrors the cron's, so re-deciding never
+    // resets a running founder's clock. With no cycle row (an un-migrated dev
+    // DB, or an application never pinned to one) there is no calendar to clamp
+    // to and `getCohortGate` treats the founder as un-gated anyway, so the
+    // old admitted-only behaviour stands.
+    if (cycle) {
+      await c.env.DB.prepare(
+        `UPDATE users SET spinout_lab_active = 1, spinout_lab_week = 1, spinout_lab_started_at = ?
+          WHERE id = ? AND (spinout_lab_active IS NULL OR spinout_lab_active = 0)`,
+      ).bind(cycle.start_at, app.user_id).run();
+      // Retire the applicant from the activation queue we just did by hand,
+      // so the cron's own pass is a no-op rather than a second admission.
+      try {
+        await c.env.DB.prepare(
+          `UPDATE cohort_applicants SET status = 'activated', decided_at = datetime('now')
+            WHERE application_id = ? AND status = 'approved'`,
+        ).bind(appId).run();
+      } catch { /* cohort_applicants not yet migrated */ }
+    }
+
+    if (emailClaimed) try {
       const { send } = await import('../services/email/send');
       const labUrl = `${appUrl}/spinout-lab`;
       const r = await send(c.env, 'spinout_admitted', app.email, {
@@ -1100,7 +1179,7 @@ admin.post('/spinout-applications/:app_id/decide', async (c) => {
     // Next cohort label: "Cohort 4" → "Cohort 5"; fall back gracefully.
     const m = /^Cohort (\d+)$/.exec(cohort);
     const nextCohort = m ? `Cohort ${Number(m[1]) + 1}` : 'the next cohort';
-    try {
+    if (emailClaimed) try {
       const { send } = await import('../services/email/send');
       const applyUrl = `${appUrl}/spinout-lab/apply`;
       const r = await send(c.env, 'spinout_refused', app.email, {
@@ -1161,13 +1240,14 @@ admin.get('/spinout-participants', async (c) => {
   try {
     const rs = await c.env.DB.prepare(
       `SELECT u.id, u.uid, u.name, u.email,
-              u.spinout_lab_admitted, u.spinout_lab_cohort,
+              usf.spinout_lab_admitted, usf.spinout_lab_cohort,
               u.spinout_lab_active, u.spinout_lab_week,
               u.spinout_lab_started_at, u.is_incorporated,
               p.name AS project_name, p.sector AS project_sector
        FROM users u
+       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
        LEFT JOIN projects p ON p.founder_id = u.founder_id
-       WHERE u.spinout_lab_admitted = 1
+       WHERE usf.spinout_lab_admitted = 1
           OR u.spinout_lab_active = 1
           OR u.id IN (SELECT user_id FROM spinout_lab_milestones
                       WHERE milestone_key = 'incorporation_completed')
@@ -1362,7 +1442,35 @@ admin.post('/impersonate/:userId', async (c) => {
   const impAdminHash = await hashEmail(adminUser.email);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('admin_impersonate', ${`Admin ${adminUser.name} impersonated user ${target.name} (user_id=${target.id})`}, ${impAdminHash}, ${adminUser.id})`;
   await sql.end();
-  return c.json({ token, user: { id: target.id, email: target.email, name: target.name, role: target.role } });
+  // Cohort Timing task — full session audit trail. `context` (optional
+  // query param, e.g. 'cohort_review:week=2') records WHY the session was
+  // opened; the session id is returned so the client can close it via
+  // POST /impersonate-sessions/:id/end when exiting the founder view.
+  let impersonationSessionId: number | null = null;
+  try {
+    const { ensureCohortTimingSchema } = await import('../services/cohortTiming');
+    await ensureCohortTimingSchema(c.env);
+    const ctx = (c.req.query('context') || '').slice(0, 200) || null;
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO impersonation_sessions (admin_user_id, target_user_id, context) VALUES (?, ?, ?)`,
+    ).bind(adminUser.id, target.id, ctx).run();
+    impersonationSessionId = Number(ins.meta?.last_row_id ?? 0) || null;
+  } catch (e) { console.warn('[admin/impersonate] session audit failed', e); }
+  return c.json({ token, user: { id: target.id, email: target.email, name: target.name, role: target.role }, impersonation_session_id: impersonationSessionId });
+});
+
+// Close an impersonation session (audit end timestamp). Fired best-effort
+// by the client when the admin exits the founder view; sessions left open
+// simply show ended_at=null in the audit list.
+admin.post('/impersonate-sessions/:id/end', async (c) => {
+  const adminUser = await requireAdmin(c);
+  const id = parseInt(c.req.param('id')) || 0;
+  try {
+    await c.env.DB.prepare(
+      `UPDATE impersonation_sessions SET ended_at = datetime('now') WHERE id = ? AND admin_user_id = ? AND ended_at IS NULL`,
+    ).bind(id, adminUser.id).run();
+  } catch (e) { console.warn('[admin/impersonate-sessions] end failed', e); }
+  return c.json({ ok: true });
 });
 
 admin.patch('/users/:userId/role', async (c) => {

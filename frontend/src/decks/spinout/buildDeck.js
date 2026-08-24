@@ -115,9 +115,12 @@ function cover(pres, data, notes) {
   s.addNotes(notes.cover || '');
 }
 
-/* ---- SLIDE 2 — PROBLEM ---- */
+/* ---- SLIDE 2 — PROBLEM (+ validation evidence) ---- */
+// Mirrors the React `SlideProblem` 1:1: the standalone Validation slide is
+// merged here as a compact discovery-funnel stat strip along the bottom,
+// reading the unchanged `validation` section (stages + conversion) in place.
 function problem(pres, data, notes) {
-  const d = data.problem, s = pres.addSlide();
+  const d = data.problem, v = data.validation || {}, s = pres.addSlide();
   s.background = { color: C.white };
   eyebrow(s, d.eyebrow, d.idx);
   title(s, d.title);
@@ -149,51 +152,39 @@ function problem(pres, data, notes) {
       rectRadius: 0.085, fill: { color: i === 0 ? C.accent : C.accentMid }, line: { type: 'none' } });
     py += 0.92;
   });
+
+  // validation evidence strip — discovery funnel + conversion
+  const stages = Array.isArray(v.stages) ? v.stages : [];
+  const conversion = Array.isArray(v.conversion) ? v.conversion : ['', ''];
+  if (stages.length) {
+    const stW = Math.min(1.85, 9.25 / stages.length);
+    s.addText(v.funnelLabel || '', { x: ML, y: 6.02, w: 6, h: 0.25, margin: 0, fontFace: F.head,
+      fontSize: 9.5, bold: true, charSpacing: 2, color: C.muted });
+    stages.forEach((st, i) => {
+      const x = ML + i * stW;
+      s.addText(String(st[1]), { x, y: 6.3, w: stW - 0.2, h: 0.32, margin: 0, fontFace: F.head,
+        fontSize: 16, bold: true, color: i === stages.length - 1 ? C.accent : C.ink });
+      // Single-line clamp (footer starts at 7.06): pptx text boxes wrap, so
+      // truncate long dynamic stage labels instead of letting them collide.
+      const stLabel = String(st[0] ?? '');
+      s.addText(stLabel.length > 18 ? stLabel.slice(0, 17) + '…' : stLabel, {
+        x, y: 6.62, w: stW - 0.2, h: 0.26, margin: 0, fontFace: F.body,
+        fontSize: 8.5, color: C.muted, lineSpacingMultiple: 1.05 });
+      if (i < stages.length - 1) {
+        s.addText('\u2192', { x: x + stW - 0.24, y: 6.3, w: 0.24, h: 0.32, margin: 0, align: 'center',
+          valign: 'middle', fontFace: F.head, fontSize: 12, color: C.accentMid });
+      }
+    });
+    s.addText([
+      { text: conversion[0] || '', options: { bold: true, color: C.accent, fontSize: 16 } },
+      { text: '  ' + (conversion[1] || ''), options: { color: C.muted, fontSize: 11 } },
+    ], { x: 10.1, y: 6.3, w: 2.53, h: 0.56, margin: 0, valign: 'top', fontFace: F.head, lineSpacingMultiple: 1.15 });
+  }
   footer(s, data.brand);
   s.addNotes(notes.problem || '');
 }
 
-/* ---- SLIDE 3 — VALIDATION ---- */
-function validation(pres, data, notes) {
-  const d = data.validation, s = pres.addSlide();
-  s.background = { color: C.white };
-  eyebrow(s, d.eyebrow, d.idx);
-  title(s, d.title);
-
-  const cw = 2.85, gap = 0.18, cy = 1.95, ch = 1.45;
-  d.cards.forEach((c, i) => {
-    const x = ML + i * (cw + gap);
-    panel(pres, s, x, cy, cw, ch, { r: 0.1 });
-    s.addText(c[0], { x: x + 0.25, y: cy + 0.18, w: cw - 0.5, h: 0.7, margin: 0, valign: 'middle',
-      fontFace: F.head, fontSize: 40, bold: true, color: C.accent });
-    s.addText(c[1], { x: x + 0.25, y: cy + 0.92, w: cw - 0.5, h: 0.4, margin: 0, valign: 'top',
-      fontFace: F.head, fontSize: 11, color: C.muted });
-  });
-
-  s.addText(d.funnelLabel, { x: ML, y: 3.75, w: 11, h: 0.3, margin: 0, fontFace: F.head,
-    fontSize: 10, bold: true, charSpacing: 2, color: C.muted });
-  const maxV = Math.max(...d.stages.map(s2 => s2[1])), fx = 3.05, maxW = 7.7;
-  const trans = [55, 40, 28, 16, 0];
-  let fy = 4.2;
-  d.stages.forEach((st, i) => {
-    s.addText(st[0], { x: ML, y: fy, w: 2.25, h: 0.34, margin: 0, valign: 'middle',
-      fontFace: F.head, fontSize: 12, bold: true, color: C.ink });
-    const w = Math.max(0.45, maxW * (st[1] / maxV));
-    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: fx, y: fy, w, h: 0.34, rectRadius: 0.05,
-      fill: { color: C.accent, transparency: trans[Math.min(i, trans.length - 1)] }, line: { type: 'none' } });
-    s.addText(String(st[1]), { x: fx + w + 0.12, y: fy, w: 1.0, h: 0.34, margin: 0, valign: 'middle',
-      fontFace: F.head, fontSize: 12, bold: true, color: i === d.stages.length - 1 ? C.accent : C.body });
-    fy += 0.5;
-  });
-  s.addText([
-    { text: d.conversion[0], options: { bold: true, color: C.accent, fontSize: 18 } },
-    { text: '  ' + d.conversion[1], options: { color: C.muted, fontSize: 12 } },
-  ], { x: 6.4, y: 5.72, w: 6.0, h: 0.4, margin: 0, valign: 'middle', fontFace: F.head });
-  footer(s, data.brand);
-  s.addNotes(notes.validation || '');
-}
-
-/* ---- SLIDE 4 — MARKET ---- */
+/* ---- SLIDE 5 — MARKET ---- */
 function market(pres, data, notes) {
   const d = data.market, s = pres.addSlide();
   s.background = { color: C.white };
@@ -560,96 +551,194 @@ function productDemo(pres, data, notes) {
   s.addNotes(notes.productDemo || '');
 }
 
-/* ---- SLIDE 8 — CAP TABLE ---- */
-function captable(pres, data, notes, ICON) {
-  const d = data.captable, s = pres.addSlide();
+/* ---- SLIDE 6 — COMPETITIVE ---- */
+// Mirrors the React `SlideCompetitive` 1:1: landscape table on the left
+// (name / category / stage / gap), numbered edges on the right, whitespace
+// claim as a callout.
+function competitive(pres, data, notes) {
+  const d = data.competitive || {}, s = pres.addSlide();
   s.background = { color: C.white };
-  eyebrow(s, d.eyebrow, d.idx);
-  title(s, d.title);
+  eyebrow(s, d.eyebrow || 'Competitive landscape', d.idx || '06');
+  title(s, d.title || '');
 
-  const lx = ML, lw = 6.5;
-  s.addText(d.checklistLabel, { x: lx, y: 2.0, w: lw, h: 0.3, margin: 0, fontFace: F.head,
+  const lx = ML, lw = 7.3;
+  s.addText(d.tableLabel || '', { x: lx, y: 2.0, w: lw, h: 0.3, margin: 0, fontFace: F.head,
     fontSize: 10, bold: true, charSpacing: 2, color: C.muted });
-  let iy = 2.5;
-  d.items.forEach(it => {
-    const done = it[1] === 'done';
-    panel(pres, s, lx, iy, lw, 0.5, { r: 0.06, fill: C.panel, line: false, shadow: false });
-    statusDot(pres, s, ICON, lx + 0.18, iy + 0.13, it[1], 0.24);
-    s.addText(it[0], { x: lx + 0.6, y: iy, w: lw - 2.1, h: 0.5, margin: 0, valign: 'middle',
-      fontFace: F.head, fontSize: 13, bold: true, color: C.ink });
-    s.addText(done ? 'Done' : 'In progress', { x: lx + lw - 1.5, y: iy, w: 1.35, h: 0.5, margin: 0,
-      align: 'right', valign: 'middle', fontFace: F.head, fontSize: 11, bold: true,
-      color: done ? C.done : C.active });
-    iy += 0.6;
+  (Array.isArray(d.competitors) ? d.competitors : []).forEach((r, i) => {
+    const ry = 2.5 + i * 0.94;
+    panel(pres, s, lx, ry, lw, 0.8, { r: 0.08 });
+    s.addText(r[0], { x: lx + 0.24, y: ry + 0.13, w: 2.0, h: 0.32, margin: 0, valign: 'middle',
+      fontFace: F.head, fontSize: 13.5, bold: true, color: C.ink });
+    s.addText(String(r[1] || '').toUpperCase(), { x: lx + 0.24, y: ry + 0.46, w: 2.0, h: 0.24, margin: 0,
+      valign: 'middle', fontFace: F.head, fontSize: 9.5, bold: true, charSpacing: 1, color: C.accent });
+    s.addText(r[2] || '', { x: lx + 2.3, y: ry, w: 1.0, h: 0.8, margin: 0, valign: 'middle',
+      fontFace: F.head, fontSize: 10, color: C.muted });
+    s.addText(r[3] || '', { x: lx + 3.4, y: ry + 0.1, w: lw - 3.6, h: 0.6, margin: 0, valign: 'middle',
+      fontFace: F.body, fontSize: 10.5, color: C.body, lineSpacingMultiple: 1.12 });
   });
 
-  const rx = 7.55, rw = 5.05;
-  s.addText(d.donutLabel, { x: rx, y: 2.0, w: rw, h: 0.3, margin: 0, fontFace: F.head,
-    fontSize: 10, bold: true, charSpacing: 2, color: C.muted });
-  const donutColors = [C.accent, C.accentMid, C.panel2];
-  s.addChart(pres.charts.DOUGHNUT, [{
-    name: 'Cap table', labels: d.segments.map(x => x[0]), values: d.segments.map(x => x[1]),
-  }], {
-    x: rx + 0.55, y: 2.5, w: 3.9, h: 3.0, holeSize: 62,
-    chartColors: donutColors, showLegend: false, showValue: false,
-    dataBorder: { pt: 2, color: C.white },
+  const rx = 8.35, rw = 4.28;
+  s.addText(d.edgeLabel || 'OUR EDGE', { x: rx, y: 2.0, w: rw, h: 0.3, margin: 0, fontFace: F.head,
+    fontSize: 11, bold: true, charSpacing: 2, color: C.accent });
+  (Array.isArray(d.edges) ? d.edges : []).forEach((e, i) => {
+    const ey = 2.5 + i * 0.98;
+    s.addText(String(i + 1).padStart(2, '0'), { x: rx, y: ey, w: 0.55, h: 0.5, margin: 0, valign: 'top',
+      fontFace: F.head, fontSize: 18, bold: true, color: C.accentMid });
+    s.addText(e, { x: rx + 0.6, y: ey, w: rw - 0.6, h: 0.85, margin: 0, valign: 'top',
+      fontFace: F.head, fontSize: 12.5, bold: true, color: C.ink, lineSpacingMultiple: 1.12 });
   });
-  // center label (centered on donut hole)
-  s.addText([
-    { text: d.centerBig, options: { bold: true, fontSize: 22, color: C.ink, breakLine: true } },
-    { text: d.centerSmall, options: { fontSize: 10, color: C.muted } },
-  ], { x: rx + 1.6, y: 3.62, w: 1.8, h: 0.78, margin: 0, align: 'center', valign: 'middle', fontFace: F.head });
-  let cy2 = 5.75;
-  d.segments.forEach((l, i) => {
-    s.addShape(pres.shapes.OVAL, { x: rx + 0.55, y: cy2 + 0.02, w: 0.16, h: 0.16, fill: { color: donutColors[i] },
-      line: donutColors[i] === C.panel2 ? { color: C.line, width: 1 } : { type: 'none' } });
-    s.addText([
-      { text: l[0] + '   ', options: { color: C.ink, fontSize: 11, bold: true } },
-      { text: fmt.pct(l[1]), options: { color: C.muted, fontSize: 11 } },
-    ], { x: rx + 0.8, y: cy2 - 0.05, w: rw - 0.8, h: 0.28, margin: 0, valign: 'middle', fontFace: F.head });
-    cy2 += 0.3;
-  });
+  panel(pres, s, rx, 5.6, rw, 1.2, { fill: C.accentSoft, line: false, shadow: false });
+  s.addText(d.whitespace || '', { x: rx + 0.24, y: 5.75, w: rw - 0.48, h: 0.9, margin: 0, valign: 'top',
+    fontFace: F.body, fontSize: 11.5, italic: true, color: C.ink, lineSpacingMultiple: 1.18 });
   footer(s, data.brand);
-  s.addNotes(notes.captable || '');
+  s.addNotes(notes.competitive || '');
 }
 
-/* ---- SLIDE 9 — ASK ---- */
+/* ---- SLIDE 7 — TRACTION ---- */
+// Mirrors the React `SlideTraction` 1:1: monthly revenue trend (area chart +
+// MRR + growth) on the left, revenue mix bars and the takeaway on the right.
+function traction(pres, data, notes) {
+  const d = data.traction || {}, s = pres.addSlide();
+  s.background = { color: C.white };
+  eyebrow(s, d.eyebrow || 'Traction', d.idx || '07');
+  title(s, d.title || '');
+
+  const lx = ML, lw = 6.6;
+  s.addText(d.trendLabel || '', { x: lx, y: 2.0, w: lw, h: 0.3, margin: 0, fontFace: F.head,
+    fontSize: 10, bold: true, charSpacing: 2, color: C.muted });
+  s.addText(d.mrr || '', { x: lx, y: 2.35, w: 3.4, h: 0.75, margin: 0, valign: 'middle',
+    fontFace: F.head, fontSize: 40, bold: true, color: C.accent });
+  s.addText(d.mrrLabel || 'MRR', { x: lx, y: 3.12, w: 3.4, h: 0.3, margin: 0, fontFace: F.head,
+    fontSize: 11, bold: true, charSpacing: 2, color: C.muted });
+  s.addText(d.growth || '', { x: lx + 3.6, y: 2.45, w: 3.0, h: 0.45, margin: 0, valign: 'middle',
+    fontFace: F.head, fontSize: 20, bold: true, color: C.done });
+  s.addText(d.growthNote || '', { x: lx + 3.6, y: 2.95, w: 3.0, h: 0.3, margin: 0, fontFace: F.body,
+    fontSize: 10, color: C.muted });
+
+  const trendX = Array.isArray(d.trendX) ? d.trendX : [];
+  const trendY = Array.isArray(d.trendY) ? d.trendY : [];
+  s.addChart(pres.charts.AREA, [{ name: 'Revenue', labels: trendX, values: trendY }], {
+    x: lx, y: 3.75, w: lw, h: 2.5,
+    chartColors: [C.accent], chartColorsOpacity: [30],
+    chartArea: { fill: { color: C.white } }, plotArea: { fill: { color: C.white } },
+    lineSize: 3, lineSmooth: true,
+    showLegend: false, showTitle: false,
+    catAxisLabelColor: C.dfaint, catAxisLabelFontSize: 8, catAxisLineShow: false,
+    valAxisHidden: true, valGridLine: { style: 'none' }, catGridLine: { style: 'none' },
+    valAxisMinVal: 0, valAxisMaxVal: Math.max(1, Math.ceil(Math.max(0, ...trendY.map(Number)) * 1.14)),
+  });
+  const trendLabels = Array.isArray(d.trendLabels) ? d.trendLabels : [];
+  const lastLabel = trendLabels.length ? trendLabels[trendLabels.length - 1] : '';
+  s.addText(String(lastLabel), { x: lx + lw - 1.2, y: 3.8, w: 1.2, h: 0.35, margin: 0, align: 'right',
+    fontFace: F.head, fontSize: 14, bold: true, color: C.accent });
+
+  const rx = 7.9, rw = 4.73;
+  s.addText(d.mixLabel || '', { x: rx, y: 2.0, w: rw, h: 0.3, margin: 0, fontFace: F.head,
+    fontSize: 10, bold: true, charSpacing: 2, color: C.muted });
+  (Array.isArray(d.mix) ? d.mix : []).forEach((mx, i) => {
+    const my = 2.5 + i * 0.85;
+    s.addText(mx[0], { x: rx, y: my, w: rw - 1.7, h: 0.3, margin: 0, valign: 'middle',
+      fontFace: F.head, fontSize: 12.5, bold: true, color: C.ink });
+    s.addText(`${mx[1]}  ·  ${fmt.pct(mx[2])}`, { x: rx + rw - 1.7, y: my, w: 1.7, h: 0.3, margin: 0,
+      align: 'right', valign: 'middle', fontFace: F.head, fontSize: 12, bold: true,
+      color: i === 0 ? C.accent : C.body });
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: rx, y: my + 0.36, w: rw, h: 0.17, rectRadius: 0.085,
+      fill: { color: C.panel2 }, line: { type: 'none' } });
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: rx, y: my + 0.36, w: rw * (Number(mx[2]) / 100), h: 0.17,
+      rectRadius: 0.085, fill: { color: i === 0 ? C.accent : C.accentMid }, line: { type: 'none' } });
+  });
+  panel(pres, s, rx, 5.55, rw, 1.25, { fill: C.accentSoft, line: false, shadow: false });
+  s.addText(d.takeaway || '', { x: rx + 0.24, y: 5.72, w: rw - 0.48, h: 0.95, margin: 0, valign: 'top',
+    fontFace: F.body, fontSize: 11.5, italic: true, color: C.ink, lineSpacingMultiple: 1.18 });
+  footer(s, data.brand);
+  s.addNotes(notes.traction || '');
+}
+
+/* ---- SLIDE 10 — ASK (+ cap table) ---- */
+// Mirrors the React `SlideAsk` 1:1: the standalone Cap Table slide is merged
+// here as a right column (fully-diluted donut + entity-setup status), reading
+// the unchanged `captable` section (segments / items / labels) in place.
 function ask(pres, data, notes) {
-  const d = data.ask, s = pres.addSlide();
+  const d = data.ask, c = data.captable || {}, s = pres.addSlide();
   s.background = { color: C.white };
   eyebrow(s, d.eyebrow, d.idx);
   title(s, d.title);
 
-  const kw = 2.85, kh = 1.7, kgx = 0.3, kgy = 0.3, kx0 = ML, ky0 = 2.2;
+  const kw = 2.32, kh = 1.7, kgx = 0.26, kgy = 0.3, kx0 = ML, ky0 = 2.2;
   d.kpis.forEach((k, i) => {
     const x = kx0 + (i % 2) * (kw + kgx), y = ky0 + Math.floor(i / 2) * (kh + kgy);
     panel(pres, s, x, y, kw, kh, { r: 0.1 });
-    s.addText(k[0], { x: x + 0.28, y: y + 0.3, w: kw - 0.5, h: 0.75, margin: 0, valign: 'middle',
-      fontFace: F.head, fontSize: 33, bold: true, color: C.accent });
-    s.addText(k[1], { x: x + 0.28, y: y + 1.05, w: kw - 0.5, h: 0.45, margin: 0, valign: 'top',
-      fontFace: F.head, fontSize: 12, color: C.muted });
+    s.addText(k[0], { x: x + 0.24, y: y + 0.3, w: kw - 0.44, h: 0.75, margin: 0, valign: 'middle',
+      fontFace: F.head, fontSize: 26, bold: true, color: C.accent });
+    s.addText(k[1], { x: x + 0.24, y: y + 1.05, w: kw - 0.44, h: 0.45, margin: 0, valign: 'top',
+      fontFace: F.head, fontSize: 11, color: C.muted, lineSpacingMultiple: 1.08 });
   });
 
-  const ux = 6.95, uw = 5.65;
+  const ux = 5.85, uw = 3.6;
   s.addText(d.useLabel, { x: ux, y: 2.0, w: uw, h: 0.3, margin: 0, fontFace: F.head,
     fontSize: 10, bold: true, charSpacing: 2, color: C.muted });
   let fy = 2.55;
   d.funds.forEach((f, i) => {
-    s.addText(f[0], { x: ux, y: fy, w: uw - 0.9, h: 0.3, margin: 0, valign: 'middle',
-      fontFace: F.head, fontSize: 13, bold: true, color: C.ink });
-    s.addText(fmt.pct(f[1]), { x: ux + uw - 0.9, y: fy, w: 0.9, h: 0.3, margin: 0, align: 'right',
-      valign: 'middle', fontFace: F.head, fontSize: 13, bold: true, color: i === 0 ? C.accent : C.body });
+    s.addText(f[0], { x: ux, y: fy, w: uw - 0.8, h: 0.3, margin: 0, valign: 'middle',
+      fontFace: F.head, fontSize: 12, bold: true, color: C.ink });
+    s.addText(fmt.pct(f[1]), { x: ux + uw - 0.8, y: fy, w: 0.8, h: 0.3, margin: 0, align: 'right',
+      valign: 'middle', fontFace: F.head, fontSize: 12, bold: true, color: i === 0 ? C.accent : C.body });
     s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: ux, y: fy + 0.36, w: uw, h: 0.17, rectRadius: 0.085,
       fill: { color: C.panel2 }, line: { type: 'none' } });
     s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: ux, y: fy + 0.36, w: uw * (f[1] / 100), h: 0.17,
       rectRadius: 0.085, fill: { color: i === 0 ? C.accent : C.accentMid }, line: { type: 'none' } });
     fy += 0.82;
   });
-  panel(pres, s, ux, 6.0, uw, 0.7, { fill: C.accentSoft, line: false, shadow: false });
+  panel(pres, s, ux, 6.0, uw, 0.85, { fill: C.accentSoft, line: false, shadow: false });
   s.addText([
-    { text: d.milestone[0] + '  ', options: { bold: true, color: C.accent, fontSize: 12 } },
-    { text: d.milestone[1], options: { color: C.ink, fontSize: 12 } },
-  ], { x: ux + 0.25, y: 6.0, w: uw - 0.5, h: 0.7, margin: 0, valign: 'middle', fontFace: F.head });
+    { text: d.milestone[0] + '  ', options: { bold: true, color: C.accent, fontSize: 11 } },
+    { text: d.milestone[1], options: { color: C.ink, fontSize: 11 } },
+  ], { x: ux + 0.22, y: 6.0, w: uw - 0.44, h: 0.85, margin: 0, valign: 'middle', fontFace: F.head,
+    lineSpacingMultiple: 1.12 });
+
+  // cap table column
+  const rx = 9.75, rw = 2.88;
+  // Legend capped at 3 rows (4.95..5.83): the entity-status panel starts at
+  // 6.0, so real cap tables with 5–6 holders would otherwise collide with it.
+  const allSegments = Array.isArray(c.segments) ? c.segments : [];
+  const segments = allSegments.slice(0, 3);
+  const items = Array.isArray(c.items) ? c.items : [];
+  s.addText(c.donutLabel || '', { x: rx, y: 2.0, w: rw, h: 0.3, margin: 0, fontFace: F.head,
+    fontSize: 10, bold: true, charSpacing: 2, color: C.muted });
+  const donutColors = [C.accent, C.accentMid, C.panel2];
+  if (allSegments.length) {
+    s.addChart(pres.charts.DOUGHNUT, [{
+      name: 'Cap table', labels: allSegments.map(x => x[0]), values: allSegments.map(x => x[1]),
+    }], {
+      x: rx + 0.29, y: 2.45, w: 2.3, h: 2.3, holeSize: 62,
+      chartColors: donutColors, showLegend: false, showValue: false,
+      dataBorder: { pt: 2, color: C.white },
+    });
+    s.addText([
+      { text: c.centerBig || '', options: { bold: true, fontSize: 16, color: C.ink, breakLine: true } },
+      { text: c.centerSmall || '', options: { fontSize: 8.5, color: C.muted } },
+    ], { x: rx + 0.79, y: 3.31, w: 1.3, h: 0.58, margin: 0, align: 'center', valign: 'middle', fontFace: F.head });
+  }
+  let cy2 = 4.95;
+  segments.forEach((l, i) => {
+    s.addShape(pres.shapes.OVAL, { x: rx, y: cy2 + 0.02, w: 0.16, h: 0.16, fill: { color: donutColors[i % donutColors.length] },
+      line: donutColors[i % donutColors.length] === C.panel2 ? { color: C.line, width: 1 } : { type: 'none' } });
+    s.addText([
+      { text: l[0] + '   ', options: { color: C.ink, fontSize: 10.5, bold: true } },
+      { text: fmt.pct(l[1]), options: { color: C.muted, fontSize: 10.5 } },
+    ], { x: rx + 0.26, y: cy2 - 0.05, w: rw - 0.26, h: 0.28, margin: 0, valign: 'middle', fontFace: F.head });
+    cy2 += 0.3;
+  });
+  if (items.length) {
+    const doneN = items.filter(it => it[1] === 'done').length;
+    panel(pres, s, rx, 6.0, rw, 0.85, { fill: C.panel, line: false, shadow: false });
+    s.addText([
+      { text: `${doneN} / ${items.length}  `, options: { bold: true, fontSize: 10.5,
+        color: doneN === items.length ? C.done : C.active } },
+      { text: 'entity setup steps complete', options: { color: C.body, fontSize: 10.5 } },
+    ], { x: rx + 0.2, y: 6.0, w: rw - 0.4, h: 0.85, margin: 0, valign: 'middle', fontFace: F.head,
+      lineSpacingMultiple: 1.15 });
+  }
   footer(s, data.brand);
   s.addNotes(notes.ask || '');
 }
@@ -726,13 +815,13 @@ export async function buildDeck(data = SAMPLE_DATA, opts = {}) {
 
   cover(pres, data, notes);
   problem(pres, data, notes);
-  validation(pres, data, notes);
-  market(pres, data, notes);
   solution(pres, data, notes, ICON);
   productDemo(pres, data, notes);
+  market(pres, data, notes);
+  competitive(pres, data, notes);
+  traction(pres, data, notes);
   roadmap(pres, data, notes, ICON);
   await team(pres, data, notes);
-  captable(pres, data, notes, ICON);
   ask(pres, data, notes);
   deal(pres, data, notes);
 

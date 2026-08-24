@@ -181,6 +181,12 @@ def _ensure_schema(session: Session) -> None:
             session.commit()
         except Exception:
             session.rollback()
+    # codeql[py/unused-global-variable] -- _migrated is read via the `global _migrated` guard at the top of this same function (`if
+    # _migrated: return`); the write here is what a LATER, separate call's read observes. CodeQL's
+    # dead-store analysis does not model a global's value persisting across separate invocations of
+    # the function that sets it, so it sees this write as never consumed. It is: this flag exists
+    # specifically to make the schema-migration idempotent-but-skippable after the first successful
+    # request in this process.
     _migrated = True
 
 
@@ -737,10 +743,14 @@ def upload_headshot(
     )
     session.commit()
     if old_path and old_path != str(fpath):
+        # The new headshot is already saved and the row already points at it,
+        # so the response is correct either way — a stray old file is wasted
+        # disk, not a correctness problem. Logged so an accumulating leak
+        # (e.g. a permissions issue that fails every delete) would surface.
         try:
             Path(old_path).unlink(missing_ok=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("settings: could not remove old headshot %s: %s", old_path, exc)
     return {"ok": True, "headshot_url": f"/api/settings/headshot/{user.uid}"}
 
 
@@ -998,6 +1008,12 @@ def totp_repair(
     )
     session.commit()
 
+    # The re-pair itself is already committed above (secret stored, sessions
+    # invalidated, activity logged) — the QR is a rendering convenience on top
+    # of `provisioning_uri`, which any authenticator app can also accept
+    # directly. A failure here degrades to manual entry, not a broken re-pair,
+    # but is still logged: a `qrcode`/Pillow issue would otherwise silently
+    # strip the QR from every setup response with nothing to point at why.
     qr_b64: Optional[str] = None
     try:
         import qrcode
@@ -1009,8 +1025,9 @@ def totp_repair(
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         qr_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-    except Exception:
-        pass
+    except Exception as exc:
+        safe_user_id = str(user.id).replace("\r", "").replace("\n", "").replace("\t", "")
+        logger.warning("settings: TOTP QR generation failed for user %s: %s", safe_user_id, exc)
 
     return {
         "ok": True,
@@ -1439,6 +1456,12 @@ def _ensure_user_settings_schema(session: Session) -> None:
         session.commit()
     except Exception:
         session.rollback()
+    # codeql[py/unused-global-variable] -- _user_settings_migrated is read via the `global _user_settings_migrated` guard at the top of
+    # this same function (`if _user_settings_migrated: return`); the write here is what a LATER,
+    # separate call's read observes. CodeQL's dead-store analysis does not model a global's value
+    # persisting across separate invocations of the function that sets it, so it sees this write as
+    # never consumed. It is: this flag exists specifically to make the schema-migration idempotent-
+    # but-skippable after the first successful request in this process.
     _user_settings_migrated = True
 
 
@@ -1803,6 +1826,12 @@ def _ensure_profile_extras_schema(session: Session) -> None:
             )
         """))
         session.commit()
+        # codeql[py/unused-global-variable] -- _profile_extras_migrated is read via the `global _profile_extras_migrated` guard at the top
+        # of this same function (`if _profile_extras_migrated: return`); the write here is what a LATER,
+        # separate call's read observes. CodeQL's dead-store analysis does not model a global's value
+        # persisting across separate invocations of the function that sets it, so it sees this write as
+        # never consumed. It is: this flag exists specifically to make the schema-migration idempotent-
+        # but-skippable after the first successful request in this process.
         _profile_extras_migrated = True
     except Exception:
         session.rollback()

@@ -4,7 +4,7 @@ export const BRAND = {
   parent: "Axal VC Management LLC",
   tagline: "Where venture builders meet capital, globally.",
   subTagline: "One network. Four lanes — partners, capital, founders, advisors.",
-  nicheProduct: { name: "Spin-Out Lab", duration: "30 days", parent: "GVPN" },
+  nicheProduct: { name: "Spin-Out Lab", duration: "28 days", parent: "GVPN" },
 } as const;
 
 export const LEGAL_ENTITIES = {
@@ -69,7 +69,7 @@ export const LANES = [
     label: "Pitch to the Network",
     short: "For Founders",
     accent: "amber",
-    blurb: "30-day Spin-Out Lab to incorporate. Full workflow for existing companies — pitch deck to cap table to fundraise.",
+    blurb: "28-day Spin-Out Lab to incorporate. Full workflow for existing companies — pitch deck to cap table to fundraise.",
     href: "/register?lane=founder",
   },
   {

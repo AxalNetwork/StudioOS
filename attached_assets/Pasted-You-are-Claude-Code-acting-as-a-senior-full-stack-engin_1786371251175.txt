@@ -1,0 +1,260 @@
+You are Claude Code acting as a senior full-stack engineer and product-minded data systems builder.
+
+Goal:
+Upgrade the existing “Signals” page in the Axal VC platform from a static or fake-data concept into a real, production-oriented founder market intelligence feature powered only by real external data.
+
+Critical requirement:
+Do not use fake data, placeholder datasets, dummy trend lines, invented companies, mock opportunity clusters, or decorative sample charts.
+If a data source is unavailable, the UI must show an honest empty / unsupported / low-confidence state.
+Real data only.
+
+Primary product purpose:
+This page is for founders to understand what to build, what pain points are emerging, which workflows are gaining urgency, and where there is evidence-backed opportunity.
+The feature must help answer:
+- what should I build
+- which problem is getting stronger
+- what category is showing demand
+- where customer pain is visible
+- what is noise vs real signal
+
+Your job:
+1. Audit the existing Signals page implementation
+2. Remove fake/sample data paths
+3. Design and implement a real data strategy
+4. Use only free, publicly available, legally usable data sources
+5. Build a signal ingestion and normalization layer
+6. Build a confidence-aware aggregation system
+7. Surface evidence transparently in the UI
+8. Integrate it into the existing Signals page without breaking surrounding navigation and platform style
+
+Constraints:
+- Prefer free sources only
+- No paid APIs
+- No proprietary subscriptions
+- No fake fallback content
+- If scraping is required, use only lightweight, respectful, legally safe approaches to public pages, feeds, open APIs, or official datasets
+- Use caching and rate limiting
+- Build source adapters so new sources can be added later
+- Keep the architecture modular
+- Use the existing stack and conventions in the codebase
+- Claude Code should be the one implementing the data strategy, not leaving it as a vague TODO
+
+What to build:
+
+A. Audit and cleanup
+- Find the existing Signals page and all components, hooks, API routes, mock data files, seed files, placeholder cards, or hardcoded demo content powering it
+- Remove or isolate fake data pathways
+- Preserve the UI only where it still makes sense
+- Document what was removed and why
+
+B. Real-source data strategy
+Implement a market-signals ingestion system using free/public sources where feasible.
+Prioritize sources that are likely accessible without payment and are useful for founder opportunity detection.
+
+Candidate source categories to evaluate and implement where viable:
+1. Google Trends or trend proxies
+2. GitHub trending / repository / topic activity
+3. Hacker News search/story frequency
+4. Reddit public discussion trends
+5. Product Hunt public launches or RSS-style public data if accessible
+6. Public job board data or RSS feeds for hiring-demand proxies
+7. Stack Overflow question/tag activity where accessible
+8. Public company / startup directories with legal free access
+9. App store ranking or review proxies if publicly accessible
+10. Government or regulatory datasets
+11. Patent / scientific publication datasets for deeptech / biotech / climate / hardware
+12. Public procurement / grants / RFP data where relevant
+13. RSS/news feeds from sector-relevant sources
+14. Open datasets from Kaggle/GitHub only if they are truly public, redistributable, and refreshable enough to be useful
+15. Public pricing / changelog / release note feeds from important infrastructure vendors if useful for AI infra / devtools / cloud signals
+
+You must decide which sources are realistic and sustainable in implementation.
+Do not include sources just because they sound good.
+Choose the strongest free sources that can actually power a reliable MVP.
+
+C. Source evaluation framework
+For each candidate source, assess:
+- free availability
+- legal/access risk
+- data freshness
+- rate-limit sensitivity
+- signal value
+- parsing complexity
+- founder usefulness
+- whether it is strong enough for MVP, optional for v2, or should be excluded
+
+Build a simple internal source registry/config object to track this.
+
+D. Backend ingestion architecture
+Implement a modular ingestion pipeline with:
+- source adapters
+- fetchers
+- parsers
+- normalizers
+- deduplication
+- lightweight scoring
+- caching
+- refresh scheduling
+- error handling
+- source health status
+
+Suggested normalized signal object shape:
+- id
+- source
+- source_type
+- title
+- excerpt
+- url
+- published_at
+- fetched_at
+- sector_tags
+- keyword_tags
+- company_tags if applicable
+- geography
+- signal_type
+- raw_strength
+- normalized_strength
+- confidence
+- evidence_group_key
+- metadata
+
+Suggested normalized opportunity cluster shape:
+- id
+- title
+- summary
+- why_now
+- possible_icp
+- suggested_product_angle
+- signal_count
+- source_count
+- confidence
+- first_seen_at
+- last_seen_at
+- sector_tags
+- evidence_items[]
+- trend_direction
+- quality_flags[]
+
+Use clean TypeScript types.
+
+E. Aggregation and clustering
+Implement an MVP-safe clustering / grouping approach.
+Do not over-engineer with heavy AI dependencies if not needed.
+Start with deterministic logic such as:
+- keyword overlap
+- topic tags
+- source co-occurrence
+- time proximity
+- sector mapping
+- heuristics for repeated pain-point language
+
+Optionally use a lightweight summarization layer only if there is already infrastructure in the codebase for model usage and it is cheap/free enough.
+But the core system must still work without depending on expensive LLM calls.
+
+F. Confidence scoring
+Build transparent confidence logic based on things like:
+- number of distinct sources
+- recency
+- source reliability weight
+- repetition across channels
+- clarity of problem statement
+- sector relevance
+- contradiction / noise penalties
+
+Show the actual confidence inputs in code comments and expose interpretable UI labels such as:
+- Emerging
+- Building
+- Strong
+- Mixed
+- Low confidence
+
+G. API layer
+Create or update backend endpoints needed by the Signals page.
+Examples:
+- GET /api/signals
+- GET /api/signals/clusters
+- GET /api/signals/clusters/:id
+- POST /api/signals/refresh
+- GET /api/signals/sources
+- GET /api/signals/health
+
+Respect the current backend style and auth model.
+
+H. Frontend integration
+Integrate the real data into the existing Signals page.
+Do not redesign the entire app unless needed.
+Reuse existing page structure where practical, but improve it as needed to support:
+- opportunity cluster feed
+- source-aware cards
+- confidence labels
+- filters
+- evidence detail drawer
+- empty states
+- refresh states
+- unsupported states
+- source transparency UI
+
+If there are charts, only show charts when they are backed by real data and clearly labeled.
+No decorative charts.
+
+I. Filters
+Implement useful filters such as:
+- sector
+- source type
+- signal type
+- geography
+- confidence
+- time range
+
+J. Founder actions
+Wire simple actions where possible:
+- save signal
+- mark interesting
+- dismiss as noise
+- send to customer discovery
+- compare with existing startup idea if that object already exists in the codebase
+
+If full downstream integration is too large, create clean extension points and TODO markers with exact integration notes.
+
+K. Operational concerns
+Implement:
+- cache layer
+- refresh throttling
+- source timeout handling
+- partial failure tolerance
+- logging
+- basic observability
+- source health display for admin/debug if appropriate
+
+L. Deliverables
+You must:
+1. inspect the existing codebase and identify the current Signals page implementation
+2. implement the real-source MVP
+3. replace fake data with real data flows
+4. explain which sources were chosen and why
+5. explain which sources were rejected and why
+6. leave the codebase in a working state
+7. provide a concise implementation summary
+8. list exact files changed
+9. list follow-up improvements for v2
+
+Important product principles:
+- evidence before insight
+- real data only
+- honest low-data states
+- no black-box scoring without explanation
+- founder decision support, not generic trend watching
+- practical MVP over ambitious but fragile architecture
+
+Output requirements:
+At the end, provide:
+- audit summary
+- chosen free data sources
+- rejected sources with reasons
+- architecture summary
+- files changed
+- how to run / test refresh locally
+- limitations
+- recommended next steps
+
+Now start by locating the current Signals page, related API/data files, and any fake/mock data paths. Then implement the real-data MVP.

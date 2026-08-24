@@ -84,6 +84,7 @@ import adminGithub from './routes/admin_github';
 import githubWebhook from './routes/github';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
 import adminAdvisorAudit from './routes/admin_advisor_audit';
+import adminCohort from './routes/admin_cohort';
 import privateData from './routes/private-data';
 import monitoring from './routes/monitoring';
 import infra from './routes/infra';
@@ -162,6 +163,8 @@ import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
 import radarRoutes from './routes/radar';
 import spinoutLabRoutes from './routes/spinout_lab';
+import spinoutCertificateRoutes, { publicCertificateRoutes } from './routes/spinout_certificates';
+import spinoutModerationRoutes from './routes/spinout_moderation';
 // T13/T14/T15 — port of FastAPI mentors/partner_office_hours/watchlist/journal/
 // portfolio_health/references/comarketing/company/needs/insights routers.
 import advisorsRoutes from './routes/advisors';
@@ -206,6 +209,7 @@ import consultations, { adminConsultations } from './routes/consultations';
 import adminBestFit from './routes/admin_bestfit';
 // Task #9 — Admin review queue for 'exploring' users (binding e-sign + role assignment).
 import adminExploring from './routes/admin_exploring';
+import adminLpApplications from './routes/admin_lp_applications';
 import bestFitSelf from './routes/best_fit';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
@@ -389,6 +393,12 @@ app.get('/api/health', (c) =>
       kv_rate_limits: !!c.env.RATE_LIMITS,
       durable_pipeline: !!(c.env as any).PIPELINE_ROOM,
       durable_onboarding: !!(c.env as any).ONBOARDING_CHAT,
+    },
+    // Task #9 — ticket↔GitHub sync config presence (flags only, no values).
+    github_sync: {
+      token: !!c.env.GITHUB_ACCESS_TOKEN,
+      repo: !!(c.env.GITHUB_REPO_OWNER && c.env.GITHUB_REPO_NAME),
+      webhook_secret: !!c.env.GITHUB_WEBHOOK_SECRET,
     },
   }),
 );
@@ -647,6 +657,8 @@ app.route('/api/admin/integration-keys', adminIntegrationKeys);
 app.route('/api/admin/github', adminGithub);
 app.route('/api/github', githubWebhook);
 app.route('/api/admin/advisor-audit', adminAdvisorAudit);
+// Cohort Timing & Gating — timeline, review queue, grace/override, impersonation audit.
+app.route('/api/admin/cohort', adminCohort);
 // Task #10 (LD) — Admin team roster CRUD + photo upload. Mounted BEFORE
 // the generic /api/admin router so the more-specific prefix wins.
 app.route('/api/admin/team', adminTeam);
@@ -701,6 +713,8 @@ app.route('/api/admin/best-fit', adminBestFit);
 // Task #9 — Exploring-users review queue. Mount BEFORE the catch-all
 // /api/admin so /api/admin/exploring/* resolves here. requireAdmin per-route.
 app.route('/api/admin/exploring', adminExploring);
+// GP review queue for Spin-Out Fund I LP applications. requireAdmin per-route.
+app.route('/api/admin/lp-applications', adminLpApplications);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
@@ -761,14 +775,14 @@ app.route('/api/deck-reviewer', deckReviewer);
 // Task #20 — public visual preview of a landing template (no auth, noindex).
 // Registered before /landing/:slug so the two-segment path matches first.
 app.get('/landing/template-preview/:style', (c) => renderTemplatePreview(c.env, c.req.param('style'), c.get('cspNonce' as never) as string | undefined));
-app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug'), c.get('cspNonce' as never) as string | undefined));
+app.get('/landing/:slug', async (c) => renderLandingHtml(c.env, c.req.param('slug'), c.get('cspNonce' as never) as string | undefined, new URL(c.req.url).origin));
 // Task #4 — private preview URL for unpublished drafts (noindex).
 app.get('/landing/preview/:token', async (c) => renderLandingPreview(c.env, c.req.param('token'), c.get('cspNonce' as never) as string | undefined));
 // Task #2 — branded multi-page site URLs: /p/{startup}/{page} resolves the
 // editable site slug + page slug; /p/{startup} renders the site's home page.
 // Requires the axal.vc/p{,/*} apex routes in wrangler.toml (both blocks).
-app.get('/p/:site/:page', async (c) => renderSitePage(c.env, c.req.param('site'), c.req.param('page'), c.get('cspNonce' as never) as string | undefined));
-app.get('/p/:site', async (c) => renderSitePage(c.env, c.req.param('site'), null, c.get('cspNonce' as never) as string | undefined));
+app.get('/p/:site/:page', async (c) => renderSitePage(c.env, c.req.param('site'), c.req.param('page'), c.get('cspNonce' as never) as string | undefined, new URL(c.req.url).origin));
+app.get('/p/:site', async (c) => renderSitePage(c.env, c.req.param('site'), null, c.get('cspNonce' as never) as string | undefined, new URL(c.req.url).origin));
 // Task #15 — Cloudflare Access on sensitive R2 read endpoints. Soft no-op in
 // dev/preview; production wrangler secrets engage the gate. Per-route auth
 // checks (requireAdmin/requireAuth) still run as the inner perimeter.
@@ -838,6 +852,11 @@ app.route('/api/values', valuesRoutes);
 app.route('/api/radar', radarRoutes);
 // Spin-Out Lab — guided 4-week sprint for pre-incorporation founders.
 app.route('/api/spinout-lab', spinoutLabRoutes);
+// Graduation-certificate registry (admin issue/revoke + owner read).
+app.route('/api/spinout-lab', spinoutCertificateRoutes);
+// Lab participant moderation (admin only). Moves spinout_lab_active,
+// never users.is_active — see the route file header.
+app.route('/api/admin/spinout-moderation', spinoutModerationRoutes);
 // T13 — Advisors (formerly Mentors) + Partner Office Hours.
 // `/api/mentors` is kept as a permanent alias so old clients/bookmarks keep working.
 app.route('/api/advisors', advisorsRoutes);
@@ -869,6 +888,9 @@ app.route('/api/public', jobsPublicRoutes);
 // Task #9 — Communities & Circles public feed. Mount BEFORE the generic
 // publicRoutes so /api/public/circles resolves to the circles feed.
 app.route('/api/public', circlesPublicRoutes);
+// Mounted BEFORE publicRoutes so /api/public/verify/:token resolves to the
+// certificate verifier rather than falling through.
+app.route('/api/public', publicCertificateRoutes);
 app.route('/api/public', publicRoutes);
 // Task #10 (LD) — Public team roster. Mounted under /api/public so it
 // sits OUTSIDE auth + the /api/admin/* CF Access perimeter; the Jekyll
@@ -1167,6 +1189,30 @@ export default {
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
+        // Cohort Timing & Gating — every-minute tick: materializes monthly
+        // cycles, unlocks weeks at their Delaware-midnight boundaries,
+        // evaluates pass/fail at each week deadline, finalizes lapsed grace
+        // extensions, and sends 48h/24h/3h reminders. Every job run is
+        // claimed via scheduled_jobs_audit.idempotency_key so re-runs are
+        // no-ops. Cheap on idle ticks (indexed due-window SELECTs).
+        try {
+          const { runCohortTimingTick } = await import('./services/cohortTiming');
+          await runCohortTimingTick(env, now);
+        } catch (e) {
+          console.error('[cron] cohort timing tick failed', e);
+        }
+        // Task #5 — Cohort application lifecycle tick: closes application
+        // windows 7 days before the 1st (23:59:59 ET), sends 3d/24h close
+        // reminders, runs the below-minimum capacity check (postpone +
+        // roll-forward), and activates approved founders at Delaware
+        // midnight on the 1st. Idempotent via scheduled_jobs_audit claims
+        // and the per-user notification ledger.
+        try {
+          const { runCohortApplicationsTick } = await import('./services/cohortApplications');
+          await runCohortApplicationsTick(env, now);
+        } catch (e) {
+          console.error('[cron] cohort applications tick failed', e);
+        }
         // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
         // HMAC on every approved official snapshot; mismatches get flagged
         // for admin review and disappear from LP/partner views immediately.
@@ -1179,6 +1225,21 @@ export default {
         // Runs at 14:00 UTC so US/EU admins see it in the morning.
         if (now.getUTCHours() === 14 && now.getUTCMinutes() === 0) {
           try { await Jobs.enqueue(env, 'flagged_score_digest', {}); } catch {}
+        }
+        // Founder Signals live ingestion — nightly at 04:20 UTC. Fetches real
+        // evidence from the free public sources (HN/Algolia, Stack Exchange,
+        // GitHub, Federal Register, SEC EDGAR FTS) and persists promoted
+        // signals + their evidence into D1, replacing the illustrative seed
+        // corpus on the /signals page. Idempotent; a failed night just leaves
+        // yesterday's real data (or the labeled examples) in place.
+        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
+          try {
+            const { runRefresh } = await import('./services/signals/engine');
+            const r = await runRefresh(env);
+            console.info(`[cron] signals ingested promoted=${r.promoted} held=${r.held} evidence=${r.evidence_written}`);
+          } catch (e) {
+            console.error('[cron] signals ingestion failed', e);
+          }
         }
         // Task #4 — Investor Signals aggregation every 6h at HH:05.
         // Cron fires every minute; gate on hour%6==0 + minute==5 so the

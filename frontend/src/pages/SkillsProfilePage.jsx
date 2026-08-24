@@ -303,7 +303,7 @@ export default function SkillsProfilePage() {
                           </div>
                         </div>
                         {lvl > 0 && isOpen && (
-                          <div className="mt-3 grid sm:grid-cols-[1fr,8rem] gap-3">
+                          <div className="mt-3 grid sm:grid-cols-[1fr_8rem] gap-3">
                             <label className="block">
                               <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mb-1">
                                 <Link2 className="w-3 h-3" /> Evidence link (optional)

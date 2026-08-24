@@ -13,17 +13,17 @@
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.3.1",
-    "hono": "^4.12.30",
-    "jose": "^6.2.3",
+    "hono": "^4.13.2",
+    "jose": "^6.2.9",
     "mimetext": "^3.0.28",
     "otpauth": "^9.5.1",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260713.1",
+    "@cloudflare/workers-types": "^5.20260817.1",
     "@types/qrcode": "^1.5.5",
-    "typescript": "^6.0.3",
-    "wrangler": "^4.110.0"
+    "typescript": "^7.0.2",
+    "wrangler": "^4.118.0"
   }
 }

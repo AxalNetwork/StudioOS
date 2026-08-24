@@ -56,6 +56,52 @@ const metaVal = (f, key) => {
   return pair ? pair[1] : '';
 };
 
+/* ------------------------------------------------------- deck-only overrides -- */
+// The DECK OVERRIDE rows. These are the third kind of row, and the distinction
+// matters: an AUTO row is read-only live data, an EDITABLE row writes back into
+// the project (a real module edit, visible everywhere), and a DECK row writes
+// only to `spinout_deck_overrides` — deck wording that leaves the founder's
+// Solution/Problem modules alone.
+//
+// Keys are dotted paths into SpinoutDeckData and MUST be in the worker's
+// SPINOUT_OVERRIDABLE_KEYS allowlist; the PUT rejects anything else with a 400
+// naming the key, and `overridableKeys` from the GET is used below to hide a row
+// the server would refuse rather than showing a save that silently fails.
+const DECK_ROWS = {
+  cover: [{ label: 'Thesis line', key: 'cover.thesis', kind: 'paragraph' }],
+  problem: [
+    { label: 'Slide headline', key: 'problem.title' },
+    { label: 'Framing sentence', key: 'problem.framing', kind: 'paragraph' },
+    { label: 'Pull quote', key: 'problem.quote', kind: 'paragraph' },
+    { label: 'Quote attribution', key: 'problem.quoteAttr' },
+  ],
+  market: [
+    { label: 'Slide headline', key: 'market.title' },
+    { label: 'Sizing assumptions', key: 'market.assumptions', kind: 'paragraph' },
+  ],
+  competitive: [
+    { label: 'Slide headline', key: 'competitive.title' },
+    { label: 'Whitespace claim', key: 'competitive.whitespace', kind: 'paragraph' },
+  ],
+  traction: [
+    { label: 'Slide headline', key: 'traction.title' },
+    { label: 'Takeaway line', key: 'traction.takeaway', kind: 'paragraph' },
+  ],
+  solution: [{ label: 'Slide headline', key: 'solution.title' }],
+  product_demo: [
+    { label: 'Slide headline', key: 'productDemo.title' },
+    { label: 'Walkthrough copy', key: 'productDemo.body', kind: 'paragraph' },
+    { label: 'Caption', key: 'productDemo.caption' },
+  ],
+  roadmap: [{ label: 'Slide headline', key: 'roadmap.title' }],
+  team_network: [{ label: 'Slide headline', key: 'team.title' }],
+  ask: [{ label: 'Slide headline', key: 'ask.title' }],
+  review_the_deal: [
+    { label: 'Slide headline', key: 'deal.title' },
+    { label: 'Closing line', key: 'deal.closingLine', kind: 'paragraph' },
+  ],
+};
+
 /* -------------------------------------------------------- per-slide config -- */
 // Each slide (keyed by spec_id) declares its AUTO rows (read-only, sourced from
 // the live `fields` map and/or the loaded project) and its EDITABLE rows (mapped
@@ -70,7 +116,7 @@ const CONFIG = {
       { label: 'Description', src: 'project', get: (f, p) => orDash(p?.description) },
       { label: 'Sector', src: 'project', get: (f, p) => orDash(p?.sector || metaVal(f, 'SECTOR')) },
       {
-        label: 'Validation signal · 30-day sprint',
+        label: 'Validation signal · 28-day sprint',
         src: 'discovery',
         get: (f) => orDash([f['cover.signalLabel'], f['cover.signalCaption']].filter(Boolean).join(' — ')),
       },
@@ -78,8 +124,20 @@ const CONFIG = {
     edit: [],
   },
   problem: {
-    title: 'Problem',
+    title: 'Problem & validation',
     auto: [
+      {
+        // The standalone Validation slide is merged into Problem — its
+        // scorecard renders here so the evidence stays reviewable.
+        label: 'Discovery scorecard',
+        src: 'discovery',
+        multi: (f) => {
+          const cards = j(f['validation.cards_json']) || [];
+          return cards
+            .map((c) => (Array.isArray(c) ? { label: c[1] || 'Metric', value: orDash(c[0]) } : null))
+            .filter(Boolean);
+        },
+      },
       {
         label: 'Discovery quote',
         src: 'discovery',
@@ -103,24 +161,6 @@ const CONFIG = {
         help: 'The core, evidenced problem your venture solves.',
       },
     ],
-  },
-  validation: {
-    title: 'Validation',
-    // Data-driven: render the live discovery scorecard exactly as assembled
-    // (each card carries its own label), so labels never drift from the data.
-    auto: [
-      {
-        label: 'Discovery scorecard',
-        src: 'discovery',
-        multi: (f) => {
-          const cards = j(f['validation.cards_json']) || [];
-          return cards
-            .map((c) => (Array.isArray(c) ? { label: c[1] || 'Metric', value: orDash(c[0]) } : null))
-            .filter(Boolean);
-        },
-      },
-    ],
-    edit: [],
   },
   market: {
     title: 'Market',
@@ -216,26 +256,52 @@ const CONFIG = {
     ],
     edit: [],
   },
-  cap_table: {
-    title: 'Cap table & incorporation',
+  competitive: {
+    title: 'Competitive landscape',
     auto: [
       {
-        label: 'Cap table',
-        src: 'captable',
-        get: (f) => orDash(listJoin(j(f['captable.segments_json']),
-          (s) => (Array.isArray(s) ? `${s[0]} ${s[1]}%` : ''))),
+        label: 'Competitors',
+        src: 'project',
+        get: (f) => orDash(listJoin(j(f['competitive.competitors_json']),
+          (c) => (Array.isArray(c) ? `${c[0]}${c[1] ? ` (${c[1]})` : ''}` : String(c)))),
       },
       {
-        label: 'Incorporation',
-        src: 'incorporation',
-        get: (f) => orDash(listJoin(j(f['captable.items_json']),
-          (i) => (Array.isArray(i) ? `${i[0]} (${i[1]})` : String(i)))),
+        label: 'Our edge',
+        src: 'project',
+        get: (f) => orDash(listJoin(j(f['competitive.edges_json']), (e) => String(e))),
+      },
+    ],
+    edit: [],
+  },
+  traction: {
+    title: 'Traction',
+    auto: [
+      {
+        label: 'Monthly revenue trend',
+        src: 'project',
+        get: (f) => {
+          const labels = j(f['traction.trendLabels_json']) || [];
+          const months = j(f['traction.trendX_json']) || [];
+          const out = months.map((m, i) => `${m} ${labels[i] ?? ''}`.trim()).filter(Boolean);
+          return out.length ? out.join(' · ') : '—';
+        },
+      },
+      {
+        label: 'MRR & growth',
+        src: 'project',
+        get: (f) => orDash([f['traction.mrr'], f['traction.growth']].filter(Boolean).join ('  ·  ')),
+      },
+      {
+        label: 'Revenue mix',
+        src: 'project',
+        get: (f) => orDash(listJoin(j(f['traction.mix_json']),
+          (m) => (Array.isArray(m) ? `${m[0]} ${m[2]}%` : String(m)))),
       },
     ],
     edit: [],
   },
   ask: {
-    title: 'The ask',
+    title: 'The ask & cap table',
     note: 'Edit the use-of-funds allocation in the “THE ASK — Use of Funds” panel on the right. The raise and milestone are pulled from your startup.',
     auto: [
       {
@@ -257,6 +323,20 @@ const CONFIG = {
           const m = j(f['ask.milestone_json']);
           return Array.isArray(m) ? orDash(m.filter(Boolean).join(' — ')) : '—';
         },
+      },
+      {
+        // The standalone Cap Table slide is merged into Ask — surface its
+        // splits + entity checklist here so they stay reviewable.
+        label: 'Cap table',
+        src: 'captable',
+        get: (f) => orDash(listJoin(j(f['captable.segments_json']),
+          (s) => (Array.isArray(s) ? `${s[0]} ${s[1]}%` : ''))),
+      },
+      {
+        label: 'Incorporation',
+        src: 'incorporation',
+        get: (f) => orDash(listJoin(j(f['captable.items_json']),
+          (i) => (Array.isArray(i) ? `${i[0]} (${i[1]})` : String(i)))),
       },
     ],
     edit: [],
@@ -317,6 +397,11 @@ const EDIT_BADGE = (
     Editable
   </span>
 );
+const DECK_BADGE = (
+  <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+    Deck only
+  </span>
+);
 
 function AutoRow({ row, value, src }) {
   const empty = !value || value === '—';
@@ -347,6 +432,17 @@ export default function SpinoutSlideEditor({ slide, fields, projectId, onSaved }
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
+  // Deck-level manual overrides — stored server-side per (project, field key),
+  // never written into the project's own columns. `overridableKeys` is the
+  // server's allowlist; a row whose key is absent from it is hidden rather than
+  // rendered as a control the PUT would reject.
+  const [overrides, setOverrides] = useState({});
+  const [overridableKeys, setOverridableKeys] = useState(null);
+  const [deckDraft, setDeckDraft] = useState({});
+  const [deckSaving, setDeckSaving] = useState(false);
+  const [deckSaved, setDeckSaved] = useState(false);
+  const [deckError, setDeckError] = useState('');
+
   useEffect(() => {
     if (!projectId) return undefined;
     let alive = true;
@@ -362,6 +458,23 @@ export default function SpinoutSlideEditor({ slide, fields, projectId, onSaved }
     return () => { alive = false; };
   }, [projectId]);
 
+  useEffect(() => {
+    if (!projectId) return undefined;
+    let alive = true;
+    api.spinoutDeckOverrides(projectId)
+      .then((r) => {
+        if (!alive) return;
+        setOverrides(r?.overrides || {});
+        setOverridableKeys(Array.isArray(r?.overridable_keys) ? r.overridable_keys : null);
+      })
+      .catch((e) => {
+        // A deck that can't read its overrides still edits its module fields —
+        // degrade to "no overrides" rather than blocking the whole editor.
+        if (alive) reportError('SpinoutSlideEditor:overrides', e);
+      });
+    return () => { alive = false; };
+  }, [projectId]);
+
   // (Re)initialise the editable draft whenever the project loads or the active
   // slide changes. Switching slides discards unsaved typing by design.
   useEffect(() => {
@@ -374,6 +487,51 @@ export default function SpinoutSlideEditor({ slide, fields, projectId, onSaved }
   }, [project, specId]);
 
   const dirty = editRows.some((r) => (draft[r.field] ?? '') !== (project?.[r.field] ?? ''));
+
+  // Deck-override rows for this slide, filtered by the server's allowlist.
+  const deckRows = useMemo(() => {
+    const rows = DECK_ROWS[specId] || [];
+    if (!overridableKeys) return rows;
+    const allow = new Set(overridableKeys);
+    return rows.filter((r) => allow.has(r.key));
+  }, [specId, overridableKeys]);
+
+  // (Re)seed the override draft when the stored overrides or the slide change.
+  useEffect(() => {
+    const d = {};
+    for (const r of deckRows) d[r.key] = overrides[r.key] ?? '';
+    setDeckDraft(d);
+    setDeckSaved(false);
+    setDeckError('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overrides, specId, deckRows.length]);
+
+  const deckDirty = deckRows.some((r) => (deckDraft[r.key] ?? '') !== (overrides[r.key] ?? ''));
+
+  const onSaveDeck = async () => {
+    if (!projectId || deckSaving || !deckDirty) return;
+    setDeckSaving(true); setDeckError('');
+    try {
+      // Cleared fields go in `remove` — an empty value is a REVERT back to the
+      // module data, which is why there is no separate delete call.
+      const payload = {};
+      const remove = [];
+      for (const r of deckRows) {
+        const v = (deckDraft[r.key] ?? '').trim();
+        if (v === '') { if (overrides[r.key]) remove.push(r.key); }
+        else if (v !== (overrides[r.key] ?? '')) payload[r.key] = v;
+      }
+      const res = await api.saveSpinoutDeckOverrides(projectId, payload, remove);
+      setOverrides(res?.overrides || {});
+      setDeckSaved(true);
+      if (onSaved) onSaved();
+    } catch (e) {
+      setDeckError(e?.message || 'Save failed');
+      reportError('SpinoutSlideEditor:saveOverrides', e);
+    } finally {
+      setDeckSaving(false);
+    }
+  };
 
   const onSave = async () => {
     if (!projectId || saving || !dirty) return;
@@ -475,7 +633,57 @@ export default function SpinoutSlideEditor({ slide, fields, projectId, onSaved }
         </div>
       )}
 
-      {!cfg && (
+      {deckRows.length > 0 && (
+        <div className="space-y-3 pt-3 border-t dark:border-slate-800">
+          <p className="text-[11px] text-gray-500 dark:text-slate-400">
+            <span className="font-medium">Deck-only wording.</span> These replace the text on this
+            slide without touching your venture data — your Solution, Problem and Discovery modules
+            stay exactly as you wrote them. Clear a field to go back to the live text.
+          </p>
+          {deckRows.map((r) => {
+            const isOn = !!overrides[r.key];
+            return (
+              <div key={r.key}>
+                <RowLabel
+                  label={r.label}
+                  badge={isOn ? DECK_BADGE : null}
+                  src={null}
+                />
+                {r.kind === 'paragraph' ? (
+                  <textarea
+                    className="w-full border rounded px-3 py-2 bg-white dark:bg-slate-950 dark:border-slate-700 text-sm"
+                    rows={3}
+                    value={deckDraft[r.key] || ''}
+                    placeholder={live[r.key] ? `Live: ${String(live[r.key]).slice(0, 90)}` : 'Leave empty to use the live text'}
+                    onChange={(e) => setDeckDraft((d) => ({ ...d, [r.key]: e.target.value }))}
+                  />
+                ) : (
+                  <input
+                    className="w-full border rounded px-3 py-2 bg-white dark:bg-slate-950 dark:border-slate-700 text-sm"
+                    value={deckDraft[r.key] || ''}
+                    placeholder={live[r.key] ? `Live: ${String(live[r.key]).slice(0, 60)}` : 'Leave empty to use the live text'}
+                    onChange={(e) => setDeckDraft((d) => ({ ...d, [r.key]: e.target.value }))}
+                  />
+                )}
+              </div>
+            );
+          })}
+          {deckError && <p className="text-xs text-red-500">{deckError}</p>}
+          <button
+            onClick={onSaveDeck}
+            disabled={!deckDirty || deckSaving}
+            className="w-full px-2 py-1.5 text-sm border border-amber-300 text-amber-700 dark:text-amber-300 dark:border-amber-800 rounded hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {deckSaving
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+              : (deckSaved && !deckDirty)
+                ? <><Check className="w-4 h-4" /> Saved</>
+                : 'Save deck wording'}
+          </button>
+        </div>
+      )}
+
+      {!cfg && deckRows.length === 0 && (
         <div className="text-xs text-gray-400 italic">No editable fields for this slide.</div>
       )}
     </div>

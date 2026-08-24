@@ -28,7 +28,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: '22'
@@ -49,7 +49,7 @@ jobs:
       run:
         working-directory: cloudflare-worker
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: '22'
@@ -62,6 +62,38 @@ jobs:
         run: npx --no-install tsc --noEmit
 
   # -------------------------------------------------------------------------
+  # The full gate: every frontend + worker test, then the static guards and the
+  # worker typecheck. `npm run test:drift` globs its test files rather than
+  # naming them, so a new test file is covered the moment it lands — 29 of 89
+  # worker test files used to be omitted from the hand-maintained list, and one
+  # of them had been failing unnoticed.
+  #
+  # This job is why the suite exists. Without it the gate only ran on whichever
+  # developer remembered, which is how a ReferenceError that `test:drift` catches
+  # in seconds reached main (PR #218).
+  # -------------------------------------------------------------------------
+  gate:
+    name: test:drift (full suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+      # The suite imports React deck templates and the worker's TypeScript, so
+      # it needs both workspaces' dependencies installed.
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install worker deps
+        working-directory: cloudflare-worker
+        run: npm ci
+      - name: Install root deps
+        run: npm ci || npm install --no-audit --no-fund
+      - run: npm run test:drift
+
+  # -------------------------------------------------------------------------
   # API ↔ Worker drift smoke test (T1). Static analysis: every /api/* path
   # called from frontend/src/lib/api.js MUST be mounted on the production
   # worker, OR be allowlisted with a tracking task id.
@@ -71,12 +103,46 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: '22'
       - name: Run drift checker
         run: node scripts/check-api-drift.mjs
+
+  # -------------------------------------------------------------------------
+  # Open Graph / social-preview gate.
+  #
+  # Guards the "every axal.vc link previews with the same wrong image" class of
+  # regression. Validates the committed docs/ build — the bytes a crawler
+  # actually receives — so it catches a route that stopped being prerendered, an
+  # og:image pointing at a file that does not exist, a relative image URL, or a
+  # card that is not 1200x630.
+  # -------------------------------------------------------------------------
+  og-tags:
+    name: open graph metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+      # The three checks below all read the COMMITTED docs/ bytes — "what a
+      # crawler actually receives". If docs/ is behind frontend/src they are
+      # validating an old build and passing, so assert freshness first. Strict
+      # here (unlike the local warning) because this job can rebuild from the
+      # lockfile if it needs to.
+      - name: Committed docs/ build is current
+        run: node scripts/check-docs-fresh.mjs --strict
+      - name: Prerendered routes are current
+        run: node scripts/prerender-og.mjs --check
+      - name: Card images are current
+        # ubuntu-latest ships Google Chrome; the script skips loudly (and says
+        # what is no longer covered) if no browser is present.
+        run: node scripts/generate-og-images.mjs --check
+      - name: Validate tags in built output
+        run: node scripts/validate-og-tags.mjs
 
   # -------------------------------------------------------------------------
   # LFS size gate — only fires on files added / modified in the PR.
@@ -88,7 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
@@ -114,8 +180,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -146,7 +212,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: '22'
@@ -169,7 +235,7 @@ jobs:
       run:
         working-directory: cloudflare-worker
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: '22'
@@ -184,8 +250,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.11'
           cache: 'pip'

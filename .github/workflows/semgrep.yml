@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   security-events: write
+  actions: read
 
 # Static-analysis scan using the official Semgrep CLI with public OSS rule
 # packs. We deliberately do NOT use `semgrep ci` (which requires a paid
@@ -29,7 +30,7 @@ jobs:
     container:
       image: semgrep/semgrep:latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Run semgrep (public OSS rules)
         # Path exclusions for generated/pasted trees live in the ROOT-ANCHORED
         # .semgrepignore (/docs/, /attached_assets/) which semgrep reads from
@@ -44,8 +45,27 @@ jobs:
             --sarif --output semgrep.sarif \
             --error
         continue-on-error: true
+      # Semgrep's console output and its SARIF output disagree about inline
+      # suppressions. The run above prints e.g. "44 findings" (suppressed ones
+      # dropped), but the SARIF it wrote still contains every `# nosemgrep:`
+      # finding, tagged `"suppressions": [{"kind": "inSource"}]`. GitHub code
+      # scanning opens an alert for those anyway — which is why annotated lines
+      # like backend/app/models/migrations.py:2793 came back as open "Error"
+      # alerts with the silencing comment visible in the reported snippet.
+      #
+      # Strip them so the upload matches the finding count semgrep reported.
+      # Runs on `always()` because the scan step exits 1 whenever `--error`
+      # fires, which is exactly when there is a SARIF worth filtering.
+      - name: Drop nosemgrep-suppressed results from SARIF
+        if: always()
+        run: |
+          # `semgrep` is itself a Python console script, so this image ships an
+          # interpreter. Resolve it rather than hardcoding `python3`, since the
+          # image tag is `latest` and its layout is not ours to depend on.
+          PY="$(command -v python3 || command -v python)"
+          "$PY" scripts/strip-suppressed-sarif.py semgrep.sarif
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
         if: always()
         with:
           sarif_file: semgrep.sarif

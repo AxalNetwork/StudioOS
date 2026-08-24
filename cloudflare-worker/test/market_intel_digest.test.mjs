@@ -30,6 +30,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { transpileTs } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -41,19 +42,27 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /* ------------------------------------------------------------------ */
 async function loadDigest({ sendNotificationEmail, periodKey, ensureMarketIntelSchema }) {
   const srcPath = resolve(__dirname, '../src/services/market_intel/digest.ts');
-  let src = await readFile(srcPath, 'utf8');
+  const tsSrc = await readFile(srcPath, 'utf8');
+
+  // Erase types FIRST, while the source is still a module. `export type
+  // Cadence = …` and `import type { Env } …` are only valid — and only
+  // recognised as type syntax — at the top level of a module; once the source
+  // is spliced into the IIFE below they read as ordinary `export`/`import`
+  // statements in a nested scope, survive stripping, and `new Function` throws
+  // "'import', and 'export' cannot be used outside of module code". Stripping
+  // before wrapping is what keeps that ordering hazard from coming back.
+  let src = transpileTs(tsSrc);
 
   // Strip all top-of-file imports — the helpers they pull in are
-  // injected as free variables by the IIFE wrapper below.
+  // injected as free variables by the IIFE wrapper below. (Type-only imports
+  // are already gone; these are the value ones.)
   src = src.replace(/^import[^;]+;\s*$/gm, '');
 
   // Replace bare `export function` / `export async function` with plain
   // `function` so the IIFE can return them by name.
   src = src.replace(/\bexport\s+(async\s+)?function\b/g, '$1function');
-  // `export type` / `export interface` lines are stripped by transpile,
-  // but defensive replace in case future edits drop the `type`.
 
-  const wrapped = `
+  const outputText = `
     const __mod = (() => {
       ${src}
       return {
@@ -67,18 +76,24 @@ async function loadDigest({ sendNotificationEmail, periodKey, ensureMarketIntelS
     })();
   `;
 
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
-
   // Inject the stubs + return the exports map. `crypto` is available
   // as a Node global (Node 20+), so the HMAC code path runs unchanged.
+  // Every import digest.ts makes must be injected here by name — the source is
+  // string-extracted with its imports stripped, so a call to anything not in
+  // this list is a ReferenceError at run time, not a load error. When digest.ts
+  // gains an import, add it here. `stripTrailingSlashes` is the real
+  // implementation from util/url.ts (three lines, no deps) rather than a stub,
+  // so the URL the digest actually builds is the URL under test.
+  const stripTrailingSlashes = (s) => {
+    let i = s.length;
+    while (i > 0 && s.charCodeAt(i - 1) === 47 /* '/' */) i--;
+    return i === s.length ? s : s.slice(0, i);
+  };
   const factory = new Function(
-    'sendNotificationEmail', 'periodKey', 'ensureMarketIntelSchema',
+    'sendNotificationEmail', 'periodKey', 'ensureMarketIntelSchema', 'stripTrailingSlashes',
     `${outputText}; return __mod;`,
   );
-  return factory(sendNotificationEmail, periodKey, ensureMarketIntelSchema);
+  return factory(sendNotificationEmail, periodKey, ensureMarketIntelSchema, stripTrailingSlashes);
 }
 
 /* ------------------------------------------------------------------ */

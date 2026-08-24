@@ -20,10 +20,11 @@ import { mintDownloadToken, verifyAndConsumeToken } from '../services/signedDown
 import { notify } from '../services/notify';
 import {
   SECTION_CATALOG, CONNECTORS, sectionsFor, runConnector,
+  checklistFor,
   computeScore, worstSeverity,
   encField, decField,
   renderReportArtifact,
-  type DDSubjectType, type ReportCase, type ReportSection,
+  type DDSubjectType, type ReportCase, type ReportSection, type ChecklistDepth,
 } from '../services/dueDiligence';
 import { encryptBytes, decryptBytes } from '../services/cryptoBox';
 
@@ -172,6 +173,10 @@ dd.post('/cases', async (c) => {
   if (!subjectId || !subjectLabel) {
     return c.json({ error: 'subject_id and subject_label are required' }, 400);
   }
+  // Build queue #128 — stage templates. The depth picks how many
+  // checklist items are seeded per section (lite ⊂ standard ⊂ deep).
+  const templateDepth: ChecklistDepth = (['lite', 'standard', 'deep'] as const)
+    .includes(body.template_depth) ? body.template_depth : 'standard';
   const sql = getSQL(c.env);
   try {
     if (!isPrivileged) {
@@ -189,9 +194,9 @@ dd.post('/cases', async (c) => {
     }
     const uid = genUid();
     const inserted: any[] = await sql`
-      INSERT INTO dd_cases (uid, subject_type, subject_id, subject_label, owner_user_id)
-      VALUES (${uid}, ${subjectType}, ${subjectId}, ${subjectLabel}, ${user.id})
-      RETURNING id, uid, subject_type, subject_id, subject_label, status, owner_user_id, created_at`;
+      INSERT INTO dd_cases (uid, subject_type, subject_id, subject_label, owner_user_id, template_depth)
+      VALUES (${uid}, ${subjectType}, ${subjectId}, ${subjectLabel}, ${user.id}, ${templateDepth})
+      RETURNING id, uid, subject_type, subject_id, subject_label, status, owner_user_id, template_depth, created_at`;
     const row = inserted[0];
     const caseId = Number(row.id);
 
@@ -209,13 +214,30 @@ dd.post('/cases', async (c) => {
     }
 
     const sections = sectionsFor(subjectType);
+    const sectionIdByKey = new Map<string, number>();
     for (const s of sections) {
-      await sql`
+      const secIns: any[] = await sql`
         INSERT INTO dd_sections (case_id, section_key, title, weight)
-        VALUES (${caseId}, ${s.key}, ${s.title}, ${s.weight})`;
+        VALUES (${caseId}, ${s.key}, ${s.title}, ${s.weight})
+        RETURNING id`;
+      sectionIdByKey.set(s.key, Number(secIns[0].id));
     }
-    await audit(c.env, caseId, user, 'case_opened', { type: 'dd_case', id: caseId }, { subject_type: subjectType, subject_id: subjectId });
-    return c.json({ ...row, sections_seeded: sections.length }, 201);
+    // Seed the working checklist at the chosen depth. Items land
+    // 'pending'; reviewers work them to pass/flag/fail and the
+    // flagged/failed severities feed the composite score alongside
+    // connector findings (see recomputeAndStoreScore).
+    const checklist = checklistFor(subjectType, templateDepth);
+    let itemsSeeded = 0;
+    for (const it of checklist) {
+      const sid = sectionIdByKey.get(it.section_key);
+      if (!sid) continue;
+      await sql`
+        INSERT INTO dd_checklist_items (case_id, section_id, item_key, title, depth)
+        VALUES (${caseId}, ${sid}, ${it.key}, ${it.title}, ${it.depth})`;
+      itemsSeeded++;
+    }
+    await audit(c.env, caseId, user, 'case_opened', { type: 'dd_case', id: caseId }, { subject_type: subjectType, subject_id: subjectId, template_depth: templateDepth });
+    return c.json({ ...row, sections_seeded: sections.length, checklist_seeded: itemsSeeded }, 201);
   } finally { await sql.end(); }
 });
 
@@ -246,12 +268,14 @@ dd.get('/cases/:uid', async (c) => {
   }
   const sql = getSQL(c.env);
   try {
-    const [sectionsAll, findingsAll, sources, attachmentsAll, reviewersAll]: [any[], any[], any[], any[], any[]] = await Promise.all([
+    const [sectionsAll, findingsAll, sources, attachmentsAll, reviewersAll, checklistAll, requestsAll]: [any[], any[], any[], any[], any[], any[], any[]] = await Promise.all([
       sql`SELECT * FROM dd_sections WHERE case_id = ${caseId} ORDER BY id`,
       sql`SELECT * FROM dd_findings WHERE case_id = ${caseId} ORDER BY created_at DESC`,
       sql`SELECT id, connector, status, records_count, findings_emitted, error_message, started_at, completed_at FROM dd_external_sources WHERE case_id = ${caseId} ORDER BY id DESC`,
       sql`SELECT id, section_id, filename, mime_type, size_bytes, uploaded_by_user_id, created_at FROM dd_attachments WHERE case_id = ${caseId}`,
       sql`SELECT r.*, u.name AS user_name, u.email AS user_email FROM dd_reviewers r JOIN users u ON u.id = r.user_id WHERE r.case_id = ${caseId}`,
+      sql`SELECT * FROM dd_checklist_items WHERE case_id = ${caseId} ORDER BY id`,
+      sql`SELECT r.*, u.name AS created_by_name FROM dd_requests r LEFT JOIN users u ON u.id = r.created_by_user_id WHERE r.case_id = ${caseId} ORDER BY r.created_at DESC`,
     ]);
     const allowSection = (sid: number | null | undefined) =>
       scopedSectionIds == null ? true : (sid != null && scopedSectionIds.has(Number(sid)));
@@ -259,6 +283,13 @@ dd.get('/cases/:uid', async (c) => {
     const findings = findingsAll.filter(f => allowSection(f.section_id));
     const attachments = attachmentsAll.filter(a => allowSection(a.section_id));
     const reviewers = reviewersAll.filter(r => allowSection(r.section_id));
+    // Checklist items follow the same section scoping as findings; the
+    // encrypted note is decrypted for anyone allowed to see the item.
+    const checklist = await Promise.all(checklistAll.filter(i => allowSection(i.section_id)).map(async i => ({
+      ...i,
+      note: await decField(c.env, 'dd_checklist_items', 'note', i.id, i.note_enc),
+      note_enc: undefined,
+    })));
 
     const decryptedFindings = await Promise.all(findings.map(async f => ({
       id: f.id, section_id: f.section_id, source_id: f.source_id, source_kind: f.source_kind,
@@ -295,6 +326,10 @@ dd.get('/cases/:uid', async (c) => {
       sources: isScoped ? [] : sources, // scan results are case-wide; hide from scoped reviewers
       attachments,
       reviewers,
+      checklist,
+      // Requests are case-wide correspondence with the subject's founder
+      // — owner/admin material, hidden from scoped reviewers like sources.
+      requests: isScoped ? [] : requestsAll,
     });
   } finally { await sql.end(); }
 });
@@ -522,12 +557,24 @@ async function recomputeAndStoreScore(env: Env, caseId: number): Promise<{ score
   try {
     const sections: any[] = await sql`SELECT * FROM dd_sections WHERE case_id = ${caseId}`;
     const findings: any[] = await sql`SELECT section_id, severity, resolved_at FROM dd_findings WHERE case_id = ${caseId}`;
+    const items: any[] = await sql`SELECT section_id, status, severity FROM dd_checklist_items WHERE case_id = ${caseId}`;
     const bySection = new Map<number, string[]>();
     for (const f of findings) {
       if (f.resolved_at) continue;
       const arr = bySection.get(f.section_id) || [];
       arr.push(f.severity);
       bySection.set(f.section_id, arr);
+    }
+    // Build queue #128 — flagged/failed checklist items join connector
+    // findings in the per-section severity floor. An explicit severity
+    // wins; without one a plain 'fail' counts as medium and a 'flag' as
+    // low, so working the checklist always moves the score.
+    for (const it of items) {
+      if (it.status !== 'flag' && it.status !== 'fail') continue;
+      const sev = it.severity || (it.status === 'fail' ? 'medium' : 'low');
+      const arr = bySection.get(it.section_id) || [];
+      arr.push(sev);
+      bySection.set(it.section_id, arr);
     }
     const inputs = sections.map(s => ({
       weight: Number(s.weight) || 1,
@@ -547,6 +594,253 @@ dd.post('/cases/:uid/recompute', async (c) => {
   catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
   const r = await recomputeAndStoreScore(c.env, Number(cs.id));
   return c.json(r);
+});
+
+// ---------- checklist items (build queue #128) ----------
+
+const CHECKLIST_STATUSES = new Set(['pending', 'pass', 'flag', 'fail', 'n_a']);
+const CHECKLIST_SEVERITIES = new Set(['info', 'low', 'medium', 'high', 'critical']);
+
+dd.patch('/cases/:uid/items/:itemId', async (c) => {
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
+  const caseId = Number(cs.id);
+  const itemId = parseInt(c.req.param('itemId'), 10);
+  const body = await c.req.json().catch(() => ({}));
+
+  const sql = getSQL(c.env);
+  try {
+    // Integrity: the item must belong to the URL case (same rule as
+    // verdicts/NDAs — no cross-case writes by URL tampering).
+    const rows: any[] = await sql`SELECT * FROM dd_checklist_items WHERE id = ${itemId} AND case_id = ${caseId} LIMIT 1`;
+    if (rows.length === 0) return c.json({ error: 'Checklist item not found on this case' }, 404);
+    const it = rows[0];
+    // Assigned reviewers (writers who are neither admin nor the owner)
+    // may only work items on sections they are assigned to — mirrors
+    // the verdict scoping rule.
+    if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+      const r: any[] = await sql`SELECT 1 FROM dd_reviewers WHERE section_id = ${it.section_id} AND user_id = ${user.id} LIMIT 1`;
+      if (r.length === 0) return c.json({ error: 'You are not assigned to this section' }, 403);
+    }
+
+    const nextStatus = body.status !== undefined ? String(body.status) : String(it.status);
+    if (!CHECKLIST_STATUSES.has(nextStatus)) return c.json({ error: 'Invalid status' }, 400);
+    let nextSeverity: string | null = body.severity !== undefined
+      ? (body.severity == null ? null : String(body.severity))
+      : (it.severity ?? null);
+    if (nextSeverity != null && !CHECKLIST_SEVERITIES.has(nextSeverity)) return c.json({ error: 'Invalid severity' }, 400);
+    // Severity only means something on a flagged/failed item.
+    if (nextStatus !== 'flag' && nextStatus !== 'fail') nextSeverity = null;
+    const nextOwner: number | null = body.owner_user_id !== undefined
+      ? (body.owner_user_id == null ? null : Number(body.owner_user_id))
+      : (it.owner_user_id ?? null);
+    if (nextOwner != null) {
+      if (!Number.isFinite(nextOwner)) return c.json({ error: 'Invalid owner_user_id' }, 400);
+      const u: any[] = await sql`SELECT 1 FROM users WHERE id = ${nextOwner} LIMIT 1`;
+      if (u.length === 0) return c.json({ error: 'Owner user not found' }, 404);
+    }
+    const nextDue: string | null = body.due_date !== undefined
+      ? (body.due_date == null || body.due_date === '' ? null : String(body.due_date))
+      : (it.due_date ?? null);
+    if (nextDue != null && !/^\d{4}-\d{2}-\d{2}$/.test(nextDue)) return c.json({ error: 'due_date must be YYYY-MM-DD' }, 400);
+    let noteEnc: string | null = it.note_enc ?? null;
+    if (body.note !== undefined) {
+      noteEnc = body.note == null || body.note === ''
+        ? null
+        : await encField(c.env, 'dd_checklist_items', 'note', itemId, String(body.note).slice(0, 4000));
+    }
+
+    await sql`
+      UPDATE dd_checklist_items
+         SET status = ${nextStatus}, severity = ${nextSeverity}, owner_user_id = ${nextOwner},
+             due_date = ${nextDue}, note_enc = ${noteEnc}, updated_by_user_id = ${user.id},
+             updated_at = CURRENT_TIMESTAMP
+       WHERE id = ${itemId} AND case_id = ${caseId}`;
+    await audit(c.env, caseId, user, 'checklist_item_updated', { type: 'dd_checklist_item', id: itemId },
+      { item_key: it.item_key, status: nextStatus, severity: nextSeverity });
+    const score = await recomputeAndStoreScore(c.env, caseId);
+    return c.json({
+      ok: true,
+      item: { id: itemId, item_key: it.item_key, status: nextStatus, severity: nextSeverity, owner_user_id: nextOwner, due_date: nextDue },
+      ...score,
+    });
+  } finally { await sql.end(); }
+});
+
+// ---------- information requests (build queue #128) ----------
+//
+// INVARIANT: dd_requests rows are founder-visible by design and carry
+// NO diligence content — no verdicts, findings, severities, or case
+// notes ever land in this table. Conclusions live in dd_findings /
+// dd_sections; a request only says "please provide X". This is what
+// keeps the "founders NEVER read DD" rule (file header) intact while
+// still letting the diligence team collect documents from the subject.
+
+/** The user the case is ABOUT: project → owning founder user; every
+ *  other subject_type stores a users.id directly in subject_id (see
+ *  partnerDeals.activatePartnerDealOnSignature + /report/share). */
+async function resolveSubjectUserId(env: Env, cs: Record<string, unknown>): Promise<number | null> {
+  if (cs.subject_type === 'project') {
+    const sql = getSQL(env);
+    try {
+      const rows: any[] = await sql`
+        SELECT u.id FROM projects p
+        LEFT JOIN founders f ON f.id = p.founder_id
+        LEFT JOIN users u ON LOWER(u.email) = LOWER(f.email)
+        WHERE p.id = ${cs.subject_id} LIMIT 1`;
+      return rows[0]?.id ? Number(rows[0].id) : null;
+    } finally { await sql.end(); }
+  }
+  const id = Number(cs.subject_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+dd.post('/cases/:uid/requests', async (c) => {
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
+  // Requests go OUT to the subject — only the case owner or an admin may
+  // originate them; section reviewers cannot message the subject.
+  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+    return c.json({ error: 'Only the case owner or an admin may send requests' }, 403);
+  }
+  const caseId = Number(cs.id);
+  const body = await c.req.json().catch(() => ({}));
+  const title = String(body.title || '').trim().slice(0, 200);
+  if (!title) return c.json({ error: 'title is required' }, 400);
+  const details = body.details ? String(body.details).trim().slice(0, 4000) : null;
+  const sectionId = body.section_id == null ? null : parseInt(String(body.section_id), 10);
+
+  const sql = getSQL(c.env);
+  try {
+    if (sectionId != null) {
+      const secOwn: any[] = await sql`SELECT 1 FROM dd_sections WHERE id = ${sectionId} AND case_id = ${caseId} LIMIT 1`;
+      if (secOwn.length === 0) return c.json({ error: 'Section does not belong to this case' }, 404);
+    }
+    const inserted: any[] = await sql`
+      INSERT INTO dd_requests (case_id, section_id, title, details, created_by_user_id)
+      VALUES (${caseId}, ${sectionId}, ${title}, ${details}, ${user.id})
+      RETURNING id, case_id, section_id, title, details, state, created_at`;
+    const row = inserted[0];
+    await audit(c.env, caseId, user, 'request_created', { type: 'dd_request', id: Number(row.id) }, { title });
+
+    const subjectUserId = await resolveSubjectUserId(c.env, cs);
+    if (subjectUserId) {
+      await notify(c.env, {
+        userId: subjectUserId,
+        type: 'dd_request_created',
+        title: `Information requested: ${title}`,
+        body: details || 'A reviewer has requested information from you. Open your requests to respond.',
+        link: `/due-diligence/requests`,
+        channels: ['in_app', 'email'],
+      }).catch(() => null);
+    }
+    return c.json({ ok: true, request: row }, 201);
+  } finally { await sql.end(); }
+});
+
+dd.patch('/cases/:uid/requests/:id', async (c) => {
+  const cs = await getCaseByUid(c.env, c.req.param('uid'));
+  if (!cs) return c.json({ error: 'Case not found' }, 404);
+  let user: AppUser;
+  try { user = await requireCaseWriter(c, cs); }
+  catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
+  if (user.role !== 'admin' && Number(cs.owner_user_id) !== user.id) {
+    return c.json({ error: 'Only the case owner or an admin may update requests' }, 403);
+  }
+  const caseId = Number(cs.id);
+  const requestId = parseInt(c.req.param('id'), 10);
+  const body = await c.req.json().catch(() => ({}));
+  if (body.state !== 'reviewed') return c.json({ error: "state must be 'reviewed'" }, 400);
+
+  const sql = getSQL(c.env);
+  try {
+    const rows: any[] = await sql`SELECT id, state FROM dd_requests WHERE id = ${requestId} AND case_id = ${caseId} LIMIT 1`;
+    if (rows.length === 0) return c.json({ error: 'Request not found on this case' }, 404);
+    await sql`
+      UPDATE dd_requests
+         SET state = 'reviewed', reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ${requestId} AND case_id = ${caseId}`;
+    await audit(c.env, caseId, user, 'request_reviewed', { type: 'dd_request', id: requestId });
+    return c.json({ ok: true, id: requestId, state: 'reviewed' });
+  } finally { await sql.end(); }
+});
+
+// ---------- subject-facing request surface ----------
+//
+// The ONLY DD endpoints a founder may touch. They expose a request's
+// own fields (title/details/state) plus the case's subject_label — and
+// deliberately nothing else: no case uid, no score/band, no sections,
+// no findings. Auth is subject-resolution, not role: any authenticated
+// user sees exactly the requests addressed to them.
+
+dd.get('/requests/mine', async (c) => {
+  const user = await requireAuth(c);
+  const sql = getSQL(c.env);
+  try {
+    const rows: any[] = await sql`
+      SELECT r.id, r.title, r.details, r.state, r.responded_at, r.response_note, r.response_url, r.created_at,
+             c.subject_type, c.subject_label
+        FROM dd_requests r
+        JOIN dd_cases c ON c.id = r.case_id
+       WHERE (c.subject_type != 'project' AND c.subject_id = ${user.id})
+          OR (c.subject_type = 'project' AND c.subject_id IN (
+                SELECT p.id FROM projects p
+                JOIN founders f ON f.id = p.founder_id
+                JOIN users u ON LOWER(u.email) = LOWER(f.email)
+               WHERE u.id = ${user.id}))
+       ORDER BY r.created_at DESC LIMIT 100`;
+    return c.json({ items: rows });
+  } finally { await sql.end(); }
+});
+
+dd.patch('/requests/:id/respond', async (c) => {
+  const user = await requireAuth(c);
+  const requestId = parseInt(c.req.param('id'), 10);
+  const body = await c.req.json().catch(() => ({}));
+  const responseNote = body.response_note ? String(body.response_note).trim().slice(0, 4000) : null;
+  const responseUrl = body.response_url ? String(body.response_url).trim().slice(0, 2048) : null;
+  if (!responseNote && !responseUrl) return c.json({ error: 'response_note or response_url is required' }, 400);
+  if (responseUrl && !/^https?:\/\//i.test(responseUrl)) return c.json({ error: 'response_url must be an http(s) URL' }, 400);
+
+  const sql = getSQL(c.env);
+  try {
+    const rows: any[] = await sql`
+      SELECT r.id, r.state, r.title, r.case_id, c.uid AS case_uid, c.subject_type, c.subject_id,
+             c.subject_label, c.owner_user_id
+        FROM dd_requests r JOIN dd_cases c ON c.id = r.case_id
+       WHERE r.id = ${requestId} LIMIT 1`;
+    if (rows.length === 0) return c.json({ error: 'Request not found' }, 404);
+    const req = rows[0];
+    // Ownership: the caller must BE the subject this request is
+    // addressed to. Same resolution as /requests/mine.
+    const subjectUserId = await resolveSubjectUserId(c.env, { subject_type: req.subject_type, subject_id: req.subject_id });
+    if (subjectUserId !== user.id) return c.json({ error: 'This request is not addressed to you' }, 403);
+    // Founders may amend a response until the team marks it reviewed.
+    if (req.state === 'reviewed') return c.json({ error: 'This request has already been reviewed' }, 409);
+
+    await sql`
+      UPDATE dd_requests
+         SET state = 'received', responded_at = CURRENT_TIMESTAMP,
+             response_note = ${responseNote}, response_url = ${responseUrl},
+             updated_at = CURRENT_TIMESTAMP
+       WHERE id = ${requestId}`;
+    await audit(c.env, Number(req.case_id), user as unknown as AppUser, 'request_responded', { type: 'dd_request', id: requestId });
+    await notify(c.env, {
+      userId: Number(req.owner_user_id),
+      type: 'dd_request_responded',
+      title: `Response received: ${req.title}`,
+      body: `${req.subject_label} responded to your information request.`,
+      link: `/admin/due-diligence/${req.case_uid}`,
+      channels: ['in_app', 'email'],
+    }).catch(() => null);
+    return c.json({ ok: true, id: requestId, state: 'received' });
+  } finally { await sql.end(); }
 });
 
 // ---------- report generation + share ----------

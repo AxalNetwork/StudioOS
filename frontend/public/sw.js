@@ -14,7 +14,7 @@
 // offline.html, manifest, icons) so old caches drop on activate. Vite-built
 // /assets/* files are content-hashed in their filenames, so the cache-first
 // rule is safe across deploys without a version bump.
-const VERSION = 'v14-2026-07-12a';
+const VERSION = 'v15-2026-08-05';
 const PRECACHE = `studioos-precache-${VERSION}`;
 const RUNTIME_STATIC = `studioos-static-${VERSION}`;
 const RUNTIME_API = `studioos-api-${VERSION}`;
@@ -116,6 +116,15 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
+
+  // In dev environments (Replit, localhost) pass every request straight to
+  // the network. The SW should never cache Vite dev-server responses —
+  // they carry optimizer dep hashes that change on every restart, and
+  // caching them here causes stale-module blank pages.
+  if (/(localhost|replit\.dev|replit\.app|repl\.co)/.test(self.location.host) ||
+      self.location.port === '5000') {
+    return; // let browser handle it natively
+  }
 
   // Don't intercept cross-origin (CDN fonts, etc.)
   if (url.origin !== self.location.origin) return;

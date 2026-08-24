@@ -152,6 +152,12 @@ interface StatePayload {
   action: 'signin' | 'link';
   uid?: number;       // present for action=link
   redirect: string;   // absolute path inside app.axal.vc (no host)
+  // The signup lane ('founder' | 'partner' | 'investor'), carried through the
+  // handshake so a fresh Google account records the same suggested role the
+  // classic/magic-link path already does. Safe to round-trip here: the state is
+  // HMAC-signed, so a tampered lane fails verification. It is only ever a
+  // SUGGESTION for the admin queue — never applied to users.role.
+  lane?: string;
 }
 
 async function signState(env: Env, payload: StatePayload): Promise<string> {
@@ -289,12 +295,17 @@ authGoogle.get('/start', async (c) => {
   const nonceBytes = new Uint8Array(16);
   crypto.getRandomValues(nonceBytes);
   const nonce = b64urlEncode(nonceBytes);
+  // Whitelisted, not passed through: an unrecognised lane is dropped rather
+  // than stored, so the admin queue can never show an invented persona.
+  const laneRaw = (c.req.query('lane') || '').trim().toLowerCase();
+  const lane = ['founder', 'partner', 'investor'].includes(laneRaw) ? laneRaw : undefined;
   const state = await signState(c.env, {
     n: nonce,
     ts: Math.floor(Date.now() / 1000),
     action,
     uid,
     redirect,
+    lane,
   });
   // Bind the nonce to this OAuth handshake via KV (keyed by the state's
   // own HMAC signature) AND via cookie for defence-in-depth. The KV
@@ -568,6 +579,20 @@ authGoogle.get('/callback', async (c) => {
           VALUES (${googleEmail}, ${name}, 'exploring', true)
           RETURNING *` as any[];
         user = inserted[0];
+        // Parity with the classic path (routes/auth.ts:304): record the lane
+        // the applicant picked as a SUGGESTION for the admin review queue.
+        // Google signups previously recorded nothing at all, so a founder who
+        // chose "founder" arrived in the queue with no hint of intent while an
+        // identical email signup carried one. Best-effort: a failure here must
+        // never break an otherwise-valid sign-in.
+        if (state.lane) {
+          try {
+            const { upsertSuggestedRole } = await import('../services/exploringSchema');
+            await upsertSuggestedRole(c.env, (user as any).id, state.lane);
+          } catch (e) {
+            console.error('[auth_google] suggested-role upsert failed:', (e as Error).message);
+          }
+        }
         // INSERT OR IGNORE defends against the rare case where a second
         // concurrent fresh-signup request for the same google_sub raced
         // us between the email-lookup miss and here. The new users row

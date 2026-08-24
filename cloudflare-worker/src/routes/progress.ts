@@ -39,6 +39,7 @@ import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '.
 import {
   ensureDiscoveryInterviewFeaturedColumn,
   ensureDiscoveryValidationRatingColumns,
+  ensureDiscoveryIcpFitColumn,
 } from '../services/discoveryInterviewSchema';
 import { ensureWaitlistCrmColumns } from '../services/waitlistCrmSchema';
 import { send, type SendResult } from '../services/email/send';
@@ -51,6 +52,7 @@ import {
   type PainGroupRow,
 } from '../services/painGroups';
 import { syncStripeForUser } from '../integrations/providers/stripe';
+import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Snapshot as SaasSnapshot } from '../services/saasMetrics';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -84,6 +86,18 @@ function ensureCanEdit(project: Project, user: User): void {
     if (!canAccessFounderResource(user, project.founder_id)) {
       throw new Error('Forbidden');
     }
+    return;
+  }
+  // Active Spin-Out Lab members log interviews/OKRs as program deliverables
+  // regardless of account role (admitted users keep e.g. 'exploring').
+  // Deliberately an EXPLICIT ownership comparison, not
+  // canAccessFounderResource(): that predicate treats partners as privileged
+  // readers, which must never widen into cross-project writes.
+  if (
+    Number(user.spinout_lab_active ?? 0) === 1 &&
+    project.founder_id != null &&
+    user.founder_id === project.founder_id
+  ) {
     return;
   }
   throw new Error('Forbidden');
@@ -142,6 +156,7 @@ type InterviewRow = {
   featured: number | null;
   validation_rating: number | null;
   validation_comment: string | null;
+  icp_fit: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -198,6 +213,8 @@ function serializeInterview(r: InterviewRow) {
     // founder fills them in.
     validation_rating: r.validation_rating == null ? null : Number(r.validation_rating),
     validation_comment: r.validation_comment ?? null,
+    // Migration 161. Null = not yet assessed (NOT "not ICP").
+    icp_fit: r.icp_fit ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
@@ -206,9 +223,22 @@ function serializeInterview(r: InterviewRow) {
 const INTERVIEW_SELECT =
   `SELECT id, project_id, interviewee_name, interviewee_role, interview_date,
           notes, hypotheses_json, pains_json, featured,
-          validation_rating, validation_comment,
+          validation_rating, validation_comment, icp_fit,
           created_at, updated_at
      FROM discovery_interviews`;
+
+/**
+ * The founder's ICP-fit judgement for an interviewee (migration 161).
+ * Deliberately distinct from `validation_rating`, which rates the SOLUTION,
+ * not the person's fit. Null means "not yet assessed" — consumers must not
+ * fold null into 'none', or unassessed interviews would read as rejections.
+ */
+const VALID_ICP_FIT = new Set(['strong', 'partial', 'none']);
+function asIcpFit(raw: unknown): string | null {
+  if (raw == null || raw === '') return null;
+  const s = String(raw).trim().toLowerCase();
+  return VALID_ICP_FIT.has(s) ? s : null;
+}
 
 function asFeaturedFlag(raw: unknown): number {
   if (raw === true || raw === 1 || raw === '1') return 1;
@@ -227,6 +257,7 @@ progress.get('/discovery/:projectId', async (c) => {
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await ensureDiscoveryValidationRatingColumns(c.env);
+  await ensureDiscoveryIcpFitColumn(c.env);
   const { results } = await c.env.DB.prepare(
     `${INTERVIEW_SELECT}
       WHERE project_id = ?
@@ -275,21 +306,23 @@ progress.post('/discovery/:projectId', async (c) => {
   const featured = asFeaturedFlag(body.featured);
   const validationRating = asValidationRating(body.validation_rating);
   const validationComment = asStringOrNull(body.validation_comment);
+  const icpFit = asIcpFit(body.icp_fit);
   const nowIso = new Date().toISOString();
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await ensureDiscoveryValidationRatingColumns(c.env);
+  await ensureDiscoveryIcpFitColumn(c.env);
   const res = await c.env.DB.prepare(
     `INSERT INTO discovery_interviews
        (project_id, interviewee_name, interviewee_role, interview_date,
         notes, hypotheses_json, pains_json, featured,
-        validation_rating, validation_comment,
+        validation_rating, validation_comment, icp_fit,
         created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     projectId, intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
-    featured, validationRating, validationComment,
+    featured, validationRating, validationComment, icpFit,
     nowIso, nowIso,
   ).run();
 
@@ -356,19 +389,26 @@ progress.put('/discovery/interview/:id', async (c) => {
   const validationComment = Object.prototype.hasOwnProperty.call(body, 'validation_comment')
     ? asStringOrNull(body.validation_comment)
     : (existing.validation_comment ?? null);
+  // Same preserve-on-omit rule (migration 161): a payload that predates
+  // icp_fit must not clear an assessment the founder already made.
+  const icpFit = Object.prototype.hasOwnProperty.call(body, 'icp_fit')
+    ? asIcpFit(body.icp_fit)
+    : (existing.icp_fit ?? null);
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await ensureDiscoveryValidationRatingColumns(c.env);
+  await ensureDiscoveryIcpFitColumn(c.env);
   await c.env.DB.prepare(
     `UPDATE discovery_interviews
         SET interviewee_name = ?, interviewee_role = ?, interview_date = ?,
             notes = ?, hypotheses_json = ?, pains_json = ?, featured = ?,
-            validation_rating = ?, validation_comment = ?, updated_at = ?
+            validation_rating = ?, validation_comment = ?, icp_fit = ?,
+            updated_at = ?
       WHERE id = ?`,
   ).bind(
     intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
-    featured, validationRating, validationComment,
+    featured, validationRating, validationComment, icpFit,
     new Date().toISOString(), id,
   ).run();
 
@@ -514,16 +554,29 @@ progress.get('/discovery/:projectId/waitlist', async (c) => {
   ensureCanView(project, user);
 
   await ensureWaitlistCrmColumns(c.env);
+  // The list view JOINs the source landing page so the Discovery panel can
+  // show WHICH template each lead signed up through. Deliberately NOT folded
+  // into WAITLIST_SELECT: loadCustomerSignup reuses that fragment with
+  // unqualified WHERE columns (id/project_id/audience exist on both tables),
+  // so a shared JOIN would make those queries ambiguous.
   const { results } = await c.env.DB.prepare(
-    `${WAITLIST_SELECT}
-      WHERE project_id = ? AND audience = 'customer'
-      ORDER BY created_at DESC, id DESC
+    `SELECT w.id, w.project_id, w.email, w.name, w.source, w.audience, w.created_at,
+            w.crm_status, w.invited_at, w.followed_up_at, w.promoted_at, w.promoted_interview_id,
+            lp.template_kit AS landing_template_kit, lp.name AS landing_page_name
+       FROM waitlist_signups w
+       LEFT JOIN landing_pages lp ON lp.id = w.landing_page_id
+      WHERE w.project_id = ? AND w.audience = 'customer'
+      ORDER BY w.created_at DESC, w.id DESC
       LIMIT 500`,
-  ).bind(projectId).all<WaitlistSignupRow>();
+  ).bind(projectId).all<WaitlistSignupRow & { landing_template_kit: string | null; landing_page_name: string | null }>();
 
   return c.json({
     project_id: projectId,
-    signups: (results || []).map(serializeWaitlistSignup),
+    signups: (results || []).map((r) => ({
+      ...serializeWaitlistSignup(r),
+      landing_template_kit: r.landing_template_kit ?? null,
+      landing_page_name: r.landing_page_name ?? null,
+    })),
   });
 });
 
@@ -1435,6 +1488,11 @@ type MetricsSnapshot = {
   monthly_churn_pct: number | null;
   active_users: number | null;
   new_users: number | null;
+  net_burn: number | null;
+  cash_balance: number | null;
+  headcount: number | null;
+  nrr_pct: number | null;
+  paying_accounts: number | null;
   notes: string | null;
   source: string | null;
   created_by: number | null;
@@ -1452,6 +1510,11 @@ type SerializedSnap = {
   monthly_churn_pct: number | null;
   active_users: number | null;
   new_users: number | null;
+  net_burn: number | null;
+  cash_balance: number | null;
+  headcount: number | null;
+  nrr_pct: number | null;
+  paying_accounts: number | null;
   notes: string | null;
   source: string | null;
   created_at: string;
@@ -1474,6 +1537,8 @@ export async function ensureMetricsSnapshotsSchema(env: Env): Promise<void> {
           + ` snapshot_date TEXT NOT NULL,`
           + ` mrr REAL, arr REAL, cac REAL, ltv REAL, monthly_churn_pct REAL,`
           + ` active_users INTEGER, new_users INTEGER,`
+          + ` net_burn REAL, cash_balance REAL, headcount INTEGER,`
+          + ` nrr_pct REAL, paying_accounts INTEGER,`
           + ` notes TEXT, source TEXT,`
           + ` created_by INTEGER REFERENCES users(id),`
           + ` created_at TEXT NOT NULL DEFAULT (datetime('now'))`
@@ -1486,6 +1551,11 @@ export async function ensureMetricsSnapshotsSchema(env: Env): Promise<void> {
       const required: Array<[string, string]> = [
         ['arr', 'REAL'], ['cac', 'REAL'], ['ltv', 'REAL'],
         ['monthly_churn_pct', 'REAL'], ['new_users', 'INTEGER'],
+        // Board-reporting metrics (migration 173). Runway is deliberately
+        // absent: it is derived from cash ÷ net_burn, and a stored copy
+        // would drift from the two numbers printed beside it.
+        ['net_burn', 'REAL'], ['cash_balance', 'REAL'], ['headcount', 'INTEGER'],
+        ['nrr_pct', 'REAL'], ['paying_accounts', 'INTEGER'],
       ];
       for (const [col, decl] of required) {
         if (!have.has(col)) {
@@ -1512,6 +1582,11 @@ function serializeSnap(s: MetricsSnapshot): SerializedSnap {
     monthly_churn_pct: s.monthly_churn_pct ?? null,
     active_users: s.active_users,
     new_users: s.new_users ?? null,
+    net_burn: s.net_burn ?? null,
+    cash_balance: s.cash_balance ?? null,
+    headcount: s.headcount ?? null,
+    nrr_pct: s.nrr_pct ?? null,
+    paying_accounts: s.paying_accounts ?? null,
     notes: s.notes,
     source: s.source,
     created_at: s.created_at,
@@ -1564,15 +1639,27 @@ progress.post('/metrics/:projectId', async (c) => {
   const churn = numOrNull(body?.monthly_churn_pct);
   const activeUsers = numOrNull(body?.active_users);
   const newUsers = numOrNull(body?.new_users);
+  // Board-reporting metrics (migration 173). Runway is NOT accepted from
+  // the client — it is derived from cash and burn in saasMetrics, so that
+  // the three numbers cannot disagree inside one board pack.
+  const netBurn = numOrNull(body?.net_burn);
+  const cashBalance = numOrNull(body?.cash_balance);
+  const headcount = numOrNull(body?.headcount);
+  const nrrPct = numOrNull(body?.nrr_pct);
+  const payingAccounts = numOrNull(body?.paying_accounts);
   const notes = body?.notes ? String(body.notes).slice(0, 4000) : null;
   const source = body?.source ? String(body.source).slice(0, 80) : 'manual';
   try {
     const r = await c.env.DB.prepare(
       `INSERT INTO metrics_snapshots
          (project_id, snapshot_date, mrr, arr, cac, ltv, monthly_churn_pct,
-          active_users, new_users, notes, source, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-    ).bind(projectId, snapshotDate, mrr, arr, cac, ltv, churn, activeUsers, newUsers, notes, source, user.id).run();
+          active_users, new_users, net_burn, cash_balance, headcount,
+          nrr_pct, paying_accounts, notes, source, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    ).bind(
+      projectId, snapshotDate, mrr, arr, cac, ltv, churn, activeUsers, newUsers,
+      netBurn, cashBalance, headcount, nrrPct, payingAccounts, notes, source, user.id,
+    ).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM metrics_snapshots WHERE id = ?')
       .bind(r.meta.last_row_id).first<MetricsSnapshot>();
     return c.json(serializeSnap(fresh as MetricsSnapshot));
@@ -1610,6 +1697,11 @@ progress.put('/metrics/snapshot/:id', async (c) => {
     ['monthly_churn_pct', body.monthly_churn_pct !== undefined ? numOrNull(body.monthly_churn_pct) : undefined],
     ['active_users', body.active_users !== undefined ? numOrNull(body.active_users) : undefined],
     ['new_users', body.new_users !== undefined ? numOrNull(body.new_users) : undefined],
+    ['net_burn', body.net_burn !== undefined ? numOrNull(body.net_burn) : undefined],
+    ['cash_balance', body.cash_balance !== undefined ? numOrNull(body.cash_balance) : undefined],
+    ['headcount', body.headcount !== undefined ? numOrNull(body.headcount) : undefined],
+    ['nrr_pct', body.nrr_pct !== undefined ? numOrNull(body.nrr_pct) : undefined],
+    ['paying_accounts', body.paying_accounts !== undefined ? numOrNull(body.paying_accounts) : undefined],
     ['notes', body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : undefined],
   ];
   const sets: string[] = [];
@@ -1691,6 +1783,41 @@ progress.get('/metrics/:projectId/series', async (c) => {
     console.error('[progress] metrics series:', (e as Error).message);
   }
   return c.json({ project_id: projectId, metric: safeMetric, granularity, series });
+});
+
+/**
+ * Build queue #121 — GET /metrics/:projectId/summary
+ *
+ * Derived KPIs computed from the snapshot series (services/saasMetrics.ts)
+ * rather than from anything a founder typed into a deck field. Returns
+ * `unavailable[]` alongside the numbers: a blank KPI tells the founder
+ * exactly which input it needs instead of reading as a zero or a bug.
+ */
+progress.get('/metrics/:projectId/summary', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const project = await loadProject(c.env, projectId);
+  if (!project) return c.json({ detail: 'Project not found' }, 404);
+  ensureCanView(project, user);
+  await ensureMetricsSnapshotsSchema(c.env);
+
+  let rows: SaasSnapshot[] = [];
+  try {
+    const res = await c.env.DB.prepare(
+      `SELECT snapshot_date, mrr, arr, cac, ltv, monthly_churn_pct, active_users, new_users
+         FROM metrics_snapshots WHERE project_id = ?
+         ORDER BY snapshot_date ASC, id ASC LIMIT 500`,
+    ).bind(projectId).all<SaasSnapshot>();
+    rows = res.results || [];
+  } catch (e) {
+    console.error('[progress] metrics summary:', (e as Error).message);
+  }
+  return c.json({
+    project_id: projectId,
+    ...summariseSaasMetrics(rows),
+    mrr_series: saasSparkline(rows, 'mrr'),
+  });
 });
 
 progress.post('/metrics/:projectId/import-stripe', async (c) => {

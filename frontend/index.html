@@ -30,7 +30,7 @@
     (function () {
       try {
         var isDev = !!document.querySelector('script[src="/@vite/client"]') ||
-                    /[?&](localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
+                    /(localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
                     window.location.port === '5000';
         if (!isDev || !('serviceWorker' in navigator)) return;
         navigator.serviceWorker.getRegistrations().then(function (regs) {
@@ -64,7 +64,7 @@
     (function () {
       try {
         var isDev = !!document.querySelector('script[src="/@vite/client"]') ||
-                    /[?&](localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
+                    /(localhost|replit\.dev|replit\.app|repl\.co)/.test(window.location.host) ||
                     window.location.port === '5000';
         if (isDev) return;
         var REBOOT_KEY = 'axal:boot-reboot';
@@ -138,17 +138,36 @@
   <link rel="apple-touch-icon" sizes="192x192" href="/axal-mark.png" />
   <link rel="apple-touch-icon" sizes="512x512" href="/axal-logo.png" />
 
+  <!-- Fallback social metadata ONLY.
+       `scripts/prerender-og.mjs` rewrites this block per route at build time
+       (see the `og:managed` markers in the built docs/**/index.html), so what
+       is here is what a path serves *before* prerendering — and what the SPA
+       fallback would serve if the prerender step were ever skipped.
+
+       It therefore points at the sitewide default card rather than any one
+       page's. Previously this block referenced https://axal.vc/og.png, a file
+       that does not exist in this repository: crawlers fetched a 404 for the
+       declared image and fell back to scraping an unrelated raster off the
+       page, which is why every shared link previewed with the same wrong
+       image. Do not reintroduce a URL here without a matching file in
+       frontend/public/. -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://axal.vc/" />
-  <meta property="og:title" content="Global Venture Partner Network" />
-  <meta property="og:description" content="One network connecting partners, capital, and founders. Spin-Out Lab included." />
-  <meta property="og:image" content="https://axal.vc/og.png" />
-  <meta property="og:site_name" content="Global Venture Partner Network" />
+  <meta property="og:title" content="Axal VC StudioOS" />
+  <meta property="og:description" content="One network connecting partners, capital, and founders. Spin-Out Lab takes companies from idea to funded in 30 days." />
+  <meta property="og:image" content="https://axal.vc/og/default.png" />
+  <meta property="og:image:secure_url" content="https://axal.vc/og/default.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Axal VC StudioOS" />
+  <meta property="og:site_name" content="Axal VC StudioOS" />
 
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Global Venture Partner Network" />
+  <meta name="twitter:title" content="Axal VC StudioOS" />
   <meta name="twitter:description" content="One network connecting partners, capital, and founders." />
-  <meta name="twitter:image" content="https://axal.vc/og.png" />
+  <meta name="twitter:image" content="https://axal.vc/og/default.png" />
+  <meta name="twitter:image:alt" content="Axal VC StudioOS" />
 
   <link rel="icon" href="/favicon.ico" type="image/x-icon" sizes="any" />
   <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
@@ -178,7 +197,11 @@
   </script>
 </head>
 <body class="bg-white text-gray-900">
-  <div id="root"></div>
+  <div id="root">
+    <div style="display:flex;align-items:center;justify-content:center;height:calc(100vh - 44px);font-family:sans-serif;font-size:16px;color:#6b7280;">
+      Loading…
+    </div>
+  </div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

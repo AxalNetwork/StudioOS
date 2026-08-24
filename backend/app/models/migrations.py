@@ -150,6 +150,20 @@ def ensure_project_revenue_proof_columns() -> None:
         session.commit()
 
 
+def ensure_project_market_sizing_columns() -> None:
+    """Prod parity — Worker migration 069 (deck autofill) added
+    `projects.som`; the dev schema never got it. Idempotent."""
+    with Session(engine) as session:
+        try:
+            # Justification: static identifier, dev-only FastAPI
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS som DOUBLE PRECISION"
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_project_market_sizing_columns: ALTER failed: %s", exc)
+        session.commit()
+
+
 def ensure_project_product_demo_columns() -> None:
     """Task #31 — add product-demo source columns to `projects` for the
     Spin-Out Demo Day "Product demo" slide. Idempotent (uses
@@ -172,6 +186,86 @@ def ensure_project_product_demo_columns() -> None:
                 ))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("ensure_project_product_demo_columns: %s ALTER failed: %s", col, exc)
+        session.commit()
+
+
+def ensure_project_uof_meta_column() -> None:
+    """Use of Funds planning metadata — mirrors Worker D1 migration 158 so the
+    dev FastAPI backend persists the same `projects.use_of_funds_meta` JSON
+    blob (alert threshold, milestone costs, sync timestamps). Idempotent."""
+    with Session(engine) as session:
+        try:
+            # Justification: static identifier, dev-only FastAPI
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS use_of_funds_meta VARCHAR"
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_project_uof_meta_column: ALTER failed: %s", exc)
+        session.commit()
+
+
+def ensure_project_incorporation_meta_column() -> None:
+    """Spin-Out Lab Incorporate workspace state — mirrors Worker D1 migration
+    159 so the dev FastAPI backend persists the same
+    `projects.incorporation_meta` JSON blob (entity decision + override,
+    payment, document/filing statuses, uni-IP checklist). Idempotent."""
+    with Session(engine) as session:
+        try:
+            # Justification: static identifier, dev-only FastAPI
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS incorporation_meta VARCHAR"
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_project_incorporation_meta_column: ALTER failed: %s", exc)
+        session.commit()
+
+
+def ensure_project_cofounder_decision_column() -> None:
+    """Spin-Out Lab Co-founder Match decision — mirrors Worker D1 migration
+    162 so the dev FastAPI backend persists the same
+    `projects.cofounder_decision_meta` JSON blob (outcome, candidate uid,
+    note, follow-ups). Idempotent."""
+    with Session(engine) as session:
+        try:
+            # Justification: static identifier, dev-only FastAPI
+            session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                "ALTER TABLE projects ADD COLUMN IF NOT EXISTS cofounder_decision_meta VARCHAR"
+            ))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_project_cofounder_decision_column: ALTER failed: %s", exc)
+        session.commit()
+
+
+def ensure_interview_assessment_columns() -> None:
+    """Discovery-interview assessment fields on the dev `interviews` table.
+
+    Brings dev up to the Worker's shape so the Spin-Out Lab Customer Discovery
+    "Log interview" flow round-trips locally instead of silently dropping
+    fields the Worker persists:
+      - icp_fit           — Worker D1 migration 161 ('strong'|'partial'|'none',
+                            NULL = not yet assessed, never "not ICP")
+      - featured          — migration 072 (deck-eligible quote)
+      - validation_rating — migration 074 (0-5, how well the solution
+                            addresses the problem) + its free-text comment
+
+    Idempotent. Dev-only: this backend never deploys (see CLAUDE.md)."""
+    with Session(engine) as session:
+        for col, ddl in (
+            ("icp_fit", "VARCHAR"),
+            ("featured", "BOOLEAN DEFAULT FALSE"),
+            ("validation_rating", "INTEGER"),
+            ("validation_comment", "VARCHAR"),
+        ):
+            try:
+                # Justification: static identifiers from the literal tuple above,
+                # dev-only FastAPI
+                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+                    f"ALTER TABLE interviews ADD COLUMN IF NOT EXISTS {col} {ddl}"
+                ))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "ensure_interview_assessment_columns: ALTER %s failed: %s", col, exc
+                )
         session.commit()
 
 
@@ -683,6 +777,35 @@ def ensure_marketplace_columns() -> None:
         session.commit()
 
 
+def ensure_partner_office_hours_guidance_columns() -> None:
+    """Partner office-hours booking guidance (Spin-Out Lab / Office Hours).
+
+    Dev parity for D1 migration 160_partner_office_hours_guidance.sql:
+    partner-authored "when to book / best for stage / one session gets you /
+    bring to the session" copy on `partners`. Nothing is backfilled — an
+    unset column means the partner has not published guidance and the UI
+    shows an explicit empty state. Safe to run on every boot.
+    """
+    cols = (
+        ("oh_when_to_book", "TEXT"),
+        ("oh_stage_fit", "VARCHAR"),
+        ("oh_session_outcome", "VARCHAR"),
+        ("oh_bring_json", "TEXT DEFAULT '[]' NOT NULL"),
+        ("oh_guidance_updated_at", "TIMESTAMP"),
+    )
+    # No index: nothing filters, joins or sorts on these columns (guidance is
+    # always read by partner id), matching D1 migration 160.
+    with Session(engine) as session:
+        for col, ddl in cols:
+            try:
+                # Justification: f-string interpolates static schema identifiers from local
+                # lists, dev-only FastAPI not exposed to user input
+                session.exec(text(f"ALTER TABLE partners ADD COLUMN IF NOT EXISTS {col} {ddl}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("ensure_partner_office_hours_guidance_columns: %s ALTER failed: %s", col, exc)
+        session.commit()
+
+
 def ensure_partner_directory_columns() -> None:
     """Task #53 — Public partner directory + ranking.
 
@@ -924,6 +1047,33 @@ def ensure_advisor_tables() -> None:
             ))
             session.commit()
         except Exception:  # noqa: BLE001
+            session.rollback()
+
+        # The rename above converts the COLUMN, but the legacy FK constraint
+        # still points at the old `mentors` table, so every slot INSERT on an
+        # upgraded dev DB fails with `office_hours_slots_mentor_id_fkey`.
+        # Idempotently re-point it at `advisors`: drop-if-exists + add with a
+        # stable name (the ADD is guarded so re-runs are no-ops).
+        try:
+            session.exec(text(
+                "ALTER TABLE office_hours_slots DROP CONSTRAINT IF EXISTS office_hours_slots_mentor_id_fkey"
+            ))
+            session.exec(text("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'office_hours_slots_advisor_id_fkey'
+                    ) THEN
+                        ALTER TABLE office_hours_slots
+                            ADD CONSTRAINT office_hours_slots_advisor_id_fkey
+                            FOREIGN KEY (advisor_id) REFERENCES advisors(id);
+                    END IF;
+                END $$;
+            """))
+            session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_advisor_tables: slots FK repoint: %s", exc)
             session.rollback()
 
         try:
@@ -2640,9 +2790,7 @@ def ensure_deal_flow_tables() -> None:
             try:
                 # Justification: static DDL literals from a local tuple, no
                 # user input; dev-only FastAPI backend.
-                session.exec(text(  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
-                    f"ALTER TABLE deals ADD COLUMN IF NOT EXISTS {col}"
-                ))
+                session.exec(text(f"ALTER TABLE deals ADD COLUMN IF NOT EXISTS {col}"))  # nosemgrep: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text
                 session.commit()
             except Exception as exc:  # noqa: BLE001
                 session.rollback()

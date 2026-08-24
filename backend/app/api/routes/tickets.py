@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from backend.app.database import get_session
@@ -7,7 +9,40 @@ from backend.app.api.routes.auth import get_current_user
 from backend.app.services.github_service import create_github_issue
 from datetime import datetime
 
+logger = logging.getLogger("studioos.tickets")
+
 router = APIRouter(prefix="/tickets", tags=["Support"])
+
+_type_column_ensured = False
+
+
+def _ensure_type_column(session: Session):
+    """Task #9 dev parity — the prod Worker adds tickets.type at runtime;
+    mirror that here so create_all-provisioned dev DBs pick it up without a
+    migration (same in-route ensure pattern as brand.py)."""
+    global _type_column_ensured
+    if _type_column_ensured:
+        return
+    from sqlalchemy import text
+    # Postgres path first; SQLite (no IF NOT EXISTS) falls back to a plain
+    # ADD COLUMN whose duplicate-column error is the signal it already exists.
+    for stmt in (
+        "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'task'",
+        "ALTER TABLE tickets ADD COLUMN type TEXT DEFAULT 'task'",
+    ):
+        try:
+            session.exec(text(stmt))
+            session.commit()
+            break
+        except Exception:
+            session.rollback()
+    # codeql[py/unused-global-variable] -- _type_column_ensured is read via the `global _type_column_ensured` guard at the top of this
+    # same function (`if _type_column_ensured: return`); the write here is what a LATER, separate
+    # call's read observes. CodeQL's dead-store analysis does not model a global's value persisting
+    # across separate invocations of the function that sets it, so it sees this write as never
+    # consumed. It is: this flag exists specifically to make the schema-migration idempotent-but-
+    # skippable after the first successful request in this process.
+    _type_column_ensured = True
 
 
 @router.get("")
@@ -35,10 +70,12 @@ async def create_ticket(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    _ensure_type_column(session)
     ticket = Ticket(
         title=data.title,
         description=data.description,
         priority=data.priority,
+        type=data.type,
         submitted_by=user.name or user.email,
         user_id=user.id,
         project_id=data.project_id,
@@ -90,6 +127,48 @@ def sync_tickets(
     return {"tickets": tickets, "synced": 0}
 
 
+@router.post("/{ticket_id}/comments")
+def comment_ticket(
+    ticket_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Task #9 dev parity — comments are GitHub-canonical and only the prod
+    Worker can post them. Explicit dev stub (no silent success)."""
+    ticket = session.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if user.role != UserRole.ADMIN and ticket.user_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only comment on your own tickets")
+    return {"ok": False, "github_sync_status": "dev-stub",
+            "message": "Comments post to GitHub in production only."}
+
+
+@router.get("/{ticket_id}/mapping")
+def ticket_mapping(
+    ticket_id: int,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Task #9 dev parity — mapping/debug endpoint (admin only)."""
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin only")
+    ticket = session.get(Ticket, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return {
+        "ticket_id": ticket.id,
+        "github_issue_number": ticket.github_issue_number,
+        "github_issue_url": ticket.github_issue_url,
+        "status": str(ticket.status),
+        "priority": str(ticket.priority),
+        "type": getattr(ticket, "type", "task"),
+        "github_labels": [],
+        "github_assignees": [],
+        "last_sync_events": [],
+    }
+
+
 @router.get("/{ticket_id}")
 def get_ticket(
     ticket_id: int,
@@ -128,7 +207,11 @@ def update_ticket(
     session.commit()
     session.refresh(ticket)
 
-    # Phase 0.2 — notify ticket owner of any update by another actor.
+    # Phase 0.2 — notify ticket owner of any update by another actor. notify()
+    # already isolates and logs its own per-channel delivery failures, so an
+    # exception escaping past it is a bug in the call above, not a downed
+    # webhook — worth logging, but must not fail the update that already
+    # committed above.
     if ticket.user_id and ticket.user_id != user.id:
         try:
             from backend.app.services.notify import notify
@@ -141,6 +224,6 @@ def update_ticket(
                 payload={"ticket_id": ticket.id, "status": str(ticket.status)},
                 channels=("in_app", "email", "slack"),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("tickets: update notify failed for ticket %s: %s", ticket.id, exc)
     return ticket

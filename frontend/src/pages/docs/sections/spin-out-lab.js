@@ -7,7 +7,7 @@ export default {
       id: 'overview',
       title: 'Overview & how unlocks work',
       overview:
-        "The Spin-Out Lab is a 30-day, week-by-week sprint that takes you from a hypothesis to an incorporated, funded company. The sidebar collapses to a focused Lab view that only shows the features you need this week; new tools unlock as you complete milestones.",
+        "The Spin-Out Lab is a 28-day, week-by-week sprint that takes you from a hypothesis to an incorporated, funded company. The sidebar collapses to a focused Lab view that only shows the features you need this week; new tools unlock as you complete milestones.",
       howto: [
         'Enter the lab from Founder Portal → Spin-Out Lab.',
         'Complete each week’s required milestones to unlock the next week.',

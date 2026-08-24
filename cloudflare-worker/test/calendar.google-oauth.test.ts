@@ -44,11 +44,29 @@ const FULL_MICROSOFT: EnvShape = {
   PUBLIC_BASE_URL: 'https://app.axal.vc',
 };
 
-test('preflightOAuthSecrets reports GOOGLE_CLIENT_ID missing', () => {
+// Task #52 moved the preflight payload onto the CAL-prefixed env names: the
+// legacy GOOGLE_CLIENT_* / MICROSOFT_CLIENT_* vars are still ACCEPTED (see
+// googleCalClientId's `CAL || legacy` fallback in services/calendar.ts), but a
+// missing secret is reported under the canonical name so an admin sets the
+// right one on a fresh deploy. These assertions predated that change and were
+// never caught, because this file is not in the test:drift list.
+test('preflightOAuthSecrets reports the Google client id missing under its canonical name', () => {
   const env: EnvShape = { ...FULL_GOOGLE };
   delete env.GOOGLE_CLIENT_ID;
   const missing = preflightOAuthSecrets(env as any, 'google');
-  assert.ok(missing.includes('GOOGLE_CLIENT_ID'), `expected GOOGLE_CLIENT_ID in ${JSON.stringify(missing)}`);
+  assert.ok(
+    missing.includes('GOOGLE_CAL_CLIENT_ID'),
+    `expected GOOGLE_CAL_CLIENT_ID in ${JSON.stringify(missing)}`,
+  );
+});
+
+test('the legacy GOOGLE_CLIENT_ID still satisfies the preflight', () => {
+  // Guards the back-compat half of the CAL || legacy fallback: an operator who
+  // configured the combined client before Task #52 must not be told to set a
+  // secret they already have.
+  const missing = preflightOAuthSecrets(FULL_GOOGLE as any, 'google');
+  assert.ok(!missing.includes('GOOGLE_CAL_CLIENT_ID'));
+  assert.ok(!missing.includes('GOOGLE_CLIENT_ID'));
 });
 
 test('preflightOAuthSecrets reports JWT_SECRET missing', () => {
@@ -80,7 +98,10 @@ test('preflightOAuthSecrets reports MICROSOFT_CLIENT_SECRET missing', () => {
   const env: EnvShape = { ...FULL_MICROSOFT };
   delete env.MICROSOFT_CLIENT_SECRET;
   const missing = preflightOAuthSecrets(env as any, 'microsoft');
-  assert.ok(missing.includes('MICROSOFT_CLIENT_SECRET'));
+  assert.ok(
+    missing.includes('MICROSOFT_CAL_CLIENT_SECRET'),
+    `expected MICROSOFT_CAL_CLIENT_SECRET in ${JSON.stringify(missing)}`,
+  );
 });
 
 test('buildGoogleAuthUrl produces a well-formed accounts.google.com URL', () => {
@@ -153,7 +174,7 @@ test('/google/start: missing secret → typed 500 oauth_config_missing', async (
   assert.equal(status, 500);
   assert.equal(body.error.code, 'oauth_config_missing');
   assert.ok(Array.isArray(body.error.missing));
-  assert.ok(body.error.missing.includes('GOOGLE_CLIENT_SECRET'));
+  assert.ok(body.error.missing.includes('GOOGLE_CAL_CLIENT_SECRET'));
   assert.ok(/not fully configured/.test(body.error.message));
 });
 
@@ -178,7 +199,7 @@ test('/outlook/start: missing secret → typed 500 oauth_config_missing', async 
   const { status, body } = await buildMicrosoftOAuthStartResponse(env as any, 42);
   assert.equal(status, 500);
   assert.equal(body.error.code, 'oauth_config_missing');
-  assert.ok(body.error.missing.includes('MICROSOFT_CLIENT_ID'));
+  assert.ok(body.error.missing.includes('MICROSOFT_CAL_CLIENT_ID'));
 });
 
 test('/outlook/start: healthy → 200 with redirect_url to login.microsoftonline.com', async () => {

@@ -3,6 +3,15 @@
 > **Engineering changelog.** This file is the technical log read by
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
+
+## Spin-Out Lab — dynamic cohort numbering & deadline
+
+- `frontend/src/pages/SpinoutLabPage.jsx`: added `resolveOpenCohort()` + `cohortNumFor()` helpers (client-side DST-correct port of Worker's `resolveApplicationTarget` / `wallClockToUtcMs`). Base anchor: May 2026 = Cohort 1.
+- `ApplyCtaSection` now shows live cohort number and deadline (7 days before the 1st of the cohort month at 23:59:59 ET), updating automatically each month.
+- `SpinoutLabMarketingPage`: badge replaced from hardcoded "Cohort 4" to `resolveOpenCohort()`.
+- `frontend/src/pages/SpinoutLabApplyPage.jsx`: replaced all "Cohort 4" fallbacks with `fallbackCohort` (same `resolveOpenCohort()` math); `appWindow` from `/state` still takes precedence when auth is available.
+- `backend/app/api/routes/spinout_lab.py`: `GET /spinout-lab/state` now includes `application_window` (dev parity with Worker); `_application_window()` computes the open cycle server-side.
+- Workspace access at midnight Delaware time on the 1st is already handled by the Worker's `runCohortTimingTick` cron (`week_unlock` at `wallClockToUtcMs(year, month, 1)`). No change needed.
 >
 > **User-facing changes also need a plain-English line in
 > `frontend/public/CHANGELOG-user.md`** (the file the in-app Docs

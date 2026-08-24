@@ -233,11 +233,18 @@ def _ic_events(session: Session, user: User,
             IcMeeting.status != "cancelled",
         )
     ).all()
+    meeting_ids = [m.id for m in rows]
+    attendees_by_meeting: dict[int, list[IcMeetingAttendee]] = {}
+    if meeting_ids:
+        all_attendees = session.exec(
+            select(IcMeetingAttendee).where(IcMeetingAttendee.meeting_id.in_(meeting_ids))
+        ).all()
+        for a in all_attendees:
+            attendees_by_meeting.setdefault(a.meeting_id, []).append(a)
+
     out: list[dict] = []
     for m in rows:
-        attendees = session.exec(
-            select(IcMeetingAttendee).where(IcMeetingAttendee.meeting_id == m.id)
-        ).all()
+        attendees = attendees_by_meeting.get(m.id, [])
         invited_user_ids = {a.user_id for a in attendees}
         if not (is_admin or m.organizer_user_id == user.id or user.id in invited_user_ids):
             continue
@@ -404,7 +411,7 @@ def events_to_ics(events: list[dict], *, calendar_name: str = "Axal StudioOS") -
         "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH",
     ]
-    now = _ics_dt(datetime.utcnow())
+    now = _ics_dt(datetime.now(timezone.utc))
     for ev in events:
         start = datetime.fromisoformat(ev["start_at"])
         end = datetime.fromisoformat(ev["end_at"])
@@ -469,7 +476,7 @@ def push_event_to_google(*, access_token: str, event_payload: dict,
                 )
                 # If the remote got deleted, fall through to a fresh insert.
                 if r.status_code == 404:
-                    google_event_id = None
+                    pass
                 elif r.status_code >= 400:
                     logger.warning("gcal patch %s: %s", r.status_code, r.text[:200])
                     return None
@@ -546,7 +553,7 @@ def sync_user_to_google(session: Session, user: User, *,
             continue
         if rec:
             rec.google_event_id = new_id
-            rec.last_synced_at = datetime.utcnow()
+            rec.last_synced_at = datetime.now(timezone.utc)
             session.add(rec); updated += 1
         else:
             try:
@@ -560,9 +567,8 @@ def sync_user_to_google(session: Session, user: User, *,
                 # Defensive: another transaction beat us to it. Roll back
                 # just this insert and treat it as an update.
                 session.rollback()
-                pushed = pushed  # unchanged
                 failed += 1
-    token_row.last_synced_at = datetime.utcnow()
+    token_row.last_synced_at = datetime.now(timezone.utc)
     session.add(token_row)
     session.commit()
     return {

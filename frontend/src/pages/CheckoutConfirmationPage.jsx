@@ -64,7 +64,7 @@ export default function CheckoutConfirmationPage() {
           <AlertTriangle size={26} />
         </span>
         <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">{error}</h1>
-        <button onClick={() => navigate('/products')} className="mt-4 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
+        <button onClick={() => navigate('/plans-and-pricing')} className="mt-4 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
           Back to Products
         </button>
       </div>

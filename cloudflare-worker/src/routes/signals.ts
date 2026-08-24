@@ -41,6 +41,7 @@ import {
   getSignalDetail,
   getKpis,
   getFacets,
+  getIngestHealth,
   runRefresh,
 } from '../services/signals/engine';
 
@@ -114,11 +115,14 @@ r.get('/kpis', async (c) => {
   }
 });
 
-// GET /api/signals/sources — source registry (why a signal is credible).
+// GET /api/signals/sources — source registry (why a signal is credible) plus
+// the recent ingest-run history, so the transparency modal can show which
+// sources actually answered on the last refresh rather than implying all did.
 r.get('/sources', async (c) => {
   try {
     await requireAuth(c);
-    return c.json({ sources: SOURCE_REGISTRY });
+    const health = await getIngestHealth(c.env);
+    return c.json({ sources: SOURCE_REGISTRY, health });
   } catch (e) {
     return mapError(c, e);
   }

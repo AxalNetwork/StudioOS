@@ -12,8 +12,9 @@
  * is applied; the migration is the canonical record.
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireRole } from '../auth';
+import { requireAuth, requireRole } from '../auth';
 import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { sendContactInviteEmail } from '../services/email';
 import { ensureAdvisorProfilesSchema } from '../services/advisorProfilesSchema';
@@ -23,6 +24,9 @@ import {
   ensureDiscoveryValidationRatingColumns,
 } from '../services/discoveryInterviewSchema';
 import { hashEmail } from '../util/hashEmail';
+import {
+  computeRoundProgress, rollUpTranches, computeProRata, postRoundStake,
+} from '../services/roundMath';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -102,6 +106,11 @@ async function ensureSchema(env: Env): Promise<void> {
        status TEXT NOT NULL DEFAULT 'new',
        promoted_to TEXT,
        promoted_ref_id INTEGER,
+       -- Lead attribution (migration 166). utm_json is an allowlisted,
+       -- length-clipped {utm_source,utm_medium,utm_campaign,utm_term,
+       -- utm_content} blob; referrer is the capturing page's document.referrer.
+       utm_json TEXT,
+       referrer TEXT,
        last_activity_at TEXT,
        created_at TEXT NOT NULL DEFAULT (datetime('now')),
        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -170,8 +179,67 @@ async function ensureSchema(env: Env): Promise<void> {
        created_at TEXT NOT NULL DEFAULT (datetime('now'))
      )`,
     `CREATE INDEX IF NOT EXISTS idx_raise_updates_project ON raise_investor_updates(project_id)`,
+    // Round Manager (#129) — closes/tranches + pro-rata rights. Canonical
+    // record is migration 169; this bootstrap self-heals an earlier DB.
+    `CREATE TABLE IF NOT EXISTS raise_closes (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       uid TEXT UNIQUE NOT NULL,
+       project_id INTEGER NOT NULL,
+       round_id INTEGER NOT NULL,
+       name TEXT NOT NULL,
+       sequence INTEGER NOT NULL DEFAULT 0,
+       state TEXT NOT NULL DEFAULT 'planned',
+       target_date TEXT,
+       closed_date TEXT,
+       notes TEXT,
+       created_at TEXT NOT NULL DEFAULT (datetime('now')),
+       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_raise_closes_round ON raise_closes(round_id, sequence)`,
+    `CREATE INDEX IF NOT EXISTS idx_raise_closes_project ON raise_closes(project_id)`,
+    `CREATE TABLE IF NOT EXISTS raise_pro_rata (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       uid TEXT UNIQUE NOT NULL,
+       project_id INTEGER NOT NULL,
+       round_id INTEGER NOT NULL,
+       holder_name TEXT NOT NULL,
+       holder_email TEXT,
+       prior_stake_pct REAL NOT NULL DEFAULT 0,
+       taking_amount REAL,
+       state TEXT NOT NULL DEFAULT 'offered',
+       offered_at TEXT,
+       responded_at TEXT,
+       notes TEXT,
+       created_at TEXT NOT NULL DEFAULT (datetime('now')),
+       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_raise_pro_rata_round ON raise_pro_rata(round_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_raise_pro_rata_holder ON raise_pro_rata(round_id, holder_email) WHERE holder_email IS NOT NULL`,
   ];
   for (const s of stmts) await env.DB.prepare(s).run();
+  // Round Manager (#129) — self-heal the round/allocation columns on
+  // EXISTING tables. Canonical adds are the ALTERs in migration 169;
+  // same PRAGMA-guarded pattern as `amount` below.
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(raise_rounds)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((x) => x.name));
+    for (const [col, decl] of [['pro_rata_reserved', 'REAL'], ['pre_money', 'REAL']] as const) {
+      if (!have.has(col)) {
+        try { await env.DB.prepare(`ALTER TABLE raise_rounds ADD COLUMN ${col} ${decl}`).run(); }
+        catch (e) { console.warn(`[contacts] ALTER raise_rounds.${col} failed (likely already applied)`, e); }
+      }
+    }
+  } catch (e) { console.warn('[contacts] raise_rounds round-manager bootstrap failed', e); }
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(raise_prospects)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((x) => x.name));
+    for (const [col, decl] of [['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT']] as const) {
+      if (!have.has(col)) {
+        try { await env.DB.prepare(`ALTER TABLE raise_prospects ADD COLUMN ${col} ${decl}`).run(); }
+        catch (e) { console.warn(`[contacts] ALTER raise_prospects.${col} failed (likely already applied)`, e); }
+      }
+    }
+  } catch (e) { console.warn('[contacts] raise_prospects round-manager bootstrap failed', e); }
   // Task #32 — self-heal promoted_ref_id on an EXISTING prod contacts table
   // (CREATE TABLE IF NOT EXISTS never adds columns to a table that already
   // exists). Canonical add is migration 128; this is the runtime safety net.
@@ -195,6 +263,19 @@ async function ensureSchema(env: Env): Promise<void> {
       catch (e) { console.warn('[contacts] ALTER raise_prospects.amount failed (likely already applied)', e); }
     }
   } catch (e) { console.warn('[contacts] raise_prospects.amount bootstrap failed', e); }
+  // Lead attribution — self-heal utm_json/referrer on an EXISTING contacts
+  // table. Canonical add is migration 166; same PRAGMA-guarded pattern as
+  // promoted_ref_id above (see GOTCHAS.md "Migrations & schema").
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(contacts)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((x) => x.name));
+    for (const [col, decl] of [['utm_json', 'TEXT'], ['referrer', 'TEXT']] as const) {
+      if (!have.has(col)) {
+        try { await env.DB.prepare(`ALTER TABLE contacts ADD COLUMN ${col} ${decl}`).run(); }
+        catch (e) { console.warn(`[contacts] ALTER ${col} failed (likely already applied)`, e); }
+      }
+    }
+  } catch (e) { console.warn('[contacts] attribution bootstrap failed', e); }
   _ensured = true;
 }
 
@@ -205,20 +286,34 @@ async function ensureSchema(env: Env): Promise<void> {
  */
 export async function ingestContact(
   env: Env,
-  opts: { projectId: number; landingPageId?: number | null; email: string; name?: string | null; audience?: string | null; cta?: string | null; message?: string | null; source?: string | null; status?: string },
+  opts: {
+    projectId: number; landingPageId?: number | null; email: string; name?: string | null;
+    audience?: string | null; cta?: string | null; message?: string | null; source?: string | null;
+    status?: string;
+    /** Allowlisted utm_* map from the capturing page's querystring. */
+    utm?: Record<string, string> | null;
+    /** document.referrer of the capturing page. */
+    referrer?: string | null;
+  },
 ): Promise<void> {
   await ensureSchema(env);
   const audience = opts.audience && CONTACT_AUDIENCES.includes(opts.audience) ? opts.audience : 'customer';
   const uid = newUid();
+  // Attribution is stored as a JSON blob rather than five columns: the set of
+  // useful keys changes with whatever the founder runs campaigns on, and a
+  // blob keeps that from being a migration each time. It is written only from
+  // the allowlisted+clipped map the caller built, never raw request input.
+  const utmJson = opts.utm && Object.keys(opts.utm).length ? JSON.stringify(opts.utm) : null;
   await env.DB.prepare(
-    `INSERT INTO contacts (uid, project_id, audience, routed_to, name, email, cta, message, source, landing_page_id, status, last_activity_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO contacts (uid, project_id, audience, routed_to, name, email, cta, message, source, landing_page_id, status, utm_json, referrer, last_activity_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     uid, opts.projectId, audience, routeFor(audience),
     opts.name || null, String(opts.email).toLowerCase(),
     opts.cta || null, opts.message || null, opts.source || 'landing',
     opts.landingPageId ?? null,
     opts.status && CONTACT_STATUSES.includes(opts.status) ? opts.status : 'new',
+    utmJson, opts.referrer || null,
     nowIso(), nowIso(), nowIso(),
   ).run();
 }
@@ -229,6 +324,22 @@ async function ownedProjectScope(env: Env, user: User): Promise<'all' | number[]
   if (!user.founder_id) return [];
   const rows = await env.DB.prepare('SELECT id FROM projects WHERE founder_id = ? AND deleted_at IS NULL').bind(user.founder_id).all<{ id: number }>();
   return (rows.results || []).map((x) => Number(x.id));
+}
+
+/**
+ * Raise-pipeline auth. Founders own the raise workflow, but ACTIVE Spin-Out
+ * Lab members (role `exploring` + spinout_lab_active=1) run their Week-4
+ * raise through the lab Capital page too. Safe because every raise handler
+ * scopes by ownedProjectScope(), which keys off founder_id — an explorer only
+ * ever sees their own projects. Role alone is NOT enough: `exploring` is also
+ * the pre-admission holding role, and those accounts must not get the lab
+ * exception (mirrors advisors.ts).
+ */
+async function requireRaiseUser(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAuth(c);
+  if (user.role === 'admin' || user.role === 'founder') return user;
+  if (user.role === 'exploring' && Number((user as any).spinout_lab_active ?? 0) === 1) return user;
+  throw new Error('Forbidden');
 }
 
 async function loadOwned(env: Env, uid: string, user: User): Promise<ContactRow | 'notfound' | 'forbidden'> {
@@ -341,23 +452,33 @@ r.get('/', async (c) => {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
     const scope = await ownedProjectScope(c.env, user);
+    // Filters are qualified with the `c.` alias — the leads query LEFT JOINs
+    // landing_pages, which shares the project_id and audience column names.
     let where = '1=1';
     const params: any[] = [];
     if (scope !== 'all') {
       if (scope.length === 0) return c.json({ items: [], counts: {} });
-      where += ` AND project_id IN (${scope.map(() => '?').join(',')})`;
+      where += ` AND c.project_id IN (${scope.map(() => '?').join(',')})`;
       params.push(...scope);
     }
     const audience = c.req.query('audience');
     const status = c.req.query('status');
     const routed = c.req.query('routed_to');
-    if (audience) { where += ' AND audience = ?'; params.push(audience); }
-    if (status) { where += ' AND status = ?'; params.push(status); }
-    if (routed) { where += ' AND routed_to = ?'; params.push(routed); }
+    if (audience) { where += ' AND c.audience = ?'; params.push(audience); }
+    if (status) { where += ' AND c.status = ?'; params.push(status); }
+    if (routed) { where += ' AND c.routed_to = ?'; params.push(routed); }
+    // LEFT JOIN the source landing page so destination pages can show WHICH
+    // template a lead signed up through ("Inbound leads · Brand & Pages").
+    // Manually-added / invited contacts have no landing_page_id and come back
+    // with NULL attribution — the UI treats that as "added directly".
     const rows = await c.env.DB.prepare(
-      `SELECT * FROM contacts WHERE ${where} ORDER BY COALESCE(last_activity_at, created_at) DESC LIMIT 500`
-    ).bind(...params).all<ContactRow>();
-    const items = (rows.results || []) as ContactRow[];
+      `SELECT c.*, lp.template_kit AS landing_template_kit, lp.name AS landing_page_name
+         FROM contacts c
+         LEFT JOIN landing_pages lp ON lp.id = c.landing_page_id
+        WHERE ${where}
+        ORDER BY COALESCE(c.last_activity_at, c.created_at) DESC LIMIT 500`
+    ).bind(...params).all<ContactRow & { landing_template_kit: string | null; landing_page_name: string | null }>();
+    const items = (rows.results || []) as (ContactRow & { landing_template_kit: string | null; landing_page_name: string | null })[];
     const counts: Record<string, number> = {};
     for (const it of items) counts[it.audience] = (counts[it.audience] || 0) + 1;
     return c.json({ items, counts });
@@ -439,7 +560,7 @@ r.post('/invite', async (c) => {
 // Registered BEFORE /:uid so the static segment wins the Hono route match.
 r.get('/raise-prospects', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const scope = await ownedProjectScope(c.env, user);
     let where = '1=1';
@@ -461,7 +582,7 @@ r.get('/raise-prospects', async (c) => {
 // PUT /api/contacts/raise-prospects/:id — update stage / notes / firm / name.
 r.put('/raise-prospects/:id', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const id = Number(c.req.param('id'));
     const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
@@ -475,9 +596,32 @@ r.put('/raise-prospects/:id', async (c) => {
     const firm = body.firm !== undefined ? (body.firm ? String(body.firm).slice(0, 200) : null) : row.firm;
     const name = body.name !== undefined ? (body.name ? String(body.name).slice(0, 200) : null) : row.name;
     const amount = body.amount !== undefined ? normAmount(body.amount) : (row.amount ?? null);
+    // Round Manager (#129) — allocation fields. A prospect that is not
+    // committed carries no commit_status: a "wired" row sitting in the
+    // Meeting column would be a contradiction the funnel would then
+    // count as money.
+    const commitStatus = stage !== 'committed'
+      ? null
+      : (body.commit_status !== undefined
+        ? (COMMIT_STATUSES.includes(String(body.commit_status)) ? String(body.commit_status) : null)
+        : (row.commit_status ?? null));
+    const instrument = body.instrument !== undefined
+      ? (INSTRUMENTS.includes(String(body.instrument)) ? String(body.instrument) : null)
+      : (row.instrument ?? null);
+    const closeId = body.close_id !== undefined
+      ? (body.close_id == null ? null : Number(body.close_id))
+      : (row.close_id ?? null);
+    // A close must belong to this prospect's project — otherwise money
+    // could be slotted into another founder's tranche by id guess.
+    if (closeId != null) {
+      const own = await c.env.DB.prepare(
+        'SELECT 1 FROM raise_closes WHERE id = ? AND project_id = ? LIMIT 1',
+      ).bind(closeId, Number(row.project_id)).first();
+      if (!own) return c.json({ detail: 'close_id does not belong to this project' }, 400);
+    }
     await c.env.DB.prepare(
-      `UPDATE raise_prospects SET stage=?, notes=?, firm=?, name=?, amount=?, updated_at=? WHERE id=?`,
-    ).bind(stage, notes, firm, name, amount, nowIso(), id).run();
+      `UPDATE raise_prospects SET stage=?, notes=?, firm=?, name=?, amount=?, commit_status=?, instrument=?, close_id=?, updated_at=? WHERE id=?`,
+    ).bind(stage, notes, firm, name, amount, commitStatus, instrument, closeId, nowIso(), id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
     return c.json(fresh);
   } catch (e) { return mapError(c, e); }
@@ -487,7 +631,7 @@ r.put('/raise-prospects/:id', async (c) => {
 // the pipeline (form). Creates-or-links the underlying Contacts-hub row.
 r.post('/raise-prospects', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const projectId = Number(body.project_id);
@@ -506,7 +650,7 @@ r.post('/raise-prospects', async (c) => {
 // chunks bigger files). Per-row failures are reported, never silently dropped.
 r.post('/raise-prospects/import', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const projectId = Number(body.project_id);
@@ -532,7 +676,7 @@ r.post('/raise-prospects/import', async (c) => {
 // Contacts-hub record (via contact_id) so the SPA can render the contact card.
 r.get('/raise-prospects/:id', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const id = Number(c.req.param('id'));
     const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
@@ -554,7 +698,7 @@ r.get('/raise-prospects/:id', async (c) => {
 // counter that can drift).
 r.get('/raise-round', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const scope = await ownedProjectScope(c.env, user);
     const pid = resolveProjectId(scope, c.req.query('project_id'));
@@ -567,10 +711,16 @@ r.get('/raise-round', async (c) => {
     const agg = await c.env.DB.prepare(
       `SELECT COALESCE(SUM(amount), 0) AS raised, COUNT(*) AS n FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
     ).bind(pid).first<{ raised: number; n: number }>();
+    // Round Manager (#129) — the funnel split alongside the legacy
+    // `raised` total. `progress.committed` equals `raised` until a
+    // founder starts marking rows soft/wired, so nothing moves on the
+    // deploy that ships this (see migration 169's note on commit_status).
+    const allocations = await loadAllocations(c.env, pid).catch(() => []);
     return c.json({
       round: round || null,
       raised: Number(agg?.raised || 0),
       committed_count: Number(agg?.n || 0),
+      progress: computeRoundProgress(allocations, round?.target_amount ?? null),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -580,7 +730,7 @@ r.get('/raise-round', async (c) => {
 // status='active') backstops races — the losing INSERT re-reads the winner.
 r.put('/raise-round', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const scope = await ownedProjectScope(c.env, user);
@@ -628,10 +778,323 @@ r.put('/raise-round', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// ---------- Round Manager (#129): closes/tranches + pro-rata ----------
+
+const CLOSE_STATES = ['planned', 'open', 'closed'];
+const COMMIT_STATUSES = ['soft', 'signed', 'wired'];
+const INSTRUMENTS = ['safe', 'note', 'equity'];
+const PRO_RATA_STATES = ['offered', 'taking', 'waived', 'expired'];
+
+function ymd(v: unknown): string | null {
+  if (v == null || v === '') return null;
+  const s = String(v).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+/**
+ * Allocations for the round funnel. A prospect at stage='committed' IS
+ * an allocation; `commit_status` refines it. NULL maps to 'signed' so
+ * the new committed total exactly reproduces the legacy `raised` figure
+ * on the deploy that introduces this — no number moves under founders.
+ */
+async function loadAllocations(env: Env, projectId: number): Promise<Array<{
+  amount: number; status: 'soft' | 'signed' | 'wired'; close_id: number | null;
+}>> {
+  const rows = await env.DB.prepare(
+    `SELECT amount, commit_status, close_id FROM raise_prospects
+      WHERE project_id = ? AND stage = 'committed'`,
+  ).bind(projectId).all<any>();
+  return (rows.results || []).map((x: any) => ({
+    amount: Number(x.amount) || 0,
+    status: (COMMIT_STATUSES.includes(String(x.commit_status)) ? x.commit_status : 'signed') as 'soft' | 'signed' | 'wired',
+    close_id: x.close_id == null ? null : Number(x.close_id),
+  }));
+}
+
+// GET /api/contacts/raise-closes — tranches of the active round, each
+// with its own subtotal, plus the round-level funnel.
+r.get('/raise-closes', async (c) => {
+  try {
+    const user = await requireRaiseUser(c);
+    await ensureSchema(c.env);
+    const scope = await ownedProjectScope(c.env, user);
+    const pid = resolveProjectId(scope, c.req.query('project_id'));
+    if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
+    if (pid === 'ambiguous') return c.json({ detail: 'project_id is required' }, 400);
+    if (pid === null) return c.json({ round: null, closes: [], progress: null, unassigned: null });
+
+    const round = await c.env.DB.prepare(
+      `SELECT * FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
+    ).bind(pid).first<any>();
+    if (!round) return c.json({ round: null, closes: [], progress: null, unassigned: null });
+
+    const [closeRows, allocations] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT * FROM raise_closes WHERE round_id = ? ORDER BY sequence, id`,
+      ).bind(round.id).all<any>(),
+      loadAllocations(c.env, pid),
+    ]);
+    const { tranches, unassigned } = rollUpTranches(
+      (closeRows.results || []).map((x: any) => ({
+        id: Number(x.id), name: String(x.name), state: x.state,
+        target_date: x.target_date, closed_date: x.closed_date,
+      })),
+      allocations,
+    );
+    // Merge the rollup back onto the stored rows so the client gets uid
+    // and notes alongside the computed subtotals.
+    const byId = new Map(tranches.map(t => [t.id, t]));
+    const closes = (closeRows.results || []).map((x: any) => ({ ...x, ...(byId.get(Number(x.id)) || {}) }));
+    return c.json({
+      round,
+      closes,
+      progress: computeRoundProgress(allocations, round.target_amount ?? null),
+      unassigned,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/contacts/raise-closes — add a tranche to the active round.
+r.post('/raise-closes', async (c) => {
+  try {
+    const user = await requireRaiseUser(c);
+    await ensureSchema(c.env);
+    const body = await c.req.json().catch(() => ({} as any));
+    const scope = await ownedProjectScope(c.env, user);
+    const pid = resolveProjectId(scope, body.project_id !== undefined ? String(body.project_id) : undefined);
+    if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
+    if (pid === 'ambiguous' || pid === null) return c.json({ detail: 'project_id is required' }, 400);
+    const name = body.name ? String(body.name).trim().slice(0, 200) : '';
+    if (!name) return c.json({ detail: 'name is required' }, 400);
+    const state = CLOSE_STATES.includes(String(body.state)) ? String(body.state) : 'planned';
+
+    const round = await c.env.DB.prepare(
+      `SELECT id FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
+    ).bind(pid).first<{ id: number }>();
+    if (!round) return c.json({ detail: 'Set up the round before adding closes' }, 400);
+    const seqRow = await c.env.DB.prepare(
+      `SELECT COALESCE(MAX(sequence), -1) + 1 AS next FROM raise_closes WHERE round_id = ?`,
+    ).bind(round.id).first<{ next: number }>();
+
+    const res = await c.env.DB.prepare(
+      `INSERT INTO raise_closes (uid, project_id, round_id, name, sequence, state, target_date, closed_date, notes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      newUid(), pid, round.id, name,
+      body.sequence != null ? Number(body.sequence) : Number(seqRow?.next || 0),
+      state, ymd(body.target_date), ymd(body.closed_date),
+      body.notes ? String(body.notes).slice(0, 4000) : null, nowIso(), nowIso(),
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM raise_closes WHERE id = ?').bind(lastInsertId(res)).first<any>();
+    return c.json(fresh, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT /api/contacts/raise-closes/:id — edit a tranche.
+r.put('/raise-closes/:id', async (c) => {
+  try {
+    const user = await requireRaiseUser(c);
+    await ensureSchema(c.env);
+    const body = await c.req.json().catch(() => ({} as any));
+    const scope = await ownedProjectScope(c.env, user);
+    const row = await c.env.DB.prepare('SELECT * FROM raise_closes WHERE id = ?')
+      .bind(Number(c.req.param('id'))).first<any>();
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    // Ownership: the close must belong to a project the caller owns.
+    if (scope !== 'all' && !scope.includes(Number(row.project_id))) return c.json({ detail: 'Forbidden' }, 403);
+
+    const state = body.state !== undefined
+      ? (CLOSE_STATES.includes(String(body.state)) ? String(body.state) : row.state)
+      : row.state;
+    // Marking a close 'closed' with no date stamps today — a closed
+    // tranche without a date is not a useful record.
+    const closedDate = body.closed_date !== undefined
+      ? ymd(body.closed_date)
+      : (state === 'closed' && !row.closed_date ? new Date().toISOString().slice(0, 10) : row.closed_date);
+
+    await c.env.DB.prepare(
+      `UPDATE raise_closes SET name=?, sequence=?, state=?, target_date=?, closed_date=?, notes=?, updated_at=? WHERE id=?`,
+    ).bind(
+      body.name !== undefined ? String(body.name).trim().slice(0, 200) || row.name : row.name,
+      body.sequence !== undefined ? Number(body.sequence) : row.sequence,
+      state,
+      body.target_date !== undefined ? ymd(body.target_date) : row.target_date,
+      closedDate,
+      body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : row.notes,
+      nowIso(), row.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM raise_closes WHERE id = ?').bind(row.id).first<any>();
+    return c.json(fresh);
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /api/contacts/raise-pro-rata — existing holders' rights in the
+// active round. Entitlements are COMPUTED per request (roundMath.ts) so
+// they can never drift from the round size; only the holder's prior
+// stake and their decision are stored.
+r.get('/raise-pro-rata', async (c) => {
+  try {
+    const user = await requireRaiseUser(c);
+    await ensureSchema(c.env);
+    const scope = await ownedProjectScope(c.env, user);
+    const pid = resolveProjectId(scope, c.req.query('project_id'));
+    if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
+    if (pid === 'ambiguous') return c.json({ detail: 'project_id is required' }, 400);
+    if (pid === null) return c.json({ round: null, holders: [], result: null });
+
+    const round = await c.env.DB.prepare(
+      `SELECT * FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
+    ).bind(pid).first<any>();
+    if (!round) return c.json({ round: null, holders: [], result: null });
+
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM raise_pro_rata WHERE round_id = ? ORDER BY prior_stake_pct DESC, id`,
+    ).bind(round.id).all<any>();
+    const stored = rows.results || [];
+    const result = computeProRata(
+      stored.map((h: any) => ({
+        key: String(h.uid),
+        prior_stake_pct: Number(h.prior_stake_pct) || 0,
+        taking: h.taking_amount == null ? null : Number(h.taking_amount),
+        state: h.state,
+      })),
+      Number(round.target_amount) || 0,
+      round.pro_rata_reserved == null ? null : Number(round.pro_rata_reserved),
+    );
+    // Stitch the computed entitlement onto each stored row.
+    const byKey = new Map(result.rows.map(x => [x.key, x]));
+    const holders = stored.map((h: any) => {
+      const calc = byKey.get(String(h.uid));
+      return {
+        ...h,
+        entitlement: calc?.entitlement ?? null,
+        entitlement_raw: calc?.entitlement_raw ?? null,
+        scaled: calc?.scaled ?? false,
+        post_round_stake_pct: postRoundStake(
+          Number(h.prior_stake_pct) || 0,
+          Number(h.taking_amount) || 0,
+          Number(round.pre_money) || 0,
+          Number(round.target_amount) || 0,
+        ),
+      };
+    });
+    return c.json({ round, holders, result });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/contacts/raise-pro-rata — add a holder to the pro-rata list.
+// `seed_from_cap_table: true` imports every cap-table holder instead.
+r.post('/raise-pro-rata', async (c) => {
+  try {
+    const user = await requireRaiseUser(c);
+    await ensureSchema(c.env);
+    const body = await c.req.json().catch(() => ({} as any));
+    const scope = await ownedProjectScope(c.env, user);
+    const pid = resolveProjectId(scope, body.project_id !== undefined ? String(body.project_id) : undefined);
+    if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
+    if (pid === 'ambiguous' || pid === null) return c.json({ detail: 'project_id is required' }, 400);
+    const round = await c.env.DB.prepare(
+      `SELECT id FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
+    ).bind(pid).first<{ id: number }>();
+    if (!round) return c.json({ detail: 'Set up the round before tracking pro-rata' }, 400);
+
+    if (body.seed_from_cap_table) {
+      // Import the current cap table as a starting point. Existing rows
+      // are left alone — a founder's edits outrank a stale snapshot.
+      const holders = await c.env.DB.prepare(
+        `SELECT name, email, ownership_pct FROM cap_table_holders
+          WHERE project_id = ? AND ownership_pct IS NOT NULL AND ownership_pct > 0
+          ORDER BY ownership_pct DESC LIMIT 100`,
+      ).bind(pid).all<any>().catch(() => ({ results: [] as any[] }));
+      let added = 0, skipped = 0;
+      for (const h of (holders.results || [])) {
+        const email = h.email ? String(h.email).toLowerCase().slice(0, 200) : null;
+        if (email) {
+          const dup = await c.env.DB.prepare(
+            `SELECT 1 FROM raise_pro_rata WHERE round_id = ? AND LOWER(holder_email) = ? LIMIT 1`,
+          ).bind(round.id, email).first();
+          if (dup) { skipped++; continue; }
+        }
+        await c.env.DB.prepare(
+          `INSERT INTO raise_pro_rata (uid, project_id, round_id, holder_name, holder_email, prior_stake_pct, state, offered_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'offered', NULL, ?, ?)`,
+        ).bind(
+          newUid(), pid, round.id, String(h.name || 'Holder').slice(0, 200), email,
+          Number(h.ownership_pct) || 0, nowIso(), nowIso(),
+        ).run();
+        added++;
+      }
+      return c.json({ ok: true, added, skipped }, 201);
+    }
+
+    const name = body.holder_name ? String(body.holder_name).trim().slice(0, 200) : '';
+    if (!name) return c.json({ detail: 'holder_name is required' }, 400);
+    const stake = Number(body.prior_stake_pct);
+    if (!Number.isFinite(stake) || stake < 0 || stake > 100) {
+      return c.json({ detail: 'prior_stake_pct must be between 0 and 100' }, 400);
+    }
+    const res = await c.env.DB.prepare(
+      `INSERT INTO raise_pro_rata (uid, project_id, round_id, holder_name, holder_email, prior_stake_pct, state, offered_at, notes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'offered', ?, ?, ?, ?)`,
+    ).bind(
+      newUid(), pid, round.id, name,
+      body.holder_email ? String(body.holder_email).toLowerCase().slice(0, 200) : null,
+      stake, ymd(body.offered_at), body.notes ? String(body.notes).slice(0, 4000) : null,
+      nowIso(), nowIso(),
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM raise_pro_rata WHERE id = ?').bind(lastInsertId(res)).first<any>();
+    return c.json(fresh, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT /api/contacts/raise-pro-rata/:id — record an offer or a response.
+r.put('/raise-pro-rata/:id', async (c) => {
+  try {
+    const user = await requireRaiseUser(c);
+    await ensureSchema(c.env);
+    const body = await c.req.json().catch(() => ({} as any));
+    const scope = await ownedProjectScope(c.env, user);
+    const row = await c.env.DB.prepare('SELECT * FROM raise_pro_rata WHERE id = ?')
+      .bind(Number(c.req.param('id'))).first<any>();
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    if (scope !== 'all' && !scope.includes(Number(row.project_id))) return c.json({ detail: 'Forbidden' }, 403);
+
+    const state = body.state !== undefined
+      ? (PRO_RATA_STATES.includes(String(body.state)) ? String(body.state) : row.state)
+      : row.state;
+    const stake = body.prior_stake_pct !== undefined ? Number(body.prior_stake_pct) : null;
+    if (stake != null && (!Number.isFinite(stake) || stake < 0 || stake > 100)) {
+      return c.json({ detail: 'prior_stake_pct must be between 0 and 100' }, 400);
+    }
+    // A holder who waives is not also taking money — clear the amount
+    // rather than leaving a contradictory row behind.
+    const taking = state === 'waived' || state === 'expired'
+      ? null
+      : (body.taking_amount !== undefined ? normAmount(body.taking_amount) : row.taking_amount);
+    // Any state change away from 'offered' is a response; stamp it once.
+    const responded = state !== 'offered' && !row.responded_at ? nowIso() : row.responded_at;
+
+    await c.env.DB.prepare(
+      `UPDATE raise_pro_rata SET holder_name=?, holder_email=?, prior_stake_pct=?, taking_amount=?, state=?, offered_at=?, responded_at=?, notes=?, updated_at=? WHERE id=?`,
+    ).bind(
+      body.holder_name !== undefined ? String(body.holder_name).trim().slice(0, 200) || row.holder_name : row.holder_name,
+      body.holder_email !== undefined ? (body.holder_email ? String(body.holder_email).toLowerCase().slice(0, 200) : null) : row.holder_email,
+      stake != null ? stake : row.prior_stake_pct,
+      taking, state,
+      body.offered_at !== undefined ? ymd(body.offered_at) : row.offered_at,
+      responded,
+      body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : row.notes,
+      nowIso(), row.id,
+    ).run();
+    const fresh = await c.env.DB.prepare('SELECT * FROM raise_pro_rata WHERE id = ?').bind(row.id).first<any>();
+    return c.json(fresh);
+  } catch (e) { return mapError(c, e); }
+});
+
 // GET /api/contacts/raise-updates — investor updates posted from the pipeline.
 r.get('/raise-updates', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const scope = await ownedProjectScope(c.env, user);
     const pid = resolveProjectId(scope, c.req.query('project_id'));
@@ -651,7 +1114,7 @@ r.get('/raise-updates', async (c) => {
 // says so explicitly rather than pretending delivery happened.
 r.post('/raise-updates', async (c) => {
   try {
-    const user = await requireRole(c, 'founder');
+    const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
     const scope = await ownedProjectScope(c.env, user);

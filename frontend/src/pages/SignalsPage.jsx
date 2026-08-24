@@ -18,6 +18,8 @@ import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
  * point founders toward?"); the mode toggle changes ordering + copy only.
  */
 export default function SignalsPage({ user }) {
+  // eslint-disable-next-line no-console
+  console.log('[SignalsPage] rendering — user role:', user?.role);
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
   const mode = String(user?.role || '').toLowerCase() === 'advisor' ? 'advisor' : 'founder';
 
@@ -49,6 +51,8 @@ export default function SignalsPage({ user }) {
       setData(list);
       setKpis(k);
     } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[SignalsPage] load failed:', e);
       setError(e.message || 'Failed to load signals.');
     } finally {
       setLoading(false);
@@ -116,6 +120,29 @@ export default function SignalsPage({ user }) {
           )}
         </div>
       </div>
+
+      {/* Data-provenance disclosure. `data_state` comes from the engine:
+          'illustrative' means D1 holds no ingested signals yet and every card
+          below is a curated example — this banner is the required honesty
+          label for that state (audit: "wire the real pipeline or label as
+          illustrative" — we did both). 'live' means every evidence line was
+          fetched from a public source by an ingestion run. */}
+      {data?.data_state === 'illustrative' && (
+        <div
+          data-testid="signals-illustrative-banner"
+          className="flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 px-4 py-2.5 text-sm text-amber-900 dark:text-amber-200"
+        >
+          <Info size={15} className="mt-0.5 shrink-0 text-amber-500" />
+          <span>
+            <strong className="font-semibold">Illustrative examples.</strong>{' '}
+            Live ingestion hasn&rsquo;t populated this environment yet, so these cards are
+            curated examples of what a signal looks like — not live observations.
+            {isAdmin
+              ? ' Run Refresh to ingest real evidence from the public sources.'
+              : ' An admin can switch this to live public-source data.'}
+          </span>
+        </div>
+      )}
 
       {/* Advisor-mode helper strip */}
       {mode === 'advisor' && (

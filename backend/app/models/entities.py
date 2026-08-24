@@ -87,6 +87,14 @@ class TicketPriority(str, Enum):
     URGENT = "urgent"
 
 
+class TicketType(str, Enum):
+    """Task #9 — first-class ticket type, mirrored to GitHub labels
+    bug/feature/task by the production Worker sync."""
+    BUG = "bug"
+    FEATURE = "feature"
+    TASK = "task"
+
+
 class DealStatus(str, Enum):
     APPLIED = "applied"
     SCORED = "scored"
@@ -245,6 +253,9 @@ class Project(SQLModel, table=True):
     why_now: Optional[str] = None
     tam: Optional[float] = None
     sam: Optional[float] = None
+    # Prod parity: Worker migration 069 (deck autofill) added projects.som —
+    # the obtainable-share figure the Demo Day deck's Market slide consumes.
+    som: Optional[float] = None
     users_count: Optional[int] = None
     revenue: Optional[float] = None
     # Task #2 — structured revenue proof surfaced on the Spin-Out Demo Day
@@ -260,6 +271,17 @@ class Project(SQLModel, table=True):
     cost_to_mvp: Optional[float] = None
     funding_needed: Optional[float] = None
     use_of_funds: Optional[str] = None
+    # Use of Funds planning metadata (JSON): alert threshold, milestone→capital
+    # cost mapping, deck/Axal sync timestamps. Mirrors Worker D1 migration 158.
+    use_of_funds_meta: Optional[str] = None
+    # Spin-Out Lab Incorporate workspace state (JSON): entity decision +
+    # override, payment, document/filing statuses, uni-IP checklist.
+    # Mirrors Worker D1 migration 159.
+    incorporation_meta: Optional[str] = None
+    # Spin-Out Lab Co-founder Match decision (JSON): outcome
+    # advance/searching/solo, optional candidate uid, note, follow-ups.
+    # Mirrors Worker D1 migration 162.
+    cofounder_decision_meta: Optional[str] = None
     # Task #31 — Product demo source surfaced on the Spin-Out Demo Day deck's
     # "Product demo" slide (slot 6). Editable on the project detail page.
     product_demo_video_url: Optional[str] = None
@@ -448,6 +470,14 @@ class Partner(SQLModel, table=True):
     featured: bool = Field(default=False, index=True)
     featured_until: Optional[datetime] = None
     featured_tier: Optional[str] = None  # platinum | gold | editor | None
+    # Office-hours booking guidance (partner-authored). Mirrors D1 migration
+    # 160_partner_office_hours_guidance.sql. NULL = not published; the UI
+    # renders an explicit empty state and never invents guidance copy.
+    oh_when_to_book: Optional[str] = None
+    oh_stage_fit: Optional[str] = None
+    oh_session_outcome: Optional[str] = None
+    oh_bring_json: str = "[]"
+    oh_guidance_updated_at: Optional[datetime] = None
 
 
 @event.listens_for(Partner, "before_insert")
@@ -915,6 +945,7 @@ class Ticket(SQLModel, table=True):
     description: Optional[str] = None
     priority: TicketPriority = TicketPriority.MEDIUM
     status: TicketStatus = TicketStatus.OPEN
+    type: Optional[str] = Field(default="task")
     submitted_by: Optional[str] = None
     assigned_to: Optional[str] = None
     user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
@@ -1300,6 +1331,13 @@ class Interview(SQLModel, table=True):
     notes: str = ""                      # Mom-Test interview notes
     hypotheses_json: str = "[]"          # [{hypothesis, status, evidence}]
     pains_json: str = "[]"               # ["pain text", ...]
+    # Assessment fields — mirror the Worker (D1 migrations 072 / 074 / 161).
+    # icp_fit: 'strong' | 'partial' | 'none'; None = not yet assessed, which
+    # is NOT the same as 'none' and must never be counted as a rejection.
+    icp_fit: Optional[str] = None
+    featured: bool = False               # deck-eligible quote
+    validation_rating: Optional[int] = None   # 0-5, solution-fit (not ICP fit)
+    validation_comment: Optional[str] = None
     created_by: Optional[int] = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

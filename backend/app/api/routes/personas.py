@@ -123,7 +123,7 @@ PERSONAS: list[dict[str, Any]] = [
     {
         "id": "founder_new",
         "label": "Founder — New Venture",
-        "short_description": "Founder spinning out a brand-new venture through the 30-day engine.",
+        "short_description": "Founder spinning out a brand-new venture through the 28-day engine.",
         "role_alignment": "founder",
         "email_domain_hints": [],
         "follow_up_questions": [
@@ -258,6 +258,12 @@ def _ensure_personas_schema(db: Session) -> None:
     except Exception:
         db.rollback()
         raise
+    # codeql[py/unused-global-variable] -- _personas_schema_ready is read via the `global _personas_schema_ready` guard at the top of
+    # this same function (`if _personas_schema_ready: return`); the write here is what a LATER,
+    # separate call's read observes. CodeQL's dead-store analysis does not model a global's value
+    # persisting across separate invocations of the function that sets it, so it sees this write as
+    # never consumed. It is: this flag exists specifically to make the schema-migration idempotent-
+    # but-skippable after the first successful request in this process.
     _personas_schema_ready = True
 
 
@@ -295,7 +301,7 @@ def _classify_heuristic(email: str, first_message: str) -> dict[str, Any]:
         "corporate_vc": ["corporate venture", "cvc", "strategic investor"],
         "sovereign_family_office": ["family office", "sovereign", "multi-family"],
         "academic": ["lab", "tech transfer", "research", "professor", "phd"],
-        "founder_new": ["spin out", "spinout", "new venture", "30-day", "incorporate"],
+        "founder_new": ["spin out", "spinout", "new venture", "28-day", "30-day", "incorporate"],
         "founder_existing": ["existing company", "scaling", "series a", "series b"],
         "operator_advisor": ["operator", "advisor", "fractional", "sweat equity"],
         "service_provider": ["law firm", "counsel", "accounting", "legal services"],

@@ -54,7 +54,7 @@ export const Slide16x9: React.FC<React.PropsWithChildren<{
     data-slide-frame=""
     className={`relative ${className}`}
     style={{
-      width: 1920, height: 1080, background: bg, color: ink,
+      width: 1920, height: 1080, boxSizing: 'border-box', background: bg, color: ink,
       fontFamily: font, padding: 96, display: 'flex', flexDirection: 'column',
       pageBreakAfter: 'always',
     }}>

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, requireApprovedKyc, canAccessFounderResource } from '../auth';
+import { requireAuth, requireApprovedKyc, canAccessFounderResource, entityListScope } from '../auth';
 import { seedStandardEventsForJurisdiction } from './compliance';
 import { CONTRACT_DOC_TYPES } from './admin_contracts';
 import { getActiveTemplateBody } from '../services/legalTemplateStore';
@@ -21,6 +21,11 @@ import {
   getIncorporationForUser,
 } from '../services/incorporations';
 import legal83b from './legal_83b';
+import {
+  validateCofounderAgreement,
+  renderCofounderAgreement,
+  totalEquityPct,
+} from '../services/cofounderAgreement';
 
 const legal = new Hono<{ Bindings: Env }>();
 
@@ -720,7 +725,7 @@ legal.get('/incorporate/orders', async (c) => {
   const user = await requireAuth(c);
   await ensureIncorporationsSchema(c.env);
   const rows = await c.env.DB.prepare(
-    `SELECT id, status, jurisdiction_id, company_name, amount_cents, currency, paid_at, created_at
+    `SELECT id, project_id, status, jurisdiction_id, company_name, amount_cents, currency, paid_at, created_at
      FROM incorporations
      WHERE user_id = ? AND status != 'pending_payment'
      ORDER BY created_at DESC
@@ -937,16 +942,132 @@ legal.put('/documents/:id/sign', async (c) => {
   return c.json(safeDoc(updated));
 });
 
-legal.get('/entities', async (c) => {
-  await requireAuth(c);
+/**
+ * POST /legal/cofounder-agreement — generate a founder-terms agreement.
+ *
+ * This existed only in the Replit-dev FastAPI service, which CLAUDE.md is
+ * explicit is never deployed — so on production it 404'd for every caller and
+ * the Co-Founder Agreement tool's entire namesake action did nothing, on both
+ * /spinout-lab/cofounder-agreement and /incorporate/cofounder-agreement (they
+ * post the same payload to the same method).
+ *
+ * The document assembly lives in services/cofounderAgreement.ts, both so it is
+ * unit-testable without this file's heavy import graph — the same reason
+ * legal_83b is a sub-app — and so the template stays a local constant. It must
+ * NOT route through POST /templates/:key/generate: D1 already carries an active
+ * `cofounder_agreement` row in `legal_templates` with a different two-party
+ * {{dotted.path}} vocabulary, `getActiveTemplateBody` prefers the stored body
+ * over any inline one, and `applyMergeFields` leaves unresolved tokens as
+ * literals — so that path would hand a founder a legal document reading
+ * {{founder.legal_name}} with none of the terms they just entered.
+ */
+legal.post('/cofounder-agreement', async (c) => {
+  const user = await requireAuth(c);
+  const parsed = validateCofounderAgreement(await c.req.json().catch(() => null));
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const value = parsed.value;
+
   const sql = getSQL(c.env);
-  const entities = await sql`SELECT * FROM entities ORDER BY created_at DESC`;
+  const projRows = await sql`SELECT id, founder_id FROM projects WHERE id = ${value.project_id}`;
+  if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
+  const project = projRows[0] as any;
+
+  // Same rule as /incorporate/wizard, and the same rule the FastAPI original
+  // enforced: admin/partner, or the founder who owns this project. Investors
+  // are NOT privileged on this write path — a co-founder agreement records who
+  // owns the company, so writing one against a project you do not own is a
+  // cross-project IDOR, not a read-path convenience.
+  if (user.role !== 'admin' && user.role !== 'partner') {
+    const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
+    if (!ownsProject) {
+      await sql.end();
+      return c.json({ error: 'Forbidden: you do not own this project' }, 403);
+    }
+  }
+
+  const content = renderCofounderAgreement(value);
+  const title = `Co-Founder Agreement — ${value.company_name}`;
+  // `template_name` must stay exactly 'cofounder_agreement': the Lab page
+  // refreshes its list after generating and filters on that literal, so any
+  // other value saves the document but hides it from the founder.
+  const [doc] = await sql`
+    INSERT INTO documents (project_id, title, doc_type, status, content, template_name)
+    VALUES (${project.id}, ${title}, 'other', 'generated', ${content}, 'cofounder_agreement')
+    RETURNING id, uid, title, template_name`;
+  await sql.end();
+
+  // The /incorporate page dereferences `result.document.title` unguarded, so
+  // this envelope (and the 200, not 201) is part of the contract.
+  return c.json({
+    ok: true,
+    document: doc,
+    summary: {
+      founders: value.founders.length,
+      total_equity_pct: totalEquityPct(value.founders),
+      vesting_years: value.vesting_years,
+      cliff_months: value.cliff_months,
+      acceleration: value.acceleration,
+    },
+  });
+});
+
+/**
+ * Cross-tenant read guard.
+ *
+ * This was `SELECT * FROM entities` behind a bare `requireAuth`, so every
+ * authenticated principal received every incorporated company in the studio:
+ * legal name, jurisdiction, incorporation date, and the `parent_id` chain that
+ * discloses who owns what. Nothing had to be tampered with to trigger it — the
+ * /legal page loads entities in the same `Promise.all` as /legal/documents, and
+ * `GET /documents` (170 lines up) was already scoped correctly. The two routes
+ * disagreed inside one file.
+ *
+ * `entities` carries no owner column; the link is `projects.entity_id`, so an
+ * entity belongs to the founder whose project points at it. Scoping therefore
+ * mirrors `canAccessFounderResource`: admin/partner are studio-wide staff and
+ * keep the full list, a founder sees only entities reachable from their own
+ * projects, and every other role sees none — unlike the projects list there is
+ * no masked entity view to fall back on, so the safe default is empty.
+ *
+ * The `IN (SELECT ...)` shape rather than a JOIN is deliberate: two of a
+ * founder's projects may share one holding entity, and a JOIN would return it
+ * twice.
+ */
+legal.get('/entities', async (c) => {
+  const user = await requireAuth(c);
+  const scope = entityListScope(user);
+  if (scope.kind === 'none') return c.json([]);
+  const sql = getSQL(c.env);
+  const entities = scope.kind === 'all'
+    ? await sql`SELECT * FROM entities ORDER BY created_at DESC`
+    : await sql`
+        SELECT * FROM entities
+        WHERE id IN (
+          SELECT entity_id FROM projects
+          WHERE founder_id = ${scope.founderId} AND entity_id IS NOT NULL
+        )
+        ORDER BY created_at DESC`;
   await sql.end();
   return c.json(entities);
 });
 
+/**
+ * Staff-only, and the write half of the same hole: this had no ownership check
+ * at all, so any authenticated principal could graft a row into the corporate
+ * tree — including one whose `parent_id` points at another founder's holding
+ * company.
+ *
+ * Restricting to staff costs nothing: no caller exists (`api.js` exposes only
+ * `listEntities`), and the legitimate way a founder's entity comes into being
+ * is POST /incorporate, which creates it under that project's own ownership
+ * check and links it via `projects.entity_id`. An entity minted here is
+ * unreachable from the scoped GET above anyway, since nothing points at it.
+ */
 legal.post('/entities', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
+  if (user.role !== 'admin' && user.role !== 'partner') {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
   const data = await c.req.json();
   const sql = getSQL(c.env);
   const [entity] = await sql`INSERT INTO entities (name, entity_type, parent_id, jurisdiction) VALUES (${data.name}, ${data.entity_type}, ${data.parent_id || null}, ${data.jurisdiction || null}) RETURNING *`;

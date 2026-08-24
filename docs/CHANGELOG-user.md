@@ -3,6 +3,10 @@
 A plain-English summary of recent changes to StudioOS, written for
 everyone using the platform. Newest changes are at the top.
 
+## Spin-Out Lab applications now update automatically
+
+The "Apply to Cohort" section on the Spin-Out Lab page now shows the correct cohort number and application deadline without any manual updates. The deadline is always 7 days before the 1st of the cohort month. Cohort numbers advance automatically each month, and workspace access is still granted at midnight Delaware time on the 1st of each cohort month.
+
 ---
 
 ## New: a guided "Discovery" chat and a Products page for Exploring members

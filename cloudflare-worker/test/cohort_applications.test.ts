@@ -1,0 +1,301 @@
+/**
+ * Cohort Application Deadlines — pure-core unit tests.
+ *
+ * Covers the spec's mandated cases:
+ *   • Close deadline = 7 days before the 1st at 23:59:59 America/New_York,
+ *     DST-correct in both directions (March spring-forward, November
+ *     fall-back cohorts).
+ *   • Late submissions targeting a closed cycle are rejected with the next
+ *     eligible cycle attached; untargeted submissions auto-land in the
+ *     earliest open cycle (skipping the closed one during review windows).
+ *   • Low-capacity rollover decision: below-minimum postpones unless
+ *     force_proceed is set; empty cycles never postpone.
+ *   • Idempotent notifications: the ledger's UNIQUE claim means a re-run
+ *     of the same (user, cycle, type) never sends twice.
+ *
+ * Run with the strip-types loader (same as test:drift's ts group):
+ *   node --experimental-strip-types --no-warnings \
+ *     --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *     --test cloudflare-worker/test/cohort_applications.test.ts
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  applicationWindowFor,
+  resolveApplicationTarget,
+  capacityDecision,
+  nextYearMonth,
+  monthLabel,
+  notifyOnce,
+  claimDecisionEmail,
+} from '../src/services/cohortApplications.ts';
+
+// ---------------------------------------------------------------------------
+// Deadline math — 7 days before the 1st, 23:59:59 ET, DST-correct
+// ---------------------------------------------------------------------------
+
+test('August 2026 window: closes July 25 23:59:59 EDT (03:59:59Z next day)', () => {
+  const w = applicationWindowFor(2026, 8);
+  // Opens July 1 00:00 EDT → 04:00 UTC.
+  assert.equal(w.openMs, Date.UTC(2026, 6, 1, 4));
+  // Closes July 25 23:59:59 EDT (UTC-4) → July 26 03:59:59 UTC.
+  assert.equal(w.closeMs, Date.UTC(2026, 6, 26, 3, 59, 59));
+  // Cohort starts Aug 1 00:00 EDT → 04:00 UTC.
+  assert.equal(w.startMs, Date.UTC(2026, 7, 1, 4));
+});
+
+test('March 2026 cohort (EST close): Feb 22 23:59:59 EST → 04:59:59Z next day', () => {
+  const w = applicationWindowFor(2026, 3);
+  // Feb 22 is deep EST (UTC-5) — spring-forward is Mar 8, after the close.
+  assert.equal(w.closeMs, Date.UTC(2026, 1, 23, 4, 59, 59));
+  // Start Mar 1 00:00 EST → 05:00 UTC.
+  assert.equal(w.startMs, Date.UTC(2026, 2, 1, 5));
+});
+
+test('November 2026 cohort (EDT close, EST later): Oct 25 23:59:59 EDT → 03:59:59Z', () => {
+  const w = applicationWindowFor(2026, 11);
+  // Oct 25 is still EDT (fall-back is Nov 1) → UTC-4.
+  assert.equal(w.closeMs, Date.UTC(2026, 9, 26, 3, 59, 59));
+  // Start Nov 1 00:00 EDT → 04:00 UTC.
+  assert.equal(w.startMs, Date.UTC(2026, 10, 1, 4));
+});
+
+test('January cohort window opens Dec 1 of the previous year (month underflow)', () => {
+  const w = applicationWindowFor(2027, 1);
+  // Dec 1 2026 00:00 EST → 05:00 UTC.
+  assert.equal(w.openMs, Date.UTC(2026, 11, 1, 5));
+  // Close Dec 25 2026 23:59:59 EST → Dec 26 04:59:59 UTC.
+  assert.equal(w.closeMs, Date.UTC(2026, 11, 26, 4, 59, 59));
+});
+
+// ---------------------------------------------------------------------------
+// Target resolution — late submissions hard-blocked
+// ---------------------------------------------------------------------------
+
+test('one second before close: targeted submission accepted', () => {
+  const close = applicationWindowFor(2026, 8).closeMs;
+  const t = resolveApplicationTarget(close - 1000, { year: 2026, month: 8 });
+  assert.equal(t.ok, true);
+});
+
+test('at/after close: targeted submission rejected with next eligible cycle', () => {
+  const close = applicationWindowFor(2026, 8).closeMs;
+  const t = resolveApplicationTarget(close, { year: 2026, month: 8 });
+  assert.equal(t.ok, false);
+  if (!t.ok) {
+    assert.deepEqual(t.closed, { year: 2026, month: 8 });
+    assert.equal(t.next.year, 2026);
+    assert.equal(t.next.month, 9);
+  }
+});
+
+test('untargeted submission during the review window lands in the month after next', () => {
+  // July 28 2026 12:00 UTC — after the Aug close (Jul 26 03:59:59Z),
+  // before Aug 1. Next eligible cohort is September.
+  const t = resolveApplicationTarget(Date.UTC(2026, 6, 28, 12));
+  assert.equal(t.ok, true);
+  if (t.ok) {
+    assert.equal(t.year, 2026);
+    assert.equal(t.month, 9);
+  }
+});
+
+test('untargeted submission mid-month lands in next month while its window is open', () => {
+  // July 10 2026 — August window still open.
+  const t = resolveApplicationTarget(Date.UTC(2026, 6, 10, 12));
+  assert.equal(t.ok, true);
+  if (t.ok) assert.equal(t.month, 8);
+});
+
+test('December → January year rollover', () => {
+  // Dec 28 2026 (after Dec 25 close for January 2027? no — close for Jan
+  // 2027 is Dec 25): applying Dec 28 targets February 2027.
+  const t = resolveApplicationTarget(Date.UTC(2026, 11, 28, 12));
+  assert.equal(t.ok, true);
+  if (t.ok) {
+    assert.equal(t.year, 2027);
+    assert.equal(t.month, 2);
+  }
+  assert.deepEqual(nextYearMonth(2026, 12), { year: 2027, month: 1 });
+});
+
+test('monthLabel renders human-readable cohort names', () => {
+  assert.equal(monthLabel(2026, 8), 'August 2026');
+  assert.equal(monthLabel(2027, 1), 'January 2027');
+});
+
+// ---------------------------------------------------------------------------
+// Capacity decision
+// ---------------------------------------------------------------------------
+
+test('capacityDecision: below minimum postpones', () => {
+  assert.equal(capacityDecision(2, 5, 4, false), 'postpone');
+});
+
+test('capacityDecision: at/above minimum proceeds', () => {
+  assert.equal(capacityDecision(4, 6, 4, false), 'proceed');
+  assert.equal(capacityDecision(7, 7, 4, false), 'proceed');
+});
+
+test('capacityDecision: force_proceed overrides the minimum', () => {
+  assert.equal(capacityDecision(1, 3, 4, true), 'proceed');
+});
+
+test('capacityDecision: an empty cycle never postpones (nothing to combine)', () => {
+  assert.equal(capacityDecision(0, 0, 4, false), 'proceed');
+});
+
+// ---------------------------------------------------------------------------
+// Fake D1 — UNIQUE-dedupes the notification ledger so idempotency is
+// observable; records every prepared statement + bindings.
+// ---------------------------------------------------------------------------
+
+type Call = { sql: string; binds: unknown[] };
+
+function fakeEnv() {
+  const calls: Call[] = [];
+  const ledgerKeys = new Set<string>();
+  const env = {
+    DB: {
+      prepare(sql: string) {
+        return {
+          bind(...binds: unknown[]) {
+            return {
+              async run() {
+                calls.push({ sql, binds });
+                if (sql.includes('INSERT OR IGNORE INTO cohort_app_notification_ledger')) {
+                  const key = binds.join('|');
+                  if (ledgerKeys.has(key)) return { meta: { changes: 0 } };
+                  ledgerKeys.add(key);
+                  return { meta: { changes: 1 } };
+                }
+                return { meta: { changes: 1 } };
+              },
+              async first() { calls.push({ sql, binds }); return null; },
+              async all() { calls.push({ sql, binds }); return { results: [] }; },
+            };
+          },
+          async run() { calls.push({ sql, binds: [] }); return { meta: { changes: 1 } }; },
+          async first() { calls.push({ sql, binds: [] }); return null; },
+          async all() { calls.push({ sql, binds: [] }); return { results: [] }; },
+        };
+      },
+    },
+  };
+  return { env: env as never, calls };
+}
+
+test('notifyOnce sends exactly once per (user, cycle, type) — re-runs are no-ops', async () => {
+  const { env } = fakeEnv();
+  const args = { userId: 7, cycleId: 3, notifType: 'workspace_live', title: 't', body: 'b' };
+  const first = await notifyOnce(env, args);
+  const second = await notifyOnce(env, args);
+  const otherType = await notifyOnce(env, { ...args, notifType: 'cohorts_combined' });
+  const otherUser = await notifyOnce(env, { ...args, userId: 8 });
+  assert.equal(first, true);
+  assert.equal(second, false); // idempotent re-run
+  assert.equal(otherType, true);
+  assert.equal(otherUser, true);
+});
+
+// ---------------------------------------------------------------------------
+// Admission decision email dedupe — both admin decide surfaces (the cohort
+// route and the legacy spinout-applications route) call claimDecisionEmail
+// before sending spinout_admitted/spinout_refused; only the first claim per
+// (user, cycle, decision) may send, regardless of which surface goes first.
+// ---------------------------------------------------------------------------
+
+test('claimDecisionEmail: cohort route decides, then legacy route — one email', async () => {
+  const { env } = fakeEnv();
+  const cohortRoute = await claimDecisionEmail(env, 7, 3, 'approved');
+  const legacyRoute = await claimDecisionEmail(env, 7, 3, 'approved');
+  assert.equal(cohortRoute, true);  // sends
+  assert.equal(legacyRoute, false); // suppressed
+});
+
+test('claimDecisionEmail: legacy route decides, then cohort route — one email', async () => {
+  const { env } = fakeEnv();
+  const legacyRoute = await claimDecisionEmail(env, 7, 3, 'rejected');
+  const cohortRoute = await claimDecisionEmail(env, 7, 3, 'rejected');
+  assert.equal(legacyRoute, true);
+  assert.equal(cohortRoute, false);
+});
+
+test('claimDecisionEmail: distinct decision/cycle/user keys claim independently', async () => {
+  const { env } = fakeEnv();
+  assert.equal(await claimDecisionEmail(env, 7, 3, 'approved'), true);
+  assert.equal(await claimDecisionEmail(env, 7, 3, 'rejected'), true);  // different decision
+  assert.equal(await claimDecisionEmail(env, 7, 4, 'approved'), true);  // different cycle
+  assert.equal(await claimDecisionEmail(env, 8, 3, 'approved'), true);  // different user
+  assert.equal(await claimDecisionEmail(env, 7, 3, 'approved'), false); // exact repeat
+});
+
+// ---------------------------------------------------------------------------
+// Admission PARITY between the two decide surfaces.
+//
+// The two engines sit one tab apart in AdminSpinoutLab.jsx and are already
+// hand-synced on status and on the email ledger — but they used to diverge on
+// the thing that matters most: the legacy route stopped at `admitted = 1` and
+// left `spinout_lab_active` at 0, so the founder clicked "Start Week 1" and
+// `startLab()` stamped `spinout_lab_started_at` with their CLICK time.
+//
+// That drift is silent and consequential. `getCohortGate` resolves a founder's
+// cycle by `start_at <= started_at < end_at`, so an early starter resolves to
+// the PREVIOUS cycle — whose week windows have already expired, unlocking all
+// four weeks at once — or to no cycle at all. And the admin review/at-risk
+// queues count participants by `started_at BETWEEN cycle.start_at AND
+// cycle.end_at`, so that founder stops appearing in their own cohort.
+//
+// These are source-level assertions (the same technique the market-intel
+// gating tests use) because the write lives in a route handler inside
+// admin.ts, whose import graph the strip-types gate cannot load. What they pin
+// is the invariant a future edit would break: both paths bind `started_at` to
+// the CYCLE's start instant, and both guard against re-stamping a founder who
+// is already running.
+// ---------------------------------------------------------------------------
+
+import { readFileSync } from 'node:fs';
+
+const ADMIN_SRC = readFileSync(new URL('../src/routes/admin.ts', import.meta.url), 'utf8');
+const CRON_SRC = readFileSync(new URL('../src/services/cohortApplications.ts', import.meta.url), 'utf8');
+
+/** The activation write, normalised so formatting differences don't matter. */
+const ACTIVATION = /UPDATE users SET spinout_lab_active = 1, spinout_lab_week = 1, spinout_lab_started_at = \?\s+WHERE id = \? AND \(spinout_lab_active IS NULL OR spinout_lab_active = 0\)/;
+
+test('the cron activates with a started_at bind and an already-active guard', () => {
+  assert.match(CRON_SRC, ACTIVATION, 'activateDueCycles is the reference implementation');
+});
+
+test('the legacy decide route performs the SAME activation write as the cron', () => {
+  assert.match(
+    ADMIN_SRC, ACTIVATION,
+    'a legacy accept must land the founder in the same state the cron would, or week-gating drifts',
+  );
+});
+
+test('the legacy route binds started_at to the cycle start, never to now()', () => {
+  // The specific regression: `datetime('now')` here would reintroduce exactly
+  // the drift this fix removes, while still looking correct in review.
+  const activation = ADMIN_SRC.slice(ADMIN_SRC.search(ACTIVATION));
+  const bindLine = activation.slice(0, 400);
+  assert.match(bindLine, /\.bind\(cycle\.start_at, app\.user_id\)/, 'bound to the cycle instant');
+  assert.ok(
+    !/spinout_lab_started_at = datetime\('now'\)/.test(ADMIN_SRC),
+    'started_at must never be stamped with the decision time',
+  );
+});
+
+test('the legacy route retires the applicant so the cron does not re-admit', () => {
+  assert.match(
+    ADMIN_SRC,
+    /UPDATE cohort_applicants SET status = 'activated'[\s\S]{0,160}WHERE application_id = \? AND status = 'approved'/,
+    "hand-activating without retiring the 'approved' row leaves the cron a second admission to perform",
+  );
+});
+
+test('activation is skipped when no cycle is known, rather than guessing a date', () => {
+  // An un-migrated dev DB (or an application never pinned to a cycle) has no
+  // calendar to clamp to, and getCohortGate treats those founders as un-gated
+  // anyway — so the old admitted-only behaviour is correct there.
+  assert.match(ADMIN_SRC, /if \(cycle\) \{/, 'the activation block is cycle-conditional');
+});

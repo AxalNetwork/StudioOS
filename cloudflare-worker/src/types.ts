@@ -129,6 +129,14 @@ export interface Env {
   GITHUB_REPO_OWNER?: string;
   GITHUB_REPO_NAME?: string;
   GITHUB_ISSUES_TOKEN?: string;
+  // Task #9 — ticket↔GitHub sync loop prevention + assignee mapping.
+  // GITHUB_SYNC_BOT_LOGIN: the GitHub login of the identity behind
+  // GITHUB_ACCESS_TOKEN; webhook events from this actor are our own echoes
+  // and are dropped. ADMIN_GITHUB_LOGINS: JSON map of local assignee
+  // (name or email, case-insensitive) → GitHub login, e.g.
+  // {"kim@axal.vc":"kim-axal"}. Unmapped assignees skip the GitHub call.
+  GITHUB_SYNC_BOT_LOGIN?: string;
+  ADMIN_GITHUB_LOGINS?: string;
   // Shared secret used to verify inbound GitHub webhook deliveries
   // (X-Hub-Signature-256). Set via the admin GitHub panel or wrangler.
   GITHUB_WEBHOOK_SECRET?: string;
@@ -401,7 +409,9 @@ export interface User {
   uid: string;
   email: string;
   name: string;
-  role: 'admin' | 'founder' | 'partner' | 'investor';
+  // 'exploring' = Spin-Out Lab holding role (Task #9 onboarding queue) — it
+  // authenticates like any other role, so it belongs in the union.
+  role: 'admin' | 'founder' | 'partner' | 'investor' | 'exploring';
   investor_id?: number | null;
   password_hash: string | null;
   founder_id: number | null;
@@ -413,6 +423,9 @@ export interface User {
   kyc_status: string | null;
   created_at: string;
   jwt_min_iat?: number | null;
+  // Spin-Out Lab membership (getCurrentUser does SELECT *, so the row carries
+  // it). Lab members may edit their OWN project regardless of account role.
+  spinout_lab_active?: number | null;
 }
 
 export interface JWTPayload {

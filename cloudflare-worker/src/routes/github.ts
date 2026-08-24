@@ -1,27 +1,34 @@
 /**
- * Inbound GitHub webhook. Mounted at `/api/github`.
+ * Inbound GitHub webhook — the GitHub→Platform half of the ticket sync
+ * (Task #9). Mounted at `/api/github`.
  *
  *   POST /webhook  → verify X-Hub-Signature-256 against GITHUB_WEBHOOK_SECRET,
- *                    then on issue closed/reopened/edited update the matching
- *                    ticket's status by github_issue_number.
+ *                    then:
+ *     - `issues` closed/reopened/edited          → ticket status + snapshots
+ *     - `issues` labeled/unlabeled               → ticket priority/type + label snapshot
+ *     - `issues` assigned/unassigned             → assignee snapshot
+ *     - `issue_comment` created                  → bump updated_at + notify owner
+ *
+ * Loop prevention:
+ *   - deliveries are deduped by the `X-GitHub-Delivery` GUID via the
+ *     ticket_sync_events table (INSERT OR IGNORE);
+ *   - events whose body carries the axal-sync source marker, or whose sender
+ *     matches GITHUB_SYNC_BOT_LOGIN (the token identity), are acknowledged
+ *     and dropped — they are echoes of our own outbound writes.
  *
  * Public (no auth) but signature-verified. Non-issue events, unknown issue
- * numbers, and irrelevant actions are acknowledged without changes so GitHub
+ * numbers, and irrelevant actions are acknowledged with 2xx so GitHub
  * doesn't retry. Pull-based sync in routes/tickets.ts remains the fallback.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import {
+  ensureTicketSyncSchema, recordSyncEvent, releaseSyncEvent, sha256Hex,
+  mapGithubStatusToLocal, parseLabelsFromGithub, hasSyncMarker,
+} from '../services/githubSync';
 
 const github = new Hono<{ Bindings: Env }>();
-
-function mapGithubStatusToLocal(ghState: string, ghStateReason?: string): string {
-  if (ghState === 'closed') {
-    if (ghStateReason === 'not_planned') return 'closed';
-    return 'resolved';
-  }
-  return 'open';
-}
 
 // Constant-time-ish compare over hex strings of equal length.
 function timingSafeEqual(a: string, b: string): boolean {
@@ -45,6 +52,8 @@ async function verifySignature(secret: string, raw: ArrayBuffer, header: string 
   return timingSafeEqual(`sha256=${hex}`, header.trim());
 }
 
+const ISSUE_ACTIONS = ['closed', 'reopened', 'edited', 'labeled', 'unlabeled', 'assigned', 'unassigned'];
+
 github.post('/webhook', async (c) => {
   const secret = c.env.GITHUB_WEBHOOK_SECRET;
   if (!secret) return c.json({ error: 'webhook_secret_not_configured' }, 503);
@@ -56,7 +65,7 @@ github.post('/webhook', async (c) => {
   }
 
   const event = c.req.header('X-GitHub-Event');
-  if (event !== 'issues') {
+  if (event !== 'issues' && event !== 'issue_comment') {
     return c.json({ ok: true, ignored: event || 'unknown' });
   }
 
@@ -71,28 +80,121 @@ github.post('/webhook', async (c) => {
   const issue = payload?.issue || {};
   const issueNumber = issue?.number;
   if (!issueNumber) return c.json({ ok: true, ignored: 'no_issue_number' });
-  if (!['closed', 'reopened', 'edited'].includes(action)) {
+
+  if (event === 'issues' && !ISSUE_ACTIONS.includes(action)) {
+    return c.json({ ok: true, ignored: `action:${action}` });
+  }
+  if (event === 'issue_comment' && action !== 'created') {
     return c.json({ ok: true, ignored: `action:${action}` });
   }
 
-  const newStatus = mapGithubStatusToLocal(issue.state, issue.state_reason);
+  // Loop prevention — drop echoes of our own outbound writes.
+  const senderLogin: string | null = payload?.sender?.login || null;
+  const botLogin = (c.env as any).GITHUB_SYNC_BOT_LOGIN as string | undefined;
+  if (botLogin && senderLogin && senderLogin.toLowerCase() === botLogin.toLowerCase()) {
+    return c.json({ ok: true, ignored: 'sync_bot_actor' });
+  }
+  // Only COMMENT bodies are marker-dropped: our issue bodies always carry the
+  // marker, but a human closing/labeling that issue must still sync back.
+  if (event === 'issue_comment' && hasSyncMarker(payload?.comment?.body)) {
+    return c.json({ ok: true, ignored: 'sync_marker' });
+  }
+
+  await ensureTicketSyncSchema(c.env);
+
+  // Idempotency — GitHub redelivers on timeouts; dedupe by delivery GUID.
+  // Claim-then-release: the GUID is claimed up front, and RELEASED in the
+  // catch below if the ticket mutation fails, so a GitHub retry of the same
+  // delivery is reprocessed instead of being swallowed as a duplicate.
+  const delivery = c.req.header('X-GitHub-Delivery') || null;
+  const deliveryKey = delivery ? `gh:${delivery}` : null;
+  if (deliveryKey) {
+    const firstSeen = await recordSyncEvent(c.env, {
+      issueNumber,
+      direction: 'inbound',
+      eventKey: deliveryKey,
+      payloadHash: await sha256Hex(`${event}:${action}:${issueNumber}`),
+    });
+    if (!firstSeen) {
+      return c.json({ ok: true, ignored: 'duplicate_delivery', delivery });
+    }
+  }
+
   const sql = getSQL(c.env);
   try {
-    const rows = await sql`SELECT id, status FROM tickets WHERE github_issue_number = ${issueNumber}`;
+    const rows = await sql`SELECT id, status, priority, type, user_id, title, github_updated_at FROM tickets WHERE github_issue_number = ${issueNumber}`;
     if (rows.length === 0) {
       await sql.end();
       return c.json({ ok: true, ignored: 'no_matching_ticket', issue: issueNumber });
     }
     const ticket = rows[0];
-    if (ticket.status !== newStatus) {
-      await sql`UPDATE tickets SET status = ${newStatus}, updated_at = datetime('now') WHERE id = ${ticket.id}`;
+
+    if (event === 'issue_comment') {
+      // Comments are GitHub-canonical (detail view hydrates live); just bump
+      // freshness and page the ticket owner.
+      await sql`UPDATE tickets SET updated_at = datetime('now') WHERE id = ${ticket.id}`;
+      try {
+        if (ticket.user_id) {
+          const { notify } = await import('../services/notify');
+          await notify(c.env, {
+            userId: ticket.user_id,
+            type: 'ticket_update',
+            title: `New comment on ticket #${ticket.id}`,
+            body: `${senderLogin || 'Someone'} commented on "${ticket.title}".`,
+            link: '/tickets',
+            payload: { ticket_id: ticket.id, github_comment_id: payload?.comment?.id },
+            channels: ['in_app'],
+          });
+        }
+      } catch (e) { console.warn('[github] notify comment failed', e); }
       await sql.end();
-      return c.json({ ok: true, updated: true, ticket_id: ticket.id, status: newStatus });
+      return c.json({ ok: true, updated: true, ticket_id: ticket.id, event: 'comment' });
     }
+
+    // `issues` events — compute the full desired local state from the issue
+    // payload and apply it as an absolute write. Out-of-order protection:
+    // drop deliveries whose issue.updated_at is older than the last applied
+    // one, so a delayed stale event can't revert newer state.
+    const issueUpdatedAt: string | null = issue.updated_at || null;
+    if (issueUpdatedAt && ticket.github_updated_at && issueUpdatedAt < ticket.github_updated_at) {
+      await sql.end();
+      return c.json({ ok: true, ignored: 'stale_event', issue: issueNumber });
+    }
+    const newStatus = mapGithubStatusToLocal(issue.state, issue.state_reason);
+    const parsed = parseLabelsFromGithub(issue.labels);
+    const labelsSnap = JSON.stringify(parsed.names);
+    const assigneesSnap = JSON.stringify((issue.assignees || []).map((a: any) => a?.login).filter(Boolean));
+    const newPriority = parsed.priority || ticket.priority;
+    const newType = parsed.type || ticket.type || 'task';
+
+    const changed = newStatus !== ticket.status || newPriority !== ticket.priority || newType !== ticket.type;
+    await sql`UPDATE tickets SET status = ${newStatus}, priority = ${newPriority}, type = ${newType}, github_labels = ${labelsSnap}, github_assignees = ${assigneesSnap}, github_updated_at = ${issueUpdatedAt}, updated_at = datetime('now') WHERE id = ${ticket.id}`;
+
+    // Notify the owner on meaningful state flips they didn't cause.
+    if (changed && newStatus !== ticket.status) {
+      try {
+        if (ticket.user_id) {
+          const { notify } = await import('../services/notify');
+          await notify(c.env, {
+            userId: ticket.user_id,
+            type: 'ticket_update',
+            title: `Ticket #${ticket.id} updated`,
+            body: `Status: ${newStatus}.`,
+            link: '/tickets',
+            payload: { ticket_id: ticket.id, status: newStatus },
+            channels: ['in_app'],
+          });
+        }
+      } catch (e) { console.warn('[github] notify status failed', e); }
+    }
+
     await sql.end();
-    return c.json({ ok: true, updated: false, ticket_id: ticket.id, status: newStatus });
+    return c.json({ ok: true, updated: changed, ticket_id: ticket.id, status: newStatus, priority: newPriority, type: newType });
   } catch (e: any) {
     try { await sql.end(); } catch { /* noop */ }
+    // Release the delivery claim so GitHub's retry of this delivery is
+    // reprocessed rather than dropped as a duplicate.
+    if (deliveryKey) await releaseSyncEvent(c.env, deliveryKey);
     return c.json({ error: 'db_error', detail: String(e?.message || e).slice(0, 200) }, 500);
   }
 });

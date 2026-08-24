@@ -10,17 +10,21 @@
 //
 // Tools live INSIDE this page (per the design) — the app sidebar stays the
 // user's normal navigation and is never replaced by lab-specific links.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
+  Award,
   Banknote,
   Building2,
   CalendarCheck,
   Check,
+  Fingerprint,
   ChevronDown,
   ClipboardCheck,
+  Clock,
   Compass,
+  DollarSign,
   FileSignature,
   FileText,
   FlaskConical,
@@ -32,6 +36,7 @@ import {
   Palette,
   PieChart,
   Presentation,
+  Radar,
   Rocket,
   ShieldCheck,
   Users,
@@ -43,26 +48,71 @@ const SPRINT_DAYS = 28;
 // spinout_lab.py MILESTONES / Worker spinoutLabCatalog.ts). Routes reuse the
 // same in-app destinations the old lab sidebar linked to.
 export const TOOL_INFO = {
-  projects: { label: 'Startups', to: '/projects', desc: 'Your company record and founding team', icon: Building2 },
-  'customer-discovery': { label: 'Customer Discovery', to: '/build/discovery', desc: 'Interview log and ICP tracker', icon: MessagesSquare },
-  'market-intelligence': { label: 'Market Intel', to: '/market-intel', desc: 'TAM / SAM research and sizing', icon: Compass },
-  roadmap: { label: 'Roadmap', to: '/build/roadmap', desc: 'OKRs, milestones, and MVP scope', icon: MapIcon },
-  'brand-builder': { label: 'Brand & Landing Pages', to: '/build/brand', desc: 'Create landing pages for your audience', icon: Palette },
-  'pitch-deck': { label: 'Pitch Deck Builder', to: '/build/deck', desc: 'Auto-assemble your venture pitch deck', icon: Presentation },
-  scoring: { label: 'Scoring Engine', to: '/scoring', desc: 'Venture-readiness diligence', icon: Gauge },
-  advisors: { label: 'Advisors', to: '/advisors', desc: 'Matched advisor network', icon: Users },
-  // Booking lives on the Advisors directory — /office-hours is the
-  // advisor-side ops console, the wrong surface for a lab founder.
-  'office-hours': { label: 'Office Hours', to: '/advisors', desc: 'Book partner sessions', icon: CalendarCheck },
-  'cofounder-match': { label: 'Co-founder Match', to: '/cofounder', desc: 'Co-founder sourcing', icon: Users },
-  incorporate: { label: 'Incorporate', to: '/incorporate', desc: 'Entity formation', icon: Landmark },
-  captable: { label: 'Cap Table', to: '/build/captable', desc: 'Founder stock & vesting', icon: PieChart },
-  'section-83b': { label: '83(b) Election', to: '/incorporate/83b', desc: 'File within 30 days of your stock grant', icon: FileText },
-  'cofounder-agreement': { label: 'Co-founder Agreement', to: '/incorporate/cofounder-agreement', desc: 'Signed founder terms', icon: FileSignature },
+  // The lab-facing company record page (design: workspace tool pages); the
+  // raw /projects list stays reachable from it via "Edit record".
+  projects: { label: 'Startups', to: '/spinout-lab/startup', desc: 'Your company record and founding team', icon: Building2 },
+  // Lab-facing discovery dashboard (design: workspace tool pages); the raw
+  // interview-logging tool at /build/discovery stays reachable from it.
+  'customer-discovery': { label: 'Customer Discovery', to: '/spinout-lab/discovery', desc: 'Interview log and ICP tracker', icon: MessagesSquare },
+  // Lab-facing market page (design: workspace tool pages); the platform-wide
+  // investor/partner MI dashboard stays at /market-intel.
+  'market-intelligence': { label: 'Market Intel', to: '/spinout-lab/market', desc: 'TAM / SAM research and sizing', icon: Compass },
+  // Week-3 investor-signals surface. The design shows "MI — Investor Signals"
+  // as its own Week-3 card; the app consolidated it into the Market Intel
+  // page's investor-fit section, so it links there. `uncounted` keeps it out of
+  // the scorecard's per-week tool totals (the design's own scorecard excludes
+  // it — Week 3 reads "5 of 5"), and `unlockWeek` gates it to Week 3 since it
+  // has no standalone backend feature flag.
+  misignals: { label: 'MI — Investor Signals', to: '/spinout-lab/market', desc: 'Full investor intelligence', icon: Radar, uncounted: true, unlockWeek: 3 },
+  // Lab-facing founder profiling report (design: workspace tool pages);
+  // reads the Studio-built skills/values/archetype profile.
+  profiling: { label: 'Profiling', to: '/spinout-lab/profiling', desc: 'Skills, values, archetypes, and assessment progress', icon: Fingerprint },
+  // Lab-facing roadmap page (design: workspace tool pages); the raw kanban
+  // stays reachable at /build/roadmap via the page's "Kanban view" button.
+  roadmap: { label: 'Roadmap', to: '/spinout-lab/roadmap', desc: 'OKRs, milestones, and MVP scope', icon: MapIcon },
+  'brand-builder': { label: 'Brand & Landing Pages', to: '/spinout-lab/brand', desc: 'Create landing pages for your audience', icon: Palette },
+  'pitch-deck': { label: 'Pitch Deck Builder', to: '/spinout-lab/pitch-deck', desc: 'Auto-assemble your venture pitch deck', icon: Presentation },
+  // Lab-facing readiness report + practice runs (design: workspace tool
+  // pages); the partner/admin scoring console stays at /scoring.
+  scoring: { label: 'Scoring Engine', to: '/spinout-lab/scoring', desc: 'Venture-readiness diligence', icon: Gauge },
+  // Lab-facing matching + booking page; the full directory stays at /advisors.
+  // The desc names WHO you book, because Office Hours below is the other
+  // "book an expert" tile and the two are not interchangeable: this one books
+  // an individual advisor matched to your skill gaps and satisfies the Week-3
+  // REQUIRED milestone; that one books partner organisations and does not.
+  advisors: { label: 'Advisors', to: '/spinout-lab/advisors', desc: '1:1 advisors matched to your gaps', icon: Users },
+  // Revenue capture + traction proof (metrics snapshots + project proof fields).
+  revenue: { label: 'Revenue', to: '/spinout-lab/revenue', desc: 'Real revenue & investor-ready proof', icon: DollarSign },
+  // Capital allocation + runway modeling; edits the SAME canonical
+  // use_of_funds/funding_needed fields THE ASK deck slide reads.
+  'use-of-funds': { label: 'Use of Funds', to: '/spinout-lab/use-of-funds', desc: 'Allocation & budget plan', icon: PieChart },
+  // Lab-facing partner session booking (design: Office Hours tool page);
+  // /office-hours stays the advisor-side ops console.
+  'office-hours': { label: 'Office Hours', to: '/spinout-lab/office-hours', desc: 'Investors, lawyers & operators', icon: CalendarCheck },
+  'cofounder-match': { label: 'Co-founder Match', to: '/spinout-lab/cofounder-match', desc: 'Co-founder sourcing', icon: Users },
+  incorporate: { label: 'Incorporate', to: '/spinout-lab/incorporate', desc: 'Entity formation', icon: Landmark },
+  captable: { label: 'Cap Table', to: '/spinout-lab/captable', desc: 'Founder stock & vesting', icon: PieChart },
+  'section-83b': { label: '83(b) Election', to: '/spinout-lab/83b', desc: 'File within 30 days of your stock grant', icon: FileText },
+  'cofounder-agreement': { label: 'Co-founder Agreement', to: '/spinout-lab/cofounder-agreement', desc: 'Signed founder terms', icon: FileSignature },
+  // The credential itself, not a deliverable: it is CONFERRED by finishing
+  // incorporation rather than being another box to tick, so `uncounted`
+  // keeps it off the week's scorecard denominator (same rule as misignals).
+  certificate: { label: 'Graduation Certificate', to: '/spinout-lab/certificate', desc: 'Your cohort credential', icon: Award, uncounted: true, unlockWeek: 4 },
   // No founder-facing capital surface exists yet (/capital is the investor
   // console) — card shows as coming soon until the lab version ships.
-  capital: { label: 'Capital', to: '/capital', desc: 'Fundraise & introductions', icon: Banknote, comingSoon: true },
-  compliance: { label: 'Compliance', to: '/compliance', desc: 'Filing calendar & obligations', icon: ShieldCheck },
+  // Lab-facing raise workspace (round + investor pipeline + data-room
+  // readiness). The founder-persona workspace at /raise/capital stays intact.
+  capital: { label: 'Capital', to: '/spinout-lab/capital', desc: 'Fundraise & introductions', icon: Banknote },
+  // Lab-facing compliance dashboard (Week 4 readiness). The platform-wide
+  // Compliance CALENDAR — recurring filings, reminder pings, advisor
+  // deep-links — stays at /compliance. Same split as Market Intel.
+  compliance: { label: 'Compliance', to: '/spinout-lab/compliance', desc: 'Week 4 readiness & obligations', icon: ShieldCheck },
+  // The founder's weekly operating cadence — a dedicated Lab page (design:
+  // Studio_Ops.dc), NOT the studio's admin operations console that lives on
+  // Command Center's Operations tab. `ungated` keeps its deliverable button
+  // visible without touching unlocked_features (the cadence is worth setting
+  // from Week 1 even though its milestone belongs to Week 2).
+  'studio-ops': { label: 'Studio Ops', to: '/spinout-lab/studio-ops', desc: 'Weekly cadence and accountability', icon: CalendarCheck, ungated: true },
 };
 
 // Four program weeks. `chips` are the timeline summary chips (done derives
@@ -79,16 +129,24 @@ export const WEEK_DEFS = [
     chips: [
       { label: '1 Startup', keys: ['project_created'] },
       { label: '3 interviews', keys: ['customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3'] },
-      { label: 'TAM sized', keys: [] },
+      { label: 'TAM sized', keys: ['market_sizing_completed'] },
     ],
-    features: ['projects', 'customer-discovery', 'market-intelligence'],
+    features: ['projects', 'customer-discovery', 'market-intelligence', 'profiling'],
+    // Week-overview page panels (design: weekPanels — "What you do" / "What
+    // unlocks"; the Deliverables panel reuses `deliverables[].label` so it
+    // stays in sync with the live checklist).
+    panels: {
+      doYou: ['Define the problem and ICP', 'Run market sizing seed research', 'Talk to ≥5 customers and log every interview'],
+      unlocks: ['Startups', 'Customer Discovery', 'Market Intelligence (read-only)', 'Profiling'],
+    },
     leaveWith: 'Startup record · 3 customer interviews · TAM/SAM sized',
     deliverables: [
-      { label: 'Create your startup record', keys: ['project_created'], tool: 'projects' },
-      { label: 'Log customer interview #1', keys: ['customer_interview_logged_1'], tool: 'customer-discovery' },
-      { label: 'Log customer interview #2', keys: ['customer_interview_logged_2'], tool: 'customer-discovery' },
-      { label: 'Log customer interview #3', keys: ['customer_interview_logged_3'], tool: 'customer-discovery' },
-      { label: 'Size your market (TAM / SAM)', keys: [], tool: 'market-intelligence' },
+      { label: 'Create startup record', keys: ['project_created'], tool: 'projects' },
+      { label: 'Log 5 customer interviews', keys: ['customer_interview_logged_1', 'customer_interview_logged_2', 'customer_interview_logged_3', 'customer_interview_logged_4', 'customer_interview_logged_5'], tool: 'customer-discovery' },
+      { label: 'Size TAM / SAM with citations', keys: ['market_sizing_completed'], tool: 'market-intelligence' },
+      { label: 'Complete skills, values & archetype assessment', keys: ['profiling_completed'], tool: 'profiling' },
+      { label: 'Finalize ICP definition and validation criteria', keys: ['icp_defined'], tool: 'customer-discovery' },
+      { label: 'Export or share initial Market Intel research', keys: ['market_research_shared'], tool: 'market-intelligence' },
     ],
   },
   {
@@ -103,14 +161,20 @@ export const WEEK_DEFS = [
       { label: 'Brand basics', keys: ['brand_basics_filled'] },
       { label: 'Pitch deck v1', keys: ['pitch_deck_drafted'] },
     ],
-    features: ['roadmap', 'brand-builder', 'pitch-deck'],
+    features: ['roadmap', 'brand-builder', 'pitch-deck', 'studio-ops'],
+    panels: {
+      doYou: ['Scope the MVP', 'Set 90-day OKRs', 'Draft brand v1', 'Draft pitch deck v1'],
+      unlocks: ['Roadmap', 'Brand & Landing Pages', 'Pitch Deck Builder', 'Studio Ops cadence'],
+    },
     leaveWith: 'MVP scope · 90-day OKRs · Brand v1 · Pitch deck v1',
     deliverables: [
-      { label: 'Scope the MVP', keys: [], tool: 'roadmap' },
+      { label: 'Scope the MVP', keys: ['mvp_scoped'], tool: 'roadmap' },
       { label: 'Set 3+ OKRs (90-day)', keys: ['okrs_created'], tool: 'roadmap' },
-      { label: 'Draft Brand v1', keys: ['brand_basics_filled'], tool: 'brand-builder' },
-      { label: 'Design landing pages', keys: [], tool: 'brand-builder' },
+      { label: 'Design landing pages', keys: ['landing_page_created'], tool: 'brand-builder' },
       { label: 'Draft pitch deck v1', keys: ['pitch_deck_drafted'], tool: 'pitch-deck' },
+      { label: 'Studio Ops cadence set', keys: ['studio_ops_cadence_set'], tool: 'studio-ops' },
+      { label: 'Draft Brand v1 (tagline, value prop, visual direction)', keys: ['brand_basics_filled'], tool: 'brand-builder' },
+      { label: 'Map first 3 customer discovery follow-ups', keys: ['discovery_followups_mapped'], tool: 'customer-discovery' },
     ],
   },
   {
@@ -125,16 +189,26 @@ export const WEEK_DEFS = [
       { label: 'Advisor cadence', keys: ['advisor_meeting_booked'] },
       { label: 'Co-founder', keys: ['cofounder_request_sent'] },
     ],
-    features: ['scoring', 'advisors', 'office-hours', 'cofounder-match'],
+    features: ['scoring', 'advisors', 'office-hours', 'cofounder-match', 'misignals', 'revenue'],
+    panels: {
+      doYou: ['Run your first venture-readiness score', 'Match with advisors', 'Decide co-founder track', 'Pressure-test scoring weak points'],
+      unlocks: ['Diligence & Scoring Engine', 'Advisors', 'Office Hours', 'Co-founder Match', 'MI — Investor Signals'],
+    },
+    // Locked-week preview card pills (design curates these; falls back to
+    // the feature labels when absent).
+    previewPills: ['Scoring Engine', 'Advisors', 'Office Hours', 'Co-founder Match', 'MI Investor Signals'],
     leaveWith: 'Venture-readiness score · Advisor cadence · Co-founder decision',
     deliverables: [
-      { label: 'Run your venture-readiness score', keys: ['scoring_run_completed'], tool: 'scoring' },
+      { label: 'Run venture-readiness score', keys: ['scoring_run_completed'], tool: 'scoring' },
       // The backend's week-3 gate is scoring PLUS EITHER of these two —
       // `altGroup` makes them count as ONE unit in every progress count,
       // or a validly completed week 3 could never read as fully done.
-      { label: 'Book an advisor session', keys: ['advisor_meeting_booked'], tool: 'advisors', altGroup: 'validate-path' },
-      { label: 'Send a co-founder intro request', keys: ['cofounder_request_sent'], tool: 'cofounder-match', altGroup: 'validate-path' },
-      { label: 'Set your office-hours cadence', keys: [], tool: 'office-hours' },
+      { label: 'Establish advisor cadence', keys: ['advisor_meeting_booked'], tool: 'advisors', altGroup: 'validate-path' },
+      { label: 'Decide co-founder track', keys: ['cofounder_request_sent'], tool: 'cofounder-match', altGroup: 'validate-path' },
+      { label: 'Book a session in Office Hours', keys: ['office_hours_booked'], tool: 'office-hours' },
+      { label: 'Bring revenue proof', keys: ['revenue_proof_added'], tool: 'revenue' },
+      { label: 'Generate investor-ready revenue summary', keys: ['revenue_summary_generated'], tool: 'revenue' },
+      { label: 'Score ≥70% confidence across 5+ dimensions', keys: ['scoring_confidence_70'], tool: 'scoring', optional: true },
     ],
   },
   {
@@ -146,17 +220,29 @@ export const WEEK_DEFS = [
     activeRing: 'border-violet-300 dark:border-violet-700 ring-2 ring-violet-500/20',
     chips: [
       { label: 'C-Corp', keys: ['incorporation_completed'] },
-      { label: 'Cap table', keys: [] },
-      { label: '83(b)', keys: [] },
+      { label: 'Cap table', keys: ['founder_stock_issued'] },
+      { label: '83(b)', keys: ['section83b_filed'] },
     ],
-    features: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance'],
+    features: ['incorporate', 'captable', 'section-83b', 'cofounder-agreement', 'capital', 'compliance', 'use-of-funds', 'certificate'],
+    panels: {
+      doYou: ['Incorporate the entity', 'Issue founder stock with vesting', 'File 83(b)', 'Sign co-founder agreement', 'Lock the fundraise ask'],
+      unlocks: ['Incorporate', 'Cap Table', 'Co-founder Agreement', 'Capital', 'Use of Funds'],
+    },
+    previewPills: ['Incorporate', 'Cap Table', '83(b)', 'Co-founder Agreement', 'Capital', 'KYC'],
     leaveWith: 'Delaware C-Corp · Vesting cap table · 83(b) filed · Co-founder agreement',
     deliverables: [
       { label: 'Incorporate the entity', keys: ['incorporation_completed'], tool: 'incorporate' },
-      { label: 'Initialize cap table & founder vesting', keys: [], tool: 'captable' },
-      { label: 'File your 83(b) election', keys: [], tool: 'section-83b' },
-      { label: 'Sign the co-founder agreement', keys: [], tool: 'cofounder-agreement' },
-      { label: 'Plan your use of funds', keys: [], tool: 'capital' },
+      { label: 'File incorporation docs and receive EIN', keys: ['ein_received'], tool: 'incorporate' },
+      { label: 'Issue founder stock with vesting', keys: ['founder_stock_issued'], tool: 'captable' },
+      { label: 'File 83(b) election', keys: ['section83b_filed'], tool: 'section-83b' },
+      { label: 'Sign co-founder agreement (or solo declaration)', keys: ['cofounder_agreement_signed'], tool: 'cofounder-agreement' },
+      { label: 'Lock the fundraise ask', keys: ['fundraise_ask_locked'], tool: 'capital' },
+      { label: 'Fill in Use of Funds', keys: ['use_of_funds_filled'], tool: 'use-of-funds' },
+      // Warm intros & the data room live on the Capital raise workspace —
+      // there is no founder-facing "Investor Signals" surface.
+      { label: 'Secure ≥3 warm investor intros', keys: ['investor_intros_secured'], tool: 'capital' },
+      { label: 'Lock cap table with dilution modeling', keys: ['captable_locked'], tool: 'captable' },
+      { label: 'Build data room with ≥8 key artifacts', keys: ['data_room_built'], tool: 'capital' },
     ],
   },
 ];
@@ -164,11 +250,12 @@ export const WEEK_DEFS = [
 // Deliverable progress with either/or awareness: rows sharing an `altGroup`
 // count as a single unit that is done when ANY member is done (mirrors the
 // backend's `required_any` week-3 gate — see MILESTONES in spinout_lab.py).
-function countDeliverables(week, isRowDone) {
+export function countDeliverables(week, isRowDone) {
   const groupDone = new Map();
   let total = 0;
   let done = 0;
   week.deliverables.forEach((d) => {
+    if (d.optional) return; // bonus rows never gate or count toward progress
     const rowDone = isRowDone(d);
     if (d.altGroup) {
       if (!groupDone.has(d.altGroup)) {
@@ -186,7 +273,7 @@ function countDeliverables(week, isRowDone) {
   return { done, total };
 }
 
-function milestoneKeySet(milestones) {
+export function milestoneKeySet(milestones) {
   const out = new Set();
   (milestones || []).forEach((m) => {
     if (typeof m === 'string') out.add(m);
@@ -200,6 +287,105 @@ function formatStartDate(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// ---------------------------------------------------------------------------
+// Cohort timing (server-authoritative). The Worker cron decides everything;
+// the UI only renders a countdown against `server_time` so a wrong client
+// clock can't lie about the deadline.
+// ---------------------------------------------------------------------------
+function parseServerUtc(ts) {
+  if (!ts) return null;
+  const ms = Date.parse(ts.includes('T') ? ts : `${ts.replace(' ', 'T')}Z`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return '0h 0m 0s';
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${m}m ${sec}s`;
+}
+
+function formatLocal(ts) {
+  const ms = parseServerUtc(ts);
+  if (ms === null) return null;
+  return new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function CohortDeadlineBanner({ timing, serverTime }) {
+  // Offset between the server clock and this device, captured once per
+  // state payload — countdowns tick locally but stay server-anchored.
+  const offsetRef = useRef(0);
+  useEffect(() => {
+    const sMs = parseServerUtc(serverTime || timing?.server_time);
+    if (sMs !== null) offsetRef.current = sMs - Date.now();
+  }, [serverTime, timing?.server_time]);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!timing || !timing.in_cohort) return null;
+
+  const nowMs = Date.now() + offsetRef.current;
+  const frozen = Boolean(timing.frozen);
+  const graceMs = parseServerUtc(timing.grace_until);
+  const inGrace = graceMs !== null && graceMs > nowMs;
+  const deadlineMs = parseServerUtc(timing.current_deadline_at);
+  const nextLocked = (timing.weeks || []).find((w) => !w.unlocked);
+
+  if (frozen) {
+    return (
+      <div className="mb-6 rounded-2xl border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-900/20 px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="cohort-frozen-banner">
+        <Lock size={16} className="text-red-600 dark:text-red-400 shrink-0" />
+        <span className="text-sm font-bold text-red-800 dark:text-red-300">
+          Week {timing.frozen_week} deadline passed with incomplete deliverables.
+        </span>
+        <span className="text-xs text-red-700 dark:text-red-400">
+          Your sprint is paused pending admin review — you may be granted a grace extension or advanced manually.
+        </span>
+      </div>
+    );
+  }
+  if (inGrace) {
+    return (
+      <div className="mb-6 rounded-2xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="cohort-grace-banner">
+        <Clock size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+        <span className="text-sm font-bold text-amber-800 dark:text-amber-300">
+          Grace extension active — {formatCountdown(graceMs - nowMs)} left
+        </span>
+        <span className="text-xs text-amber-700 dark:text-amber-400">
+          Finish your remaining Week {timing.current_week} deliverables before the extension ends.
+        </span>
+      </div>
+    );
+  }
+  if (deadlineMs === null) return null;
+  const remaining = deadlineMs - nowMs;
+  const urgent = remaining <= 24 * 3600_000;
+  return (
+    <div
+      className={`mb-6 rounded-2xl border px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1 ${urgent ? 'border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-900/20' : 'border-violet-100 dark:border-violet-800/50 bg-violet-50/70 dark:bg-violet-900/20'}`}
+      data-testid="cohort-countdown-banner"
+    >
+      <Clock size={16} className={`shrink-0 ${urgent ? 'text-amber-600 dark:text-amber-400' : 'text-violet-600 dark:text-violet-300'}`} />
+      <span className={`text-sm font-bold tabular-nums ${urgent ? 'text-amber-800 dark:text-amber-300' : 'text-violet-800 dark:text-violet-300'}`} data-testid="cohort-countdown-value">
+        Week {timing.current_week} deadline in {formatCountdown(remaining)}
+      </span>
+      <span className={`text-xs ${urgent ? 'text-amber-700 dark:text-amber-400' : 'text-violet-600/80 dark:text-violet-400'}`}>
+        Deadlines land at midnight Delaware time · {formatLocal(timing.current_deadline_at)} your time
+      </span>
+      {nextLocked && (
+        <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto" data-testid="cohort-next-unlock">
+          Week {nextLocked.week} unlocks {formatLocal(nextLocked.unlock_at)}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false }) {
@@ -217,6 +403,32 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   const [selected, setSelected] = useState(currentWeek);
   // Which completed-week summary panel is expanded (week num or null).
   const [openSummary, setOpenSummary] = useState(null);
+  // Week-overview page (design: `view: 'week-N'`) — non-null renders the
+  // dedicated week view in place of the workspace sections.
+  const [weekView, setWeekView] = useState(null);
+
+  // Milestone completion timestamps (when the state payload carries object
+  // rows) — used for the design's "Completed <date>" summary meta.
+  const milestoneDates = useMemo(() => {
+    const m = new Map();
+    (state?.milestones || []).forEach((x) => {
+      if (x && typeof x === 'object' && (x.key || x.milestone_key) && x.completed_at) {
+        m.set(x.key || x.milestone_key, x.completed_at);
+      }
+    });
+    return m;
+  }, [state?.milestones]);
+  const weekCompletedLabel = (week) => {
+    let latest = null;
+    week.deliverables.forEach((d) => d.keys.forEach((k) => {
+      const ts = milestoneDates.get(k);
+      if (ts && (!latest || ts > latest)) latest = ts;
+    }));
+    if (!latest) return null;
+    const d = new Date(latest.includes('T') ? latest : `${latest.replace(' ', 'T')}Z`);
+    if (Number.isNaN(d.getTime())) return null;
+    return `Completed ${d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}`;
+  };
 
   const weekStatus = (num) => {
     if (graduated || num < currentWeek) return 'done';
@@ -224,7 +436,11 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
     return previewAllUnlocked ? 'unlocked' : 'locked';
   };
   const weekBrowsable = (num) => weekStatus(num) !== 'locked';
-  const featureUnlocked = (key) => previewAllUnlocked || graduated || unlockedFeatures.has(key);
+  const featureUnlocked = (key) =>
+    previewAllUnlocked || graduated || unlockedFeatures.has(key) || Boolean(TOOL_INFO[key]?.ungated) ||
+    // Tools with no standalone backend flag (e.g. MI — Investor Signals) unlock
+    // by program week instead of an `unlocked_features` entry.
+    (TOOL_INFO[key]?.unlockWeek != null && currentWeek >= TOOL_INFO[key].unlockWeek);
   const chipDone = (weekNum, keys) =>
     keys.length > 0 ? keys.every((k) => done.has(k)) : weekStatus(weekNum) === 'done';
 
@@ -232,7 +448,8 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   const selectedStatus = weekStatus(selectedDef.num);
   const selectedCounts = countDeliverables(selectedDef, (d) => chipDone(selectedDef.num, d.keys));
   const deliverablesDone = selectedCounts.done;
-  const progressPct = graduated ? 100 : Math.min(100, Math.round((dayNum / SPRINT_DAYS) * 100));
+  // Preview mode mirrors the design's "All weeks unlocked" ring at 100%.
+  const progressPct = graduated || previewAllUnlocked ? 100 : Math.min(100, Math.round((dayNum / SPRINT_DAYS) * 100));
 
   const openTool = (key) => {
     const tool = TOOL_INFO[key];
@@ -243,12 +460,15 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
     .filter((k) => featureUnlocked(k) && !TOOL_INFO[k]?.comingSoon)
     .slice(0, 2);
 
-  // ---- 30-day scorecard (design section 3) — all derived from live state ----
+  // ---- 28-day scorecard (design section 3) — all derived from live state ----
   const weekStats = WEEK_DEFS.map((w) => {
     const status = weekStatus(w.num);
     const { done: dDone, total: dTotal } = countDeliverables(w, (d) => chipDone(w.num, d.keys));
-    const tTotal = w.features.length;
-    const tUnlocked = w.features.filter((k) => featureUnlocked(k)).length;
+    // `uncounted` tools show as cards but never count toward the scorecard's
+    // per-week tool totals — mirrors the design, whose scorecard excludes them.
+    const counted = w.features.filter((k) => !TOOL_INFO[k]?.uncounted);
+    const tTotal = counted.length;
+    const tUnlocked = counted.filter((k) => featureUnlocked(k)).length;
     const keyOutput = w.chips.filter((c) => chipDone(w.num, c.keys)).map((c) => c.label).join(' · ');
     return { def: w, status, dTotal, dDone, tTotal, tUnlocked, keyOutput };
   });
@@ -265,10 +485,20 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
       ? `Week ${upcomingNums[0]}`
       : `Weeks ${upcomingNums.slice(0, -1).join(', ')} & ${upcomingNums[upcomingNums.length - 1]}`;
 
+  // "View week →" opens the dedicated week-overview page (design `openWeek`).
   const viewWeek = (num) => {
-    setSelected(num);
+    // Locked weeks still open the overview (design: preview cards say
+    // "View week →"); the overview renders the Locked badge and keeps the
+    // week's tools disabled. Only the inline week selection stays gated.
+    if (weekBrowsable(num)) setSelected(num);
+    setWeekView(num);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  const closeWeekView = () => {
+    setWeekView(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const overviewDef = weekView != null ? WEEK_DEFS.find((w) => w.num === weekView) : null;
 
   const STATUS_BADGE = {
     done: { label: 'Completed', cls: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' },
@@ -278,9 +508,9 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24" data-testid="spinout-workspace">
-      {/* ---- Program header ---- */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4 mb-8">
+    <div className="px-4 sm:px-6 py-6 pb-24" data-testid="spinout-workspace">
+      {/* ---- Program header (sticky, like the design's page header) ---- */}
+      <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-gray-50/90 dark:bg-gray-950/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 pb-4 mb-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2.5">
@@ -337,19 +567,21 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
             </div>
           </div>
         </div>
-        {/* Segmented week progress bar */}
+        {/* Segmented week progress bar — the design renders this all-violet
+            (track #ede9fe, fill #7c3aed) with a pulse dot on the active label */}
         <div className="flex gap-1.5 pt-4">
           {WEEK_DEFS.map((w) => {
             const st = weekStatus(w.num);
             return (
               <div key={w.num} className="flex-1 flex flex-col gap-1">
-                <div className="h-1.5 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-800">
+                <div className="h-1.5 rounded-full overflow-hidden bg-violet-100 dark:bg-violet-900/40">
                   <div
-                    className={`h-full rounded-full ${st === 'done' ? 'bg-emerald-500 w-full' : st === 'active' ? `${w.accentBar} animate-pulse` : 'w-0'}`}
+                    className={`h-full rounded-full ${st === 'done' ? 'bg-violet-600 w-full' : st === 'active' ? 'bg-violet-600 animate-pulse' : 'w-0'}`}
                     style={st === 'active' ? { width: `${Math.min(100, Math.round((((dayNum - 1) % 7) + 1) / 7 * 100))}%` } : undefined}
                   />
                 </div>
-                <span className={`text-[11px] font-semibold ${st === 'active' ? w.accentText : st === 'done' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'}`}>
+                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${st === 'locked' ? 'text-gray-400 dark:text-gray-500' : 'text-violet-700 dark:text-violet-300'}`}>
+                  {st === 'active' && <span className="w-[5px] h-[5px] rounded-full bg-violet-600 dark:bg-violet-400 animate-pulse" />}
                   Week {w.num}
                 </span>
               </div>
@@ -358,6 +590,91 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
         </div>
       </div>
 
+      {/* ---- Cohort deadline banner (server-synced countdown) ---- */}
+      {!graduated && !previewAllUnlocked && (
+        <CohortDeadlineBanner timing={state?.cohort_timing} serverTime={state?.server_time} />
+      )}
+
+      {/* ---- Week overview page (design: `isWeekView`) ---- */}
+      {overviewDef ? (
+        <div data-testid={`workspace-week-view-${overviewDef.num}`}>
+          <button
+            type="button"
+            onClick={closeWeekView}
+            data-testid="workspace-week-view-back"
+            className="inline-flex items-center gap-1.5 h-[34px] px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 text-[13px] font-semibold mb-5 hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            <span className="text-[15px]">←</span> Back to Workspace
+          </button>
+          <div className="flex flex-wrap gap-3.5 items-center mb-2">
+            <div className={`text-xs font-bold uppercase tracking-wide ${overviewDef.accentText}`}>Week {overviewDef.num}</div>
+            <span className={`inline-flex items-center gap-1 text-[10.5px] font-bold rounded-full px-2 py-0.5 ${STATUS_BADGE[weekStatus(overviewDef.num)].cls}`}>
+              {weekStatus(overviewDef.num) === 'active'
+                ? <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                : weekStatus(overviewDef.num) === 'locked' ? <Lock size={10} /> : <Check size={11} />}
+              {STATUS_BADGE[weekStatus(overviewDef.num)].label}
+            </span>
+          </div>
+          <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50 mb-5">{overviewDef.name}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-7">
+            {[
+              { title: 'What you do', items: overviewDef.panels?.doYou || [] },
+              { title: 'What unlocks', items: overviewDef.panels?.unlocks || [] },
+              { title: 'Deliverables', items: overviewDef.deliverables.map((d) => d.label) },
+            ].map((p) => (
+              <div key={p.title} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">{p.title}</div>
+                <div className="flex flex-col gap-2">
+                  {p.items.map((it) => (
+                    <div key={it} className="flex gap-2 text-[13px] text-gray-700 dark:text-gray-200 leading-snug">
+                      <span className={`flex-none font-bold ${overviewDef.accentText}`}>·</span>
+                      <span>{it}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Tools in this week</div>
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
+            {overviewDef.features.map((key) => {
+              const info = TOOL_INFO[key];
+              if (!info) return null;
+              const unlocked = featureUnlocked(key);
+              const clickable = unlocked && !info.comingSoon;
+              const Icon = info.icon;
+              return (
+                <div
+                  key={key}
+                  data-testid={`workspace-week-view-tool-${key}`}
+                  onClick={() => openTool(key)}
+                  role={clickable ? 'link' : undefined}
+                  tabIndex={clickable ? 0 : undefined}
+                  onKeyDown={(e) => { if (clickable && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openTool(key); } }}
+                  className={`rounded-xl p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex flex-col ${
+                    clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : 'opacity-60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="w-[34px] h-[34px] rounded-lg bg-violet-50 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300 flex items-center justify-center">
+                      <Icon size={16} />
+                    </div>
+                    {!unlocked && <Lock size={13} className="text-gray-400 dark:text-gray-500" />}
+                  </div>
+                  <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">{info.label}</div>
+                  <div className="text-[11.5px] leading-snug text-gray-400 dark:text-gray-500 mt-0.5 flex-1">{info.desc}</div>
+                  {clickable && (
+                    <div className="mt-3 text-[11px] font-semibold text-violet-700 dark:text-violet-300 inline-flex items-center gap-1">
+                      Open <ArrowRight size={11} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+      <>
       {/* ---- Section 1: Program timeline ---- */}
       <section className="mb-9">
         <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Program timeline</div>
@@ -373,9 +690,10 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                 data-testid={`workspace-week-card-${w.num}`}
                 onClick={() => clickable && setSelected(w.num)}
                 disabled={!clickable}
+                title={w.summary}
                 className={`text-left rounded-2xl bg-white dark:bg-gray-900 border p-4 flex flex-col transition-shadow ${
                   isSelected ? w.activeRing : 'border-gray-200 dark:border-gray-800'
-                } ${clickable ? 'cursor-pointer hover:shadow-md' : 'opacity-60 cursor-not-allowed'}`}
+                } ${st === 'active' ? 'ws-glow' : ''} ${clickable ? 'cursor-pointer hover:shadow-md' : 'opacity-60 cursor-not-allowed'}`}
               >
                 <div className="flex items-start justify-between gap-2 mb-2.5">
                   <div>
@@ -450,7 +768,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
 
       {/* ---- Section 2A: selected week header ---- */}
       <section className="mb-5">
-        <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6">
+        <div className={`relative overflow-hidden rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 ${selectedStatus === 'active' ? 'ws-glow' : ''}`}>
           <div className={`absolute top-0 left-0 bottom-0 w-1 ${selectedDef.accentBar}`} />
           <div className="flex flex-wrap gap-5 justify-between items-start">
             <div className="min-w-[260px]">
@@ -464,10 +782,10 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                 }`}>
                   {selectedStatus === 'active' && <span className="w-1.5 h-1.5 rounded-full bg-violet-600 dark:bg-violet-400 animate-pulse" />}
                   {selectedStatus === 'active'
-                    ? 'Active this week — complete all modules to advance'
+                    ? 'Active week'
                     : selectedStatus === 'done'
-                      ? 'Week complete'
-                      : 'Browsing ahead'}
+                      ? 'Completed'
+                      : 'Preview'}
                 </span>
               </div>
               <h2 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50" data-testid="workspace-active-week-title">
@@ -484,7 +802,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                   <ClipboardCheck size={13} className="text-violet-600 dark:text-violet-400" /> {deliverablesDone} of {selectedCounts.total} tasks done
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5">
-                  <Check size={13} className="text-violet-600 dark:text-violet-400" /> {selectedDef.features.filter((f) => featureUnlocked(f)).length} tools unlocked
+                  <Check size={13} className="text-violet-600 dark:text-violet-400" /> {selectedDef.features.filter((f) => featureUnlocked(f) && !TOOL_INFO[f]?.uncounted).length} tools unlocked
                 </span>
               </div>
             </div>
@@ -511,8 +829,8 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
         </div>
       </section>
 
-      {/* ---- Section 2B + 2C: deliverables & tools ---- */}
-      <section className="grid grid-cols-1 lg:grid-cols-[2fr,3fr] gap-5 items-start">
+      {/* ---- Section 2B + 2C: deliverables & tools (design ratio 1fr / 2fr) ---- */}
+      <section className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-5 items-start">
         <div>
           <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
             Week {selectedDef.num} deliverables
@@ -520,6 +838,8 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
           <div className="flex flex-col gap-2.5">
             {selectedDef.deliverables.map((d) => {
               const dDone = chipDone(selectedDef.num, d.keys);
+              const keysDone = d.keys.filter((k) => done.has(k)).length;
+              const partial = !dDone && d.keys.length > 1 && keysDone > 0;
               const info = TOOL_INFO[d.tool];
               const unlocked = featureUnlocked(d.tool);
               return (
@@ -547,21 +867,41 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                         className={`text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${
                           dDone
                             ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
+                            : partial
+                              ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300'
+                              : d.optional
+                                ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                                : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'
                         }`}
                       >
-                        {dDone ? 'Done' : 'Not started'}
+                        {dDone ? 'Done' : partial ? 'In Progress' : d.optional ? 'Optional · boosts readiness' : 'Not started'}
                       </span>
                     </div>
+                    {partial && (
+                      <div className="mt-2 h-1.5 w-40 max-w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-violet-600"
+                          style={{ width: `${Math.round((keysDone / d.keys.length) * 100)}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
-                  {info && unlocked && !info.comingSoon && (
+                  {info && unlocked && !info.comingSoon ? (
                     <Link
                       to={info.to}
-                      className="flex-none h-8 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-xs font-semibold inline-flex items-center gap-1"
+                      className="flex-none h-8 px-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap"
                     >
-                      Open <ArrowRight size={12} />
+                      Open {info.label} <ArrowRight size={12} />
                     </Link>
-                  )}
+                  ) : info ? (
+                    /* Design always renders the action — locked tools show it disabled */
+                    <span
+                      aria-disabled="true"
+                      className="flex-none h-8 px-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 text-gray-400 dark:text-gray-500 text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap select-none"
+                    >
+                      Open {info.label} <ArrowRight size={12} />
+                    </span>
+                  ) : null}
                 </div>
               );
             })}
@@ -583,7 +923,7 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
             return (
               <div key={w.num} className="mb-4">
                 <div className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 mb-2">{heading}</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
                   {w.features.map((key) => {
                     const info = TOOL_INFO[key];
                     if (!info) return null;
@@ -621,9 +961,13 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                             {unlocked ? (w.num <= currentWeek || graduated ? 'Active' : `Unlocked · Wk ${w.num}`) : `Unlocks Wk ${w.num}`}
                           </span>
                           {clickable && (
-                            <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 inline-flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); openTool(key); }}
+                              className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 inline-flex items-center gap-0.5 h-[26px] px-2 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:bg-violet-50 dark:hover:bg-violet-900/30"
+                            >
                               Open <ArrowRight size={11} />
-                            </span>
+                            </button>
                           )}
                           {unlocked && info.comingSoon && (
                             <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">Coming soon</span>
@@ -639,10 +983,10 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
         </div>
       </section>
 
-      {/* ---- Section 3: 30-day scorecard ---- */}
+      {/* ---- Section 3: 28-day scorecard ---- */}
       <section className="mt-10" data-testid="workspace-scorecard">
         <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">
-          30-day scorecard
+          28-day scorecard
         </div>
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
@@ -756,7 +1100,9 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                         <Check size={13} />
                       </span>
                       <span className="text-[14.5px] font-bold text-gray-900 dark:text-gray-50">Week {s.def.num} Summary</span>
-                      <span className="text-xs text-gray-400 dark:text-gray-500">Completed · {s.dDone} of {s.dTotal} deliverables</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {weekCompletedLabel(s.def) || `Completed · ${s.dDone} of ${s.dTotal} deliverables`}
+                      </span>
                     </span>
                     <ChevronDown size={18} className={`text-gray-400 dark:text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
                   </button>
@@ -830,17 +1176,14 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
                 <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Week {s.def.num}</div>
                 <div className="text-base font-bold text-gray-900 dark:text-gray-50 mb-3">{s.def.name}</div>
                 <div className="flex flex-wrap gap-1.5 mb-3.5">
-                  {s.def.features.map((k) => {
-                    const info = TOOL_INFO[k];
-                    return info ? (
-                      <span
-                        key={k}
-                        className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 rounded-md px-2 py-0.5"
-                      >
-                        {info.label}
-                      </span>
-                    ) : null;
-                  })}
+                  {(s.def.previewPills || s.def.features.map((k) => TOOL_INFO[k]?.label).filter(Boolean)).map((label) => (
+                    <span
+                      key={label}
+                      className="text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 rounded-md px-2 py-0.5"
+                    >
+                      {label}
+                    </span>
+                  ))}
                 </div>
                 <div className="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
                   <span className="font-semibold text-gray-500 dark:text-gray-400">You leave with:</span> {s.def.leaveWith}
@@ -850,6 +1193,8 @@ export default function SpinoutLabWorkspace({ state, previewAllUnlocked = false 
             ))}
           </div>
         </section>
+      )}
+      </>
       )}
     </div>
   );

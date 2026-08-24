@@ -5,6 +5,13 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Transpile dev-served source AND pre-bundled deps down to es2020 so older
+  // Safari doesn't hit a silent parse error (blank white page). Dev-only
+  // concern: prod builds already target lower via build defaults.
+  // Vite 8 (rolldown) uses oxc — the legacy `esbuild` key is silently
+  // IGNORED ("oxc options will be used and esbuild options will be ignored"),
+  // which re-broke the Safari blank page. Set the target on `oxc` instead.
+  oxc: { target: 'es2020' },
   resolve: {
     alias: {
       '@assets': path.resolve(__dirname, '../attached_assets'),
@@ -14,6 +21,10 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
+    // Keep pre-bundled deps at es2020 so Safari doesn't hit a parse error
+    // on newer syntax in third-party packages (Vite 8 uses Rolldown for
+    // optimizeDeps; esbuildOptions is deprecated, use rolldownOptions).
+    rolldownOptions: { output: { format: 'es' } },
     include: [
       'react',
       'react-dom',
@@ -72,6 +83,12 @@ export default defineConfig({
           });
         },
       },
+      // Backend-rendered public landing surfaces (Brand & Landing Pages).
+      // The dev FastAPI serves /landing/preview/:token, /landing/:slug and
+      // the branded multi-page sites at /p/:site/:page — without these the
+      // "View Live" preview URLs 404 on the Vite origin in dev.
+      '/landing': { target: 'http://localhost:8000', changeOrigin: true },
+      '/p/': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
 });

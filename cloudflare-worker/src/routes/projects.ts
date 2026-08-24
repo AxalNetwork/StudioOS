@@ -16,6 +16,13 @@ import {
 import { runFullScore } from '../services/scoring';
 import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
 import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
+import {
+  SPINOUT_OVERRIDABLE_KEYS,
+  applySpinoutOverrides,
+  loadSpinoutDeckOverrides,
+  sanitizeSpinoutOverrides,
+  saveSpinoutDeckOverrides,
+} from '../services/decks/spinoutDeckOverrides';
 import { ensureMethodAllowed } from '../services/decks/branding';
 import { PREMIUM_METHOD_IDS } from '../services/decks/methods';
 import { normalizeUseOfFunds, formatUseOfFundsText } from '../util/useOfFunds';
@@ -81,6 +88,93 @@ export async function ensureProjectProductDemoColumns(env: Env): Promise<void> {
     try { await env.DB.exec(ddl); } catch (_e) { /* duplicate column on re-run is fine */ }
   }
   _productDemoReady.set(db, true);
+}
+
+// Use of Funds planning metadata (JSON) — lazy bootstrap for
+// `projects.use_of_funds_meta`. Migration 158 is the canonical apply path;
+// this keeps a cold D1 isolate (or dev SQLite) working before it runs.
+// Additive + idempotent; same WeakMap pattern as the helpers above.
+const _uofMetaReady = new WeakMap<object, true>();
+export async function ensureProjectUofMetaColumn(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_uofMetaReady.has(db)) return;
+  try { await env.DB.exec(`ALTER TABLE projects ADD COLUMN use_of_funds_meta TEXT`); } catch (_e) { /* duplicate column on re-run is fine */ }
+  _uofMetaReady.set(db, true);
+}
+
+// Validate + canonicalize the Use of Funds planning metadata blob. Accepts an
+// object or a JSON string; must parse to a plain object; size-capped so it
+// can't be abused as arbitrary storage. Returns { value } (canonical JSON
+// string or null to clear) or { error }.
+export function normalizeUofMeta(raw: unknown): { value?: string | null; error?: string } {
+  if (raw === null || raw === undefined || raw === '') return { value: null };
+  let obj: unknown = raw;
+  if (typeof raw === 'string') {
+    if (raw.length > 8000) return { error: 'use_of_funds_meta too large' };
+    try { obj = JSON.parse(raw); } catch { return { error: 'use_of_funds_meta must be valid JSON' }; }
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+    return { error: 'use_of_funds_meta must be a JSON object' };
+  }
+  const out = JSON.stringify(obj);
+  if (out.length > 8000) return { error: 'use_of_funds_meta too large' };
+  return { value: out };
+}
+
+// Spin-Out Lab Incorporate workspace state (JSON) — lazy bootstrap for
+// `projects.incorporation_meta`. Migration 159 is the canonical apply path;
+// same WeakMap pattern as ensureProjectUofMetaColumn above.
+const _incMetaReady = new WeakMap<object, true>();
+export async function ensureProjectIncMetaColumn(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_incMetaReady.has(db)) return;
+  try { await env.DB.exec(`ALTER TABLE projects ADD COLUMN incorporation_meta TEXT`); } catch (_e) { /* duplicate column on re-run is fine */ }
+  _incMetaReady.set(db, true);
+}
+
+// Validate + canonicalize the Incorporate workspace state blob. Same contract
+// as normalizeUofMeta: object or JSON string, plain object only, size-capped.
+export function normalizeIncMeta(raw: unknown): { value?: string | null; error?: string } {
+  if (raw === null || raw === undefined || raw === '') return { value: null };
+  let obj: unknown = raw;
+  if (typeof raw === 'string') {
+    if (raw.length > 8000) return { error: 'incorporation_meta too large' };
+    try { obj = JSON.parse(raw); } catch { return { error: 'incorporation_meta must be valid JSON' }; }
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+    return { error: 'incorporation_meta must be a JSON object' };
+  }
+  const out = JSON.stringify(obj);
+  if (out.length > 8000) return { error: 'incorporation_meta too large' };
+  return { value: out };
+}
+
+// Spin-Out Lab Co-founder Match decision (JSON) — lazy bootstrap for
+// `projects.cofounder_decision_meta`. Migration 162 is the canonical apply
+// path; same WeakMap pattern as ensureProjectUofMetaColumn above.
+const _cfDecisionReady = new WeakMap<object, true>();
+export async function ensureProjectCofounderDecisionColumn(env: Env): Promise<void> {
+  const db = env.DB as unknown as object;
+  if (_cfDecisionReady.has(db)) return;
+  try { await env.DB.exec(`ALTER TABLE projects ADD COLUMN cofounder_decision_meta TEXT`); } catch (_e) { /* duplicate column on re-run is fine */ }
+  _cfDecisionReady.set(db, true);
+}
+
+// Validate + canonicalize the co-founder decision blob. Same contract as
+// normalizeUofMeta: object or JSON string, plain object only, size-capped.
+export function normalizeCofounderDecisionMeta(raw: unknown): { value?: string | null; error?: string } {
+  if (raw === null || raw === undefined || raw === '') return { value: null };
+  let obj: unknown = raw;
+  if (typeof raw === 'string') {
+    if (raw.length > 8000) return { error: 'cofounder_decision_meta too large' };
+    try { obj = JSON.parse(raw); } catch { return { error: 'cofounder_decision_meta must be valid JSON' }; }
+  }
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+    return { error: 'cofounder_decision_meta must be a JSON object' };
+  }
+  const out = JSON.stringify(obj);
+  if (out.length > 8000) return { error: 'cofounder_decision_meta too large' };
+  return { value: out };
 }
 
 // Task #1 — lazy bootstrap for the founder's editable company / affiliation,
@@ -538,6 +632,30 @@ projects.put('/:id', async (c) => {
     if (uof.error) { await sql.end(); return c.json({ error: uof.error, code: 'invalid_use_of_funds' }, 400); }
     data.use_of_funds = uof.value;
   }
+  // Use of Funds planning metadata (alert threshold, milestone costs, sync
+  // timestamps) — owner-editable JSON blob next to the canonical allocation.
+  if (data.use_of_funds_meta !== undefined) {
+    await ensureProjectUofMetaColumn(c.env);
+    const meta = normalizeUofMeta(data.use_of_funds_meta);
+    if (meta.error) { await sql.end(); return c.json({ error: meta.error, code: 'invalid_use_of_funds_meta' }, 400); }
+    data.use_of_funds_meta = meta.value;
+  }
+  // Spin-Out Lab Incorporate workspace state — owner-editable JSON blob
+  // (entity decision/override, payment, docs, filing, uni-IP checklist).
+  if (data.incorporation_meta !== undefined) {
+    await ensureProjectIncMetaColumn(c.env);
+    const meta = normalizeIncMeta(data.incorporation_meta);
+    if (meta.error) { await sql.end(); return c.json({ error: meta.error, code: 'invalid_incorporation_meta' }, 400); }
+    data.incorporation_meta = meta.value;
+  }
+  // Spin-Out Lab Co-founder Match decision — owner-editable JSON blob
+  // (outcome advance/searching/solo, optional candidate uid, note, followups).
+  if (data.cofounder_decision_meta !== undefined) {
+    await ensureProjectCofounderDecisionColumn(c.env);
+    const meta = normalizeCofounderDecisionMeta(data.cofounder_decision_meta);
+    if (meta.error) { await sql.end(); return c.json({ error: meta.error, code: 'invalid_cofounder_decision_meta' }, 400); }
+    data.cofounder_decision_meta = meta.value;
+  }
   // Task #31 — Product demo source columns are owner-editable (founders
   // manage their own demo media on the project detail page). Trim URLs/text;
   // explicit '' / null clears the column.
@@ -547,7 +665,29 @@ projects.put('/:id', async (c) => {
       data[k] = s || null;
     }
   }
-  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
+  // Market-sizing invariants (mirrored in the dev FastAPI): TAM/SAM/SOM
+  // non-negative when supplied; funnel nests (SAM ≤ TAM, SOM ≤ SAM) judged
+  // against effective (incoming or stored) values. `som` exists since
+  // migration 069 (deck autofill) and is founder-editable like tam/sam.
+  for (const k of ['tam', 'sam', 'som']) {
+    if (data[k] !== undefined && data[k] !== null && (!Number.isFinite(Number(data[k])) || Number(data[k]) < 0)) {
+      await sql.end();
+      return c.json({ error: 'invalid_market_sizing', detail: `${k} must be a non-negative number` }, 400);
+    }
+  }
+  if (['tam', 'sam', 'som'].some((k) => data[k] !== undefined)) {
+    const eff = (k: string) => (data[k] !== undefined ? data[k] : (project as any)[k]);
+    const [tamV, samV, somV] = [eff('tam'), eff('sam'), eff('som')];
+    if (tamV != null && samV != null && Number(samV) > Number(tamV)) {
+      await sql.end();
+      return c.json({ error: 'invalid_market_sizing', detail: 'SAM cannot exceed TAM' }, 400);
+    }
+    if (samV != null && somV != null && Number(somV) > Number(samV)) {
+      await sql.end();
+      return c.json({ error: 'invalid_market_sizing', detail: 'SOM cannot exceed SAM' }, 400);
+    }
+  }
+  const baseFields = ['name', 'description', 'sector', 'problem_statement', 'solution', 'why_now', 'tam', 'sam', 'som', 'users_count', 'revenue', 'growth_signals', 'cost_to_mvp', 'funding_needed', 'use_of_funds', 'use_of_funds_meta', 'incorporation_meta', 'cofounder_decision_meta', 'data_room_url', 'data_room_nda_required', 'mrr', 'paying_customers', 'first_payment_date', 'paid_pilot_status', 'product_demo_video_url', 'product_demo_live_url', 'product_demo_caption', 'product_demo_screenshot_url', 'website'];
   // Normalise: coerce boolean → 0/1 for the NDA flag, trim URL, allow
   // explicit null to clear either field.
   if (data.data_room_nda_required !== undefined) {
@@ -685,20 +825,28 @@ projects.post('/:id/advance-week', async (c) => {
 // check as POST /api/decks/apply-method — a founder who can apply the
 // axal_spinout_demoday template can always generate its deck — then the same
 // owner RBAC as PUT /:id below.
-projects.post('/:projectId/spinout-deck', async (c) => {
-  const user = await requireAuth(c);
-  const projectId = parseInt(c.req.param('projectId'));
-  if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);
-
+// Paywall + RBAC + data-source resolution for every Spin-Out deck surface
+// (generate, and the manual-override read/write below). Shared so the override
+// routes cannot drift into a laxer rule than the generator they edit: an
+// override IS deck content, and anyone who can rewrite the thesis on a deck can
+// read the deck.
+//
+// Returns either the userId whose Lab data the deck sources from, or the exact
+// error Response to send. Callers do `if ('error' in access) return access.error`.
+async function resolveSpinoutDeckAccess(
+  c: any,
+  projectId: number,
+  user: any,
+): Promise<{ sourceUserId: number } | { error: any }> {
   // Premium gate — mirrors /api/decks/apply-method's 402 upgrade payload.
   try {
     ensureMethodAllowed(user, 'axal_spinout_demoday', PREMIUM_METHOD_IDS);
   } catch (_e) {
-    return c.json({
+    return { error: c.json({
       error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD',
       method_id: 'axal_spinout_demoday', required_tier: 'growth',
       message: 'The Spin-Out deck is part of the Growth plan. Upgrade to unlock.',
-    }, 402);
+    }, 402) };
   }
 
   // Ownership + data-source resolution. The deck is sourced from the PROJECT
@@ -720,7 +868,7 @@ projects.post('/:projectId/spinout-deck', async (c) => {
   let ownerUserId: number | null = null;
   try {
     const rows = await sql`SELECT id, founder_id FROM projects WHERE id = ${projectId}`;
-    if (rows.length === 0) return c.json({ error: 'Project not found' }, 404);
+    if (rows.length === 0) return { error: c.json({ error: 'Project not found' }, 404) };
     project = rows[0];
     if (project.founder_id != null) {
       const owners = await sql`SELECT id FROM users WHERE founder_id = ${project.founder_id} ORDER BY id ASC LIMIT 1`;
@@ -740,16 +888,32 @@ projects.post('/:projectId/spinout-deck', async (c) => {
     isCofounderMember = memberRole === 'cofounder' || memberRole === 'owner';
   }
   if (!isStaff && !isOwner && !isCofounderMember) {
-    return c.json({ detail: "Forbidden: you cannot generate this project's deck" }, 403);
+    return { error: c.json({ detail: "Forbidden: you cannot generate this project's deck" }, 403) };
   }
   // Founder generating their own deck sources from themselves (the verified
   // happy path); staff / co-founder generate sources from the resolved owner.
   const sourceUserId = isOwner ? Number(user.id) : ownerUserId;
   if (sourceUserId == null) {
-    return c.json({ error: 'This project has no founder account to source deck data from' }, 409);
+    return { error: c.json({ error: 'This project has no founder account to source deck data from' }, 409) };
   }
+  return { sourceUserId };
+}
 
-  const bundle = await assembleSpinoutDeckData(c.env, sourceUserId, projectId);
+projects.post('/:projectId/spinout-deck', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = parseInt(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);
+
+  const access = await resolveSpinoutDeckAccess(c, projectId, user);
+  if ('error' in access) return access.error;
+
+  // Manual overrides sit ON TOP of the live assembly — precedence is
+  // override > canonical module data > derived placeholder — so a deck edit
+  // never has to rewrite the founder's Solution/Problem module to change a
+  // sentence. With no stored overrides this is an identity transform.
+  const base = await assembleSpinoutDeckData(c.env, access.sourceUserId, projectId);
+  const stored = await loadSpinoutDeckOverrides(c.env, projectId);
+  const bundle = applySpinoutOverrides(base, stored);
   // Pre-flight preview (?preview=1): the deck page shows the live gaps
   // checklist + draft/ready status BEFORE the founder exports, so missing
   // sections (interviews, market sizing, cap table, …) can be filled in
@@ -758,18 +922,77 @@ projects.post('/:projectId/spinout-deck', async (c) => {
   if (c.req.query('preview') === '1') {
     return c.json({
       gaps: bundle.gaps,
+      gap_sections: bundle.gapSections,
       draft: bundle.draft,
       program_day: bundle.programDay,
+      overridden_keys: bundle.overriddenKeys,
     });
   }
   return c.json({
     data: bundle.data,
     notes: bundle.notes,
     gaps: bundle.gaps,
+    // Which SLIDE each gap belongs to. The Pitch Deck Builder derives per-slide
+    // readiness from this, not from counting entries in `fields` — `fields`
+    // omits empty scalars, so a slide rendering template fallback content is
+    // indistinguishable there from one the founder actually filled in.
+    gap_sections: bundle.gapSections,
     draft: bundle.draft,
     program_day: bundle.programDay,
     fields: bundle.fields,
+    overrides: bundle.overrides,
+    overridden_keys: bundle.overriddenKeys,
   });
+});
+
+// Manual deck overrides — read.
+//
+// Returns the stored overrides plus the allowlist, so the editor can render a
+// "Manual"/"Auto" state per field without hard-coding which fields are
+// overridable in the frontend.
+projects.get('/:projectId/spinout-deck/overrides', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = parseInt(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);
+
+  const access = await resolveSpinoutDeckAccess(c, projectId, user);
+  if ('error' in access) return access.error;
+
+  const overrides = await loadSpinoutDeckOverrides(c.env, projectId);
+  return c.json({ overrides, overridable_keys: SPINOUT_OVERRIDABLE_KEYS });
+});
+
+// Manual deck overrides — write.
+//
+// Body: { overrides: { 'cover.thesis': '…' } }. A key sent with an empty string
+// (or listed in `remove`) is DELETED — that is the "revert to my module data"
+// path, and it is why the editor's revert button does not need a second route.
+// Unknown keys are rejected with a 400 naming them rather than being dropped
+// silently: a typo'd field would otherwise look like a save that did nothing.
+projects.put('/:projectId/spinout-deck/overrides', async (c) => {
+  const user = await requireAuth(c);
+  const projectId = parseInt(c.req.param('projectId'));
+  if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);
+
+  const access = await resolveSpinoutDeckAccess(c, projectId, user);
+  if ('error' in access) return access.error;
+
+  let body: any = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+  const raw = body?.overrides ?? body ?? {};
+  const remove = Array.isArray(body?.remove) ? body.remove.map((k: unknown) => String(k)) : [];
+
+  const { rejected } = sanitizeSpinoutOverrides(raw);
+  if (rejected.length) {
+    return c.json({
+      error: 'Unknown or non-overridable deck fields',
+      rejected,
+      overridable_keys: SPINOUT_OVERRIDABLE_KEYS,
+    }, 400);
+  }
+
+  const overrides = await saveSpinoutDeckOverrides(c.env, projectId, Number(user.id), raw, remove);
+  return c.json({ overrides, overridable_keys: SPINOUT_OVERRIDABLE_KEYS });
 });
 
 // ===========================================================================

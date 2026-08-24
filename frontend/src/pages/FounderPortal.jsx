@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { reportError } from '../lib/log';
 import { api } from '../lib/api';
 import { Rocket, CheckCircle, XCircle, AlertTriangle, ChevronDown, ArrowRight } from 'lucide-react';
@@ -23,6 +23,39 @@ function ModernSelect({ value, onChange, children, ...props }) {
 }
 
 
+/**
+ * Map the founder onboarding wizard's stored answers onto this form's fields.
+ *
+ * The wizard already asked "what problem are you solving?", "how are you
+ * solving it?" and "why now?" — and this page then presented the same three as
+ * empty textareas, because the answers went into `onboarding_progress.data`,
+ * which nothing but the wizard itself ever read back.
+ *
+ * Keys on the LEFT are the wizard's (`OnboardingFounderPage`); keys on the
+ * RIGHT are this form's, which are also the `projects` column names. The same
+ * mapping exists server-side in `services/onboardingProjection.ts` for the
+ * founders who go to the Spin-Out Lab instead of here; a test pins the two
+ * together so they cannot drift apart.
+ */
+const ONBOARDING_TO_FORM = {
+  company_name: 'name',
+  tagline: 'description',
+  full_name: 'founder_name',
+  problem: 'problem_statement',
+  solution: 'solution',
+  why_now: 'why_now',
+};
+
+export function founderFormPrefill(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
+  const out = {};
+  for (const [from, to] of Object.entries(ONBOARDING_TO_FORM)) {
+    const v = data[from];
+    if (v != null && String(v).trim() !== '') out[to] = String(v).trim();
+  }
+  return out;
+}
+
 export default function FounderPortal({ embedded = false }) {
   const [form, setForm] = useState({
     name: '', description: '', sector: '', founder_name: '', founder_email: '',
@@ -36,6 +69,28 @@ export default function FounderPortal({ embedded = false }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
+
+  // Carry the onboarding answers in rather than asking for them again. Only
+  // fills fields still untouched, so a founder who started typing before the
+  // request lands never sees their own words overwritten.
+  useEffect(() => {
+    let alive = true;
+    api.onboardingGetProgress()
+      .then((p) => {
+        if (!alive || p?.flow !== 'founder') return;
+        const seed = founderFormPrefill(p.data);
+        if (Object.keys(seed).length === 0) return;
+        setForm((prev) => {
+          const next = { ...prev };
+          for (const [k, v] of Object.entries(seed)) {
+            if (String(prev[k] ?? '').trim() === '') next[k] = v;
+          }
+          return next;
+        });
+      })
+      .catch(() => { /* first-time users have no row; the blank form is correct */ });
+    return () => { alive = false; };
+  }, []);
 
   const handleChange = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
   const handleFund = (i, value) => setForm(prev => {

@@ -84,6 +84,11 @@ async def lifespan(app: FastAPI):
             ensure_growth_track_columns,
             ensure_project_revenue_proof_columns,
             ensure_project_product_demo_columns,
+            ensure_project_incorporation_meta_column,
+            ensure_project_uof_meta_column,
+            ensure_project_cofounder_decision_column,
+            ensure_interview_assessment_columns,
+            ensure_project_market_sizing_columns,
             ensure_lifecycle_columns,
             ensure_document_file_columns,
             ensure_user_access_level_column,
@@ -93,6 +98,7 @@ async def lifespan(app: FastAPI):
             ensure_marketplace_columns,
             ensure_service_catalogue_columns,
             ensure_partner_directory_columns,
+            ensure_partner_office_hours_guidance_columns,
             ensure_references_table,
             ensure_founder_risk_profiles_table,
             ensure_cap_table_scenarios_table,
@@ -130,6 +136,15 @@ async def lifespan(app: FastAPI):
         logger.info("StudioOS migrations: project revenue-proof columns ensured")
         ensure_project_product_demo_columns()
         logger.info("StudioOS migrations: project product-demo columns ensured")
+        ensure_project_uof_meta_column()
+        ensure_project_incorporation_meta_column()
+        logger.info("StudioOS migrations: project use-of-funds meta column ensured")
+        ensure_interview_assessment_columns()
+        logger.info("StudioOS migrations: interview assessment columns ensured")
+        ensure_project_cofounder_decision_column()
+        logger.info("StudioOS migrations: cofounder decision meta column ensured")
+        ensure_project_market_sizing_columns()
+        logger.info("StudioOS migrations: project market-sizing (som) column ensured")
         ensure_lifecycle_columns()
         logger.info("StudioOS migrations: project lifecycle columns ensured")
         ensure_document_file_columns()
@@ -154,6 +169,8 @@ async def lifespan(app: FastAPI):
         # Must run before service-catalogue migrations so `partners.slug`
         # exists when downstream queries join on it.
         ensure_partner_directory_columns()
+        # Office-hours booking guidance (dev parity for D1 migration 160).
+        ensure_partner_office_hours_guidance_columns()
         logger.info("StudioOS migrations: marketplace columns ensured")
         ensure_service_catalogue_columns()
         logger.info("StudioOS migrations: service catalogue + engagement lifecycle ensured")
@@ -307,7 +324,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Axal StudioOS",
-    description="The 30-Day Spin-Out Engine API",
+    description="The 28-Day Spin-Out Engine API",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -454,6 +471,12 @@ app.include_router(users.router, prefix="/api")
 app.include_router(market_intel.router, prefix="/api")
 app.include_router(matches.router, prefix="/api")
 app.include_router(_investor_signals.router, prefix="/api")
+# Founder Signals (/signals page) — dev parity for the Worker's /api/signals.
+# Registered because the page's very first request (GET /api/signals/filters)
+# 404'd in dev without it. NOT the same feature as investor_signals above.
+from backend.app.api.routes import signals as _signals  # noqa: E402
+
+app.include_router(_signals.router, prefix="/api")
 app.include_router(advisory.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
@@ -536,6 +559,11 @@ app.include_router(_kyc.router, prefix="/api")
 from backend.app.database import get_session  # noqa: E402
 from backend.app.api.routes import brand as _brand  # noqa: E402
 app.include_router(_brand.router, prefix="/api")
+# Contacts — dev mirror of the worker's inbound relationship hub (list side
+# only) so the "INBOUND LEADS · BRAND & PAGES" panels and the Brand page's
+# audience-inflow counts read real rows in local dev.
+from backend.app.api.routes import contacts as _contacts  # noqa: E402
+app.include_router(_contacts.router, prefix="/api")
 # Task #38 — dev-only parity shims (Skills profile + Payouts/network).
 from backend.app.api.routes import skills as _skills  # noqa: E402
 app.include_router(_skills.router, prefix="/api")
@@ -736,7 +764,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # ---------------------------------------------------------------------------
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "StudioOS v1.0", "tagline": "The 30-Day Spin-Out Engine"}
+    return {"status": "ok", "app": "StudioOS v1.0", "tagline": "The 28-Day Spin-Out Engine"}
 
 
 @app.get("/api/dashboard")
@@ -905,6 +933,12 @@ def dashboard_stats(user=Depends(get_current_user)):
         "total_users": total_users,
     }
 
+
+# Dev-only stubs for Worker-only surfaces (/api/articles, /api/public/events).
+# Registered last among API routes so real routes always win; this whole
+# module only ever runs in the local dev server, never in production.
+from backend.app.api.routes import dev_stubs as _dev_stubs  # noqa: E402
+app.include_router(_dev_stubs.router, prefix="/api")
 
 # ---------------------------------------------------------------------------
 # Static SPA fallback (last so /api routes win)

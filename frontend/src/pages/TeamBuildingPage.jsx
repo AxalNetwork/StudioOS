@@ -165,6 +165,7 @@ export default function TeamBuildingPage() {
           routed here so they're visible where the founder acts on them. */}
       <IncomingLeadsStrip
         audience="cofounder"
+        sectionLabel="INBOUND LEADS · BRAND & PAGES"
         title="New co-founder leads"
         blurb="People who reached out about co-founding via your landing pages."
       />

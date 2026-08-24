@@ -6,8 +6,8 @@
  * happy-path flow start → milestone (×4) → auto-advance → milestone
  * (week-2 set) → … → week-4 milestone (auto-exit) against a mocked D1
  * sql() helper, exercising the same exported logic functions the wire
- * handlers wrap. No new test deps — same node:test + tsc.transpileModule
- * pattern used by `projects.test.mjs`.
+ * handlers wrap. No new test deps — same node:test + type-erasure pattern
+ * used by `projects.test.mjs` (see `_transpile-ts.mjs`).
  *
  * Run with:  node --test cloudflare-worker/test/spinout_lab.test.mjs
  */
@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { transpileTs } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -27,8 +28,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /* exact source bytes that ship to Cloudflare.                        */
 /* ------------------------------------------------------------------ */
 async function loadModule() {
+  // The catalog constants were extracted to services/spinoutLabCatalog.ts
+  // (route file re-exports them) — slice from both real sources.
   const srcPath = resolve(__dirname, '../src/routes/spinout_lab.ts');
-  const src = await readFile(srcPath, 'utf8');
+  const catPath = resolve(__dirname, '../src/services/spinoutLabCatalog.ts');
+  const src = `${await readFile(catPath, 'utf8')}\n\n${await readFile(srcPath, 'utf8')}`;
 
   function sliceBlock(anchor) {
     const start = src.indexOf(anchor);
@@ -72,7 +76,15 @@ async function loadModule() {
 
   const pieces = [
     sliceConstArray('export const MILESTONES'),
-    sliceBlock('export const VALID_MILESTONE_KEYS'),
+    sliceBlock('export const OPTIONAL_MILESTONES'),
+    // Set literal has no braces — slice to the closing `]);`.
+    (() => {
+      const start = src.indexOf('export const VALID_MILESTONE_KEYS');
+      assert.notEqual(start, -1, 'export const VALID_MILESTONE_KEYS not found');
+      const end = src.indexOf(']);', start);
+      assert.notEqual(end, -1, 'VALID_MILESTONE_KEYS terminator not found');
+      return src.slice(start, end + 3);
+    })(),
     sliceBlock('function weekForKey('),
     sliceBlock('export function weekMet('),
     sliceBlock('export function unlockedFeaturesThrough('),
@@ -101,11 +113,7 @@ async function loadModule() {
     };
   })();`;
 
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js')))
-    .default;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
 
   return new Function(`${outputText}; return __out;`)();
 }
@@ -257,14 +265,17 @@ test('unlockedFeaturesThrough is cumulative and stable per week', async () => {
   for (const f of w2) assert.ok(w4.includes(f), `${f} should remain at w4`);
   assert.equal(w1.includes('roadmap'), false);
   assert.equal(w2.includes('roadmap'), true);
-  assert.equal(w4.includes('kyc'), true);
+  assert.equal(w4.includes('compliance'), true);
 });
 
 /* ------------------------------------------------------------------ */
 /* Route-flow smoke test — start → milestone (auto-advance) → exit    */
 /* ------------------------------------------------------------------ */
 test('happy path: start → 4 weeks of milestones → auto-exit on week 4', async () => {
-  const { startLab, recordMilestone, exitLab } = await loadModule();
+  // exitLab is not called here — week 4's 'incorporation_completed' milestone
+  // auto-exits the lab from inside recordMilestone, which is the behaviour
+  // this test asserts below. Exercising exitLab() directly is a separate test.
+  const { startLab, recordMilestone } = await loadModule();
   const { sql, state } = makeSql();
 
   // start()

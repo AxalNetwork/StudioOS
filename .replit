@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "python-3.11", "bash", "postgresql-16"]
+modules = ["nodejs-20", "web", "python-3.11", "bash"]
 [agent]
 expertMode = true
 integrations = ["github:1.0.0"]
@@ -15,6 +15,9 @@ runButton = "Project"
 name = "Project"
 mode = "parallel"
 author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
@@ -37,7 +40,18 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload"
+# --reload-dir scopes uvicorn's file watcher to backend/ only. Without it,
+# --reload defaults to walking the ENTIRE working directory (repo root) on
+# every reload check — including .local/, node_modules/, frontend/, .git/,
+# and any other tooling-managed directory that comes and goes during a
+# session. When one of those gets deleted mid-scan, the watcher's rglob()
+# throws FileNotFoundError and takes the whole backend process down (not
+# just skips a reload — the process exits), which the frontend experiences
+# as every /api/* call failing at once: a blank preview with no code defect
+# anywhere. Scoping to the one directory the app's source actually lives in
+# is the fix, not a workaround — nothing outside backend/ should ever
+# trigger or block a reload here.
+args = "UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir backend"
 waitForPort = 8000
 
 [[workflows.workflow]]

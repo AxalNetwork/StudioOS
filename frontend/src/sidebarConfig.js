@@ -21,8 +21,8 @@ import {
   Globe, Brain, Activity, Shield, ShieldCheck,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, LayoutGrid,
   MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
-  BookOpen, Settings as SettingsIcon, PieChart as PieIcon, Gamepad2, ShieldAlert,
-  Gavel, Inbox, FileBarChart, Radar, Wallet, PhoneCall,
+  BookOpen, Settings as SettingsIcon, Gamepad2, ShieldAlert,
+  Gavel, Inbox, FileBarChart, Radar, Wallet,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -68,7 +68,6 @@ export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
@@ -80,6 +79,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/circles', icon: Network, label: 'Communities Admin' },
       // Task #9 — chat-onboarded users awaiting binding agreement + role assignment.
       { to: '/admin/exploring', icon: UserCircle, label: 'Exploring Users' },
+      // GP review queue for Spin-Out Fund I LP applications (migration 165).
+      { to: '/admin/lp-applications', icon: Inbox, label: 'LP Applications' },
       { to: '/monitoring', icon: Activity, label: 'Monitoring' },
       { to: '/admin/telegram', icon: Send, label: 'Telegram Channels' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
@@ -145,17 +146,13 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'more', label: 'More', items: [
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
-      { to: '/incorporate/83b', icon: Calendar, label: '83(b) Tracker' },
+      { to: '/spinout-lab/83b', icon: Calendar, label: '83(b) Tracker' },
       { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/founder', icon: Rocket, label: 'Founder Portal' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/tickets', icon: Ticket, label: 'Support' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 
@@ -197,7 +194,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'build', label: 'Build', items: [
       // Command Center merges four founder Build destinations — Founder Portal
@@ -218,7 +214,7 @@ export const SIDEBAR_GROUPS = {
       // deep-links (or is redirected from) the legacy standalone routes.
       { to: '/build/team', icon: Users, label: 'Team', match: ['/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications'] },
       { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
-      { to: '/build/brand', icon: Sparkles, label: 'Brand & Landing' },
+      { to: '/spinout-lab/brand', icon: Sparkles, label: 'Brand & Landing', match: ['/spinout-lab/brand', '/build/brand'] },
     ]},
     { key: 'validate', label: 'Validate', items: [
       { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
@@ -243,12 +239,25 @@ export const SIDEBAR_GROUPS = {
     // Task #7 — Growth section mirrors the advisor/partner profiles: five tabs
     // (Talent, Customers, Partnerships, Capital, Experts) served by the shared
     // GrowthWorkspace under /founder/growth/*.
+    //
+    // Founder-journey audit — these five tabs are UI shell only (mock data,
+    // see src/data/growth.js), and sat unlocked next to the REAL Raise/Team
+    // workspaces with a colliding label: two sidebar items both read "Capital"
+    // — one live (/raise/capital), one sample data. `requiredTier: 'growth'`
+    // gives them the same lock-icon + PaywallModal treatment every other
+    // tier-gated item already gets (see `/liquidity` below), which at minimum
+    // stops a free founder from being shown counterfeit data as a working
+    // feature. It does NOT fully resolve the label collision on its own: Lab
+    // -active founders bypass this gate too (`hasTier`'s existing rule for
+    // REQUIRED lab tooling, e.g. the deck builder) and would still see an
+    // unlocked "Capital" here beside the real one — hence also renaming this
+    // one to "Capital Match" below, which stays true regardless of lock state.
     { key: 'growth', label: 'Growth', items: [
-      { to: '/founder/growth/talent', icon: Users, label: 'Talent' },
-      { to: '/founder/growth/customers', icon: Briefcase, label: 'Customers' },
-      { to: '/founder/growth/partnerships', icon: Handshake, label: 'Partnerships' },
-      { to: '/founder/growth/capital', icon: DollarSign, label: 'Capital' },
-      { to: '/founder/growth/experts', icon: Brain, label: 'Experts' },
+      { to: '/founder/growth/talent', icon: Users, label: 'Talent', requiredTier: 'growth' },
+      { to: '/founder/growth/customers', icon: Briefcase, label: 'Customers', requiredTier: 'growth' },
+      { to: '/founder/growth/partnerships', icon: Handshake, label: 'Partnerships', requiredTier: 'growth' },
+      { to: '/founder/growth/capital', icon: DollarSign, label: 'Capital Match', requiredTier: 'growth' },
+      { to: '/founder/growth/experts', icon: Brain, label: 'Experts', requiredTier: 'growth' },
     ]},
     // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
     // the shared Research workspace (also used by advisors/investors/partners).
@@ -286,10 +295,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/tickets', icon: Ticket, label: 'Support' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/docs', icon: BookOpen, label: 'Docs' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 
@@ -343,7 +348,6 @@ export const SIDEBAR_GROUPS = {
   partner: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/services', icon: Package, label: 'My Services' },
@@ -400,10 +404,6 @@ export const SIDEBAR_GROUPS = {
     // The whole single-item group is removed from the partner nav.
     { key: 'account', label: 'Account', items: [
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/tickets', icon: Ticket, label: 'Support' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 
@@ -431,7 +431,16 @@ export const SIDEBAR_GROUPS = {
   investor: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/products', icon: Package, label: 'Products' },
+      // Same item at the same index as the founder and exploring navs, so the
+      // program reads the same way in every profile — but it does NOT resolve
+      // to the same page. App.jsx serves /spinout-lab by the role being browsed
+      // as: an investor gets the Fund I sales page (SpinoutLabInvestorPage —
+      // what founders do inside the Lab, the operating stack, the underwriting
+      // edge, studio proof), whose CTAs route into the deeper
+      // /spinout-lab/investor-workspace (fund terms, raise status, reporting,
+      // allocation, apply). Everyone else gets the founder program. An LP's
+      // relationship with the Lab is the fund, not the 4-week curriculum.
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: ['/spinout-lab', '/spinout-lab/investor-workspace'] },
     ]},
     // Task — investor sidebar restructured around the investment lifecycle IA:
     // Network → Pipeline → Portfolio → Funds → Research. Network & Research
@@ -461,6 +470,12 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'funds', label: 'Funds', items: [
       { to: '/funds', icon: Wallet, label: 'Fund Management' },
+      // NOTE: no 'LP Workspace' item here — the investor journey to it runs
+      // Home → Spin-Out Lab (sales page) → its CTAs →
+      // /spinout-lab/investor-workspace, and a second nav item opening the
+      // same content under a fund-ops name is the confusion, not the fix. The
+      // /funds/lp-workspace ROUTE stays registered and is still a tab inside
+      // Fund Ops, so deep links and the tab strip are unaffected.
       { to: '/lp-reports', icon: UserCircle, label: 'LP Management' },
       { to: '/funds/performance', icon: Activity, label: 'Performance' },
       { to: '/funds/accounting', icon: Scale, label: 'Accounting' },
@@ -477,21 +492,12 @@ export const SIDEBAR_GROUPS = {
       { to: '/trust', icon: Lock, label: 'Trust & Identity' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
-      // "Integrations" merged into Settings (/settings/integrations); the
-      // /integrations route redirects there. Removed from the investor nav.
-      // Advisors, Partners, Jobs and Articles were trimmed from the investor
-      // Account group — they remain reachable by URL for other roles.
-      { to: '/activity', icon: Activity, label: 'Activity' },
-      { to: '/docs', icon: BookOpen, label: 'Docs' },
-      { to: '/tickets', icon: MessageSquare, label: 'Support' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 
   advisor: [
     { key: 'home', label: 'Home', items: [
       { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     // Task #23 — each Advisor workspace is its own sidebar group so its
     // sub-sections are visible directly (mirrors the founder/partner/investor
@@ -533,13 +539,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/advisors', icon: UserCircle, label: 'Advisor Directory' },
       { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-      { to: '/tickets', icon: Ticket, label: 'Support' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/articles/draft', icon: FileText, label: 'Articles' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 
@@ -554,17 +556,10 @@ export const SIDEBAR_GROUPS = {
       // Task #13 — surface the Spin-Out Lab program to explorers so they can
       // see the full 28-day pipeline before committing.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      // Explorer completion incentive — where the one-time 30-day-license
-      // promo code from the Personal Advisor gets redeemed.
-      { to: '/products', icon: Package, label: 'Products' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/profile', icon: UserCircle, label: 'My Profile' },
-      { to: '/docs', icon: BookOpen, label: 'Documentation' },
       { to: '/trust', icon: Lock, label: 'Trust Center' },
-      { to: '/activity', icon: Activity, label: 'Activity Log' },
-      { to: '/tickets', icon: MessageSquare, label: 'Support' },
-      { to: '/settings', icon: SettingsIcon, label: 'Settings' },
     ]},
   ],
 };

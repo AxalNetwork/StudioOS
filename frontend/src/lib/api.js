@@ -96,7 +96,9 @@ export async function request(path, options = {}) {
       const isPublicEndpoint = path.startsWith('/partner-onboard')
         || path.startsWith('/esign/sign')
         || path.startsWith('/public/')
-        || path.startsWith('/decks/share/');
+        || path.startsWith('/decks/share/')
+        // Build queue #120 — public audience-scoped cap-table link.
+        || path.startsWith('/captable/share/');
       if (res.status === 401 && !path.startsWith('/auth/') && !isPublicEndpoint) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -150,6 +152,7 @@ export async function request(path, options = {}) {
           || currentPath.startsWith('/esign/')
           || currentPath.startsWith('/deck/share/')
           || currentPath.startsWith('/share/deck/')
+          || currentPath.startsWith('/share/captable/')
           || currentPath.startsWith('/insights')
           || currentPath.startsWith('/settings/email/')
           // Task #5 — Public event surface (no auth)
@@ -310,6 +313,10 @@ export const api = {
     const qs = new URLSearchParams();
     if (params.action) qs.set('action', params.action);
     if (params.redirect) qs.set('redirect', params.redirect);
+    // Signup lane — the worker whitelists it again and signs it into the OAuth
+    // state. Without this the param is dropped here and a Google signup
+    // records no suggested role, unlike every other signup path.
+    if (params.lane) qs.set('lane', params.lane);
     const q = qs.toString();
     return request(`/auth/google/start${q ? `?${q}` : ''}`, { headers: { accept: 'application/json' } });
   },
@@ -448,6 +455,10 @@ export const api = {
   //     amount_cents, currency, registered_agent } | { dev:true, status:'paid', … }
   legalIncorporationOrder: (data) =>
     request('/legal/incorporation/order', { method: 'POST', body: JSON.stringify(data) }),
+  // Dev parity: simulate the Stripe webhook marking a checkout-created order
+  // paid (the dev FastAPI has no real Stripe webhook).
+  legalIncorporateDevComplete: (id) =>
+    request(`/legal/incorporate/dev-complete?id=${encodeURIComponent(id)}`, { method: 'POST' }),
   legalIncorporateStatus: (id) =>
     request(`/legal/incorporate/status?id=${encodeURIComponent(id)}`),
   legalIncorporationOrders: () =>
@@ -458,6 +469,32 @@ export const api = {
   // Task #31 — Co-founder agreement + 83(b) tracker
   legalCofounderAgreement: (data) =>
     request('/legal/cofounder-agreement', { method: 'POST', body: JSON.stringify(data) }),
+  // Spin-Out Lab graduation-certificate registry. Scopes are enforced in the
+  // worker (routes/spinout_certificates.ts), not here: admin issues/revokes,
+  // the holder reads only their own row, and the public verifier is separate
+  // and unauthenticated.
+  spinoutCertificateMine: () => request('/spinout-lab/certificates/mine'),
+  spinoutCertificateSharing: (enabled) =>
+    request('/spinout-lab/certificates/mine/sharing', {
+      method: 'POST', body: JSON.stringify({ public_share_enabled: !!enabled }),
+    }),
+  spinoutCertificateList: () => request('/spinout-lab/certificates'),
+  spinoutCertificateIssue: (data) =>
+    request('/spinout-lab/certificates', { method: 'POST', body: JSON.stringify(data) }),
+  spinoutCertificateRevoke: (id, reason) =>
+    request(`/spinout-lab/certificates/${id}/revoke`, {
+      method: 'POST', body: JSON.stringify({ reason: reason || null }),
+    }),
+  // Catch-up issuance for graduates who finished before auto-issuance
+  // existed. Admin-only, idempotent, and bounded per call — the response
+  // reports `remaining` so the caller knows whether to run it again.
+  spinoutCertificateBackfill: (limit) =>
+    request('/spinout-lab/certificates/backfill', {
+      method: 'POST', body: JSON.stringify({ limit: limit || 100 }),
+    }),
+  // Public, unauthenticated: returns only the public_* snapshot.
+  publicVerifyCertificate: (token) =>
+    request(`/public/verify/${encodeURIComponent(token)}`),
   legal83bList: (projectId) =>
     request(`/legal/83b/trackers${projectId ? `?project_id=${projectId}` : ''}`),
   legal83bCreate: (data) =>
@@ -622,6 +659,23 @@ export const api = {
   partnerPortal: {
     myDeal: () => request('/partner-portal/my-deal'),
     setAcceptingIntros: (value) => request('/partner-portal/accepting-intros', { method: 'PATCH', body: JSON.stringify({ accepting_intros: value }) }),
+    // Office-hours booking guidance the partner authors about themselves.
+    // Worker: cloudflare-worker/src/routes/partner_portal.ts (D1 migration
+    // 160_partner_office_hours_guidance.sql). Founders read it via the
+    // oh_* columns that ride along on GET /partners.
+    officeHoursGuidance: () => request('/partner-portal/office-hours-guidance'),
+    // Full replace, not a per-field merge: always send all four fields; a
+    // blank/omitted field is stored as NULL (i.e. unpublished).
+    updateOfficeHoursGuidance: ({ when_to_book, stage_fit, session_outcome, bring }) =>
+      request('/partner-portal/office-hours-guidance', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          when_to_book: when_to_book || null,
+          stage_fit: stage_fit || null,
+          session_outcome: session_outcome || null,
+          bring: Array.isArray(bring) ? bring : [],
+        }),
+      }),
   },
 
   // Task #10 (AC-1) — Personal advisor (dashboard chatbot + write-router).
@@ -690,7 +744,7 @@ export const api = {
   listInvestors: () => request('/capital/investors'),
   createInvestor: (data) => request('/capital/investors', { method: 'POST', body: JSON.stringify(data) }),
   getInvestor: (id) => request(`/capital/investors/${id}`),
-  createCapitalCall: (data) => request('/capital/calls', { method: 'POST', body: JSON.stringify(data) }),
+  createCapitalCallV2: (data) => request('/capital/calls', { method: 'POST', body: JSON.stringify(data) }),
   listCapitalCalls: (status) => request(`/capital/calls${status ? `?status=${status}` : ''}`),
   payCapitalCall: (id) => request(`/capital/calls/${id}/pay`, { method: 'POST' }),
   portfolio: () => request('/capital/portfolio'),
@@ -700,6 +754,9 @@ export const api = {
   getTicket: (id) => request(`/tickets/${id}`),
   updateTicket: (id, data) => request(`/tickets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   syncTickets: () => request('/tickets/sync', { method: 'POST' }),
+  // Task #9 — GitHub-canonical ticket comments + admin sync-mapping debug.
+  commentTicket: (id, body) => request(`/tickets/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
+  getTicketMapping: (id) => request(`/tickets/${id}/mapping`),
 
   // Task #82 — `scope='mine'` narrows the funnel to deals the investor has a
   // relationship with (dealroom member / introduced / converted watchlist).
@@ -909,6 +966,10 @@ export const api = {
   listMetricsSnapshots: (projectId) => request(`/progress/metrics/${projectId}`),
   createMetricsSnapshot: (projectId, data) => request(`/progress/metrics/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   deleteMetricsSnapshot: (id) => request(`/progress/metrics/${id}`, { method: 'DELETE' }),
+  // Build queue #121 — derived KPIs (growth, LTV:CAC, payback, retention)
+  // computed server-side from the snapshot series, with `unavailable[]`
+  // explaining any metric that could not be computed.
+  metricsSummary: (projectId) => request(`/progress/metrics/${projectId}/summary`),
   importMetricsFromStripe: (projectId) => request(`/progress/metrics/${projectId}/import-stripe`, { method: 'POST' }),
   getProgressSignals: (projectId) => request(`/progress/signals/${projectId}`),
   getLifecycle: (projectId) => request(`/progress/lifecycle/${projectId}`),
@@ -982,6 +1043,7 @@ export const api = {
   submitQuote: (needId, data) => request(`/needs/${needId}/quotes`, { method: 'POST', body: JSON.stringify(data) }),
   listQuotesForNeed: (needId) => request(`/needs/${needId}/quotes`),
   myQuotes: () => request('/quotes/me'),
+  quotesAnalytics: () => request('/quotes/analytics'),
   acceptQuote: (id) => request(`/quotes/${id}/accept`, { method: 'POST' }),
   rejectQuote: (id) => request(`/quotes/${id}/reject`, { method: 'POST' }),
   withdrawQuote: (id) => request(`/quotes/${id}/withdraw`, { method: 'POST' }),
@@ -1251,7 +1313,18 @@ export const api = {
   },
   adminVoidContractWithReason: (uid, reason) =>
     request(`/admin/contracts/${uid}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  adminImpersonate: (userId) => request(`/admin/impersonate/${userId}`, { method: 'POST' }),
+  adminImpersonate: async (userId) => {
+    const res = await request(`/admin/impersonate/${userId}`, { method: 'POST' });
+    // Cohort Timing task — session audit trail. Remember the Worker-issued
+    // session id so exitImpersonation can stamp ended_at (best-effort; the
+    // dev backend doesn't return one).
+    try {
+      if (res?.impersonation_session_id) localStorage.setItem('impersonationSessionId', String(res.impersonation_session_id));
+      else localStorage.removeItem('impersonationSessionId');
+    } catch { /* storage unavailable */ }
+    return res;
+  },
+  adminImpersonateEnd: (sessionId) => request(`/admin/impersonate-sessions/${sessionId}/end`, { method: 'POST' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
   adminSetIntegrationKeys: (provider, client_id, client_secret) =>
@@ -1445,6 +1518,28 @@ export const api = {
   // Task #102 — admitted / active / graduated founders with milestone rows,
   // derived tool unlocks, and the shared week catalog.
   adminSpinoutParticipants: () => request('/admin/spinout-participants'),
+  // Lab participant moderation. Ejecting closes the LAB workspace
+  // (spinout_lab_active = 0); it never deactivates the platform account the
+  // way adminToggleActive does. Reason code is mandatory on every action,
+  // reinstatement included.
+  adminSpinoutModeration: (userId) => request(`/admin/spinout-moderation/${userId}`),
+  adminSpinoutModerate: (userId, data) =>
+    request(`/admin/spinout-moderation/${userId}`, { method: 'POST', body: JSON.stringify(data) }),
+  // Cohort Timing & Gating — Worker-only endpoints (405/404 in dev backend;
+  // callers show a fallback). Timeline of monthly cycles + week windows,
+  // review queue (failed/grace/at-risk), grace extensions and pass/fail
+  // overrides (reason required, audited), impersonation session audit.
+  adminCohortTimeline: () => request('/admin/cohort/timeline'),
+  adminCohortReview: (cycleId) => request(`/admin/cohort/review${cycleId ? `?cycle_id=${cycleId}` : ''}`),
+  adminCohortGrace: (payload) => request('/admin/cohort/grace', { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortOverride: (payload) => request('/admin/cohort/override', { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortImpersonationAudit: () => request('/admin/cohort/impersonation-audit'),
+  adminCohortApplications: () => request('/admin/cohort/applications'),
+  adminCohortAppSettings: (payload) => request('/admin/cohort/applications/settings', { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortApplicantDecide: (applicantId, payload) => request(`/admin/cohort/applications/${applicantId}/decide`, { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortForceProceed: (cycleId, payload) => request(`/admin/cohort/applications/cycles/${cycleId}/force-proceed`, { method: 'POST', body: JSON.stringify(payload) }),
+  adminCohortAppNotifications: (cycleId) => request(`/admin/cohort/applications/notifications${cycleId ? `?cycle_id=${cycleId}` : ''}`),
+  adminCohortAppEvents: (cycleId) => request(`/admin/cohort/applications/events${cycleId ? `?cycle_id=${cycleId}` : ''}`),
 
   integrationsAvailable: () => request('/integrations/available'),
   // Crunchbase enrichment (Task #3, 2026-05-10) — growth tier, requires
@@ -1526,6 +1621,14 @@ export const api = {
   brandDeletePage: (pageId) => request(`/brand/landing/pages/${pageId}`, { method: 'DELETE' }),
   brandPublishPage: (pageId, published) => request(`/brand/landing/pages/${pageId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),
   brandPagePreviewUrl: (pageId) => request(`/brand/landing/pages/${pageId}/preview-url`),
+  // The SHAREABLE public url (distinct from the noindex preview-token link
+  // above). Returns { url, published, page_slug }.
+  brandPagePublicUrl: (pageId) => request(`/brand/landing/pages/${pageId}/public-url`),
+  // Pre-flight for the slug editor. Returns { available, reason?, message?, slug? }.
+  brandPageSlugAvailable: (projectId, slug, excludePageId) => request(
+    `/brand/landing/by-project/${projectId}/page-slug-available?slug=${encodeURIComponent(slug)}`
+    + (excludePageId ? `&exclude_page_id=${encodeURIComponent(excludePageId)}` : ''),
+  ),
   brandListCustomTemplates: () => request('/brand/custom-templates'),
   brandSaveCustomTemplate: (name, fromPageId) => request('/brand/custom-templates', { method: 'POST', body: JSON.stringify({ name, from_page_id: fromPageId }) }),
   brandDeleteCustomTemplate: (id) => request(`/brand/custom-templates/${id}`, { method: 'DELETE' }),
@@ -1591,6 +1694,18 @@ export const api = {
   // returns ONLY { gaps, draft, program_day } (skips the heavy DATA + NOTES
   // payload) so the deck page can show what's still missing BEFORE export.
   spinoutDeckPreview: (projectId) => request(`/projects/${projectId}/spinout-deck?preview=1`, { method: 'POST', body: '{}' }),
+  // Deck-level MANUAL OVERRIDES. These edit the deck only — they do NOT rewrite
+  // the founder's canonical module data (which is what the slide editor used to
+  // do). Resolution at render time is override > module data > derived
+  // placeholder. Returns { overrides, overridable_keys }.
+  spinoutDeckOverrides: (projectId) => request(`/projects/${projectId}/spinout-deck/overrides`),
+  // Send a key with an empty string (or list it in `remove`) to REVERT it back
+  // to the module value; there is no separate delete call.
+  saveSpinoutDeckOverrides: (projectId, overrides, remove = []) =>
+    request(`/projects/${projectId}/spinout-deck/overrides`, {
+      method: 'PUT',
+      body: JSON.stringify({ overrides, remove }),
+    }),
   // Task #2 — server-side export, format ∈ {pdf, pptx}. PNG cover was
   // removed end-to-end (PDF + PPTX are both driven by Cloudflare Browser
   // Rendering against the live SPA print template).
@@ -1813,7 +1928,7 @@ export const api = {
   infraReembedMetrics: (hours = 24) => request(`/infra/reembed-metrics?hours=${hours}`),
 
   // ---------- Funds & LPs ----------
-  fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
+  fundsListByStatus: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
   fundGet: (id) => request(`/funds/${id}`),
   fundCreate: (data) => request('/funds', { method: 'POST', body: JSON.stringify(data) }),
   fundUpdate: (id, data) => request(`/funds/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -1832,6 +1947,13 @@ export const api = {
     request('/liquidity/execute-exit', { method: 'POST', body: JSON.stringify(data) }),
   liquidityMyPortfolio: () => request('/liquidity/my-portfolio'),
   liquidityEvents: () => request('/liquidity/events'),
+  // Settlement side of a secondary — seller or admin only. Proceeds is a
+  // calculator (nothing is stored); the ROFR notice is real state.
+  liquidityProceeds: (id, terms = {}) =>
+    request(`/liquidity/listings/${id}/proceeds`, { method: 'POST', body: JSON.stringify(terms) }),
+  liquidityRofr: (id) => request(`/liquidity/listings/${id}/rofr`),
+  liquidityUpdateRofr: (id, data) =>
+    request(`/liquidity/listings/${id}/rofr`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // ---------- VC Funds / LP Portal / Distributions ----------
   fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
@@ -1847,6 +1969,15 @@ export const api = {
   fundsSignLpa: (lpId) =>
     request(`/funds/lps/${lpId}/sign-lpa`, { method: 'POST', body: JSON.stringify({}) }),
   fundsLpPortal: () => request('/funds/lp-portal'),
+  // GP-only. Returns ONE limited partner's reporting data in the same shape as
+  // fundsLpPortal, so the quarterly-report renderer is a single code path
+  // whether the LP downloads their own statement or the GP produces it.
+  fundsLpReport: (fundId, lpId) => request(`/funds/${fundId}/lp-report/${lpId}`),
+  // GP-only. Quarterly reporting periods; a period is a DRAFT until issued, and
+  // issuing freezes the fund-level snapshot and the GP's letter.
+  fundsReportPeriods: (fundId) => request(`/funds/${fundId}/report-periods`),
+  fundsSaveReportPeriod: (fundId, data) =>
+    request(`/funds/${fundId}/report-periods`, { method: 'POST', body: JSON.stringify(data) }),
   fundsSyndication: () => request('/funds/syndication'),
   fundsDistributions: (fund_id) => request(`/funds/distributions?fund_id=${fund_id}`),
   fundsExecuteDistribution: (data) =>
@@ -1942,6 +2073,7 @@ export const api = {
 
   // Company Profiles (Growth & Expansion Track — Task 1)
   companyMe: () => request('/company/me'),
+  listMyCompanies: () => request('/company/memberships'),
   getCompany: (uid) => request(`/company/${uid}`),
   listCompanies: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
@@ -1984,8 +2116,25 @@ export const api = {
   deleteCapTableScenario: (uid) =>
     request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
   exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
+  // 409A safe harbour — appraisals on file plus the material events that
+  // can end the presumption before the 12 months are up.
+  get409a: (projectId) => request(`/captable/409a/${projectId}`),
+  record409a: (projectId, data) =>
+    request(`/captable/409a/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  record409aEvent: (projectId, data) =>
+    request(`/captable/409a/${projectId}/events`, { method: 'POST', body: JSON.stringify(data) }),
+  delete409aEvent: (projectId, id) =>
+    request(`/captable/409a/${projectId}/events/${id}`, { method: 'DELETE' }),
   // Task #5 — live cap table (Carta-synced + manually-promoted rows).
   liveCapTable: () => request('/captable/live'),
+  // Build queue #120 — audience-scoped share links. The raw token is
+  // returned exactly once at mint time; only its hash is stored, so a
+  // link that is lost cannot be recovered, only replaced.
+  capTableShareCreate: (uid, data) =>
+    request(`/captable/scenarios/${uid}/share`, { method: 'POST', body: JSON.stringify(data) }),
+  capTableShareList: (uid) => request(`/captable/scenarios/${uid}/shares`),
+  capTableShareRevoke: (id) => request(`/captable/shares/${id}`, { method: 'DELETE' }),
+  capTableShared: (token) => request(`/captable/share/${token}`),
 
   // ---------- Task #6 — Founder subscription tier (FREE / GROWTH / STUDIO) ----------
   // 402 `tier_required` responses are auto-handled by `request` above (it
@@ -2344,6 +2493,18 @@ export const api = {
     const s = qs.toString();
     return request(`/advisors/${s ? `?${s}` : ''}`);
   },
+  // Worker-only matching engine (founder/explorer vectors vs advisor pool);
+  // the dev API has no /advisors/match — callers treat a 404 as "engine
+  // unavailable in this environment" and fall back to the directory ranking.
+  // Optional refinement: { gap, focus }. Both narrow the same scored set on
+  // the Worker, so a refined shortlist is a subset of the unrefined one.
+  advisorsMatch: (params) => {
+    const q = new URLSearchParams();
+    if (params?.gap) q.set('gap', params.gap);
+    if (params?.focus) q.set('focus', params.focus);
+    const s = q.toString();
+    return request(`/advisors/match${s ? `?${s}` : ''}`);
+  },
   getAdvisor: (uid) => request(`/advisors/${uid}`),
   upsertMyAdvisor: (data) => request('/advisors/me', { method: 'POST', body: JSON.stringify(data) }),
   getMyAdvisor: () => request('/advisors/me'),
@@ -2589,6 +2750,17 @@ export const api = {
   positionsList: () => request('/positions'),
   positionsByProject: (projectUid) => request(`/positions/${projectUid}`),
   positionCreate: (data) => request('/positions', { method: 'POST', body: JSON.stringify(data) }),
+  // Build queue #125 — real portfolio performance. `analytics` returns
+  // gross-of-fees TVPI/DPI/RVPI/MOIC/IRR computed from positions, marks,
+  // and realisations, with mark_coverage so the UI can flag how much of
+  // NAV is still carried at cost.
+  positionsAnalytics: (asOf) => request(`/positions/analytics${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`),
+  positionsKpiCompliance: (cadence = 'quarterly') =>
+    request(`/positions/kpi-compliance?cadence=${encodeURIComponent(cadence)}`),
+  positionMarkCreate: (projectUid, data) =>
+    request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
+  positionDistributionCreate: (projectUid, data) =>
+    request(`/positions/${projectUid}/distributions`, { method: 'POST', body: JSON.stringify(data) }),
 
   // ---------- Contacts (inbound relationship hub) ----------
   contactsList: (opts = {}) => {
@@ -2616,6 +2788,15 @@ export const api = {
   raiseRoundSave: (data) => request('/contacts/raise-round', { method: 'PUT', body: JSON.stringify(data) }),
   raiseUpdates: (projectId) => request(projectId ? `/contacts/raise-updates?project_id=${projectId}` : '/contacts/raise-updates'),
   raiseUpdateCreate: (data) => request('/contacts/raise-updates', { method: 'POST', body: JSON.stringify(data) }),
+  // Build queue #129 — Round Manager. Closes are tranches of the single
+  // active round; pro-rata entitlements are computed server-side per
+  // request (services/roundMath.ts) so they cannot drift from round size.
+  raiseCloses: (projectId) => request(projectId ? `/contacts/raise-closes?project_id=${projectId}` : '/contacts/raise-closes'),
+  raiseCloseCreate: (data) => request('/contacts/raise-closes', { method: 'POST', body: JSON.stringify(data) }),
+  raiseCloseUpdate: (id, data) => request(`/contacts/raise-closes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  raiseProRata: (projectId) => request(projectId ? `/contacts/raise-pro-rata?project_id=${projectId}` : '/contacts/raise-pro-rata'),
+  raiseProRataCreate: (data) => request('/contacts/raise-pro-rata', { method: 'POST', body: JSON.stringify(data) }),
+  raiseProRataUpdate: (id, data) => request(`/contacts/raise-pro-rata/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // ---------- Notifications (Phase 0.2) ----------
   listNotifications: (opts = {}) => {
@@ -2816,6 +2997,18 @@ export const dd = {
     fd.append('file', file);
     return request(`/dd/cases/${uid}/sections/${sectionId}/nda`, { method: 'POST', body: fd });
   },
+  // Build queue #128 — working checklists + information requests.
+  updateItem: (uid, itemId, patch) =>
+    request(`/dd/cases/${uid}/items/${itemId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  createRequest: (uid, data) =>
+    request(`/dd/cases/${uid}/requests`, { method: 'POST', body: JSON.stringify(data) }),
+  reviewRequest: (uid, id) =>
+    request(`/dd/cases/${uid}/requests/${id}`, { method: 'PATCH', body: JSON.stringify({ state: 'reviewed' }) }),
+  // Subject-facing surface: the ONLY dd calls a founder may make. The
+  // payload carries no case internals — see routes/dd.ts invariant.
+  myRequests: () => request('/dd/requests/mine'),
+  respondRequest: (id, data) =>
+    request(`/dd/requests/${id}/respond`, { method: 'PATCH', body: JSON.stringify(data) }),
 };
 
 // Task #2 (AU) — Admin Publication Exports.
@@ -3154,6 +3347,29 @@ export const spinoutLab = {
       body: JSON.stringify({ milestone_key }),
     }),
   exit: () => request('/spinout-lab/exit', { method: 'POST' }),
+
+  // Studio Ops (/spinout-lab/studio-ops) — the founder's weekly operating
+  // cadence and closeout review. Distinct from `api.studioOps*` below, which
+  // drives the STUDIO's admin workflow console at /api/studioops.
+  //
+  // Only these two founder-authored things are stored server-side. The page's
+  // objective, commitments, execution health and blockers are all derived from
+  // `state()` plus the week catalog, so they cannot drift from the workspace.
+  //
+  // `lock: true` on saveStudioOpsCadence is what records the Week-2
+  // `studio_ops_cadence_set` deliverable — saving a draft records nothing.
+  studioOps: () => request('/spinout-lab/studio-ops'),
+  saveStudioOpsCadence: (cadence, { lock = false } = {}) =>
+    request('/spinout-lab/studio-ops/cadence', {
+      method: 'PUT',
+      body: JSON.stringify({ cadence, lock }),
+    }),
+  saveStudioOpsReview: (review, { complete = false } = {}) =>
+    request('/spinout-lab/studio-ops/review', {
+      method: 'PUT',
+      body: JSON.stringify({ review, complete }),
+    }),
+
   // Public — real graduate companies for the "Graduate companies." section
   // (renders on the logged-out marketing page too).
   graduates: () => request('/spinout-lab/graduates'),
@@ -3164,6 +3380,26 @@ export const spinoutLab = {
   // Cohort application — signed-in founders only; contact info comes from
   // the account. Sends a confirmation email (production Worker).
   apply: (data) => request('/spinout-lab/apply', { method: 'POST', body: JSON.stringify(data) }),
+  // Auth'd — live program track record + Spin-Out Fund raise progress for the
+  // LP & Investor Workspace. Blocks carry `available`; the workspace falls
+  // back to its operator-maintained model when a block is not.
+  fundMetrics: () => request('/spinout-lab/fund-metrics'),
+  // LP request-for-access. `lpApplication()` returns { application } (null when
+  // the caller has never applied); `submitLpApplication(body)` upserts the
+  // caller's own row and returns the stored result. An application is an
+  // expression of interest, NOT an entitlement — it moves the workspace's
+  // access ladder from 'visitor' to 'pending', and 'pending' unlocks nothing.
+  lpApplication: () => request('/spinout-lab/lp-application'),
+
+  // GP application review (admin only). The queue returns every application
+  // for the fund plus per-status counts computed BEFORE filtering, so the tab
+  // badges stay stable while the reviewer switches views.
+  adminLpApplications: (fund) =>
+    request(`/admin/lp-applications${fund ? `?fund=${encodeURIComponent(fund)}` : ''}`),
+  adminLpApplicationReview: (id, body) =>
+    request(`/admin/lp-applications/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  submitLpApplication: (body) =>
+    request('/spinout-lab/lp-application', { method: 'POST', body: JSON.stringify(body) }),
 };
 
 // Task #39 — Event engine. `events` covers the authenticated host/attendee

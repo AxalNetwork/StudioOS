@@ -23,7 +23,7 @@ import re
 import secrets
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -174,6 +174,12 @@ def _ensure_schema(session: Session) -> None:
             session.commit()
         except Exception:
             session.rollback()
+    # codeql[py/unused-global-variable] -- _migrated is read via the `global _migrated` guard at the top of this same function (`if
+    # _migrated: return`); the write here is what a LATER, separate call's read observes. CodeQL's
+    # dead-store analysis does not model a global's value persisting across separate invocations of
+    # the function that sets it, so it sees this write as never consumed. It is: this flag exists
+    # specifically to make the schema-migration idempotent-but-skippable after the first successful
+    # request in this process.
     _migrated = True
 
 
@@ -221,6 +227,20 @@ def _slugify(name: str) -> str:
 # Task #2 — multi-page site helpers (mirror of routes/brand.ts).
 _CLEAN_SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$")
 _RESERVED_SITE_SLUGS = {"api", "app", "admin", "axal", "assets", "landing", "login", "preview", "register", "static", "www"}
+
+# Mirror of RESERVED_PAGE_SLUGS in cloudflare-worker/src/routes/brand.ts.
+# A page slug is the second segment of /p/{site}/{page} so it can't shadow an
+# app route, but it CAN impersonate a trust surface on the founder's own path
+# (/p/acme/login). Blocks credential/payment-adjacent names only.
+_RESERVED_PAGE_SLUGS = {
+    "login", "signin", "sign-in", "logout", "register", "signup", "sign-up",
+    "auth", "oauth", "sso", "password", "reset", "verify", "verification",
+    "account", "billing", "payment", "payments", "checkout", "card",
+    "admin", "api", "assets", "static", "preview", "settings", "security",
+}
+
+# Mirror of MAX_PAGES_PER_PROJECT in cloudflare-worker/src/routes/brand.ts.
+MAX_PAGES_PER_PROJECT = 5
 
 
 def _clean_slug(v: Any) -> Optional[str]:
@@ -639,6 +659,12 @@ class WaitlistPayload(BaseModel):
     name: Optional[str] = Field(default=None, max_length=120)
     source: Optional[str] = Field(default=None, max_length=64)
     audience: Optional[str] = Field(default=None, max_length=20)
+    # Attribution + bot trap, mirroring the worker. `company_website` is the
+    # honeypot (HONEYPOT_FIELD in landingTemplates.ts): a real visitor never
+    # sees or fills it, so any value means a bot.
+    utm: Optional[Dict[str, Any]] = None
+    referrer: Optional[str] = Field(default=None, max_length=500)
+    company_website: Optional[str] = Field(default=None, max_length=200)
 
 
 # Stored-XSS guard for logo_svg: founders can save a custom SVG that we
@@ -1134,8 +1160,39 @@ def _valid_audience(v: Optional[str]) -> Optional[str]:
     return None
 
 
+# Mirrors pickUtm() in cloudflare-worker/src/routes/brand.ts — allowlist the
+# five standard keys and clip each value. This is attacker-controlled input on
+# a public endpoint, so anything outside the allowlist is dropped, not stored.
+_UTM_KEYS = ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content")
+
+
+def _pick_utm(v: Any) -> Optional[Dict[str, str]]:
+    if not isinstance(v, dict):
+        return None
+    out: Dict[str, str] = {}
+    for k in _UTM_KEYS:
+        raw = v.get(k)
+        if isinstance(raw, str) and raw.strip():
+            out[k] = raw.strip()[:120]
+    return out or None
+
+
+def _sanitize_for_log(value: Any, max_len: int = 200) -> str:
+    s = str(value or "")
+    s = re.sub(r"[\r\n\t\x00-\x1f\x7f]+", " ", s)
+    return s.strip()[:max_len]
+
+
 @router.post("/landing/{slug}/waitlist")
 def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Session = Depends(get_session)):
+    # Sanitize user-controlled path value before writing to logs to prevent
+    # log injection / forged log lines via control characters.
+    safe_slug = _sanitize_for_log(slug, max_len=200)
+    # Honeypot — answer 200 so a bot can't distinguish the trap from success
+    # (a 400 teaches it to adapt). Nothing is written. Mirrors the worker.
+    if (payload.company_website or "").strip():
+        logger.warning("brand: honeypot tripped on landing %s", safe_slug)
+        return {"ok": True}
     email = (payload.email or "").strip().lower()
     if not _EMAIL_RE.match(email):
         raise HTTPException(status_code=422, detail="invalid email")
@@ -1145,6 +1202,14 @@ def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Ses
     ), params={"slug": slug}).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="landing page not found")
+    # Idempotent re-submit: the same email on the same page is one lead, not
+    # two. Scoped to (landing_page_id, email) — a different page is genuinely
+    # a different lead.
+    dupe = session.exec(text(
+        "SELECT 1 FROM waitlist_signups WHERE landing_page_id = :lid AND email = :email LIMIT 1"
+    ), params={"lid": row["id"], "email": email}).first()
+    if dupe:
+        return {"ok": True, "duplicate": True}
     # Hash IP so we can de-dupe without storing PII.
     ip = (request.client.host if request.client else "") or ""
     ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:32] if ip else None
@@ -1158,6 +1223,25 @@ def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Ses
         "source": payload.source or "landing", "audience": audience, "iph": ip_hash,
     })
     session.commit()
+    # Mirror the worker's dual-write: route the lead into the Contacts hub
+    # (full 6-audience taxonomy — the legacy waitlist column above is
+    # CHECK-limited to customer/partner/investor) so the destination pages'
+    # inbound-leads panels and the Brand page's inflow counts see it in dev.
+    # Best-effort: the capture above must succeed even if this write fails.
+    try:
+        from backend.app.api.routes.contacts import ingest_contact
+        contact_audience = _valid_page_audience(payload.audience) or "customer"
+        ingest_contact(
+            session,
+            project_id=row["project_id"], landing_page_id=row["id"],
+            email=email, name=payload.name, audience=contact_audience,
+            source=payload.source or "landing",
+            utm=_pick_utm(payload.utm), referrer=(payload.referrer or None),
+        )
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.warning("brand: contacts ingest failed for landing %s: %s", safe_slug, exc)
     return {"ok": True}
 
 
@@ -1183,12 +1267,12 @@ def list_waitlist(
     aud = _valid_audience(audience)
     if aud:
         rows = session.exec(text(
-            "SELECT id, email, name, source, audience, created_at FROM waitlist_signups "
+            "SELECT id, landing_page_id, email, name, source, audience, created_at FROM waitlist_signups "
             "WHERE project_id = :pid AND audience = :audience ORDER BY created_at DESC LIMIT 500"
         ), params={"pid": project_id, "audience": aud}).mappings().all()
     else:
         rows = session.exec(text(
-            "SELECT id, email, name, source, audience, created_at FROM waitlist_signups "
+            "SELECT id, landing_page_id, email, name, source, audience, created_at FROM waitlist_signups "
             "WHERE project_id = :pid ORDER BY created_at DESC LIMIT 500"
         ), params={"pid": project_id}).mappings().all()
     return {
@@ -1338,6 +1422,22 @@ def create_page(
     _ensure_schema(session)
     body = payload
 
+    # Hard cap, server-side (mirrors the worker). 409 rather than 400: the
+    # request is well-formed, it conflicts with current state, and deleting a
+    # page resolves it.
+    count_row = session.exec(text(
+        "SELECT COUNT(*) AS n FROM landing_pages WHERE project_id = :pid"
+    ), params={"pid": project_id}).mappings().first()
+    existing_count = int((count_row or {}).get("n") or 0)
+    if existing_count >= MAX_PAGES_PER_PROJECT:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"You've reached the limit of {MAX_PAGES_PER_PROJECT} landing pages "
+                "for this project. Delete a page to make room for a new one."
+            ),
+        )
+
     # Seed from a saved template the caller owns. The merged payload is
     # re-validated through LandingUpsert + _landing_params, so stored
     # snapshots are never trusted as-is.
@@ -1367,6 +1467,8 @@ def create_page(
         page_slug = _clean_slug(payload.page_slug)
         if not page_slug:
             raise HTTPException(status_code=400, detail=_SLUG_FORMAT_MSG)
+        if page_slug in _RESERVED_PAGE_SLUGS:
+            raise HTTPException(status_code=400, detail=f'"{page_slug}" is reserved and can\'t be used as a page URL.')
         hit = session.exec(text(
             "SELECT 1 FROM landing_pages WHERE project_id = :pid AND page_slug = :ps"
         ), params={"pid": project_id, "ps": page_slug}).first()
@@ -1478,6 +1580,78 @@ def page_preview_url(page_id: int, user: User = Depends(get_current_user), sessi
         ), params={"token": token, "id": page_id})
         session.commit()
     return {"url": f"/landing/preview/{token}"}
+
+
+def _canonical_public_url(session: Session, row: Dict[str, Any], origin: str) -> Optional[str]:
+    """The ONE public URL a published page should be shared/indexed under.
+
+    Mirrors canonicalPublicUrl() in cloudflare-worker/src/routes/brand.ts: a
+    published page is reachable at both the legacy random /landing/{slug} and
+    the branded /p/{site}/{page}, which is duplicate content — the branded one
+    wins because the founder chose it and it's stable across re-publishes.
+    """
+    if not origin:
+        return None
+    try:
+        site = session.exec(text(
+            "SELECT slug FROM brand_sites WHERE project_id = :pid"
+        ), params={"pid": row.get("project_id")}).mappings().first()
+        if site and site.get("slug"):
+            page = str(row.get("page_slug") or "home")
+            if page == "home":
+                return f"{origin}/p/{quote(str(site['slug']), safe='')}"
+            return f"{origin}/p/{quote(str(site['slug']), safe='')}/{quote(page, safe='')}"
+    except Exception as exc:
+        # A missing brand_sites table must not break the response.
+        logger.warning("brand: canonical lookup failed: %s", exc)
+    slug = row.get("slug")
+    return f"{origin}/landing/{quote(str(slug), safe='')}" if slug else None
+
+
+@router.get("/landing/pages/{page_id}/public-url")
+def page_public_url(
+    page_id: int,
+    request: Request,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """The page's SHAREABLE public url (not the noindex preview token)."""
+    _ensure_schema(session)
+    row = _page_owned(session, page_id, user)
+    origin = str(request.base_url).rstrip("/")
+    return {
+        "url": _canonical_public_url(session, dict(row), origin),
+        "published": bool(row.get("published")),
+        "page_slug": row.get("page_slug") or "home",
+    }
+
+
+@router.get("/landing/by-project/{project_id}/page-slug-available")
+def page_slug_available(
+    project_id: int,
+    slug: str = "",
+    exclude_page_id: int = 0,
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """Pre-flight for the slug editor — same three verdicts the write enforces."""
+    _project_owned(session, project_id, user)
+    _ensure_schema(session)
+    cleaned = _clean_slug(slug)
+    if not cleaned:
+        return {"available": False, "reason": "invalid", "message": _SLUG_FORMAT_MSG}
+    if cleaned in _RESERVED_PAGE_SLUGS:
+        return {
+            "available": False,
+            "reason": "reserved",
+            "message": f'"{cleaned}" is reserved and can\'t be used as a page URL.',
+        }
+    hit = session.exec(text(
+        "SELECT 1 FROM landing_pages WHERE project_id = :pid AND page_slug = :ps AND id <> :ex"
+    ), params={"pid": project_id, "ps": cleaned, "ex": exclude_page_id}).first()
+    if hit:
+        return {"available": False, "reason": "taken", "message": "You already have a page at that URL.", "slug": cleaned}
+    return {"available": True, "slug": cleaned}
 
 
 @router.get("/custom-templates")

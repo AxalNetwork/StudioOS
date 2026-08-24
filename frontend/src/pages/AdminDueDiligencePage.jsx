@@ -192,11 +192,19 @@ export default function AdminDueDiligencePage() {
   );
 }
 
+// Build queue #128 — stage templates. Depth picks how much checklist is
+// seeded per section (tiers are cumulative; recorded on the case).
+const DEPTH_TEMPLATES = [
+  { k: 'lite', name: 'Lite', blurb: 'Screening pass — the cheapest checks in every section. For small checks and early looks.' },
+  { k: 'standard', name: 'Standard', blurb: 'The default raise-grade process: references, cohorts, licenses, liabilities.', recommended: true },
+  { k: 'deep', name: 'Deep', blurb: 'Institutional depth — the full catalog, including QoE, code review, and expert calls.' },
+];
+
 function NewCaseModal({ onClose, onCreated }) {
   useEscapeClose(onClose);
   const [form, setForm] = useState({
     subject_type: 'project', subject_id: '', subject_label: '',
-    subject_email: '', subject_legal_name: '', notes: '',
+    subject_email: '', subject_legal_name: '', notes: '', template_depth: 'standard',
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -250,6 +258,26 @@ function NewCaseModal({ onClose, onCreated }) {
             <input value={form.subject_legal_name} onChange={(e) => setForm(f => ({ ...f, subject_legal_name: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900" />
           </label>
+          <div>
+            <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Diligence template</div>
+            <div className="grid grid-cols-3 gap-2">
+              {DEPTH_TEMPLATES.map(t => (
+                <button key={t.k} type="button" onClick={() => setForm(f => ({ ...f, template_depth: t.k }))}
+                  className={`text-left p-2.5 rounded-lg border transition-colors ${
+                    form.template_depth === t.k
+                      ? 'border-violet-400 bg-violet-50 dark:bg-violet-900/20 ring-1 ring-violet-400'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                  }`}>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100">{t.name}</span>
+                    {t.recommended && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 font-semibold">Default</span>}
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-1 leading-snug">{t.blurb}</div>
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">The template seeds the case checklist and is recorded on the case — scope by check size and stage, not by taste.</p>
+          </div>
           <label className="block">
             <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Analyst notes</div>
             <textarea rows={3} value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}

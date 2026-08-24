@@ -523,8 +523,12 @@ async def daily_health_loop(stop_event: asyncio.Event) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("portfolio_health tick failed: %s", exc)
         try:
+            # Wake every hour; use stop_event so shutdown is responsive.
+            # TimeoutError here is the expected outcome of every iteration
+            # but the last one — it means no stop signal arrived, keep looping.
             await asyncio.wait_for(stop_event.wait(), timeout=3600)
         except asyncio.TimeoutError:
+            # Expected on every iteration but the last — no stop signal arrived.
             pass
     logger.info("portfolio_health daily loop: stopped")
 

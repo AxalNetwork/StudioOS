@@ -39,6 +39,7 @@ export default function RegisterPage() {
   // worker has no GOOGLE_AUTH_CLIENT_ID configured (start returns 503).
   const [googleAvailable, setGoogleAvailable] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -58,7 +59,14 @@ export default function RegisterPage() {
       // Task #1 — carry the invite/deep-link target through the OAuth state
       // so the worker callback lands the user straight on it (new signups
       // included). The localStorage copy written on mount is defence-in-depth.
-      const { url } = await api.googleStartUrl({ action: 'signin', ...(nextPath ? { redirect: nextPath } : {}) });
+      // Carry the chosen lane too. Without it a Google signup recorded no
+      // suggested role at all, so the same person choosing "founder" arrived
+      // in the admin queue with intent via email and with none via Google.
+      const { url } = await api.googleStartUrl({
+        action: 'signin',
+        ...(nextPath ? { redirect: nextPath } : {}),
+        ...(laneRole ? { lane: laneRole } : {}),
+      });
       if (!url) throw new Error('No redirect URL returned.');
       window.location.href = url;
     } catch (e) {
@@ -128,7 +136,15 @@ export default function RegisterPage() {
     },
     founder: {
       title: 'Submit your pitch',
-      desc: "We'll score your venture within 72 hours. Free to join — no password to remember, we'll email you a secure sign-in link.",
+      // Founder-journey audit — this used to promise a fixed scoring
+      // turnaround measured in hours. Nothing enforces any such SLA: a fresh
+      // signup holds in the exploring review queue until an admin sends the
+      // binding agreement, and scoring is SELF-SERVE (the founder runs it from
+      // /scoring / the Lab) once the workspace opens — nobody scores the
+      // venture for them, on any clock. Promise what the system actually does.
+      // The guard test (founder_journey_guards.test.mjs) greps this file for
+      // timed-SLA copy, which is why the old wording isn't quoted here.
+      desc: "Free to join — after a short profile review, your workspace opens with self-serve venture scoring and the Spin-Out Lab tools. No password to remember; we'll email you a secure sign-in link.",
     },
   };
   const activeLane = lane && laneCopy[lane] ? laneCopy[lane] : null;
@@ -336,7 +352,7 @@ export default function RegisterPage() {
 
               {productIntent === 'spinout-lab' && (
                 <div className="bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 mb-4 text-xs text-amber-800">
-                  You're applying for <b>Spin-Out Lab</b> — our 30-day cohort.
+                  You're applying for <b>Spin-Out Lab</b> — our 28-day cohort.
                 </div>
               )}
 

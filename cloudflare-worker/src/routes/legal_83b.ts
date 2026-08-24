@@ -12,7 +12,7 @@ import {
 } from '../services/section83b';
 
 // ----------------------- 83(b) tracker (Task #13) ---------------------------
-// Worker parity for /incorporate/83b. The dev FastAPI backend
+// Worker parity for the 83(b) tracker (/spinout-lab/83b). The dev FastAPI backend
 // (routes/legal.py) is the authoritative contract; the DTO + access rules
 // mirror it 1:1. Trackers are scoped per founder (admins/partners see all);
 // the receipt upload stores binary scans in R2 (FILES) with a JSON pointer

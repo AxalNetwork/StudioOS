@@ -6,8 +6,8 @@ import { useToast } from '../components/useToast';
 import {
   User, ShieldCheck, Bell, Lock,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
-  Plus, X, KeyRound, Palette, Plug, CreditCard, UserCog,
-  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Share2,
+  Plus, X, KeyRound, Palette, Plug, CreditCard,
+  Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Activity,
 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
@@ -17,9 +17,6 @@ import OnboardingSettingsTab from '../components/OnboardingSettingsTab';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import BillingDashboard from '../components/BillingDashboard';
-// Task #4 — Referrals lives inside Settings as its own section; lazy-loaded so
-// its heavier deps (QR code, Stripe Connect panel) stay out of the settings chunk.
-const ReferralsPage = lazy(() => import('./ReferralsPage'));
 // Task — the full Integrations marketplace is embedded into the Settings
 // Integrations section; lazy so its provider/OAuth deps stay out of the
 // settings chunk (mirrors the ReferralsPage embed above).
@@ -135,22 +132,22 @@ const PARTNER_NOTIFICATION_EVENTS = [
   { key: 'partner_kyc_block', label: 'A founder you backed is blocked on KYC' },
 ];
 
+const ActivityPage = lazy(() => import('./ActivityPage'));
+
 // Task #1 — Settings expansion (tabbed). Nine tabs per the audit-plan brief.
 // `roles` controls visibility per signed-in role; absence = visible to all.
 const SECTIONS = [
-  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'account', label: 'Account', icon: User },
   { id: 'onboarding', label: 'Onboarding', icon: CheckCircle2 },
-  { id: 'account', label: 'Account', icon: UserCog },
-  { id: 'security', label: 'Security', icon: ShieldCheck },
+  { id: 'security-privacy', label: 'Security & Privacy', icon: ShieldCheck },
   { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'privacy', label: 'Privacy', icon: Lock },
   { id: 'integrations', label: 'Integrations', icon: Plug },
   { id: 'billing', label: 'Billing', icon: CreditCard },
   // Task #4 — the merged Referrals workspace (Refer & Earn + Payouts) now lives
   // here as a section. Gated to the roles that carried the standalone /refer
   // item (admin/founder/partner/investor); hidden for advisor.
-  { id: 'referrals', label: 'Referrals', icon: Share2, roles: ['admin', 'founder', 'partner', 'investor'] },
   { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'activity', label: 'Activity Log', icon: Activity },
 ];
 
 // ---------- Page ------------------------------------------------------------
@@ -161,19 +158,19 @@ const SECTIONS = [
 const PATH_TO_SECTION = {
   notifications: 'notifications',
   onboarding: 'onboarding',
-  profile: 'profile',
+  profile: 'account',
   account: 'account',
-  security: 'security',
-  privacy: 'privacy',
+  security: 'security-privacy',
+  privacy: 'security-privacy',
+  'security-privacy': 'security-privacy',
   integrations: 'integrations',
   billing: 'billing',
-  referrals: 'referrals',
   appearance: 'appearance',
   // Back-compat: old deep links still resolve to a sensible new tab.
-  jurisdictions: 'profile',
+  jurisdictions: 'account',
   email: 'account',
-  auth: 'security',
-  role: 'profile',
+  auth: 'security-privacy',
+  role: 'account',
 };
 
 export default function SettingsPage() {
@@ -267,12 +264,12 @@ export default function SettingsPage() {
   // not get the Developer UI rendered just because the URL parsed `active`
   // before role was known. Mirror the nav filter on the content side.
   const allowedIds = new Set(sections.map(s => s.id));
-  const safeActive = allowedIds.has(active) ? active : 'profile';
+  const safeActive = allowedIds.has(active) ? active : 'account';
 
   return (
     <div className="max-w-5xl" data-testid="settings-page" data-active-section={safeActive}>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Settings</h1>
-      <p className="text-gray-600 dark:text-gray-400 mb-6">Profile, security, notifications, and role preferences for your Axal VC account.</p>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">User Settings</h1>
+      <p className="text-gray-600 dark:text-gray-400 mb-6">Account, security, notifications, and preferences for your Axal VC profile.</p>
 
       {toast && (
         <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
@@ -305,24 +302,16 @@ export default function SettingsPage() {
         </nav>
 
         <div className="space-y-6">
-          {safeActive === 'profile' && (
-            <ProfileTabs data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
-          )}
           {safeActive === 'account' && (
             <>
+              <ProfileTabs data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
               <EmailSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
               <AccountDeletionCard data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
             </>
           )}
-          {safeActive === 'security' && <AuthSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />}
-          {safeActive === 'notifications' && (
+          {safeActive === 'security-privacy' && (
             <>
-              <NotificationsSection data={data} patch={patch} />
-              <DigestQuietHoursCard flash={flash} />
-            </>
-          )}
-          {safeActive === 'privacy' && (
-            <>
+              <AuthSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
               <PrivacyCoreCard flash={flash} />
               <InvestorSignalsContributionCard flash={flash} role={data?.role} />
               <InvestorMyThesisCard flash={flash} role={data?.role} />
@@ -331,15 +320,21 @@ export default function SettingsPage() {
               <PrivacySection data={data} patch={patch} flash={flash} reload={() => api.getSettings().then(setData)} hideAccountDelete />
             </>
           )}
+          {safeActive === 'notifications' && (
+            <>
+              <NotificationsSection data={data} patch={patch} />
+              <DigestQuietHoursCard flash={flash} />
+            </>
+          )}
           {safeActive === 'onboarding' && <OnboardingSettingsTab />}
           {safeActive === 'integrations' && allowedIds.has('integrations') && <IntegrationsTab />}
           {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
-          {safeActive === 'referrals' && allowedIds.has('referrals') && (
-            <Suspense fallback={<div className="text-gray-500 dark:text-gray-400 py-8 text-center">Loading…</div>}>
-              <ReferralsPage embedded />
+          {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
+          {safeActive === 'activity' && (
+            <Suspense fallback={<div className="py-8 text-center text-gray-500 dark:text-gray-400 text-sm">Loading…</div>}>
+              <ActivityPage />
             </Suspense>
           )}
-          {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
         </div>
       </div>
     </div>
@@ -536,7 +531,6 @@ function ProfileTabs({ data, onSaved, flash, patch }) {
   const [pct, setPct] = useState(0);
   const tabs = [
     { id: 'personal', label: 'Personal' },
-    { id: 'corporate', label: 'Corporate' },
     { id: 'verification', label: 'Verification' },
   ];
   return (
@@ -560,7 +554,6 @@ function ProfileTabs({ data, onSaved, flash, patch }) {
           <RolePreferencesSection data={data} patch={patch} />
         </>
       )}
-      {sub === 'corporate' && <CorporateIdentityCard flash={flash} onPctChange={setPct} />}
       {sub === 'verification' && <VerificationStubCard data={data} />}
     </>
   );
@@ -713,188 +706,6 @@ function PersonalIdentityCard({ flash, onPctChange }) {
   );
 }
 
-function CorporateIdentityCard({ flash, onPctChange }) {
-  const [row, setRow] = useState(null);
-  const [err, setErr] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [taxIdInput, setTaxIdInput] = useState('');
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [draftUbo, setDraftUbo] = useState({ name: '', nationality: '', ownership_pct: '' });
-
-  useEffect(() => {
-    let cancelled = false;
-    // AE-2: prefer the /legal-entity alias which always returns
-    // `profile_completion_pct` so the parent ring & top banner stay
-    // in sync without a second round-trip.
-    api.getLegalEntity()
-      .then(r => { if (!cancelled) { setRow(r); onPctChange?.(r.profile_completion_pct || 0); } })
-      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load corporate profile'); });
-    return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const save = async (patch) => {
-    setBusy(true);
-    setFieldErrors({});
-    try {
-      const updated = await api.updateLegalEntity(patch);
-      setRow(updated);
-      onPctChange?.(updated.profile_completion_pct || 0);
-      // Notify the top-of-Settings banner to re-fetch.
-      try { window.dispatchEvent(new CustomEvent('axal:profile_saved')); } catch {}
-      flash('Saved');
-      if ('tax_id_number' in patch) setTaxIdInput('');
-      if ('ubos' in patch) setDraftUbo({ name: '', nationality: '', ownership_pct: '' });
-    } catch (e) {
-      // AE-2: surface field-level errors inline. The AE-1 envelope is
-      // `{error, field, errors:{[field]: msg}}` — prefer the map form
-      // when present (multi-field), fall back to single-field shape.
-      const errsMap = e?.data?.errors;
-      if (errsMap && typeof errsMap === 'object') setFieldErrors(errsMap);
-      else if (e?.field) setFieldErrors({ [e.field]: e.message });
-      // Only flash a toast when the error has no field — pure inline
-      // otherwise, per AE-2 acceptance ("never a generic toast").
-      if (!e?.field && !errsMap) flash(e.message || 'Failed to save', 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (err) return <Card title="Legal entity"><div className="text-sm text-red-600">{err}</div></Card>;
-  if (!row) return <Card title="Legal entity"><div className="text-sm text-gray-500">Loading…</div></Card>;
-
-  const r = row;
-  const set = (k, v) => setRow({ ...r, [k]: v });
-  const onBlurSave = (k) => {
-    const v = r[k] ?? null;
-    save({ [k]: v === '' ? null : v });
-  };
-  const fe = (k) => fieldErrors[k] ? <span className="text-[11px] text-red-600 block mt-1">{fieldErrors[k]}</span> : null;
-
-  const addUbo = () => {
-    const pct = Number(draftUbo.ownership_pct);
-    if (!draftUbo.name.trim() || !Number.isFinite(pct)) {
-      flash('UBO needs a name and a numeric ownership %', 'error');
-      return;
-    }
-    const next = [...(r.ubos || []), {
-      name: draftUbo.name.trim(),
-      nationality: draftUbo.nationality ? draftUbo.nationality.toUpperCase() : null,
-      ownership_pct: pct,
-      is_pep: false,
-    }];
-    save({ ubos: next });
-  };
-  const removeUbo = (i) => {
-    const next = (r.ubos || []).filter((_, idx) => idx !== i);
-    save({ ubos: next });
-  };
-
-  return (
-    <>
-      <Card title="Legal entity"
-        description="Used to identify your company on Axal VC contracts. Leave blank if you operate as an individual.">
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="Entity name">
-            <input value={r.entity_name || ''} onChange={e => set('entity_name', e.target.value)}
-              onBlur={() => onBlurSave('entity_name')} disabled={busy} className={inputCls} />
-          </Field>
-          <Field label="Entity type">
-            <select value={r.entity_type || ''} onChange={e => { set('entity_type', e.target.value); save({ entity_type: e.target.value || null }); }}
-              disabled={busy} className={inputCls}>
-              {ENTITY_TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-            {fe('entity_type')}
-          </Field>
-          <Field label="Registration number" hint="Required when entity type is set.">
-            <input value={r.registration_number || ''} onChange={e => set('registration_number', e.target.value)}
-              onBlur={() => onBlurSave('registration_number')} disabled={busy} className={inputCls} />
-            {fe('registration_number')}
-          </Field>
-          <Field label="Registered country (ISO α-2)">
-            <input value={r.registered_country || ''} maxLength={2}
-              onChange={e => set('registered_country', e.target.value.toUpperCase())}
-              onBlur={() => onBlurSave('registered_country')} disabled={busy} className={inputCls} placeholder="US" />
-            {fe('registered_country')}
-          </Field>
-          <Field label={`Tax ID / EIN${r.has_tax_id ? ' (saved · ••••' + (r.tax_id_last4 || '••••') + ')' : ''}`}>
-            <div className="flex gap-2">
-              <input value={taxIdInput} onChange={e => setTaxIdInput(e.target.value)}
-                disabled={busy} className={inputCls} placeholder={r.has_tax_id ? 'Replace…' : 'Enter…'} />
-              <button onClick={() => taxIdInput && save({ tax_id_number: taxIdInput })}
-                disabled={busy || !taxIdInput}
-                className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg">Save</button>
-              {r.has_tax_id && (
-                <button onClick={() => save({ tax_id_number: null })} disabled={busy}
-                  className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg">Clear</button>
-              )}
-            </div>
-            {fe('tax_id_number')}
-          </Field>
-        </div>
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-          <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Registered address</h3>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="Address line 1"><input value={r.registered_address_line1 || ''} onChange={e => set('registered_address_line1', e.target.value)} onBlur={() => onBlurSave('registered_address_line1')} disabled={busy} className={inputCls} /></Field>
-            <Field label="Address line 2"><input value={r.registered_address_line2 || ''} onChange={e => set('registered_address_line2', e.target.value)} onBlur={() => onBlurSave('registered_address_line2')} disabled={busy} className={inputCls} /></Field>
-            <Field label="City"><input value={r.registered_city || ''} onChange={e => set('registered_city', e.target.value)} onBlur={() => onBlurSave('registered_city')} disabled={busy} className={inputCls} /></Field>
-            <Field label="State / region"><input value={r.registered_state || ''} onChange={e => set('registered_state', e.target.value)} onBlur={() => onBlurSave('registered_state')} disabled={busy} className={inputCls} /></Field>
-            <Field label="Postal code">
-              <input value={r.registered_postal || ''} onChange={e => set('registered_postal', e.target.value)} onBlur={() => onBlurSave('registered_postal')} disabled={busy} className={inputCls} />
-              {fe('registered_postal')}
-            </Field>
-          </div>
-        </div>
-        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-          <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Signing authority</h3>
-          <div className="grid sm:grid-cols-3 gap-3">
-            <Field label="Name"><input value={r.signing_authority_name || ''} onChange={e => set('signing_authority_name', e.target.value)} onBlur={() => onBlurSave('signing_authority_name')} disabled={busy} className={inputCls} /></Field>
-            <Field label="Title"><input value={r.signing_authority_title || ''} onChange={e => set('signing_authority_title', e.target.value)} onBlur={() => onBlurSave('signing_authority_title')} disabled={busy} className={inputCls} placeholder="CEO" /></Field>
-            <Field label="Email">
-              <input value={r.signing_authority_email || ''} onChange={e => set('signing_authority_email', e.target.value)} onBlur={() => onBlurSave('signing_authority_email')} disabled={busy} className={inputCls} placeholder="founder@…" />
-              {fe('signing_authority_email')}
-            </Field>
-          </div>
-        </div>
-      </Card>
-
-      <Card title="Ultimate beneficial owners (UBOs)"
-        description="List anyone with ≥25% ownership. We mark the entity as UBO-disclosed once at least one ≥25% holder is on file.">
-        <div className="space-y-2">
-          {(r.ubos || []).length === 0 && (
-            <div className="text-xs text-gray-500 dark:text-gray-400">No UBOs added yet.</div>
-          )}
-          {(r.ubos || []).map((u, i) => (
-            <div key={i} className="flex items-center gap-2 text-sm border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2">
-              <span className="font-medium text-gray-900 dark:text-gray-100 flex-1 truncate">{u.name}</span>
-              <span className="text-xs text-gray-500">{u.nationality || '—'}</span>
-              <span className="text-xs font-medium text-gray-700 dark:text-gray-300 w-16 text-right">{u.ownership_pct}%</span>
-              <button onClick={() => removeUbo(i)} disabled={busy}
-                className="text-xs text-red-600 hover:text-red-700"><X size={14} /></button>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 grid sm:grid-cols-[1fr_80px_100px_auto] gap-2">
-          <input value={draftUbo.name} onChange={e => setDraftUbo({ ...draftUbo, name: e.target.value })}
-            placeholder="Full name" className={inputCls} />
-          <input value={draftUbo.nationality} onChange={e => setDraftUbo({ ...draftUbo, nationality: e.target.value.toUpperCase() })}
-            maxLength={2} placeholder="ISO" className={inputCls} />
-          <input value={draftUbo.ownership_pct} onChange={e => setDraftUbo({ ...draftUbo, ownership_pct: e.target.value })}
-            type="number" min="0" max="100" step="0.01" placeholder="%" className={inputCls} />
-          <button onClick={addUbo} disabled={busy}
-            className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg whitespace-nowrap">
-            <Plus size={12} className="inline" /> Add
-          </button>
-        </div>
-        {fe('ubos')}
-        <div className="mt-3 text-[11px] text-gray-500 dark:text-gray-400">
-          Status: {r.ubo_disclosed
-            ? <span className="text-emerald-600 font-medium">Disclosed (≥25% holder on file)</span>
-            : <span className="text-amber-600 font-medium">Pending — add a ≥25% holder.</span>}
-        </div>
-      </Card>
-    </>
-  );
-}
 
 function VerificationStubCard({ data }) {
   const kyc = (data.kyc_status || 'not_started').toLowerCase();

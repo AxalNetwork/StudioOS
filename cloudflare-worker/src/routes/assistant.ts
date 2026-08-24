@@ -174,16 +174,26 @@ const TOOL_DEFS: ToolDef[] = [
 
 // Role → feature catalog. Kept in one place so listAvailableFeatures and
 // deepLink share the same source of truth.
+//
+// Founder-journey audit — every `url` here MUST be a route registered in
+// frontend/src/App.jsx: the assistant speaks these links to users, and seven
+// of them pointed at paths that were renamed or consolidated after this
+// catalog was written (/legal/cofounder-agreement, /legal/incorporation,
+// /discovery, /financials, /dd, /portfolio, /notifications) — so the
+// assistant was confidently deep-linking founders into 404s. The frontend
+// guard test (frontend/test/founder_journey_guards.test.mjs) now cross-checks
+// each url's pathname against the registered routes, so a future route rename
+// fails the suite instead of quietly re-breaking the assistant.
 interface FeatureEntry { keywords: string[]; url: string; label: string; roles: string[] }
 const FEATURE_CATALOG: FeatureEntry[] = [
   { keywords: ['cofounder agreement', 'co-founder agreement', 'cofounder', 'co-founder'],
-    url: '/legal/cofounder-agreement', label: 'Co-Founder Agreement', roles: ['founder', 'admin'] },
-  { keywords: ['spinout lab', 'spin-out lab', 'spinout', '30-day spin-out'],
+    url: '/incorporate/cofounder-agreement', label: 'Co-Founder Agreement', roles: ['founder', 'admin'] },
+  { keywords: ['spinout lab', 'spin-out lab', 'spinout', '28-day spin-out'],
     url: '/spinout-lab', label: 'Spin-Out Lab', roles: ['founder', 'admin'] },
   { keywords: ['cap table', 'captable', 'cap-table'],
     url: '/legal-capital', label: 'Cap-Table Simulator', roles: ['founder', 'admin', 'investor'] },
   { keywords: ['incorporation', 'incorporate', 'wizard'],
-    url: '/legal/incorporation', label: 'Incorporation Wizard', roles: ['founder', 'admin'] },
+    url: '/incorporate', label: 'Incorporation Wizard', roles: ['founder', 'admin'] },
   { keywords: ['compliance calendar', 'compliance', '83(b)', '83b'],
     url: '/compliance', label: 'Compliance Calendar', roles: ['founder', 'admin'] },
   { keywords: ['fund management', 'fund'],
@@ -191,13 +201,13 @@ const FEATURE_CATALOG: FeatureEntry[] = [
   { keywords: ['advisor', 'office hours', 'advisor matching'],
     url: '/advisors', label: 'Advisor Matching', roles: ['founder', 'admin', 'partner'] },
   { keywords: ['discovery', 'interviews'],
-    url: '/discovery', label: 'Discovery Interviews', roles: ['founder', 'admin'] },
+    url: '/build/discovery', label: 'Discovery Interviews', roles: ['founder', 'admin'] },
   { keywords: ['roadmap', 'okr', 'okrs'],
-    url: '/roadmap', label: 'Roadmap & OKRs', roles: ['founder', 'admin'] },
+    url: '/build/roadmap', label: 'Roadmap & OKRs', roles: ['founder', 'admin'] },
   { keywords: ['financial model', 'financials', 'model builder'],
-    url: '/financials', label: 'Financial Model Builder', roles: ['founder', 'admin', 'investor'] },
+    url: '/build/financials', label: 'Financial Model Builder', roles: ['founder', 'admin', 'investor'] },
   { keywords: ['portfolio', 'portfolio health'],
-    url: '/portfolio', label: 'Portfolio Health', roles: ['admin', 'investor', 'partner'] },
+    url: '/portfolio/health', label: 'Portfolio Health', roles: ['admin', 'investor', 'partner'] },
   { keywords: ['watchlist'],
     url: '/watchlist', label: 'Watchlist & Decision Journal', roles: ['admin', 'investor', 'partner'] },
   { keywords: ['investor signals', 'market intel', 'signals'],
@@ -205,13 +215,13 @@ const FEATURE_CATALOG: FeatureEntry[] = [
   { keywords: ['settings', 'preferences', 'account'],
     url: '/settings', label: 'Settings', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['notifications', 'inbox'],
-    url: '/notifications', label: 'Notifications', roles: ['admin', 'founder', 'partner', 'investor'] },
+    url: '/activity', label: 'Notifications & Activity', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['docs', 'help', 'documentation'],
     url: '/docs', label: 'Help & Docs', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['calendar', 'meetings'],
     url: '/calendar', label: 'Calendar', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['due diligence', 'dd'],
-    url: '/dd', label: 'Due Diligence', roles: ['admin', 'partner', 'investor'] },
+    url: '/due-diligence', label: 'Due Diligence', roles: ['admin', 'partner', 'investor'] },
   { keywords: ['analytics', 'monitoring'],
     url: '/monitoring?tab=analytics', label: 'Admin Analytics', roles: ['admin'] },
 ];

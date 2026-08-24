@@ -37,4 +37,4 @@ Settings → Account → Delete account.
 Subject to applicable law (including GDPR/CCPA where relevant), you
 may request access, correction, portability, or deletion of your data
 by contacting privacy@axal.vc (Axal VC Management LLC, attn: Privacy
-Officer).
+Officer, 16192 Coastal Hwy, Lewes, DE 19958, United States).

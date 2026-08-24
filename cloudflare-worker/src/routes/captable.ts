@@ -22,6 +22,60 @@ import {
   type AccessUser,
 } from '../services/captableAccess';
 import { ensureCapTableVariantColumn } from '../services/captableSchema';
+import {
+  mintShareToken, verifyShareToken, claimShareToken, sha256Hex, hashViewerField,
+} from '../services/shareLink';
+import {
+  redactForAudience, isShareAudience, AUDIENCE_SCOPE, type ShareAudience,
+} from '../services/captableShare';
+import {
+  safeHarbourStatus, triggerChecklist, commonToPreferredRatio, type TriggerKind,
+} from '../services/valuation409a';
+
+/**
+ * Build queue #120 — lazy bootstrap for the share tables. Canonical
+ * record is migration 170; this self-heals a database that has the
+ * deploy but not the migration yet, matching the pattern used by
+ * ensureCapTableVariantColumn above. Cached per isolate.
+ */
+let _shareSchemaReady = false;
+async function ensureCapTableShareSchema(env: Env): Promise<void> {
+  if (_shareSchemaReady) return;
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS captable_share_tokens (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       scenario_uid TEXT NOT NULL,
+       audience TEXT NOT NULL DEFAULT 'summary',
+       token_hash TEXT NOT NULL UNIQUE,
+       expires_at TEXT NOT NULL,
+       used_at TEXT,
+       view_limit INTEGER NOT NULL DEFAULT 1,
+       view_count INTEGER NOT NULL DEFAULT 0,
+       last_viewed_at TEXT,
+       label TEXT,
+       revoked_at TEXT,
+       created_by INTEGER,
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_captable_share_hash ON captable_share_tokens(token_hash)`,
+    `CREATE INDEX IF NOT EXISTS idx_captable_share_scenario ON captable_share_tokens(scenario_uid, created_at)`,
+    `CREATE TABLE IF NOT EXISTS captable_share_views (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       share_token_id INTEGER NOT NULL,
+       scenario_uid TEXT NOT NULL,
+       ip_hash TEXT,
+       ua_fingerprint TEXT,
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_captable_share_views_token ON captable_share_views(share_token_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_captable_share_views_scenario ON captable_share_views(scenario_uid, created_at)`,
+  ];
+  for (const s of stmts) {
+    try { await env.DB.prepare(s).run(); }
+    catch (e) { console.warn('[captable] share schema bootstrap:', (e as Error).message); }
+  }
+  _shareSchemaReady = true;
+}
 
 const captable = new Hono<{ Bindings: Env }>();
 
@@ -373,6 +427,165 @@ captable.get('/scenarios/:uid/export.csv', async (c) => {
   });
 });
 
+// =====================================================================
+// Build queue #120 — audience-scoped share links.
+//
+// ROUTE ORDER MATTERS: `/share/:token` and the scenario-scoped share
+// endpoints are registered here, ABOVE the `/:projectId` catch-all
+// further down this file. Hono matches in registration order, so moving
+// these below it would route `/api/captable/share/abc` into the
+// project handler and 404 (or worse, treat "share" as a project id).
+// =====================================================================
+
+const SHARE_TTL_HOURS_DEFAULT = 168;   // 7 days
+const SHARE_TTL_HOURS_MAX = 24 * 90;   // 90 days
+const SHARE_VIEW_LIMIT_MAX = 500;
+
+/** POST /api/captable/scenarios/:uid/share — mint an audience-scoped link. */
+captable.post('/scenarios/:uid/share', async (c) => {
+  try {
+  const user = await requireAuth(c);
+  await ensureCapTableShareSchema(c.env);
+  const uid = c.req.param('uid');
+  // Sharing is a WRITE-level act: it hands the cap table to an outsider,
+  // so scenario READ access is deliberately not enough. Reuses the
+  // existing gate so project-bound scenarios follow project write rules.
+  await ensureScenarioWriteOr404(c.env, uid, user);
+
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const audience: ShareAudience = isShareAudience(body.audience) ? body.audience : 'summary';
+  const ttlHours = Math.min(
+    SHARE_TTL_HOURS_MAX,
+    Math.max(1, Number(body.expires_in_hours) || SHARE_TTL_HOURS_DEFAULT),
+  );
+  const viewLimit = Math.min(
+    SHARE_VIEW_LIMIT_MAX,
+    Math.max(1, Number(body.view_limit) || 25),
+  );
+  const label = body.label ? String(body.label).slice(0, 120) : null;
+
+  const minted = await mintShareToken(c.env, `captable:${uid}:${audience}`, ttlHours * 3600, user.email);
+  await c.env.DB.prepare(
+    `INSERT INTO captable_share_tokens (scenario_uid, audience, token_hash, expires_at, view_limit, label, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    uid, audience, await sha256Hex(minted.token), minted.expires_at, viewLimit, label, user.id,
+  ).run();
+
+  return c.json({
+    token: minted.token,
+    audience,
+    expires_at: minted.expires_at,
+    expires_in_seconds: minted.expires_in_seconds,
+    view_limit: viewLimit,
+    share_path: `/share/captable/${minted.token}`,
+    scope: AUDIENCE_SCOPE[audience],
+  }, 201);
+  } catch (e) { return asJsonError(c, e); }
+});
+
+/** GET /api/captable/scenarios/:uid/shares — live links for this scenario. */
+captable.get('/scenarios/:uid/shares', async (c) => {
+  try {
+  const user = await requireAuth(c);
+  await ensureCapTableShareSchema(c.env);
+  const uid = c.req.param('uid');
+  await ensureScenarioWriteOr404(c.env, uid, user);
+  const rows = await c.env.DB.prepare(
+    `SELECT id, audience, expires_at, used_at, view_limit, view_count, last_viewed_at,
+            label, revoked_at, created_at
+       FROM captable_share_tokens
+      WHERE scenario_uid = ? ORDER BY created_at DESC LIMIT 100`,
+  ).bind(uid).all<Record<string, unknown>>();
+  // The token itself is unrecoverable by design — only its hash was
+  // stored — so the list shows status, never a re-copyable link.
+  return c.json({ items: rows.results || [] });
+  } catch (e) { return asJsonError(c, e); }
+});
+
+/** DELETE /api/captable/shares/:id — revoke a link before it expires. */
+captable.delete('/shares/:id', async (c) => {
+  try {
+  const user = await requireAuth(c);
+  await ensureCapTableShareSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const tok = await c.env.DB.prepare(
+    'SELECT id, scenario_uid FROM captable_share_tokens WHERE id = ?',
+  ).bind(id).first<{ id: number; scenario_uid: string }>();
+  if (!tok) return c.json({ detail: 'Not found' }, 404);
+  await ensureScenarioWriteOr404(c.env, tok.scenario_uid, user);
+  // Revoke by expiring rather than deleting, so the view history stays
+  // attributable to a link the owner can still see they created.
+  await c.env.DB.prepare(
+    `UPDATE captable_share_tokens
+        SET revoked_at = datetime('now'), expires_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(id).run();
+  return c.json({ ok: true, id });
+  } catch (e) { return asJsonError(c, e); }
+});
+
+/**
+ * GET /api/captable/share/:token — PUBLIC. No auth.
+ *
+ * Redaction runs server-side before serialisation (services/
+ * captableShare.ts), so data the audience may not see never reaches the
+ * browser at all rather than being hidden by the client.
+ */
+captable.get('/share/:token', async (c) => {
+  await ensureCapTableShareSchema(c.env);
+  const token = c.req.param('token');
+  const verified = await verifyShareToken(c.env, token);
+  if ('error' in verified) {
+    // 410 for a link that WAS valid and has aged out, 403 for one that
+    // never was — a viewer can act on the difference.
+    return verified.error === 'expired'
+      ? c.json({ detail: 'This link has expired. Ask for a fresh one.' }, 410)
+      : c.json({ detail: 'This link is not valid.' }, 403);
+  }
+  const m = /^captable:([A-Za-z0-9_-]+):(summary|investor|full)$/.exec(String(verified.k));
+  if (!m) return c.json({ detail: 'This link is not valid.' }, 403);
+  const [, uid, audienceRaw] = m;
+  const audience = audienceRaw as ShareAudience;
+
+  const claim = await claimShareToken(c.env, 'captable_share_tokens', await sha256Hex(token));
+  if (!claim.ok) {
+    return claim.reason === 'exhausted_or_expired'
+      ? c.json({ detail: 'This link has been used its maximum number of times, or has expired.' }, 410)
+      : c.json({ detail: 'This link is not valid.' }, 403);
+  }
+
+  const row = await c.env.DB.prepare(
+    'SELECT uid, name, result_json FROM cap_table_scenarios WHERE uid = ?',
+  ).bind(uid).first<{ uid: string; name: string; result_json: string | null }>();
+  if (!row) return c.json({ detail: 'This cap table is no longer available.' }, 404);
+
+  let result: SimulateResult | null = null;
+  try { result = row.result_json ? JSON.parse(row.result_json) as SimulateResult : null; }
+  catch { result = null; }
+
+  // Best-effort impression log; never block or fail the read on it.
+  try {
+    const tok = await c.env.DB.prepare(
+      'SELECT id FROM captable_share_tokens WHERE token_hash = ? LIMIT 1',
+    ).bind(await sha256Hex(token)).first<{ id: number }>();
+    if (tok) {
+      await c.env.DB.prepare(
+        `INSERT INTO captable_share_views (share_token_id, scenario_uid, ip_hash, ua_fingerprint)
+         VALUES (?, ?, ?, ?)`,
+      ).bind(
+        tok.id, uid,
+        await hashViewerField(c.env, c.req.header('cf-connecting-ip') || null),
+        await hashViewerField(c.env, c.req.header('user-agent') || null),
+      ).run();
+    }
+  } catch (e) {
+    console.warn('[captable] share view log failed:', (e as Error).message);
+  }
+
+  return c.json(redactForAudience(result, audience, row.name || 'Cap table'));
+});
+
 /**
  * Task #5 — Live cap table (Carta-synced or manually-promoted rows).
  *
@@ -384,6 +597,241 @@ captable.get('/scenarios/:uid/export.csv', async (c) => {
  * Read-only — admin sees own rows only here (their privileged read of other
  * tenants is intentionally NOT exposed at this surface).
  */
+// ---------------------------------------------------------------------------
+// 409A safe harbour
+//
+// services/valuation409a.ts decides whether a company's option grants sit
+// behind a §409A presumption of reasonableness. It is pure — no clock, no
+// storage — so these routes supply both: the appraisals and material
+// events from D1 (migration 172), and today's date.
+//
+// The valuation table is HISTORY, never overwritten. An auditor asks what
+// the FMV was on a grant date, not what it is today, and the current
+// status is just the latest row by valuation_date.
+//
+// Access rides on the project, exactly like a cap table scenario:
+// founders on their own project, plus admins and partners. Reading a
+// company's FMV is reading its cap table by another route, so the two
+// gates have to agree.
+//
+// These are registered above `/:projectId`. Their paths carry two
+// segments so Hono would not confuse them today, but the catch-all below
+// makes that a matter of luck rather than design.
+// ---------------------------------------------------------------------------
+
+let valuation409aSchemaReady = false;
+async function ensure409aSchema(env: Env): Promise<void> {
+  if (valuation409aSchemaReady) return;
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS valuations_409a (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+       valuation_date TEXT NOT NULL,
+       fmv_per_share REAL NOT NULL,
+       provider TEXT,
+       method TEXT,
+       preferred_price_per_share REAL,
+       report_url TEXT,
+       notes TEXT,
+       created_by INTEGER REFERENCES users(id),
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+  ).run();
+  await env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS valuation_409a_events (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+       kind TEXT NOT NULL,
+       occurred_on TEXT NOT NULL,
+       note TEXT,
+       created_by INTEGER REFERENCES users(id),
+       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+     )`,
+  ).run();
+  valuation409aSchemaReady = true;
+}
+
+const TRIGGER_KINDS = new Set<TriggerKind>([
+  'priced_round', 'material_change', 'secondary_transaction',
+  'acquisition_discussion', 'financial_restatement',
+]);
+const VALUATION_METHODS = new Set([
+  'income', 'market', 'asset', 'obm', 'backsolve', 'other',
+]);
+
+/** Read-gate a project the same way a project-bound scenario is read-gated. */
+async function ensureProjectReadAccess(env: Env, projectId: number, user: AuthUser) {
+  const proj = await loadProject(env, projectId);
+  if (!proj) throw new HttpError(404, 'Project not found');
+  if (!canReadProject(user as AccessUser, proj)) {
+    throw new HttpError(403, "You don't have access to that project");
+  }
+}
+
+function isoDateOrThrow(value: unknown, field: string): string {
+  const s = String(value ?? '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(s))) {
+    throw new HttpError(400, `${field} must be an ISO date (YYYY-MM-DD)`);
+  }
+  return s;
+}
+
+// GET /api/captable/409a/:projectId — status, history and trigger checklist.
+captable.get('/409a/:projectId', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const projectId = parseInt(c.req.param('projectId'), 10);
+    if (!Number.isFinite(projectId)) throw new HttpError(400, 'Invalid project id');
+    await ensureProjectReadAccess(c.env, projectId, user as AuthUser);
+    await ensure409aSchema(c.env);
+
+    const [valuations, events] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT * FROM valuations_409a WHERE project_id = ?
+          ORDER BY valuation_date DESC, id DESC LIMIT 50`,
+      ).bind(projectId).all(),
+      c.env.DB.prepare(
+        `SELECT * FROM valuation_409a_events WHERE project_id = ?
+          ORDER BY occurred_on DESC, id DESC LIMIT 100`,
+      ).bind(projectId).all(),
+    ]);
+
+    const history = (valuations.results || []) as any[];
+    const eventRows = ((events.results || []) as any[]).map((e) => ({
+      kind: e.kind as TriggerKind,
+      occurred_on: String(e.occurred_on).slice(0, 10),
+      note: e.note ?? null,
+    }));
+    // Latest by valuation_date — the appraisal currently in force.
+    const current = history[0]
+      ? {
+          valuation_date: String(history[0].valuation_date).slice(0, 10),
+          fmv_per_share: Number(history[0].fmv_per_share),
+          provider: history[0].provider ?? null,
+          method: history[0].method ?? null,
+        }
+      : null;
+
+    const today = new Date().toISOString().slice(0, 10);
+    return c.json({
+      ok: true,
+      project_id: projectId,
+      as_of: today,
+      current,
+      status: safeHarbourStatus(current, eventRows, today),
+      triggers: triggerChecklist(current, eventRows, today),
+      // Null rather than a fabricated ratio when either side is missing.
+      common_to_preferred: commonToPreferredRatio(
+        history[0]?.fmv_per_share ?? null,
+        history[0]?.preferred_price_per_share ?? null,
+      ),
+      history,
+      events: events.results || [],
+    });
+  } catch (e) { return asJsonError(c, e); }
+});
+
+// POST /api/captable/409a/:projectId — record an appraisal.
+captable.post('/409a/:projectId', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const projectId = parseInt(c.req.param('projectId'), 10);
+    if (!Number.isFinite(projectId)) throw new HttpError(400, 'Invalid project id');
+    await ensureProjectWriteAccess(c.env, projectId, user as AuthUser);
+    await ensure409aSchema(c.env);
+
+    const body: any = await c.req.json().catch(() => ({}));
+    const valuationDate = isoDateOrThrow(body?.valuation_date, 'valuation_date');
+    const fmv = Number(body?.fmv_per_share);
+    // Zero is rejected along with negatives and junk: a zero FMV would
+    // report every grant as free and is never a real appraisal result.
+    if (!Number.isFinite(fmv) || fmv <= 0) {
+      throw new HttpError(400, 'fmv_per_share must be a positive number');
+    }
+    const method = body?.method ? String(body.method) : null;
+    if (method && !VALUATION_METHODS.has(method)) {
+      throw new HttpError(400, `method must be one of ${[...VALUATION_METHODS].join(', ')}`);
+    }
+    const preferred = body?.preferred_price_per_share == null
+      ? null : Number(body.preferred_price_per_share);
+    if (preferred !== null && (!Number.isFinite(preferred) || preferred <= 0)) {
+      throw new HttpError(400, 'preferred_price_per_share must be a positive number when supplied');
+    }
+
+    const res = await c.env.DB.prepare(
+      `INSERT INTO valuations_409a
+         (project_id, valuation_date, fmv_per_share, provider, method,
+          preferred_price_per_share, report_url, notes, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       RETURNING id`,
+    ).bind(
+      projectId, valuationDate, fmv,
+      body?.provider ? String(body.provider).slice(0, 200) : null,
+      method, preferred,
+      body?.report_url ? String(body.report_url).slice(0, 1000) : null,
+      body?.notes ? String(body.notes).slice(0, 2000) : null,
+      user.id,
+    ).first<{ id: number }>();
+
+    return c.json({ ok: true, id: res?.id ?? null }, 201);
+  } catch (e) { return asJsonError(c, e); }
+});
+
+// POST /api/captable/409a/:projectId/events — record a material event.
+captable.post('/409a/:projectId/events', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const projectId = parseInt(c.req.param('projectId'), 10);
+    if (!Number.isFinite(projectId)) throw new HttpError(400, 'Invalid project id');
+    await ensureProjectWriteAccess(c.env, projectId, user as AuthUser);
+    await ensure409aSchema(c.env);
+
+    const body: any = await c.req.json().catch(() => ({}));
+    const kind = String(body?.kind || '') as TriggerKind;
+    if (!TRIGGER_KINDS.has(kind)) {
+      throw new HttpError(400, `kind must be one of ${[...TRIGGER_KINDS].join(', ')}`);
+    }
+    const occurredOn = isoDateOrThrow(body?.occurred_on, 'occurred_on');
+
+    const res = await c.env.DB.prepare(
+      `INSERT INTO valuation_409a_events (project_id, kind, occurred_on, note, created_by)
+       VALUES (?, ?, ?, ?, ?) RETURNING id`,
+    ).bind(
+      projectId, kind, occurredOn,
+      body?.note ? String(body.note).slice(0, 2000) : null,
+      user.id,
+    ).first<{ id: number }>();
+
+    return c.json({ ok: true, id: res?.id ?? null }, 201);
+  } catch (e) { return asJsonError(c, e); }
+});
+
+// DELETE /api/captable/409a/:projectId/events/:id — undo a mis-entered event.
+//
+// Events only, never valuations. A wrong event date silently changes
+// whether grants are covered, so it has to be correctable; an appraisal
+// is a document that existed, and deleting one destroys the answer to
+// "what was the FMV when you granted these options".
+captable.delete('/409a/:projectId/events/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const projectId = parseInt(c.req.param('projectId'), 10);
+    const eventId = parseInt(c.req.param('id'), 10);
+    if (!Number.isFinite(projectId) || !Number.isFinite(eventId)) {
+      throw new HttpError(400, 'Invalid id');
+    }
+    await ensureProjectWriteAccess(c.env, projectId, user as AuthUser);
+    await ensure409aSchema(c.env);
+    // project_id in the WHERE clause, not just the event id — otherwise
+    // anyone with write access to any project could delete any event.
+    const res = await c.env.DB.prepare(
+      `DELETE FROM valuation_409a_events WHERE id = ? AND project_id = ?`,
+    ).bind(eventId, projectId).run();
+    if (!Number(res?.meta?.changes || 0)) throw new HttpError(404, 'Event not found');
+    return c.json({ ok: true });
+  } catch (e) { return asJsonError(c, e); }
+});
+
 captable.get('/live', async (c) => {
   const user = await requireAuth(c);
   const integration = await c.env.DB.prepare(

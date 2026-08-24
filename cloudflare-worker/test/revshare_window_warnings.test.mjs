@@ -35,6 +35,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { transpileTs } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -93,10 +94,7 @@ async function loadCron({ notifyStub, emailStub }) {
     })();
   `;
 
-  const ts = (await import(resolve(__dirname, '../node_modules/typescript/lib/typescript.js'))).default;
-  const { outputText } = ts.transpileModule(wrapped, {
-    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
-  });
+  const outputText = transpileTs(wrapped);
 
   const factory = new Function('__notify', '__sendNotificationEmail', `${outputText}; return __mod;`);
   return factory(notifyStub, emailStub);

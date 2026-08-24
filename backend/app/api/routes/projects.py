@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
 from sqlalchemy import text
@@ -76,7 +77,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             "company": upper,
             "eyebrowRight": f"DEMO DAY · {lab_status}",
             "thesis": thesis,
-            "signalLabel": "VALIDATION SIGNAL · 30-DAY SPRINT",
+            "signalLabel": "VALIDATION SIGNAL · 28-DAY SPRINT",
             "signalCaption": "Cumulative discovery interviews",
             "signalX": ["D0", "D5", "D10", "D15", "D20", "D25", "D30"],
             "signalY": [4, 9, 14, 18, 22, 25, 28],
@@ -132,9 +133,24 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             "outcomeLabel": "TARGET OUTCOMES",
             "outcomes": [["Faster", "decisions"], ["Continuous", "monitoring"], ["Earlier", "signals"]],
         },
+        # Task #31 — Product demo (slot 6). Pulls the founder's REAL demo
+        # links/caption off the project; buildDeck() renders honest "Add a…"
+        # placeholders when unset. This section was missing from the dev
+        # mirror, which crashed buildDeck's eyebrow() (d.eyebrow undefined)
+        # for every dev PPTX export.
+        "productDemo": {
+            "eyebrow": "Product demo", "idx": "06",
+            "title": "See it work — live product walkthrough.",
+            "screenshot": "",
+            "caption": (getattr(project, "product_demo_caption", None) or "").strip(),
+            "walkthroughLabel": "WALKTHROUGH",
+            "body": "A guided pass through the core workflow: connect data, score risk, and act on live alerts.",
+            "liveUrl": (getattr(project, "product_demo_live_url", None) or "").strip(),
+            "videoUrl": (getattr(project, "product_demo_video_url", None) or "").strip(),
+        },
         "roadmap": {
-            "eyebrow": "Roadmap", "idx": "06",
-            "title": "Now, next, later \u2014 on a 30-day operating clock.",
+            "eyebrow": "Roadmap", "idx": "07",
+            "title": "Now, next, later \u2014 on a 28-day operating clock.",
             "days": ["Day 0", "Day 30", "Day 60", "Day 90"],
             "currentDay": 1,
             "phases": [
@@ -153,7 +169,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             ],
         },
         "team": {
-            "eyebrow": "Team & Network", "idx": "07",
+            "eyebrow": "Team & Network", "idx": "08",
             "title": "A founder backed by an operating network.",
             "founder": {"initials": "—", "name": "Founder", "role": "Founder & CEO",
                         "bio": "[draft — add your founder profile in the Team module]"},
@@ -168,7 +184,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             ],
         },
         "captable": {
-            "eyebrow": "Cap table & incorporation", "idx": "08",
+            "eyebrow": "Cap table & incorporation", "idx": "09",
             "title": "Entity-ready: clean cap table and founder setup.",
             "checklistLabel": "FOUNDER & ENTITY SETUP",
             "items": [
@@ -184,7 +200,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             "segments": [["Founders", 80], ["Option pool", 15], ["Reserved", 5]],
         },
         "ask": {
-            "eyebrow": "The ask", "idx": "09",
+            "eyebrow": "The ask", "idx": "10",
             "title": "Raising a pre-seed round to reach revenue.",
             "kpis": [["$750K", "Target raise"], ["SAFE", "Instrument"], ["18 mo", "Runway"], ["Pre-seed", "Stage"]],
             "useLabel": "USE OF FUNDS",
@@ -197,7 +213,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
             "milestone": ["Gets us to:", "[draft — add your next funding milestone in the Capital module]"],
         },
         "deal": {
-            "eyebrow": "Deal readiness", "idx": "10",
+            "eyebrow": "Deal readiness", "idx": "11",
             "title": "Data room open. Ready to move.",
             "diligenceLabel": "DILIGENCE PACKAGE",
             "ready": [
@@ -231,7 +247,7 @@ def _spinout_deck_payload(project: Project, session: Session) -> dict:
         "validation": "VALIDATION. Message: measurable signal from the sprint.\nAUTO: scorecard values, funnel stage counts, conversion rate.\nMANUAL: confirm funnel stages (outreach / LOIs) where not tracked.",
         "market": "MARKET. Message: credible bottom-up serviceable market.\nAUTO: TAM/SAM/SOM figures, why-now lines.\nMANUAL: sizing assumptions + citation basis.",
         "solution": "SOLUTION. Message: data \u2192 live score, four steps.\nAUTO: step copy from capabilities.\nMANUAL: confirm target outcome metrics vs. latest pilot.",
-        "roadmap": "ROADMAP. Message: operating plan on the 30-day cadence.\nAUTO: Now/Next/Later from OKRs + status flags.\nMANUAL: none if tracker is current.",
+        "roadmap": "ROADMAP. Message: operating plan on the 28-day cadence.\nAUTO: Now/Next/Later from OKRs + status flags.\nMANUAL: none if tracker is current.",
         "team": "TEAM & NETWORK. Message: founder inside a structured operating network.\nAUTO: founder profile, advisor roster, network nodes.\nMANUAL: advisor consent; swap initials for headshots.",
         "captable": "CAP TABLE & INCORPORATION. Message: legal + equity setup is investor-ready.\nAUTO: readiness checklist statuses, cap-table splits.\nMANUAL: none if module current.",
         "ask": "THE ASK. Message: specific raise tied to a milestone.\nAUTO: raise, runway, allocations, milestone.\nMANUAL: confirm instrument/cap + close with counsel.",
@@ -634,6 +650,84 @@ def update_project(project_id: int, data: ProjectUpdate, session: Session = Depe
         if uof_error:
             raise HTTPException(status_code=400, detail={"error": uof_error, "code": "invalid_use_of_funds"})
         update_data["use_of_funds"] = uof_value
+    # Use of Funds planning metadata (Worker parity — migration 158 there):
+    # must be a JSON object, size-capped; empty/null clears the field.
+    if "use_of_funds_meta" in update_data:
+        raw_meta = update_data["use_of_funds_meta"]
+        if raw_meta in (None, ""):
+            update_data["use_of_funds_meta"] = None
+        else:
+            try:
+                parsed_meta = json.loads(raw_meta) if isinstance(raw_meta, str) else raw_meta
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail={"error": "use_of_funds_meta must be valid JSON", "code": "invalid_use_of_funds_meta"})
+            if not isinstance(parsed_meta, dict):
+                raise HTTPException(status_code=400, detail={"error": "use_of_funds_meta must be a JSON object", "code": "invalid_use_of_funds_meta"})
+            canonical_meta = json.dumps(parsed_meta)
+            if len(canonical_meta) > 8000:
+                raise HTTPException(status_code=400, detail={"error": "use_of_funds_meta too large", "code": "invalid_use_of_funds_meta"})
+            update_data["use_of_funds_meta"] = canonical_meta
+    # Spin-Out Lab Incorporate workspace state (Worker parity — migration 159):
+    # must be a JSON object, size-capped; empty/null clears the field.
+    if "incorporation_meta" in update_data:
+        raw_inc = update_data["incorporation_meta"]
+        if raw_inc in (None, ""):
+            update_data["incorporation_meta"] = None
+        else:
+            try:
+                parsed_inc = json.loads(raw_inc) if isinstance(raw_inc, str) else raw_inc
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail={"error": "incorporation_meta must be valid JSON", "code": "invalid_incorporation_meta"})
+            if not isinstance(parsed_inc, dict):
+                raise HTTPException(status_code=400, detail={"error": "incorporation_meta must be a JSON object", "code": "invalid_incorporation_meta"})
+            canonical_inc = json.dumps(parsed_inc)
+            if len(canonical_inc) > 8000:
+                raise HTTPException(status_code=400, detail={"error": "incorporation_meta too large", "code": "invalid_incorporation_meta"})
+            update_data["incorporation_meta"] = canonical_inc
+    # Spin-Out Lab Co-founder Match decision (Worker parity — migration 162):
+    # same JSON-object contract as the two metas above.
+    if "cofounder_decision_meta" in update_data:
+        raw_cfd = update_data["cofounder_decision_meta"]
+        if raw_cfd in (None, ""):
+            update_data["cofounder_decision_meta"] = None
+        else:
+            try:
+                parsed_cfd = json.loads(raw_cfd) if isinstance(raw_cfd, str) else raw_cfd
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail={"error": "cofounder_decision_meta must be valid JSON", "code": "invalid_cofounder_decision_meta"})
+            if not isinstance(parsed_cfd, dict):
+                raise HTTPException(status_code=400, detail={"error": "cofounder_decision_meta must be a JSON object", "code": "invalid_cofounder_decision_meta"})
+            canonical_cfd = json.dumps(parsed_cfd)
+            if len(canonical_cfd) > 8000:
+                raise HTTPException(status_code=400, detail={"error": "cofounder_decision_meta too large", "code": "invalid_cofounder_decision_meta"})
+            update_data["cofounder_decision_meta"] = canonical_cfd
+    # Market-sizing invariants (mirrored in the Worker): TAM/SAM/SOM must be
+    # non-negative when supplied, and the funnel must nest — SAM ≤ TAM,
+    # SOM ≤ SAM — judged against the effective (incoming or stored) values.
+    for key in ("tam", "sam", "som"):
+        if key in update_data and update_data[key] is not None and float(update_data[key]) < 0:
+            raise HTTPException(status_code=400, detail={"error": "invalid_market_sizing", "detail": f"{key} must be non-negative"})
+    if any(k in update_data for k in ("tam", "sam", "som")):
+        eff = {k: (update_data[k] if k in update_data else getattr(project, k, None)) for k in ("tam", "sam", "som")}
+        if eff["tam"] is not None and eff["sam"] is not None and float(eff["sam"]) > float(eff["tam"]):
+            raise HTTPException(status_code=400, detail={"error": "invalid_market_sizing", "detail": "SAM cannot exceed TAM"})
+        if eff["sam"] is not None and eff["som"] is not None and float(eff["som"]) > float(eff["sam"]):
+            raise HTTPException(status_code=400, detail={"error": "invalid_market_sizing", "detail": "SOM cannot exceed SAM"})
+    # Structured revenue-proof fields — mirrors the Worker's Task #2
+    # coercion: non-negative numbers (null clears), paid_pilot_status is a
+    # closed enum (invalid values store NULL), date string is trimmed.
+    if "mrr" in update_data and update_data["mrr"] is not None:
+        v = float(update_data["mrr"])
+        update_data["mrr"] = v if math.isfinite(v) and v >= 0 else None
+    if "paying_customers" in update_data and update_data["paying_customers"] is not None:
+        pcf = float(update_data["paying_customers"])
+        update_data["paying_customers"] = int(math.floor(pcf)) if math.isfinite(pcf) and pcf >= 0 else None
+    if "first_payment_date" in update_data:
+        fpd = str(update_data["first_payment_date"] or "").strip()
+        update_data["first_payment_date"] = fpd or None
+    if "paid_pilot_status" in update_data:
+        pps = str(update_data["paid_pilot_status"] or "").strip().lower()
+        update_data["paid_pilot_status"] = pps if pps in {"paid", "pilot_paid", "pilot_signed", "pre_revenue"} else None
     # Task #66 — startup website: trim, allow null to clear, require an
     # http(s) scheme when present (mirrors the Worker validation).
     if "website" in update_data and update_data["website"] is not None:

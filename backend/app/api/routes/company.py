@@ -215,6 +215,35 @@ def my_company(
 
 
 # ---------------------------------------------------------------------------
+# /api/company/memberships — all companies the current user belongs to
+# ---------------------------------------------------------------------------
+@router.get("/company/memberships")
+def my_memberships(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    """Returns ALL companies the current user is linked to (any role),
+    ordered by primary-admin status first, then creation time.
+    Returns an empty list when the user has no company memberships."""
+    links = session.exec(
+        select(UserCompanyLink)
+        .where(UserCompanyLink.user_id == user.id)
+        .order_by(UserCompanyLink.is_primary_admin.desc(), UserCompanyLink.created_at.asc())
+    ).all()
+    result = []
+    for link in links:
+        company = session.get(CompanyProfile, link.company_id)
+        if not company:
+            continue
+        result.append({
+            **_company_detail_dto(session, company, viewer=user),
+            "my_role": link.role_in_company,
+            "is_primary_admin": link.is_primary_admin,
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Create
 # ---------------------------------------------------------------------------
 @router.post("/company/create")

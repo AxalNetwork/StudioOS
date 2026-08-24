@@ -2,12 +2,15 @@ import React, { useEffect, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import SectorSelect from '../components/SectorSelect';
 import { Link } from 'react-router-dom';
-import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye, Users, LayoutTemplate, Share2, X, Plus, Trash2 } from 'lucide-react';
+import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye, Users, LayoutTemplate, Share2, X, Monitor, Smartphone } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
-import { AUDIENCES, AUDIENCE_LABELS as PAGE_AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES, TEMPLATE_CONTENT_SCHEMA } from '../lib/brand/templates.js';
+import { AUDIENCES, AUDIENCE_LABELS as PAGE_AUDIENCE_LABELS, VISUAL_TEMPLATE_PALETTES } from '../lib/brand/templates.js';
+import { defaultsForTemplate, contentForTemplate, contentFieldsFor } from '../lib/brand/templateContent.js';
+import TemplateContentEditor from '../components/brand/TemplateContentEditor.jsx';
+import TemplateEditorPreview from '../components/brand/TemplateEditorPreview.jsx';
 import { suggestAudienceAndGoal, getRecommendedTemplatesForAudience, generateInitialBrandKit } from '../lib/brand/flow.js';
 
 // Task #24 — Brand & landing page generator.
@@ -31,17 +34,10 @@ const GOAL_LABELS = {
 
 // Task #3 — schema defaults for a template's editable content block. Used to
 // seed the dynamic step-3 form and to layer under AI auto-fill so every field
-// lands populated with on-brand starting copy.
-function defaultsForKey(key) {
-  const fields = TEMPLATE_CONTENT_SCHEMA[key] || [];
-  const o = {};
-  for (const f of fields) {
-    o[f.key] = f.kind === 'groupList'
-      ? (Array.isArray(f.default) ? f.default : [])
-      : (typeof f.default === 'string' ? f.default : '');
-  }
-  return o;
-}
+// lands populated with on-brand starting copy. Delegates to the shared content
+// model so this page, the inline editor on /spinout-lab/brand, and the preview
+// components all read one definition of a template's sections.
+const defaultsForKey = (key) => defaultsForTemplate(key);
 
 export default function BrandBuilderPage() {
   const { user } = useAuth();
@@ -91,6 +87,8 @@ export default function BrandBuilderPage() {
   const [templates, setTemplates] = useState([]);
   // Task #20 — visual-style key currently shown in the full-screen preview modal (null = closed)
   const [previewTemplate, setPreviewTemplate] = useState(null);
+  // Device toggle for the step-3 live preview (same template on both).
+  const [builderDevice, setBuilderDevice] = useState('desktop');
 
   useEffect(() => {
     api.listProjects().then((r) => {
@@ -121,7 +119,7 @@ export default function BrandBuilderPage() {
           const tk = lp.template || 'minimal';
           const loadedContent = lp.content_json || {};
           const needsSeed = !(loadedContent[tk] && Object.keys(loadedContent[tk]).length)
-            && (TEMPLATE_CONTENT_SCHEMA[tk] || []).length > 0;
+            && contentFieldsFor(tk).length > 0;
           const seededContent = needsSeed
             ? { ...loadedContent, [tk]: defaultsForKey(tk) }
             : loadedContent;
@@ -205,7 +203,7 @@ export default function BrandBuilderPage() {
   useEffect(() => {
     const tk = draft.template;
     if (!tk) return;
-    if (!(TEMPLATE_CONTENT_SCHEMA[tk] || []).length) return;
+    if (!contentFieldsFor(tk).length) return;
     setDraft((d) => {
       const existing = (d.content_json || {})[tk];
       if (existing && Object.keys(existing).length) return d;
@@ -266,31 +264,6 @@ export default function BrandBuilderPage() {
     const tc = { ...((d.content_json || {})[tk] || {}), [fieldKey]: value };
     return { ...d, content_json: { ...(d.content_json || {}), [tk]: tc } };
   });
-
-  const currentList = (fieldKey) => {
-    const cur = contentFor(draft)[fieldKey];
-    return Array.isArray(cur) ? cur : [];
-  };
-
-  const addContentItem = (f) => {
-    const cur = currentList(f.key);
-    if (cur.length >= (f.max || 12)) return;
-    const blank = {};
-    (f.itemFields || []).forEach((itf) => { blank[itf.key] = ''; });
-    setContentField(f.key, [...cur, blank]);
-  };
-
-  const updateContentItem = (fieldKey, idx, itemKey, value) => {
-    const cur = currentList(fieldKey).slice();
-    cur[idx] = { ...cur[idx], [itemKey]: value };
-    setContentField(fieldKey, cur);
-  };
-
-  const removeContentItem = (fieldKey, idx) => {
-    const cur = currentList(fieldKey).slice();
-    cur.splice(idx, 1);
-    setContentField(fieldKey, cur);
-  };
 
   // Task #3 — one-click AI auto-fill. Reads the project name + sector +
   // description (the step-1 inputs) and fills the page's hero copy + the chosen
@@ -427,6 +400,36 @@ export default function BrandBuilderPage() {
   const recommendedTemplates = draft.audience ? getRecommendedTemplatesForAudience(draft.audience) : [];
   const visualMeta = templates.find((t) => t.key === draft.template);
   const visualLabel = (key) => templates.find((t) => t.key === key)?.label || key;
+
+  // Brand + content payload for the REAL template preview. For a template the
+  // founder hasn't selected yet (the step-2 peek), its signature palette stands
+  // in for the draft's — that's what selecting it would seed anyway.
+  const previewDataForTemplate = (key) => {
+    const sig = key !== draft.template ? VISUAL_TEMPLATE_PALETTES[key] : null;
+    const aud = draft.audience || 'customer';
+    return {
+      name: draft.name || undefined,
+      brandName: draft.name || project?.name || undefined,
+      headline: draft.headline || undefined,
+      subheadline: draft.subheadline || undefined,
+      body: draft[`audience_${aud}_body`] || undefined,
+      tagline: draft.tagline || undefined,
+      ctaText: draft.cta_text || undefined,
+      themeColor: sig?.theme_color || draft.theme_color,
+      paletteBg: sig?.palette_bg || draft.palette_bg,
+      paletteInk: sig?.palette_ink || draft.palette_ink,
+      paletteSecondary: sig?.palette_secondary || draft.palette_secondary,
+      paletteAccent: sig?.palette_accent || draft.palette_accent,
+      fontPairing: draft.font_pairing,
+      logoUrl: draft.logo_url || undefined,
+      logoSvg: draft.logo_svg || undefined,
+      heroMediaUrl: draft.hero_media_url || undefined,
+      productScreenshotUrl: draft.product_screenshot_url || undefined,
+      content: contentForTemplate(draft.content_json, key),
+      audience: draft.audience || undefined,
+      goal: draft.goal || undefined,
+    };
+  };
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4">
@@ -609,12 +612,17 @@ export default function BrandBuilderPage() {
                 <X size={18} />
               </button>
             </div>
-            <iframe
-              key={previewTemplate}
-              src={`/landing/template-preview/${encodeURIComponent(previewTemplate)}`}
-              title="Template preview"
-              className="w-full flex-1 border-0 bg-white dark:bg-gray-900"
-            />
+            {/* The REAL template component — the same renderer the library
+                cards, the inline editor and the published page use — fed the
+                current draft so this previews YOUR page, not a stock sample. */}
+            <div className="w-full flex-1 overflow-auto bg-gray-100 p-4 dark:bg-gray-950">
+              <TemplateEditorPreview
+                templateKey={previewTemplate}
+                data={previewDataForTemplate(previewTemplate)}
+                device="desktop"
+                maxHeight={9999}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -844,87 +852,21 @@ export default function BrandBuilderPage() {
 
               {/* Task #3 — template-aware page content. Fields adapt to the
                   visual template chosen in step 2; edits persist per template
-                  in draft.content_json[draft.template]. */}
-              {(TEMPLATE_CONTENT_SCHEMA[draft.template] || []).length > 0 && (
+                  in draft.content_json[draft.template]. The field list itself
+                  comes from the shared TemplateContentEditor, which reads
+                  TEMPLATE_CONTENT_SCHEMA — the same source the inline editor on
+                  /spinout-lab/brand and the renderers use. */}
+              {contentFieldsFor(draft.template).length > 0 && (
                 <div className="border border-gray-200 rounded-lg p-3 space-y-3 dark:border-gray-800">
                   <span className="block text-[11px] font-medium text-gray-600 dark:text-gray-400">
                     Page content — these fields fill the sections of your chosen template.
                   </span>
-                  {(TEMPLATE_CONTENT_SCHEMA[draft.template] || []).map((f) => {
-                    const tc = contentFor(draft);
-                    if (f.kind === 'groupList') {
-                      const items = Array.isArray(tc[f.key]) ? tc[f.key] : [];
-                      return (
-                        <div key={f.key} className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">{f.label}</span>
-                            {items.length < (f.max || 12) && (
-                              <button
-                                type="button"
-                                onClick={() => addContentItem(f)}
-                                className="inline-flex items-center gap-1 text-xs text-violet-700 hover:text-violet-800"
-                              >
-                                <Plus size={12} /> Add
-                              </button>
-                            )}
-                          </div>
-                          {items.map((item, idx) => (
-                            <div key={idx} className="border border-gray-200 rounded-lg p-2 space-y-2 dark:border-gray-800">
-                              {(f.itemFields || []).map((itf) => (
-                                itf.kind === 'textarea' ? (
-                                  <textarea
-                                    key={itf.key}
-                                    rows={2}
-                                    value={item[itf.key] || ''}
-                                    onChange={(e) => updateContentItem(f.key, idx, itf.key, e.target.value)}
-                                    placeholder={itf.label}
-                                    className="w-full border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-                                  />
-                                ) : (
-                                  <input
-                                    key={itf.key}
-                                    value={item[itf.key] || ''}
-                                    onChange={(e) => updateContentItem(f.key, idx, itf.key, e.target.value)}
-                                    placeholder={itf.label}
-                                    className="w-full border border-gray-200 rounded px-2 py-1 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-                                  />
-                                )
-                              ))}
-                              <button
-                                type="button"
-                                onClick={() => removeContentItem(f.key, idx)}
-                                className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-red-600"
-                              >
-                                <Trash2 size={12} /> Remove
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    }
-                    const val = typeof tc[f.key] === 'string' ? tc[f.key] : '';
-                    return (
-                      <label key={f.key} className="flex flex-col gap-1">
-                        <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">{f.label}</span>
-                        {f.kind === 'textarea' ? (
-                          <textarea
-                            rows={2}
-                            value={val}
-                            onChange={(e) => setContentField(f.key, e.target.value)}
-                            placeholder={typeof f.default === 'string' ? f.default : ''}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-                          />
-                        ) : (
-                          <input
-                            value={val}
-                            onChange={(e) => setContentField(f.key, e.target.value)}
-                            placeholder={typeof f.default === 'string' ? f.default : ''}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-                          />
-                        )}
-                      </label>
-                    );
-                  })}
+                  <TemplateContentEditor
+                    templateKey={draft.template}
+                    content={contentFor(draft)}
+                    onChange={setContentField}
+                    testIdPrefix="builder-content"
+                  />
                 </div>
               )}
 
@@ -937,6 +879,38 @@ export default function BrandBuilderPage() {
                   Save
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* Live preview — the SAME renderer as the library card, the inline
+              editor and the published page, driven by the unsaved draft. */}
+          <div className="mt-5 border-t border-gray-200 pt-4 dark:border-gray-800">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                Live preview — {visualLabel(draft.template)}
+              </span>
+              <div className="ml-auto flex gap-0.5 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
+                {['desktop', 'mobile'].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setBuilderDevice(d)}
+                    className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[11.5px] font-semibold ${builderDevice === d ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
+                    data-testid={`builder-device-${d}`}
+                  >
+                    {d === 'desktop' ? <Monitor size={12} /> : <Smartphone size={12} />}
+                    {d === 'desktop' ? 'Desktop' : 'Mobile'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl bg-gray-100 p-4 dark:bg-gray-950">
+              <TemplateEditorPreview
+                templateKey={draft.template}
+                data={previewDataForTemplate(draft.template)}
+                device={builderDevice}
+                maxHeight={640}
+              />
             </div>
           </div>
         </section>

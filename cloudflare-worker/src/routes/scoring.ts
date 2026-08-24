@@ -59,9 +59,6 @@ function pickQualitativeText(body: Record<string, unknown>): string {
 }
 
 scoring.post('/score', async (c) => {
-  // Task #6 — scoring runs are Growth-tier for founders. Bypass roles
-  // (admin/partner/investor) skip the gate inside ensureTier.
-  ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   let body: Record<string, unknown>;
   try {
@@ -81,6 +78,16 @@ scoring.post('/score', async (c) => {
   }
 
   const isSandbox = body.is_sandbox === true || body.is_sandbox === 1 || body.is_sandbox === '1';
+
+  // Task #6 — scoring runs are Growth-tier for founders. Bypass roles
+  // (admin/partner/investor) skip the gate inside ensureTier. Exception:
+  // Spin-Out Lab members (role `exploring`) may run SANDBOX practice scores
+  // without a subscription — Week-3 lab tooling. The ownership guard below
+  // still limits them to their own project, and official runs stay
+  // tier-gated and founder-only.
+  if (!(isSandbox && user.role === 'exploring')) {
+    ensureTier(user, 'growth');
+  }
   // Practice-by-default (Investor UX audit ④). Sandbox is honored for ALL roles
   // now — previously it was founder-only, so an investor/partner exploring the
   // scorer silently wrote an OFFICIAL, LP-facing, cooldown-locking run. Sandbox
@@ -118,8 +125,14 @@ scoring.post('/score', async (c) => {
   }
   const project = projects[0];
 
-  // IDOR guard: founders may only score their own project.
-  if (!canAccessFounderResource(user, project.founder_id)) {
+  // IDOR guard: founders may only score their own project. Spin-Out Lab
+  // members (role `exploring`) may run SANDBOX-only scores on their OWN
+  // project — parity with the FastAPI dev backend; official runs remain
+  // founder/staff-only.
+  const isExploringSandboxOwner =
+    isSandbox && user.role === 'exploring' &&
+    user.founder_id != null && user.founder_id === project.founder_id;
+  if (!canAccessFounderResource(user, project.founder_id) && !isExploringSandboxOwner) {
     await sql.end();
     return c.json({ error: 'Forbidden' }, 403);
   }
@@ -415,15 +428,25 @@ scoring.get('/scores/:projectId', async (c) => {
   const ownerFounderId = owners[0].founder_id;
 
   // IDOR guard: founders only see their own project; partner/admin all.
-  if (!canAccessFounderResource(user, ownerFounderId)) {
+  // Spin-Out Lab members (role `exploring`) also read their OWN project's
+  // scores — Week-3 lab tooling; parity with the FastAPI dev backend.
+  const isExploringOwner =
+    user.role === 'exploring' && user.founder_id != null && user.founder_id === ownerFounderId;
+  if (!canAccessFounderResource(user, ownerFounderId) && !isExploringOwner) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
 
-  // Founders see their own sandbox runs; LPs/partners never do. Admin sees
-  // everything — including flagged + tampered rows — so they can audit.
+  // Project owners see their own sandbox runs (founder or `exploring` lab
+  // owner — role-bounded so LP/partner/investor accounts stay out even if a
+  // converted account still carries a founder_id). Admin sees everything —
+  // including flagged + tampered rows — so they can audit.
   const wantSandbox = c.req.query('include_sandbox') === '1';
-  const showSandbox = (user.role === 'admin') || (user.role === 'founder' && wantSandbox);
+  const showSandbox =
+    (user.role === 'admin') ||
+    (wantSandbox &&
+      (user.role === 'founder' || user.role === 'exploring') &&
+      user.founder_id != null && user.founder_id === ownerFounderId);
 
   const rows = (showSandbox
     ? await sql`SELECT * FROM score_snapshots WHERE project_id = ${projectId} ORDER BY created_at DESC`

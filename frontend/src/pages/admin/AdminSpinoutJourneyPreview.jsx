@@ -17,6 +17,7 @@ const STAGES = [
   { key: 'marketing', label: 'Spin-Out Lab' },
   { key: 'apply', label: 'Apply' },
   { key: 'confirmation', label: 'Email confirmation' },
+  { key: 'admission', label: 'Admission email' },
   { key: 'welcome', label: 'Welcome to cohort' },
   { key: 'workspace', label: 'Workspace' },
   { key: 'graduation', label: 'Graduation' },
@@ -93,6 +94,80 @@ function ConfirmationEmailCard() {
   );
 }
 
+// Mirrors the production admission-decision email templates
+// (cloudflare-worker/src/templates/email/registry.ts → spinout_admitted and
+// spinout_refused) with sample variables, so admins can review both variants
+// of the email a candidate receives when their cohort application is decided.
+// Keep the copy in lockstep with the Worker templates. Buttons are inert —
+// this preview never navigates or sends anything.
+function AdmissionEmailCards() {
+  const swallow = (e) => e.preventDefault();
+  return (
+    <section className="max-w-[640px] mx-auto px-6 py-10 space-y-10" data-testid="preview-admission-emails">
+      <div data-testid="preview-admission-accepted">
+        <div className="flex items-center gap-2 mb-2.5 text-gray-500 dark:text-gray-400">
+          <Mail size={15} aria-hidden="true" />
+          <span className="text-[13px] font-semibold">If accepted — the admission email</span>
+          <span className="text-[11.5px] text-gray-400">· sample data</span>
+        </div>
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 text-[12.5px] text-gray-500 dark:text-gray-400 space-y-0.5">
+            <div><span className="font-semibold text-gray-700 dark:text-gray-300">From:</span> Axal VC &lt;support@axal.vc&gt;</div>
+            <div><span className="font-semibold text-gray-700 dark:text-gray-300">Subject:</span> You're in — welcome to the Spin-Out Lab (Cohort 4)</div>
+          </div>
+          <div className="px-6 py-6">
+            <h2 className="m-0 mb-2 text-[22px] font-bold tracking-[-0.02em] text-gray-900 dark:text-gray-100">You're in 🎉</h2>
+            <p className="m-0 mb-5 text-[14px] leading-relaxed text-gray-500 dark:text-gray-400">
+              Hi Alex, congratulations — you've been admitted to the <strong className="text-gray-900 dark:text-gray-100">Spin-Out Lab</strong> (Cohort 4).
+            </p>
+            <div className="rounded-[14px] border border-[#e9d5ff] dark:border-violet-800/50 bg-[#faf5ff] dark:bg-violet-950/30 px-5 py-4 mb-6">
+              <div className="text-[11px] uppercase tracking-[0.06em] text-[#7c3aed] dark:text-violet-300 font-semibold mb-1.5">The next 28 days</div>
+              <div className="text-[14px] leading-relaxed text-gray-900 dark:text-gray-100">
+                Idea → customer discovery → MVP scope → venture-readiness score → Delaware C-Corp → warm investor introductions.
+              </div>
+            </div>
+            <div className="text-center mb-6">
+              <a href="/spinout-lab" onClick={swallow} className="inline-block bg-[#7c3aed] text-white no-underline text-[16px] font-semibold px-7 py-4 rounded-[14px]">Start Week 1</a>
+            </div>
+            <p className="m-0 text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">Sign in with this email address and you'll land straight in your founder workspace.</p>
+          </div>
+        </div>
+      </div>
+      <div data-testid="preview-admission-refused">
+        <div className="flex items-center gap-2 mb-2.5 text-gray-500 dark:text-gray-400">
+          <Mail size={15} aria-hidden="true" />
+          <span className="text-[13px] font-semibold">If refused — the decision email</span>
+          <span className="text-[11.5px] text-gray-400">· sample data</span>
+        </div>
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[16px] shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 text-[12.5px] text-gray-500 dark:text-gray-400 space-y-0.5">
+            <div><span className="font-semibold text-gray-700 dark:text-gray-300">From:</span> Axal VC &lt;support@axal.vc&gt;</div>
+            <div><span className="font-semibold text-gray-700 dark:text-gray-300">Subject:</span> Your Spin-Out Lab application — Cohort 4</div>
+          </div>
+          <div className="px-6 py-6">
+            <h2 className="m-0 mb-2 text-[22px] font-bold tracking-[-0.02em] text-gray-900 dark:text-gray-100">About your application</h2>
+            <p className="m-0 mb-5 text-[14px] leading-relaxed text-gray-500 dark:text-gray-400">
+              Hi Alex, thank you for applying to the <strong className="text-gray-900 dark:text-gray-100">Spin-Out Lab</strong> (Cohort 4)
+              with <strong className="text-gray-900 dark:text-gray-100">Northwind Labs</strong>. After careful review, we weren't able to
+              offer you a spot in this cohort — spots are limited and acceptance is selective.
+            </p>
+            <div className="rounded-[14px] border border-[#e9d5ff] dark:border-violet-800/50 bg-[#faf5ff] dark:bg-violet-950/30 px-5 py-4 mb-6">
+              <div className="text-[14px] leading-relaxed text-gray-900 dark:text-gray-100">
+                This is not the end of the road — founders often strengthen their idea and get in on the next try.
+                We'd love to see you re-apply for <strong>Cohort 5</strong>.
+              </div>
+            </div>
+            <div className="text-center mb-6">
+              <a href="/spinout-lab/apply" onClick={swallow} className="inline-block bg-[#7c3aed] text-white no-underline text-[16px] font-semibold px-7 py-4 rounded-[14px]">Re-apply for Cohort 5</a>
+            </div>
+            <p className="m-0 text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">Keep building — the Axal team.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function AdminSpinoutJourneyPreview() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -141,6 +216,13 @@ export default function AdminSpinoutJourneyPreview() {
         <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 px-6 py-8 pb-16">
           <SpinoutLabApplyPage previewMode="submitted" />
           <ConfirmationEmailCard />
+        </div>
+      );
+      break;
+    case 'admission':
+      content = (
+        <div className="min-h-[100dvh] bg-[#F8F8FA] dark:bg-gray-950 pb-8">
+          <AdmissionEmailCards />
         </div>
       );
       break;

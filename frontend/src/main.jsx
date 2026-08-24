@@ -13,6 +13,11 @@ import { registerServiceWorker } from './lib/pwa';
 // linger in the URL once we've successfully booted.
 try {
   window.__axalBooted = true;
+  // Remove the dev-diagnostic banner once JS is executing
+  const _diag = document.getElementById('dev-diag');
+  if (_diag) _diag.remove();
+  const _root = document.getElementById('root');
+  if (_root) _root.style.paddingTop = '';
   const _u = new URL(window.location.href);
   if (_u.searchParams.has('__reboot')) {
     _u.searchParams.delete('__reboot');
