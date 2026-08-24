@@ -6,7 +6,7 @@ aiohttp==3.14.3
     # via pywebpush
 aiosignal==1.4.0
     # via aiohttp
-alembic==1.18.5
+alembic==1.19.1
     # via repl-nix-workspace
 annotated-doc==0.0.5
     # via fastapi
@@ -23,9 +23,9 @@ certifi==2026.7.22
     #   httpcore
     #   httpx
     #   requests
-cffi==2.1.0 ; platform_python_implementation != 'PyPy'
+cffi==2.1.1 ; platform_python_implementation != 'PyPy'
     # via cryptography
-charset-normalizer==3.4.9
+charset-normalizer==3.5.1
     # via requests
 click==8.4.2
     # via uvicorn
@@ -45,24 +45,24 @@ frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
-google-api-core==2.33.0
+google-api-core==2.34.0
     # via google-api-python-client
 google-api-python-client==2.198.0
     # via repl-nix-workspace
-google-auth==2.56.2
+google-auth==2.56.3
     # via
     #   google-api-core
     #   google-api-python-client
     #   google-auth-httplib2
     #   google-auth-oauthlib
     #   repl-nix-workspace
-google-auth-httplib2==0.4.0
+google-auth-httplib2==0.4.1
     # via google-api-python-client
 google-auth-oauthlib==1.4.0
     # via repl-nix-workspace
-googleapis-common-protos==1.75.0
+googleapis-common-protos==1.75.1
     # via google-api-core
-greenlet==3.5.4 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
+greenlet==3.5.5 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
 h11==0.16.0
     # via
@@ -84,7 +84,7 @@ idna==3.18
     #   httpx
     #   requests
     #   yarl
-mako==1.3.12
+mako==1.4.1
     # via alembic
 markupsafe==3.0.3
     # via mako
@@ -98,7 +98,7 @@ propcache==0.5.2
     # via
     #   aiohttp
     #   yarl
-proto-plus==1.28.2
+proto-plus==1.28.3
     # via google-api-core
 protobuf==7.35.1
     # via
@@ -129,11 +129,11 @@ pyotp==2.10.0
     # via repl-nix-workspace
 pyparsing==3.3.2
     # via httplib2
-python-dotenv==1.2.2
+python-dotenv==1.2.3
     # via repl-nix-workspace
 python-multipart==0.0.32
     # via repl-nix-workspace
-pywebpush==2.3.0
+pywebpush==2.4.0
     # via repl-nix-workspace
 qrcode==8.2
     # via repl-nix-workspace
@@ -144,13 +144,13 @@ requests==2.34.2
     #   requests-oauthlib
 requests-oauthlib==2.0.0
     # via google-auth-oauthlib
-sqlalchemy==2.0.51
+sqlalchemy==2.0.52
     # via
     #   alembic
     #   sqlmodel
 sqlmodel==0.0.39
     # via repl-nix-workspace
-starlette==1.3.1
+starlette==1.6.0
     # via fastapi
 typing-extensions==4.16.0
     # via
@@ -165,7 +165,7 @@ typing-extensions==4.16.0
     #   sqlmodel
     #   starlette
     #   typing-inspection
-typing-inspection==0.4.2
+typing-inspection==0.4.4
     # via
     #   fastapi
     #   pydantic
@@ -173,7 +173,7 @@ uritemplate==4.2.0
     # via google-api-python-client
 urllib3==2.7.0
     # via requests
-uvicorn==0.52.1
+uvicorn==0.52.3
     # via repl-nix-workspace
 yarl==1.24.5
     # via aiohttp
