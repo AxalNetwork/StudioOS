@@ -93,7 +93,7 @@ const AdvisoryPage = lazy(() => import('./pages/AdvisoryPage'));
 const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
-const AdminReferEarnPayouts = lazy(() => import('./pages/admin/ReferEarnPayouts'));
+const AdminReferralReview = lazy(() => import('./pages/admin/ReferralReview'));
 const ReferralsPage = lazy(() => import('./pages/ReferralsPage'));
 const CompanySettingsPage = lazy(() => import('./pages/CompanySettingsPage'));
 const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage'));
@@ -154,7 +154,6 @@ const CofounderPage = lazy(() => import('./pages/CofounderPage'));
 // Team Building — founder workspace consolidating Advisor, Co-Founder
 // and Jobs into one tabbed page at /build/team.
 const TeamBuildingPage = lazy(() => import('./pages/TeamBuildingPage'));
-const CommandCenterPage = lazy(() => import('./pages/CommandCenterPage'));
 // Task #20 — /skills and /values are consolidated into the advisor flow.
 // The underlying SkillsProfilePage/ValuesAssessmentPage files are kept intact on
 // disk (data stores), but their routes now redirect to /studio.
@@ -1754,7 +1753,7 @@ function AppInner() {
       <Route path="/deck/print-export/:token" element={<PitchDeckPrintPage exportMode />} />
       <Route path="/admin" element={guard(['admin'], <AdminPage onImpersonate={handleImpersonate} />)} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
-      <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferEarnPayouts />)} />
+      <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferralReview />)} />
       <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
@@ -1808,9 +1807,9 @@ function AppInner() {
       {/* Task #12 — Founder Execution area: one deep-linkable shell wrapping the
           Projects / Board / Roadmap views. Standalone routes above stay intact
           for other personas. */}
-      <Route path="/execution" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=execution" replace /> : <ExecutionPage />)} />
-      <Route path="/execution/board" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=execution" replace /> : <ExecutionPage />)} />
-      <Route path="/execution/roadmap" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=execution" replace /> : <ExecutionPage />)} />
+      <Route path="/execution" element={guard(['admin', 'founder'], <ExecutionPage />)} />
+      <Route path="/execution/board" element={guard(['admin', 'founder'], <ExecutionPage />)} />
+      <Route path="/execution/roadmap" element={guard(['admin', 'founder'], <ExecutionPage />)} />
       {/* Task #1 — RAISE Workspaces. Three founder workspaces compose the
           existing pages via an `embedded` prop; each guarded for the roles of
           the pages it wraps. Standalone routes (/build/financials, /build/captable,
@@ -1866,7 +1865,7 @@ function AppInner() {
           role but redirect a founder into the matching tab so old deep links
           keep resolving. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], <TeamBuildingPage />)} />
-      <Route path="/build/command-center" element={guard(labRoles(['admin', 'founder']), <CommandCenterPage />)} />
+      <Route path="/build/command-center" element={guard(labRoles(['admin', 'founder']), <Navigate to="/studio" replace />)} />
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
       <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
@@ -1900,7 +1899,7 @@ function AppInner() {
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'exploring'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
-      <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=spin-outs" replace /> : <SpinOutsPage />)} />
+      <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], <SpinOutsPage />)} />
       {/* Friendly-URL alias: the canonical route is /spinouts (no hyphen),
           but users frequently type or link /spin-outs. Redirect instead of
           rendering a blank page. */}
@@ -1918,7 +1917,7 @@ function AppInner() {
       {/* Task #19 — the founder sidebar no longer surfaces "Founder Portal"
           (folded into Studio/Home). Founders hitting the old link are
           redirected to /studio; admins keep the Founder Portal surface. */}
-      <Route path="/founder" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=founder-portal" replace /> : <FounderPortal />)} />
+      <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       {/* Task #18 — investor-lifecycle features ported from PR #119. */}
       <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
       <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
@@ -2002,9 +2001,9 @@ function AppInner() {
           (preserving any ?query= so OAuth-return states still show). Available
           to every authenticated profile, matching the all-roles Settings tab. */}
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
-      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals?tab=payouts" replace />)} />
+      <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
-      <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/command-center?tab=studio-ops" replace /> : <StudioOpsPage />)} />
+      <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelineWorkspace />)} />
       {/* Task #1 — unified Network page (Contacts + Introductions +

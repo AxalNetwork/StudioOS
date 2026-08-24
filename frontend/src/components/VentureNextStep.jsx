@@ -101,17 +101,17 @@ export default function VentureNextStep() {
             </p>
           ) : (
             <p className="mt-1.5 text-sm text-gray-600 dark:text-gray-400">
-              Open Command Center to set your current stage.
+              Open your Studio dashboard to set your current stage.
             </p>
           )}
         </div>
 
         <Link
-          to="/build/command-center"
+          to="/studio"
           data-testid="venture-next-step-link"
           className="flex-none inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium transition-colors"
         >
-          Command Center <ArrowRight size={14} />
+          Open Studio <ArrowRight size={14} />
         </Link>
       </div>
     </div>

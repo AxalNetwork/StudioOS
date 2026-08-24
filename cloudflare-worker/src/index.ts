@@ -1333,26 +1333,10 @@ export default {
             }
           } catch (e) { console.error('[cron] trust expiry failed', e); }
         }
-        // Task #9 — daily Refer & Earn auto-approval sweep at 04:50 UTC.
-        // Walks every pending referral_payouts row, re-runs the
-        // (email-verified + investor-KYC + 30-day refund window + OFAC)
-        // checks, and flips eligible rows to 'approved' so the admin
-        // queue stays current without manual intervention. Idempotent;
-        // failures during one row don't affect the rest.
-        if (now.getUTCHours() === 4 && now.getUTCMinutes() === 50) {
-          try {
-            const { runApprovalEngine } = await import('./services/referralPayouts');
-            const r = await runApprovalEngine(env);
-            if (r.scanned) {
-              console.info(
-                `[cron] refer-earn approval-engine scanned=${r.scanned} ` +
-                `approved=${r.approved} still_pending=${r.still_pending} blocked=${r.blocked}`,
-              );
-            }
-          } catch (e) {
-            console.error('[cron] refer-earn approval-engine failed', e);
-          }
-        }
+        // The 04:50 UTC Refer & Earn payout auto-approval sweep was removed
+        // with Stripe Connect in the referrals redesign. Referral rewards are
+        // milestone labels reviewed by a human in the admin queue, so there is
+        // no ledger left to sweep.
         // Task #8 (X-1) — daily partner deal expiry sweep at 04:40 UTC.
         // Flips deals past their term to 'expired' and revokes tier
         // grants on the partner + every redeemer (paid upgrades that

@@ -167,12 +167,11 @@ export const SIDEBAR_GROUPS = {
   // Intentional removals (documented so a nav-integrity guard treats them as
   // deliberate, not silent drops):
   //   • "Founder Portal" (/founder), "Execution" (/execution + board/roadmap),
-  //     "Studio Ops" (/studio-ops) and "Spin-Outs" (/spinouts) are merged into
-  //     one "Command Center" workspace (/build/command-center). Each is now a
-  //     deep-linkable tab (?tab=founder-portal|execution|studio-ops|spin-outs);
-  //     founders hitting the legacy routes are redirected into the matching tab
-  //     in App.jsx. Every route stays registered and reachable for admin/other
-  //     personas.
+  //     "Studio Ops" (/studio-ops) and "Spin-Outs" (/spinouts) were merged into
+  //     a "Command Center" workspace and have since been UN-merged: that page
+  //     was removed, so each is a first-class row again pointing at its own
+  //     standalone page — the same page every non-founder role always saw.
+  //     Founders are no longer redirected away from those routes.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
   //     (/build/metrics) as the founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
@@ -196,17 +195,18 @@ export const SIDEBAR_GROUPS = {
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
     ]},
     { key: 'build', label: 'Build', items: [
-      // Command Center merges four founder Build destinations — Founder Portal
-      // (/founder), Execution (/execution + board/roadmap), Studio Ops
-      // (/studio-ops) and Spin-Outs (/spinouts, + the /spin-outs alias) — into
-      // one tabbed page at /build/command-center. `match` keeps the row active
-      // across every tab and every legacy deep-linked route (founders are
-      // redirected from those routes into the matching ?tab= in App.jsx).
-      // '/founder' is intentionally NOT in `match`: it would prefix-match the
-      // new /founder/growth/* routes and double-highlight this row. The bare
-      // /founder route redirects founders to /build/command-center anyway, so
-      // it never rests in the URL.
-      { to: '/build/command-center', icon: LayoutGrid, label: 'Command Center', match: ['/build/command-center', '/execution', '/studio-ops', '/spinouts', '/spin-outs', '/projects', '/pipeline', '/build/roadmap'] },
+      // Command Center was removed. It had merged four founder Build
+      // destinations into one tabbed page; with it gone each is a row again,
+      // pointing at the standalone page every non-founder role already saw.
+      // /build/command-center now redirects to /studio for old bookmarks.
+      // No `match` on purpose: omitting it makes the NavLink `end`-exact, so
+      // this row highlights on /founder only. A '/founder' prefix entry would
+      // also match /founder/growth/* and double-highlight against the Growth
+      // row — the same trap the old Command Center comment called out.
+      { to: '/founder', icon: LayoutGrid, label: 'Founder Portal' },
+      { to: '/execution', icon: Briefcase, label: 'Execution', match: ['/execution', '/projects', '/build/roadmap'] },
+      { to: '/studio-ops', icon: LayoutDashboard, label: 'Studio Ops', match: ['/studio-ops'] },
+      { to: '/spinouts', icon: Rocket, label: 'Spin-Outs', match: ['/spinouts', '/spin-outs'] },
       { to: '/signals', icon: Radar, label: 'Signals' },
       // Team Building — consolidates the former "Find a Advisor" (Validate),
       // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one
