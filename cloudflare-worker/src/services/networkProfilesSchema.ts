@@ -2,9 +2,7 @@
  * Task #1 — Lazy bootstrap for network_profiles.
  *
  * Mirrors ensureTeamMembersSchema(): migration 075 is the canonical
- * apply path, but several recent migrations have landed un-applied
- * on prod. CREATE TABLE IF NOT EXISTS on the cold path keeps the
- * admin + deck routes self-healing.
+ * production apply path; development and preview retain the lazy fallback.
  *
  * Also exports the canonical 12-axis SKILL_CATALOG that drives both
  * the admin profile editor (multi-select) and the SkillsSpider radar
@@ -38,6 +36,10 @@ export type SkillAxis = typeof SKILL_CATALOG[number];
 
 export async function ensureNetworkProfilesSchema(env: Env): Promise<void> {
   if (_ready) return;
+  if (env.ENVIRONMENT === 'production') {
+    _ready = true;
+    return;
+  }
   try {
     await env.DB.batch([
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS network_profiles (

@@ -42,6 +42,12 @@ const STATEMENTS: string[] = [
 
 export async function ensureCirclesSchema(env: Env): Promise<boolean> {
   if (_ready) return true;
+  // The production D1 migration is authoritative. Avoid running table/index
+  // DDL from a cold public request, while preserving dev/preview convenience.
+  if (env.ENVIRONMENT === 'production') {
+    _ready = true;
+    return true;
+  }
   try {
     for (const ddl of STATEMENTS) {
       try {

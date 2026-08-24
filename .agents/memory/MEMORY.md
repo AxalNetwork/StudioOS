@@ -11,4 +11,5 @@
 - [Deck data honesty](deck-data-honesty.md) — financial_models computed months are forecasts, never chart as traction; merged Problem/Ask slides still read validation/captable sections via prefixes.
 - [Fund money-column semantics](fund-money-semantics.md) — vc_funds.total_commitment is summed LP commitments, not the target; fund size lives in fund_size_cents; lpa_signed & slug are D1-only.
 - [Font LFS attribute quirk](font-lfs-attribute-quirk.md) — Space Grotesk is stored as a full blob despite *.woff2 LFS attributes; use a local .git/info override before pulling.
-- [Cloudflare cutover observability](cloudflare-cutover-observability.md) — current token cannot read Analytics GraphQL; use route/API verification and live probes during cutovers until its scopes change.
+- [Cloudflare cutover observability](cloudflare-cutover-observability.md) — Adaptive HTTP status counts work, but edge-TTFB fields do not; combine five-minute 5xx buckets with route/API probes.
+- [Production schema ownership](production-schema-ownership.md) — request-time DDL is dev/preview-only; production D1 migrations must create public-route schemas before deployment.

@@ -1,7 +1,40 @@
 # Jekyll → Cloudflare cutover: content inventory
 
-Status: inventory complete. Gates the `wrangler.toml` route-table inversion
-and whatever Replit executes against Cloudflare.
+Status: inventory complete; apex-wide route remains disabled pending the
+stabilisation gate below.
+
+## Stabilisation gate (2026-08-24)
+
+The first apex-wide Worker-route attempt was rolled back after Cloudflare
+Adaptive HTTP Analytics recorded intermittent 504 responses on ordinary
+document, asset, health, and public-stats requests. The Worker had been
+performing role-schema repairs synchronously on every fresh isolate before
+serving requests; those repairs include live users-table rebuilds and can
+contend under parallel cold traffic.
+
+Before retrying `axal.vc/*`:
+
+1. Deploy the non-blocking static, health, telemetry, and explicitly
+   allowlisted anonymous-public-read paths with per-isolate single-flight
+   schema guards. Authenticated, optional-auth, and mutating public endpoints
+   must remain blocking.
+2. Confirm Cloudflare Adaptive HTTP Analytics has no 5xx responses across a
+   sustained observation window. The current account exposes status counts but
+   denies `edgeTimeToFirstByteMs`; document that limitation and use the
+   Worker's own latency telemetry for API timing.
+   - Treat “sustained” as 24 continuous hours after the bootstrap deployment,
+     sampled in five-minute buckets. Probe `/api/health` and
+     `/api/public/stats` at least once per bucket, plus representative
+     Worker-served hard loads.
+   - Abort the wildcard attempt and restore the saved version/67-route table
+     immediately if either probe returns a 5xx, or Analytics reports two or
+     more 5xx responses in any five-minute bucket.
+3. Hard-load representative non-prerendered routes and public APIs in a fresh
+   browser context, confirming no redirect, blank shell, missing hashed asset,
+   or failed module.
+4. Capture the current Worker version, route table, and Pages configuration
+   before enabling the wildcard. Keep GitHub Pages and the specific-path route
+   table available for immediate rollback.
 
 ## Headline finding
 
