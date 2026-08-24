@@ -29,6 +29,7 @@ import type { Env } from '../types';
 import { rebuildUsersRoleCheckForExploring } from '../util/usersRoleRebuild';
 
 let _exploringSchemaReady = false;
+let _exploringSchemaBootstrap: Promise<void> | null = null;
 
 export function exploringSchemaReady(): boolean {
   return _exploringSchemaReady;
@@ -36,6 +37,11 @@ export function exploringSchemaReady(): boolean {
 
 export async function ensureExploringSchema(env: Env): Promise<void> {
   if (_exploringSchemaReady) return;
+  // Multiple requests can land on a cold isolate before the first live-DDL
+  // repair completes. Coalesce them so only one users-table rebuild and schema
+  // setup runs at a time in that isolate.
+  if (_exploringSchemaBootstrap) return _exploringSchemaBootstrap;
+  _exploringSchemaBootstrap = (async () => {
   try {
     // A successful call means the live CHECK now admits 'exploring' (either it
     // already did — no-op — or the table was rebuilt). Only then may the
@@ -81,7 +87,11 @@ export async function ensureExploringSchema(env: Env): Promise<void> {
     if (roleCheckOk) _exploringSchemaReady = true;
   } catch (e) {
     console.error('[boot] ensureExploringSchema failed:', (e as Error).message);
+  } finally {
+    _exploringSchemaBootstrap = null;
   }
+  })();
+  return _exploringSchemaBootstrap;
 }
 
 /**

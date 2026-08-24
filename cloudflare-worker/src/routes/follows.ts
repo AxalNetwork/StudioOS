@@ -21,6 +21,12 @@ const r = new Hono<{ Bindings: Env }>();
 let _schemaReady = false;
 export async function ensureFollowsSchema(env: Env): Promise<void> {
   if (_schemaReady) return;
+  // The production migration is authoritative; public follower counts should
+  // never first create tables or indexes on the request path.
+  if (env.ENVIRONMENT === 'production') {
+    _schemaReady = true;
+    return;
+  }
   try {
     await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS follows (

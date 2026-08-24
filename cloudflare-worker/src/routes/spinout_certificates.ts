@@ -28,6 +28,12 @@ const app = new Hono<{ Bindings: Env }>();
 let _migrated = false;
 async function ensureTables(env: Env) {
   if (_migrated) return;
+  // Certificate persistence is applied by migration in production. Public
+  // verification must never create its registry and indexes on a cold request.
+  if (env.ENVIRONMENT === 'production') {
+    _migrated = true;
+    return;
+  }
   const stmts = [
     `CREATE TABLE IF NOT EXISTS spinout_certificates (
       id                  INTEGER PRIMARY KEY AUTOINCREMENT,
