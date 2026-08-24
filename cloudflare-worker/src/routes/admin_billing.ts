@@ -4,7 +4,7 @@ import type { Env } from '../types';
 import { requireAdmin, requireFactor, requireStepUp } from '../auth';
 import { stripeCall } from './billing';
 import { ensureAdminAuditLogTable } from './admin';
-import { clawbackReferralCommissionForRefund, type ClawbackResult } from '../services/referralPayouts';
+import { clawbackReferralCommissionForRefund, type ClawbackResult } from '../services/referralCommissions';
 
 // Task #11 (II) — Admin billing actions. Mounted at `/api/admin/billing`
 // BEFORE the catch-all `/api/admin` in index.ts so the nested routes resolve

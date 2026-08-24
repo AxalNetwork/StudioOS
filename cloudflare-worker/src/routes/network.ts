@@ -155,23 +155,10 @@ export async function fireCommissionEvent(
     if (!insertResult.meta?.changes) return; // already credited; do not log a second time
     await sql`UPDATE referrals SET status = 'converted', converted_at = CURRENT_TIMESTAMP WHERE id = ${referral.id} AND status != 'converted'`;
 
-    // Task #9 — also create a referral_payouts ledger row for the new
-    // commission so the Stripe Connect payout pipeline can pick it up.
-    // Idempotent via UNIQUE(redemption_id) inside the helper.
-    try {
-      const commissionRow = await sql`SELECT id FROM commissions WHERE user_id = ${referral.referrer_id} AND source_type = ${rule.source_type} AND source_id = ${sourceId} LIMIT 1`;
-      const commissionId = (commissionRow[0] as { id?: number } | undefined)?.id;
-      if (commissionId) {
-        const { createReferralPayoutForCommission } = await import('../services/referralPayouts');
-        await createReferralPayoutForCommission(env, {
-          commissionId,
-          referrerUserId: referral.referrer_id,
-          amountCents,
-        });
-      }
-    } catch (e) {
-      console.warn('[refer-earn] createReferralPayoutForCommission failed:', (e as Error).message);
-    }
+    // The commission row above is the record of what was earned. It no longer
+    // forks into a Stripe Connect payout ledger: Connect was removed in the
+    // referrals redesign, and referral rewards now settle off-platform against
+    // the milestone labels shown in the pipeline.
 
     const referrerRow = await sql`SELECT email, id FROM users WHERE id = ${referral.referrer_id}`;
     if (referrerRow.length) {
@@ -246,18 +233,8 @@ export async function firePurchaseCommission(
   ).bind(args.referrerUserId, args.paymentIntentId).first<{ id: number }>();
   if (!row?.id) return;
 
-  // Hand off to the post-charge Connect payout pipeline (clawback-able).
-  try {
-    const { createReferralPayoutForCommission } = await import('../services/referralPayouts');
-    await createReferralPayoutForCommission(env, {
-      commissionId: row.id,
-      referrerUserId: args.referrerUserId,
-      amountCents: commissionCents,
-      currency,
-    });
-  } catch (e) {
-    console.warn('[refer-earn] createReferralPayoutForCommission (purchase) failed:', (e as Error).message);
-  }
+  // The post-charge Connect payout hand-off was removed with Stripe Connect.
+  // The commission row remains the record of what the purchase earned.
 
   // Once-only side effects — only on the first delivery that created the row.
   if (!isNew) return;

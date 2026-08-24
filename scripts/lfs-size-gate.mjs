@@ -46,6 +46,29 @@ const LFS_TRACKED_EXTS = new Set([
   ".woff2",
 ]);
 
+/**
+ * Paths exempt from the extension policy above, by exact repo-relative path.
+ *
+ * This exists because a file can be REQUIRED to be a readable blob. LFS
+ * pointers only resolve where git-lfs is installed and has fetched them, and
+ * `actions/checkout` does not fetch LFS by default — so any build step that
+ * reads a tracked file's BYTES sees a 130-byte pointer in CI and silently
+ * produces wrong output.
+ *
+ * Keep this list short and always say why. An exemption is a claim that the
+ * file must be byte-readable without git-lfs AND is small enough that keeping
+ * it in git costs nothing — not a way around the size policy. Anything large
+ * belongs in LFS, and the > 500 KB size gate below still applies to every
+ * exempt path.
+ */
+const LFS_EXEMPT_PATHS = new Set([
+  // Inlined byte-for-byte into every OG card by scripts/generate-og-images.mjs,
+  // which fingerprints the result. As an LFS pointer it fingerprints against
+  // 130 bytes of pointer text, so all 13 cards report stale and the "Card
+  // images are current" CI gate can never pass. 22 KB.
+  "scripts/og-assets/SpaceGrotesk-Variable.woff2",
+]);
+
 const args = new Set(process.argv.slice(2));
 
 function git(args) {
@@ -136,7 +159,9 @@ function main() {
     const ext = extOf(f);
     const size = st.size;
 
-    if (LFS_TRACKED_EXTS.has(ext)) {
+    // An exempt path skips the EXTENSION rule only; it still falls through to
+    // the size gate below, so an exemption can never smuggle in a large file.
+    if (LFS_TRACKED_EXTS.has(ext) && !LFS_EXEMPT_PATHS.has(f)) {
       if (!isLfsTracked(f)) {
         violations.push({
           path: f, size, reason: `extension ${ext} must be LFS-tracked (see .gitattributes)`,
@@ -145,11 +170,17 @@ function main() {
       continue;
     }
 
-    if (SIZE_GATED_EXTS.has(ext) && size > SIZE_GATE_BYTES) {
+    // Exempt paths are size-gated here whatever their extension. Without this
+    // an exemption would be an unbounded hole: .woff2 is not in
+    // SIZE_GATED_EXTS, so an exempt font of any size would pass both checks.
+    const sizeGated = SIZE_GATED_EXTS.has(ext) || LFS_EXEMPT_PATHS.has(f);
+    if (sizeGated && size > SIZE_GATE_BYTES) {
       if (!isLfsTracked(f)) {
         violations.push({
           path: f, size,
-          reason: `${ext} > 500 KB (${(size / 1024).toFixed(0)} KB) must be LFS-tracked: run \`git lfs track "${f}"\``,
+          reason: LFS_EXEMPT_PATHS.has(f)
+            ? `${f} is LFS-exempt but > 500 KB (${(size / 1024).toFixed(0)} KB). An exemption covers small files that must be byte-readable without git-lfs; this one is too big to keep in git.`
+            : `${ext} > 500 KB (${(size / 1024).toFixed(0)} KB) must be LFS-tracked: run \`git lfs track "${f}"\``,
         });
       }
     }

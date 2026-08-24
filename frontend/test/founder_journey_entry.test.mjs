@@ -41,22 +41,22 @@ test('venture progress renders BEFORE the personal-profile section', () => {
   assert.ok(strip < profile, 'a founder\'s front door must lead with the venture, not the person');
 });
 
-test('the strip links to Command Center, which nothing on /studio reached before', () => {
-  assert.match(code(STRIP), /to="\/build\/command-center"/);
+test('the strip links to the Studio dashboard', () => {
+  // Command Center was removed; /studio is where the founder's stage and
+  // next-best-action now live, and it is their role-default landing path.
+  assert.match(code(STRIP), /to="\/studio"/);
 });
 
-test('it links to the Overview tab, not Operations', () => {
-  // /studio-ops redirects founders to ?tab=studio-ops → the Operations tab.
-  // Command Center with no ?tab lands on Overview, which is where the
-  // next-best-action checklist lives.
+test('it does not link at the Operations console or a dead Command Center tab', () => {
   const src = code(STRIP);
   assert.doesNotMatch(src, /tab=studio-ops/);
   assert.doesNotMatch(src, /\/studio-ops/);
+  assert.doesNotMatch(src, /command-center/, 'the removed page must not be linked');
 });
 
 test('the next action comes from the same endpoint LifecycleModule uses', () => {
-  // Two sources would let /studio and Command Center tell a founder two
-  // different next steps.
+  // Two sources would let the strip and the lifecycle rail tell a founder
+  // two different next steps.
   const src = code(STRIP);
   assert.match(src, /api\.getLifecycle\(/);
   assert.match(src, /checklist\.find\(\(i\) => !i\.done\)/);
