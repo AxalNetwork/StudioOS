@@ -92,7 +92,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/projects', icon: Zap, label: 'Startups' },
       { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
       { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
-      { to: '/spinouts', icon: Rocket, label: 'Spin-Outs' },
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
@@ -164,8 +163,8 @@ export const SIDEBAR_GROUPS = {
   //
   // Intentional removals (documented so a nav-integrity guard treats them as
   // deliberate, not silent drops):
-  //   • The legacy founder landing page was retired. Execution, Studio Ops, and
-  //     Spin-Outs remain first-class rows pointing at their standalone pages.
+  //   • The legacy founder landing page and standalone Spin-Outs page were
+  //     retired. Execution and Studio Ops remain first-class rows.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
   //     (/build/metrics) as the founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
@@ -191,7 +190,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'build', label: 'Build', items: [
       { to: '/execution', icon: Briefcase, label: 'Execution', match: ['/execution', '/projects', '/build/roadmap'] },
       { to: '/studio-ops', icon: LayoutDashboard, label: 'Studio Ops', match: ['/studio-ops'] },
-      { to: '/spinouts', icon: Rocket, label: 'Spin-Outs', match: ['/spinouts', '/spin-outs'] },
       { to: '/signals', icon: Radar, label: 'Signals' },
       // Team Building — consolidates the former "Find a Advisor" (Validate),
       // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one

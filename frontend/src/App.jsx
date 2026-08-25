@@ -165,7 +165,6 @@ const StudioOpsPage = lazy(() => import('./pages/StudioOpsPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
-const SpinOutsPage = lazy(() => import('./pages/SpinOutsPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
@@ -377,7 +376,7 @@ function highlightMatch(label, query) {
 // Sidebar abbreviations for the collapsed rail. First letter of each word
 // (split on whitespace and hyphens), filtering out filler words, capped at
 // 3 chars. Examples: Dashboard→D, Admin Console→AC, Pipeline Board→PB,
-// Spin-Outs→SO, Refer & Earn→RE.
+// Refer & Earn→RE.
 function abbreviateLabel(label) {
   if (!label) return '';
   const parts = String(label).split(/[\s\-/&]+/).filter((w) => {
@@ -1901,11 +1900,6 @@ function AppInner() {
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'exploring'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
-      <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], <SpinOutsPage />)} />
-      {/* Friendly-URL alias: the canonical route is /spinouts (no hyphen),
-          but users frequently type or link /spin-outs. Redirect instead of
-          rendering a blank page. */}
-      <Route path="/spin-outs" element={<Navigate to="/spinouts" replace />} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], <LiquidityPage currentUser={user} />)} />
       <Route path="/funds" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
