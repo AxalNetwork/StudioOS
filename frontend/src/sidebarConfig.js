@@ -147,7 +147,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
       { to: '/spinout-lab/83b', icon: Calendar, label: '83(b) Tracker' },
       { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
-      { to: '/founder', icon: Rocket, label: 'Founder Portal' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
     ]},
     { key: 'account', label: 'Account', items: [
@@ -158,19 +157,15 @@ export const SIDEBAR_GROUPS = {
   // Task #19 — regroup the founder sidebar around the venture lifecycle:
   // Home → Build → Validate → Raise → Launch → More → Account. This replaces the
   // former 8-group layout (which crammed execution + validation + fundraising
-  // into one "Build" bucket and duplicated Home via a parallel "Founder Portal")
+  // into one "Build" bucket and duplicated Home via a parallel portal)
   // so every feature has exactly one home and founders face far fewer top-level
   // choices. Sidebar-level only: every surviving route/icon/tier-gate is
   // preserved; no pages are merged. Mirrors the Task #17 investor reorg.
   //
   // Intentional removals (documented so a nav-integrity guard treats them as
   // deliberate, not silent drops):
-  //   • "Founder Portal" (/founder), "Execution" (/execution + board/roadmap),
-  //     "Studio Ops" (/studio-ops) and "Spin-Outs" (/spinouts) were merged into
-  //     a "Command Center" workspace and have since been UN-merged: that page
-  //     was removed, so each is a first-class row again pointing at its own
-  //     standalone page — the same page every non-founder role always saw.
-  //     Founders are no longer redirected away from those routes.
+  //   • The legacy founder portal was retired. Execution, Studio Ops, and
+  //     Spin-Outs remain first-class rows pointing at their standalone pages.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
   //     (/build/metrics) as the founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
@@ -194,15 +189,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
     ]},
     { key: 'build', label: 'Build', items: [
-      // Command Center was removed. It had merged four founder Build
-      // destinations into one tabbed page; with it gone each is a row again,
-      // pointing at the standalone page every non-founder role already saw.
-      // /build/command-center now redirects to /studio for old bookmarks.
-      // No `match` on purpose: omitting it makes the NavLink `end`-exact, so
-      // this row highlights on /founder only. A '/founder' prefix entry would
-      // also match /founder/growth/* and double-highlight against the Growth
-      // row — the same trap the old Command Center comment called out.
-      { to: '/founder', icon: LayoutGrid, label: 'Founder Portal' },
       { to: '/execution', icon: Briefcase, label: 'Execution', match: ['/execution', '/projects', '/build/roadmap'] },
       { to: '/studio-ops', icon: LayoutDashboard, label: 'Studio Ops', match: ['/studio-ops'] },
       { to: '/spinouts', icon: Rocket, label: 'Spin-Outs', match: ['/spinouts', '/spin-outs'] },

@@ -56,7 +56,6 @@ const CapitalPage = lazy(() => import('./pages/CapitalPage'));
 const TicketsPage = lazy(() => import('./pages/TicketsPage'));
 const DealsPage = lazy(() => import('./pages/DealsPage'));
 const DealRoomPage = lazy(() => import('./pages/DealRoomPage'));
-const FounderPortal = lazy(() => import('./pages/FounderPortal'));
 const PartnerPortal = lazy(() => import('./pages/PartnerPortal'));
 const PartnerDealPortal = lazy(() => import('./pages/PartnerDealPortal'));
 const PartnerOnboardPage = lazy(() => import('./pages/PartnerOnboardPage'));
@@ -283,9 +282,8 @@ const ROLE_COLORS = {
 
 const ROLE_DEFAULT_PATH = {
   admin: '/studio',
-  // Task #19 — "Founder Portal" folded into Home (Studio). Founders land on
-  // /studio directly; /founder now redirects founders there anyway, so pointing
-  // the default here avoids an extra redirect hop on login/root navigation.
+  // Founders land on Studio directly, avoiding an extra redirect hop on
+  // login/root navigation.
   founder: '/studio',
   partner: '/partner-portal',
   investor: '/studio',
@@ -1918,10 +1916,6 @@ function AppInner() {
       <Route path="/funds/lp-workspace" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
       <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
-      {/* Task #19 — the founder sidebar no longer surfaces "Founder Portal"
-          (folded into Studio/Home). Founders hitting the old link are
-          redirected to /studio; admins keep the Founder Portal surface. */}
-      <Route path="/founder" element={guard(['admin', 'founder'], <FounderPortal />)} />
       {/* Task #18 — investor-lifecycle features ported from PR #119. */}
       <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
       <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />

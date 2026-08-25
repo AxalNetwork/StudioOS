@@ -9,9 +9,9 @@ export default {
       overview:
         "The Spin-Out Lab is a 28-day, week-by-week sprint that takes you from a hypothesis to an incorporated, funded company. The sidebar collapses to a focused Lab view that only shows the features you need this week; new tools unlock as you complete milestones.",
       howto: [
-        'Enter the lab from Founder Portal → Spin-Out Lab.',
+        'Enter the lab from Studio → Spin-Out Lab.',
         'Complete each week’s required milestones to unlock the next week.',
-        'The lab auto-exits to the standard Founder Portal once Week 4 is complete.',
+        'The lab returns you to Studio once Week 4 is complete.',
       ],
       tips: [
         'Milestones are visible in the Lab sidebar; click any to see what’s required.',
@@ -124,7 +124,7 @@ export default {
       id: 'graduating',
       title: 'Graduating from the lab',
       overview:
-        "Once Week 4 is complete, the lab marks you as incorporated and the standard Founder Portal returns. All the work you did in the lab — discovery, roadmap, brand, cap table, legal docs — stays attached to your startup.",
+        "Once Week 4 is complete, the lab marks you as incorporated and returns you to Studio. All the work you did in the lab — discovery, roadmap, brand, cap table, legal docs — stays attached to your startup.",
       howto: [
         'Confirm incorporation completes successfully (check the cap table populates).',
         'The sidebar auto-restores to the full Founder view on next page load.',
@@ -139,7 +139,7 @@ export default {
         'If the cap table didn’t populate after incorporation, contact support before issuing more shares.',
       ],
       related: [
-        { label: 'Founder Portal', href: '#portals/founder' },
+        { label: 'Studio', href: '#getting-started/choosing-path' },
         { label: 'Pitch Deck', href: '#build/pitch-deck' },
       ],
     },

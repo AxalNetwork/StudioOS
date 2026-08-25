@@ -2,17 +2,15 @@
  * Carrying the founder onboarding answers into the intake form.
  *
  * `OnboardingFounderPage` asks "what problem are you solving?", "how are you
- * solving it?" and "why now?", then hands the founder to `/founder`, where
- * `FounderPortal` presented those same three as empty textareas. The answers
- * had gone into `onboarding_progress.data`, which nothing but the wizard
- * itself ever read back.
+ * solving it?" and "why now?" before handing the founder to the active
+ * workspace. The retired portal form no longer consumes these answers.
  *
  * There are two receiving surfaces, because the wizard branches on `journey`:
  *   • pre_incorp    → /spinout-lab, which has no intake form at all, so the
  *                     worker projects the answers straight into `projects`
  *                     (services/onboardingProjection.ts).
- *   • incorporated  → /founder, this form, which creates the project itself —
- *                     so it is prefilled rather than double-written.
+ *   • incorporated  → /studio, where the founder continues with the active
+ *                     workspace instead of a retired intake form.
  *
  * Both halves must speak the same field names or half the answers vanish, and
  * the last test in this file is what stops them drifting.

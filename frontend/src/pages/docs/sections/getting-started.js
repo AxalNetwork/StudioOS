@@ -34,11 +34,11 @@ export default {
       howto: [
         'On first sign-in, the Onboarding wizard asks where you are in your journey.',
         'Pick "Spin-Out Lab" to enter the 4-week sprint with a locked, week-by-week feature tree.',
-        'Pick "Existing Company" to land on the standard Founder Portal with full sidebar access.',
-        'You can re-enter the lab any time from Founder Portal → Spin-Out Lab.',
+        'Pick "Existing Company" to land in Studio with full founder tooling.',
+        'You can re-enter the lab any time from Studio → Spin-Out Lab.',
       ],
       tips: [
-        'The lab gates features per week to keep you focused; the standard portal is open-ended.',
+        'The lab gates features per week to keep you focused; Studio is open-ended.',
         'You can graduate the lab early by completing each week’s milestones — the system auto-exits when Week 4 is done.',
       ],
       pitfalls: [
@@ -47,7 +47,7 @@ export default {
       ],
       related: [
         { label: 'Spin-Out Lab overview', href: '#spin-out-lab/overview' },
-        { label: 'Founder Portal', href: '#portals/founder' },
+        { label: 'Spin-Out Lab', href: '#spin-out-lab/overview' },
       ],
     },
     {
@@ -72,7 +72,7 @@ export default {
       ],
       related: [
         { label: 'Settings → Profile', href: '#account/settings-overview' },
-        { label: 'Founder Portal', href: '#portals/founder' },
+        { label: 'Settings', href: '#account/settings-overview' },
       ],
     },
     {
