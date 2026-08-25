@@ -82,7 +82,6 @@ export const OPTIONAL_MILESTONES: Record<number, string[]> = {
   2: [
     'mvp_scoped',
     'landing_page_created',
-    'studio_ops_cadence_set',
     'discovery_followups_mapped',
   ],
   3: [

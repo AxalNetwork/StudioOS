@@ -531,13 +531,6 @@ projects.post('/submit', async (c) => {
   await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, ${dealStatus})`;
   await sql`INSERT INTO activity_logs (project_id, action, details, actor) VALUES (${project.id}, 'auto_scored', ${`Score: ${result.total_score}, Tier: ${result.tier}, Status: ${newStatus}, Review: ${intakeReview}`}, 'system')`;
   await sql.end();
-  // Only auto-create StudioOps for clean, approved tier_1/tier_2. A flagged
-  // intake holds at 'scoring' until admin signs off — Epic 5 LP guarantee.
-  if (intakeReview === 'auto_approved' && (newStatus === 'tier_1' || newStatus === 'tier_2')) {
-    const { autoCreateStudioOpsForProject } = await import('./studioops');
-    await autoCreateStudioOpsForProject(c.env, project.id, newStatus, founderId || 1);
-  }
-
   return c.json({
     project: { ...project, status: newStatus, stage: newStage },
     score: { ...result, integrity_hash: intakeHash, integrity_version: INTEGRITY_VERSION, requires_admin_review: intakeReview === 'flagged', anomaly_flags: intakeFlags },

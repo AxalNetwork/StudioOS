@@ -389,7 +389,7 @@ networkfx.post('/marketplace/request-intro', async (c) => {
   const target: any = await c.env.DB.prepare(`SELECT u.name, u.email FROM marketplace_profiles mp JOIN users u ON u.id = mp.user_id WHERE u.id = ?`).bind(targetUserId).first();
   if (!target) return c.json({ error: 'Target is not on the marketplace' }, 404);
 
-  // Auto-create a Studio Ops workflow_task for an admin to handle the intro
+  // Auto-create a workflow task for an admin to handle the intro.
   // Find or create a strategic workflow for "Marketplace Intros"
   let wf: any = await c.env.DB.prepare(`SELECT id FROM workflows WHERE template_key = 'marketplace.intros' AND project_id IS NULL LIMIT 1`).first();
   if (!wf) {

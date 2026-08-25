@@ -11,8 +11,8 @@ import { reportError } from '../lib/log';
 //
 // Task #11 (Spin-Out Lab) — adds a journey-stage step that branches the
 // finish action: pre-incorp founders get flipped into the Spin-Out Lab
-// (4-week guided sprint) and land on /spinout-lab; everyone else keeps
-// the existing /founder handoff.
+// (4-week guided sprint) and land on /spinout-lab; everyone else continues
+// to Studio.
 const JOURNEY_PRE_INCORP = 'pre_incorp';
 const JOURNEY_INCORPORATED = 'incorporated';
 
@@ -36,7 +36,7 @@ export default function OnboardingFounderPage() {
     {
       key: 'journey',
       title: 'Where are you in your journey?',
-      description: 'This decides whether we drop you into our 4-week Spin-Out Lab sprint or the standard founder portal.',
+      description: 'This decides whether we drop you into our 4-week Spin-Out Lab sprint or Studio.',
       validate: (v) => (!v.journey ? 'Pick one to continue' : null),
       render: ({ values, set }) => (
         <ChoiceField

@@ -421,7 +421,7 @@ pipeline.post('/decision-gate/review', async (c) => {
     ts: Date.now(),
   });
 
-  // Auto-create a Studio Ops strategic oversight task for human review
+  // Auto-create a strategic oversight task for human review.
   try {
     let wf: any = await c.env.DB.prepare(`SELECT id FROM workflows WHERE template_key = 'pipeline.gate_review' AND project_id = ? LIMIT 1`).bind(dealId).first();
     if (!wf) {

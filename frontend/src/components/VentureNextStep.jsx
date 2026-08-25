@@ -4,10 +4,8 @@
 // followed by ProfileFitSection — Skills graph, Values graph, Founder
 // archetype, Best-fit matches. All about the person, none about the venture.
 // The one surface that answers "what do I do next" is Command Center's
-// Overview tab, and nothing on /studio linked to it: the closest thing, the
-// "My Studio Ops Tasks" card, routes to /studio-ops which redirects founders to
-// the OPERATIONS tab, not Overview — and only renders when they have assigned
-// tasks at all.
+// Overview tab, and nothing on /studio linked to it. This component provides
+// a direct path to the next relevant action.
 //
 // So this reads the same lifecycle endpoint LifecycleModule does
 // (GET /api/progress/lifecycle/:id) and surfaces the identical `nextAction` —

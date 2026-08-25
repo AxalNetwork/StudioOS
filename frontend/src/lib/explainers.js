@@ -190,7 +190,7 @@ export const EXPLAINERS = {
   wellbeing: {
     title: 'Founder wellbeing',
     body: 'Private check-ins, sleep / load tracking and burnout signals. Encrypted at rest — your investors never see this.',
-    docPath: 'portals/founder',
+    docPath: 'validate-grow/wellbeing',
   },
   portfolio_health: {
     title: 'Portfolio health score',

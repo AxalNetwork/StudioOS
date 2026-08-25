@@ -671,7 +671,7 @@ legalcap.post('/subsidiary/spinout', async (c) => {
     }
   } catch (e: any) { console.error('spinout capital call:', e?.message); }
 
-  // Studio Ops workflow for human follow-up
+  // Workflow task for human follow-up.
   try {
     let wf: any = await c.env.DB.prepare(`SELECT id FROM workflows WHERE template_key = 'spinout.coordination' AND project_id = ? LIMIT 1`).bind(dealId).first();
     if (!wf) {

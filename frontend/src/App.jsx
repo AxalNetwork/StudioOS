@@ -46,7 +46,6 @@ const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage
 const CofounderAgreementPage = lazy(() => import('./pages/CofounderAgreementPage'));
 const SpinoutLab83bPage = lazy(() => import('./pages/SpinoutLab83bPage'));
 const SpinoutLabCompliancePage = lazy(() => import('./pages/SpinoutLabCompliancePage'));
-const SpinoutLabStudioOpsPage = lazy(() => import('./pages/SpinoutLabStudioOpsPage'));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 const WellbeingPage = lazy(() => import('./pages/WellbeingPage'));
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
@@ -161,11 +160,9 @@ const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage')
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
-const StudioOpsPage = lazy(() => import('./pages/StudioOpsPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
-const SpinOutsPage = lazy(() => import('./pages/SpinOutsPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
@@ -377,7 +374,7 @@ function highlightMatch(label, query) {
 // Sidebar abbreviations for the collapsed rail. First letter of each word
 // (split on whitespace and hyphens), filtering out filler words, capped at
 // 3 chars. Examples: Dashboard→D, Admin Console→AC, Pipeline Board→PB,
-// Spin-Outs→SO, Refer & Earn→RE.
+// Refer & Earn→RE.
 function abbreviateLabel(label) {
   if (!label) return '';
   const parts = String(label).split(/[\s\-/&]+/).filter((w) => {
@@ -1656,12 +1653,6 @@ function AppInner() {
       {/* Office Hours tool page (design: Office Hours.dc) — founder-side
           partner session booking; /office-hours stays the advisor console. */}
       <Route path="/spinout-lab/office-hours" element={guard(labRoles(['admin']), <SpinoutLabOfficeHoursPage />)} />
-      {/* Studio Ops tool page (design: Studio_Ops.dc) — the FOUNDER's weekly
-          operating cadence: focus, execution tracker, blockers, closeout.
-          Dedicated Lab page; deliberately NOT the studio's admin operations
-          console (StudioOpsPage), which stays on Command Center's Operations
-          tab and the legacy /studio-ops redirect. */}
-      <Route path="/spinout-lab/studio-ops" element={guard(labRoles(['admin']), <SpinoutLabStudioOpsPage />)} />
       {/* Cohort application form — signed-in founders only (contact info
           comes from the account); logged-out visitors are sent to register
           with the spinout-lab product intent. */}
@@ -1901,11 +1892,6 @@ function AppInner() {
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'exploring'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
-      <Route path="/spinouts" element={guard(['admin', 'founder', 'partner', 'investor'], <SpinOutsPage />)} />
-      {/* Friendly-URL alias: the canonical route is /spinouts (no hyphen),
-          but users frequently type or link /spin-outs. Redirect instead of
-          rendering a blank page. */}
-      <Route path="/spin-outs" element={<Navigate to="/spinouts" replace />} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], <LiquidityPage currentUser={user} />)} />
       <Route path="/funds" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
@@ -2001,7 +1987,6 @@ function AppInner() {
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
-      <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelineWorkspace />)} />
       {/* Task #1 — unified Network page (Contacts + Introductions +

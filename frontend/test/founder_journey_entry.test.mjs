@@ -5,8 +5,8 @@
  *    Values graph, Founder archetype, Best-fit matches. Nothing about the
  *    venture, and no link to Command Center's Overview tab, which is the one
  *    surface that answers "what next". The closest thing on the page, the
- *    Studio Ops card, routes to /studio-ops → the OPERATIONS tab, and only
- *    renders when the founder has assigned tasks at all.
+ *    dashboard card was conditional on an operator assignment and did not
+ *    direct a founder toward the next venture action.
  *
  * 2. The holding-state screen showed byte-identical copy to every applicant
  *    regardless of the lane they picked at signup, and Google signups recorded

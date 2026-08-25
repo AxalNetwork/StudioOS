@@ -158,7 +158,7 @@ export const PERSONAS: Persona[] = [
       { key: 'jurisdiction', prompt: 'Preferred incorporation jurisdiction? (Delaware / UK / Singapore)', type: 'choice', choices: ['Delaware', 'UK', 'Singapore'] },
       { key: 'cofounders', prompt: 'Co-founders (names + roles), or solo?', type: 'text' },
     ],
-    nav_extras: [{ to: '/founder', label: 'Founder Portal' }, { to: '/spinouts', label: 'Spin-Outs' }],
+    nav_extras: [],
   },
   {
     id: 'founder_existing',
