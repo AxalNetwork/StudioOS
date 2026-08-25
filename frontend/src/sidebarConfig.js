@@ -144,7 +144,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'more', label: 'More', items: [
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
       { to: '/spinout-lab/83b', icon: Calendar, label: '83(b) Tracker' },
-      { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
     ]},
     { key: 'account', label: 'Account', items: [
@@ -269,7 +268,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'more', label: 'More', items: [
       // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
       // /refer route redirects there. Removed from the founder nav.
-      { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
