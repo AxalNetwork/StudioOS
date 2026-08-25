@@ -119,8 +119,6 @@ export const SIDEBAR_GROUPS = {
       // Relationships tabs); /contacts and /relationships redirect to /network.
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
-      { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       // "Integrations" merged into Settings (/settings/integrations); the
       // /integrations route redirects there. Removed from the admin nav.
@@ -144,11 +142,9 @@ export const SIDEBAR_GROUPS = {
     { key: 'more', label: 'More', items: [
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
       { to: '/spinout-lab/83b', icon: Calendar, label: '83(b) Tracker' },
-      { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
   ],
 
@@ -261,18 +257,14 @@ export const SIDEBAR_GROUPS = {
       { to: '/raise/legal-engine', icon: Scale, label: 'Legal Engine' },
     ]},
     { key: 'launch', label: 'Launch', items: [
-      { to: '/my/events', icon: Ticket, label: 'Events' },
       // "Jobs" moved into the Build › Team workspace (/build/team?tab=jobs).
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
-      { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
     { key: 'more', label: 'More', items: [
       // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
       // /refer route redirects there. Removed from the founder nav.
-      { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
-      { to: '/calendar', icon: Calendar, label: 'Calendar' },
     ]},
     { key: 'account', label: 'Account', items: [
     ]},
@@ -338,9 +330,7 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'engage', label: 'Engage', items: [
       { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
-      { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
-      { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
     ]},
     // Network — Introductions, Relationships, Organizations. Reuses the shared
@@ -468,8 +458,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
   ],
 
@@ -511,15 +499,12 @@ export const SIDEBAR_GROUPS = {
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
     ]},
     { key: 'engagements', label: 'Engagements', items: [
-      { to: '/calendar', icon: Calendar, label: 'Calendar' },
-      { to: '/my/events', icon: Ticket, label: 'Events' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/advisors', icon: UserCircle, label: 'Advisor Directory' },
       { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
   ],
 

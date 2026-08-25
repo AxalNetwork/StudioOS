@@ -250,6 +250,7 @@ const GrowthWorkspace = lazy(() => import('./pages/growth/GrowthWorkspace'));
 // wrapped in its own <Suspense fallback> so fetching a chunk can't blank the app.
 const InactivityWarningModal = lazy(() => import('./components/InactivityWarningModal'));
 const NotificationBell = lazy(() => import('./components/NotificationBell'));
+const FounderWellbeingMenu = lazy(() => import('./components/FounderWellbeingMenu'));
 const CommandPalette = lazy(() => import('./components/CommandPalette'));
 const StepUpModal = lazy(() => import('./components/StepUpModal'));
 const InstallPrompt = lazy(() => import('./components/InstallPrompt'));
@@ -424,6 +425,18 @@ function UserDropdown({ user, onLogout }) {
           <Link to="/trust" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Trust Center
+          </Link>
+          <Link to="/calendar" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Calendar
+          </Link>
+          <Link to="/my/events" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Events
+          </Link>
+          <Link to="/articles/draft" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Articles
           </Link>
           <Link to="/tickets" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
@@ -1015,6 +1028,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[activeRole]}`}>
                 {ROLE_LABELS[activeRole]} View
               </span>
+            )}
+            {(activeRole === 'founder' || activeRole === 'admin') && (
+              <Suspense fallback={<span className="inline-block h-8 w-8" />}>
+                <FounderWellbeingMenu />
+              </Suspense>
             )}
             <Suspense fallback={<span className="inline-block w-8 h-8" />}>
               <NotificationBell userId={user?.id} />

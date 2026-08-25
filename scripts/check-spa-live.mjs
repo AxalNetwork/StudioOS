@@ -294,7 +294,13 @@ async function checkRoute(base, route, assetSink) {
         // omit it. Static analysis only sees today's single call site and reads
         // this guard as always-true — it's deliberate defensive handling of an
         // optional argument, not dead code.
-        if (assetSink) for (const ref of extractAssetRefs(body)) assetSink.add(ref);
+        // The apex root intentionally falls through to the marketing site,
+        // where `shell: false` means this checker only asserts a healthy HTML
+        // response. Its asset manifest belongs to GitHub Pages and must not be
+        // mixed with the Worker-served SPA asset checks for routed app paths.
+        if (assetSink && route.shell) {
+          for (const ref of extractAssetRefs(body)) assetSink.add(ref);
+        }
         return null;
       }
       lastErr = problems.join('; ');
