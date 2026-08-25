@@ -145,7 +145,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
   ],
 
@@ -260,7 +259,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'launch', label: 'Launch', items: [
       // "Jobs" moved into the Build › Team workspace (/build/team?tab=jobs).
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
-      { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
     { key: 'more', label: 'More', items: [
       // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
@@ -507,7 +505,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/articles/draft', icon: FileText, label: 'Articles' },
     ]},
   ],
 

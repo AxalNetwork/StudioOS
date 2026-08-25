@@ -434,6 +434,10 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Events
           </Link>
+          <Link to="/articles/draft" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Articles
+          </Link>
           <Link to="/tickets" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Support
