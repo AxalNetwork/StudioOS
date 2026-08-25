@@ -20,7 +20,7 @@ import {
   Ticket, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, Shield, ShieldCheck,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, LayoutGrid,
-  MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
+  MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, Gamepad2, ShieldAlert,
   Gavel, Inbox, FileBarChart, Radar, Wallet,
 } from 'lucide-react';
@@ -112,7 +112,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
       { to: '/incorporate', icon: Scale, label: 'Incorporate' },
       { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
     { key: 'network', label: 'Network & Growth', items: [
       { to: '/partners', icon: Users, label: 'Partners' },
@@ -294,7 +293,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
   ],
 
@@ -403,7 +401,6 @@ export const SIDEBAR_GROUPS = {
     // has moved into Settings (/settings/referrals); /refer redirects there.
     // The whole single-item group is removed from the partner nav.
     { key: 'account', label: 'Account', items: [
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
   ],
 
@@ -489,7 +486,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/trust', icon: Lock, label: 'Trust & Identity' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
@@ -559,7 +555,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/profile', icon: UserCircle, label: 'My Profile' },
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
   ],
 };
