@@ -6,7 +6,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 
 // Phase 0.2 / Task #23 — Founder onboarding wizard.
-// Light intake before handing off to the existing FounderPortal where
+// Light intake before handing off to the founder's Studio workspace where
 // the rich project-submission flow lives.
 //
 // Task #11 (Spin-Out Lab) — adds a journey-stage step that branches the
@@ -110,7 +110,7 @@ export default function OnboardingFounderPage() {
       navigate('/spinout-lab');
       return;
     }
-    navigate('/founder');
+    navigate('/studio');
   };
 
   return (
@@ -118,7 +118,7 @@ export default function OnboardingFounderPage() {
       <OnboardingWizard
         flow="founder"
         steps={steps}
-        finishLabel="Open Founder Portal"
+        finishLabel="Continue to Studio"
         onFinish={handleFinish}
       />
     </div>

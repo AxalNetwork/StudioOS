@@ -1438,21 +1438,37 @@ export const api = {
   adminPayouts: () => request('/network/admin/payouts'),
   adminProcessPayout: (id, data) => request(`/network/admin/payouts/${id}/process`, { method: 'PATCH', body: JSON.stringify(data) }),
 
-  // Task #9 — Refer & Earn payouts via Stripe Connect Express.
-  referEarnConnectOnboard: () => request('/refer-earn/connect/onboard', { method: 'POST' }),
-  referEarnConnectStatus: () => request('/refer-earn/connect/status'),
-  referEarnConnectLoginLink: () => request('/refer-earn/connect/login-link', { method: 'POST' }),
-  referEarnDashboard: () => request('/refer-earn/dashboard'),
-  referEarnPayoutsMe: () => request('/refer-earn/payouts/me'),
-  adminReferEarnPayouts: (status) =>
-    request(`/refer-earn/admin/payouts${status ? `?status=${encodeURIComponent(status)}` : ''}`),
-  adminReferEarnApprove: (id) => request(`/refer-earn/admin/payouts/${id}/approve`, { method: 'POST' }),
-  adminReferEarnPay: (id) => request(`/refer-earn/admin/payouts/${id}/pay`, { method: 'POST' }),
-  adminReferEarnRunApprovalEngine: () =>
-    request('/refer-earn/admin/run-approval-engine', { method: 'POST' }),
-  adminReferEarnTaxSummary: (year) =>
-    request(`/refer-earn/admin/tax-summary${year ? `?year=${year}` : ''}`),
-  adminReferEarnEvaluate: (id) => request(`/refer-earn/admin/payouts/${id}/evaluate`),
+  // Refer & Earn — referral submission pipeline. (The Stripe Connect payout
+  // endpoints that used to live here were removed with the payouts backend;
+  // rewards are milestone labels settled off-platform.)
+  referralOverview: () => request('/refer-earn/overview'),
+  referralSubmissions: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v != null && v !== ''),
+    ).toString();
+    return request(`/refer-earn/submissions${qs ? `?${qs}` : ''}`);
+  },
+  referralSubmission: (uid) => request(`/refer-earn/submissions/${encodeURIComponent(uid)}`),
+  referralSubmit: (data) =>
+    request('/refer-earn/submissions', { method: 'POST', body: JSON.stringify(data) }),
+  referralAddContext: (uid, data) =>
+    request(`/refer-earn/submissions/${encodeURIComponent(uid)}/context`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  referralImport: (data) =>
+    request('/refer-earn/submissions/import', { method: 'POST', body: JSON.stringify(data) }),
+  referralStrategicAccess: (data) =>
+    request('/refer-earn/strategic-access', { method: 'POST', body: JSON.stringify(data) }),
+  adminReferralSubmissions: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v != null && v !== ''),
+    ).toString();
+    return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
+  },
+  adminReferralReview: (uid, data) =>
+    request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`, {
+      method: 'PATCH', body: JSON.stringify(data),
+    }),
 
   adminUserProfile: (userId) => request(`/admin/users/${userId}/profile`),
   // Task #1 (DB) — dedicated transcript endpoints. The /profile call above

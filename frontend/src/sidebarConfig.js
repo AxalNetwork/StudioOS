@@ -20,7 +20,7 @@ import {
   Ticket, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, Shield, ShieldCheck,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, LayoutGrid,
-  MessageSquare, Package, Lock, Calendar, Heart, Bookmark, Megaphone, Send,
+  MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, Gamepad2, ShieldAlert,
   Gavel, Inbox, FileBarChart, Radar, Wallet,
 } from 'lucide-react';
@@ -112,7 +112,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/legal-capital', icon: Scale, label: 'Legal & Capital' },
       { to: '/incorporate', icon: Scale, label: 'Incorporate' },
       { to: '/compliance', icon: Calendar, label: 'Compliance Calendar' },
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
     { key: 'network', label: 'Network & Growth', items: [
       { to: '/partners', icon: Users, label: 'Partners' },
@@ -148,7 +147,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
       { to: '/spinout-lab/83b', icon: Calendar, label: '83(b) Tracker' },
       { to: '/wellbeing', icon: Heart, label: 'Founder Wellbeing' },
-      { to: '/founder', icon: Rocket, label: 'Founder Portal' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
     ]},
     { key: 'account', label: 'Account', items: [
@@ -159,20 +157,15 @@ export const SIDEBAR_GROUPS = {
   // Task #19 — regroup the founder sidebar around the venture lifecycle:
   // Home → Build → Validate → Raise → Launch → More → Account. This replaces the
   // former 8-group layout (which crammed execution + validation + fundraising
-  // into one "Build" bucket and duplicated Home via a parallel "Founder Portal")
+  // into one "Build" bucket and duplicated Home via a parallel portal)
   // so every feature has exactly one home and founders face far fewer top-level
   // choices. Sidebar-level only: every surviving route/icon/tier-gate is
   // preserved; no pages are merged. Mirrors the Task #17 investor reorg.
   //
   // Intentional removals (documented so a nav-integrity guard treats them as
   // deliberate, not silent drops):
-  //   • "Founder Portal" (/founder), "Execution" (/execution + board/roadmap),
-  //     "Studio Ops" (/studio-ops) and "Spin-Outs" (/spinouts) are merged into
-  //     one "Command Center" workspace (/build/command-center). Each is now a
-  //     deep-linkable tab (?tab=founder-portal|execution|studio-ops|spin-outs);
-  //     founders hitting the legacy routes are redirected into the matching tab
-  //     in App.jsx. Every route stays registered and reachable for admin/other
-  //     personas.
+  //   • The legacy founder portal was retired. Execution, Studio Ops, and
+  //     Spin-Outs remain first-class rows pointing at their standalone pages.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
   //     (/build/metrics) as the founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
@@ -196,17 +189,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
     ]},
     { key: 'build', label: 'Build', items: [
-      // Command Center merges four founder Build destinations — Founder Portal
-      // (/founder), Execution (/execution + board/roadmap), Studio Ops
-      // (/studio-ops) and Spin-Outs (/spinouts, + the /spin-outs alias) — into
-      // one tabbed page at /build/command-center. `match` keeps the row active
-      // across every tab and every legacy deep-linked route (founders are
-      // redirected from those routes into the matching ?tab= in App.jsx).
-      // '/founder' is intentionally NOT in `match`: it would prefix-match the
-      // new /founder/growth/* routes and double-highlight this row. The bare
-      // /founder route redirects founders to /build/command-center anyway, so
-      // it never rests in the URL.
-      { to: '/build/command-center', icon: LayoutGrid, label: 'Command Center', match: ['/build/command-center', '/execution', '/studio-ops', '/spinouts', '/spin-outs', '/projects', '/pipeline', '/build/roadmap'] },
+      { to: '/execution', icon: Briefcase, label: 'Execution', match: ['/execution', '/projects', '/build/roadmap'] },
+      { to: '/studio-ops', icon: LayoutDashboard, label: 'Studio Ops', match: ['/studio-ops'] },
+      { to: '/spinouts', icon: Rocket, label: 'Spin-Outs', match: ['/spinouts', '/spin-outs'] },
       { to: '/signals', icon: Radar, label: 'Signals' },
       // Team Building — consolidates the former "Find a Advisor" (Validate),
       // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one
@@ -294,7 +279,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
   ],
 
@@ -403,7 +387,6 @@ export const SIDEBAR_GROUPS = {
     // has moved into Settings (/settings/referrals); /refer redirects there.
     // The whole single-item group is removed from the partner nav.
     { key: 'account', label: 'Account', items: [
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
   ],
 
@@ -489,7 +472,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
     ]},
     { key: 'account', label: 'Account', items: [
-      { to: '/trust', icon: Lock, label: 'Trust & Identity' },
       { to: '/calendar', icon: Calendar, label: 'Calendar' },
       { to: '/my/events', icon: Ticket, label: 'Events' },
     ]},
@@ -559,7 +541,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/profile', icon: UserCircle, label: 'My Profile' },
-      { to: '/trust', icon: Lock, label: 'Trust Center' },
     ]},
   ],
 };

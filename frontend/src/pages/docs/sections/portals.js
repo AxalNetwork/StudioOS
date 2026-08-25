@@ -4,29 +4,6 @@ export default {
   icon: 'LayoutDashboard',
   subsections: [
     {
-      id: 'founder',
-      title: 'Founder Portal',
-      overview:
-        "The Founder Portal is the home base for active founders. It surfaces your startup status, this week’s priorities, upcoming deadlines, advisor sessions, and quick actions tailored to where you are in the journey.",
-      howto: [
-        'Open Founder Portal from the sidebar (or it’s your default landing page).',
-        'Review the "This week" card for your priorities.',
-        'Use Quick actions to jump to the most-used tools.',
-      ],
-      tips: [
-        'Pin Founder Portal as a browser bookmark — most founders open it daily.',
-        'The portal re-orders cards based on your tier and stage; the experience evolves with you.',
-      ],
-      pitfalls: [
-        'Hiding cards you don’t want today can hide them tomorrow when you need them — re-enable from the gear icon.',
-        'Treating Quick actions as a feature list — many features live only in the sidebar groups.',
-      ],
-      related: [
-        { label: 'Spin-Out Lab overview', href: '#spin-out-lab/overview' },
-        { label: 'Roadmap', href: '#build/roadmap' },
-      ],
-    },
-    {
       id: 'portfolio-health',
       title: 'Investor Portfolio Health',
       overview:

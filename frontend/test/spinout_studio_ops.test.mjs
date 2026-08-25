@@ -41,14 +41,19 @@ test('Studio Ops tool card opens the dedicated Lab page, not Command Center', ()
   assert.equal(TOOL_INFO['studio-ops'].ungated, true);
 });
 
-test('the dedicated route exists in App.jsx and Command Center keeps its Operations embed', () => {
+test('the dedicated Lab route exists and /studio-ops still serves the studio console', () => {
   const app = read('src/App.jsx');
   assert.ok(app.includes('path="/spinout-lab/studio-ops"'), 'Lab route missing');
   assert.ok(app.includes('SpinoutLabStudioOpsPage'), 'Lab page not routed');
-  // The decoupling must not have deleted the studio console's own surfaces.
-  const cc = read('src/pages/CommandCenterPage.jsx');
-  assert.ok(cc.includes('<StudioOpsPage embedded founderCopy />'), 'Command Center Operations tab lost its embed');
+  // Command Center used to embed the Operations tab; with that page removed,
+  // /studio-ops must serve StudioOpsPage directly for founders too, rather
+  // than redirecting into a tab that no longer exists.
   assert.ok(app.includes('path="/studio-ops"'), 'legacy /studio-ops route removed');
+  assert.match(
+    app,
+    /path="\/studio-ops"[^\n]*<StudioOpsPage \/>/,
+    '/studio-ops must render StudioOpsPage directly, with no Command Center redirect',
+  );
 });
 
 test('the page marks no milestone on load — only the server-side cadence lock does', () => {

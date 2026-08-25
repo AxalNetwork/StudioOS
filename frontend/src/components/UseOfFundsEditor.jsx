@@ -9,7 +9,7 @@ import {
 /**
  * Task #8 — deck-side editor for THE ASK "Use of Funds" allocation.
  *
- * Founders set the allocation once at intake (FounderPortal); this lets them
+ * Founders set the allocation once at intake; this lets them
  * revise it afterwards from the Pitch Deck builder. It loads the project's
  * current allocation, prefills the shared allocator, and saves via
  * PUT /api/projects/:id (validated server-side to total exactly 100% or

@@ -88,3 +88,13 @@
 *.sh text eol=lf
 *.mjs text eol=lf
 *.cjs text eol=lf
+
+# The OG card generator inlines this font's BYTES into each card's HTML and
+# fingerprints the result (scripts/generate-og-images.mjs). Under the *.woff2
+# rule above it becomes a 130-byte LFS pointer for anyone without git-lfs —
+# including actions/checkout, which does not fetch LFS by default — so every
+# card fingerprints against the pointer and the "Card images are current" gate
+# fails on all 13. It has always been a full blob in git for that reason; the
+# exception is pinned here so a repo-wide re-tracking sweep cannot silently
+# undo it again. (.agents/memory/font-lfs-attribute-quirk.md has the history.)
+scripts/og-assets/SpaceGrotesk-Variable.woff2 -filter -diff -merge -text

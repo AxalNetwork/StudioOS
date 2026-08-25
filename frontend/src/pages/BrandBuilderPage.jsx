@@ -1014,7 +1014,7 @@ export default function BrandBuilderPage() {
       )}
 
       <div className="mt-6 text-xs text-gray-500 dark:text-gray-400">
-        <Link to="/founder" className="text-violet-700 hover:underline">← Back to Founder Portal</Link>
+        <Link to="/studio" className="text-violet-700 hover:underline">← Back to Studio</Link>
       </div>
     </div>
   );

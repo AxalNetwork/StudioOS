@@ -1374,47 +1374,32 @@ billing.post('/stripe/webhook', async (c) => {
     await ensureIncorporationsSchema(c.env);
   });
   await handleStripeEvent(c.env, event);
-  // Task #9 — Refer & Earn Connect events. Same webhook endpoint, dispatched
-  // by event type. `account.updated` mirrors the Connect account flags onto
-  // users.*; `transfer.paid` / `transfer.failed` close the referral_payouts
-  // lifecycle.
+  // `account.updated` still mirrors Connect flags onto experts.* — Task #4's
+  // paid-bookings gate depends on it, and Expert Connect accounts are a
+  // SEPARATE Connect integration from the retired Refer & Earn payouts.
+  //
+  // The Refer & Earn dispatch that used to sit here (`applyConnectAccountUpdated`
+  // onto users.*, plus the `transfer.paid` / `transfer.failed` handlers closing
+  // the referral_payouts lifecycle) went with Stripe Connect in the referrals
+  // redesign. There is no referral payout ledger left for a transfer event to
+  // close, so those event types are simply no longer dispatched here.
   try {
     const ev = event as { type: string; account?: string; data: { object: Record<string, unknown> } };
     if (ev.type === 'account.updated') {
-      const { applyConnectAccountUpdated } = await import('../services/referralPayouts');
-      await applyConnectAccountUpdated(c.env, ev.data.object as Parameters<typeof applyConnectAccountUpdated>[1]);
-      // Task #4 — mirror Connect flags onto experts.* so the directory can
-      // gate paid bookings on (stripe_charges_enabled = 1).
-      try {
-        const acct = ev.data.object as { id?: string; charges_enabled?: boolean; payouts_enabled?: boolean };
-        if (acct?.id) {
-          await c.env.DB.prepare(
-            `UPDATE experts SET stripe_charges_enabled = ?, stripe_payouts_enabled = ?
-               WHERE stripe_account_id = ?`,
-          ).bind(
-            acct.charges_enabled ? 1 : 0,
-            acct.payouts_enabled ? 1 : 0,
-            acct.id,
-          ).run();
-        }
-      } catch (e: any) {
-        console.warn('[billing] expert connect mirror failed:', String(e?.message || e));
-      }
-    } else if (ev.type === 'transfer.paid') {
-      const transferId = (ev.data.object as { id?: string }).id;
-      if (transferId) {
-        const { applyTransferPaid } = await import('../services/referralPayouts');
-        await applyTransferPaid(c.env, transferId);
-      }
-    } else if (ev.type === 'transfer.failed' || ev.type === 'transfer.reversed') {
-      const obj = ev.data.object as { id?: string; failure_message?: string; failure_code?: string };
-      if (obj.id) {
-        const { applyTransferFailed } = await import('../services/referralPayouts');
-        await applyTransferFailed(c.env, obj.id, obj.failure_message || obj.failure_code || ev.type);
+      const acct = ev.data.object as { id?: string; charges_enabled?: boolean; payouts_enabled?: boolean };
+      if (acct?.id) {
+        await c.env.DB.prepare(
+          `UPDATE experts SET stripe_charges_enabled = ?, stripe_payouts_enabled = ?
+             WHERE stripe_account_id = ?`,
+        ).bind(
+          acct.charges_enabled ? 1 : 0,
+          acct.payouts_enabled ? 1 : 0,
+          acct.id,
+        ).run();
       }
     }
-  } catch (e) {
-    console.warn('[billing] refer-earn webhook dispatch failed:', (e as Error).message);
+  } catch (e: any) {
+    console.warn('[billing] expert connect mirror failed:', String(e?.message || e));
   }
   return c.json({ received: true });
 });
