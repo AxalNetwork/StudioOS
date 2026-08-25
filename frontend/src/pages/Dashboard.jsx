@@ -212,22 +212,6 @@ export default function Dashboard() {
           {/* Main Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              {isOperator && operator_workspace?.assigned_tasks?.length > 0 && (
-                <Card title="My Studio Ops Tasks" icon={Briefcase} link="/studio-ops" linkLabel="Open Studio Ops">
-                  <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {operator_workspace.assigned_tasks.slice(0, 6).map(t => (
-                      <div key={t.id} className="py-2 flex items-center gap-3 text-sm">
-                        <PriorityDot p={t.priority} />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{t.title}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t.workflow_title} • {t.type}</div>
-                        </div>
-                        <span className="text-[10px] uppercase text-gray-500 dark:text-gray-400">{t.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              )}
             </div>
 
             <div className="space-y-6">

@@ -107,12 +107,6 @@ export const TOOL_INFO = {
   // Compliance CALENDAR — recurring filings, reminder pings, advisor
   // deep-links — stays at /compliance. Same split as Market Intel.
   compliance: { label: 'Compliance', to: '/spinout-lab/compliance', desc: 'Week 4 readiness & obligations', icon: ShieldCheck },
-  // The founder's weekly operating cadence — a dedicated Lab page (design:
-  // Studio_Ops.dc), NOT the studio's admin operations console that lives on
-  // Command Center's Operations tab. `ungated` keeps its deliverable button
-  // visible without touching unlocked_features (the cadence is worth setting
-  // from Week 1 even though its milestone belongs to Week 2).
-  'studio-ops': { label: 'Studio Ops', to: '/spinout-lab/studio-ops', desc: 'Weekly cadence and accountability', icon: CalendarCheck, ungated: true },
 };
 
 // Four program weeks. `chips` are the timeline summary chips (done derives
@@ -161,10 +155,10 @@ export const WEEK_DEFS = [
       { label: 'Brand basics', keys: ['brand_basics_filled'] },
       { label: 'Pitch deck v1', keys: ['pitch_deck_drafted'] },
     ],
-    features: ['roadmap', 'brand-builder', 'pitch-deck', 'studio-ops'],
+    features: ['roadmap', 'brand-builder', 'pitch-deck'],
     panels: {
       doYou: ['Scope the MVP', 'Set 90-day OKRs', 'Draft brand v1', 'Draft pitch deck v1'],
-      unlocks: ['Roadmap', 'Brand & Landing Pages', 'Pitch Deck Builder', 'Studio Ops cadence'],
+      unlocks: ['Roadmap', 'Brand & Landing Pages', 'Pitch Deck Builder'],
     },
     leaveWith: 'MVP scope · 90-day OKRs · Brand v1 · Pitch deck v1',
     deliverables: [
@@ -172,7 +166,6 @@ export const WEEK_DEFS = [
       { label: 'Set 3+ OKRs (90-day)', keys: ['okrs_created'], tool: 'roadmap' },
       { label: 'Design landing pages', keys: ['landing_page_created'], tool: 'brand-builder' },
       { label: 'Draft pitch deck v1', keys: ['pitch_deck_drafted'], tool: 'pitch-deck' },
-      { label: 'Studio Ops cadence set', keys: ['studio_ops_cadence_set'], tool: 'studio-ops' },
       { label: 'Draft Brand v1 (tagline, value prop, visual direction)', keys: ['brand_basics_filled'], tool: 'brand-builder' },
       { label: 'Map first 3 customer discovery follow-ups', keys: ['discovery_followups_mapped'], tool: 'customer-discovery' },
     ],

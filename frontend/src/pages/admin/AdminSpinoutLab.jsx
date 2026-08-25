@@ -49,7 +49,6 @@ const WEEK_DELIVERABLES = [
       { label: 'Set 3+ OKRs (90-day)', keys: ['okrs_created'], toolLabel: 'Open Roadmap' },
       { label: 'Design landing pages', keys: ['landing_page_created'], toolLabel: 'Open Brand & Landing Pages' },
       { label: 'Draft pitch deck v1', keys: ['pitch_deck_drafted'], toolLabel: 'Open Pitch Deck Builder' },
-      { label: 'Studio Ops cadence set', keys: ['studio_ops_cadence_set'], toolLabel: 'Open Studio Ops' },
       { label: 'Draft Brand v1 (tagline, value prop, visual direction)', keys: ['brand_basics_filled'], toolLabel: 'Open Brand & Landing Pages' },
       { label: 'Map first 3 customer discovery follow-ups', keys: ['discovery_followups_mapped'], toolLabel: 'Open Customer Discovery' },
     ],

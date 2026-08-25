@@ -1761,23 +1761,6 @@ export const api = {
   matchScore: (data) => request('/matches/score', { method: 'POST', body: JSON.stringify(data) }),
   matchAdminAll: () => request('/matches/admin/all'),
 
-  studioOpsTemplates: () => request('/studioops/templates'),
-  studioOpsWorkflows: (params = {}) => {
-    const q = new URLSearchParams(Object.entries(params).filter(([_, v]) => v != null && v !== '')).toString();
-    return request('/studioops/workflows' + (q ? '?' + q : ''));
-  },
-  studioOpsWorkflow: (id) => request(`/studioops/workflows/${id}`),
-  studioOpsCreateWorkflow: (data) => request('/studioops/workflows', { method: 'POST', body: JSON.stringify(data) }),
-  studioOpsUpdateWorkflow: (id, data) => request(`/studioops/workflows/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  studioOpsDeleteWorkflow: (id) => request(`/studioops/workflows/${id}`, { method: 'DELETE' }),
-  studioOpsExecuteTemplate: (data) => request('/studioops/execute-template', { method: 'POST', body: JSON.stringify(data) }),
-  studioOpsCreateTask: (data) => request('/studioops/tasks', { method: 'POST', body: JSON.stringify(data) }),
-  studioOpsUpdateTask: (id, data) => request(`/studioops/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  studioOpsStrategicReview: (projectId) => request(`/studioops/strategic-review/${projectId}`),
-  studioOpsAiAssist: (data) => request('/studioops/ai-assist', { method: 'POST', body: JSON.stringify(data) }),
-  studioOpsAudit: () => request('/studioops/audit'),
-  studioOpsStats: () => request('/studioops/stats'),
-
   networkFxEffects: () => request('/networkfx/effects'),
   networkFxCompounding: () => request('/networkfx/referrals/compounding'),
   networkFxSyndicates: (status) => request('/networkfx/syndicates' + (status ? `?status=${status}` : '')),
@@ -3374,28 +3357,6 @@ export const spinoutLab = {
       body: JSON.stringify({ milestone_key }),
     }),
   exit: () => request('/spinout-lab/exit', { method: 'POST' }),
-
-  // Studio Ops (/spinout-lab/studio-ops) — the founder's weekly operating
-  // cadence and closeout review. Distinct from `api.studioOps*` below, which
-  // drives the STUDIO's admin workflow console at /api/studioops.
-  //
-  // Only these two founder-authored things are stored server-side. The page's
-  // objective, commitments, execution health and blockers are all derived from
-  // `state()` plus the week catalog, so they cannot drift from the workspace.
-  //
-  // `lock: true` on saveStudioOpsCadence is what records the Week-2
-  // `studio_ops_cadence_set` deliverable — saving a draft records nothing.
-  studioOps: () => request('/spinout-lab/studio-ops'),
-  saveStudioOpsCadence: (cadence, { lock = false } = {}) =>
-    request('/spinout-lab/studio-ops/cadence', {
-      method: 'PUT',
-      body: JSON.stringify({ cadence, lock }),
-    }),
-  saveStudioOpsReview: (review, { complete = false } = {}) =>
-    request('/spinout-lab/studio-ops/review', {
-      method: 'PUT',
-      body: JSON.stringify({ review, complete }),
-    }),
 
   // Public — real graduate companies for the "Graduate companies." section
   // (renders on the logged-out marketing page too).

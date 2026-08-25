@@ -91,7 +91,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'studio', label: 'Studio', items: [
       { to: '/projects', icon: Zap, label: 'Startups' },
       { to: '/pipeline', icon: Layers, label: 'Pipeline Board' },
-      { to: '/studio-ops', icon: Briefcase, label: 'Studio Ops' },
       { to: '/scoring', icon: Target, label: 'Scoring Engine' },
       { to: '/portfolio/risk-matrix', icon: ShieldAlert, label: 'Risk Matrix' },
       { to: '/market-intel', icon: Globe, label: 'Market Intelligence' },
@@ -164,7 +163,7 @@ export const SIDEBAR_GROUPS = {
   // Intentional removals (documented so a nav-integrity guard treats them as
   // deliberate, not silent drops):
   //   • The legacy founder landing page and standalone Spin-Outs page were
-  //     retired. Execution and Studio Ops remain first-class rows.
+  //     retired. Execution remains a first-class row.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
   //     (/build/metrics) as the founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
@@ -189,7 +188,6 @@ export const SIDEBAR_GROUPS = {
     ]},
     { key: 'build', label: 'Build', items: [
       { to: '/execution', icon: Briefcase, label: 'Execution', match: ['/execution', '/projects', '/build/roadmap'] },
-      { to: '/studio-ops', icon: LayoutDashboard, label: 'Studio Ops', match: ['/studio-ops'] },
       { to: '/signals', icon: Radar, label: 'Signals' },
       // Team Building — consolidates the former "Find a Advisor" (Validate),
       // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one

@@ -448,7 +448,7 @@ export function canAccessFounderResource(user: User, ownerFounderId: number | nu
   // founder data is the NDA-gated, fail-closed `maskFounderForInvestor` view
   // (projects list/detail, dashboard, private-data). The routes that call THIS
   // predicate (financials, scoring, progress, pipeline, deals, legal docs,
-  // studioops) carry NO mask, so letting an investor through leaks unmasked
+  // admin-only resources carry NO mask, so letting an investor through leaks unmasked
   // founder data regardless of any NDA — a cross-founder IDOR. The one place an
   // investor still needs a masked fallback, `projects.get('/:id')`, keeps its
   // own `user.role !== 'investor'` branch so the mask below still runs.

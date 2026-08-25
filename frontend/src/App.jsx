@@ -46,7 +46,6 @@ const IncorporateSuccessPage = lazy(() => import('./pages/IncorporateSuccessPage
 const CofounderAgreementPage = lazy(() => import('./pages/CofounderAgreementPage'));
 const SpinoutLab83bPage = lazy(() => import('./pages/SpinoutLab83bPage'));
 const SpinoutLabCompliancePage = lazy(() => import('./pages/SpinoutLabCompliancePage'));
-const SpinoutLabStudioOpsPage = lazy(() => import('./pages/SpinoutLabStudioOpsPage'));
 const CompliancePage = lazy(() => import('./pages/CompliancePage'));
 const WellbeingPage = lazy(() => import('./pages/WellbeingPage'));
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
@@ -161,7 +160,6 @@ const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage')
 const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
 const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
-const StudioOpsPage = lazy(() => import('./pages/StudioOpsPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
@@ -1655,12 +1653,6 @@ function AppInner() {
       {/* Office Hours tool page (design: Office Hours.dc) — founder-side
           partner session booking; /office-hours stays the advisor console. */}
       <Route path="/spinout-lab/office-hours" element={guard(labRoles(['admin']), <SpinoutLabOfficeHoursPage />)} />
-      {/* Studio Ops tool page (design: Studio_Ops.dc) — the FOUNDER's weekly
-          operating cadence: focus, execution tracker, blockers, closeout.
-          Dedicated Lab page; deliberately NOT the studio's admin operations
-          console (StudioOpsPage), which stays on Command Center's Operations
-          tab and the legacy /studio-ops redirect. */}
-      <Route path="/spinout-lab/studio-ops" element={guard(labRoles(['admin']), <SpinoutLabStudioOpsPage />)} />
       {/* Cohort application form — signed-in founders only (contact info
           comes from the account); logged-out visitors are sent to register
           with the spinout-lab product intent. */}
@@ -1995,7 +1987,6 @@ function AppInner() {
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
-      <Route path="/studio-ops" element={guard(['admin', 'founder', 'partner', 'investor'], <StudioOpsPage />)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelineWorkspace />)} />
       {/* Task #1 — unified Network page (Contacts + Introductions +

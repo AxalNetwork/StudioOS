@@ -126,7 +126,6 @@ import network from './routes/network';
 import referEarn from './routes/refer_earn';
 import networkfx from './routes/networkfx';
 import profiling from './routes/profiling';
-import studioops from './routes/studioops';
 import dashboard from './routes/dashboard';
 import matches from './routes/matches';
 import settings from './routes/settings';
@@ -812,7 +811,6 @@ app.route('/api/network', network);
 app.route('/api/refer-earn', referEarn);
 app.route('/api/networkfx', networkfx);
 app.route('/api/profiling', profiling);
-app.route('/api/studioops', studioops);
 app.route('/api/dashboard', dashboard);
 // Task #39 — Event engine authed routes (§8.1).
 app.route('/api/events', eventsRoutes);

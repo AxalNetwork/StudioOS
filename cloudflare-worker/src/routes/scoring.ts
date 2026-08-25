@@ -8,7 +8,6 @@ import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import { runFullScore, tierLabel } from '../services/scoring';
 import { formatUseOfFundsText } from '../util/useOfFunds';
-import { autoCreateStudioOpsForProject } from './studioops';
 import {
   assertNoReservedFields,
   assertOfficialInputsComplete,
@@ -309,10 +308,6 @@ scoring.post('/score', async (c) => {
   }
 
   await sql.end();
-
-  if (!effectiveSandbox && reviewStatus === 'auto_approved' && newStatus !== project.status && (newStatus === 'tier_1' || newStatus === 'tier_2')) {
-    try { await autoCreateStudioOpsForProject(c.env, projectId, newStatus, user.id); } catch {}
-  }
 
   // Phase 0.2 notify — page the founder when an official score lands on
   // their project. Sandbox runs and self-runs are intentionally silent.

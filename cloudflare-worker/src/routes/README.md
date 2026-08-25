@@ -37,7 +37,6 @@ against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
 /api/network       → network.ts
 /api/networkfx     → networkfx.ts
 /api/profiling     → profiling.ts
-/api/studioops     → studioops.ts
 /api/dashboard     → dashboard.ts
 /api/matches       → matches.ts
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)

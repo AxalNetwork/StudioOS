@@ -77,7 +77,7 @@ export default function MarketIntelPage() {
     { key: 'geography', label: 'Geography Lens', icon: MapPin },
     { key: 'citations', label: 'Citations & Methodology', icon: BookOpen },
     { key: 'watchlist', label: 'Custom Watchlist', icon: Bookmark },
-    // Legacy tabs (still useful — public markets, studio ops benchmarks, etc.)
+    // Legacy tabs (still useful — public markets, operating benchmarks, etc.)
     { key: 'pulse', label: 'Market Pulse', icon: Zap },
     { key: 'macro', label: 'Public Markets', icon: Globe },
     { key: 'private', label: 'Private Rounds', icon: Building2 },

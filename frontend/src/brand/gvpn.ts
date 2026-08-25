@@ -40,7 +40,7 @@ export const LEGAL_ENTITIES = {
 
 export const NETWORK_LAYERS = [
   { id: "trust",          name: "Trust",            blurb: "KYC, KYB, accreditation, NDAs, sanctions." },
-  { id: "build",          name: "Build",            blurb: "Projects, Pipeline, Studio Ops, Brand, Pitch Deck, Roadmap, Customer Discovery." },
+  { id: "build",          name: "Build",            blurb: "Projects, Pipeline, Brand, Pitch Deck, Roadmap, Customer Discovery." },
   { id: "validate_grow",  name: "Validate & Grow",  blurb: "Scoring, Advisors, Office Hours, Co-founder Match, Market Intelligence." },
   { id: "capital",        name: "Capital",          blurb: "Capital, Investors, Cap Table, Funds, Reserves, Waterfall, Liquidity." },
   { id: "legal",          name: "Legal",            blurb: "Incorporation, 83(b), Cofounder Agreement, Compliance, E-Sign." },
