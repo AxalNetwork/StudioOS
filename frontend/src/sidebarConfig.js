@@ -19,7 +19,7 @@ import {
   LayoutDashboard, Target, FileText, Users, DollarSign,
   Ticket, Zap, Handshake, Rocket, UserCircle,
   Globe, Brain, Activity, Shield, ShieldCheck,
-  Network, Sparkles, Briefcase, TrendingUp, Layers, Scale, LayoutGrid,
+  Network, Sparkles, Briefcase, TrendingUp, Layers, Scale,
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   BookOpen, Settings as SettingsIcon, Gamepad2, ShieldAlert,
   Gavel, Inbox, FileBarChart, Radar, Wallet,
@@ -164,7 +164,7 @@ export const SIDEBAR_GROUPS = {
   //
   // Intentional removals (documented so a nav-integrity guard treats them as
   // deliberate, not silent drops):
-  //   • The legacy founder portal was retired. Execution, Studio Ops, and
+  //   • The legacy founder landing page was retired. Execution, Studio Ops, and
   //     Spin-Outs remain first-class rows pointing at their standalone pages.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
   //     (/build/metrics) as the founder's own company-health view; the
