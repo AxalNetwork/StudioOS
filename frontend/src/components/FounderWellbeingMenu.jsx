@@ -121,17 +121,6 @@ export default function FounderWellbeingMenu() {
             </div>
           </Link>
 
-          <div className="px-4 py-3">
-            <Link
-              to="/wellbeing"
-              onClick={() => setOpen(false)}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600 transition-colors hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-200"
-              role="menuitem"
-            >
-              More
-              <ChevronRight size={13} />
-            </Link>
-          </div>
         </div>
       )}
     </div>

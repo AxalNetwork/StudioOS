@@ -15,6 +15,7 @@ test('Founder Wellbeing is surfaced in the header instead of the sidebar', () =>
   assert.match(app, /FounderWellbeingMenu/);
   assert.match(menu, /aria-label="Founder Wellbeing"/);
   assert.match(menu, /Today’s check-in/);
-  assert.match(menu, /to="\/wellbeing"/g);
+  assert.match(menu, /to="\/wellbeing"/);
   assert.match(menu, /wellbeingDaily\(1\)/);
+  assert.doesNotMatch(menu, />\s*More\s*</);
 });
