@@ -157,6 +157,42 @@ for (const file of UI_FILES) {
   });
 }
 
+// The other direction. CodeQL has now reported an unused import on this
+// extraction twice: PaywallModal, then hasTier — which survived my own grep
+// because its only other mention in App.jsx is inside a comment, the exact
+// mistake the comment scanner above exists to prevent. App.jsx is in this
+// list because it is the file the extraction keeps leaving debris in.
+const IMPORT_RE = /^import\s+([\s\S]+?)\s+from\s+'[^']*'/gm;
+
+function unusedImports(raw) {
+  const src = scan(raw);
+  const body = src.replace(IMPORT_RE, '');
+  const unused = [];
+  for (const m of src.matchAll(IMPORT_RE)) {
+    for (const name of m[1].replace(/[{}]/g, ',').split(',')) {
+      const bound = name.trim().split(/\s+as\s+/).pop().trim();
+      // React is imported without being referenced in 330 of 351 files here —
+      // that is the house style under the automatic JSX runtime, not debris.
+      if (!bound || bound === 'React') continue;
+      if (!new RegExp(`\\b${bound}\\b`).test(body)) unused.push(bound);
+    }
+  }
+  return unused;
+}
+
+for (const path of [...UI_FILES.map((f) => `ui/${f}`), 'App.jsx']) {
+  test(`${path} imports nothing it does not use`, () => {
+    assert.deepEqual(unusedImports(read(`frontend/src/${path}`)), []);
+  });
+}
+
+test('the unused-import check would actually catch one', () => {
+  assert.deepEqual(unusedImports("import { a, b } from 'x';\na();"), ['b']);
+  // ...and is not fooled by a mention in a comment, which is how hasTier survived.
+  assert.deepEqual(unusedImports("import { b } from 'x';\n// b is nice\na();"), ['b']);
+  assert.deepEqual(unusedImports("import { b } from 'x';\nb();"), []);
+});
+
 test('the resolver would actually catch a missing import', () => {
   // A test that cannot fail is worse than no test — this is the one that broke.
   assert.deepEqual(freeNames("import { a } from 'x';\na(); b();"), ['b']);
