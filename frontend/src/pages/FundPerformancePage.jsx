@@ -1,209 +1,190 @@
 import React, { useMemo, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
-import {
-  ResponsiveContainer, LineChart, Line, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-} from 'recharts';
 import { StatCard, Section, Chip, FilterChips, EmptyState } from './advisor/network/kit';
+import ErrorState from '../components/ErrorState';
+import Skeleton from '../components/Skeleton';
+import InfoStrip from '../components/InfoStrip';
 import {
-  FUNDS, FUND_SUMMARY, NAV_HISTORY, JCURVE, DEPLOYMENT_PACING,
-} from '../data/fundAnalytics';
+  useFundAnalytics, fmtCents, fmtMultiple, Unrecorded,
+} from '../lib/fundAnalytics';
 
-const fmtM = (v) => {
-  const n = Number(v || 0);
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n.toFixed(0)}`;
-};
-const fmtX = (v) => `${Number(v || 0).toFixed(2)}x`;
-const fmtPct = (v) => `${(Number(v || 0) * 100).toFixed(1)}%`;
+/**
+ * Fund Performance — /funds/performance, a tab of FundOpsWorkspace.
+ *
+ * This page used to render four invented funds with invented NAV, IRR, TVPI
+ * and RVPI, plus a J-curve, a NAV-over-time series and a deployment-pacing
+ * chart built from the same fixture. All three charts are gone rather than
+ * re-pointed, because none of them has a source:
+ *
+ *   J-curve            needs dated cumulative net cashflow. A per-fund capital
+ *                      call is recorded as a notice job, not a dated receipt.
+ *   NAV over time      needs a NAV. There is no fund-level valuation mark.
+ *   Deployment pacing  vc_funds.deployed_capital is one scalar with no history,
+ *                      and the "target" series was invented outright.
+ *
+ * A chart is a stronger claim than a number — it asserts a shape over time —
+ * so drawing one from data that does not exist is the worst version of the
+ * problem, not a softer one. What survives is what D1 can answer, and the
+ * strip at the top says plainly what is missing and what would fill it.
+ */
 
 const STATUS_TONE = {
-  Harvesting: 'emerald',
-  Active: 'violet',
-  Investing: 'blue',
+  harvesting: 'emerald',
+  active: 'violet',
+  investing: 'blue',
+  fundraising: 'blue',
+  closed: 'gray',
+  wound_down: 'gray',
 };
 
-const AXIS = { fontSize: 11, fill: '#9ca3af' };
-
-function ChartCard({ title, subtitle, children }) {
-  return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
-      <div className="mb-3">
-        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</div>
-        {subtitle && <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</div>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-const tooltipStyle = {
-  fontSize: 12,
-  borderRadius: 8,
-  border: '1px solid rgba(148,163,184,0.35)',
-  background: 'rgba(17,24,39,0.92)',
-  color: '#f9fafb',
-};
+const titleCase = (s) =>
+  String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || 'Unknown';
 
 export default function FundPerformancePage({ embedded = false }) {
+  const { items, totals, unavailable, loading, error, reload } = useFundAnalytics();
   const [statusFilter, setStatusFilter] = useState('all');
 
   const statusOptions = useMemo(() => {
-    const counts = FUNDS.reduce((acc, f) => {
-      acc[f.status] = (acc[f.status] || 0) + 1;
+    const counts = items.reduce((acc, f) => {
+      const k = f.status || 'unknown';
+      acc[k] = (acc[k] || 0) + 1;
       return acc;
     }, {});
     return [
-      { id: 'all', label: 'All funds', count: FUNDS.length },
-      ...Object.keys(counts).map((s) => ({ id: s, label: s, count: counts[s] })),
+      { id: 'all', label: 'All funds', count: items.length },
+      ...Object.keys(counts).map((s) => ({ id: s, label: titleCase(s), count: counts[s] })),
     ];
-  }, []);
+  }, [items]);
 
   const funds = useMemo(
-    () => (statusFilter === 'all' ? FUNDS : FUNDS.filter((f) => f.status === statusFilter)),
-    [statusFilter],
+    () => (statusFilter === 'all' ? items : items.filter((f) => (f.status || 'unknown') === statusFilter)),
+    [items, statusFilter],
   );
 
-  const content = (
-    <div className="space-y-6">
-      <p className="text-sm text-gray-600 dark:text-gray-400">
-        LP-ready returns across the Axal fund family — blended TVPI, net IRR and the
-        classic J-curve, with per-fund detail suitable for quarterly reporting.
-      </p>
-
-      {/* Summary stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <StatCard label="AUM" value={fmtM(FUND_SUMMARY.aum)} hint="Net asset value across funds" />
-        <StatCard label="Blended TVPI" value={fmtX(FUND_SUMMARY.blendedTVPI)} hint="Total value to paid-in" />
-        <StatCard label="Net IRR" value={fmtPct(FUND_SUMMARY.blendedIRR)} hint="Since inception" />
-        <StatCard label="DPI" value={fmtX(FUND_SUMMARY.blendedDPI)} hint="Distributions to paid-in" />
-        <StatCard label="RVPI" value={fmtX(FUND_SUMMARY.blendedRVPI)} hint="Residual value to paid-in" />
-      </div>
-
-      {/* J-curve */}
-      <ChartCard
-        title="J-curve — cumulative net cashflow"
-        subtitle="Contributions early, distributions later; the curve climbs back toward breakeven."
-      >
-        <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={JCURVE} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-            <defs>
-              <linearGradient id="jcurveFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#7c3aed" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="#7c3aed" stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
-            <XAxis dataKey="quarter" tick={AXIS} tickLine={false} axisLine={false} interval={1} />
-            <YAxis tick={AXIS} tickLine={false} axisLine={false} tickFormatter={fmtM} width={54} />
-            <Tooltip
-              contentStyle={tooltipStyle}
-              formatter={(v, n) => [fmtM(v), n === 'cumulative' ? 'Cumulative' : 'Net cashflow']}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Area
-              type="monotone" dataKey="cumulative" name="Cumulative"
-              stroke="#7c3aed" strokeWidth={2} fill="url(#jcurveFill)"
-            />
-            <Line type="monotone" dataKey="netCashflow" name="Net cashflow" stroke="#10b981" strokeWidth={1.5} dot={false} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </ChartCard>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* NAV over time */}
-        <ChartCard
-          title="NAV over time"
-          subtitle="Contributions vs distributions vs net asset value."
-        >
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={NAV_HISTORY} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
-              <XAxis
-                dataKey="date" tick={AXIS} tickLine={false} axisLine={false}
-                tickFormatter={(d) => String(d).slice(0, 7)} interval={2}
-              />
-              <YAxis tick={AXIS} tickLine={false} axisLine={false} tickFormatter={fmtM} width={54} />
-              <Tooltip contentStyle={tooltipStyle} formatter={(v) => fmtM(v)} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="nav" name="NAV" stroke="#7c3aed" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="contributions" name="Contributions" stroke="#3b82f6" strokeWidth={1.5} dot={false} />
-              <Line type="monotone" dataKey="distributions" name="Distributions" stroke="#10b981" strokeWidth={1.5} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Deployment pacing */}
-        <ChartCard
-          title="Capital deployment & pacing"
-          subtitle="Deployed capital against the pacing target per period."
-        >
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={DEPLOYMENT_PACING} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" vertical={false} />
-              <XAxis dataKey="period" tick={AXIS} tickLine={false} axisLine={false} />
-              <YAxis tick={AXIS} tickLine={false} axisLine={false} tickFormatter={fmtM} width={54} />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                formatter={(v, n) => [fmtM(v), n === 'deployed' ? 'Deployed' : 'Target']}
-              />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="deployed" name="Deployed" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="target" name="Target" fill="#c4b5fd" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
-
-      {/* Per-fund table */}
-      <Section title="Fund-by-fund returns">
-        <div className="mb-3">
-          <FilterChips options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+  let content;
+  if (loading) {
+    content = (
+      <div className="space-y-4" aria-busy="true">
+        <Skeleton h={16} w="66%" />
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} h={88} rounded="rounded-xl" />)}
         </div>
-        {funds.length === 0 ? (
-          <EmptyState>No funds match this filter.</EmptyState>
-        ) : (
-          <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 dark:text-gray-400">
-                <tr>
-                  <th className="text-left font-medium px-4 py-2.5">Fund</th>
-                  <th className="text-left font-medium px-4 py-2.5">Vintage</th>
-                  <th className="text-left font-medium px-4 py-2.5">Status</th>
-                  <th className="text-right font-medium px-4 py-2.5">Size</th>
-                  <th className="text-right font-medium px-4 py-2.5">Called</th>
-                  <th className="text-right font-medium px-4 py-2.5">NAV</th>
-                  <th className="text-right font-medium px-4 py-2.5">DPI</th>
-                  <th className="text-right font-medium px-4 py-2.5">RVPI</th>
-                  <th className="text-right font-medium px-4 py-2.5">TVPI</th>
-                  <th className="text-right font-medium px-4 py-2.5">Net IRR</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {funds.map((f) => (
-                  <tr key={f.id} className="bg-white dark:bg-gray-900">
-                    <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100">{f.name}</td>
-                    <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{f.vintage}</td>
-                    <td className="px-4 py-2.5">
-                      <Chip tone={STATUS_TONE[f.status] || 'gray'}>{f.status}</Chip>
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{fmtM(f.size)}</td>
-                    <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{fmtM(f.called)}</td>
-                    <td className="px-4 py-2.5 text-right font-medium text-gray-900 dark:text-gray-100">{fmtM(f.nav)}</td>
-                    <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{fmtX(f.dpi)}</td>
-                    <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{fmtX(f.rvpi)}</td>
-                    <td className="px-4 py-2.5 text-right font-medium text-violet-700 dark:text-violet-300">{fmtX(f.tvpi)}</td>
-                    <td className="px-4 py-2.5 text-right font-medium text-emerald-700 dark:text-emerald-300">{fmtPct(f.irr)}</td>
+        <Skeleton.Table rows={4} cols={6} />
+      </div>
+    );
+  } else if (error) {
+    content = <ErrorState message={error} onRetry={reload} />;
+  } else {
+    const blendedDpi = fmtMultiple(totals?.dpi);
+    content = (
+      <div className="space-y-6">
+        <InfoStrip
+          variant="info"
+          storageKey="funds-performance-basis"
+          title="What these figures are, and what is missing"
+          body={
+            'Committed, called, deployed and distributed come from D1 rows. DPI is '
+            + 'distributions over called capital. NAV, RVPI, TVPI and net IRR read '
+            + '"Not recorded" because nothing in the schema supports them yet: there '
+            + 'are no fund-level valuation marks, and capital calls are stored as '
+            + 'notices rather than dated cash receipts. Hover any "Not recorded" '
+            + 'cell for the specific reason.'
+          }
+        />
+
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <StatCard
+            label="Committed"
+            value={fmtCents(totals?.committed_cents)}
+            hint={`${totals?.fund_count || 0} fund${totals?.fund_count === 1 ? '' : 's'}, ${totals?.lp_count || 0} LP${totals?.lp_count === 1 ? '' : 's'}`}
+          />
+          <StatCard label="Called" value={fmtCents(totals?.called_cents)} hint="Paid in by LPs to date" />
+          <StatCard label="Deployed" value={fmtCents(totals?.deployed_cents)} hint="Invested into portfolio" />
+          <StatCard label="Distributed" value={fmtCents(totals?.distributed_cents)} hint="Paid distributions" />
+          <StatCard
+            label="Blended DPI"
+            value={blendedDpi || <Unrecorded reason="No capital has been called yet, so there is nothing to divide by." />}
+            hint="Family distributions ÷ family called"
+          />
+        </div>
+
+        {/* The four the schema cannot answer, kept visible rather than dropped:
+            an LP should see that TVPI is tracked and unavailable, not wonder
+            whether anyone measures it. */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            ['NAV', 'nav_cents'],
+            ['RVPI', 'rvpi'],
+            ['TVPI', 'tvpi'],
+            ['Net IRR', 'irr'],
+          ].map(([label, key]) => (
+            <StatCard key={key} label={label} value={<Unrecorded reason={unavailable[key]} />} hint={unavailable[key]} />
+          ))}
+        </div>
+
+        <Section title="Fund-by-fund">
+          {items.length > 0 && (
+            <div className="mb-3">
+              <FilterChips options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+            </div>
+          )}
+          {items.length === 0 ? (
+            <EmptyState>
+              No funds are recorded yet. A fund appears here once it exists in fund administration.
+            </EmptyState>
+          ) : funds.length === 0 ? (
+            <EmptyState>No funds match this filter.</EmptyState>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-900/60 text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th className="text-left font-medium px-4 py-2.5">Fund</th>
+                    <th className="text-left font-medium px-4 py-2.5">Vintage</th>
+                    <th className="text-left font-medium px-4 py-2.5">Status</th>
+                    <th className="text-right font-medium px-4 py-2.5">LPs</th>
+                    <th className="text-right font-medium px-4 py-2.5">Committed</th>
+                    <th className="text-right font-medium px-4 py-2.5">Called</th>
+                    <th className="text-right font-medium px-4 py-2.5">Deployed</th>
+                    <th className="text-right font-medium px-4 py-2.5">Distributed</th>
+                    <th className="text-right font-medium px-4 py-2.5">DPI</th>
+                    <th className="text-right font-medium px-4 py-2.5">TVPI</th>
+                    <th className="text-right font-medium px-4 py-2.5">Net IRR</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Section>
-    </div>
-  );
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {funds.map((f) => {
+                    const dpi = fmtMultiple(f.dpi);
+                    return (
+                      <tr key={f.id} className="bg-white dark:bg-gray-900">
+                        <td className="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100">{f.name}</td>
+                        <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">
+                          {f.vintage_year ?? <Unrecorded reason="No vintage year is set on this fund." />}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <Chip tone={STATUS_TONE[f.status] || 'gray'}>{titleCase(f.status)}</Chip>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{f.lp_count}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{fmtCents(f.committed_cents)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{fmtCents(f.called_cents)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{fmtCents(f.deployed_cents)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-600 dark:text-gray-400">{fmtCents(f.distributed_cents)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 dark:text-gray-100">
+                          {dpi || <Unrecorded reason="Nothing has been called for this fund yet." />}
+                        </td>
+                        <td className="px-4 py-2.5 text-right"><Unrecorded reason={unavailable.tvpi} /></td>
+                        <td className="px-4 py-2.5 text-right"><Unrecorded reason={unavailable.irr} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Section>
+      </div>
+    );
+  }
 
   if (embedded) return content;
   return (
@@ -213,7 +194,7 @@ export default function FundPerformancePage({ embedded = false }) {
           <TrendingUp className="w-6 h-6 text-violet-600" /> Fund Performance
         </h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Returns, J-curve and deployment pacing across the Axal fund family.
+          Committed, called, deployed and distributed capital across the fund family.
         </p>
       </div>
       {content}
