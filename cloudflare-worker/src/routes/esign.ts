@@ -11,7 +11,15 @@
  *  - POST   /api/legal/esign/sign/:token/reject (public) — recipient declines
  *
  * Security model:
- *  - Admin routes require requireAdmin (Zero Trust JWT).
+ *  - Authenticated routes require requireAuth. Origination and the envelope
+ *    reads were admin-only until task #119; they are now open to any signed-in
+ *    user, with two controls in place of the gate:
+ *      * reads are scoped by services/tenancyScope.ts, which grants an
+ *        envelope only to its originator, its subject, or a recipient, and
+ *        denies by default for anything it cannot positively identify;
+ *      * origination is capped by the fail-CLOSED `esign_send` bucket in
+ *        middleware/rateLimit.ts, because it emails an Axal-branded signing
+ *        link to an arbitrary address.
  *  - Public sign/:token routes are gated by a 32-byte URL-safe random token
  *    stored in `esign_recipients.signing_token` with a 7-day expiry.
  *  - Tokens are single-use for the POST submit; GET is allowed multiple times
@@ -23,7 +31,8 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireAuth } from '../auth';
+import { requireAuth } from '../auth';
+import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { renderAgreementPdf, sha256Hex } from '../services/pdf';
 import { PDFDocument } from 'pdf-lib';
@@ -434,7 +443,7 @@ export async function createAndSendEnvelope(
         // we have no integration to satisfy it. We do NOT silently
         // fall back to native; the caller decides whether to retry
         // with provider='native' or surface a connect-DocuSign prompt.
-        throw new Error('docusign_not_connected: no active DocuSign integration for the calling admin.');
+        throw new Error('docusign_not_connected: no active DocuSign integration for the sender.');
       }
       {
         const webhookSecret = await ensureDocusignWebhookSecret(env, dsRow);
@@ -529,8 +538,25 @@ export async function createAndSendEnvelope(
 // ---------------------------------------------------------------------------
 
 // POST /api/legal/esign/send — admin creates an envelope and emails the recipient.
+// POST /api/legal/esign/send — originate an envelope.
+//
+// De-admined (task #119). A founder must be able to send their own SAFE or
+// advisory agreement without an operator doing it for them, which was the
+// whole point of the admin gate coming off.
+//
+// What replaces the gate, because this route emails an Axal-branded signing
+// link to an ARBITRARY address and is therefore an outbound-mail surface:
+//   * a dedicated fail-CLOSED rate-limit bucket, `esign_send` in
+//     middleware/rateLimit.ts — 10/hour/user. Previously this route fell
+//     through to the generic 60/min/user bucket, fail-OPEN, which was fine
+//     while only admins could reach it and is not fine now.
+//   * the sender's own name on the outbound mail, so a recipient sees who
+//     actually sent it rather than an anonymous "Axal" request.
+//   * the existing esign_audit_events trail, which already records the
+//     originator.
+// Reads are scoped separately, in services/tenancyScope.ts.
 esign.post('/send', async (c) => {
-  const admin = await requireAdmin(c);
+  const sender = await requireAuth(c);
   await ensureSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
   const documentType = String(body?.document_type || '').trim();
@@ -574,11 +600,11 @@ esign.post('/send', async (c) => {
   }
 
   // Studio-tier gate. DocuSign is a Studio-only provider; non-Studio
-  // admins get a 402 with the standard upsell payload (the BYPASS_ROLES
+  // senders get a 402 with the standard upsell payload (the BYPASS_ROLES
   // set in middleware/requireTier already lets super-admins through).
   if (viaProvider === 'docusign') {
     const { userMeetsTier, tierUpsell } = await import('../middleware/requireTier');
-    if (!userMeetsTier(admin, 'studio')) {
+    if (!userMeetsTier(sender, 'studio')) {
       return c.json(tierUpsell('studio'), 402);
     }
   }
@@ -586,8 +612,8 @@ esign.post('/send', async (c) => {
   let result;
   try {
     result = await createAndSendEnvelope(c.env, {
-      adminUserId: admin.id,
-      adminName: admin.name || admin.email,
+      adminUserId: sender.id,
+      adminName: sender.name || sender.email,
       recipientUserId,
       recipientEmail,
       recipientName,
@@ -603,7 +629,7 @@ esign.post('/send', async (c) => {
     // connect DocuSign or retry with provider='native'.
     const msg = (e as Error).message || '';
     if (msg.startsWith('docusign_not_connected')) {
-      return c.json({ error: 'docusign_not_connected', message: 'No active DocuSign integration for the calling admin.' }, 412);
+      return c.json({ error: 'docusign_not_connected', message: 'No active DocuSign integration for the sender.' }, 412);
     }
     if (msg.startsWith('docusign_')) {
       // All other typed DocuSign failures (provider rejection, no
@@ -619,13 +645,19 @@ esign.post('/send', async (c) => {
 
 // GET /api/legal/esign — admin lists envelopes (filter by user_id or deal_id).
 esign.get('/', async (c) => {
-  await requireAdmin(c);
+  const user = await requireAuth(c);
   await ensureSchema(c.env);
+  // The scope goes in FIRST and unconditionally. Previously the WHERE clause
+  // was built only when a query filter was present, so an unfiltered list
+  // returned every row — correct while the route was admin-only, and a
+  // cross-tenant leak the moment it is not. An admin's scope is `1=1`, so the
+  // shape is identical for them.
+  const scope = esignEnvelopeScope(user);
+  const where: string[] = [scope.sql];
+  const args: any[] = [...scope.binds];
   const userId = c.req.query('user_id');
   const dealId = c.req.query('deal_id');
   const recipientEmail = c.req.query('recipient_email')?.toLowerCase();
-  const where: string[] = [];
-  const args: any[] = [];
   if (userId)         { where.push('e.user_id = ?');         args.push(Number(userId)); }
   if (dealId)         { where.push('e.deal_id = ?');         args.push(Number(dealId)); }
   if (recipientEmail) { where.push('LOWER(r.recipient_email) = ?'); args.push(recipientEmail); }
@@ -634,7 +666,8 @@ esign.get('/', async (c) => {
                       (SELECT COUNT(*) FROM esign_recipients WHERE envelope_id = e.id) AS recipient_count,
                       (SELECT COUNT(*) FROM esign_recipients WHERE envelope_id = e.id AND status = 'signed') AS signed_count
                  FROM esign_envelopes e
-                 ${where.length ? 'LEFT JOIN esign_recipients r ON r.envelope_id = e.id WHERE ' + where.join(' AND ') : ''}
+                 ${recipientEmail ? 'LEFT JOIN esign_recipients r ON r.envelope_id = e.id' : ''}
+                 WHERE ${where.join(' AND ')}
                  GROUP BY e.id
                  ORDER BY e.created_at DESC LIMIT 200`;
   const r: any = await c.env.DB.prepare(sql).bind(...args).all();
@@ -643,10 +676,16 @@ esign.get('/', async (c) => {
 
 // GET /api/legal/esign/:id — envelope detail incl. recipients + audit log.
 esign.get('/:id{[0-9]+}', async (c) => {
-  await requireAdmin(c);
+  const user = await requireAuth(c);
   await ensureSchema(c.env);
   const id = Number(c.req.param('id'));
-  const env: any = await c.env.DB.prepare(`SELECT * FROM esign_envelopes WHERE id = ?`).bind(id).first();
+  const scope = esignEnvelopeScope(user);
+  // 404 rather than 403 for an envelope outside the caller's scope: a 403
+  // would confirm that envelope id exists, which is itself a leak on a
+  // sequential id. An admin's scope is `1=1`, so they still get a true 404.
+  const env: any = await c.env.DB.prepare(
+    `SELECT e.* FROM esign_envelopes e WHERE e.id = ? AND ${scope.sql}`
+  ).bind(id, ...scope.binds).first();
   if (!env) return c.json({ error: 'Envelope not found' }, 404);
   const recs: any = await c.env.DB.prepare(
     `SELECT id, recipient_email, recipient_name, status, signed_at, signer_ip, token_expires_at FROM esign_recipients WHERE envelope_id = ? ORDER BY id`
