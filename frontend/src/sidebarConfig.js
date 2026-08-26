@@ -122,7 +122,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       // "Integrations" merged into Settings (/settings/integrations); the
       // /integrations route redirects there. Removed from the admin nav.
-      { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
       { to: '/services', icon: Package, label: 'Service Catalogue' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
       { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
@@ -320,7 +319,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/services', icon: Package, label: 'My Services' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-      { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
       { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
     ]},
     { key: 'engage', label: 'Engage', items: [

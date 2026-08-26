@@ -428,7 +428,22 @@ export const api = {
 
   listTemplates: () => request('/legal/templates'),
   getTemplateContent: (key) => request(`/legal/templates/${key}`),
-  generateDocument: (data) => request('/legal/documents/generate', { method: 'POST', body: JSON.stringify(data) }),
+  // The worker takes the template key in the PATH (legal.ts:784
+  // `POST /legal/templates/:key/generate`); there is no
+  // `/legal/documents/generate` and there never was, so every call from
+  // LegalPage's generate dialog hit a route the worker does not mount. The
+  // form's `doc_type` IS the template key, so it moves into the path and the
+  // rest of the form travels as the body.
+  //
+  // Two worker behaviours the caller should expect: the document title comes
+  // from the template, not from `title` in the body; and a contract-type
+  // template returns 409 {code:'use_esign_envelope'} because contracts must be
+  // issued through POST /legal/esign/send rather than minted as a documents row.
+  generateDocument: ({ doc_type, ...fields }) =>
+    request(`/legal/templates/${encodeURIComponent(doc_type)}/generate`, {
+      method: 'POST',
+      body: JSON.stringify(fields),
+    }),
   listDocuments: (projectId) => request(`/legal/documents${projectId ? `?project_id=${projectId}` : ''}`),
   getDocument: (id) => request(`/legal/documents/${id}`),
   incorporateProject: (projectId) => request(`/legal/incorporate?project_id=${projectId}`, { method: 'POST' }),
@@ -970,8 +985,6 @@ export const api = {
   updateLifecycle: (projectId, data) => request(`/progress/lifecycle/${projectId}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Task #36 — Service Provider Marketplace
-  listProviders: (params = {}) => request(`/marketplace/providers${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
-  getProvider: (id) => request(`/marketplace/providers/${id}`),
 
   // Task #53 — Public partner directory (no auth required).
   publicListPartners: (params = {}) => {
@@ -998,9 +1011,6 @@ export const api = {
   followStatus: (entityType, entityId) =>
     request(`/follows/status?entity_type=${encodeURIComponent(entityType)}&entity_id=${encodeURIComponent(entityId)}`),
   followsMine: () => request('/follows/mine'),
-  setPartnerFeatured: (partnerId, body) => request(`/marketplace/providers/${partnerId}/featured`, {
-    method: 'POST', body: JSON.stringify(body),
-  }),
   // Admin-managed Service Provider Directory approval (Task #53).
   // List = every partner with their current listed/featured flags;
   // toggle = flip either flag (featured without listed is auto-corrected
@@ -1015,17 +1025,6 @@ export const api = {
         ...(typeof featured === 'boolean' ? { featured } : {}),
       }),
     }),
-  getMyProvider: () => request('/marketplace/providers/me'),
-  updateMyProvider: (data) => request('/marketplace/providers/me', { method: 'PUT', body: JSON.stringify(data) }),
-  setProviderKyb: (id, status) => request(`/marketplace/providers/${id}/kyb`, { method: 'POST', body: JSON.stringify({ status }) }),
-  listProviderReviews: (id) => request(`/marketplace/providers/${id}/reviews`),
-  createProviderReview: (id, data) => request(`/marketplace/providers/${id}/reviews`, { method: 'POST', body: JSON.stringify(data) }),
-  marketplaceCategories: () => request('/marketplace/categories'),
-  createInquiry: (partnerId, data) => request(`/marketplace/inquiries?partner_id=${partnerId}`, { method: 'POST', body: JSON.stringify(data) }),
-  listInquiries: () => request('/marketplace/inquiries'),
-  getInquiry: (id) => request(`/marketplace/inquiries/${id}`),
-  postInquiryMessage: (id, body) => request(`/marketplace/inquiries/${id}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
-  closeInquiry: (id) => request(`/marketplace/inquiries/${id}/close`, { method: 'POST' }),
 
   // Task #50 — Needs board + RFPs + Quotes
   listNeeds: (params = {}) => request(`/needs${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
@@ -1060,9 +1059,20 @@ export const api = {
   engageServiceOffering: (id, data) => request(`/services/offerings/${id}/engage`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Task #51 — Stripe Connect onboarding (partner-only)
-  getMyStripeStatus: () => request('/marketplace/providers/me/stripe'),
-  startStripeOnboarding: () => request('/marketplace/providers/me/stripe/onboard', { method: 'POST' }),
-  refreshStripeStatus: () => request('/marketplace/providers/me/stripe/refresh', { method: 'POST' }),
+  // Stripe Connect for service providers. These lived under /marketplace/*,
+  // which the worker has never mounted, so the Stripe tab failed hard for
+  // every partner. needs.ts:575 and :588 serve exactly these two operations —
+  // deliberately as typed stubs ("Stripe Connect onboarding is owned by AO;
+  // return a typed empty status so the SPA's check renders without crashing"),
+  // returning {connected:false, detail:'stripe_connect_not_configured'} and a
+  // 503 respectively. Pointing at them turns a "Request failed" into the
+  // not-configured state the tab was designed to render.
+  //
+  // There is no /refresh anywhere; refreshing a status means re-reading it, and
+  // the caller assigns the response straight to `status` either way.
+  getMyStripeStatus: () => request('/needs/providers/me/stripe'),
+  startStripeOnboarding: () => request('/needs/providers/me/stripe/onboard', { method: 'POST' }),
+  refreshStripeStatus: () => request('/needs/providers/me/stripe'),
 
   // Task #52 — Demand heatmap + insight feed
   insightsHeatmap: (windowDays = 180) => request(`/insights/heatmap?window_days=${windowDays}`),
