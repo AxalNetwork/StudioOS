@@ -363,23 +363,6 @@ export const api = {
   }),
   health: () => request('/health'),
 
-  // Task #16 — Organizations directory (Network > Organizations). Real VC
-  // funds / deep-tech investors served from the backend `organizations` table.
-  listOrganizations: (params = {}) => {
-    const q = new URLSearchParams();
-    const set = (k, v) => { if (v != null && v !== '') q.set(k, String(v)); };
-    set('q', params.q);
-    set('type', params.type);
-    set('region', params.region);
-    set('source', params.source);
-    set('page', params.page);
-    set('page_size', params.page_size);
-    const qs = q.toString();
-    return request(`/organizations${qs ? `?${qs}` : ''}`);
-  },
-  getOrganizationFacets: () => request('/organizations/facets'),
-  getOrganization: (uid) => request(`/organizations/${encodeURIComponent(uid)}`),
-
   // Task #15 — Page header explainers (server-synced dismiss list).
   getExplainersDismissed: () => request('/settings/explainers'),
   dismissExplainer: (page_key) => request('/settings/explainer-dismissed', { method: 'POST', body: JSON.stringify({ page_key }) }),
@@ -2334,45 +2317,6 @@ export const api = {
   // Privacy-preserving intro/matching flow. DISTINCT from the credits-based
   // /introductions/* system above — this hits /network-introductions/*.
   // Contact details are never returned by the server until both sides connect.
-  networkIntros: {
-    list: () => request('/network-introductions'),
-    get: (id) => request(`/network-introductions/${id}`),
-    create: (data) =>
-      request('/network-introductions', { method: 'POST', body: JSON.stringify(data || {}) }),
-    accept: (id) => request(`/network-introductions/${id}/accept`, { method: 'POST' }),
-    decline: (id) => request(`/network-introductions/${id}/decline`, { method: 'POST' }),
-    targets: (q) =>
-      request(`/network-introductions/targets${q ? `?q=${encodeURIComponent(q)}` : ''}`),
-    // Task #24 — people-only matchmaking (Discover). Ranked candidate feed +
-    // per-plan connect-credit balance. `create` above spends a connect credit
-    // and returns 402 {code:'connect_credits_exhausted', ...} when exhausted.
-    candidates: (filters = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== '' && v !== 0) qs.set(k, v);
-      });
-      const s = qs.toString();
-      return request(`/network-introductions/candidates${s ? `?${s}` : ''}`);
-    },
-    connectCredits: () => request('/network-introductions/connect-credits'),
-    createInvestorProfile: (data) =>
-      request('/network-introductions/investor-profiles', {
-        method: 'POST',
-        body: JSON.stringify(data || {}),
-      }),
-    messages: (id) => request(`/network-introductions/${id}/messages`),
-    sendMessage: (id, body) =>
-      request(`/network-introductions/${id}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ body }),
-      }),
-    // Public tokenized review link (off-platform recipient — no auth needed).
-    invite: (token) => request(`/network-introductions/invite/${encodeURIComponent(token)}`),
-    inviteAccept: (token) =>
-      request(`/network-introductions/invite/${encodeURIComponent(token)}/accept`, { method: 'POST' }),
-    inviteDecline: (token) =>
-      request(`/network-introductions/invite/${encodeURIComponent(token)}/decline`, { method: 'POST' }),
-  },
 
   // ---------- Trust layer (Task #58) ----------
   // Task #4 (Y-2) — Trust Center v2 endpoints. The legacy
