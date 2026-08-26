@@ -7,7 +7,10 @@ rather than by accident.
 
 ---
 
-## Part 1 — Open decisions (need sign-off)
+## Part 1 — Decisions
+
+D1, D2, D5 and D7 are resolved. D3, D4 and D6 remain open but none blocks
+Phase 0/1.
 
 ### D1. Studio Ops — re-integrate, or honour the deletion?
 
@@ -30,12 +33,12 @@ it. One extra wrinkle: the canvas lists Studio Ops as a **top-level Products nav
 item** beside Deal Flow and Cap Table, which suggests it was drawn as a platform
 surface, not only a Lab tool.
 
-**Options:** (a) honour the deletion, drop the canvas — default; (b) rebuild it
-inside the Lab, which means deleting the guard test; (c) build it as the
-platform-level surface the canvas's own nav implies, which is a different product
-from what was deleted.
-
-**Status: OPEN. No default applied.**
+**RESOLVED — honour the deletion; drop the canvas.** The removal was deliberate,
+made one day before the designs landed, and is guarded by a test. Re-integrating
+would reverse a product decision and require deleting
+`studio_ops_removed.test.mjs`. `Studio Ops.dc.html` is therefore not a work item
+in any phase. If Studio Ops returns later it should be scoped fresh as a
+platform surface, not restored from this canvas.
 
 ### D2. Which palette wins — the spec sheet or the canvases?
 
@@ -60,12 +63,20 @@ Nothing in the baseline was *absent* — every claimed literal exists. The quest
 is only which wins. `tokens.json` records the spec value as `value` and the
 frequency winner as `majority` with counts, so this is reversible either way.
 
-**Options:** (a) spec wins — canonical, but ~99 canvases get re-coloured during
-integration; (b) majority wins — closer to what was actually drawn, but abandons
-the one file that calls itself the token sheet; (c) spec for brand colours
-(violet family, confirmed dominant anyway), majority for neutrals.
+**RESOLVED — spec palette for brand colours, corpus majority for neutrals.**
+The brand violets cost nothing under this rule: `#7c3aed` (73 canvases) and
+`#6d28d9` (81) were already the corpus majority. Applied in `tokens.json`:
 
-**Status: OPEN.** `tokens.json` currently carries spec-as-value pending this call.
+| Token | Was (spec) | Now (majority) | Margin |
+| --- | --- | --- | --- |
+| `ink` | `#241f38` | `#18181b` | 80 vs 14 |
+| `hairline` | `#e8e6ee` | `#ececf1` | 91 vs 21 |
+| `faint` | `#8b8798` | `#a1a1aa` | 28 vs 13 |
+
+`muted` and `ground` stay on the spec value: `muted` has no real majority (six
+competing values, the largest at 42 of 107) and `ground` is near-tied (52 vs 45).
+Both keep their competing value under `majority` so the call can be revisited.
+Every flipped token retains its spec value under `spec`, so this is reversible.
 
 ### D3. What is the AI feature called?
 
@@ -111,7 +122,16 @@ weights 500/600/700, missing the 400 that 43 canvases request.
 Fixing this changes the appearance of every page in the product, so it is not a
 silent repair.
 
-**Status: OPEN.** Not fixed — §16 is an audit pass. Belongs in Phase 1.
+**RESOLVED — fix in Phase 1, alongside the token work**, so the visual shift
+happens once and deliberately rather than as an isolated surprise deploy. Both
+faces get the non-blocking treatment already used for Space Grotesk
+(`index.html:175-183`: preconnect x2 with `crossorigin` on gstatic, `preload
+as=style`, `stylesheet media="print" onload="this.media='all'"`, `<noscript>`
+duplicate, `&display=swap`), with the union axes the canvases actually request —
+Inter `400;500;600;700;800`, Roboto Mono `400;500;600;700`. The render-blocking
+`@import` on `index.css:1` goes away in the same change. Note `font-mono` is used
+233x in `frontend/src` and currently resolves to Tailwind's default stack, so
+defining `--font-mono` restyles all 233 at once.
 
 ### D6. Four live defects — fix now, or fold into the canvas work?
 
@@ -124,6 +144,32 @@ canvas covering them.
 
 **Status: OPEN.** Recommend fixing `/marketplace` and `/legal` independently of
 this work, since nothing in the canvas set will otherwise touch them.
+
+### D7. The fixture layer — wire what has a backend first
+
+**RESOLVED.** Roughly 26 sidebar-reachable tabs render from static fixtures with
+zero API calls — 2,949 lines across seven modules under `frontend/src/data/`
+(`growth.js`, `advisor/research.js`, `advisor/advisory.js`,
+`partner/operations.js`, `advisor/network.js`, `fundAnalytics.js`,
+`portfolioAnalytics.js`). `growth.js` says so in its own header: *"This is a UI
+shell only — everything here is sample data."*
+
+This inverts §3's premise for those surfaces: the UI exists and the wiring does
+not, so they are builds, not reskins. The approach is to wire the ones with a
+live backend first, highest value per unit of work:
+
+1. **Research** — the clearest case. `/market-intel` is a rich live
+   implementation (~32 API calls) of the same material, sitting unused beside a
+   mock shell that five role navs link to. `market_intel.ts` has ~30 endpoints.
+2. **Portfolio Growth / Fund Performance / Fund Accounting** — `positions.ts`
+   and `funds.ts` already serve marks, distributions, KPI compliance and per-LP
+   reports; several of those endpoints have no consumer at all.
+3. **Network** — `introductions.ts` and `contacts.ts` are live, but the pages
+   call `/api/network-introductions/*` and `/api/organizations*`, which do not
+   exist. Decide first which of the two parallel Network surfaces survives
+   (`/network`, wired, vs `/advisor/network/*`, broken but linked everywhere).
+4. **Advisory / Partner Operations** — thinnest backend coverage; treat as
+   genuine builds scoped from their canvases.
 
 ---
 

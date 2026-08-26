@@ -142,7 +142,7 @@ HTMLs, 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
 | Spin-Out Lab-print-1vkgcux | public | `/spinout-lab` | `/spinout-lab` (logged-out) | `spinout_lab.ts`, `public.ts` | OUT OF SCOPE | **Byte-for-byte duplicate of `Spin-Out Lab.dc.html`** plus a print harness (identical 45,145-char body, difflib ratio 1.0). Redundant. |
 | Spin-Out Lab-print | public | `/spinout-lab/brief` | `/spinout-lab/brief` | `spinout_lab.ts` | OUT OF SCOPE | **Not** a duplicate of the above. A truncated 4,547 B fragment of the printable Program Brief that stops mid-element and carries no `x-dc` data block, so every binding is unresolvable. |
 | Spin-Out Lab | public | `/spinout-lab` | `/spinout-lab` | `spinout_lab.ts`, `spinout_moderation.ts`, `public.ts` | OUT OF SCOPE | Public Lab landing + cohort tracker + apply flow. |
-| Studio Ops | founder | — (see note) | — (deleted from main 2026-08-25) | — (none) | **SEE DECISION D1** | Lab tool by subject — Week-2 unlocked tool and Week-2 deliverable in the master workspace canvas — but there is **no live Studio Ops surface**: the route, both pages, the worker route, the service and 16 `api.js` methods were deleted, and `frontend/test/studio_ops_removed.test.mjs` now asserts they stay gone. OUT OF SCOPE reads "already built, skip"; that does not apply here. The canvas also lists Studio Ops as a **top-level Products nav item**, suggesting a platform surface rather than only a Lab tool. Needs an explicit call. |
+| Studio Ops | founder | — (see note) | — (deleted from main 2026-08-25) | — (none) | OUT OF SCOPE | Lab tool by subject — Week-2 unlocked tool and Week-2 deliverable in the master workspace canvas — but there is **no live Studio Ops surface**: the route, both pages, the worker route, the service and 16 `api.js` methods were deleted, and `frontend/test/studio_ops_removed.test.mjs` now asserts they stay gone. **Resolved (DECISIONS.md D1): honour the deletion, drop the canvas.** Not a work item in any phase. If Studio Ops returns it should be scoped fresh, not restored from this canvas. |
 | Support Security · Super | super-admin | Support → `/tickets`; Security → `/admin/security` (new) | `/tickets` (partial), `/monitoring`, `/admin` | `tickets.ts`, `monitoring.ts`, `monitoring_analytics.ts`, `trust.ts`, `admin.ts` | NEW | Two artboards, two answers. HQ Support = three queues (escalations, HQ-held users, subsidiary admins raising tickets about the admin product), tenant × queue analytics, GitHub `ticket_sync_events` health, inherited SLA bands. Security = a new destination: a `security_events` ledger (the canvas calls it "the one real backend build"), session revoke/force-re-auth, AI-safety counters, GDPR DSR clocks per territory, backup/DR **drill** status, with `admin_audit_log` demoted to one zone of eight. Gated on the absent tenancy model. |
 | Support · Subsidiary | admin | `/tickets` | `/tickets` | `tickets.ts` | UPGRADE | Turns a flat list into a territory-scoped help desk: SLA-chipped inbox with lanes, live chat routed by tenant, escalate-to-HQ writing an engineering ticket under the operator's name, canned replies with usage counts, CSAT, a Forge triage proposal. Its second artboard deliberately **refuses** a tenant-tier security console. Gated on the absent tenancy model. |
 | System Sheet | chrome | — (design-system reference) | — | — (none) | NEW | S1 Tokens + in-use component inventory; S2 the four states the other canvases omit (empty, loading, error, confirmation) plus a voice do/don't. **This is the file the baseline palette was transcribed from.** Partially exists as code (`index.css` `@theme`, `EmptyState.jsx`, `ErrorState.jsx`, `Skeleton.jsx`, `useToast.js`) but there is no published sheet. |
@@ -159,12 +159,11 @@ HTMLs, 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
 | Status | Count |
 | --- | ---: |
 | UPGRADE | 42 |
-| OUT OF SCOPE | 26 |
+| OUT OF SCOPE | 27 |
 | NEW | 23 |
 | RESKIN | 7 |
 | CURRENT | 4 |
 | DEFERRED | 4 |
-| Needs a decision (Studio Ops, D1) | 1 |
 | **Total** | **107** |
 
 `UPGRADE` being the largest bucket is the headline: this is mostly a re-integration
