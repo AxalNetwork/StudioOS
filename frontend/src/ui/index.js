@@ -38,8 +38,10 @@ export { default as AssistRail } from './AssistRail';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 
 // The left navigation, lifted out of App.jsx unchanged (census: lift, do not
-// rebuild — the live one already beats the canvas rail).
+// rebuild — the live one already beats the canvas rail), and the company
+// switcher that rides above it — the single writer of active-company context.
 export { default as SidebarNav } from './SidebarNav';
+export { default as CompanySwitcher } from './CompanySwitcher';
 
 // Pre-existing, re-exported so `ui/` is the one import surface.
 export { default as EmptyState } from '../components/EmptyState';

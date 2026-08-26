@@ -7,6 +7,42 @@ import { runCost, batchCost, spendMeter, formatCost } from '../src/ui/assistCost
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
 
+// Two earlier assertions in this repo passed by matching a string that only
+// existed in a comment, so everything below reads comment-stripped source.
+// It has to be a scanner rather than a regex: a regex stripper treats the
+// `/*` inside <Route path="/auth/recover/*"> as a block-comment opener and
+// silently eats the next few hundred lines, which is how this same check
+// first reported four functions App.jsx plainly declares as undefined.
+// `blankStrings` additionally empties '...' and "..." (leaving template
+// literals, whose ${} holds real code) so identifiers quoted in copy are not
+// mistaken for references.
+function scan(src, { blankStrings = false } = {}) {
+  let out = '';
+  for (let i = 0; i < src.length; ) {
+    const c = src[i], d = src[i + 1];
+    if (c === '/' && d === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
+    if (c === '/' && d === '*') { i += 2; while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++; i += 2; continue; }
+    if (c === '"' || c === "'" || c === '`') {
+      const quote = c;
+      const drop = blankStrings && quote !== '`';
+      out += c;
+      for (i++; i < src.length; ) {
+        if (src[i] === '\\') { if (!drop) out += src.slice(i, i + 2); i += 2; continue; }
+        const end = src[i] === quote;
+        if (end || !drop) out += src[i];
+        i++;
+        if (end) break;
+      }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+const code = (p) => scan(read(p));
+
 // --- The arithmetic ------------------------------------------------------
 // Six of the eight rail canvases carry a comment insisting the pre-run estimate
 // and the post-run receipt come from ONE calculation. Two functions drifting is
@@ -56,13 +92,13 @@ test('AssistRail is the AI rail, not navigation', () => {
   // ForgeRail's boundary is the product rule, so the slot must exist.
   assert.match(src, /guardrail/);
   for (const kind of ['choice', 'fixed', 'inherited']) {
-    assert.match(src, new RegExp(`'${kind}'`), `mode.kind '${kind}' must be handled`);
+    assert.ok(src.includes(`'${kind}'`), `mode.kind '${kind}' must be handled`);
   }
 });
 
 test('SidebarNav was lifted out of App.jsx, not duplicated', () => {
   const app = read('frontend/src/App.jsx');
-  const nav = read('frontend/src/ui/SidebarNav.jsx');
+  const nav = code('frontend/src/ui/SidebarNav.jsx');
   assert.doesNotMatch(app, /^function SidebarNav\(/m, 'App.jsx must no longer define it');
   assert.match(app, /import SidebarNav from '\.\/ui\/SidebarNav'/);
   assert.match(app, /<SidebarNav\b/, 'ProtectedLayout must still render it');
@@ -71,12 +107,123 @@ test('SidebarNav was lifted out of App.jsx, not duplicated', () => {
   // "cleanup" drops one, the canvas rail is no longer the weaker option.
   assert.match(nav, /collapsed/, 'collapsed mode');
   assert.match(nav, /aria-label="Search sidebar"/, 'the sidebar search filter');
-  assert.match(nav, /PaywallModal/, 'tier locks');
+});
+
+// Lifting SidebarNav out of App.jsx moved the code but not its scope: eleven
+// names it calls were never imported into the new module. useCallback runs on
+// the first render, so the sidebar threw before it painted a single item.
+// Nothing caught it — Vite transpiles rather than type-checks, the repo has no
+// eslint, and this very test file originally "proved" the tier locks survived
+// by matching the string PaywallModal inside a COMMENT. CodeQL found three of
+// the eleven; the resolver below found the other eight. So: resolve every free
+// name in ui/ for real, on every file, forever.
+
+const UI_FILES = ['AssistRail.jsx', 'SidebarNav.jsx', 'CompanySwitcher.jsx'];
+const JS_KEYWORDS = new Set([
+  'if', 'for', 'while', 'switch', 'catch', 'return', 'function', 'typeof',
+  'await', 'super', 'new', 'delete', 'void', 'in', 'of', 'do', 'else', 'yield',
+]);
+
+function freeNames(raw) {
+  const src = scan(raw, { blankStrings: true });
+  const bound = new Set();
+  // import bindings, default + named + `as` renames
+  for (const m of src.matchAll(/^import\s+([\s\S]+?)\s+from\s+'[^']*'/gm)) {
+    for (const name of m[1].replace(/[{}]/g, ',').split(',')) {
+      const b = name.trim().split(/\s+as\s+/).pop().trim();
+      if (b) bound.add(b);
+    }
+  }
+  // declarations, array destructuring, and object destructuring incl. `icon: Icon`
+  for (const m of src.matchAll(/\b(?:function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/g)) bound.add(m[1]);
+  for (const m of src.matchAll(/(?:const|let|var)\s*[[{]([^\]}]+)[\]}]/g)) {
+    for (const n of m[1].split(',')) bound.add(n.trim().split(':').pop().trim().split('=')[0].trim());
+  }
+  // function parameters — `function f(a, b)` and `({ a, b }) =>`
+  for (const m of src.matchAll(/(?:function\s*[\w$]*\s*|\)\s*=>|^\s*)\(([^()]*)\)\s*(?:=>|\{)/gm)) {
+    for (const n of m[1].replace(/[{}]/g, ',').split(',')) bound.add(n.trim().split(':').pop().trim().split('=')[0].trim());
+  }
+
+  const used = new Set();
+  for (const m of src.matchAll(/<([A-Z][\w$]*)/g)) used.add(m[1]);              // JSX tags
+  for (const m of src.matchAll(/(?<![.\w$'"`])([a-zA-Z_$][\w$]*)\s*\(/g)) used.add(m[1]);  // calls
+
+  return [...used].filter((n) => !JS_KEYWORDS.has(n) && !bound.has(n) && !(n in globalThis));
+}
+
+for (const file of UI_FILES) {
+  test(`every name ${file} uses resolves to an import or a declaration`, () => {
+    assert.deepEqual(freeNames(code(`frontend/src/ui/${file}`)), []);
+  });
+}
+
+// The other direction. CodeQL has now reported an unused import on this
+// extraction twice: PaywallModal, then hasTier — which survived my own grep
+// because its only other mention in App.jsx is inside a comment, the exact
+// mistake the comment scanner above exists to prevent. App.jsx is in this
+// list because it is the file the extraction keeps leaving debris in.
+const IMPORT_RE = /^import\s+([\s\S]+?)\s+from\s+'[^']*'/gm;
+
+function unusedImports(raw) {
+  const src = scan(raw);
+  // Tokenise the body once rather than building a regex per import. Cheaper,
+  // and strictly more correct: \b does not bracket a $-prefixed identifier,
+  // so /\b$foo\b/ would not have matched a real use of $foo.
+  const referenced = new Set(src.replace(IMPORT_RE, '').match(/[A-Za-z_$][\w$]*/g) || []);
+  const unused = [];
+  for (const m of src.matchAll(IMPORT_RE)) {
+    for (const name of m[1].replace(/[{}]/g, ',').split(',')) {
+      const bound = name.trim().split(/\s+as\s+/).pop().trim();
+      // React is imported without being referenced in 330 of 351 files here —
+      // that is the house style under the automatic JSX runtime, not debris.
+      if (!bound || bound === 'React') continue;
+      if (!referenced.has(bound)) unused.push(bound);
+    }
+  }
+  return unused;
+}
+
+for (const path of [...UI_FILES.map((f) => `ui/${f}`), 'App.jsx']) {
+  test(`${path} imports nothing it does not use`, () => {
+    assert.deepEqual(unusedImports(read(`frontend/src/${path}`)), []);
+  });
+}
+
+test('the unused-import check would actually catch one', () => {
+  assert.deepEqual(unusedImports("import { a, b } from 'x';\na();"), ['b']);
+  // ...and is not fooled by a mention in a comment, which is how hasTier survived.
+  assert.deepEqual(unusedImports("import { b } from 'x';\n// b is nice\na();"), ['b']);
+  assert.deepEqual(unusedImports("import { b } from 'x';\nb();"), []);
+});
+
+test('the resolver would actually catch a missing import', () => {
+  // A test that cannot fail is worse than no test — this is the one that broke.
+  assert.deepEqual(freeNames("import { a } from 'x';\na(); b();"), ['b']);
+  assert.deepEqual(freeNames("import { a as b } from 'x';\nb();"), []);
+  assert.deepEqual(freeNames("const { icon: Icon } = i;\n<Icon />;"), []);
+});
+
+test('SidebarNav keeps its tier locks wired to the paywall', () => {
+  const nav = code('frontend/src/ui/SidebarNav.jsx');
+  assert.match(nav, /import \{ openPaywall \} from '\.\.\/components\/PaywallModal'/);
+  assert.match(nav, /openPaywall\(/, 'a locked item must open the paywall');
+  assert.match(nav, /hasTier\(/, 'founder tier gate');
+  assert.match(nav, /hasInvestorTier\(/, 'investor tier gate');
+});
+
+test('CompanySwitcher is the single writer of active-company context', () => {
+  // No page may show two companies at once, and no page may change which one is
+  // active — pages read the context, this component is the only thing that sets it.
+  const src = code('frontend/src/ui/CompanySwitcher.jsx');
+  assert.match(src, /useActiveCompany/, 'it must read the shared context, not own company state');
+  const app = code('frontend/src/App.jsx');
+  assert.doesNotMatch(app, /^function CompanySwitcher\(/m, 'App.jsx must no longer define it');
+  assert.match(code('frontend/src/ui/SidebarNav.jsx'), /<CompanySwitcher\b/, 'the nav still renders it');
 });
 
 test('the barrel exports both', () => {
-  const barrel = read('frontend/src/ui/index.js');
-  for (const name of ['AssistRail', 'SidebarNav', 'runCost', 'spendMeter']) {
-    assert.match(barrel, new RegExp(`\\b${name}\\b`), `ui/index.js must export ${name}`);
+  const exported = new Set(read('frontend/src/ui/index.js').match(/[A-Za-z_$][\w$]*/g) || []);
+  for (const name of ['AssistRail', 'SidebarNav', 'CompanySwitcher', 'runCost', 'spendMeter']) {
+    assert.ok(exported.has(name), `ui/index.js must export ${name}`);
   }
 });
