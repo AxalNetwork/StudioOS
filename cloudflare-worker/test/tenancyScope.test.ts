@@ -18,7 +18,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  esignEnvelopeScope, isUnscoped, andScope,
+  esignEnvelopeScope, fundGpScope, isUnscoped, andScope,
   ALL_ROWS, NO_ROWS, UNSCOPED_ROLES,
 } from '../src/services/tenancyScope.ts';
 
@@ -77,6 +77,40 @@ test('an admin is unscoped, and carries no binds to misalign', () => {
   assert.equal(s.sql, ALL_ROWS.sql);
   assert.deepEqual(s.binds, []);
   assert.ok(UNSCOPED_ROLES.has('admin'));
+});
+
+// ---------- funds ----------
+
+test('fund ownership is the GP of record, and denies by default', () => {
+  assert.equal(fundGpScope({ id: 12, role: 'investor' }).sql, '(f.gp_user_id = ?)');
+  assert.deepEqual(fundGpScope({ id: 12, role: 'investor' }).binds, [12]);
+  for (const actor of [null, undefined, {}, { id: 0 }, { role: 'investor' }] as any[]) {
+    assert.equal(fundGpScope(actor).sql, NO_ROWS.sql, `${JSON.stringify(actor)} must own no fund`);
+  }
+});
+
+test('a fund with no GP of record is owned by nobody, not by everybody', () => {
+  // The scope compares with `=`, and in SQL `NULL = 5` is NULL rather than
+  // true, so a legacy fund with gp_user_id unset matches no non-admin. That
+  // is the correct failure: the alternative hands every institutional account
+  // write access to every unowned fund, capital calls included.
+  const s = fundGpScope({ id: 5, role: 'investor' });
+  assert.match(s.sql, /gp_user_id = \?/);
+  assert.doesNotMatch(s.sql, /IS NULL|IS \?|COALESCE/, 'must not treat unowned as open');
+});
+
+test('an admin operates any fund, and the alias is configurable', () => {
+  assert.equal(fundGpScope({ id: 1, role: 'admin' }).sql, ALL_ROWS.sql);
+  assert.match(fundGpScope({ id: 2, role: 'investor' }, 'vf').sql, /vf\.gp_user_id/);
+});
+
+test('the two resources are independent — one cannot be used for the other', () => {
+  // A copy-paste that scoped funds with the envelope clause would silently
+  // grant on created_by, which vc_funds does not even have.
+  const fund = fundGpScope({ id: 3, role: 'investor' }).sql;
+  assert.doesNotMatch(fund, /created_by|esign_recipients/);
+  const env = esignEnvelopeScope({ id: 3, role: 'investor' }).sql;
+  assert.doesNotMatch(env, /gp_user_id/);
 });
 
 // ---------- composition ----------
