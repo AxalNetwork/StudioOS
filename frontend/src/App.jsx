@@ -222,7 +222,6 @@ const RoadmapPage = lazy(() => import('./pages/RoadmapPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
-const MarketplacePage = lazy(() => import('./pages/MarketplacePage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
@@ -1738,7 +1737,15 @@ function AppInner() {
           by Founder + Advisor modes (mode changes ordering + copy only). */}
       <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SignalsPage user={user} />)} />
       <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <CapTablePage />)} />
-      <Route path="/marketplace" element={guard(['admin', 'founder', 'partner', 'investor'], <MarketplacePage user={user} />)} />
+      {/* DECISIONS.md D11 — /marketplace was a partner-provider directory with
+          inquiry threads and reviews whose backend exists only in the dev-only
+          FastAPI: all 11 api.marketplace* calls hit /marketplace/* and the
+          worker mounts none of it. Discovery is already served by working
+          surfaces — /services (services.ts), /needs (needs.ts) and /partners
+          (partners.ts) — so the redirect lands on one of those rather than a
+          page where nothing loads. Inquiry threads and reviews have no backend
+          anywhere and leave with the page. */}
+      <Route path="/marketplace" element={<Navigate to="/services" replace />} />
       {/* Task #2 — Founder Marketplace merges the Service Catalogue (/services) and
           Needs Board (/needs) into one tabbed page at /build/marketplace. The
           standalone routes below stay registered for the partner/investor/admin

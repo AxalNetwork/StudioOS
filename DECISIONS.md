@@ -9,8 +9,8 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-D1, D2, D5, D7, D8, D9 and D10 are resolved. D3, D4 and D6 remain open;
-none blocks the work in flight.
+D1, D2, D5 and D7-D11 are resolved. D3 and D4 remain open; D6 is now closed
+by D11, which repaired the last two of the four live defects the audit found.
 
 ### D1. Studio Ops — re-integrate, or honour the deletion?
 
@@ -255,6 +255,51 @@ fund accounting, partner operations). Deleting the folder wholesale broke all
 eight; it was restored. It belongs in `frontend/src/ui/` and should move as
 part of that consolidation, where the 8 import rewrites can be done and tested
 as their own change rather than smuggled into a Network PR.
+
+### D11. /marketplace redirects to /services; two misrouted clients repaired
+
+**RESOLVED.** Three findings, one pass.
+
+**The dead surface.** `/marketplace` was 645 lines with 11 `api.marketplace*`
+calls, none of which the worker mounts — a partner-provider directory with
+inquiry threads and reviews, implemented only in the dev-only FastAPI.
+Discovery is already served by surfaces that work — `/services` (services.ts),
+`/needs` (needs.ts), `/partners` (partners.ts) — so the route redirects to
+`/services`, two nav rows go, and the page is deleted. Inquiry threads and
+provider reviews have no backend anywhere and leave with it.
+
+**`/legal` document generation was misrouted, not missing.** `LegalPage`'s
+generate dialog called `POST /legal/documents/generate`, which the worker has
+never mounted. But `legal.ts:784` serves exactly that operation as
+`POST /legal/templates/:key/generate`, and the form's `doc_type` **is** the
+template key. Repointed — the feature works again rather than being deleted.
+Two worker behaviours now surface correctly: a contract-type template returns
+409 `use_esign_envelope` (contracts must go through the e-sign flow), and the
+document is named from the template. The dialog's Title input was therefore
+inert, so it is gone — a control that silently does nothing is worse than no
+control.
+
+**Stripe Connect was broken on a working page — nearly deleted by mistake.**
+`getMyStripeStatus`, `startStripeOnboarding` and `refreshStripeStatus` pointed
+at `/marketplace/providers/me/stripe*`. They are called by `ServiceCatalogPage`'s
+Stripe tab, which is live on `/services` and `/build/marketplace`. `needs.ts:575`
+and `:588` serve those operations, deliberately as typed stubs — *"Stripe
+Connect onboarding is owned by AO; return a typed empty status so the SPA's
+check renders without crashing"* — returning
+`{connected:false, detail:'stripe_connect_not_configured'}` and a 503. Because
+the client used the wrong prefix, partners got a hard "Request failed" instead
+of the not-configured state the tab was built to render. Repointed. There is no
+`/refresh` endpoint anywhere, so refreshing re-reads status, which is what the
+caller does with the response regardless.
+
+That last one is the reason to grep callers before deleting: these three sat in
+the same `/marketplace/*` block as the dead code and would have been swept out
+with it, removing a fixable bug instead of fixing it. Three sibling methods with
+zero callers (`setPartnerFeatured`, `setProviderKyb`, `listProviderReviews`)
+were genuinely dead and did go.
+
+**Ledger:** 18 more baseline entries retired — `scripts/api-drift-baseline.json`
+falls **41 → 23**. Across D10 and D11 the known-drift ledger has gone 58 → 23.
 
 ---
 
