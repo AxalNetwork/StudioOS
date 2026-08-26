@@ -132,9 +132,7 @@ export const SIDEBAR_GROUPS = {
     // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
     // the shared Research workspace (also used by advisors/investors/partners).
     { key: 'research', label: 'Research', items: [
-      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
       { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
-      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
       { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
       { to: '/advisor/research/news', icon: Send, label: 'News' },
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
@@ -239,9 +237,8 @@ export const SIDEBAR_GROUPS = {
     // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
     // the shared Research workspace (also used by advisors/investors/partners).
     { key: 'research', label: 'Research', items: [
-      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/market-intel', icon: Radar, label: 'Market' },
       { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
-      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
       { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
       { to: '/advisor/research/news', icon: Send, label: 'News' },
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
@@ -362,9 +359,8 @@ export const SIDEBAR_GROUPS = {
     // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
     // the shared Research workspace (also used by advisors).
     { key: 'research', label: 'Research', items: [
-      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/market-intel', icon: Radar, label: 'Market' },
       { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
-      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
       { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
       { to: '/advisor/research/news', icon: Send, label: 'News' },
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
@@ -450,9 +446,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/funds/accounting', icon: Scale, label: 'Accounting' },
     ]},
     { key: 'research', label: 'Research', items: [
-      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/market-intel', icon: Radar, label: 'Market' },
       { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
-      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
       { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
       { to: '/advisor/research/news', icon: Send, label: 'News' },
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
@@ -491,9 +486,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/advisor/growth/experts', icon: Brain, label: 'Experts' },
     ]},
     { key: 'research', label: 'Research', items: [
-      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/market-intel', icon: Radar, label: 'Market' },
       { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
-      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
       { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
       { to: '/advisor/research/news', icon: Send, label: 'News' },
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },

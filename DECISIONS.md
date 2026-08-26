@@ -9,8 +9,8 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-D1, D2, D5 and D7 are resolved. D3, D4 and D6 remain open but none blocks
-Phase 0/1.
+D1, D2, D5, D7, D8 and D9 are resolved. D3, D4 and D6 remain open; none
+blocks the work in flight.
 
 ### D1. Studio Ops — re-integrate, or honour the deletion?
 
@@ -170,6 +170,50 @@ live backend first, highest value per unit of work:
    (`/network`, wired, vs `/advisor/network/*`, broken but linked everywhere).
 4. **Advisory / Partner Operations** — thinnest backend coverage; treat as
    genuine builds scoped from their canvases.
+
+### D8. /market-intel is the one market surface
+
+**RESOLVED.** `/advisor/research/market` and `/market-intel` were two surfaces
+over the same material. The Research tab was a mock shell reading
+`data/advisor/research.js` with **zero** API calls; `MarketIntelPage.jsx` is
+2,992 lines wired to 30 `api.*` methods over the 31 endpoints in
+`market_intel.ts`.
+
+The old URL now redirects. The four role navs that linked the Research tab
+(founder, partner, investor, advisor) point at `/market-intel` instead; admin
+already linked it directly, so that duplicate row was dropped rather than
+repointed. `MarketPage.jsx` is deleted.
+
+This is the same "two parallel surfaces" shape the audit flagged for Network
+(`/network` wired vs `/advisor/network/*` broken but linked everywhere). The
+Network pair still needs the same call.
+
+### D9. The Funds research tab is withdrawn, pending a data provider
+
+**RESOLVED.** The tab wanted a directory of external funds, fund managers,
+fundraises, unicorns, public comparables, exits and funding rounds. Nothing
+serves any of it: `grep` across `cloudflare-worker/src/` finds no fund
+directory, no managers, no fundraises, no unicorns and no comparables, and
+`funds.ts` is Axal's *own* fund administration, not third-party research data.
+
+It is not a wiring task — it needs a PitchBook/Crunchbase-class source and a
+licence before a single row of it is real. The route, the five nav entries and
+`FundsResearchPage.jsx` are removed rather than shipped blank or shipped
+fabricated; the funds honesty rule that governs `vc_funds` ("Not recorded",
+never invented) is the same principle. It returns when a source is licensed.
+
+**Correction to an earlier recommendation.** D7 named Research "the clearest
+case" for wire-what-has-a-backend-first. That was true of one tab in six, not
+of the row. Verified per tab:
+
+| Tab | Backend | Reality |
+| --- | --- | --- |
+| market | `market_intel.ts` (31) + a 2,992-line live page | full live twin → D8 |
+| companies | `crunchbase.ts` (3), `competitors.ts` (11) | partial |
+| news | `news.ts` (11) | real |
+| ai | `assistant.ts` (9) | real |
+| documents | `files.ts` (1) | thin |
+| funds | none | no data source → D9 |
 
 ---
 
