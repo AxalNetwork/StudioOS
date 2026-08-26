@@ -241,7 +241,6 @@ const AdvisorResearchWorkspace = lazy(() => import('./pages/advisor/research/Adv
 // Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
 // Engagements, Performance).
 const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
-const GrowthWorkspace = lazy(() => import('./pages/growth/GrowthWorkspace'));
 // Authenticated-shell widgets — lazy so they leave the entry chunk. They only
 // ever render inside ProtectedLayout (logged-in users), so a logged-out visitor
 // hitting the landing page never downloads them. Each render site below is
@@ -1583,30 +1582,6 @@ function AppInner() {
       <Route path="/partner/operations/portfolio" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
       <Route path="/partner/operations/engagements" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
       <Route path="/partner/operations/performance" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
-      {/* Growth section — market-matching / resource-discovery workspace shared by
-          the advisor and partner profiles. A single GrowthWorkspace derives its
-          tab and role prefix from the URL; bare paths redirect to the first tab
-          (Talent) so every workspace is reachable by direct URL and sidebar. */}
-      <Route path="/advisor/growth" element={<Navigate to="/advisor/growth/talent" replace />} />
-      <Route path="/advisor/growth/talent" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
-      <Route path="/advisor/growth/customers" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
-      <Route path="/advisor/growth/partnerships" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
-      <Route path="/advisor/growth/capital" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
-      <Route path="/advisor/growth/experts" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
-      <Route path="/partner/growth" element={<Navigate to="/partner/growth/talent" replace />} />
-      <Route path="/partner/growth/talent" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      <Route path="/partner/growth/customers" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      <Route path="/partner/growth/partnerships" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      <Route path="/partner/growth/capital" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      <Route path="/partner/growth/experts" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      {/* Task #7 — Founder Growth reuses the shared GrowthWorkspace under a
-          /founder/growth/* prefix (mirrors the advisor/partner growth routes). */}
-      <Route path="/founder/growth" element={<Navigate to="/founder/growth/talent" replace />} />
-      <Route path="/founder/growth/talent" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
-      <Route path="/founder/growth/customers" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
-      <Route path="/founder/growth/partnerships" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
-      <Route path="/founder/growth/capital" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
-      <Route path="/founder/growth/experts" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
       {/* Task #5 — investor lifecycle sections now live. Pipeline stages render
           the tabbed PipelineWorkspace; portfolio/funds analytics render as tabs
           within their existing workspaces. Investor-scoped (admin can view). */}
