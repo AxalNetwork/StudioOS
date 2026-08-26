@@ -92,7 +92,7 @@ test('AssistRail is the AI rail, not navigation', () => {
   // ForgeRail's boundary is the product rule, so the slot must exist.
   assert.match(src, /guardrail/);
   for (const kind of ['choice', 'fixed', 'inherited']) {
-    assert.match(src, new RegExp(`'${kind}'`), `mode.kind '${kind}' must be handled`);
+    assert.ok(src.includes(`'${kind}'`), `mode.kind '${kind}' must be handled`);
   }
 });
 
@@ -166,7 +166,10 @@ const IMPORT_RE = /^import\s+([\s\S]+?)\s+from\s+'[^']*'/gm;
 
 function unusedImports(raw) {
   const src = scan(raw);
-  const body = src.replace(IMPORT_RE, '');
+  // Tokenise the body once rather than building a regex per import. Cheaper,
+  // and strictly more correct: \b does not bracket a $-prefixed identifier,
+  // so /\b$foo\b/ would not have matched a real use of $foo.
+  const referenced = new Set(src.replace(IMPORT_RE, '').match(/[A-Za-z_$][\w$]*/g) || []);
   const unused = [];
   for (const m of src.matchAll(IMPORT_RE)) {
     for (const name of m[1].replace(/[{}]/g, ',').split(',')) {
@@ -174,7 +177,7 @@ function unusedImports(raw) {
       // React is imported without being referenced in 330 of 351 files here —
       // that is the house style under the automatic JSX runtime, not debris.
       if (!bound || bound === 'React') continue;
-      if (!new RegExp(`\\b${bound}\\b`).test(body)) unused.push(bound);
+      if (!referenced.has(bound)) unused.push(bound);
     }
   }
   return unused;
@@ -219,8 +222,8 @@ test('CompanySwitcher is the single writer of active-company context', () => {
 });
 
 test('the barrel exports both', () => {
-  const barrel = read('frontend/src/ui/index.js');
+  const exported = new Set(read('frontend/src/ui/index.js').match(/[A-Za-z_$][\w$]*/g) || []);
   for (const name of ['AssistRail', 'SidebarNav', 'CompanySwitcher', 'runCost', 'spendMeter']) {
-    assert.match(barrel, new RegExp(`\\b${name}\\b`), `ui/index.js must export ${name}`);
+    assert.ok(exported.has(name), `ui/index.js must export ${name}`);
   }
 });
