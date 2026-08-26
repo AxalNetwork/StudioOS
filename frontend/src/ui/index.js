@@ -32,6 +32,15 @@ export { default as Card } from './Card';
 export { default as Pill, PILL_TONES } from './Pill';
 export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
 
+// The AI control rail — eight canvases, one component. Not navigation: see
+// DECISIONS.md T3. Presentational until the forge gateway lands (Phase 4).
+export { default as AssistRail } from './AssistRail';
+export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
+
+// The left navigation, lifted out of App.jsx unchanged (census: lift, do not
+// rebuild — the live one already beats the canvas rail).
+export { default as SidebarNav } from './SidebarNav';
+
 // Pre-existing, re-exported so `ui/` is the one import surface.
 export { default as EmptyState } from '../components/EmptyState';
 export { default as ErrorState } from '../components/ErrorState';
