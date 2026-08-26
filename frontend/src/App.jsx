@@ -1941,10 +1941,18 @@ function AppInner() {
       <Route path="/advisor/advisory/engagements" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
-      <Route path="/advisor/research" element={<Navigate to="/advisor/research/market" replace />} />
-      <Route path="/advisor/research/market" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research" element={<Navigate to="/advisor/research/companies" replace />} />
+      {/* DECISIONS.md D8 — /market-intel is the one market surface. This route
+          was a mock shell over the same material (zero API calls) while
+          MarketIntelPage is ~3k lines wired to 30 endpoints; rather than build
+          a second implementation, the old URL redirects. */}
+      <Route path="/advisor/research/market" element={<Navigate to="/market-intel" replace />} />
       <Route path="/advisor/research/companies" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/funds" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
+      {/* DECISIONS.md D9 — the Funds research tab is withdrawn, not hidden. It
+          wanted a directory of external funds, managers, fundraises, unicorns,
+          exits and comparables; no backend serves any of it and no data
+          provider is configured, so the only honest options were a blank
+          surface or invented numbers. It returns when a source is licensed. */}
       <Route path="/advisor/research/documents" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
       <Route path="/advisor/research/ai" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
       <Route path="/advisor/research/news" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
