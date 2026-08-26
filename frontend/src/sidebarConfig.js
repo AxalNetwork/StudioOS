@@ -208,29 +208,6 @@ export const SIDEBAR_GROUPS = {
     { key: 'network', label: 'Network', items: [
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
     ]},
-    // Task #7 — Growth section mirrors the advisor/partner profiles: five tabs
-    // (Talent, Customers, Partnerships, Capital, Experts) served by the shared
-    // GrowthWorkspace under /founder/growth/*.
-    //
-    // Founder-journey audit — these five tabs are UI shell only (mock data,
-    // see src/data/growth.js), and sat unlocked next to the REAL Raise/Team
-    // workspaces with a colliding label: two sidebar items both read "Capital"
-    // — one live (/raise/capital), one sample data. `requiredTier: 'growth'`
-    // gives them the same lock-icon + PaywallModal treatment every other
-    // tier-gated item already gets (see `/liquidity` below), which at minimum
-    // stops a free founder from being shown counterfeit data as a working
-    // feature. It does NOT fully resolve the label collision on its own: Lab
-    // -active founders bypass this gate too (`hasTier`'s existing rule for
-    // REQUIRED lab tooling, e.g. the deck builder) and would still see an
-    // unlocked "Capital" here beside the real one — hence also renaming this
-    // one to "Capital Match" below, which stays true regardless of lock state.
-    { key: 'growth', label: 'Growth', items: [
-      { to: '/founder/growth/talent', icon: Users, label: 'Talent', requiredTier: 'growth' },
-      { to: '/founder/growth/customers', icon: Briefcase, label: 'Customers', requiredTier: 'growth' },
-      { to: '/founder/growth/partnerships', icon: Handshake, label: 'Partnerships', requiredTier: 'growth' },
-      { to: '/founder/growth/capital', icon: DollarSign, label: 'Capital Match', requiredTier: 'growth' },
-      { to: '/founder/growth/experts', icon: Brain, label: 'Experts', requiredTier: 'growth' },
-    ]},
     // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
     // the shared Research workspace (also used by advisors/investors/partners).
     { key: 'research', label: 'Research', items: [
@@ -340,15 +317,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/partner/operations/portfolio', icon: Layers, label: 'Portfolio', match: ['/partner/operations/portfolio'] },
       { to: '/partner/operations/engagements', icon: Handshake, label: 'Engagements', match: ['/partner/operations/engagements'] },
       { to: '/partner/operations/performance', icon: TrendingUp, label: 'Performance', match: ['/partner/operations/performance'] },
-    ]},
-    // Growth — market-matching workspace surfaced as five tabs (Talent,
-    // Customers, Partnerships, Capital, Experts). Each row deep-links to its tab.
-    { key: 'growth', label: 'Growth', items: [
-      { to: '/partner/growth/talent', icon: Users, label: 'Talent' },
-      { to: '/partner/growth/customers', icon: Briefcase, label: 'Customers' },
-      { to: '/partner/growth/partnerships', icon: Handshake, label: 'Partnerships' },
-      { to: '/partner/growth/capital', icon: DollarSign, label: 'Capital' },
-      { to: '/partner/growth/experts', icon: Brain, label: 'Experts' },
     ]},
     // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
     // the shared Research workspace (also used by advisors).
@@ -467,13 +435,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/advisor/advisory/engagements', icon: Layers, label: 'Engagements' },
       { to: '/advisor/advisory/delivery', icon: Package, label: 'Delivery' },
       { to: '/advisor/advisory/contracts', icon: FileText, label: 'Contracts' },
-    ]},
-    { key: 'growth', label: 'Growth', items: [
-      { to: '/advisor/growth/talent', icon: Users, label: 'Talent' },
-      { to: '/advisor/growth/customers', icon: Briefcase, label: 'Customers' },
-      { to: '/advisor/growth/partnerships', icon: Handshake, label: 'Partnerships' },
-      { to: '/advisor/growth/capital', icon: DollarSign, label: 'Capital' },
-      { to: '/advisor/growth/experts', icon: Brain, label: 'Experts' },
     ]},
     { key: 'research', label: 'Research', items: [
       { to: '/market-intel', icon: Radar, label: 'Market' },
