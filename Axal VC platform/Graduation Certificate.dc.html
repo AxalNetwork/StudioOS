@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140"><rect width="200" height="140" fill="#7c3aed"/><text x="100" y="78" font-size="38" fill="#fff" text-anchor="middle" font-family="Arial" font-weight="700">GC</text></svg></template>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=Roboto+Mono:wght@400;500&family=Mrs+Saint+Delafield&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+  a{color:#6B46C1;text-decoration:none}a:hover{color:#553C9A}
+  .gc-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  .gc-serif{font-family:'Instrument Serif',Georgia,serif}
+  .gc-sign{font-family:'Mrs Saint Delafield',cursive}
+  .gc-card{background:#fff;border:1px solid #ececf1;border-radius:16px}
+  .gc-tab:hover{color:#1A202C}
+  .gc-btn:hover{filter:brightness(1.07)}
+  .gc-ghost:hover{border-color:#d4d4d8;background:#fafafa}
+  .gc-row:hover{background:#faf9fc}
+  .gc-root.gc-embedded .gc-header{display:none!important}
+  @media(max-width:1100px){.gc-split{grid-template-columns:1fr!important}}
+  .gc-certwrap{container-type:inline-size;width:100%;max-width:840px;margin:0 auto;position:relative}
+  .gc-certwrap::before{content:"";display:block;padding-top:70.714%}
+  .gc-cert{position:absolute;top:0;left:0;width:840px;height:594px;transform:scale(calc(100cqw / 840px));transform-origin:top left}
+</style>
+</helmet>
+
+<div class="gc-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="gc-header" style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px"></div>
+
+  <div class="gc-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 0 6px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:14px">
+      <a href="#" onClick="{{ back }}" style="font-size:13px;font-weight:600;color:#71717a">← Back to Workspace</a>
+      <div style="width:1px;height:18px;background:#ececf1"></div>
+      <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Graduation Certificate</h1>
+      <span style="font-size:11px;font-weight:700;color:#166534;background:#dcfce7;padding:4px 10px;border-radius:999px">Unlocked · Wk 4</span>
+    </div>
+  </div>
+  <p class="gc-header" style="margin:0 0 18px;font-size:13.5px;color:#71717a;max-width:760px">Cohort credential issued on graduation — auto-generated from platform records, delivered as PDF, and mirrored as a profile badge.</p>
+
+  <!-- VIEW TABS -->
+  <div style="display:flex;gap:4px;border-bottom:1px solid #ececf1;margin-bottom:22px;overflow-x:auto">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+      <button class="gc-tab" onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button>
+    </sc-for>
+  </div>
+
+  <!-- ============== GRADUATE VIEW ============== -->
+  <sc-if value="{{ isGrad }}" hint-placeholder-val="{{ true }}">
+  <div>
+
+    <!-- status strip -->
+    <div class="gc-card" style="display:flex;align-items:center;gap:18px;padding:16px 20px;margin-bottom:22px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span style="width:8px;height:8px;border-radius:50%;background:{{ statusDot }}"></span>
+        <span style="font-size:13px;font-weight:700">{{ statusLabel }}</span>
+      </div>
+      <div style="width:1px;height:20px;background:#ececf1"></div>
+      <div style="font-size:12.5px;color:#71717a">Credential ID <span class="gc-mono" style="color:#1A202C;font-weight:600">{{ cert.id }}</span></div>
+      <div style="width:1px;height:20px;background:#ececf1"></div>
+      <div style="font-size:12.5px;color:#71717a">Issued <span style="color:#1A202C;font-weight:600">{{ cert.issued }}</span></div>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:8px">
+        <button class="gc-ghost" onClick="{{ openVerify }}" style="font-size:12px;font-weight:600;color:#52525b;background:#fff;border:1px solid #ececf1;border-radius:8px;padding:8px 13px;cursor:pointer">Verify</button>
+        <button class="gc-ghost" onClick="{{ openEmail }}" style="font-size:12px;font-weight:600;color:#52525b;background:#fff;border:1px solid #ececf1;border-radius:8px;padding:8px 13px;cursor:pointer">View email</button>
+        <button class="gc-btn" onClick="{{ download }}" style="font-size:12px;font-weight:700;color:#fff;background:#7c3aed;border:0;border-radius:8px;padding:8px 15px;cursor:pointer">{{ dlLabel }}</button>
+      </div>
+    </div>
+
+    <div class="gc-split" style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px;align-items:start">
+
+      <!-- CERTIFICATE -->
+      <div class="gc-card" style="padding:28px;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa">Certificate preview · A4 landscape</div>
+          <div style="font-size:11.5px;color:#a1a1aa">Auto-populated from platform records</div>
+        </div>
+
+        <div class="gc-certwrap">
+        <div class="gc-cert" style="background:#fdfdfd;border:1px solid #e4e4e7;box-shadow:0 12px 40px rgba(24,20,40,.10);overflow:hidden">
+
+          <!-- artwork background + legibility scrim -->
+          <img src="uploads/axal-vc-future.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+          <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.84) 0%,rgba(255,255,255,.90) 38%,rgba(255,255,255,.92) 70%,rgba(255,255,255,.86) 100%)"></div>
+
+          <!-- ornamental frame -->
+          <div style="position:absolute;inset:22px;border:1px solid #e0dcea;pointer-events:none"></div>
+          <div style="position:absolute;inset:28px;border:1px solid #f0eef6;pointer-events:none"></div>
+          <div style="position:absolute;top:0;left:0;right:0;height:5px;background:linear-gradient(90deg,#7c3aed 0%,#6B46C1 55%,#0d9488 100%)"></div>
+
+          <div style="position:absolute;inset:0;padding:52px 74px 56px;display:flex;flex-direction:column;overflow:hidden">
+
+            <!-- wordmark -->
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="display:flex;flex-direction:column;align-items:center">
+                <img src="assets/axal-logo.png" alt="Axal VC" style="height:54px;width:auto;display:block;mix-blend-mode:multiply">
+                <div style="font-size:9.5px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:#4e4e5a;margin-top:3px">Spin-Out Lab</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#5a5a66">Credential</div>
+                <div class="gc-mono" style="font-size:11px;font-weight:600;color:#52525b;margin-top:2px">{{ cert.id }}</div>
+              </div>
+            </div>
+
+            <div style="height:1px;background:#ebe8f2;margin:26px 0 0"></div>
+
+            <!-- body -->
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;padding:0 20px">
+              <div style="font-size:10.5px;font-weight:700;letter-spacing:.28em;text-transform:uppercase;color:#7c3aed">Certificate of Graduation</div>
+
+              <div class="gc-serif" style="font-size:62px;line-height:1.06;letter-spacing:-.02em;margin:22px 0 0;color:#12101a">{{ cert.founder }}</div>
+
+              <div style="font-size:13px;color:#6b6b78;margin-top:16px;line-height:1.75;max-width:520px;margin-left:auto;margin-right:auto">
+                has completed the twenty-eight-day Axal VC Spin-Out Lab as founder of
+                <span style="color:#12101a;font-weight:700">{{ cert.company }}</span>, satisfying every
+                venture-readiness milestone of {{ cert.cohort }} — from validated customer demand and
+                a scored diligence package to an incorporated entity, executed cap table, and a
+                capital-ready fundraise.
+              </div>
+
+              <div style="display:flex;justify-content:center;gap:0;margin-top:26px">
+                <sc-for list="{{ certPillars }}" as="p" hint-placeholder-count="4">
+                  <div style="padding:0 22px;border-left:1px solid #ebe8f2">
+                    <div class="gc-mono" style="font-size:17px;font-weight:600;color:#12101a">{{ p.v }}</div>
+                    <div style="font-size:8.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#5a5a66;margin-top:5px">{{ p.k }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <!-- signature row -->
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:30px">
+              <div style="flex:1;display:flex;align-items:flex-end;gap:16px">
+                <img src="uploads/photo-1.png" alt="Guillaume Lauzier" style="width:74px;height:74px;flex:none;border-radius:50%;object-fit:cover;border:2px solid #e6e1f2;margin-bottom:2px">
+                <div style="flex:1;min-width:0">
+                  <div class="gc-sign" style="font-size:38px;line-height:1;color:#1d1730;margin-bottom:2px">Guillaume Lauzier</div>
+                  <div style="height:1px;background:#d8d4e2;margin:7px 0"></div>
+                  <div style="font-size:9.5px;font-weight:600;color:#6b6b78;line-height:1.5">{{ cert.signerRole }}<br>{{ cert.signer2Role }}</div>
+                </div>
+              </div>
+
+              <!-- seal -->
+              <div style="width:96px;height:96px;flex:none;border-radius:50%;border:1.5px solid #d8cff0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fbfaff;margin-bottom:4px">
+                <div style="font-size:8px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#7c3aed">Axal VC</div>
+                <div class="gc-serif" style="font-size:29px;line-height:1;color:#12101a;margin:3px 0">{{ cert.cohortNum }}</div>
+                <div style="font-size:7.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#4e4e5a">Graduate</div>
+              </div>
+            </div>
+
+            <!-- footer -->
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:auto;padding-top:16px;border-top:1px solid #ebe8f2">
+              <div style="font-size:9px;color:#5a5a66;line-height:1.7">
+                Conferred {{ cert.completed }} · {{ cert.jurisdiction }}<br>
+                Verify at <span style="color:#7c3aed">{{ cert.verifyShort }}</span>
+              </div>
+              <div style="width:36px;height:36px;flex:none;margin-right:6px" dangerouslySetInnerHTML="{{ qrSvg }}"></div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+
+      <!-- SIDE RAIL -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <!-- badge card -->
+        <div class="gc-card" style="padding:20px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa;margin-bottom:14px">Profile badge</div>
+          <div style="display:flex;align-items:center;gap:13px;padding:14px;border:1px solid #ede9fb;background:#fbfaff;border-radius:12px">
+            <div style="width:46px;height:46px;flex:none;border-radius:50%;border:1.5px solid #d8cff0;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center">
+              <div class="gc-serif" style="font-size:17px;line-height:1;color:#12101a">{{ cert.cohortNum }}</div>
+              <div style="font-size:5.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#7c3aed;margin-top:1px">Grad</div>
+            </div>
+            <div style="min-width:0">
+              <div style="font-size:13.5px;font-weight:700">Spin-Out Lab Graduate</div>
+              <div style="font-size:11.5px;color:#71717a;margin-top:2px">{{ cert.cohort }} · Awarded {{ cert.issued }}</div>
+            </div>
+          </div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa;margin:16px 0 9px">Chip variant</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#5b21b6;background:#f3f0fd;border:1px solid #e6dffb;padding:4px 9px;border-radius:999px">◆ Spin-Out Lab Alumni</span>
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#166534;background:#dcfce7;padding:4px 9px;border-radius:999px">✓ Verified</span>
+          </div>
+          <p style="margin:14px 0 0;font-size:11.5px;color:#a1a1aa;line-height:1.6">Badge is minted with the credential and links back to the public verification page.</p>
+        </div>
+
+        <!-- record fields -->
+        <div class="gc-card" style="padding:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa">Auto-filled fields</div>
+            <span style="font-size:10px;font-weight:700;color:#5b21b6;background:#f3f0fd;padding:3px 7px;border-radius:5px">From platform</span>
+          </div>
+          <sc-for list="{{ fields }}" as="f" hint-placeholder-count="8">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #f6f6f8">
+              <span class="gc-mono" style="font-size:11px;color:#a1a1aa;flex:none">{{ f.k }}</span>
+              <span style="font-size:12px;font-weight:600;text-align:right;min-width:0;overflow-wrap:anywhere">{{ f.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- where to find it -->
+        <div class="gc-card" style="padding:20px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa;margin-bottom:12px">Available from</div>
+          <sc-for list="{{ surfaces }}" as="s" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 0">
+              <span style="width:5px;height:5px;border-radius:50%;background:#7c3aed;flex:none"></span>
+              <span style="font-size:12.5px;font-weight:600">{{ s.t }}</span>
+              <span style="font-size:11.5px;color:#a1a1aa;margin-left:auto">{{ s.n }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============== ADMIN VIEW ============== -->
+  <sc-if value="{{ isAdmin }}">
+  <div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px">
+      <sc-for list="{{ adminKpis }}" as="k" hint-placeholder-count="4">
+        <div class="gc-card" style="padding:16px 18px">
+          <div class="gc-mono" style="font-size:24px;font-weight:600;letter-spacing:-.02em">{{ k.v }}</div>
+          <div style="font-size:11.5px;color:#71717a;margin-top:4px">{{ k.k }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div class="gc-card" style="padding:22px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa">Issuance dashboard</div>
+          <div style="font-size:12.5px;color:#71717a;margin-top:4px">Cohort 4 · 8 founders reached graduation status</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="gc-ghost" onClick="{{ batchPreview }}" style="font-size:12px;font-weight:600;color:#52525b;background:#fff;border:1px solid #ececf1;border-radius:8px;padding:8px 13px;cursor:pointer">Preview batch</button>
+          <button class="gc-btn" onClick="{{ batchIssue }}" style="font-size:12px;font-weight:700;color:#fff;background:#7c3aed;border:0;border-radius:8px;padding:8px 15px;cursor:pointer">Issue all eligible</button>
+        </div>
+      </div>
+
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:840px">
+          <thead>
+            <tr>
+              <sc-for list="{{ adminCols }}" as="c" hint-placeholder-count="6">
+                <th style="{{ c.style }}">{{ c.t }}</th>
+              </sc-for>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ graduates }}" as="g" hint-placeholder-count="6">
+              <tr class="gc-row" style="border-top:1px solid #f4f4f5">
+                <td style="padding:13px 14px">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <div style="width:28px;height:28px;flex:none;border-radius:7px;background:{{ g.bg }};color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">{{ g.ini }}</div>
+                    <div style="min-width:0">
+                      <div style="font-size:13px;font-weight:600">{{ g.name }}</div>
+                      <div style="font-size:11.5px;color:#a1a1aa">{{ g.company }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="gc-mono" style="padding:13px 14px;font-size:12px;color:#52525b">{{ g.certId }}</td>
+                <td style="padding:13px 14px"><span style="{{ g.statusStyle }}">{{ g.status }}</span></td>
+                <td style="padding:13px 14px;font-size:12.5px;color:#71717a">{{ g.emailed }}</td>
+                <td style="padding:13px 14px;font-size:12.5px;color:#71717a">{{ g.downloaded }}</td>
+                <td style="padding:13px 14px;text-align:right">
+                  <div style="display:inline-flex;gap:6px">
+                    <button class="gc-ghost" onClick="{{ g.preview }}" style="font-size:11.5px;font-weight:600;color:#52525b;background:#fff;border:1px solid #ececf1;border-radius:7px;padding:6px 10px;cursor:pointer">Preview</button>
+                    <button class="gc-btn" onClick="{{ g.action }}" style="{{ g.actionStyle }}">{{ g.actionLabel }}</button>
+                  </div>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="gc-split" style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:22px;margin-top:22px;align-items:start">
+      <div class="gc-card" style="padding:22px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa;margin-bottom:14px">Activity log</div>
+        <sc-for list="{{ activity }}" as="a" hint-placeholder-count="5">
+          <div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f6f6f8">
+            <span style="width:6px;height:6px;border-radius:50%;background:{{ a.dot }};margin-top:6px;flex:none"></span>
+            <div style="min-width:0;flex:1">
+              <div style="font-size:12.5px;font-weight:600">{{ a.t }}</div>
+              <div style="font-size:11.5px;color:#a1a1aa;margin-top:2px">{{ a.d }}</div>
+            </div>
+            <span class="gc-mono" style="font-size:11px;color:#a1a1aa;flex:none">{{ a.when }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="gc-card" style="padding:20px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa;margin-bottom:12px">Issuance states</div>
+        <sc-for list="{{ states }}" as="s" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;gap:10px;padding:7px 0">
+            <span style="{{ s.chip }}">{{ s.label }}</span>
+            <span style="font-size:11.5px;color:#a1a1aa;margin-left:auto">{{ s.n }}</span>
+          </div>
+        </sc-for>
+        <p style="margin:14px 0 0;font-size:11.5px;color:#a1a1aa;line-height:1.6">Revoking a credential invalidates the verification page and removes the profile badge. Reissue regenerates the PDF with current record data under the same credential ID.</p>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============== DATA MODEL VIEW ============== -->
+  <sc-if value="{{ isModel }}">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
+    <sc-for list="{{ models }}" as="m" hint-placeholder-count="5">
+      <div class="gc-card" style="padding:20px">
+        <div class="gc-mono" style="font-size:13px;font-weight:600;color:#5b21b6">{{ m.name }}</div>
+        <div style="font-size:11.5px;color:#a1a1aa;margin:5px 0 13px;line-height:1.55">{{ m.desc }}</div>
+        <sc-for list="{{ m.fields }}" as="f" hint-placeholder-count="6">
+          <div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid #f6f6f8">
+            <span class="gc-mono" style="font-size:11.5px;color:#52525b">{{ f.k }}</span>
+            <span class="gc-mono" style="font-size:11px;color:#a1a1aa">{{ f.t }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+  </sc-if>
+
+  <!-- ============== EMAIL MODAL ============== -->
+  <sc-if value="{{ emailOpen }}">
+  <div onClick="{{ closeEmail }}" style="position:fixed;inset:0;background:rgba(18,16,26,.55);z-index:90;display:flex;align-items:flex-start;justify-content:center;padding:48px 20px;overflow:auto">
+    <div onClick="{{ stop }}" style="width:100%;max-width:600px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 24px 70px rgba(18,16,26,.35)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #ececf1">
+        <div style="font-size:14px;font-weight:700">Delivery email</div>
+        <button onClick="{{ closeEmail }}" style="font-size:18px;color:#a1a1aa;background:none;border:0;cursor:pointer;line-height:1">×</button>
+      </div>
+      <div style="padding:16px 20px;background:#faf9fc;border-bottom:1px solid #ececf1">
+        <div style="font-size:11.5px;color:#a1a1aa">Subject</div>
+        <div style="font-size:13.5px;font-weight:700;margin-top:3px">You've graduated — Spin-Out Lab {{ cert.cohort }}</div>
+      </div>
+      <div style="padding:28px 30px">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:22px">
+          <div style="width:24px;height:24px;border-radius:6px;background:#1A202C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">A</div>
+          <div style="font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase">Axal VC · Spin-Out Lab</div>
+        </div>
+        <div class="gc-serif" style="font-size:30px;line-height:1.15;letter-spacing:-.01em;margin-bottom:16px">{{ cert.founder }}, your credential is issued.</div>
+        <p style="margin:0 0 14px;font-size:13.5px;line-height:1.7;color:#52525b">Thirty days ago {{ cert.company }} was a hypothesis. It is now an incorporated Delaware C-Corp with a signed cap table, a filed 83(b), validated demand, and a fundraise in market. That is the whole point of the Lab, and you cleared every gate.</p>
+        <p style="margin:0 0 22px;font-size:13.5px;line-height:1.7;color:#52525b">Your graduation certificate is attached and permanently available in your workspace. The Spin-Out Lab Alumni badge is now live on your founder profile.</p>
+        <div style="display:flex;gap:9px;margin-bottom:22px">
+          <span style="font-size:12.5px;font-weight:700;color:#fff;background:#7c3aed;padding:11px 18px;border-radius:8px">Download certificate</span>
+          <span style="font-size:12.5px;font-weight:600;color:#52525b;background:#fff;border:1px solid #ececf1;padding:11px 18px;border-radius:8px">View profile</span>
+        </div>
+        <div style="padding-top:16px;border-top:1px solid #ececf1;font-size:11.5px;color:#a1a1aa;line-height:1.65">
+          Credential <span class="gc-mono">{{ cert.id }}</span> · verify at {{ cert.verifyShort }}<br>
+          Axal VC · Spin-Out Lab · This credential can be independently verified by any third party.
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============== VERIFY MODAL ============== -->
+  <sc-if value="{{ verifyOpen }}">
+  <div onClick="{{ closeVerify }}" style="position:fixed;inset:0;background:rgba(18,16,26,.55);z-index:90;display:flex;align-items:center;justify-content:center;padding:24px">
+    <div onClick="{{ stop }}" style="width:100%;max-width:460px;background:#fff;border-radius:16px;padding:32px;text-align:center;box-shadow:0 24px 70px rgba(18,16,26,.35)">
+      <div style="width:52px;height:52px;margin:0 auto 16px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;font-size:24px;color:#166534">✓</div>
+      <div style="font-size:17px;font-weight:800;letter-spacing:-.01em">Credential verified</div>
+      <p style="margin:8px 0 20px;font-size:13px;color:#71717a;line-height:1.65">This certificate was issued by Axal VC and has not been revoked.</p>
+      <div style="text-align:left;border:1px solid #ececf1;border-radius:12px;padding:16px">
+        <sc-for list="{{ verifyRows }}" as="v" hint-placeholder-count="5">
+          <div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0">
+            <span style="font-size:12px;color:#a1a1aa">{{ v.k }}</span>
+            <span style="font-size:12.5px;font-weight:600;text-align:right">{{ v.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <button onClick="{{ closeVerify }}" class="gc-ghost" style="margin-top:18px;width:100%;font-size:12.5px;font-weight:600;color:#52525b;background:#fff;border:1px solid #ececf1;border-radius:8px;padding:10px;cursor:pointer">Close</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- toast -->
+  <sc-if value="{{ toast }}">
+  <div style="position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:#12101a;color:#fff;font-size:12.5px;font-weight:600;padding:11px 20px;border-radius:999px;z-index:95;box-shadow:0 10px 32px rgba(18,16,26,.4)">{{ toast }}</div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;onBack&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;}}">
+class Component extends DCLogic {
+  state = { tab:'grad', emailOpen:false, verifyOpen:false, toast:'', downloaded:false, issued:{} };
+
+  toastMsg(m){ this.setState({toast:m}); clearTimeout(this._t); this._t = setTimeout(()=>this.setState({toast:''}), 2200); }
+
+  renderVals(){
+    const embedded = this.props.embedded === true || this.props.embedded === 'true';
+    const tab = this.state.tab;
+
+    const cert = {
+      id:'AXL-SOL-C4-0117',
+      founder:'Guillaume Laurent',
+      company:'NovaCraft AI',
+      cohort:'Cohort 4',
+      cohortNum:'IV',
+      completed:'July 31, 2026',
+      issued:'Aug 1, 2026',
+      jurisdiction:'Delaware C-Corp track',
+      signer:'Guillaume Lauzier',
+      signerRole:'Managing Partner, Axal VC',
+      signer2:'Guillaume Lauzier',
+      signer2Role:'Program Director, Spin-Out Lab',
+      verifyShort:'axal.vc/verify/AXL-SOL-C4-0117'
+    };
+
+    const mkTab = (k,label)=>({
+      label, go:()=>this.setState({tab:k}),
+      style:'font-size:13px;font-weight:600;padding:11px 16px;background:none;border:0;border-bottom:2px solid '+(tab===k?'#7c3aed':'transparent')+';color:'+(tab===k?'#1A202C':'#a1a1aa')+';cursor:pointer;white-space:nowrap'
+    });
+
+    const chip = (bg,fg)=>'font-size:11px;font-weight:700;color:'+fg+';background:'+bg+';padding:4px 9px;border-radius:999px;white-space:nowrap';
+    const S = {
+      issued: chip('#dcfce7','#166534'),
+      emailed: chip('#f3f0fd','#5b21b6'),
+      pending: chip('#f4f4f5','#71717a'),
+      revoked: chip('#fef2f2','#b91c1c')
+    };
+
+    const gradRow = (ini,bg,name,company,certId,status,emailed,downloaded)=>{
+      const isPending = status==='Not generated';
+      return {
+        ini,bg,name,company,certId,status,emailed,downloaded,
+        statusStyle: status==='Revoked' ? S.revoked : isPending ? S.pending : status==='Downloaded' ? S.issued : S.emailed,
+        preview: ()=>this.setState({tab:'grad'}),
+        actionLabel: isPending ? 'Issue' : status==='Revoked' ? 'Reissue' : 'Resend',
+        actionStyle: 'font-size:11.5px;font-weight:700;color:#fff;background:'+(isPending?'#7c3aed':'#52525b')+';border:0;border-radius:7px;padding:6px 11px;cursor:pointer',
+        action: ()=>this.toastMsg((isPending?'Certificate issued and emailed to ':'Certificate resent to ')+name)
+      };
+    };
+
+    const col = (t,right)=>({t, style:'text-align:'+(right?'right':'left')+';font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#a1a1aa;padding:0 14px 10px'});
+
+    return {
+      embeddedClass: embedded ? 'gc-embedded' : '',
+      back: (e)=>{ e.preventDefault(); if (this.props.onBack) this.props.onBack(); },
+      stop: (e)=>e.stopPropagation(),
+      cert,
+      isGrad: tab==='grad', isAdmin: tab==='admin', isModel: tab==='model',
+      tabs: [mkTab('grad','Graduate view'), mkTab('admin','Admin issuance'), mkTab('model','Data model')],
+
+      statusDot:'#22c55e',
+      statusLabel:'Issued · emailed · badge awarded',
+      dlLabel: this.state.downloaded ? 'Downloaded ✓' : 'Download PDF',
+      download: ()=>{ this.setState({downloaded:true}); this.toastMsg('certificate-AXL-SOL-C4-0117.pdf downloaded'); },
+      openEmail: ()=>this.setState({emailOpen:true}),
+      closeEmail: ()=>this.setState({emailOpen:false}),
+      openVerify: ()=>this.setState({verifyOpen:true}),
+      closeVerify: ()=>this.setState({verifyOpen:false}),
+      emailOpen: this.state.emailOpen,
+      verifyOpen: this.state.verifyOpen,
+      toast: this.state.toast,
+
+      certPillars: [
+        {k:'Interviews', v:'23'},
+        {k:'Readiness', v:'82'},
+        {k:'Entity', v:'DE C-Corp'},
+        {k:'Raised', v:'$610K'}
+      ],
+
+      qrSvg: { __html: (()=>{
+        // deterministic pseudo-QR block pattern
+        const n=11, cells=[];
+        for(let y=0;y<n;y++) for(let x=0;x<n;x++){
+          const corner = (x<3&&y<3)||(x>n-4&&y<3)||(x<3&&y>n-4);
+          const on = corner ? !((x===1&&y===1)||(x===n-2&&y===1)||(x===1&&y===n-2)) : ((x*7+y*13+((x*y)%5))%3===0);
+          if(on) cells.push('<rect x="'+x+'" y="'+y+'" width="1" height="1"/>');
+        }
+        return '<svg viewBox="0 0 '+n+' '+n+'" width="100%" height="100%" fill="#12101a" shape-rendering="crispEdges">'+cells.join('')+'</svg>';
+      })() },
+
+      fields: [
+        {k:'founder_name', v:cert.founder},
+        {k:'user_id', v:'usr_9f31c7'},
+        {k:'company_name', v:cert.company},
+        {k:'cohort', v:cert.cohort},
+        {k:'completed_at', v:cert.completed},
+        {k:'issued_at', v:cert.issued},
+        {k:'track', v:cert.jurisdiction},
+        {k:'signer', v:cert.signerRole},
+        {k:'certificate_id', v:cert.id},
+        {k:'verify_url', v:cert.verifyShort}
+      ],
+
+      surfaces: [
+        {t:'Founder profile', n:'Credentials'},
+        {t:'Spin-Out Lab workspace', n:'Week 4'},
+        {t:'Email delivery', n:'PDF attached'},
+        {t:'Public verification page', n:'QR link'}
+      ],
+
+      adminKpis: [
+        {k:'Eligible this cohort', v:'8'},
+        {k:'Issued', v:'6'},
+        {k:'Emailed', v:'6'},
+        {k:'Downloaded', v:'4'}
+      ],
+      adminCols: [col('Graduate'), col('Credential'), col('Status'), col('Emailed'), col('Downloaded'), col('','right')],
+      graduates: [
+        gradRow('GL','#7c3aed','Guillaume Laurent','NovaCraft AI','AXL-SOL-C4-0117','Downloaded','Aug 1','Aug 1'),
+        gradRow('AR','#0d9488','Amara Reyes','Loopfield','AXL-SOL-C4-0118','Emailed','Aug 1','—'),
+        gradRow('TN','#b45309','Tomas Nilsen','Verdant Grid','AXL-SOL-C4-0119','Downloaded','Aug 1','Aug 2'),
+        gradRow('SK','#be123c','Sara Kaur','Northbeam Bio','AXL-SOL-C4-0120','Emailed','Aug 1','—'),
+        gradRow('JW','#4f46e5','Jonah Weiss','Cadence Labs','—','Not generated','—','—'),
+        gradRow('MO','#0f766e','Mira Osei','Threadline','AXL-SOL-C4-0121','Revoked','Jul 28','Jul 28')
+      ],
+
+      activity: [
+        {dot:'#22c55e', t:'Certificate downloaded', d:'Tomas Nilsen · Verdant Grid', when:'2h ago'},
+        {dot:'#7c3aed', t:'Batch issued — 5 certificates', d:'Cohort 4 graduation · triggered by D. Ito', when:'Aug 1'},
+        {dot:'#7c3aed', t:'Badge awarded', d:'Spin-Out Lab Alumni · 5 profiles updated', when:'Aug 1'},
+        {dot:'#b91c1c', t:'Credential revoked', d:'Threadline · company withdrew from cohort', when:'Jul 28'},
+        {dot:'#a1a1aa', t:'Template updated', d:'Cohort 4 wording · signer block revised', when:'Jul 24'}
+      ],
+
+      states: [
+        {label:'Not generated', chip:S.pending, n:'2'},
+        {label:'Generated', chip:S.emailed, n:'6'},
+        {label:'Emailed', chip:S.emailed, n:'6'},
+        {label:'Downloaded', chip:S.issued, n:'4'},
+        {label:'Revoked', chip:S.revoked, n:'1'}
+      ],
+
+      batchIssue: ()=>this.toastMsg('2 certificates generated, emailed, and badges awarded'),
+      batchPreview: ()=>this.setState({tab:'grad'}),
+
+      verifyRows: [
+        {k:'Credential', v:cert.id},
+        {k:'Issued to', v:cert.founder},
+        {k:'Company', v:cert.company},
+        {k:'Program', v:'Spin-Out Lab · '+cert.cohort},
+        {k:'Status', v:'Valid'}
+      ],
+
+      models: [
+        {name:'certificate_templates', desc:'Per-cohort layout and wording. Versioned so reissues render historically accurate copy.', fields:[
+          {k:'id', t:'uuid'},{k:'cohort_id', t:'fk'},{k:'body_copy', t:'text'},
+          {k:'signer_blocks', t:'jsonb'},{k:'version', t:'int'},{k:'active', t:'bool'}
+        ]},
+        {name:'issued_certificates', desc:'One record per graduate. Fields resolved from user, company, and cohort records at issuance.', fields:[
+          {k:'certificate_id', t:'string'},{k:'user_id', t:'fk'},{k:'company_id', t:'fk'},
+          {k:'template_id', t:'fk'},{k:'status', t:'enum'},{k:'pdf_url', t:'string'},
+          {k:'issued_at', t:'timestamp'},{k:'revoked_at', t:'timestamp?'}
+        ]},
+        {name:'certificate_badges', desc:'Profile-facing credential mirror. Created on issuance, removed on revoke.', fields:[
+          {k:'badge_id', t:'uuid'},{k:'certificate_id', t:'fk'},{k:'label', t:'string'},
+          {k:'variant', t:'enum'},{k:'awarded_at', t:'timestamp'},{k:'visible', t:'bool'}
+        ]},
+        {name:'certificate_events', desc:'Append-only audit trail for issuance, revocation, and reissue.', fields:[
+          {k:'event_id', t:'uuid'},{k:'certificate_id', t:'fk'},{k:'type', t:'enum'},
+          {k:'actor_id', t:'fk'},{k:'payload', t:'jsonb'},{k:'created_at', t:'timestamp'}
+        ]},
+        {name:'certificate_delivery_logs', desc:'Email send, bounce, open, and download tracking per credential.', fields:[
+          {k:'log_id', t:'uuid'},{k:'certificate_id', t:'fk'},{k:'channel', t:'enum'},
+          {k:'recipient', t:'string'},{k:'state', t:'enum'},{k:'occurred_at', t:'timestamp'}
+        ]}
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

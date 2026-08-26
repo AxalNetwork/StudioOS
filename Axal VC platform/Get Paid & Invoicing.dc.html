@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .gp-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    /* Light paints from these; dark is a bounded override layer. */
+    .gp-page{background:#f8f8fa;color:#18181b}
+    .gp-surface{background:#ffffff}
+    .gp-sunken{background:#faf9fc}
+    .gp-border{border-color:#e8e6ee}
+    .gp-bd-b{border-bottom-color:#e8e6ee}
+    .gp-bd-t{border-top-color:#e8e6ee}
+    .gp-text{color:#18181b}
+    .gp-muted{color:#71717a}
+    .gp-strong{color:#3f3f46}
+    .gp-field{background:#faf9fc;border-color:#e8e6ee;color:#18181b}
+
+    .gp-page.gp-dark{background:#0f0e13;color:#ececf1}
+    .gp-dark .gp-surface{background:#17161d}
+    .gp-dark .gp-sunken{background:#1d1b25}
+    .gp-dark .gp-border{border-color:#2a2833}
+    .gp-dark .gp-bd-b{border-bottom-color:#2a2833}
+    .gp-dark .gp-bd-t{border-top-color:#2a2833}
+    .gp-dark .gp-text{color:#ececf1}
+    .gp-dark .gp-muted{color:#9b96a8}
+    .gp-dark .gp-strong{color:#dcd9e4}
+    .gp-dark .gp-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+
+    .gp-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .gp-btn:hover{filter:brightness(1.06)}
+    .gp-seg{cursor:pointer;transition:background .13s,color .13s,border-color .13s}
+    .gp-fade{animation:gpFade .22s ease}
+    @keyframes gpFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    @keyframes gpSpin{to{transform:rotate(360deg)}}
+    .gp-spin{animation:gpSpin 1.1s linear infinite}
+    @media (max-width:900px){.gp-2{grid-template-columns:1fr!important}.gp-3{grid-template-columns:1fr!important}}
+  </style>
+</helmet>
+
+<div class="gp-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- ============ CHROME ============ -->
+  <div class="gp-surface gp-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:20">
+    <div style="max-width:1180px;margin:0 auto;padding:15px 26px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:11px;min-width:0">
+        <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+          <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ walletIcon }}"></span>
+        </div>
+        <div style="min-width:0">
+          <div class="gp-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Payments</div>
+          <div class="gp-muted" style="font-size:11.5px;margin-top:1px">{{ chromeSub }}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+        <div class="gp-sunken gp-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid">
+          <sc-for list="{{ screenTabs }}" as="t" hint-placeholder-count="2">
+            <div class="gp-seg" onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</div>
+          </sc-for>
+        </div>
+        <div class="gp-btn gp-border gp-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+          <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+          {{ themeLabel }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1180px;margin:0 auto;padding:28px 26px 90px">
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 1 · GET PAID SETUP                                    -->
+  <!-- ============================================================ -->
+  <sc-if value="{{ isSetup }}">
+  <div class="gp-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+      <div style="min-width:0">
+        <div class="gp-text" style="font-size:22px;font-weight:800;letter-spacing:-.025em">Get paid</div>
+        <div class="gp-muted" style="font-size:13.5px;margin-top:5px;max-width:520px;line-height:1.6">Connect a bank account to receive payouts for delivered work through Axal VC. Payments are processed by Stripe — Axal never holds your funds or sees your account details.</div>
+      </div>
+      <div class="gp-sunken gp-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex:none">
+        <sc-for list="{{ stateTabs }}" as="s" hint-placeholder-count="3">
+          <div class="gp-seg" onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- ---------- NOT STARTED ---------- -->
+    <sc-if value="{{ stNotStarted }}">
+      <div class="gp-2 gp-fade" style="display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start">
+        <div class="gp-surface gp-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:30px 32px">
+          <div style="width:44px;height:44px;border-radius:13px;background:rgba(124,58,237,.1);color:#7c3aed;display:flex;align-items:center;justify-content:center">
+            <span style="width:21px;height:21px;display:flex" dangerouslySetInnerHTML="{{ bankIcon }}"></span>
+          </div>
+          <div class="gp-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em;margin-top:16px">Connect your bank account to get paid</div>
+          <div class="gp-muted" style="font-size:13.5px;line-height:1.68;margin-top:9px;max-width:440px">You have <strong class="gp-strong">{{ pendingAmount }}</strong> in approved work waiting to be paid out. Connecting takes about three minutes and only needs to be done once.</div>
+
+          <div style="display:flex;flex-direction:column;gap:0;margin-top:22px">
+            <sc-for list="{{ needList }}" as="n" hint-placeholder-count="4">
+              <div class="gp-bd-t" style="display:flex;align-items:center;gap:11px;padding:11px 0;border-top-width:1px;border-top-style:solid">
+                <span class="gp-muted" style="width:15px;height:15px;display:flex;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span>
+                <div class="gp-strong" style="font-size:13px;font-weight:600;min-width:0;flex:1">{{ n.label }}</div>
+                <div class="gp-muted" style="font-size:12px;flex:none">{{ n.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div class="gp-btn" onClick="{{ startConnect }}" style="display:inline-flex;align-items:center;gap:9px;margin-top:24px;padding:13px 22px;border-radius:11px;background:#7c3aed;color:#fff;font-size:14px;font-weight:700">
+            Connect with Stripe
+            <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ arrowIcon }}"></span>
+          </div>
+          <div class="gp-muted" style="font-size:11.5px;margin-top:13px;display:flex;align-items:center;gap:7px">
+            <span style="width:13px;height:13px;display:flex;flex:none" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+            You will be redirected to Stripe to enter your details securely.
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="gp-surface gp-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+            <div class="gp-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Waiting on payout</div>
+            <div class="gp-num gp-text" style="font-size:29px;font-weight:700;letter-spacing:-.03em;margin-top:9px">{{ pendingAmount }}</div>
+            <div class="gp-muted" style="font-size:12px;margin-top:4px">Across {{ pendingCount }} completed engagements</div>
+            <div style="display:flex;flex-direction:column;gap:0;margin-top:16px">
+              <sc-for list="{{ pendingItems }}" as="p" hint-placeholder-count="2">
+                <div class="gp-bd-t" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top-width:1px;border-top-style:solid">
+                  <div style="min-width:0;flex:1">
+                    <div class="gp-strong" style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.title }}</div>
+                    <div class="gp-muted" style="font-size:11px;margin-top:1px">{{ p.who }}</div>
+                  </div>
+                  <div class="gp-num gp-text" style="font-size:13px;font-weight:700;flex:none">{{ p.amount }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="gp-sunken gp-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+            <div class="gp-strong" style="font-size:13px;font-weight:700">Payout schedule</div>
+            <div class="gp-muted" style="font-size:12.5px;line-height:1.65;margin-top:7px">Funds are released two business days after a founder pays an invoice, then transferred on a rolling weekly cycle every Tuesday.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ---------- PENDING ---------- -->
+    <sc-if value="{{ stPending }}">
+      <div class="gp-2 gp-fade" style="display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start">
+        <div class="gp-surface gp-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div style="padding:26px 32px 22px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <div style="width:36px;height:36px;border-radius:11px;background:rgba(180,83,9,.11);color:#b45309;display:flex;align-items:center;justify-content:center;flex:none">
+                <span class="gp-spin" style="width:17px;height:17px;display:flex" dangerouslySetInnerHTML="{{ loaderIcon }}"></span>
+              </div>
+              <div style="min-width:0;flex:1">
+                <div class="gp-text" style="font-size:17px;font-weight:800;letter-spacing:-.02em">Stripe is verifying your account</div>
+                <div class="gp-muted" style="font-size:12.5px;margin-top:3px">Submitted Aug 10 · usually completes within 1–2 business days</div>
+              </div>
+              <span style="{{ chipAmber }}">Verifying</span>
+            </div>
+            <div class="gp-sunken gp-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:14px 16px;margin-top:20px;display:flex;gap:11px;align-items:flex-start">
+              <span style="width:15px;height:15px;display:flex;flex:none;color:#b45309;margin-top:1px" dangerouslySetInnerHTML="{{ alertIcon }}"></span>
+              <div style="min-width:0">
+                <div class="gp-strong" style="font-size:13px;font-weight:700">Two items still outstanding</div>
+                <div class="gp-muted" style="font-size:12.5px;line-height:1.6;margin-top:4px">Payouts are held until these clear. Everything else has been accepted.</div>
+              </div>
+            </div>
+          </div>
+          <div class="gp-bd-t" style="border-top-width:1px;border-top-style:solid">
+            <sc-for list="{{ verifySteps }}" as="v" hint-placeholder-count="5">
+              <div class="gp-bd-t" style="display:flex;align-items:center;gap:13px;padding:14px 32px;border-top-width:1px;border-top-style:solid">
+                <span style="{{ v.dotStyle }}">
+                  <span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ v.icon }}"></span>
+                </span>
+                <div style="min-width:0;flex:1">
+                  <div class="gp-strong" style="font-size:13px;font-weight:600">{{ v.label }}</div>
+                  <div class="gp-muted" style="font-size:11.5px;margin-top:2px">{{ v.note }}</div>
+                </div>
+                <sc-if value="{{ v.action }}">
+                  <div class="gp-btn" style="flex:none;padding:7px 14px;border-radius:9px;background:#7c3aed;color:#fff;font-size:12px;font-weight:700">{{ v.action }}</div>
+                </sc-if>
+                <sc-if value="{{ v.done }}">
+                  <span style="{{ chipGreen }}">Accepted</span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="gp-surface gp-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+            <div class="gp-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Held until verified</div>
+            <div class="gp-num gp-text" style="font-size:29px;font-weight:700;letter-spacing:-.03em;margin-top:9px">{{ pendingAmount }}</div>
+            <div class="gp-muted" style="font-size:12px;margin-top:4px">Released automatically once Stripe clears your account</div>
+          </div>
+          <div class="gp-sunken gp-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+            <div class="gp-strong" style="font-size:13px;font-weight:700">Nothing is lost while you wait</div>
+            <div class="gp-muted" style="font-size:12.5px;line-height:1.65;margin-top:7px">You can keep sending invoices during verification. Founders can pay them normally — the funds queue against your account and transfer on the first cycle after approval.</div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ---------- ACTIVE ---------- -->
+    <sc-if value="{{ stActive }}">
+      <div class="gp-fade">
+        <div class="gp-surface gp-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 26px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="width:36px;height:36px;border-radius:11px;background:rgba(21,128,61,.11);color:#15803d;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div class="gp-text" style="font-size:16px;font-weight:800;letter-spacing:-.02em">Account connected</div>
+            <div class="gp-muted" style="font-size:12.5px;margin-top:2px">Kern Studio GmbH · DE ·· 4471 · payouts weekly on Tuesday</div>
+          </div>
+          <span style="{{ chipGreen }}">Active</span>
+          <div class="gp-btn gp-border gp-muted" style="padding:8px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent;flex:none">Manage on Stripe</div>
+        </div>
+
+        <div class="gp-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px">
+          <sc-for list="{{ payoutStats }}" as="p" hint-placeholder-count="3">
+            <div class="gp-surface gp-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+              <div class="gp-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">{{ p.k }}</div>
+              <div class="gp-num gp-text" style="font-size:26px;font-weight:700;letter-spacing:-.03em;margin-top:8px">{{ p.v }}</div>
+              <div class="gp-muted" style="font-size:12px;margin-top:4px;line-height:1.5">{{ p.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="gp-surface gp-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:16px;overflow:hidden">
+          <div class="gp-bd-b" style="padding:15px 24px;border-bottom-width:1px;border-bottom-style:solid;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div class="gp-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Payout history</div>
+            <div class="gp-muted" style="font-size:11.5px">Next estimated {{ nextPayout }}</div>
+          </div>
+          <sc-for list="{{ payouts }}" as="p" hint-placeholder-count="4">
+            <div class="gp-bd-b" style="display:flex;align-items:center;gap:14px;padding:14px 24px;border-bottom-width:1px;border-bottom-style:solid">
+              <div class="gp-num gp-muted" style="font-size:12px;flex:none;width:66px">{{ p.date }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="gp-strong" style="font-size:13px;font-weight:600">{{ p.title }}</div>
+                <div class="gp-muted" style="font-size:11.5px;margin-top:1px">{{ p.who }}</div>
+              </div>
+              <span style="{{ p.chip }}">{{ p.status }}</span>
+              <div class="gp-num gp-text" style="font-size:13.5px;font-weight:700;flex:none;min-width:78px;text-align:right">{{ p.amount }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ============================================================ -->
+  <!-- SCREEN 2 · INVOICE & PAY                                     -->
+  <!-- ============================================================ -->
+  <sc-if value="{{ isInvoice }}">
+  <div class="gp-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+      <div style="min-width:0">
+        <div class="gp-text" style="font-size:22px;font-weight:800;letter-spacing:-.025em">{{ invHeading }}</div>
+        <div class="gp-muted" style="font-size:13.5px;margin-top:5px;max-width:540px;line-height:1.6">{{ invSub }}</div>
+      </div>
+      <div class="gp-sunken gp-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex:none">
+        <sc-for list="{{ sideTabs }}" as="s" hint-placeholder-count="2">
+          <div class="gp-seg" onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div class="gp-2" style="display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:start">
+
+      <!-- ---------- INVOICE DOCUMENT ---------- -->
+      <div class="gp-surface gp-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+
+        <!-- status strip -->
+        <div class="gp-sunken gp-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:13px 26px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <sc-for list="{{ statusStrip }}" as="s" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:8px;flex:none">
+              <span style="{{ s.dotStyle }}">
+                <sc-if value="{{ s.glyph }}"><span style="width:10px;height:10px;display:flex" dangerouslySetInnerHTML="{{ s.icon }}"></span></sc-if>
+              </span>
+              <div style="min-width:0">
+                <div style="font-size:12px;font-weight:700;color:{{ s.ink }}">{{ s.label }}</div>
+                <div class="gp-muted" style="font-size:10.5px;margin-top:1px">{{ s.when }}</div>
+              </div>
+            </div>
+            <sc-if value="{{ s.line }}">
+              <div class="gp-border" style="flex:1;min-width:16px;height:1px;border-top-width:1px;border-top-style:solid"></div>
+            </sc-if>
+          </sc-for>
+        </div>
+
+        <div style="padding:28px 30px">
+          <!-- masthead -->
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+            <div style="display:flex;gap:13px;min-width:0">
+              <div style="width:42px;height:42px;border-radius:12px;background:#1d4ed8;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">SK</div>
+              <div style="min-width:0">
+                <div class="gp-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.018em">Studio Kern</div>
+                <div class="gp-muted" style="font-size:12px;line-height:1.55;margin-top:3px">Kern Studio GmbH · Prinzessinnenstraße 20, 10969 Berlin<br>VAT DE 328 445 190 · billing@studiokern.de</div>
+              </div>
+            </div>
+            <div style="text-align:right;flex:none">
+              <div class="gp-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Invoice</div>
+              <div class="gp-num gp-text" style="font-size:15px;font-weight:700;margin-top:4px">{{ inv.number }}</div>
+              <div class="gp-num gp-muted" style="font-size:12px;margin-top:3px">Issued {{ inv.issued }}</div>
+              <div class="gp-num gp-muted" style="font-size:12px">Due {{ inv.due }}</div>
+            </div>
+          </div>
+
+          <!-- bill to / engagement -->
+          <div class="gp-2 gp-bd-t" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px;padding-top:20px;border-top-width:1px;border-top-style:solid">
+            <div>
+              <div class="gp-muted" style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Billed to</div>
+              <div class="gp-strong" style="font-size:13.5px;font-weight:700;margin-top:7px">NovaCraft AI</div>
+              <div class="gp-muted" style="font-size:12px;line-height:1.55;margin-top:2px">Guillaume Lauzier<br>Rue du Rhône 14, 1204 Geneva</div>
+            </div>
+            <div>
+              <div class="gp-muted" style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Against</div>
+              <div class="gp-strong" style="font-size:13.5px;font-weight:700;margin-top:7px">Quote Q-2026-118 · accepted Jul 14</div>
+              <div class="gp-muted" style="font-size:12px;line-height:1.55;margin-top:2px">Website Redesign · delivered Aug 8<br>4 of 4 milestones signed off</div>
+            </div>
+          </div>
+
+          <!-- line items -->
+          <div style="margin-top:24px">
+            <div class="gp-bd-b" style="display:flex;gap:12px;padding-bottom:9px;border-bottom-width:1px;border-bottom-style:solid">
+              <div class="gp-muted" style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;flex:1">Description</div>
+              <div class="gp-muted" style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;flex:none;width:96px;text-align:right">Amount</div>
+            </div>
+            <sc-for list="{{ inv.items }}" as="li" hint-placeholder-count="4">
+              <div class="gp-bd-b" style="display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-bottom-width:1px;border-bottom-style:solid">
+                <div style="min-width:0;flex:1">
+                  <div class="gp-strong" style="font-size:13.5px;font-weight:600">{{ li.name }}</div>
+                  <div class="gp-muted" style="font-size:12px;line-height:1.5;margin-top:3px">{{ li.detail }}</div>
+                </div>
+                <div class="gp-num gp-text" style="font-size:13.5px;font-weight:700;flex:none;width:96px;text-align:right">{{ li.amount }}</div>
+              </div>
+            </sc-for>
+
+            <!-- totals -->
+            <div style="display:flex;justify-content:flex-end;margin-top:16px">
+              <div style="width:290px;max-width:100%">
+                <sc-for list="{{ inv.totals }}" as="t" hint-placeholder-count="3">
+                  <div style="display:flex;justify-content:space-between;gap:14px;padding:6px 0">
+                    <div class="gp-muted" style="font-size:12.5px">{{ t.k }}</div>
+                    <div class="gp-num gp-strong" style="font-size:12.5px;font-weight:600">{{ t.v }}</div>
+                  </div>
+                </sc-for>
+                <div class="gp-bd-t" style="display:flex;justify-content:space-between;gap:14px;align-items:baseline;padding-top:11px;margin-top:7px;border-top-width:1px;border-top-style:solid">
+                  <div class="gp-text" style="font-size:13.5px;font-weight:800">{{ inv.dueLabel }}</div>
+                  <div class="gp-num gp-text" style="font-size:23px;font-weight:700;letter-spacing:-.03em">{{ inv.total }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gp-sunken gp-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:13px 16px;margin-top:22px">
+            <div class="gp-muted" style="font-size:12px;line-height:1.6">{{ inv.terms }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- ACTION RAIL ---------- -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+
+        <!-- PARTNER · pre-send -->
+        <sc-if value="{{ actSend }}">
+          <div class="gp-surface gp-border gp-fade" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+            <div class="gp-text" style="font-size:15px;font-weight:800;letter-spacing:-.018em">Send this invoice</div>
+            <div class="gp-muted" style="font-size:12.5px;line-height:1.62;margin-top:7px">Line items were carried over from the accepted quote. Edits reopen it as a draft and notify the founder.</div>
+            <div style="display:flex;flex-direction:column;gap:0;margin-top:16px">
+              <sc-for list="{{ sendChecks }}" as="c" hint-placeholder-count="3">
+                <div class="gp-bd-t" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top-width:1px;border-top-style:solid">
+                  <span style="width:14px;height:14px;display:flex;flex:none;color:#15803d" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                  <div class="gp-strong" style="font-size:12.5px;font-weight:600;min-width:0;flex:1">{{ c }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div class="gp-btn" onClick="{{ sendInvoice }}" style="margin-top:18px;padding:13px 0;border-radius:11px;background:#7c3aed;color:#fff;font-size:14px;font-weight:700;text-align:center;display:flex;align-items:center;justify-content:center;gap:9px">
+              <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ sendIcon }}"></span>
+              Send invoice · {{ inv.total }}
+            </div>
+            <div class="gp-btn gp-border gp-muted" style="margin-top:8px;padding:11px 0;border-radius:11px;border-width:1px;border-style:solid;font-size:13px;font-weight:600;background:transparent;text-align:center">Edit line items</div>
+          </div>
+        </sc-if>
+
+        <!-- PARTNER · sent -->
+        <sc-if value="{{ actSent }}">
+          <div class="gp-surface gp-border gp-fade" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:32px;height:32px;border-radius:10px;background:rgba(124,58,237,.1);color:#7c3aed;display:flex;align-items:center;justify-content:center;flex:none">
+                <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ sendIcon }}"></span>
+              </div>
+              <div style="min-width:0">
+                <div class="gp-text" style="font-size:14.5px;font-weight:800;letter-spacing:-.015em">Invoice sent</div>
+                <div class="gp-muted" style="font-size:11.5px;margin-top:1px">{{ sentWhen }} · to Guillaume Lauzier</div>
+              </div>
+            </div>
+            <div class="gp-sunken gp-border" style="border-width:1px;border-style:solid;border-radius:11px;padding:12px 14px;margin-top:16px">
+              <div class="gp-muted" style="font-size:12px;line-height:1.6">{{ sentNote }}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+              <div class="gp-btn gp-border gp-strong" style="padding:11px 0;border-radius:11px;border-width:1px;border-style:solid;font-size:13px;font-weight:600;background:transparent;text-align:center">Send a reminder</div>
+              <div class="gp-btn gp-muted" onClick="{{ resetInvoice }}" style="padding:9px 0;font-size:12px;font-weight:600;text-align:center">Back to draft</div>
+            </div>
+          </div>
+          <div class="gp-surface gp-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px">
+            <div class="gp-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">On payment</div>
+            <div class="gp-num gp-text" style="font-size:23px;font-weight:700;letter-spacing:-.03em;margin-top:8px">{{ inv.payoutNet }}</div>
+            <div class="gp-muted" style="font-size:12px;line-height:1.55;margin-top:4px">Net to your account after the {{ inv.feeLabel }} platform fee, released two business days after payment clears.</div>
+          </div>
+        </sc-if>
+
+        <!-- FOUNDER · pay -->
+        <sc-if value="{{ actPay }}">
+          <div class="gp-surface gp-border gp-fade" style="border-width:1px;border-style:solid;border-radius:16px;padding:24px 26px">
+            <div class="gp-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Amount due</div>
+            <div class="gp-num gp-text" style="font-size:34px;font-weight:700;letter-spacing:-.035em;margin-top:8px">{{ inv.total }}</div>
+            <div class="gp-muted" style="font-size:12.5px;margin-top:5px">Due {{ inv.due }} · Studio Kern · {{ inv.number }}</div>
+
+            <div class="gp-btn" onClick="{{ payInvoice }}" style="margin-top:20px;padding:14px 0;border-radius:11px;background:#7c3aed;color:#fff;font-size:15px;font-weight:800;text-align:center;display:flex;align-items:center;justify-content:center;gap:9px">
+              <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ cardIcon }}"></span>
+              Pay {{ inv.total }}
+            </div>
+            <div class="gp-muted" style="font-size:11.5px;margin-top:11px;display:flex;align-items:flex-start;gap:7px;line-height:1.55">
+              <span style="width:13px;height:13px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+              Opens Stripe Checkout. Card, SEPA debit, and bank transfer accepted.
+            </div>
+            <div class="gp-bd-t" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top-width:1px;border-top-style:solid">
+              <sc-for list="{{ payMethods }}" as="pm" hint-placeholder-count="3">
+                <div class="gp-muted" style="font-size:11.5px;font-weight:600">{{ pm }}</div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="gp-sunken gp-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+            <div class="gp-strong" style="font-size:13px;font-weight:700">Before you pay</div>
+            <div class="gp-muted" style="font-size:12.5px;line-height:1.65;margin-top:7px">All four milestones on this engagement are signed off on your side. If something is outstanding, raise it with Studio Kern before paying — funds release to them two business days after payment.</div>
+            <div class="gp-btn gp-strong" style="font-size:12.5px;font-weight:700;margin-top:11px;color:#7c3aed">Open engagement →</div>
+          </div>
+        </sc-if>
+
+        <!-- FOUNDER · paid -->
+        <sc-if value="{{ actPaid }}">
+          <div class="gp-surface gp-border gp-fade" style="border-width:1px;border-style:solid;border-radius:16px;padding:24px 26px">
+            <div style="width:42px;height:42px;border-radius:13px;background:rgba(21,128,61,.11);color:#15803d;display:flex;align-items:center;justify-content:center">
+              <span style="width:20px;height:20px;display:flex" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+            </div>
+            <div class="gp-text" style="font-size:17px;font-weight:800;letter-spacing:-.022em;margin-top:15px">Payment complete</div>
+            <div class="gp-muted" style="font-size:12.5px;line-height:1.62;margin-top:6px">{{ inv.total }} paid to Studio Kern on {{ paidWhen }}. A copy of the receipt has been emailed to you.</div>
+
+            <div class="gp-sunken gp-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:15px 17px;margin-top:18px">
+              <sc-for list="{{ receiptRows }}" as="r" hint-placeholder-count="5">
+                <div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0">
+                  <div class="gp-muted" style="font-size:12px">{{ r.k }}</div>
+                  <div class="gp-num gp-strong" style="font-size:12px;font-weight:600;text-align:right">{{ r.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div class="gp-btn" style="margin-top:16px;padding:12px 0;border-radius:11px;background:#7c3aed;color:#fff;font-size:13.5px;font-weight:700;text-align:center;display:flex;align-items:center;justify-content:center;gap:9px">
+              <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ downloadIcon }}"></span>
+              Download receipt (PDF)
+            </div>
+            <div class="gp-btn gp-muted" onClick="{{ resetInvoice }}" style="margin-top:8px;padding:9px 0;font-size:12px;font-weight:600;text-align:center">View as unpaid</div>
+          </div>
+          <div class="gp-surface gp-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+            <div class="gp-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">What happens next</div>
+            <div style="display:flex;flex-direction:column;gap:11px;margin-top:12px">
+              <sc-for list="{{ afterPaid }}" as="a" hint-placeholder-count="3">
+                <div style="display:flex;gap:11px;align-items:flex-start">
+                  <span class="gp-num" style="flex:none;font-size:11px;font-weight:700;color:#7c3aed;margin-top:1px">{{ a.n }}</span>
+                  <div class="gp-muted" style="font-size:12.5px;line-height:1.58">{{ a.t }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1180}}">
+class Component extends DCLogic {
+  state = { theme:'light', screen:'setup', payoutState:'notStarted', side:'partner', sent:false, paid:false };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state;
+    const V = '#7c3aed', V7 = '#6d28d9';
+    const dark = st.theme === 'dark';
+
+    const I = {
+      wallet:   this.ic('<path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M16 12h3"/>'),
+      bank:     this.ic('<path d="M3 10 12 4l9 6"/><path d="M5 10v9h14v-9"/><path d="M9 19v-5h6v5"/>'),
+      lock:     this.ic('<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+      arrow:    this.ic('<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>'),
+      check:    this.ic('<path d="M20 6 9 17l-5-5"/>', 2.4),
+      loader:   this.ic('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>'),
+      alert:    this.ic('<path d="M12 3 2 20h20L12 3z"/><path d="M12 9v5M12 17h.01"/>'),
+      send:     this.ic('<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/>'),
+      card:     this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>'),
+      download: this.ic('<path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/>'),
+      eye:      this.ic('<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>'),
+      dot:      this.ic('<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>'),
+      id:       this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="9" cy="12" r="2.4"/><path d="M15 10h4M15 14h4"/>'),
+      file:     this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      building: this.ic('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8h2M13 8h2M9 12h2M13 12h2M9 16h6"/>'),
+      sun:      this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon:     this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-block;padding:4px 11px;border-radius:99px;font-size:10.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const chipGreen = chip('rgba(21,128,61,.11)', dark ? '#6ee7b7' : '#15803d');
+    const chipAmber = chip('rgba(180,83,9,.11)', dark ? '#fcd34d' : '#b45309');
+    const chipViolet = chip('rgba(124,58,237,.11)', dark ? '#c4b5fd' : V7);
+    const chipGrey = chip(dark ? '#2a2833' : '#f1f0f5', dark ? '#9b96a8' : '#71717a');
+
+    const seg = (on) => 'padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? (dark ? '#c4b5fd' : V7) : (dark ? '#9b96a8' : '#71717a'))
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none');
+
+    // ---------- SCREEN 1 data ----------
+    const pendingAmount = '$5,600.00';
+    const pendingItems = [
+      { title:'Website Redesign', who:'NovaCraft AI · delivered Aug 8', amount:'$4,200.00' },
+      { title:'Pricing page audit', who:'Halyard Security · delivered Aug 1', amount:'$1,400.00' },
+    ];
+    const needList = [
+      { label:'Legal name and business address', note:'2 min', icon:I.building },
+      { label:'Government-issued ID', note:'Photo upload', icon:I.id },
+      { label:'Bank account for transfers', note:'IBAN or routing', icon:I.bank },
+      { label:'Tax details', note:'VAT or W-8/W-9', icon:I.file },
+    ];
+    const dotDone = 'width:22px;height:22px;border-radius:50%;background:rgba(21,128,61,.13);color:'+(dark?'#6ee7b7':'#15803d')+';display:flex;align-items:center;justify-content:center;flex:none';
+    const dotOpen = 'width:22px;height:22px;border-radius:50%;background:rgba(180,83,9,.13);color:'+(dark?'#fcd34d':'#b45309')+';display:flex;align-items:center;justify-content:center;flex:none';
+    const verifySteps = [
+      { label:'Business details', note:'Kern Studio GmbH · Berlin, Germany', dotStyle:dotDone, icon:I.check, done:true, action:'' },
+      { label:'Representative identity', note:'Verified Aug 10', dotStyle:dotDone, icon:I.check, done:true, action:'' },
+      { label:'Bank account', note:'DE ·· 4471 · awaiting micro-deposit confirmation', dotStyle:dotOpen, icon:I.alert, done:false, action:'Confirm' },
+      { label:'Tax form', note:'VAT number entered, certificate not yet uploaded', dotStyle:dotOpen, icon:I.alert, done:false, action:'Upload' },
+      { label:'Payout schedule', note:'Weekly · Tuesday · EUR', dotStyle:dotDone, icon:I.check, done:true, action:'' },
+    ];
+    const payoutStats = [
+      { k:'Total earned', v:'$18,650.00', note:'Across 7 paid invoices since March' },
+      { k:'Last payout', v:'$4,200.00', note:'Aug 5, 2026 · DE ·· 4471' },
+      { k:'Next payout', v:'$1,400.00', note:'Estimated Aug 19, 2026' },
+    ];
+    const nextPayout = 'Aug 19';
+    const payouts = [
+      { date:'Aug 19', title:'Pricing page audit', who:'Halyard Security · INV-2026-0141', amount:'$1,400.00', status:'Scheduled', chip:chipViolet },
+      { date:'Aug 5',  title:'Website Redesign — milestone 4', who:'NovaCraft AI · INV-2026-0137', amount:'$4,200.00', status:'Paid out', chip:chipGreen },
+      { date:'Jul 22', title:'Brand identity sprint', who:'Ceduna Labs · INV-2026-0129', amount:'$2,800.00', status:'Paid out', chip:chipGreen },
+      { date:'Jul 8',  title:'Design system handoff', who:'LoopSense · INV-2026-0121', amount:'$3,650.00', status:'Paid out', chip:chipGreen },
+    ];
+
+    // ---------- SCREEN 2 data ----------
+    const partner = st.side === 'partner';
+    const sent = st.sent, paid = st.paid;
+
+    const inv = {
+      number:'INV-2026-0143',
+      issued:'Aug 11, 2026',
+      due:'Aug 25, 2026',
+      items:[
+        { name:'Discovery & positioning workshop', detail:'3 days · Jul 15–17 · includes ICP review and messaging brief', amount:'$900.00' },
+        { name:'Marketing site design', detail:'6 pages · desktop and mobile · 2 revision rounds included', amount:'$2,100.00' },
+        { name:'CMS build & handoff', detail:'Content model, editor training, documented handoff', amount:'$900.00' },
+        { name:'Post-launch revisions', detail:'2 rounds · within 30 days of launch', amount:'$300.00' },
+      ],
+      totals:[
+        { k:'Subtotal', v:'$4,200.00' },
+        { k:'VAT · reverse charge (CH)', v:'$0.00' },
+        { k:'Paid to date', v: paid ? '$4,200.00' : '$0.00' },
+      ],
+      total:'$4,200.00',
+      dueLabel: paid ? 'Total paid' : 'Amount due',
+      payoutNet:'$4,032.00',
+      feeLabel:'4%',
+      terms: paid
+        ? 'Paid in full. Reverse charge applies under Art. 196 of the EU VAT Directive — recipient accounts for VAT.'
+        : 'Net 14. Reverse charge applies under Art. 196 of the EU VAT Directive — recipient accounts for VAT. Late payments accrue 4% annual interest after the due date.',
+    };
+
+    // The founder only reaches this view via a sent invoice, and is viewing it now —
+    // so sent/viewed are implicit on that side rather than gated on the partner-side flag.
+    const isSent = sent || !partner;
+    const stripeStage = paid ? 3 : (isSent ? 2 : 1);
+    const stripeMeta = [
+      { label:'Sent', when: isSent ? 'Aug 11, 09:40' : 'Not yet sent' },
+      { label:'Viewed', when: isSent ? 'Aug 11, 14:02' : '—' },
+      { label:'Paid', when: paid ? 'Aug 12, 08:15' : '—' },
+    ];
+    const statusStrip = stripeMeta.map((s, i) => {
+      const stage = i + 1;
+      const done = stage < stripeStage || (paid && stage === 3);
+      const current = stage === stripeStage && !done;
+      const ink = done ? (dark ? '#6ee7b7' : '#15803d') : current ? (dark ? '#c4b5fd' : V7) : (dark ? '#9b96a8' : '#71717a');
+      return {
+        label:s.label, when:s.when, ink,
+        glyph: done || current, icon: done ? I.check : I.dot,
+        dotStyle:'width:20px;height:20px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;'
+          + (done ? 'background:rgba(21,128,61,.14);color:'+(dark?'#6ee7b7':'#15803d')
+             : current ? 'background:rgba(124,58,237,.14);color:'+(dark?'#c4b5fd':V7)
+             : 'background:'+(dark?'#2a2833':'#eeedf2')+';color:transparent'),
+        line: i < 2,
+      };
+    });
+
+    const sendChecks = [
+      'All 4 milestones signed off by NovaCraft AI',
+      'Amounts match accepted quote Q-2026-118',
+      'Payout account active — funds route automatically',
+    ];
+
+    const receiptRows = [
+      { k:'Receipt', v:'RCP-2026-0143' },
+      { k:'Paid', v:'Aug 12, 2026 · 08:15 CET' },
+      { k:'Method', v:'Visa ·· 4242' },
+      { k:'Amount', v:'$4,200.00' },
+      { k:'Reference', v:'INV-2026-0143' },
+    ];
+    const afterPaid = [
+      { n:'01', t:'Studio Kern is notified immediately and the engagement moves to Complete.' },
+      { n:'02', t:'Funds release to their payout account two business days after the payment clears.' },
+      { n:'03', t:'The receipt stays available here and in your billing history indefinitely.' },
+    ];
+    const payMethods = ['Visa · Mastercard · Amex', 'SEPA direct debit', 'Bank transfer'];
+
+    // ---------- switchers ----------
+    const SCREENS = [{ k:'setup', l:'Get paid' }, { k:'invoice', l:'Invoice & pay' }];
+    const screenTabs = SCREENS.map(s => ({ label:s.l, go: () => this.setState({ screen:s.k }), style: seg(st.screen === s.k) }));
+
+    const STATES = [{ k:'notStarted', l:'Not started' }, { k:'pending', l:'Pending' }, { k:'active', l:'Active' }];
+    const stateTabs = STATES.map(s => ({ label:s.l, go: () => this.setState({ payoutState:s.k }), style: seg(st.payoutState === s.k) }));
+
+    const SIDES = [{ k:'partner', l:'Partner · sends' }, { k:'founder', l:'Founder · receives' }];
+    const sideTabs = SIDES.map(s => ({ label:s.l, go: () => this.setState({ side:s.k }), style: seg(st.side === s.k) }));
+
+    return {
+      themeClass: dark ? 'gp-dark' : '',
+      chromeSub: st.screen === 'setup' ? 'Payout account · Studio Kern' : 'Invoice ' + inv.number + ' · Website Redesign',
+      walletIcon:I.wallet, bankIcon:I.bank, lockIcon:I.lock, arrowIcon:I.arrow, checkIcon:I.check,
+      loaderIcon:I.loader, alertIcon:I.alert, sendIcon:I.send, cardIcon:I.card, downloadIcon:I.download,
+      themeIcon: dark ? I.sun : I.moon,
+      themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+
+      screenTabs, stateTabs, sideTabs,
+      isSetup: st.screen === 'setup', isInvoice: st.screen === 'invoice',
+      stNotStarted: st.payoutState === 'notStarted',
+      stPending: st.payoutState === 'pending',
+      stActive: st.payoutState === 'active',
+
+      chipGreen, chipAmber, chipViolet, chipGrey,
+      pendingAmount, pendingCount:'2', pendingItems, needList, verifySteps,
+      payoutStats, payouts, nextPayout,
+      startConnect: () => this.setState({ payoutState:'pending' }),
+
+      invHeading: partner ? (sent ? 'Invoice sent' : 'Send invoice') : (paid ? 'Receipt' : 'Invoice from Studio Kern'),
+      invSub: partner
+        ? 'Generated from accepted quote Q-2026-118. Line items, pricing, and timeline carried over from the engagement — review, then send.'
+        : (paid ? 'Paid in full. Your receipt is below and downloadable as a PDF.' : 'Studio Kern has invoiced you for the Website Redesign engagement. Review the line items against your signed-off milestones before paying.'),
+
+      inv, statusStrip, sendChecks, receiptRows, afterPaid, payMethods,
+      actSend: partner && !sent,
+      actSent: partner && sent,
+      actPay: !partner && !paid,
+      actPaid: !partner && paid,
+      sentWhen:'Aug 11, 09:40',
+      sentNote:'Guillaume opened the invoice at 14:02 on Aug 11 and has not paid yet. Net 14 terms — due Aug 25.',
+      paidWhen:'Aug 12, 2026',
+      sendInvoice: () => this.setState({ sent:true }),
+      payInvoice: () => this.setState({ paid:true }),
+      resetInvoice: () => this.setState({ sent:false, paid:false }),
+    };
+  }
+}
+</script>
+</body>
+</html>

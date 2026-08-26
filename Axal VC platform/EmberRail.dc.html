@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="font-family:Inter,system-ui,sans-serif;color:#18181b">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e">Worker AI</span>
+    <span style="font-size:11px;color:#615c6e">›</span>
+  </div>
+
+  <div style="{{ inheritStyle }}">
+    <div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:{{ deep }}">Inherited from {{ page }}</div>
+    <div style="font-size:11.5px;color:#3f3a49;margin-top:6px;line-height:1.55">Mode and model are chosen on the workspace, not re-picked here — the choice belongs to the domain, not the depth.</div>
+  </div>
+
+  <div style="border:1px solid {{ edge }};background:{{ tint }};border-radius:9px;padding:10px 11px;margin-top:9px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span style="font-size:12px;font-weight:800;color:{{ deep }}">{{ modeLabel }}</span>
+      <span style="width:24px;height:14px;border-radius:999px;background:{{ fill }};position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#fff"></span></span>
+    </div>
+    <div style="font-size:10.5px;color:{{ deep }};margin-top:4px;line-height:1.45">Proposals stay accept / edit / discard at this depth, exactly as on the workspace.</div>
+  </div>
+
+  <div style="border:1px solid {{ edge }};background:{{ tint }};border-radius:9px;padding:10px 11px;margin-top:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+      <span style="font-size:12px;font-weight:800">{{ modelName }}</span>
+      <span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:{{ deep }};background:#fff;border:1px solid {{ edge }};border-radius:3px;padding:2px 5px;flex:none">INHERITED</span>
+    </div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">{{ modelId }}</div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:7px;line-height:1.5">{{ modelWhy }}</div>
+    <div style="font-size:10.5px;color:{{ deep }};font-weight:600;margin-top:8px;padding-top:7px;border-top:1px solid {{ edge }};line-height:1.5">Rates come from the {{ page }} curation. Change the model there and this page follows.</div>
+  </div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:16px">Batch on this page</div>
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+    <div style="font-size:11.5px;font-weight:700">{{ batchOp }}</div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.5">{{ batchNote }}</div>
+    <div style="font-size:10.5px;font-weight:700;color:{{ deep }};margin-top:8px;font-variant-numeric:tabular-nums">{{ batchCost }}</div>
+    <div style="font-size:10px;color:#615c6e;margin-top:7px;line-height:1.5">Estimated before it runs. Each item lands as its own proposal.</div>
+  </div>
+
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <span style="font-size:16px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ spend }}</span>
+      <span style="font-size:10.5px;color:#615c6e">of {{ plan }}</span>
+    </div>
+    <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:{{ pct }}%;background:{{ fill }};border-radius:999px"></div></div>
+    <div style="font-size:10px;color:#615c6e;margin-top:8px;line-height:1.5;font-variant-numeric:tabular-nums">{{ pageSpend }}</div>
+  </div>
+
+  <div style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5">
+    <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:3px;padding:2px 5px;flex:none;margin-top:1px">Screened</span>
+    <div style="font-size:10px;color:#615c6e;line-height:1.5">{{ safety }}</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;emerald&quot;,&quot;amber&quot;],&quot;default&quot;:&quot;emerald&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Practice&quot;,&quot;Cohorts&quot;,&quot;Expertise&quot;,&quot;Delivery&quot;,&quot;Pipeline&quot;,&quot;Analytics&quot;],&quot;default&quot;:&quot;Practice&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    // Emerald text token is 700 (600 fails AA on white); amber text token is 700 for the same
+    // reason. Fills keep 600. This mirrors the two products' own canvases.
+    const A = this.props.accent === 'amber'
+      ? { deep:'#b45309', fill:'#d97706', tint:'#fffbf2', edge:'#fde68a' }
+      : { deep:'#047857', fill:'#059669', tint:'#f2fdf7', edge:'#a7f3d0' };
+    const page = this.props.page || 'Practice';
+
+    const P = {
+      Practice:  { mode:'AI fills the blanks', name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+                   why:'Session prep and client deliverables — the work you sign your name to.',
+                   op:'Narrate the quarter', note:'Revenue by client and type, with anomalies named.',
+                   cost:'1 × the per-narrative rate', spend:'$8.61', pageLabel:'Earnings',
+                   safety:'Earnings are internal. Screening applies when a figure lands in a client-facing document.' },
+      Cohorts:   { mode:'AI fills the blanks', name:'Llama 3.1 8B Fast', id:'@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+                   why:'Fast and cheap, which is what makes prepping every slot viable.',
+                   op:'Prep-packs for 6 slots', note:'One per founder, from their week state and open threads.',
+                   cost:'6 × the per-pack rate', spend:'$1.90', pageLabel:'Guidance',
+                   safety:'Replies leave for a founder — every one screened before it sends.' },
+      Expertise: { mode:'AI fills the blanks', name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+                   why:'Long-form in your voice, drawn from how you actually explain things.',
+                   op:'Draft 1 case study', note:'From a completed engagement. Held until consent lands.',
+                   cost:'1 × the per-draft rate', spend:'$3.47', pageLabel:'Proof',
+                   safety:'Nothing publishes without the client\u2019s consent state reading granted.' },
+      Delivery:  { mode:'AI fills the blanks', name:'Llama 3.1 8B Fast', id:'@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+                   why:'Routine status writing at volume, which is what a weekly cadence is.',
+                   op:'Status reports × 5', note:'One per active engagement, from its own milestone rail.',
+                   cost:'5 × the per-report rate', spend:'$2.30', pageLabel:'Engagements',
+                   safety:'Status reports are client-facing. Screened before send, and the ledger records what went out.' },
+      Pipeline:  { mode:'AI fills the blanks', name:'GPT-OSS 20B', id:'@cf/openai/gpt-oss-20b',
+                   why:'High-volume proposal and outreach copy at commodity cost.',
+                   op:'Score 14 open leads', note:'Need against capability, each with its receipt.',
+                   cost:'14 × the per-score rate', spend:'$1.40', pageLabel:'Leads',
+                   safety:'Scoring is internal. The proposal drafted on accept is screened before it sends.' },
+      Analytics: { mode:'AI fills the blanks', name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct',
+                   why:'Polished narrative where the reader is deciding something.',
+                   op:'Narrate the quarter', note:'Win rate, cycle time and loss pattern, each figure sourced.',
+                   cost:'1 × the per-narrative rate', spend:'$0.90', pageLabel:'Analytics',
+                   safety:'Analytics stay internal until exported into a proposal or a partner review.' }
+    };
+    const p = P[page] || P.Practice;
+
+    return {
+      page, deep:A.deep, fill:A.fill, tint:A.tint, edge:A.edge,
+      inheritStyle:'background:#fbfbfc;border:1px dashed ' + A.edge + ';border-radius:9px;padding:10px 11px;margin-top:13px',
+      modeLabel:p.mode, modelName:p.name, modelId:p.id, modelWhy:p.why,
+      batchOp:p.op, batchNote:p.note, batchCost:p.cost,
+      spend:p.spend, plan:'$40.00',
+      pct:String(Math.round(parseFloat(p.spend.slice(1)) / 40 * 100)),
+      pageSpend:p.pageLabel + ' detail, this month · ' + p.spend,
+      safety:p.safety
+    };
+  }
+}
+</script>
+</body>
+</html>

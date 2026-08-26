@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .dr-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .dr-page{background:#f8f8fa;color:#18181b}
+    .dr-surface{background:#ffffff}
+    .dr-sunken{background:#faf9fc}
+    .dr-border{border-color:#e8e6ee}
+    .dr-bd-b{border-bottom-color:#e8e6ee}
+    .dr-bd-t{border-top-color:#e8e6ee}
+    .dr-bd-r{border-right-color:#e8e6ee}
+    .dr-text{color:#18181b}
+    .dr-muted{color:#71717a}
+    .dr-strong{color:#3f3f46}
+    .dr-field{background:#faf9fc;border-color:#e8e6ee;color:#18181b}
+
+    .dr-page.dr-dark{background:#0f0e13;color:#ececf1}
+    .dr-dark .dr-surface{background:#17161d}
+    .dr-dark .dr-sunken{background:#1d1b25}
+    .dr-dark .dr-border{border-color:#2a2833}
+    .dr-dark .dr-bd-b{border-bottom-color:#2a2833}
+    .dr-dark .dr-bd-t{border-top-color:#2a2833}
+    .dr-dark .dr-bd-r{border-right-color:#2a2833}
+    .dr-dark .dr-text{color:#ececf1}
+    .dr-dark .dr-muted{color:#9b96a8}
+    .dr-dark .dr-strong{color:#dcd9e4}
+    .dr-dark .dr-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+
+    .dr-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .dr-btn:hover{filter:brightness(1.06)}
+    .dr-seg{cursor:pointer;transition:background .13s,color .13s}
+    .dr-row{cursor:pointer;transition:background .12s}
+    .dr-row:hover{background:#faf9fc}
+    .dr-dark .dr-row:hover{background:#1d1b25}
+    .dr-fold{cursor:pointer;transition:background .12s}
+    .dr-fold:hover{background:#faf9fc}
+    .dr-dark .dr-fold:hover{background:#1d1b25}
+    .dr-fade{animation:drFade .2s ease}
+    @keyframes drFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    @keyframes drBar{from{width:0}}
+    input{font-family:inherit;outline:none}
+    input:focus{border-color:#7c3aed}
+    @media (max-width:960px){.dr-split{grid-template-columns:1fr!important}.dr-aside{display:none!important}}
+  </style>
+</helmet>
+
+<div class="dr-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="dr-surface dr-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:30">
+    <div style="max-width:1280px;margin:0 auto;padding:14px 26px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:11px;min-width:0">
+        <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+          <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ vaultIcon }}"></span>
+        </div>
+        <div style="min-width:0">
+          <div class="dr-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">NovaCraft AI · Data room</div>
+          <div class="dr-muted" style="font-size:11.5px;margin-top:1px">{{ chromeSub }}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+        <div class="dr-sunken dr-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid">
+          <sc-for list="{{ viewTabs }}" as="v" hint-placeholder-count="2">
+            <div class="dr-seg" onClick="{{ v.go }}" style="{{ v.style }}">{{ v.label }}</div>
+          </sc-for>
+        </div>
+        <div class="dr-btn dr-border dr-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+          <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+          {{ themeLabel }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVESTOR IDENTITY BAR -->
+  <sc-if value="{{ isInvestor }}">
+    <div class="dr-surface dr-bd-b" style="border-bottom-width:1px;border-bottom-style:solid">
+      <div style="max-width:1280px;margin:0 auto;padding:12px 26px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="{{ viewerAv }}">MA</div>
+        <div style="min-width:0;flex:1">
+          <div class="dr-strong" style="font-size:13px;font-weight:700">Viewing as Marguerite Aubry · Stellar Point Ventures</div>
+          <div class="dr-muted" style="font-size:11.5px;margin-top:1px">{{ viewerAccessNote }}</div>
+        </div>
+        <span style="{{ ndaChip }}">{{ ndaChipLabel }}</span>
+        <sc-if value="{{ ndaSigned }}">
+          <div class="dr-btn dr-border dr-muted" onClick="{{ resetNda }}" style="padding:7px 13px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;flex:none">Reset NDA state</div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="max-width:1280px;margin:0 auto;padding:24px 26px 90px">
+
+    <!-- ======================= FOUNDER VIEW ======================= -->
+    <sc-if value="{{ isFounder }}">
+    <div class="dr-fade">
+
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="dr-text" style="font-size:22px;font-weight:800;letter-spacing:-.025em">Diligence materials</div>
+          <div class="dr-muted" style="font-size:13.5px;margin-top:5px;max-width:560px;line-height:1.6">You control who sees each folder and which files require a signed NDA first. Access is tied to investors already on this raise — nothing is public, and nothing is shared by link.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+          <div class="dr-btn dr-border dr-muted" onClick="{{ toggleAudit }}" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent">{{ auditLabel }}</div>
+          <div class="dr-btn" onClick="{{ startUpload }}" style="padding:9px 17px;border-radius:9px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px">
+            <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ uploadIcon }}"></span>
+            Upload files
+          </div>
+        </div>
+      </div>
+
+      <!-- STAT STRIP -->
+      <div class="dr-border" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#e8e6ee;border-width:1px;border-style:solid;border-radius:14px;overflow:hidden">
+        <sc-for list="{{ founderStats }}" as="s" hint-placeholder-count="4">
+          <div class="dr-surface" style="padding:15px 18px">
+            <div class="dr-num dr-text" style="font-size:19px;font-weight:800;letter-spacing:-.02em">{{ s.v }}</div>
+            <div class="dr-muted" style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;margin-top:4px">{{ s.k }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- UPLOAD DROPZONE -->
+      <sc-if value="{{ uploading }}">
+        <div class="dr-surface dr-border dr-fade" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px;margin-top:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="width:34px;height:34px;border-radius:11px;background:rgba(124,58,237,.11);color:#7c3aed;display:flex;align-items:center;justify-content:center;flex:none">
+              <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ uploadIcon }}"></span>
+            </div>
+            <div style="min-width:0;flex:1">
+              <div class="dr-strong" style="font-size:13.5px;font-weight:700">Uploading 3 files to Financials</div>
+              <div class="dr-muted" style="font-size:11.5px;margin-top:1px">Encrypted in transit and at rest · visible only to investors you grant access</div>
+            </div>
+            <div class="dr-btn dr-muted" onClick="{{ cancelUpload }}" style="font-size:12px;font-weight:600;flex:none">Cancel</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0;margin-top:14px">
+            <sc-for list="{{ uploadQueue }}" as="u" hint-placeholder-count="3">
+              <div class="dr-bd-t" style="padding:11px 0;border-top-width:1px;border-top-style:solid">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span class="dr-muted" style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ u.icon }}"></span>
+                  <div class="dr-strong" style="font-size:12.5px;font-weight:600;min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.name }}</div>
+                  <div class="dr-num dr-muted" style="font-size:11px;flex:none">{{ u.size }}</div>
+                  <div class="dr-num" style="font-size:11px;font-weight:700;flex:none;width:42px;text-align:right;color:{{ u.tone }}">{{ u.pctLabel }}</div>
+                </div>
+                <div class="dr-sunken" style="height:4px;border-radius:99px;overflow:hidden;margin-top:8px">
+                  <div style="{{ u.barStyle }}"></div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ !uploading }}">
+        <div class="dr-border" onClick="{{ startUpload }}" style="border-width:1px;border-style:dashed;border-radius:16px;padding:22px 24px;margin-top:16px;display:flex;align-items:center;gap:13px;cursor:pointer">
+          <div class="dr-sunken dr-muted" style="width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ uploadIcon }}"></span>
+          </div>
+          <div style="min-width:0">
+            <div class="dr-strong" style="font-size:13.5px;font-weight:700">Drag files here, or click to browse</div>
+            <div class="dr-muted" style="font-size:12px;margin-top:2px">PDF, XLSX, DOCX, PNG · up to 250 MB per file</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- BROWSER -->
+      <div class="dr-split" style="display:grid;grid-template-columns:1fr 320px;gap:18px;align-items:start;margin-top:18px">
+
+        <div class="dr-surface dr-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="dr-sunken dr-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div class="dr-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Folders</div>
+            <div class="dr-btn dr-muted" style="font-size:11.5px;font-weight:600">+ New folder</div>
+          </div>
+
+          <sc-for list="{{ folders }}" as="f" hint-placeholder-count="5">
+            <div class="dr-bd-b" style="border-bottom-width:1px;border-bottom-style:solid">
+              <!-- folder header -->
+              <div class="dr-fold" data-fold="{{ f.k }}" onClick="{{ toggleFolder }}" style="display:flex;align-items:center;gap:12px;padding:14px 20px">
+                <span class="dr-muted" style="width:13px;height:13px;display:flex;flex:none;transform:{{ f.caretRot }};transition:transform .15s" dangerouslySetInnerHTML="{{ caretIcon }}"></span>
+                <span style="{{ f.iconWrap }}">
+                  <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ folderIcon }}"></span>
+                </span>
+                <div style="min-width:0;flex:1">
+                  <div class="dr-text" style="font-size:13.5px;font-weight:700">{{ f.name }}</div>
+                  <div class="dr-muted" style="font-size:11.5px;margin-top:1px">{{ f.meta }}</div>
+                </div>
+                <span style="{{ f.accessChip }}">{{ f.access }}</span>
+                <sc-if value="{{ f.ndaOn }}">
+                  <span style="{{ ndaTag }}">
+                    <span style="width:10px;height:10px;display:flex" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+                    NDA
+                  </span>
+                </sc-if>
+              </div>
+
+              <!-- files -->
+              <sc-if value="{{ f.open }}">
+                <div class="dr-sunken dr-fade">
+                  <sc-for list="{{ f.files }}" as="fi" hint-placeholder-count="3">
+                    <div class="dr-row dr-bd-t" data-file="{{ fi.k }}" onClick="{{ selectFile }}" style="display:flex;align-items:center;gap:12px;padding:11px 20px 11px 46px;border-top-width:1px;border-top-style:solid;background:{{ fi.selBg }}">
+                      <span style="width:15px;height:15px;display:flex;flex:none;color:{{ fi.iconTone }}" dangerouslySetInnerHTML="{{ fi.icon }}"></span>
+                      <div style="min-width:0;flex:1">
+                        <div class="dr-strong" style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ fi.name }}</div>
+                        <div class="dr-muted" style="font-size:11px;margin-top:1px">{{ fi.meta }}</div>
+                      </div>
+                      <sc-if value="{{ fi.ndaOn }}">
+                        <span style="{{ ndaTag }}">
+                          <span style="width:10px;height:10px;display:flex" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+                          NDA
+                        </span>
+                      </sc-if>
+                      <div class="dr-num dr-muted" style="font-size:11px;flex:none;width:52px;text-align:right">{{ fi.size }}</div>
+                      <div class="dr-muted" style="font-size:11px;flex:none;width:58px;text-align:right">{{ fi.views }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- CONTROL RAIL -->
+        <div class="dr-aside" style="display:flex;flex-direction:column;gap:14px">
+          <div class="dr-surface dr-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+            <div class="dr-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">{{ selScope }}</div>
+            <div class="dr-text" style="font-size:15px;font-weight:800;letter-spacing:-.018em;margin-top:8px">{{ sel.name }}</div>
+            <div class="dr-muted" style="font-size:11.5px;margin-top:3px">{{ sel.meta }}</div>
+
+            <div class="dr-bd-t" style="margin-top:16px;padding-top:15px;border-top-width:1px;border-top-style:solid">
+              <div class="dr-strong" style="font-size:12px;font-weight:700">Who can see this</div>
+              <div style="display:flex;flex-direction:column;gap:7px;margin-top:10px">
+                <sc-for list="{{ accessOptions }}" as="a" hint-placeholder-count="3">
+                  <div class="dr-btn" onClick="{{ a.go }}" style="{{ a.style }}">
+                    <div style="min-width:0;flex:1">
+                      <div style="font-size:12.5px;font-weight:{{ a.weight }}">{{ a.label }}</div>
+                      <div class="dr-muted" style="font-size:11px;margin-top:2px;line-height:1.45">{{ a.note }}</div>
+                    </div>
+                    <sc-if value="{{ a.on }}">
+                      <span style="width:14px;height:14px;display:flex;flex:none;color:#7c3aed;margin-top:2px" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div class="dr-bd-t" style="margin-top:16px;padding-top:15px;border-top-width:1px;border-top-style:solid;display:flex;align-items:flex-start;gap:12px">
+              <div style="min-width:0;flex:1">
+                <div class="dr-strong" style="font-size:12px;font-weight:700">Require signed NDA</div>
+                <div class="dr-muted" style="font-size:11px;line-height:1.5;margin-top:3px">Viewer must execute the mutual NDA before this {{ selNoun }} unlocks.</div>
+              </div>
+              <div class="dr-btn" onClick="{{ toggleNdaOnSel }}" style="{{ ndaTrackStyle }}"><div style="{{ ndaKnobStyle }}"></div></div>
+            </div>
+
+            <div class="dr-bd-t" style="margin-top:16px;padding-top:15px;border-top-width:1px;border-top-style:solid">
+              <div class="dr-strong" style="font-size:12px;font-weight:700">With access now</div>
+              <div style="display:flex;flex-direction:column;gap:0;margin-top:8px">
+                <sc-for list="{{ selViewers }}" as="v" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:9px;padding:8px 0">
+                    <div style="{{ v.avStyle }}">{{ v.initials }}</div>
+                    <div style="min-width:0;flex:1">
+                      <div class="dr-strong" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.name }}</div>
+                      <div class="dr-muted" style="font-size:10.5px;margin-top:1px">{{ v.firm }}</div>
+                    </div>
+                    <span style="{{ v.chip }}">{{ v.state }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ selNoViewers }}">
+                <div class="dr-muted" style="font-size:11.5px;line-height:1.55;margin-top:6px">No investor can currently open this — visibility is set to you only.</div>
+              </sc-if>
+            </div>
+          </div>
+
+          <div class="dr-sunken dr-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:18px 20px;display:flex;gap:11px;align-items:flex-start">
+            <span class="dr-muted" style="width:15px;height:15px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ shieldIcon }}"></span>
+            <div class="dr-muted" style="font-size:11.5px;line-height:1.6">Files are watermarked with the viewer's name on download. Access revokes instantly when you change these settings — including for anyone with the file already open.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIVITY LOG -->
+      <sc-if value="{{ auditOpen }}">
+        <div class="dr-surface dr-border dr-fade" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:18px;overflow:hidden">
+          <div class="dr-sunken dr-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div class="dr-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Activity log</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <sc-for list="{{ auditFilters }}" as="af" hint-placeholder-count="4">
+                <div class="dr-seg" onClick="{{ af.go }}" style="{{ af.style }}">{{ af.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ auditRows }}" as="a" hint-placeholder-count="6">
+            <div class="dr-bd-b" style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom-width:1px;border-bottom-style:solid">
+              <div style="{{ a.avStyle }}">{{ a.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="dr-strong" style="font-size:12.5px;line-height:1.5">
+                  <strong style="font-weight:700">{{ a.who }}</strong> {{ a.verb }} <strong style="font-weight:700">{{ a.what }}</strong>
+                </div>
+                <div class="dr-muted" style="font-size:11px;margin-top:2px">{{ a.firm }} · {{ a.folder }}</div>
+              </div>
+              <span style="{{ a.chip }}">{{ a.action }}</span>
+              <div class="dr-num dr-muted" style="font-size:11px;flex:none;width:96px;text-align:right">{{ a.when }}</div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ auditEmpty }}">
+            <div style="padding:34px 20px;text-align:center">
+              <div class="dr-strong" style="font-size:13px;font-weight:700">No activity of this kind yet</div>
+              <div class="dr-muted" style="font-size:12px;margin-top:5px">Events appear here the moment an investor opens or downloads a file.</div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <!-- ======================= INVESTOR VIEW ======================= -->
+    <sc-if value="{{ isInvestor }}">
+    <div class="dr-fade">
+
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="dr-text" style="font-size:22px;font-weight:800;letter-spacing:-.025em">NovaCraft AI — diligence materials</div>
+          <div class="dr-muted" style="font-size:13.5px;margin-top:5px;max-width:560px;line-height:1.6">{{ investorSub }}</div>
+        </div>
+      </div>
+
+      <!-- NDA BANNER -->
+      <sc-if value="{{ !ndaSigned }}">
+        <div class="dr-surface dr-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 26px;margin-bottom:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="width:40px;height:40px;border-radius:12px;background:rgba(124,58,237,.11);color:#7c3aed;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:19px;height:19px;display:flex" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div class="dr-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.018em">{{ lockedCount }} of {{ totalCount }} files require a signed NDA</div>
+            <div class="dr-muted" style="font-size:12.5px;line-height:1.6;margin-top:5px;max-width:520px">Sign the mutual NDA once and every protected file unlocks immediately. Standard 3-year term, executed through Axal VC — takes about a minute.</div>
+          </div>
+          <div class="dr-btn" onClick="{{ signNda }}" style="flex:none;padding:12px 20px;border-radius:11px;background:#7c3aed;color:#fff;font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:9px">
+            <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ penIcon }}"></span>
+            Sign NDA to unlock
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ ndaSigned }}">
+        <div class="dr-surface dr-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:16px 22px;margin-bottom:18px;display:flex;align-items:center;gap:13px;flex-wrap:wrap">
+          <div style="width:32px;height:32px;border-radius:10px;background:rgba(21,128,61,.11);color:#15803d;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div class="dr-strong" style="font-size:13.5px;font-weight:700">Mutual NDA executed · Aug 13, 2026</div>
+            <div class="dr-muted" style="font-size:11.5px;margin-top:2px">All protected files are unlocked for you. Downloads are watermarked with your name.</div>
+          </div>
+          <div class="dr-btn dr-border dr-strong" style="flex:none;padding:8px 14px;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600;background:transparent">View executed NDA</div>
+        </div>
+      </sc-if>
+
+      <div class="dr-split" style="display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start">
+
+        <div class="dr-surface dr-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="dr-sunken dr-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div class="dr-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Shared with you</div>
+            <div class="dr-muted" style="font-size:11px">{{ visibleNote }}</div>
+          </div>
+
+          <sc-for list="{{ invFolders }}" as="f" hint-placeholder-count="4">
+            <div class="dr-bd-b" style="border-bottom-width:1px;border-bottom-style:solid">
+              <div class="dr-fold" data-fold="{{ f.k }}" onClick="{{ toggleFolder }}" style="display:flex;align-items:center;gap:12px;padding:14px 20px">
+                <span class="dr-muted" style="width:13px;height:13px;display:flex;flex:none;transform:{{ f.caretRot }};transition:transform .15s" dangerouslySetInnerHTML="{{ caretIcon }}"></span>
+                <span style="{{ f.iconWrap }}">
+                  <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ folderIcon }}"></span>
+                </span>
+                <div style="min-width:0;flex:1">
+                  <div class="dr-text" style="font-size:13.5px;font-weight:700">{{ f.name }}</div>
+                  <div class="dr-muted" style="font-size:11.5px;margin-top:1px">{{ f.invMeta }}</div>
+                </div>
+                <sc-if value="{{ f.showLock }}">
+                  <span style="{{ ndaTag }}">
+                    <span style="width:10px;height:10px;display:flex" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+                    Locked
+                  </span>
+                </sc-if>
+              </div>
+
+              <sc-if value="{{ f.open }}">
+                <div class="dr-sunken dr-fade">
+                  <sc-for list="{{ f.invFiles }}" as="fi" hint-placeholder-count="3">
+                    <!-- unlocked -->
+                    <sc-if value="{{ fi.unlocked }}">
+                      <div class="dr-row dr-bd-t" data-file="{{ fi.k }}" onClick="{{ selectFile }}" style="display:flex;align-items:center;gap:12px;padding:11px 20px 11px 46px;border-top-width:1px;border-top-style:solid;background:{{ fi.selBg }}">
+                        <span style="width:15px;height:15px;display:flex;flex:none;color:{{ fi.iconTone }}" dangerouslySetInnerHTML="{{ fi.icon }}"></span>
+                        <div style="min-width:0;flex:1">
+                          <div class="dr-strong" style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ fi.name }}</div>
+                          <div class="dr-muted" style="font-size:11px;margin-top:1px">{{ fi.meta }}</div>
+                        </div>
+                        <div class="dr-num dr-muted" style="font-size:11px;flex:none;width:52px;text-align:right">{{ fi.size }}</div>
+                        <span class="dr-muted" style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ downloadIcon }}"></span>
+                      </div>
+                    </sc-if>
+                    <!-- locked -->
+                    <sc-if value="{{ fi.locked }}">
+                      <div class="dr-bd-t" style="display:flex;align-items:center;gap:12px;padding:11px 20px 11px 46px;border-top-width:1px;border-top-style:solid;opacity:.72">
+                        <span class="dr-muted" style="width:15px;height:15px;display:flex;flex:none" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+                        <div style="min-width:0;flex:1">
+                          <div class="dr-strong" style="font-size:12.5px;font-weight:600">{{ fi.name }}</div>
+                          <div class="dr-muted" style="font-size:11px;margin-top:1px">Requires a signed NDA</div>
+                        </div>
+                        <div class="dr-btn" onClick="{{ signNda }}" style="flex:none;padding:6px 13px;border-radius:8px;background:rgba(124,58,237,.11);color:#7c3aed;font-size:11.5px;font-weight:700">Sign NDA to unlock</div>
+                      </div>
+                    </sc-if>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- PREVIEW RAIL -->
+        <div class="dr-aside" style="display:flex;flex-direction:column;gap:14px">
+          <div class="dr-surface dr-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+            <div class="dr-sunken dr-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 18px">
+              <div class="dr-muted" style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em">Preview</div>
+            </div>
+
+            <sc-if value="{{ previewLocked }}">
+              <div style="padding:40px 22px;text-align:center">
+                <div class="dr-sunken dr-muted" style="width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;margin:0 auto">
+                  <span style="width:20px;height:20px;display:flex" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+                </div>
+                <div class="dr-text" style="font-size:14px;font-weight:800;margin-top:14px">Sign the NDA to preview</div>
+                <div class="dr-muted" style="font-size:12px;line-height:1.6;margin-top:6px">Protected files stay sealed until the mutual NDA is executed.</div>
+                <div class="dr-btn" onClick="{{ signNda }}" style="margin-top:15px;padding:10px 18px;border-radius:10px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700;display:inline-block">Sign NDA</div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ previewNone }}">
+              <div style="padding:40px 22px;text-align:center">
+                <div class="dr-sunken dr-muted" style="width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;margin:0 auto">
+                  <span style="width:20px;height:20px;display:flex" dangerouslySetInnerHTML="{{ fileIcon }}"></span>
+                </div>
+                <div class="dr-text" style="font-size:14px;font-weight:800;margin-top:14px">Select a file</div>
+                <div class="dr-muted" style="font-size:12px;line-height:1.6;margin-top:6px">PDFs and images preview here. Other formats download directly.</div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ previewDoc }}">
+              <div class="dr-fade">
+                <div style="padding:16px 18px 0">
+                  <div class="dr-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.01em">{{ sel.name }}</div>
+                  <div class="dr-muted" style="font-size:11.5px;margin-top:3px">{{ sel.meta }} · {{ sel.size }}</div>
+                </div>
+                <div class="dr-sunken dr-border" style="margin:14px 18px;border-radius:11px;border-width:1px;border-style:solid;padding:22px 20px;position:relative;overflow:hidden">
+                  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+                    <div class="dr-muted" style="font-size:15px;font-weight:800;opacity:.13;transform:rotate(-24deg);white-space:nowrap;letter-spacing:.04em">M. AUBRY · STELLAR POINT</div>
+                  </div>
+                  <div style="position:relative">
+                    <div class="dr-strong" style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;text-align:center">{{ preview.title }}</div>
+                    <div class="dr-muted" style="font-size:9.5px;text-align:center;margin-top:4px">{{ preview.sub }}</div>
+                    <div style="display:flex;flex-direction:column;gap:0;margin-top:14px">
+                      <sc-for list="{{ preview.rows }}" as="pr" hint-placeholder-count="5">
+                        <div class="dr-bd-t" style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top-width:1px;border-top-style:solid">
+                          <div class="dr-muted" style="font-size:10.5px">{{ pr.k }}</div>
+                          <div class="dr-num dr-strong" style="font-size:10.5px;font-weight:700">{{ pr.v }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+                <div style="padding:0 18px 18px">
+                  <div class="dr-btn" style="padding:11px 0;border-radius:10px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px">
+                    <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ downloadIcon }}"></span>
+                    Download
+                  </div>
+                  <div class="dr-muted" style="font-size:10.5px;line-height:1.55;margin-top:9px;text-align:center">Watermarked with your name. This download is logged for the founder.</div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div class="dr-sunken dr-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:18px 20px;display:flex;gap:11px;align-items:flex-start">
+            <span class="dr-muted" style="width:15px;height:15px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ shieldIcon }}"></span>
+            <div class="dr-muted" style="font-size:11.5px;line-height:1.6">Material here is confidential and shared for the purpose of evaluating this financing only. Your views and downloads are visible to the founder.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+  </div>
+
+  <!-- NDA MODAL -->
+  <sc-if value="{{ ndaModal }}">
+    <div onClick="{{ closeNda }}" style="position:fixed;inset:0;z-index:900;background:rgba(15,14,19,.5);display:flex;align-items:center;justify-content:center;padding:24px">
+      <div class="dr-surface" onClick="{{ stop }}" style="width:100%;max-width:470px;border-radius:18px;padding:28px 30px;box-shadow:0 24px 70px rgba(15,14,19,.32)">
+        <div style="width:38px;height:38px;border-radius:12px;background:rgba(124,58,237,.11);color:#7c3aed;display:flex;align-items:center;justify-content:center">
+          <span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ penIcon }}"></span>
+        </div>
+        <div class="dr-text" style="font-size:17px;font-weight:800;letter-spacing:-.022em;margin-top:14px">Mutual non-disclosure agreement</div>
+        <div class="dr-muted" style="font-size:12.5px;line-height:1.62;margin-top:7px">Between Stellar Point Ventures SCSp and NovaCraft AI, Inc. Covers all material in this data room for the purpose of evaluating the current financing.</div>
+        <div class="dr-sunken dr-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:14px 16px;margin-top:16px">
+          <sc-for list="{{ ndaTerms }}" as="t" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0">
+              <div class="dr-muted" style="font-size:11.5px">{{ t.k }}</div>
+              <div class="dr-strong" style="font-size:11.5px;font-weight:600;text-align:right">{{ t.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:15px">
+          <div class="dr-strong" style="font-size:11.5px;font-weight:600;margin-bottom:6px">Type your full name to sign</div>
+          <input class="dr-field" value="{{ ndaName }}" onChange="{{ setNdaName }}" placeholder="Marguerite Aubry" style="width:100%;box-sizing:border-box;padding:11px 13px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+        </div>
+        <div class="dr-btn" onClick="{{ executeNda }}" style="{{ ndaSignStyle }}">Sign and unlock</div>
+        <div class="dr-muted" style="font-size:11px;line-height:1.55;margin-top:11px;text-align:center">Executed through Axal VC e-sign · timestamped with an audit trail · countersigned copy emailed to both parties.</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280}}">
+class Component extends DCLogic {
+  state = { theme:'light', view:'founder', open:{ fin:true, legal:false, prod:false, team:false },
+    selKind:'folder', selKey:'fin', auditOpen:true, auditFilter:'All',
+    uploading:false, ndaSigned:false, ndaModal:false, ndaName:'',
+    overrides:{}, invSel:null };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+
+    const I = {
+      vault:    this.ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="4"/><path d="M12 8v1M12 15v1M8 12h1M15 12h1"/>'),
+      folder:   this.ic('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+      caret:    this.ic('<path d="m9 6 6 6-6 6"/>', 2.2),
+      lock:     this.ic('<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+      check:    this.ic('<path d="M20 6 9 17l-5-5"/>', 2.4),
+      upload:   this.ic('<path d="M12 17V5"/><path d="m7 10 5-5 5 5"/><path d="M4 21h16"/>'),
+      download: this.ic('<path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/>'),
+      shield:   this.ic('<path d="M12 3 4 6v6c0 4.5 3.2 8.5 8 9.6 4.8-1.1 8-5.1 8-9.6V6z"/><path d="m9 12 2 2 4-4"/>'),
+      pen:      this.ic('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+      file:     this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      sheet:    this.ic('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>'),
+      image:    this.ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="m21 15-5-5L5 21"/>'),
+      slides:   this.ic('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8"/>'),
+      sun:      this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon:     this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const chipGreen = chip('rgba(21,128,61,.11)', dark ? '#6ee7b7' : '#15803d');
+    const chipViolet = chip('rgba(124,58,237,.11)', dark ? '#c4b5fd' : V7);
+    const chipAmber = chip('rgba(180,83,9,.11)', dark ? '#fcd34d' : '#b45309');
+    const chipGrey = chip(dark ? '#2a2833' : '#f1f0f5', dark ? '#9b96a8' : '#71717a');
+    const ndaTag = chip('rgba(124,58,237,.11)', dark ? '#c4b5fd' : V7);
+
+    const seg = (on) => 'padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? (dark ? '#c4b5fd' : V7) : (dark ? '#9b96a8' : '#71717a'))
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none');
+    const segSm = (on) => 'padding:5px 11px;border-radius:7px;font-size:11px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? 'rgba(124,58,237,.1)' : 'transparent')
+      +';color:'+(on ? (dark ? '#c4b5fd' : V7) : (dark ? '#9b96a8' : '#71717a'));
+    const av = (bg, sz) => 'width:'+(sz||28)+'px;height:'+(sz||28)+'px;border-radius:9px;background:'+bg+';color:#fff;font-size:'+(sz===34?'12px':'10.5px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const iconWrap = (c) => 'width:30px;height:30px;border-radius:9px;background:'+c+'1c;color:'+c+';display:flex;align-items:center;justify-content:center;flex:none';
+
+    const fIcon = (t) => t === 'sheet' ? I.sheet : t === 'image' ? I.image : t === 'slides' ? I.slides : I.file;
+    const fTone = (t) => t === 'sheet' ? '#15803d' : t === 'image' ? '#b45309' : t === 'slides' ? '#1d4ed8' : (dark ? '#9b96a8' : '#71717a');
+
+    // ---------- data ----------
+    const FOLDERS = [
+      { k:'fin', name:'Financials', color:'#15803d', access:'Committed', nda:true,
+        files:[
+          { k:'f1', name:'Financial model — 3yr projection.xlsx', type:'sheet', size:'2.4 MB', when:'Aug 9', by:'Guillaume', views:'6 views' },
+          { k:'f2', name:'Monthly P&L — Jan–Jul 2026.xlsx', type:'sheet', size:'840 KB', when:'Aug 9', by:'Guillaume', views:'4 views' },
+          { k:'f3', name:'Revenue proof — Stripe export.pdf', type:'pdf', size:'318 KB', when:'Aug 6', by:'Guillaume', views:'5 views' },
+          { k:'f4', name:'Burn and runway analysis.pdf', type:'pdf', size:'412 KB', when:'Aug 2', by:'Guillaume', views:'3 views' },
+        ] },
+      { k:'legal', name:'Legal', color:'#7c3aed', access:'Committed', nda:true,
+        files:[
+          { k:'l1', name:'Certificate of Incorporation — Delaware.pdf', type:'pdf', size:'186 KB', when:'Jul 28', by:'Guillaume', views:'4 views' },
+          { k:'l2', name:'Cap table — fully diluted.xlsx', type:'sheet', size:'96 KB', when:'Aug 11', by:'Guillaume', views:'7 views' },
+          { k:'l3', name:'83(b) elections — filed and acknowledged.pdf', type:'pdf', size:'244 KB', when:'Jul 30', by:'Guillaume', views:'2 views' },
+          { k:'l4', name:'Co-founder agreement — executed.pdf', type:'pdf', size:'508 KB', when:'Jul 22', by:'Guillaume', views:'3 views' },
+          { k:'l5', name:'IP assignment agreements.pdf', type:'pdf', size:'332 KB', when:'Jul 22', by:'Guillaume', views:'1 view' },
+        ] },
+      { k:'prod', name:'Product', color:'#1d4ed8', access:'Invited', nda:false,
+        files:[
+          { k:'p1', name:'Product overview — Aug 2026.pdf', type:'pdf', size:'4.1 MB', when:'Aug 10', by:'Guillaume', views:'11 views' },
+          { k:'p2', name:'Architecture diagram.png', type:'image', size:'1.2 MB', when:'Aug 4', by:'Guillaume', views:'6 views' },
+          { k:'p3', name:'Roadmap — next four quarters.pdf', type:'pdf', size:'620 KB', when:'Aug 7', by:'Guillaume', views:'8 views' },
+        ] },
+      { k:'team', name:'Team', color:'#b45309', access:'Invited', nda:false,
+        files:[
+          { k:'t1', name:'Founder bios and backgrounds.pdf', type:'pdf', size:'298 KB', when:'Jul 19', by:'Guillaume', views:'9 views' },
+          { k:'t2', name:'Org chart and hiring plan.pdf', type:'pdf', size:'174 KB', when:'Aug 1', by:'Guillaume', views:'5 views' },
+        ] },
+    ];
+
+    const ACCESS_OF = (k, d) => st.overrides[k+':access'] !== undefined ? st.overrides[k+':access'] : d;
+    const NDA_OF = (k, d) => st.overrides[k+':nda'] !== undefined ? st.overrides[k+':nda'] : d;
+
+    const INVESTORS = [
+      { k:'ma', name:'Marguerite Aubry', firm:'Stellar Point Ventures', initials:'MA', bg:'#1d4ed8', state:'Committed', tier:2 },
+      { k:'dr', name:'David Reyes', firm:'Angel · fintech infra', initials:'DR', bg:'#0f766e', state:'Committed', tier:2 },
+      { k:'sm', name:'Sofia Marchetti', firm:'Marchetti Family Office', initials:'SM', bg:'#b45309', state:'Invited', tier:1 },
+      { k:'th', name:'Thomas Herz', firm:'Kestrel Capital', initials:'TH', bg:'#be185d', state:'Invited', tier:1 },
+    ];
+    const TIER_OF = { 'Everyone invited':1, 'Committed only':2, 'Private to you':3 };
+
+    // ---------- founder folder rows ----------
+    const totalFiles = FOLDERS.reduce((a,f) => a + f.files.length, 0);
+    const ndaFileCount = FOLDERS.reduce((a,f) => a + f.files.filter(fi => NDA_OF(fi.k, f.nda)).length, 0);
+
+    const folders = FOLDERS.map(f => {
+      const acc = ACCESS_OF(f.k, f.access === 'Committed' ? 'Committed only' : 'Everyone invited');
+      const nda = NDA_OF(f.k, f.nda);
+      const open = !!st.open[f.k];
+      return {
+        k:f.k, name:f.name, open,
+        caretRot: open ? 'rotate(90deg)' : 'none',
+        iconWrap: iconWrap(f.color),
+        meta: f.files.length + ' files · updated ' + f.files[0].when,
+        access: acc, ndaOn: nda,
+        accessChip: acc === 'Committed only' ? chipViolet : acc === 'Private to you' ? chipGrey : chipGreen,
+        files: f.files.map(fi => ({
+          k:fi.k, name:fi.name, size:fi.size, views:fi.views,
+          meta:'Added ' + fi.when + ' by ' + fi.by,
+          icon: fIcon(fi.type), iconTone: fTone(fi.type),
+          ndaOn: NDA_OF(fi.k, nda),
+          selBg: (st.selKind === 'file' && st.selKey === fi.k) ? (dark ? '#241f38' : '#f4f0fe') : 'transparent',
+        })),
+      };
+    });
+
+    // ---------- selection ----------
+    const selFolder = FOLDERS.find(f => f.k === st.selKey);
+    let selRaw, selParent;
+    if (st.selKind === 'folder') { selRaw = selFolder; }
+    else {
+      FOLDERS.forEach(f => { const hit = f.files.find(x => x.k === st.selKey); if (hit) { selRaw = hit; selParent = f; } });
+    }
+    if (!selRaw) { selRaw = FOLDERS[0]; }
+
+    const isFolderSel = st.selKind === 'folder';
+    const defAccess = isFolderSel
+      ? (selRaw.access === 'Committed' ? 'Committed only' : 'Everyone invited')
+      : ACCESS_OF(selParent.k, selParent.access === 'Committed' ? 'Committed only' : 'Everyone invited');
+    const curAccess = ACCESS_OF(selRaw.k, defAccess);
+    const curNda = NDA_OF(selRaw.k, isFolderSel ? selRaw.nda : NDA_OF(selParent.k, selParent.nda));
+
+    const sel = {
+      name: selRaw.name,
+      meta: isFolderSel
+        ? selRaw.files.length + ' files · ' + selRaw.files.reduce((a,x) => a + parseFloat(x.size), 0).toFixed(1) + ' units total'
+        : selRaw.size + ' · added ' + selRaw.when + ' by ' + selRaw.by,
+      size: isFolderSel ? '' : selRaw.size,
+    };
+
+    const ACCESS_OPTS = [
+      { l:'Everyone invited', n:'All 4 investors on this raise, invited or committed' },
+      { l:'Committed only', n:'Only the 2 investors who have committed' },
+      { l:'Private to you', n:'Hidden from every investor until you change this' },
+    ];
+    const accessOptions = ACCESS_OPTS.map(o => {
+      const on = curAccess === o.l;
+      return { label:o.l, note:o.n, on, weight: on ? '700' : '600',
+        go: () => this.setState(s => ({ overrides: Object.assign({}, s.overrides, { [selRaw.k+':access']: o.l }) })),
+        style:'display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;border-width:1px;border-style:solid;text-align:left;'
+          + 'border-color:'+(on ? V : (dark ? '#2a2833' : '#e8e6ee'))
+          + ';background:'+(on ? 'rgba(124,58,237,.06)' : 'transparent')
+          + ';color:'+(on ? (dark ? '#c4b5fd' : V7) : (dark ? '#dcd9e4' : '#3f3f46')),
+      };
+    });
+
+    const selTier = TIER_OF[curAccess];
+    const selViewers = selTier === 3 ? [] : INVESTORS.filter(i => i.tier >= selTier).map(i => ({
+      name:i.name, firm:i.firm, initials:i.initials, avStyle:av(i.bg),
+      state:i.state, chip: i.state === 'Committed' ? chipGreen : chipGrey,
+    }));
+
+    // ---------- audit ----------
+    const AUDIT = [
+      { who:'Marguerite Aubry', firm:'Stellar Point Ventures', initials:'MA', bg:'#1d4ed8', verb:'downloaded', what:'Cap table — fully diluted.xlsx', folder:'Legal', action:'Download', when:'Today, 14:22' },
+      { who:'Marguerite Aubry', firm:'Stellar Point Ventures', initials:'MA', bg:'#1d4ed8', verb:'viewed', what:'Financial model — 3yr projection.xlsx', folder:'Financials', action:'View', when:'Today, 14:09' },
+      { who:'David Reyes', firm:'Angel · fintech infra', initials:'DR', bg:'#0f766e', verb:'signed the mutual NDA', what:'', folder:'Data room', action:'NDA', when:'Today, 11:47' },
+      { who:'David Reyes', firm:'Angel · fintech infra', initials:'DR', bg:'#0f766e', verb:'viewed', what:'Revenue proof — Stripe export.pdf', folder:'Financials', action:'View', when:'Today, 11:52' },
+      { who:'Sofia Marchetti', firm:'Marchetti Family Office', initials:'SM', bg:'#b45309', verb:'viewed', what:'Product overview — Aug 2026.pdf', folder:'Product', action:'View', when:'Yesterday, 17:30' },
+      { who:'Thomas Herz', firm:'Kestrel Capital', initials:'TH', bg:'#be185d', verb:'downloaded', what:'Founder bios and backgrounds.pdf', folder:'Team', action:'Download', when:'Yesterday, 09:14' },
+      { who:'Sofia Marchetti', firm:'Marchetti Family Office', initials:'SM', bg:'#b45309', verb:'was blocked from', what:'Cap table — fully diluted.xlsx', folder:'Legal', action:'Blocked', when:'Aug 11, 16:02' },
+      { who:'Marguerite Aubry', firm:'Stellar Point Ventures', initials:'MA', bg:'#1d4ed8', verb:'signed the mutual NDA', what:'', folder:'Data room', action:'NDA', when:'Aug 11, 10:38' },
+    ];
+    const AF = ['All','View','Download','NDA','Blocked'];
+    const auditFilters = AF.map(a => ({ label:a, style: segSm(st.auditFilter === a), go: () => this.setState({ auditFilter:a }) }));
+    const auditRows = AUDIT.filter(a => st.auditFilter === 'All' || a.action === st.auditFilter).map(a => Object.assign({}, a, {
+      avStyle: av(a.bg),
+      chip: a.action === 'Download' ? chipViolet : a.action === 'NDA' ? chipGreen : a.action === 'Blocked' ? chipAmber : chipGrey,
+    }));
+
+    // ---------- upload ----------
+    const uploadQueue = [
+      { name:'Q3 board deck — draft.pdf', size:'3.8 MB', pct:100 },
+      { name:'Cohort revenue detail.xlsx', size:'1.1 MB', pct:64 },
+      { name:'Bank statements — Jul 2026.pdf', size:'740 KB', pct:22 },
+    ].map(u => ({
+      name:u.name, size:u.size,
+      icon: u.name.indexOf('.xlsx') > -1 ? I.sheet : I.file,
+      pctLabel: u.pct === 100 ? 'Done' : u.pct + '%',
+      tone: u.pct === 100 ? (dark ? '#6ee7b7' : '#15803d') : (dark ? '#c4b5fd' : V7),
+      barStyle:'height:100%;width:'+u.pct+'%;border-radius:99px;background:'+(u.pct === 100 ? '#15803d' : V)+';animation:drBar .6s ease',
+    }));
+
+    // ---------- investor view ----------
+    const signed = st.ndaSigned;
+    const invVisible = FOLDERS.filter(f => TIER_OF[ACCESS_OF(f.k, f.access === 'Committed' ? 'Committed only' : 'Everyone invited')] <= 2);
+    const lockedCount = invVisible.reduce((a,f) => {
+      const fn = NDA_OF(f.k, f.nda);
+      return a + f.files.filter(fi => NDA_OF(fi.k, fn)).length;
+    }, 0);
+    const invTotal = invVisible.reduce((a,f) => a + f.files.length, 0);
+
+    const invFolders = invVisible.map(f => {
+      const fn = NDA_OF(f.k, f.nda);
+      const files = f.files.map(fi => {
+        const needs = NDA_OF(fi.k, fn);
+        const unlocked = signed || !needs;
+        return {
+          k:fi.k, name:fi.name, size:fi.size, meta:'Added ' + fi.when,
+          icon: fIcon(fi.type), iconTone: fTone(fi.type),
+          unlocked, locked: !unlocked,
+          selBg: (st.invSel === fi.k) ? (dark ? '#241f38' : '#f4f0fe') : 'transparent',
+        };
+      });
+      const lockedN = files.filter(x => x.locked).length;
+      return {
+        k:f.k, name:f.name, open: !!st.open[f.k],
+        caretRot: st.open[f.k] ? 'rotate(90deg)' : 'none',
+        iconWrap: iconWrap(f.color),
+        invMeta: lockedN ? f.files.length + ' files · ' + lockedN + ' locked' : f.files.length + ' files · all available',
+        showLock: lockedN > 0,
+        invFiles: files,
+      };
+    });
+
+    let invSelFile = null, invSelLocked = false;
+    invFolders.forEach(f => f.invFiles.forEach(x => { if (x.k === st.invSel) { invSelFile = x; invSelLocked = x.locked; } }));
+
+    const PREVIEWS = {
+      l2: { title:'NovaCraft AI, Inc. — Capitalization', sub:'Fully diluted · as of Aug 11, 2026',
+        rows:[ {k:'Founders — common',v:'6,400,000'},{k:'Option pool — reserved',v:'1,200,000'},{k:'SAFE — Stellar Point',v:'$250,000'},{k:'SAFE — Reyes',v:'$100,000'},{k:'Fully diluted shares',v:'8,000,000'} ] },
+      f1: { title:'Three-year financial model', sub:'Base case · USD thousands',
+        rows:[ {k:'FY26 revenue',v:'128'},{k:'FY27 revenue',v:'940'},{k:'FY28 revenue',v:'3,410'},{k:'Gross margin FY28',v:'78%'},{k:'Months of runway',v:'18'} ] },
+      f3: { title:'Revenue proof — Stripe export', sub:'Jan 1 – Aug 6, 2026 · settled charges',
+        rows:[ {k:'Gross volume',v:'$18,650'},{k:'Paying customers',v:'11'},{k:'MRR at period end',v:'$3,240'},{k:'Refunds',v:'$0'},{k:'Net settled',v:'$18,109'} ] },
+      p1: { title:'Product overview', sub:'August 2026 · confidential',
+        rows:[ {k:'Active workspaces',v:'214'},{k:'Weekly active users',v:'1,880'},{k:'Median setup time',v:'11 min'},{k:'Net retention',v:'118%'},{k:'Uptime, trailing 90d',v:'99.96%'} ] },
+      t1: { title:'Founding team', sub:'Backgrounds and prior operating history',
+        rows:[ {k:'Guillaume Lauzier',v:'CEO · 2x founder'},{k:'Prior exit',v:'2023'},{k:'Anneke Voss',v:'CTO · ex-infra lead'},{k:'Team size',v:'6'},{k:'Open roles',v:'2'} ] },
+    };
+    const previewKey = invSelFile && !invSelLocked ? (PREVIEWS[invSelFile.k] ? invSelFile.k : 'p1') : null;
+    const preview = previewKey ? PREVIEWS[previewKey] : { title:'', sub:'', rows:[] };
+
+    const VIEWS = [{ k:'founder', l:'Founder view' }, { k:'investor', l:'Investor view' }];
+    const viewTabs = VIEWS.map(v => ({ label:v.l, style: seg(st.view === v.k),
+      go: () => this.setState({ view:v.k, invSel:null }) }));
+
+    const canSign = st.ndaName.trim().length > 2;
+
+    return {
+      themeClass: dark ? 'dr-dark' : '',
+      chromeSub: st.view === 'founder'
+        ? 'Series Seed · 4 investors with access · ' + totalFiles + ' files'
+        : 'Shared by Guillaume Lauzier · Series Seed diligence',
+      vaultIcon:I.vault, folderIcon:I.folder, caretIcon:I.caret, lockIcon:I.lock,
+      checkIcon:I.check, uploadIcon:I.upload, downloadIcon:I.download,
+      shieldIcon:I.shield, penIcon:I.pen, fileIcon:I.file,
+      themeIcon: dark ? I.sun : I.moon,
+      themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      viewTabs, isFounder: st.view === 'founder', isInvestor: st.view === 'investor',
+      ndaTag,
+
+      founderStats:[
+        { k:'Files', v:String(totalFiles) },
+        { k:'NDA-gated', v:String(ndaFileCount) },
+        { k:'Investors with access', v:'4' },
+        { k:'Views this week', v:'38' },
+      ],
+
+      folders,
+      toggleFolder: (e) => {
+        const node = (e.currentTarget || e.target).closest('[data-fold]');
+        const k = node && node.getAttribute('data-fold');
+        if (k) this.setState(s => ({ open: Object.assign({}, s.open, { [k]: !s.open[k] }), selKind:'folder', selKey:k }));
+      },
+      selectFile: (e) => {
+        const node = (e.currentTarget || e.target).closest('[data-file]');
+        const k = node && node.getAttribute('data-file');
+        if (!k) return;
+        if (st.view === 'founder') this.setState({ selKind:'file', selKey:k });
+        else this.setState({ invSel:k });
+      },
+
+      sel, selScope: isFolderSel ? 'Folder settings' : 'File settings',
+      selNoun: isFolderSel ? 'folder' : 'file',
+      accessOptions, selViewers, selNoViewers: selViewers.length === 0,
+      ndaTrackStyle:'flex:none;width:40px;height:23px;border-radius:99px;padding:2px;display:flex;align-items:center;background:'
+        + (curNda ? V : (dark ? '#2a2833' : '#dedce4')),
+      ndaKnobStyle:'width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(15,14,19,.28);margin-left:'
+        + (curNda ? '17px' : '0') + ';transition:margin-left .16s',
+      toggleNdaOnSel: () => this.setState(s => ({ overrides: Object.assign({}, s.overrides, { [selRaw.k+':nda']: !curNda }) })),
+
+      auditOpen: st.auditOpen, auditLabel: st.auditOpen ? 'Hide activity log' : 'Show activity log',
+      toggleAudit: () => this.setState(s => ({ auditOpen: !s.auditOpen })),
+      auditFilters, auditRows, auditEmpty: auditRows.length === 0,
+
+      uploading: st.uploading, uploadQueue,
+      startUpload: () => this.setState({ uploading:true }),
+      cancelUpload: () => this.setState({ uploading:false }),
+
+      viewerAv: av('#1d4ed8', 34),
+      viewerAccessNote: signed
+        ? 'Committed on this raise · NDA executed · full access'
+        : 'Committed on this raise · NDA not yet signed',
+      ndaSigned: signed,
+      ndaChip: signed ? chipGreen : chipAmber,
+      ndaChipLabel: signed ? 'NDA signed' : 'NDA required',
+      resetNda: () => this.setState({ ndaSigned:false, ndaName:'', invSel:null }),
+
+      investorSub: signed
+        ? 'Shared with you by Guillaume Lauzier for the purpose of evaluating this financing. Your activity is visible to the founder.'
+        : 'Shared with you by Guillaume Lauzier. Some folders are open; anything containing financials or legal material needs the mutual NDA first.',
+      lockedCount:String(lockedCount), totalCount:String(invTotal),
+      visibleNote: invVisible.length + ' folders · ' + invTotal + ' files',
+      invFolders,
+
+      previewLocked: !!invSelFile && invSelLocked,
+      previewNone: !invSelFile,
+      previewDoc: !!invSelFile && !invSelLocked,
+      preview,
+
+      ndaModal: st.ndaModal,
+      signNda: () => this.setState({ ndaModal:true }),
+      closeNda: () => this.setState({ ndaModal:false }),
+      ndaName: st.ndaName,
+      setNdaName: (e) => this.setState({ ndaName:e.target.value }),
+      ndaTerms:[
+        { k:'Parties', v:'Stellar Point ↔ NovaCraft AI' },
+        { k:'Purpose', v:'Evaluating this financing' },
+        { k:'Term', v:'3 years from execution' },
+        { k:'Governing law', v:'Delaware' },
+      ],
+      ndaSignStyle:'margin-top:16px;padding:12px 0;border-radius:11px;text-align:center;font-size:13.5px;font-weight:700;'
+        + (canSign ? 'background:'+V+';color:#fff' : 'background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+(dark?'#6b6577':'#a8a4b4')+';cursor:not-allowed'),
+      executeNda: () => { if (canSign) this.setState({ ndaSigned:true, ndaModal:false }); },
+      stop: (e) => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>

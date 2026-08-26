@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f0efec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#b45309;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1010px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#faf9f7;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px}
+    .zt{font-size:15px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px}
+    .zb.on{color:#92400e;background:#fffbf2;border-color:#fde68a;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#fffbf2;border:1px solid #fde68a;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #b45309;background:#b45309;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .add{font-size:11.5px;line-height:1.5;background:#fef6e7;border-left:2px solid #d97706;padding:6px 10px;border-radius:0 6px 6px 0;color:#78350f}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .seamd{width:5px;height:5px;border-radius:50%;background:#0891b2;flex:none}
+    .grant{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#5b21b6;background:#f7f3ff;border:1px solid #ddd0fe;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .shield{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:4px;padding:2px 6px}
+    .rec{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px}
+  </style>
+</helmet>
+
+<!-- ══════════ P1 · SYSTEM ══════════ -->
+<section class="ab" id="p1">
+  <div class="ab-hd"><a class="ab-id" href="#p1">P1</a><span class="ab-nm">System — AI rail · license boundary · the seam</span></div>
+  <div class="ab-sub">Amber, where Founder is violet, Investor indigo and Advisor emerald. Four licenses, four axioms: build a company · deploy capital · sell expertise · <strong>deliver services and operational capacity</strong>. One license covers two delivery modes — a firm that ships projects, and an operator who embeds inside the client. That second mode is what forces a new seam idea: an embedded operator can hold <strong>founder-granted, scoped access</strong> to the client's own objects, and both sides need to see exactly how much.</div>
+
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+    <div style="width:306px;flex:none;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);padding:18px">
+      <dc-import name="PartnerRail" page="Delivery" hint-size="100%,720px"></dc-import>
+    </div>
+
+    <div style="flex:1;min-width:430px;display:grid;gap:16px">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+        <div class="lbl">License boundary — one license, two delivery modes</div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:13px">
+          <div style="width:200px;flex:none;background:#fbfbfc;border:1px solid #ececf1;border-radius:10px;padding:12px 0">
+            <sc-for list="{{ navLic }}" as="n" hint-placeholder-count="8"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for>
+          </div>
+          <div style="flex:1;min-width:240px">
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Eight rows, no tier gating. The Investor product gates a GP back office because running a fund is a different business; delivering services is one business whether you bill a project or embed a person, so the two modes share every page rather than splitting the license.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:13px">
+              <sc-for list="{{ modes }}" as="m" hint-placeholder-count="2">
+                <div style="border:1px solid #fde68a;background:#fffbf2;border-radius:10px;padding:11px 12px">
+                  <div style="font-size:12px;font-weight:800;color:#92400e">{{ m.name }}</div>
+                  <div style="font-size:11px;color:#3f3a49;margin-top:5px;line-height:1.55">{{ m.body }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5;flex-wrap:wrap">
+              <div style="display:inline-flex;background:#f4f4f6;border:1px solid #ececf1;border-radius:9px;padding:3px">
+                <span style="font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;background:#fff;color:#b45309;box-shadow:0 1px 2px rgba(24,24,27,.07)">Partner</span>
+                <span style="font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;color:#4a4553">Advisor</span>
+              </div>
+              <div style="font-size:11.5px;color:#615c6e;line-height:1.55;flex:1;min-width:190px">The family switcher. Many operators also advise; the products stay separate.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+        <div class="lbl">The seam — eight objects, three counterparties</div>
+        <div style="font-size:12px;color:#3f3a49;margin-top:9px;line-height:1.65">This license transacts with founders and investors both. None of their tools ever render here — only their objects, in amber.</div>
+        <div style="display:grid;grid-template-columns:1fr 1.25fr 1.25fr;gap:12px;margin-top:14px">
+          <span class="th">Shared object</span><span class="th">Their side</span><span class="th">Partner side</span>
+        </div>
+        <sc-for list="{{ seamRows }}" as="s" hint-placeholder-count="8">
+          <div style="display:grid;grid-template-columns:1fr 1.25fr 1.25fr;gap:12px">
+            <span class="td" style="font-weight:700">{{ s.obj }}</span>
+            <span class="td" style="color:#615c6e">{{ s.them }}</span>
+            <span class="td">{{ s.here }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="background:#fff;border:1px solid #ddd0fe;border-radius:12px;padding:19px 21px">
+        <div class="lbl" style="color:#5b21b6">The grant chip — new, and specific to operator mode</div>
+        <div style="font-size:12px;color:#3f3a49;margin-top:9px;line-height:1.65">A project engagement receives deliverables. An <strong>embedded operator</strong> works inside the client's own tools — their board, their metrics — which means the founder grants scoped access to specific objects, and can revoke it. That is a different relationship from a data-room grant, so it gets its own chip rather than reusing the seam marker.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+          <div style="border:1px solid #ddd0fe;background:#fcfaff;border-radius:11px;padding:13px 14px">
+            <span class="grant">Granted by Verwood · Board, KPIs · revocable</span>
+            <div style="font-size:11.5px;color:#3f3a49;margin-top:9px;line-height:1.55">What the operator sees on their own Delivery page: the scope named, the granter named, and the fact it can be withdrawn stated rather than implied.</div>
+          </div>
+          <div style="border:1px solid #ddd0fe;background:#fcfaff;border-radius:11px;padding:13px 14px">
+            <span class="grant">Rin Takahashi · Board, KPIs · revoke</span>
+            <div style="font-size:11.5px;color:#3f3a49;margin-top:9px;line-height:1.55">The same grant as the founder sees it, in their product: a person, a scope, and a revoke action. One fact, two renderings — never a silent standing permission.</div>
+          </div>
+        </div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">Scope is enumerated, never a role name. "Operator access" would be a permission nobody audits; "Board, KPIs" is one a founder can reason about — and the chip shows the same two objects on both sides, so neither party can believe a different scope than the other.</div>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+        <div class="lbl">Proposal anatomy · consent · and the honest expiry rule</div>
+        <div class="prop" style="margin-top:12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">Proposal · AI</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ p1Will }}</span>
+          </div>
+          <div class="add">+ Weekly status report for Verwood, drawn from this week's shipped work and the two open blockers. Nothing sent.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">Accept</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span class="num" style="font-size:10.5px;color:#615c6e;margin-left:auto">{{ p1Receipt }}</span>
+          </div>
+        </div>
+        <div style="display:grid;gap:9px;margin-top:13px">
+          <div style="display:flex;align-items:flex-start;gap:9px"><span class="rec" style="flex:none;margin-top:1px">Recording</span><div style="font-size:12px;color:#3f3a49;line-height:1.6">Client calls only become transcripts with consent, explicit to both sides and marked on every artifact derived from them.</div></div>
+          <div style="display:flex;align-items:flex-start;gap:9px"><span class="shield" style="flex:none;margin-top:1px">Screened</span><div style="font-size:12px;color:#3f3a49;line-height:1.6">Proposals, status reports and change orders all pass <span class="num" style="font-family:ui-monospace,Menlo,monospace;font-size:11px">@cf/meta/llama-guard-3-8b</span> before they reach a client.</div></div>
+          <div style="display:flex;align-items:flex-start;gap:9px"><span style="font-size:9.5px;font-weight:800;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;flex:none;margin-top:1px">EXPIRED</span><div style="font-size:12px;color:#3f3a49;line-height:1.6"><strong>Perk deals expire honestly.</strong> An expired deal renders as expired with its tier grants shown revoked — nothing on the Offers page pretends to be live when it is not, because a founder who redeemed it is entitled to know the benefit ended.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ P2 · HOME ══════════ -->
+<section class="ab" id="p2">
+  <div class="ab-hd"><a class="ab-id" href="#p2">P2</a><span class="ab-nm">Home — "Where does the firm stand today?"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navH }}" as="n" hint-placeholder-count="8"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Where does the firm stand today?</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Four deliverables due, one proposal expiring, and one person over capacity. Throughput is the story.</div>
+
+      <div style="margin-top:15px;background:#fff;border:1px solid #fde68a;border-radius:12px;padding:6px 6px 6px 17px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 10px rgba(217,119,6,.08)">
+        <span style="width:16px;height:16px;display:block;flex:none;color:#b45309" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+        <span style="flex:1;font-size:13.5px;color:#3f3a49">Which engagements are at risk this week, and is it scope or capacity?</span>
+        <div class="acc" style="padding:9px 15px;font-size:12.5px">{{ homeAsk }}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-top:15px">
+        <sc-for list="{{ homeStats }}" as="s" hint-placeholder-count="5">
+          <div class="card" style="padding:14px 16px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Today · Tue Aug 25</span><span class="zs">Composed 07:20 · every line carries its receipt</span></div>
+        <div class="prop">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">Proposal · operating brief</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ homeCost }}</span>
+          </div>
+          <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">Verwood is the engagement to watch — requests in the last three weeks exceed SOW section 2, and the status report is due Thursday. Rin is at 46 of 40 hours and holds two of the four deliverables. One proposal expires tomorrow, and the Novacraft perk deal expires in six days with eleven grants still live.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><span class="acc">Accept as today's brief</span><span class="gho">Edit</span><span class="dis">Discard</span></div>
+        </div>
+
+        <div style="display:grid;gap:9px;margin-top:14px">
+          <sc-for list="{{ feed }}" as="f" hint-placeholder-count="6">
+            <div style="{{ f.rowStyle }}">
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:13px;font-weight:700">{{ f.title }}</span>
+                  <sc-if value="{{ f.seam }}"><span class="seam"><span class="seamd"></span>{{ f.seam }}</span></sc-if>
+                  <sc-if value="{{ f.grant }}"><span class="grant">{{ f.grant }}</span></sc-if>
+                </div>
+                <div style="font-size:11.5px;color:#4a4553;margin-top:5px;line-height:1.55">{{ f.body }}</div>
+                <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:5px">{{ f.receipt }}</div>
+              </div>
+              <span class="acc" style="flex:none">{{ f.action }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="PartnerRail" page="Home" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ P3 · PIPELINE ══════════ -->
+<section class="ab" id="p3">
+  <div class="ab-hd"><a class="ab-id" href="#p3">P3</a><span class="ab-nm">Pipeline — "Win the work"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navP }}" as="n" hint-placeholder-count="8"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Win the work</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Leads in, proposals out, retainers renewing. Where the work comes from is as useful as how much of it there is.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+        <sc-for list="{{ anchP }}" as="a" hint-placeholder-count="5"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:16px">
+        <div class="zh" id="pl-leads"><span class="zt">Lead sources</span><span class="zs">Provenance is the point · {{ leadCount }} open</span></div>
+        <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr .9fr 1.7fr;gap:12px">
+          <span class="th">Lead</span><span class="th">Source</span><span class="th">Match</span><span class="th">Budget</span><span class="th">Read</span>
+        </div>
+        <sc-for list="{{ leads }}" as="l" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr .9fr 1.7fr;gap:12px;align-items:center">
+            <span class="td" style="font-weight:600">{{ l.co }}</span>
+            <span class="td"><sc-if value="{{ l.seam }}"><span class="seam"><span class="seamd"></span>{{ l.src }}</span></sc-if><sc-if value="{{ l.plain }}"><span>{{ l.src }}</span></sc-if></span>
+            <span class="td num">{{ l.match }}</span>
+            <span class="td num">{{ l.budget }}</span>
+            <span class="td">{{ l.read }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ leadNote }}</div>
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">Proposal · from a posted need</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ pipeCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">Halverton posted a need for a two-month design sprint. Drafted from your catalog entry and the two comparable sprints you have delivered — including the one that overran, because the scope language that failed there is the language to fix here.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><span class="acc">Open the draft</span><span class="gho">Change the scope</span><span class="dis">Discard</span><span class="shield" style="margin-left:auto">Screened before send</span></div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="pl-negotiations"><span class="zt">Negotiations</span><span class="zs">Where a proposal becomes terms · {{ negCount }} open</span></div>
+        <div style="display:grid;grid-template-columns:1.1fr .9fr 1fr 1fr 1.7fr;gap:11px">
+          <span class="th">Client</span><span class="th">Shape</span><span class="th">Their ask</span><span class="th">Our line</span><span class="th">Where it stands</span>
+        </div>
+        <sc-for list="{{ negs }}" as="n" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:1.1fr .9fr 1fr 1fr 1.7fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ n.co }}</span>
+            <span class="td"><span style="{{ n.shapeStyle }}">{{ n.shape }}</span></span>
+            <span class="td num">{{ n.ask }}</span>
+            <span class="td num">{{ n.line }}</span>
+            <span class="td">{{ n.read }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ negNote }}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="pl-proposals"><span class="zt">Proposal desk</span><span class="zs">{{ propCount }} open · {{ winRate }} win rate</span></div>
+          <div style="display:grid;grid-template-columns:1.2fr .9fr 1fr 1.5fr;gap:11px">
+            <span class="th">Client</span><span class="th">Value</span><span class="th">State</span><span class="th">Activity</span>
+          </div>
+          <sc-for list="{{ props }}" as="r" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:1.2fr .9fr 1fr 1.5fr;gap:11px;align-items:center">
+              <span class="td" style="font-weight:600">{{ r.co }}</span>
+              <span class="td num">{{ r.value }}</span>
+              <span class="td"><span style="{{ r.pill }}">{{ r.state }}</span></span>
+              <span class="td"><sc-if value="{{ r.seam }}"><span class="seam"><span class="seamd"></span>{{ r.act }}</span></sc-if><sc-if value="{{ r.plain }}"><span>{{ r.act }}</span></sc-if></span>
+            </div>
+          </sc-for>
+          <div class="prop" style="margin-top:13px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+              <span class="propb">Proposal · win/loss pattern</span>
+              <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ wlCost }}</span>
+            </div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ wlBody }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><span class="acc">Accept read</span><span class="gho">See the six</span><span class="dis">Discard</span></div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="pl-retainers"><span class="zt">Retainers</span><span class="zs">{{ mrr }} recurring · {{ renewals }} renewing</span></div>
+          <div style="display:grid;grid-template-columns:1.1fr .8fr .9fr 1.3fr;gap:11px">
+            <span class="th">Client</span><span class="th">Monthly</span><span class="th">Renews</span><span class="th">Utilization</span>
+          </div>
+          <sc-for list="{{ retainers }}" as="r" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:1.1fr .8fr .9fr 1.3fr;gap:11px;align-items:center">
+              <span class="td" style="font-weight:600">{{ r.co }}</span>
+              <span class="td num">{{ r.mo }}</span>
+              <span class="td num">{{ r.renews }}</span>
+              <span class="td"><span style="{{ r.pill }}">{{ r.util }}</span></span>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ retNote }}</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="pl-analytics"><span class="zt">Pipeline analytics</span><span class="zs">Win rate, cycle time, forecast · derived from the desk above</span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px">
+          <sc-for list="{{ analytics }}" as="a" hint-placeholder-count="4">
+            <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:10px;padding:12px 14px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <div class="num" style="font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1">{{ a.value }}</div>
+              <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:1.2fr .9fr .9fr 1.7fr;gap:11px;margin-top:15px">
+          <span class="th">Shape</span><span class="th">Win rate</span><span class="th">Cycle</span><span class="th">Read</span>
+        </div>
+        <sc-for list="{{ byShape }}" as="s" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:1.2fr .9fr .9fr 1.7fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ s.shape }}</span>
+            <span class="td num">{{ s.win }}</span>
+            <span class="td num">{{ s.cycle }}</span>
+            <span class="td">{{ s.read }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ anaNote }}</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="PartnerRail" page="Pipeline" hint-size="100%,860px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ P4 · DELIVERY ══════════ -->
+<section class="ab" id="p4">
+  <div class="ab-hd"><a class="ab-id" href="#p4">P4</a><span class="ab-nm">Delivery — "Ship the work"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navD }}" as="n" hint-placeholder-count="8"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Ship the work</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Both modes on one board: projects with milestones, and embedded seats with founder-granted scope.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+        <sc-for list="{{ anchD }}" as="a" hint-placeholder-count="5"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:16px">
+        <div class="zh" id="dl-board"><span class="zt">Engagement board</span><span class="zs">{{ engCount }} active · {{ atRisk }} at risk</span></div>
+        <div style="display:grid;grid-template-columns:1.1fr .8fr 1fr .9fr 1fr 1.5fr;gap:11px">
+          <span class="th">Client</span><span class="th">Mode</span><span class="th">Scope</span><span class="th">Milestone</span><span class="th">Health</span><span class="th">Read</span>
+        </div>
+        <sc-for list="{{ engagements }}" as="e" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:1.1fr .8fr 1fr .9fr 1fr 1.5fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ e.co }}</span>
+            <span class="td"><span style="{{ e.modeStyle }}">{{ e.mode }}</span></span>
+            <span class="td">{{ e.scope }}</span>
+            <span class="td num">{{ e.ms }}</span>
+            <span class="td"><span style="{{ e.pill }}">{{ e.health }}</span></span>
+            <span class="td">{{ e.read }}<sc-if value="{{ e.grant }}"><span class="grant" style="margin-left:6px">{{ e.grant }}</span></sc-if></span>
+          </div>
+        </sc-for>
+        <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ engNote }}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="dl-deliverables"><span class="zt">Deliverables desk</span><span class="zs">Shipped and acknowledged, or shipped and ignored</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ deliverables }}" as="d" hint-placeholder-count="4">
+              <div style="{{ d.rowStyle }}">
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:12.5px;font-weight:700">{{ d.name }}</div>
+                  <div style="font-size:11px;color:#615c6e;margin-top:4px;line-height:1.5">{{ d.co }}</div>
+                  <sc-if value="{{ d.seam }}"><div style="margin-top:6px"><span class="seam"><span class="seamd"></span>{{ d.seam }}</span></div></sc-if>
+                </div>
+                <span style="{{ d.pill }}">{{ d.state }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="dl-capacity"><span class="zt">Capacity &amp; allocation</span><span class="zs">{{ overCount }} over · embedded seats carry their scope</span></div>
+          <div style="display:grid;gap:10px">
+            <sc-for list="{{ capacity }}" as="c" hint-placeholder-count="4">
+              <div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                  <span style="font-size:12.5px;font-weight:700">{{ c.who }}</span>
+                  <span class="num" style="font-size:11.5px;font-weight:700;color:{{ c.ink }}">{{ c.load }}</span>
+                </div>
+                <div style="height:7px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:6px">
+                  <div style="height:100%;width:{{ c.pct }}%;background:{{ c.ink }};border-radius:999px"></div>
+                </div>
+                <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.5">{{ c.on }}<sc-if value="{{ c.grant }}"><span class="grant" style="margin-left:6px">{{ c.grant }}</span></sc-if></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ capNote }}</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="dl-status"><span class="zt">Client status reporting</span><span class="zs">The recurring report each client actually receives</span></div>
+        <div class="prop">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">Proposal · weekly status, Verwood</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ delCost }}</span>
+          </div>
+          <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">Drafted from the engagement's real activity: three items shipped, two blockers, and the design-system decision still waiting on their side since Aug 14. Written to be read by a founder rather than to look busy.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><span class="acc">Send to Verwood</span><span class="gho">Edit first</span><span class="dis">Discard</span><span class="shield" style="margin-left:auto">Screened</span></div>
+        </div>
+        <div class="prop" style="margin-top:11px;border-color:#fca5a5;background:#fffbfb">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span style="font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:3px 7px">Proposal · scope drift</span>
+            <span class="num" style="font-size:10.5px;color:#b91c1c;margin-left:auto">{{ driftCost }}</span>
+          </div>
+          <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">{{ driftBody }}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><span class="acc">Draft the change order</span><span class="gho">See the seven requests</span><span class="dis">Absorb it</span></div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="dl-health"><span class="zt">Engagement health</span><span class="zs">Scope against SOW, flags, and satisfaction where it exists</span></div>
+        <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr 1.7fr;gap:11px">
+          <span class="th">Client</span><span class="th">Scope vs SOW</span><span class="th">Flag</span><span class="th">Satisfaction</span><span class="th">Read</span>
+        </div>
+        <sc-for list="{{ health }}" as="h" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr 1.7fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ h.co }}</span>
+            <span class="td num">{{ h.scope }}</span>
+            <span class="td"><sc-if value="{{ h.flag }}"><span style="{{ h.flagStyle }}">{{ h.flag }}</span></sc-if><sc-if value="{{ h.noFlag }}"><span style="color:#615c6e">—</span></sc-if></span>
+            <span class="td num">{{ h.sat }}</span>
+            <span class="td">{{ h.read }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ healthNote }}</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="PartnerRail" page="Delivery" hint-size="100%,860px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ P5 · OFFERS ══════════ -->
+<section class="ab" id="p5">
+  <div class="ab-hd"><a class="ab-id" href="#p5">P5</a><span class="ab-nm">Offers — "Package what we sell"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navO }}" as="n" hint-placeholder-count="8"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Package what we sell</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">The storefront. Proof is seam-fed from completed engagements; deals expire in public.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+        <sc-for list="{{ anchO }}" as="a" hint-placeholder-count="5"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:16px">
+        <div class="zh" id="of-catalog"><span class="zt">Capability catalog</span><span class="zs">{{ catCount }} live · pricing model per entry</span></div>
+        <div style="display:grid;grid-template-columns:1.3fr 1fr .9fr .8fr 1.6fr;gap:11px">
+          <span class="th">Service</span><span class="th">Pricing</span><span class="th">Typical</span><span class="th">Sold</span><span class="th">What it includes</span>
+        </div>
+        <sc-for list="{{ catalog }}" as="c" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:1.3fr 1fr .9fr .8fr 1.6fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ c.name }}<sc-if value="{{ c.draft }}"><span style="{{ c.draftPill }}">Draft</span></sc-if></span>
+            <span class="td">{{ c.model }}</span>
+            <span class="td num">{{ c.typical }}</span>
+            <span class="td num">{{ c.sold }}</span>
+            <span class="td">{{ c.incl }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="of-deals"><span class="zt">Perk deals</span><span class="zs">{{ dealLive }} live · {{ dealExpired }} expired with grants revoked</span></div>
+        <div style="display:grid;grid-template-columns:1.3fr .9fr .8fr .9fr 1.7fr;gap:11px">
+          <span class="th">Deal</span><span class="th">State</span><span class="th">Redeemed</span><span class="th">Cap</span><span class="th">Grant on redemption</span>
+        </div>
+        <sc-for list="{{ deals }}" as="d" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:1.3fr .9fr .8fr .9fr 1.7fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ d.name }}</span>
+            <span class="td"><span style="{{ d.pill }}">{{ d.state }}</span></span>
+            <span class="td num">{{ d.redeemed }}</span>
+            <span class="td num">{{ d.cap }}</span>
+            <span class="td">{{ d.grant }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ dealNote }}</div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="of-visibility"><span class="zt">Visibility</span><span class="zs">Where the firm appears · conversion per surface</span></div>
+        <div style="display:grid;grid-template-columns:1.2fr .7fr .7fr .9fr 1.7fr;gap:11px">
+          <span class="th">Surface</span><span class="th">Views</span><span class="th">Leads</span><span class="th">Engagements</span><span class="th">Read</span>
+        </div>
+        <sc-for list="{{ visibility }}" as="v" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:1.2fr .7fr .7fr .9fr 1.7fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ v.surface }}</span>
+            <span class="td num">{{ v.views }}</span>
+            <span class="td num">{{ v.leads }}</span>
+            <span class="td num">{{ v.engagements }}</span>
+            <span class="td">{{ v.read }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ visNote }}</div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">Proposal · catalog entry from delivered work</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ offersCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ offersBody }}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">Open the draft</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span class="shield" style="margin-left:auto">Screened before publish</span>
+          </div>
+        </div>
+        <div class="prop" style="margin-top:11px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">Proposal · deal performance</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ dealNarrCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ dealNarrBody }}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">Accept read</span><span class="gho">See redemptions</span><span class="dis">Discard</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="of-proof"><span class="zt">Case studies &amp; proof</span><span class="zs">Seam-fed · consent explicit</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ proof }}" as="p" hint-placeholder-count="3">
+              <div style="border:1px solid #a5edf5;background:#f8feff;border-radius:10px;padding:12px 13px">
+                <span class="seam"><span class="seamd"></span>{{ p.src }}</span>
+                <div style="font-size:11.5px;color:#3f3a49;margin-top:8px;line-height:1.6">{{ p.text }}</div>
+                <div class="num" style="font-size:10.5px;color:#0e7490;margin-top:6px">{{ p.meta }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="of-fit"><span class="zt">Audience fit</span><span class="zs">Who this firm is for — and who it is not</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <div class="lbl" style="font-size:9px;color:#047857">Good fit</div>
+              <div style="display:grid;gap:6px;margin-top:9px">
+                <sc-for list="{{ fitYes }}" as="f" hint-placeholder-count="3"><div style="font-size:11.5px;color:#3f3a49;line-height:1.5">· {{ f }}</div></sc-for>
+              </div>
+            </div>
+            <div>
+              <div class="lbl" style="font-size:9px;color:#b91c1c">Not for us</div>
+              <div style="display:grid;gap:6px;margin-top:9px">
+                <sc-for list="{{ fitNo }}" as="f" hint-placeholder-count="3"><div style="font-size:11.5px;color:#3f3a49;line-height:1.5">· {{ f }}</div></sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:13px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ fitNote }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="PartnerRail" page="Offers" hint-size="100%,820px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ P6 · NETWORK ══════════ -->
+<section class="ab" id="p6">
+  <div class="ab-hd"><a class="ab-id" href="#p6">P6</a><span class="ab-nm">Network — "Work our relationships"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navN }}" as="n" hint-placeholder-count="8"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Work our relationships</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Clients past and present, the investors who refer, and fellow partners. Referral state lives on the card.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+        <sc-for list="{{ anchN }}" as="a" hint-placeholder-count="3"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:16px">
+        <div class="zh" id="nw-book"><span class="zt">Relationship book</span><span class="zs">{{ bookCount }} · {{ coldCount }} going cold</span></div>
+        <div style="display:grid;grid-template-columns:1.2fr 1.1fr .9fr 1fr 1.5fr;gap:11px">
+          <span class="th">Person</span><span class="th">Organization</span><span class="th">Type</span><span class="th">State</span><span class="th">Context</span>
+        </div>
+        <sc-for list="{{ book }}" as="b" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:1.2fr 1.1fr .9fr 1fr 1.5fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ b.name }}</span>
+            <span class="td">{{ b.org }}</span>
+            <span class="td">{{ b.type }}</span>
+            <span class="td"><span style="{{ b.pill }}">{{ b.state }}</span></span>
+            <span class="td">{{ b.ctx }}<sc-if value="{{ b.ref }}"><span style="{{ b.refStyle }}">{{ b.ref }}</span></sc-if></span>
+          </div>
+        </sc-for>
+        <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ bookNote }}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="nw-intros"><span class="zt">Introductions desk</span><span class="zs">{{ given }} given · {{ recvd }} received</span></div>
+          <div class="prop">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+              <span class="propb">Proposal · double opt-in intro</span>
+              <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ netCost }}</span>
+            </div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Two of your clients are solving the same onboarding problem six weeks apart. Written from both sides' context and asking each separately — an intro between clients is the cheapest value you can add, and the easiest to get wrong.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><span class="acc">Ask both</span><span class="gho">Edit</span><span class="dis">Discard</span><span class="shield" style="margin-left:auto">Screened</span></div>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.55">{{ introNote }}</div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="nw-orgs"><span class="zt">Organizations</span><span class="zs">{{ orgCount }} · counts read from the book</span></div>
+          <div style="display:grid;gap:8px">
+            <sc-for list="{{ orgs }}" as="o" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                <div style="min-width:0">
+                  <div style="font-size:12px;font-weight:700">{{ o.name }}</div>
+                  <div style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ o.note }}</div>
+                </div>
+                <span class="num" style="font-size:11px;color:#615c6e;flex:none">{{ o.people }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="PartnerRail" page="Network" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ P7 · RESEARCH ══════════ -->
+<section class="ab" id="p7">
+  <div class="ab-hd"><a class="ab-id" href="#p7">P7</a><span class="ab-nm">Research — "Know the client's world"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navR }}" as="n" hint-placeholder-count="8"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Know the client's world</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">You are billing for judgment. This page is where the judgment gets informed before the call, not after.</div>
+
+      <div id="rs-ask" style="margin-top:15px;background:#fff;border:1px solid #fde68a;border-radius:12px;padding:6px 6px 6px 17px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 10px rgba(217,119,6,.08)">
+        <span style="width:16px;height:16px;display:block;flex:none;color:#b45309" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+        <span style="flex:1;font-size:13.5px;color:#3f3a49">What has Verwood actually changed since the SOW was signed?</span>
+        <div class="acc" style="padding:9px 15px;font-size:12.5px">{{ resAsk }}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:11px 0 0">
+        <sc-for list="{{ anchR }}" as="a" hint-placeholder-count="4"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:15px">
+        <div class="zh" id="rs-client"><span class="zt">Client prep · Verwood</span><span class="zs">{{ resReceipt }}</span></div>
+        <div style="border:1px solid #a5edf5;background:#f8feff;border-radius:10px;padding:11px 13px">
+          <span class="seam"><span class="seamd"></span>Client-shared history</span>
+          <div class="num" style="font-size:10.5px;color:#0e7490;margin-top:7px;line-height:1.5">Scope: SOW v2, 3 status reports, 1 design-system doc · shared under your engagement<br>Their last action: opened last week's status report · 2h ago</div>
+        </div>
+        <div class="prop" style="margin-top:12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">Proposal · sourced answer</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ resFirstCost }} first pass</span>
+          </div>
+          <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">Since the SOW was signed they have added a second product surface and changed their design lead. Both are outside section 2 as written, and neither was raised as a change — which is why the scope-drift flag on Delivery fired rather than a satisfaction problem.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><span class="acc">Attach to the change order</span><span class="gho">Ask a follow-up</span><span class="dis">Discard</span></div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px;border-color:#fde68a;background:linear-gradient(180deg,#fffdf8,#fff)">
+        <div class="zh" id="rs-library"><span class="zt">Cached input — prep gets cheaper the deeper you go</span><span class="zs">SOWs, client documents, own playbooks</span></div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+          <div style="flex:1;min-width:290px">
+            <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">The first question reads the client's whole history — 58,000 tokens at $0.440/M, or {{ resFirstCost }}. Every question after hits cached input at <strong>$0.014/M</strong>, so a follow-up lands at {{ resCachedCost }}. Prepping a scope conversation properly means twenty questions: {{ resTwenty }} for the set.</div>
+            <div style="font-size:12.5px;color:#3f3a49;margin-top:9px;line-height:1.7">That is the argument for this page in a services business. Reading a client closely used to be unbillable overhead; it now costs less than the parking.</div>
+          </div>
+          <div style="width:250px;flex:none;background:#fff;border:1px solid #ececf1;border-radius:11px;padding:14px">
+            <div class="lbl" style="font-size:9.5px">Cost of one client's history</div>
+            <div style="display:grid;gap:9px;margin-top:11px">
+              <sc-for list="{{ cacheRows }}" as="c" hint-placeholder-count="3">
+                <div>
+                  <div class="num" style="display:flex;justify-content:space-between;font-size:11.5px;color:#3f3a49"><span>{{ c.label }}</span><span style="font-weight:700">{{ c.cost }}</span></div>
+                  <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:{{ c.pct }}%;background:{{ c.ink }};border-radius:999px"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
+        <sc-for list="{{ resCards }}" as="r" hint-placeholder-count="3">
+          <div class="card" style="padding:16px 18px">
+            <div class="zt" id="{{ r.anchorId }}" style="font-size:14px">{{ r.title }}</div>
+            <div style="font-size:11.5px;color:#4a4553;margin-top:7px;line-height:1.6">{{ r.body }}</div>
+            <div class="num" style="font-size:11px;color:#615c6e;margin-top:9px">{{ r.meta }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="PartnerRail" page="Research" hint-size="100%,780px"></dc-import></div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { anch:{} };
+
+  anchorsFor(key, list) {
+    const active = this.state.anch[key] || list[0][1];
+    return list.map(([label, id]) => ({
+      label, href:'#' + id,
+      go: () => { const a = Object.assign({}, this.state.anch); a[key] = id; this.setState({ anch:a }); },
+      style:'font-size:11px;font-weight:' + (active === id ? '700' : '600')
+        + ';color:' + (active === id ? '#92400e' : '#615c6e')
+        + ';background:' + (active === id ? '#fffbf2' : '#fff')
+        + ';border:1px solid ' + (active === id ? '#fde68a' : '#ececf1')
+        + ';border-radius:999px;padding:5px 11px;cursor:pointer;text-decoration:none;display:inline-block'
+    }));
+  }
+
+  renderVals() {
+    const A = { ink:'#d97706', deep:'#b45309', tint:'#fffbf2' };
+    // CANONICAL Partner shell — 8 rows, no tier gating in v1.
+    const ROWS = ['Home','Pipeline','Delivery','Offers','Network','Research','Trust','Firm Settings'];
+    const nav = (active) => ROWS.map(label => ({ label, cls: label === active ? 'nav on' : 'nav',
+      style: label === active ? 'color:'+A.deep+';background:'+A.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+A.ink : '' }));
+
+    const pill = (t) => {
+      const M = { 'Green':['#ecfdf5','#047857','#a7f3d0'], 'Won':['#ecfdf5','#047857','#a7f3d0'],
+        'Live':['#ecfdf5','#047857','#a7f3d0'], 'Acknowledged':['#ecfdf5','#047857','#a7f3d0'],
+        'Healthy':['#ecfdf5','#047857','#a7f3d0'], 'Strong':['#ecfdf5','#047857','#a7f3d0'],
+        'Sent':['#fffbf2','#92400e','#fde68a'], 'Opened':['#fffbf2','#92400e','#fde68a'],
+        'Amber':['#fffbeb','#92400e','#fde68a'], 'At risk':['#fffbeb','#92400e','#fde68a'],
+        'Over':['#fffbeb','#92400e','#fde68a'], 'Expiring':['#fffbeb','#92400e','#fde68a'],
+        'Going cold':['#fffbeb','#92400e','#fde68a'], 'Warm':['#fffbf2','#92400e','#fde68a'],
+        'Red':['#fef2f2','#b91c1c','#fecaca'], 'Lost':['#fef2f2','#b91c1c','#fecaca'],
+        'Expired':['#fef2f2','#b91c1c','#fecaca'], 'Not opened':['#fef2f2','#b91c1c','#fecaca'],
+        'Draft':['#f4f4f6','#615c6e','#e4e4e8'], 'Under':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Draft'];
+      return 'display:inline-block;font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven','eight'][n] || String(n);
+    const Cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+
+    // ══ ONE cost arithmetic, matching PartnerRail's curations exactly. ══
+    const c4 = (n) => '$' + n.toFixed(4);
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    const HOME = run(16800, 1240, 0.293, 2.253);
+    const PIPE = run(9400, 2100, 0.351, 0.555);
+    const WL   = run(11200, 980, 0.293, 2.253);
+    const DEL  = run(22400, 1680, 0.293, 2.253);
+    const DRIFT= run(14600, 1120, 0.293, 2.253);
+    const NET  = run(2600, 470, 0.351, 0.555);
+    const OFFERS = run(4200, 1900, 0.200, 0.300);   // GPT-OSS 20B, as the Offers rail declares
+    const DEALNARR = run(6800, 1240, 0.200, 0.300);
+    const RESF = run(58000, 1300, 0.440, 1.320);
+    const RESC = run(58000, 1300, 0.014, 1.320);
+    const ratio = Math.round(RESF / RESC);
+
+    // ══ ONE engagement book. Delivery, Home and Pipeline counts all derive from it. ══
+    const ENG = [
+      { co:'Verwood', mode:'Project', scope:'Design sprint, 8 wk', ms:'3 of 5', health:'Amber',
+        read:'Scope drift: 7 requests beyond SOW §2.', grant:null },
+      { co:'Novacraft Labs', mode:'Embedded', scope:'Fractional design, 0.6 FTE', ms:'ongoing', health:'Green',
+        read:'Rin embedded since June.', grant:'Granted · Board, KPIs' },
+      { co:'Halverton', mode:'Project', scope:'Brand system', ms:'2 of 4', health:'Green',
+        read:'On plan. Milestone 2 acknowledged.', grant:null },
+      { co:'Thornfield', mode:'Embedded', scope:'Fractional ops, 0.4 FTE', ms:'ongoing', health:'Green',
+        read:'Embedded since August.', grant:'Granted · Metrics' },
+      { co:'Kelp Bio', mode:'Project', scope:'Website rebuild', ms:'1 of 3', health:'Red',
+        read:'Blocked on their content for 19 days.', grant:null }
+    ];
+    const atRiskN = ENG.filter(e => e.health !== 'Green').length;
+    const embedded = ENG.filter(e => e.mode === 'Embedded').length;
+    const modeStyle = (m) => 'display:inline-block;font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;'
+      + (m === 'Embedded' ? 'background:#f7f3ff;color:#5b21b6;border:1px solid #ddd0fe'
+                          : 'background:#f4f4f6;color:#4a4553;border:1px solid #e4e4e8');
+
+    const DELIV = [
+      { name:'Milestone 3 · component library', co:'Verwood', state:'Sent', seam:'Not opened · sent 3d ago' },
+      { name:'Brand system v1', co:'Halverton', state:'Acknowledged', seam:'Signed off · 1d ago' },
+      { name:'Weekly status, wk 34', co:'Novacraft Labs', state:'Opened', seam:'Read twice · 4h ago' },
+      { name:'Content template pack', co:'Kelp Bio', state:'Not opened', seam:'Sent 19d ago · no reply' }
+    ];
+
+    const CAP = [
+      { who:'Rin Takahashi', hrs:46, cap:40, on:'Novacraft (embedded), Verwood ms3', grant:'Board, KPIs' },
+      { who:'Dmitri Volkov', hrs:32, cap:40, on:'Halverton brand system', grant:null },
+      { who:'Aisha Farouk', hrs:38, cap:40, on:'Verwood sprint, Kelp Bio', grant:null },
+      { who:'Tobias Lindqvist', hrs:16, cap:40, on:'Thornfield (embedded)', grant:'Metrics' }
+    ];
+    const over = CAP.filter(c => c.hrs > c.cap);
+    const capRows = CAP.map(c => {
+      const pct = Math.min(100, Math.round(c.hrs / c.cap * 100));
+      return { who:c.who, load:c.hrs + ' / ' + c.cap + ' h', pct:String(pct),
+        ink: c.hrs > c.cap ? '#b91c1c' : (c.hrs / c.cap > 0.9 ? '#b45309' : '#047857'),
+        on:c.on, grant:c.grant };
+    });
+
+    // ══ ONE lead set — provenance is the design point. ══
+    const LEADS = [
+      { co:'Halverton', src:'Marketplace need', seam:true, match:'94', budget:'$18–24k', read:'Design sprint. Matches your best-selling catalog entry.' },
+      { co:'Aperture', src:'Portfolio intro', seam:true, match:'81', budget:'$12k', read:'From an investor value-add. Warmest lead in the list.' },
+      { co:'Lumen Works', src:'Marketplace need', seam:true, match:'62', budget:'not stated', read:'Adjacent to your work. No budget named — qualify first.' },
+      { co:'Brightline', src:'Inbound', seam:false, match:'44', budget:'$4k', read:'Below your floor. Decline politely and keep the contact.' },
+      { co:'Stagerail', src:'Referral · Priyanka', seam:false, match:'71', budget:'$9k', read:'Advisor referral. Small, but referrals compound.' }
+    ];
+    const leadRows = LEADS.map(l => ({ co:l.co, src:l.src, seam:l.seam, plain:!l.seam,
+      match:l.match, budget:l.budget, read:l.read }));
+
+    const PROPS = [
+      { co:'Halverton', value:'$21,000', state:'Opened', act:'Opened 3× · 2h ago', seam:true },
+      { co:'Aperture', value:'$12,000', state:'Sent', act:'Sent yesterday', seam:false },
+      { co:'Verwood', value:'$8,400', state:'Won', act:'Change order, signed', seam:true },
+      { co:'Corvid AI', value:'$16,000', state:'Lost', act:'Lost on price · smaller shop', seam:false },
+      { co:'Stagerail', value:'$9,000', state:'Draft', act:'Expires tomorrow', seam:false }
+    ];
+    const propRows = PROPS.map(p => ({ co:p.co, value:p.value, state:p.state, pill:pill(p.state),
+      act:p.act, seam:p.seam, plain:!p.seam }));
+    // ══ ONE decided-bid record. The win rate, the by-shape table and the forecast all derive
+    // from it, so wins must sum to the headline by construction. ══
+    const BIDS = [
+      // onPrice = how many of THIS shape's losses were lost on price. The by-shape read and
+      // the win/loss proposal both derive from it, so they cannot assert different totals.
+      { shape:'Fixed-scope projects', bids:6, won:1, cycle:'22 d', onPrice:4 },
+      { shape:'Retainers',            bids:3, won:2, cycle:'14 d', onPrice:0 },
+      { shape:'Embedded seats',       bids:1, won:1, cycle:'11 d', onPrice:0 }
+    ];
+    const TOTAL_DECIDED = BIDS.reduce((a, b) => a + b.bids, 0);
+    const WON = BIDS.reduce((a, b) => a + b.won, 0);
+    const LOST = TOTAL_DECIDED - WON;
+    const winPct = (b) => Math.round(b.won / b.bids * 100);
+    const fixedShape = BIDS[0], retShape = BIDS[1];
+    const retMultiple = (winPct(retShape) / winPct(fixedShape)).toFixed(1).replace('.0', '');
+    // Open pipeline = anything not yet decided. The forecast is that, times the win rate.
+    const openValue = PROPS.filter(p => p.state !== 'Won' && p.state !== 'Lost')
+      .reduce((a, p) => a + Number(p.value.replace(/[$,]/g, '')), 0);
+    const forecast = openValue * (WON / TOTAL_DECIDED);
+
+    const RET = [
+      { co:'Novacraft Labs', mo:4500, renews:'Dec 1', util:'Healthy', pct:'88% of scope' },
+      { co:'Thornfield', mo:3200, renews:'Nov 15', util:'Under', pct:'54% of scope' },
+      { co:'Halverton', mo:2000, renews:'Sep 30', util:'Over', pct:'119% of scope' },
+      { co:'Verwood', mo:1800, renews:'Oct 12', util:'Healthy', pct:'91% of scope' }
+    ];
+    const mrrTotal = RET.reduce((a, r) => a + r.mo, 0);
+    const retRows = RET.map(r => ({ co:r.co, mo:usd(r.mo), renews:r.renews, util:r.pct, pill:pill(r.util) }));
+    const renewing = 2;
+
+    // ══ Perk deals — lifecycle rendered honestly, expiry revokes grants. ══
+    const DEALS = [
+      { name:'20% off a first design sprint', state:'Live', redeemed:9, cap:25, grant:'Studio tier · 3 months' },
+      { name:'Free brand audit', state:'Live', redeemed:14, cap:'unlimited', grant:'No tier grant' },
+      { name:'Fractional ops, first month half price', state:'Expiring', redeemed:11, cap:15, grant:'Studio tier · 3 months' },
+      { name:'Website teardown, free', state:'Expired', redeemed:22, cap:22, grant:'Grants revoked Aug 1' }
+    ];
+    const dealRows = DEALS.map(d => ({ name:d.name, state:d.state, pill:pill(d.state),
+      redeemed:String(d.redeemed), cap:String(d.cap), grant:d.grant }));
+    const REDEMPTIONS = DEALS.reduce((a, d) => a + d.redeemed, 0);
+    const dealLiveN = DEALS.filter(d => d.state === 'Live').length;
+    const dealExpN = DEALS.filter(d => d.state === 'Expired').length;
+
+    const CAT = [
+      { name:'Design sprint', model:'Fixed, 8 weeks', typical:'$21,000', sold:'6', incl:'Discovery, 3 milestones, component library.', draft:false },
+      { name:'Brand system', model:'Fixed, 6 weeks', typical:'$16,000', sold:'4', incl:'Identity, type, usage rules, one revision round.', draft:false },
+      { name:'Fractional design', model:'Retainer, 0.6 FTE', typical:'$4,500/mo', sold:'2', incl:'Embedded seat, founder-granted scope.', draft:false },
+      { name:'Fractional ops', model:'Retainer, 0.4 FTE', typical:'$3,200/mo', sold:'1', incl:'Embedded seat, cadence and reporting.', draft:false },
+      { name:'Website rebuild', model:'Fixed, 4 weeks', typical:'$9,000', sold:'3', incl:'Not published — the last one overran.', draft:true }
+    ];
+    // ══ Every engagement names the surface that sourced it, so the attribution column can never
+    // claim more engagements than the board holds. ══
+    const ENG_SOURCE = { 'Halverton':'Marketplace needs board', 'Verwood':'Marketplace needs board',
+      'Novacraft Labs':'Lab cohort matching', 'Thornfield':'Lab cohort matching', 'Kelp Bio':'Perk deals' };
+    const engBySurface = (s) => ENG.filter(e => ENG_SOURCE[e.co] === s).length;
+    const SURFACES = [
+      { surface:'Marketplace needs board', views:'—', leads:3, read:'Matched, not browsed. The qualified work comes from here.' },
+      { surface:'Partner directory', views:'412', leads:2, read:'Volume, weak intent. One lead was below your floor.' },
+      { surface:'Lab cohort matching', views:'—', leads:2, read:'Matched by gap. Both became retainers.' },
+      { surface:'Perk deals', views:'1,180', leads:4, read:'Top of funnel. One lead converted.' }
+    ];
+    const totalLeads = SURFACES.reduce((a, s) => a + s.leads, 0);
+    const attributedEng = SURFACES.reduce((a, s) => a + engBySurface(s.surface), 0);
+    const leadToEng = Math.round(attributedEng / totalLeads * 100);
+    const perkLeads = SURFACES.filter(s => s.surface === 'Perk deals')[0].leads;
+    const redToLead = Math.round(perkLeads / REDEMPTIONS * 100);
+    const catRows = CAT.map(c => Object.assign({}, c, {
+      draftPill:'display:inline-block;margin-left:6px;font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:4px;background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8' }));
+
+    // ══ ONE partner book. Network counts derive from it. ══
+    const COLD_AT = 60;
+    const BOOK = [
+      { name:'Guillaume Lauzier', org:'Novacraft Labs', type:'Client', days:4, ctx:'Embedded engagement', ref:null },
+      { name:'Tobias Ncube', org:'Verwood', type:'Client', days:2, ctx:'Sprint, milestone 3', ref:null },
+      { name:'Marisol Vega', org:'Thornbury Capital', type:'Investor', days:16, ctx:'Sent 2 portfolio intros', ref:'referred · qualified' },
+      { name:'Priyanka Raghunathan', org:'Independent', type:'Advisor', days:23, ctx:'Referred Stagerail', ref:'referred · in review' },
+      { name:'Dev Ramachandran', org:'Latitude Seed', type:'Investor', days:71, ctx:'No intros yet', ref:null },
+      { name:'Aoife Brennan', org:'Independent', type:'Partner', days:94, ctx:'Subcontracted once in Feb', ref:null }
+    ];
+    const cold = BOOK.filter(b => b.days > COLD_AT);
+    const bookRows = BOOK.map(b => ({ name:b.name, org:b.org, type:b.type,
+      state: b.days > COLD_AT ? 'Going cold' : (b.days < 14 ? 'Strong' : 'Warm'),
+      pill: pill(b.days > COLD_AT ? 'Going cold' : (b.days < 14 ? 'Strong' : 'Warm')),
+      ctx:b.ctx + ' · ' + b.days + 'd', ref:b.ref,
+      refStyle:'display:inline-block;margin-left:7px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap' }));
+    const ORGS = ['Novacraft Labs','Verwood','Thornbury Capital','Latitude Seed','Independent'];
+    const orgRows = ORGS.map(o => {
+      const people = BOOK.filter(b => b.org === o);
+      const note = o === 'Novacraft Labs' ? 'Retainer client. Embedded seat with granted scope.'
+        : o === 'Verwood' ? 'Project client. Scope drift open.'
+        : o === 'Thornbury Capital' ? 'Investor. Two portfolio intros, one became a lead.'
+        : o === 'Latitude Seed' ? 'Investor, no intros yet. Going cold at 71 days.'
+        : 'Not an organization — advisors and independent partners.';
+      return { name:o, note, people:people.length + (people.length === 1 ? ' known' : ' known') };
+    });
+    const givenN = 3, recvdN = 4;
+
+    return {
+      searchIcon: { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" width="100%" height="100%"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>' },
+
+      navLic: nav(null), navH: nav('Home'), navP: nav('Pipeline'), navD: nav('Delivery'),
+      navO: nav('Offers'), navN: nav('Network'), navR: nav('Research'),
+
+      modes: [
+        { name:'Firm mode', body:'Agencies, legal, accounting, dev shops. Projects with milestones and deliverables that ship to a client.' },
+        { name:'Operator mode', body:'Fractional operators who embed. Work happens inside the client\u2019s tools, under scoped access the founder grants and can revoke.' }
+      ],
+
+      seamRows: [
+        { obj:'The need', them:'Founder: Marketplace → need posted', here:'Pipeline → matched lead' },
+        { obj:'The proposal', them:'Founder: proposals received', here:'Pipeline → proposal sent' },
+        { obj:'The engagement', them:'Founder: service engaged', here:'Delivery → active engagement' },
+        { obj:'The deliverable', them:'Founder: work received', here:'Delivery → work shipped' },
+        { obj:'The perk deal', them:'Founder: deal redeemed → tier grant', here:'Offers → deal live, redemptions' },
+        { obj:'The retainer', them:'Founder: ongoing service', here:'Pipeline → recurring revenue' },
+        { obj:'The portfolio intro', them:'Investor: Value-add → intro made', here:'Pipeline → sourced lead' },
+        { obj:'The intro', them:'Network → help received', here:'Network → support given' }
+      ],
+
+      p1Will: 'will cost ≈ ' + c4(DEL),
+      p1Receipt: 'ran in 6.2s · 22,400 in / 1,680 out · ' + c4(DEL),
+
+      // ---- Home ----
+      homeAsk: 'Ask · ≈ ' + c4(HOME),
+      homeCost: '≈ ' + c4(HOME),
+      homeStats: [
+        { label:'Active engagements', value:String(ENG.length), note:embedded + ' embedded, ' + (ENG.length - embedded) + ' project' },
+        { label:'Due this week', value:'4', note:'2 held by one person' },
+        { label:'At risk', value:String(atRiskN), note:'1 scope, 1 blocked on client' },
+        { label:'Recurring', value:usd(mrrTotal), note:renewing + ' renewing in 60 days' },
+        { label:'Over capacity', value:String(over.length), note:over.length ? over[0].who.split(' ')[0] + ' at 46 h' : 'nobody' }
+      ],
+      feed: [
+        { title:'Verwood · scope drift', seam:null, grant:null, tone:'bad',
+          body:'Seven requests in three weeks exceed SOW §2. The status report is due Thursday, so the change order should land first.',
+          receipt:'Source: request log Aug 4–25 · SOW v2 §2', action:'Draft change order' },
+        { title:'Halverton proposal opened 3×', seam:'From Halverton · 2h ago', grant:null, tone:'accent',
+          body:'$21,000 design sprint. Three opens and no reply usually means an internal conversation, not a no.',
+          receipt:'Sent Aug 22 · opened Aug 23, 24, 25', action:'Follow up' },
+        { title:'Rin is at 46 of 40 hours', seam:null, grant:'Novacraft · Board, KPIs', tone:'due',
+          body:'Holding the embedded Novacraft seat and Verwood milestone 3. One of the two has to move.',
+          receipt:'Allocation, week 34', action:'Reallocate' },
+        { title:'Kelp Bio blocked 19 days', seam:'From Kelp Bio · no reply', grant:null, tone:'bad',
+          body:'Waiting on their content. The template pack was sent 19 days ago and never opened.',
+          receipt:'Delivered Aug 6 · unopened', action:'Escalate' },
+        { title:'Website teardown deal expired', seam:null, grant:null, tone:'plain',
+          body:'22 of 22 redemptions used, and the Studio tier grants were revoked Aug 1. Shown as expired rather than quietly hidden.',
+          receipt:'Perk deal lifecycle · automated expiry', action:'Open Offers' },
+        { title:'2 portfolio intros from Thornbury', seam:'Investor value-add', grant:null, tone:'seam',
+          body:'One became the Aperture lead. Marisol has now sent more work than any advisor referral.',
+          receipt:'Sourced Aug 18 and Aug 21', action:'See both' }
+      ].map(f => {
+        const M = { accent:['#fffbf2','#92400e','#d97706'], seam:['#f0fdff','#0e7490','#0891b2'],
+                    due:['#fffbeb','#92400e','#f59e0b'], bad:['#fef2f2','#b91c1c','#ef4444'], plain:['#f4f4f6','#615c6e','#d4d4d8'] };
+        const c = M[f.tone];
+        return Object.assign({}, f, { rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px 15px;border:1px solid #f0eff4;border-left:3px solid '+c[2]+';border-radius:0 10px 10px 0;background:#fbfbfc' });
+      }),
+
+      // ---- Pipeline ----
+      // Every anchor points at its own zone — the row advertises only what exists.
+      anchP: this.anchorsFor('P', [['Leads','pl-leads'],['Negotiations','pl-negotiations'],['Proposals','pl-proposals'],['Retainers','pl-retainers'],['Analytics','pl-analytics']]),
+      negCount: '3',
+      negs: [
+        { co:'Halverton', shape:'Fixed', ask:'$18,000', line:'$21,000', read:'They want the component library out. It is the milestone that makes the sprint reusable.' },
+        { co:'Aperture', shape:'Retainer', ask:'0.4 FTE', line:'0.6 FTE', read:'Below 0.6 the embedded seat does not hold context between weeks.' },
+        { co:'Stagerail', shape:'Fixed', ask:'$9,000', line:'$9,000', read:'Agreed on price. Waiting on their signature since Aug 21.' }
+      ].map(n => ({ ...n, shapeStyle:'display:inline-block;font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;'
+        + (n.shape === 'Retainer' ? 'background:#fffbf2;color:#92400e;border:1px solid #fde68a'
+                                  : 'background:#f4f4f6;color:#4a4553;border:1px solid #e4e4e8') })),
+      negNote: 'Shape is the negotiation, not price. The two fixed-scope talks are about what comes out; the retainer talk is about whether the seat is big enough to be useful — which is the same argument as the win/loss finding below, arriving one stage earlier.',
+
+      analytics: [
+        { label:'Win rate', value:Math.round(WON / TOTAL_DECIDED * 100) + '%', note:WON + ' of ' + TOTAL_DECIDED + ' decided' },
+        { label:'Median cycle', value:'19 d', note:'first contact to signature' },
+        { label:'Weighted forecast', value:usd(forecast), note:usd(openValue) + ' open × ' + Math.round(WON / TOTAL_DECIDED * 100) + '%' },
+        { label:'Recurring base', value:usd(mrrTotal), note:'before any new work' }
+      ],
+      byShape: BIDS.map(b => ({
+        shape:b.shape, win:winPct(b) + '%', cycle:b.cycle,
+        read: b.bids === 1
+          ? 'One bid, one won. Too few to claim a pattern.'
+          : b.bids + ' bids, ' + nWord(b.won) + ' won — '
+            + (b.onPrice === 0
+                ? 'no loss was on price.'
+                : nWord(b.onPrice) + ' of the ' + nWord(b.bids - b.won) + ' losses on price.')
+      })),
+      anaNote: 'Retainers win ' + retMultiple + ' times as often as fixed-scope projects and close eight days faster, which is the argument for reshaping the catalog rather than discounting it. Wins here sum to '
+        + WON + ' against ' + TOTAL_DECIDED + ' bids because the rows and the headline read the same record — and the embedded row is a single data point, labelled as one, since a 100% win rate on one bid is not a finding.',
+
+      anchD: this.anchorsFor('D', [['Board','dl-board'],['Deliverables','dl-deliverables'],['Capacity','dl-capacity'],['Status reports','dl-status'],['Health','dl-health']]),
+      health: ENG.map(e => {
+        const H = { Verwood:{ scope:'119% of §2', flag:'Scope drift', sat:'—', read:'Seven requests beyond scope. Change order drafted, not sent.' },
+          'Novacraft Labs':{ scope:'88% of scope', flag:null, sat:'9 / 10', read:'Retainer renewed once. The healthiest engagement.' },
+          Halverton:{ scope:'On plan', flag:null, sat:'8 / 10', read:'Milestone 2 signed off. No open questions.' },
+          Thornfield:{ scope:'54% of scope', flag:'Under-used', sat:'—', read:'Seat is half idle. Renewal risk is disuse, not dissatisfaction.' },
+          'Kelp Bio':{ scope:'Stalled', flag:'Blocked 19 d', sat:'—', read:'Waiting on their content. Not our delay, still our problem.' } };
+        const h = H[e.co];
+        return { co:e.co, scope:h.scope, flag:h.flag, noFlag:!h.flag, sat:h.sat, read:h.read,
+          flagStyle:'display:inline-block;font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:999px;'
+            + (h.flag === 'Scope drift' || h.flag === 'Blocked 19 d'
+                ? 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca'
+                : 'background:#fffbeb;color:#92400e;border:1px solid #fde68a') };
+      }),
+      healthNote: 'Satisfaction is blank on three of five because it has not been asked, and a blank is more honest than an assumed score. The two flags are opposite failures — Verwood is doing too much work outside scope, Thornfield too little inside it — and both end the same way at renewal if nobody names them now.',
+      leadCount: String(LEADS.length), leads: leadRows,
+      leadNote: 'Provenance is the most useful column here: the two seam-marked marketplace needs and the investor intro all arrived with context attached, while the inbound lead is the one below your floor. A lead source that consistently produces work you can price is worth more than volume.',
+      pipeCost: '≈ ' + c4(PIPE),
+      propCount: String(PROPS.filter(p => p.state !== 'Won' && p.state !== 'Lost').length),
+      winRate: Math.round(WON / TOTAL_DECIDED * 100) + '%',
+      props: propRows,
+      wlCost: '≈ ' + c4(WL),
+      wlBody: 'You have won ' + WON + ' of ' + TOTAL_DECIDED + ' decided proposals, and '
+        + nWord(BIDS.reduce((a, b) => a + b.onPrice, 0)) + ' of the ' + LOST
+        + ' losses were on price against smaller shops — five of those losses were fixed-scope. The pattern is not that you are expensive; it is that the fixed-scope entries invite a price comparison the retainer entries do not.',
+      mrr: usd(mrrTotal), renewals: String(renewing), retainers: retRows,
+      retNote: 'Halverton is at 119% of scope on a ' + usd(2000) + ' retainer and renews in five weeks — the renewal conversation is a re-pricing conversation, and having the utilization number is what makes it a calm one. Thornfield at 54% is the opposite risk: an under-used retainer gets cancelled.',
+
+      // ---- Delivery ---- (anchD is declared once, above, alongside the health data)
+      engCount: String(ENG.length), atRisk: String(atRiskN),
+      engagements: ENG.map(e => Object.assign({}, e, { pill:pill(e.health), modeStyle:modeStyle(e.mode) })),
+      engNote: Cap(nWord(embedded)) + ' of the ' + ENG.length + ' engagements are embedded seats rather than projects, and those carry a grant chip instead of a milestone count — an operator inside the client\u2019s board is a different relationship from a deliverable shipped to them, and the board says so rather than flattening both into "active".',
+      deliverables: DELIV.map(d => Object.assign({}, d, { pill:pill(d.state),
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid '
+          + (d.state === 'Not opened' ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:9px' })),
+      overCount: String(over.length), capacity: capRows,
+      capNote: 'Embedded seats show the scope the founder granted, because a person inside two client systems needs their access legible to you as well as to them. Rin over 40 hours while holding a granted seat is the case to fix first — an over-committed operator is a trust problem, not just a throughput one.',
+      delCost: '≈ ' + c4(DEL),
+      driftCost: '≈ ' + c4(DRIFT),
+      driftBody: 'Seven requests since Aug 4 fall outside SOW §2 as written — a second product surface and a new design lead\u2019s revisions. At the current rate this absorbs about 26 hours you have not billed. The change order is drafted with each request cited to the day it arrived, so the conversation is about scope rather than about goodwill.',
+
+      // ---- Offers ----
+      anchO: this.anchorsFor('O', [['Catalog','of-catalog'],['Perk deals','of-deals'],['Visibility','of-visibility'],['Proof','of-proof'],['Audience fit','of-fit']]),
+      // Leads and engagements are different objects — Pipeline tracks the first, Delivery the
+      // second — so the engagement column is counted from ENG rather than reusing the lead count.
+      visibility: SURFACES.map(s => ({
+        surface:s.surface, views:s.views, leads:String(s.leads),
+        engagements: engBySurface(s.surface) + ' of ' + ENG.length,
+        read:s.read
+      })),
+      visNote: 'Leads and engagements are counted separately because they are different things: these ' + totalLeads
+        + ' leads became ' + attributedEng + ' of the ' + ENG.length + ' engagements on the board, which is the ' + leadToEng
+        + '% that matters rather than the traffic. Perk deals belong on this page rather than in revenue — ' + REDEMPTIONS
+        + ' redemptions produced ' + nWord(perkLeads) + ' leads and ' + nWord(engBySurface('Perk deals'))
+        + ' engagement, a marketing cost that happens to be a product.',
+      offersCost: '≈ ' + c4(OFFERS),
+      offersBody: 'The fractional-design entry is written from what Rin actually does inside Novacraft — the embedded seat, the granted scope, the weekly cadence — rather than from a services template. Uses your own words from two status reports, with the client specifics stripped and flagged for you to check.',
+      dealNarrCost: '≈ ' + c4(DEALNARR),
+      dealNarrBody: REDEMPTIONS + ' redemptions across ' + DEALS.length + ' deals produced ' + nWord(perkLeads)
+        + ' leads — a ' + redToLead + '% redemption-to-lead rate — of which ' + nWord(engBySurface('Perk deals'))
+        + ' became an engagement. Respectable for a top-of-funnel offer and poor for a discount. The teardown deal converted best and is the one that expired; the read recommends relaunching it with a cap rather than leaving the slot empty.',
+      catCount: String(CAT.filter(c => !c.draft).length), catalog: catRows,
+      dealLive: String(dealLiveN), dealExpired: String(dealExpN), deals: dealRows,
+      dealNote: 'The expired deal stays on the page with its grants shown revoked, because 22 founders redeemed it and are entitled to know the Studio tier benefit ended on Aug 1. A storefront that quietly removes expired offers is a storefront nobody can audit — and the expiring row is flagged six days out for the same reason.',
+      proof: [
+        { src:'From Novacraft Labs · outcome', text:'Trial-to-paid conversion moved from 11.1% to 14.2% in the eight weeks after the onboarding sprint.', meta:'Their own metric · consented Aug 2026' },
+        { src:'From Halverton · testimonial', text:'"They shipped the brand system in six weeks and it survived the Series A deck without a redraw."', meta:'Written by the founder · published with consent' },
+        { src:'From Verwood · outcome', text:'Design-system adoption across three product surfaces, from zero.', meta:'From their board deck · consented' }
+      ],
+      fitYes: ['Seed to Series A, 4–20 people.','A founder who can decide in a week.','Scope you are willing to fix in writing.'],
+      fitNo: ['Pre-idea, no users, no budget named.','Enterprise procurement cycles.','Anyone shopping three agencies on price.'],
+      fitNote: 'The right-hand column is a conversion feature, not modesty. Four of the six proposals you lost were on price against smaller shops, and naming that here filters the comparison out before it costs you a week of proposal writing.',
+
+      // ---- Network ----
+      anchN: this.anchorsFor('N', [['Relationships','nw-book'],['Introductions','nw-intros'],['Organizations','nw-orgs']]),
+      bookCount: BOOK.length + ' relationships', coldCount: String(cold.length),
+      book: bookRows,
+      bookNote: 'Referral state sits on the card because the investor who sends you work and the advisor who sends you work are different relationships with the same shape. ' + Cap(nWord(cold.length)) + ' entries are going cold, and one of them is an investor who has never sent an intro — which is information about the relationship, not a task.',
+      netCost: '≈ ' + c4(NET),
+      given: String(givenN), recvd: String(recvdN),
+      introNote: 'You have received ' + recvdN + ' intros and given ' + givenN + ' — net taker, which is worth evening up while the balance is small. An intro between two clients costs nothing and is the only support a service firm can offer that a founder cannot buy.',
+      orgCount: ORGS.length + ' organizations', orgs: orgRows,
+
+      // ---- Research ----
+      anchR: this.anchorsFor('R', [['Ask','rs-ask'],['Client prep','rs-client'],['Market','rs-market'],['Library','rs-library']]),
+      resAsk: 'Research · ≈ ' + c4(RESF),
+      resReceipt: 'Ran 8s ago · 58,000 in / 1,300 out · ' + c4(RESF),
+      resFirstCost: c4(RESF), resCachedCost: c4(RESC),
+      resTwenty: '$' + (RESF + 19 * RESC).toFixed(2),
+      cacheRows: [
+        { label:'First question', cost:c4(RESF), pct:'100', ink:'#d97706' },
+        { label:'Each follow-up', cost:c4(RESC), pct:String(Math.round(RESC / RESF * 100)), ink:'#f59e0b' },
+        { label:'Same query, no cache', cost:c4(RESF), pct:'100', ink:'#d4d2dc' }
+      ],
+      resCards: [
+        { anchorId:'rs-market', title:'Market context', body:'Attachable to a proposal, so a client sees the reading behind the recommendation — with its run date, since a stale number should look stale.', meta:'6 saved · oldest May 2026' },
+        { anchorId:'rs-companies', title:'Client &amp; prospect profiles', body:'Every client and the companies they compete with, built from public filings and what they have shared under the engagement.', meta:'11 profiles' },
+        { anchorId:'rs-playbooks', title:'SOWs &amp; playbooks', body:'Your own past scopes are the most under-used source here — the language that failed on the last website rebuild is the language to fix on the next.', meta:'14 SOWs, 5 playbooks' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

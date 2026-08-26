@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .cm-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .cm-page{background:#f6f5f8;color:#18181b}
+    .cm-surface{background:#ffffff}
+    .cm-sunken{background:#faf9fc}
+    .cm-border{border-color:#e5e3ec}
+    .cm-bd-b{border-bottom-color:#e5e3ec}
+    .cm-bd-t{border-top-color:#e5e3ec}
+    .cm-text{color:#18181b}
+    .cm-muted{color:#6b6577}
+    .cm-strong{color:#3f3f46}
+    .cm-field{background:#faf9fc;border-color:#e5e3ec;color:#18181b}
+    .cm-track{background:#e9e7ef}
+
+    .cm-page.cm-dark{background:#0a090e;color:#ececf1}
+    .cm-dark .cm-surface{background:#17161d}
+    .cm-dark .cm-sunken{background:#1d1b25}
+    .cm-dark .cm-border{border-color:#2a2833}
+    .cm-dark .cm-bd-b{border-bottom-color:#2a2833}
+    .cm-dark .cm-bd-t{border-top-color:#2a2833}
+    .cm-dark .cm-text{color:#ececf1}
+    .cm-dark .cm-muted{color:#a5a0b2}
+    .cm-dark .cm-strong{color:#dcd9e4}
+    .cm-dark .cm-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+    .cm-dark .cm-track{background:#26232f}
+
+    .cm-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .cm-btn:hover{filter:brightness(1.05)}
+    .cm-seg{cursor:pointer;transition:background .13s,color .13s}
+    .cm-card{transition:box-shadow .13s,border-color .13s}
+    .cm-card.cm-live{cursor:pointer}
+    .cm-card.cm-live:hover{box-shadow:0 4px 14px rgba(10,9,14,.08)}
+    .cm-th{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .cm-fade{animation:cmFade .2s ease}
+    @keyframes cmFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    input,select,textarea{font-family:inherit;outline:none}
+    input:focus,select:focus,textarea:focus{border-color:#7c3aed}
+    ::placeholder{color:#8b8798}
+    @media (max-width:900px){.cm-2{grid-template-columns:1fr!important}.cm-3{grid-template-columns:1fr!important}}
+  </style>
+</helmet>
+
+<div class="cm-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- HEADER -->
+  <div class="cm-surface cm-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:30">
+    <div style="max-width:1080px;margin:0 auto;padding:15px 24px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:11px;min-width:0">
+        <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+          <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ megaIcon }}"></span>
+        </div>
+        <div style="min-width:0">
+          <div class="cm-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Co-marketing</div>
+          <div class="cm-muted" style="font-size:11.5px;margin-top:1px">Pitch content, Axal VC runs distribution, inbound demand attributes back to you.</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div class="cm-btn cm-border cm-muted" onClick="{{ toggleAdmin }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent" title="Demo: toggle admin view">{{ adminLabel }}</div>
+        <div class="cm-btn cm-border cm-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+          <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+          {{ themeLabel }}
+        </div>
+        <div class="cm-btn" onClick="{{ openCompose }}" style="padding:9px 17px;border-radius:9px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px">
+          <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ plusIcon }}"></span>
+          Pitch an idea
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1080px;margin:0 auto;padding:20px 24px 90px">
+
+    <!-- FIRST-RUN EXPLAINER -->
+    <sc-if value="{{ showExplainer }}">
+      <div class="cm-surface cm-border cm-fade" style="border-width:1px;border-style:solid;border-radius:16px;padding:18px 22px;margin-bottom:16px;display:flex;gap:14px;align-items:flex-start">
+        <div style="width:34px;height:34px;border-radius:11px;background:rgba(124,58,237,.1);color:{{ violet }};display:flex;align-items:center;justify-content:center;flex:none">
+          <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+        </div>
+        <div style="min-width:0;flex:1">
+          <div class="cm-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.012em">How co-marketing works</div>
+          <div class="cm-muted" style="font-size:12.5px;line-height:1.65;margin-top:5px;max-width:640px">Pitch a webinar, blog post, or podcast. If Axal VC approves it, the platform co-produces and distributes it across the network — and every inbound lead it generates is attributed to your profile, not lost in a shared funnel. Approval favours specific angles over broad topics.</div>
+        </div>
+        <div class="cm-btn cm-border cm-muted" onClick="{{ dismissExplainer }}" style="width:28px;height:28px;border-radius:8px;border-width:1px;border-style:solid;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none">×</div>
+      </div>
+    </sc-if>
+
+    <!-- ONE CONTROL ROW -->
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;min-width:0;flex:1">
+        <sc-for list="{{ statusChips }}" as="c" hint-placeholder-count="6">
+          <div class="cm-seg" onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}<sc-if value="{{ c.n }}"><span style="{{ c.nStyle }}">{{ c.n }}</span></sc-if></div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ isAdmin }}">
+        <select class="cm-field" onChange="{{ setScope }}" style="flex:none;padding:8px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600">
+          <option selected="{{ scopeMine }}">My pitches</option>
+          <option selected="{{ scopeAll }}">All pitches</option>
+        </select>
+      </sc-if>
+    </div>
+
+    <!-- ADMIN REVIEW HINT -->
+    <sc-if value="{{ reviewHint }}">
+      <div class="cm-sunken cm-border cm-fade" style="border-width:1px;border-style:solid;border-radius:12px;padding:11px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+        <span style="width:14px;height:14px;display:flex;flex:none;color:{{ amber }}" dangerouslySetInnerHTML="{{ clockIcon }}"></span>
+        <div class="cm-muted" style="font-size:12px;line-height:1.5">{{ reviewHintText }}</div>
+      </div>
+    </sc-if>
+
+    <!-- PITCH LIST -->
+    <sc-if value="{{ hasPitches }}">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ pitches }}" as="p" hint-placeholder-count="6">
+          <div class="cm-card cm-surface {{ p.liveClass }}" data-pitch="{{ p.k }}" onClick="{{ openPitch }}" style="{{ p.cardStyle }}">
+            <div style="display:flex;align-items:flex-start;gap:13px;flex-wrap:wrap">
+              <div style="{{ p.iconWrap }}">
+                <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ p.icon }}"></span>
+              </div>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                  <div class="cm-text" style="font-size:14px;font-weight:800;letter-spacing:-.012em;opacity:{{ p.titleOpacity }}">{{ p.title }}</div>
+                  <span style="{{ p.chip }}">{{ p.status }}</span>
+                </div>
+                <div class="cm-muted" style="font-size:12px;line-height:1.55;margin-top:4px;max-width:620px">{{ p.angle }}</div>
+                <div class="cm-muted cm-num" style="font-size:10.5px;margin-top:6px">{{ p.meta }}</div>
+                <sc-if value="{{ p.rejection }}">
+                  <div style="{{ p.rejectWrap }}">{{ p.rejection }}</div>
+                </sc-if>
+              </div>
+              <sc-if value="{{ p.attributed }}">
+                <div style="flex:none;text-align:right">
+                  <div class="cm-num" style="font-size:19px;font-weight:700;letter-spacing:-.024em;color:{{ violet }}">{{ p.attributed }}</div>
+                  <div class="cm-muted cm-th" style="margin-top:2px">inbound leads</div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ p.adminActions }}">
+                <div style="flex:none;display:flex;gap:7px">
+                  <div class="cm-btn" data-act="approve" data-pitch="{{ p.k }}" onClick="{{ adminAct }}" style="padding:7px 13px;border-radius:9px;background:rgba(17,102,50,.1);color:{{ green }};font-size:11.5px;font-weight:700">Approve</div>
+                  <div class="cm-btn" data-act="reject" data-pitch="{{ p.k }}" onClick="{{ adminAct }}" style="padding:7px 13px;border-radius:9px;background:rgba(185,28,28,.07);color:{{ red }};font-size:11.5px;font-weight:700">Reject</div>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- EMPTY STATES -->
+    <sc-if value="{{ noPitches }}">
+      <div class="cm-border" style="border-width:1px;border-style:dashed;border-radius:16px;padding:40px 24px;text-align:center">
+        <div class="cm-sunken cm-muted" style="width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;margin:0 auto">
+          <span style="width:19px;height:19px;display:flex" dangerouslySetInnerHTML="{{ emptyIcon }}"></span>
+        </div>
+        <div class="cm-text" style="font-size:14px;font-weight:800;margin-top:14px">{{ emptyTitle }}</div>
+        <div class="cm-muted" style="font-size:12.5px;line-height:1.6;margin-top:6px;max-width:420px;margin-left:auto;margin-right:auto">{{ emptyBody }}</div>
+        <sc-if value="{{ emptyCta }}">
+          <div class="cm-btn" onClick="{{ openCompose }}" style="display:inline-block;margin-top:16px;padding:10px 18px;border-radius:10px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700">{{ emptyCta }}</div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <!-- COMPOSE MODAL -->
+  <sc-if value="{{ composeOpen }}">
+    <div onClick="{{ closeCompose }}" style="position:fixed;inset:0;z-index:900;background:rgba(10,9,14,.52);display:flex;align-items:center;justify-content:center;padding:24px">
+      <div class="cm-surface" onClick="{{ stop }}" style="width:100%;max-width:560px;border-radius:18px;padding:26px 28px;box-shadow:0 24px 70px rgba(10,9,14,.36);max-height:88vh;overflow-y:auto">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div>
+            <div class="cm-text" style="font-size:17px;font-weight:800;letter-spacing:-.02em">Pitch an idea</div>
+            <div class="cm-muted" style="font-size:12px;line-height:1.6;margin-top:5px">Specific angles get approved. "How we cut onboarding to 4 minutes" beats "onboarding best practices".</div>
+          </div>
+          <div class="cm-btn cm-border cm-muted" onClick="{{ closeCompose }}" style="width:28px;height:28px;border-radius:8px;border-width:1px;border-style:solid;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none">×</div>
+        </div>
+
+        <div class="cm-muted cm-th" style="margin:18px 0 9px">Content type</div>
+        <div class="cm-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px">
+          <sc-for list="{{ typeCards }}" as="t" hint-placeholder-count="3">
+            <div class="cm-btn" data-type="{{ t.k }}" onClick="{{ pickType }}" style="{{ t.style }}">
+              <span style="width:16px;height:16px;display:flex;color:{{ t.iconTone }}" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+              <div style="font-size:12.5px;font-weight:700;margin-top:8px">{{ t.label }}</div>
+              <div class="cm-muted" style="font-size:10.5px;line-height:1.45;margin-top:3px">{{ t.hint }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+          <div>
+            <div class="cm-strong" style="font-size:11.5px;font-weight:600;margin-bottom:5px">Title</div>
+            <input class="cm-field" value="{{ f.title }}" onChange="{{ setTitle }}" placeholder="e.g. How we cut SOC 2 prep from 6 months to 6 weeks" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px">
+          </div>
+          <div>
+            <div class="cm-strong" style="font-size:11.5px;font-weight:600;margin-bottom:5px">Angle · what makes this worth an audience's time</div>
+            <textarea class="cm-field" value="{{ f.angle }}" onChange="{{ setAngle }}" rows="3" placeholder="The specific claim, story, or result — not the topic area." style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;resize:vertical;line-height:1.6"></textarea>
+          </div>
+          <div>
+            <div class="cm-strong" style="font-size:11.5px;font-weight:600;margin-bottom:5px">Target audience</div>
+            <input class="cm-field" value="{{ f.audience }}" onChange="{{ setAudience }}" placeholder="e.g. seed-stage founders preparing a first enterprise sale" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px">
+          </div>
+          <div>
+            <div class="cm-strong" style="font-size:11.5px;font-weight:600;margin-bottom:5px">What you bring · audience &amp; distribution</div>
+            <input class="cm-field" value="{{ f.brings }}" onChange="{{ setBrings }}" placeholder="e.g. 4,200 newsletter subscribers, 11k LinkedIn followers" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px">
+          </div>
+        </div>
+
+        <div class="cm-btn" onClick="{{ submitPitch }}" style="{{ submitStyle }}">{{ submitLabel }}</div>
+        <div class="cm-muted" style="font-size:10.5px;line-height:1.55;margin-top:10px;text-align:center">Review takes about a week. Approved pitches get a producer and a distribution slot.</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- PUBLISHED DETAIL MODAL -->
+  <sc-if value="{{ detailOpen }}">
+    <div onClick="{{ closeDetail }}" style="position:fixed;inset:0;z-index:900;background:rgba(10,9,14,.52);display:flex;align-items:center;justify-content:center;padding:24px">
+      <div class="cm-surface" onClick="{{ stop }}" style="width:100%;max-width:600px;border-radius:18px;padding:26px 28px;box-shadow:0 24px 70px rgba(10,9,14,.36);max-height:88vh;overflow-y:auto">
+        <div style="display:flex;align-items:flex-start;gap:13px">
+          <div style="{{ det.iconWrap }}">
+            <span style="width:17px;height:17px;display:flex" dangerouslySetInnerHTML="{{ det.icon }}"></span>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div class="cm-text" style="font-size:16.5px;font-weight:800;letter-spacing:-.02em;line-height:1.3">{{ det.title }}</div>
+            <div class="cm-muted cm-num" style="font-size:11px;margin-top:4px">{{ det.meta }}</div>
+          </div>
+          <div class="cm-btn cm-border cm-muted" onClick="{{ closeDetail }}" style="width:28px;height:28px;border-radius:8px;border-width:1px;border-style:solid;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none">×</div>
+        </div>
+
+        <!-- headline stats -->
+        <div class="cm-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px">
+          <sc-for list="{{ det.stats }}" as="s" hint-placeholder-count="3">
+            <div class="cm-sunken cm-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:13px 15px">
+              <div class="cm-muted cm-th" style="font-size:8.5px">{{ s.k }}</div>
+              <div class="cm-num" style="font-size:18px;font-weight:700;letter-spacing:-.022em;margin-top:4px;color:{{ s.tone }}">{{ s.v }}</div>
+              <div class="cm-muted" style="font-size:10px;margin-top:2px">{{ s.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- attribution chart -->
+        <div class="cm-muted cm-th" style="margin:18px 0 9px">Inbound leads attributed · by week</div>
+        <div style="display:flex;align-items:flex-end;gap:5px;height:88px">
+          <sc-for list="{{ det.bars }}" as="b" hint-placeholder-count="8">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end">
+              <div class="cm-num cm-muted" style="font-size:9px">{{ b.n }}</div>
+              <div style="{{ b.style }}" title="{{ b.label }}"></div>
+              <div class="cm-muted cm-num" style="font-size:8.5px">{{ b.wk }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- channels -->
+        <div class="cm-muted cm-th" style="margin:18px 0 9px">Distribution channels</div>
+        <div style="display:flex;flex-direction:column;gap:0">
+          <sc-for list="{{ det.channels }}" as="c" hint-placeholder-count="3">
+            <div class="cm-bd-t" style="display:flex;align-items:center;gap:11px;padding:10px 0;border-top-width:1px;border-top-style:solid">
+              <span class="cm-muted" style="width:13px;height:13px;display:flex;flex:none" dangerouslySetInnerHTML="{{ c.icon }}"></span>
+              <div class="cm-strong" style="font-size:12px;font-weight:600;min-width:0;flex:1">{{ c.name }}</div>
+              <div class="cm-muted cm-num" style="font-size:11px">{{ c.reach }}</div>
+              <div class="cm-num" style="font-size:12px;font-weight:700;flex:none;width:64px;text-align:right;color:{{ violet }}">{{ c.leads }} leads</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- leads handed over -->
+        <div class="cm-muted cm-th" style="margin:18px 0 9px">Recent leads on your profile</div>
+        <div style="display:flex;flex-direction:column;gap:0">
+          <sc-for list="{{ det.leads }}" as="l" hint-placeholder-count="3">
+            <div class="cm-bd-t" style="display:flex;align-items:center;gap:11px;padding:10px 0;border-top-width:1px;border-top-style:solid">
+              <div style="{{ l.avStyle }}">{{ l.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="cm-strong" style="font-size:12px;font-weight:600">{{ l.name }}</div>
+                <div class="cm-muted" style="font-size:10.5px;margin-top:1px">{{ l.meta }}</div>
+              </div>
+              <span style="{{ l.chip }}">{{ l.state }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="cm-muted" style="font-size:11px;line-height:1.55;margin-top:12px">{{ det.leadNote }}</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1080}}">
+class Component extends DCLogic {
+  state = { theme:'light', admin:false, filter:'All', scope:'mine',
+    explainer:true, composeOpen:false, detail:null,
+    f:{ type:'webinar', title:'', angle:'', audience:'', brings:'' },
+    submitted:[], adminActs:{} };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+  setF(k){ return (e) => this.setState(s => ({ f: Object.assign({}, s.f, { [k]: e.target.value }) })); }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+    // Text-safe violet — bare V7 measures ~2.5:1 on dark surfaces.
+    const VIO = dark ? '#c4b5fd' : V7;
+    const GRN = dark ? '#6ee7b7' : '#116632';
+    const AMB = dark ? '#fcd34d' : '#92400e';
+    const RED = dark ? '#fca5a5' : '#b91c1c';
+    const BLU = dark ? '#93b4fc' : '#1e40af';
+    const INK = dark ? '#ececf1' : '#18181b';
+    const MUT = dark ? '#a5a0b2' : '#6b6577';
+
+    const I = {
+      mega: this.ic('<path d="M3 11v2a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M17 9a4 4 0 0 1 0 6"/>'),
+      video: this.ic('<rect x="2" y="5" width="14" height="14" rx="2"/><path d="m16 10 6-3v10l-6-3"/>'),
+      pen: this.ic('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+      mic: this.ic('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>'),
+      spark: this.ic('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'),
+      plus: this.ic('<path d="M12 5v14M5 12h14"/>'),
+      clock: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
+      mail: this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="m2 7 10 6 10-6"/>'),
+      globe: this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/>'),
+      users: this.ic('<path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.4"/><path d="M22 20v-2a4 4 0 0 0-3-3.8"/>'),
+      inbox: this.ic('<path d="M3 12h5l2 3h4l2-3h5"/><path d="M3 12 5.5 5h13L21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+      sun: this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon: this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+    const TYPE = {
+      webinar: { icon:I.video, color:'#1d4ed8', label:'Webinar' },
+      blog:    { icon:I.pen, color:'#0f766e', label:'Blog post' },
+      podcast: { icon:I.mic, color:'#b45309', label:'Podcast' },
+    };
+    const TYPE_INK = {
+      '#1d4ed8': dark ? '#93b4fc' : '#1e40af',
+      '#0f766e': dark ? '#5eead4' : '#115e59',
+      '#b45309': dark ? '#fcd34d' : '#92400e',
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:9.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const cGreen = chip('rgba(17,102,50,.1)', GRN);
+    const cAmber = chip('rgba(180,83,9,.1)', AMB);
+    const cRed = chip('rgba(185,28,28,.09)', RED);
+    const cViolet = chip('rgba(124,58,237,.1)', VIO);
+    const cBlue = chip('rgba(29,78,216,.1)', BLU);
+    const cGrey = chip(dark ? '#2a2833' : '#f1f0f5', MUT);
+    const seg = (on) => 'padding:7px 13px;border-radius:9px;font-size:12px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? VIO : MUT)
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none')+';white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border:1px solid '
+      +(on ? (dark ? '#3a3455' : '#e5e0f2') : 'transparent');
+    const av = (bg) => 'width:26px;height:26px;border-radius:8px;background:'+bg+';color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const iconWrap = (c, sz) => 'width:'+(sz||36)+'px;height:'+(sz||36)+'px;border-radius:11px;background:'+c+'1c;color:'+(TYPE_INK[c]||c)+';display:flex;align-items:center;justify-content:center;flex:none';
+
+    // ============ PITCHES · one list, one source ============
+    // status: proposed | review | approved | published | rejected | withdrawn
+    const SEED = [
+      { k:'soc2', mine:true, type:'webinar', status:'published',
+        title:'How we cut SOC 2 prep from 6 months to 6 weeks', by:'You · Northwind Data',
+        angle:'A walkthrough of the exact control-mapping spreadsheet and the three audits we failed first.',
+        submitted:'May 14', published:'Jun 9', attributed:34,
+        stats:[ { k:'Inbound leads', v:'34', tone:VIO, note:'attributed to your profile' },
+                { k:'Registrations', v:'412', tone:INK, note:'188 attended live' },
+                { k:'Replay views', v:'1,240', tone:INK, note:'still accruing' } ],
+        bars:[3,7,9,6,4,2,2,1], barStart:'Jun 9',
+        channels:[ { name:'Axal VC newsletter', icon:I.mail, reach:'18,400 sent', leads:14 },
+                   { name:'Platform event listing', icon:I.globe, reach:'2,100 views', leads:11 },
+                   { name:'Partner cross-post · Sablefin', icon:I.users, reach:'6,800 reach', leads:9 } ],
+        leads:[ { name:'Dana Whitfield', initials:'DW', bg:'#1d4ed8', meta:'Head of Compliance · Ferrostack · via replay', state:'Contacted', chip:cBlue },
+                { name:'Marcus Oyelaran', initials:'MO', bg:'#0f766e', meta:'CTO · Lumenpath · attended live', state:'Meeting booked', chip:cGreen },
+                { name:'Ines Baptiste', initials:'IB', bg:'#b45309', meta:'Founder · Verity Health · via newsletter', state:'New', chip:cViolet } ],
+        leadNote:'All 34 leads sit on your profile under Inbound, with this webinar as source. Leads stay attributed even if they convert months later.' },
+      { k:'pricing', mine:true, type:'blog', status:'approved',
+        title:'We published our pricing and inbound tripled', by:'You · Northwind Data',
+        angle:'The internal debate, the two objections that nearly killed it, and 90 days of before/after funnel data.',
+        submitted:'Jul 28', meta2:'Producer assigned · draft due Aug 22' },
+      { k:'churn', mine:true, type:'podcast', status:'proposed',
+        title:'The churn post-mortem we ran on ourselves', by:'You · Northwind Data',
+        angle:'Interviewing our own churned customers on-air, with their permission — what they said versus what our dashboards claimed.',
+        submitted:'Aug 11' },
+      { k:'ai-eval', mine:true, type:'webinar', status:'rejected',
+        title:'AI evaluation frameworks for startups', by:'You · Northwind Data',
+        angle:'A survey of evaluation approaches for teams shipping LLM features.',
+        submitted:'Jun 30',
+        rejection:'Too broad for the network audience — resubmit anchored to your own eval pipeline and the regressions it caught.' },
+      { k:'hiring', mine:true, type:'blog', status:'withdrawn',
+        title:'Hiring your first AE before you have a sales motion', by:'You · Northwind Data',
+        angle:'Why we sequenced sales hiring wrong and what the first 60 days cost us.',
+        submitted:'Jun 2',
+        rejection:'Withdrawn by you on Jun 18 — folded into the pricing post instead.' },
+      { k:'kelp-lca', mine:false, type:'webinar', status:'proposed',
+        title:'Lifecycle analysis for material startups, without a consultant', by:'Diana Kessler · Kelp Bio',
+        angle:'The open-source LCA toolchain we used to answer investor sustainability diligence in a week.',
+        submitted:'Aug 12' },
+      { k:'arc-recon', mine:false, type:'podcast', status:'proposed',
+        title:'What reconciliation breaks at 10,000 payouts a day', by:'Tomas Arcline · Arcline',
+        angle:'A war-story episode on the three silent failure modes in cross-border payout data.',
+        submitted:'Aug 13' },
+      { k:'hal-idam', mine:false, type:'blog', status:'published',
+        title:'Machine identities outnumber your employees 40 to 1', by:'James Whitfield · Halyard Security',
+        angle:'An audit of service-account sprawl across 12 seed-stage companies, anonymised.',
+        submitted:'Apr 20', published:'May 15', attributed:21,
+        stats:[ { k:'Inbound leads', v:'21', tone:VIO, note:'attributed to James' },
+                { k:'Reads', v:'3,850', tone:INK, note:'8.1 min average' },
+                { k:'Shares', v:'96', tone:INK, note:'mostly LinkedIn' } ],
+        bars:[6,5,4,3,1,1,1,0], barStart:'May 15',
+        channels:[ { name:'Axal VC blog', icon:I.pen, reach:'3,850 reads', leads:12 },
+                   { name:'Axal VC newsletter', icon:I.mail, reach:'18,100 sent', leads:9 } ],
+        leads:[ { name:'Priya Menon', initials:'PM', bg:'#be185d', meta:'Founder · LoopSense · via blog', state:'Contacted', chip:cBlue } ],
+        leadNote:'Attribution shown to admins in aggregate; the lead list belongs to the pitcher.' },
+    ];
+
+    // session-submitted pitches + admin decisions layered over the seed
+    const PITCHES = SEED.concat(st.submitted).map(p => {
+      const act = st.adminActs[p.k];
+      if (!act) return p;
+      return Object.assign({}, p, act === 'approve'
+        ? { status:'approved', meta2:'Approved today · producer being assigned' }
+        : { status:'rejected', rejection:'Rejected today — feedback to follow by email.' });
+    });
+
+    const STATUS_META = {
+      proposed:  { label:'Proposed', chip:cGrey },
+      review:    { label:'In review', chip:cAmber },
+      approved:  { label:'Approved', chip:cBlue },
+      published: { label:'Published', chip:cGreen },
+      rejected:  { label:'Rejected', chip:cRed },
+      withdrawn: { label:'Withdrawn', chip:cGrey },
+    };
+
+    // ============ ONE CONTROL ROW ============
+    const isAdmin = st.admin;
+    const scope = isAdmin ? st.scope : 'mine';
+    const inScope = PITCHES.filter(p => scope === 'all' || p.mine);
+
+    const FILTERS = ['All','Proposed','In review','Approved','Published','Rejected'];
+    const filterKey = { 'Proposed':'proposed', 'In review':'review', 'Approved':'approved', 'Published':'published', 'Rejected':'rejected' };
+    const matches = (p, f) => f === 'All' ? true
+      : f === 'Rejected' ? (p.status === 'rejected' || p.status === 'withdrawn')
+      : p.status === filterKey[f];
+    const statusChips = FILTERS.map(f => {
+      const n = inScope.filter(p => matches(p, f)).length;
+      return { label:f, n: f === 'All' ? '' : String(n),
+        nStyle:'font-size:9.5px;font-weight:700;opacity:.65',
+        style: seg(st.filter === f),
+        go: () => this.setState({ filter:f }) };
+    });
+
+    const shown = inScope.filter(p => matches(p, st.filter));
+
+    const pitches = shown.map(p => {
+      const t = TYPE[p.type], m = STATUS_META[p.status];
+      const muted = p.status === 'rejected' || p.status === 'withdrawn';
+      const isPub = p.status === 'published';
+      const adminActs = isAdmin && scope === 'all' && p.status === 'proposed' && !p.mine;
+      return { k:p.k, title:p.title, angle:p.angle,
+        icon:t.icon, iconWrap: iconWrap(t.color),
+        status:m.label, chip:m.chip,
+        titleOpacity: muted ? '.6' : '1',
+        meta: t.label + ' · ' + p.by + ' · submitted ' + p.submitted
+          + (p.published ? ' · published ' + p.published : '')
+          + (p.meta2 ? ' · ' + p.meta2 : ''),
+        attributed: isPub ? String(p.attributed) : '',
+        rejection: p.rejection || '',
+        rejectWrap:'margin-top:8px;padding:8px 11px;border-radius:9px;font-size:11px;line-height:1.55;max-width:560px;background:'
+          + (dark ? 'rgba(185,28,28,.08)' : 'rgba(185,28,28,.05)') + ';color:' + (p.status === 'withdrawn' ? MUT : RED),
+        adminActions: adminActs,
+        liveClass: isPub ? 'cm-live' : '',
+        cardStyle:'border-radius:16px;padding:17px 21px;border:1px solid '
+          + (isPub ? (dark ? 'rgba(124,58,237,.32)' : 'rgba(124,58,237,.22)') : (dark ? '#2a2833' : '#e5e3ec'))
+          + (muted ? ';opacity:.75' : '') };
+    });
+
+    // ============ EMPTY STATES ============
+    const EMPTY = {
+      'All':       { t:'No pitches yet', b:'Pitch a webinar, blog post, or podcast. Approved content gets produced and distributed by Axal VC, and every lead it generates lands on your profile.', cta:'Pitch your first idea' },
+      'Proposed':  { t:'Nothing proposed', b:'Pitches you submit wait here while Axal VC reviews them — usually about a week.', cta:'Pitch an idea' },
+      'In review': { t:'Nothing in review', b:'When a proposed pitch is picked up by the review team it moves here with a decision due date.', cta:'' },
+      'Approved':  { t:'Nothing approved yet', b:'Approved pitches get a producer and a distribution slot before publishing.', cta:'' },
+      'Published': { t:'Nothing published yet', b:'Published content shows its attribution here — inbound leads, channels, and the people they became.', cta:'' },
+      'Rejected':  { t:'Nothing rejected', b:'Rejected and withdrawn pitches stay visible with their reason, so the feedback is never lost.', cta:'' },
+    };
+    const emptyMeta = EMPTY[st.filter] || EMPTY.All;
+
+    // ============ COMPOSE ============
+    const f = st.f;
+    const typeCards = Object.keys(TYPE).map(k => {
+      const t = TYPE[k], on = f.type === k;
+      return { k, label:t.label, icon:t.icon, iconTone: TYPE_INK[t.color] || t.color,
+        hint: k === 'webinar' ? 'Best for demos and walkthroughs with Q&A'
+          : k === 'blog' ? 'Best for data, post-mortems, and contrarian takes'
+          : 'Best for war stories and founder-to-founder conversation',
+        style:'border-radius:12px;padding:13px 14px;text-align:left;border:1px solid '
+          + (on ? V : (dark ? '#2a2833' : '#e5e3ec'))
+          + (on ? ';background:' + (dark ? 'rgba(124,58,237,.08)' : 'rgba(124,58,237,.04)') : '') };
+    });
+    const canSubmit = f.title.trim().length > 8 && f.angle.trim().length > 20;
+
+    // ============ DETAIL ============
+    const detRaw = st.detail ? PITCHES.find(p => p.k === st.detail) : null;
+    const maxBar = detRaw ? Math.max.apply(null, detRaw.bars.concat([1])) : 1;
+    const det = detRaw ? {
+      title:detRaw.title, icon:TYPE[detRaw.type].icon, iconWrap: iconWrap(TYPE[detRaw.type].color, 40),
+      meta: TYPE[detRaw.type].label + ' · published ' + detRaw.published + ' · ' + detRaw.by,
+      stats: detRaw.stats,
+      bars: detRaw.bars.map((n,i) => ({ n:String(n), wk:'W'+(i+1), label:n + ' leads · week ' + (i+1),
+        style:'width:100%;max-width:26px;border-radius:5px 5px 2px 2px;background:'+V+';opacity:'+(0.55 + (n / maxBar) * 0.45)+';height:'+Math.max(4, n / maxBar * 52)+'px' })),
+      channels: detRaw.channels.map(c => ({ name:c.name, icon:c.icon, reach:c.reach, leads:String(c.leads) })),
+      leads: detRaw.leads.map(l => ({ name:l.name, initials:l.initials, avStyle: av(l.bg), meta:l.meta, state:l.state, chip:l.chip })),
+      leadNote: detRaw.leadNote,
+    } : {};
+
+    // ============ REVIEW HINT (admin) ============
+    const proposedAll = PITCHES.filter(p => p.status === 'proposed').length;
+    const reviewHint = isAdmin && scope === 'all' && (st.filter === 'All' || st.filter === 'Proposed') && proposedAll > 0;
+
+    return {
+      themeClass: dark ? 'cm-dark' : '',
+      themeIcon: dark ? I.sun : I.moon, themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      megaIcon:I.mega, plusIcon:I.plus, sparkIcon:I.spark, clockIcon:I.clock, emptyIcon:I.inbox,
+      violet:VIO, green:GRN, amber:AMB, red:RED,
+
+      adminLabel: isAdmin ? 'Viewing as: admin' : 'Viewing as: founder',
+      toggleAdmin: () => this.setState(s => ({ admin: !s.admin, scope:'mine', filter:'All' })),
+      isAdmin,
+      scopeMine: scope === 'mine', scopeAll: scope === 'all',
+      setScope: (e) => this.setState({ scope: /All/.test(e.target.value) ? 'all' : 'mine' }),
+
+      showExplainer: st.explainer && !isAdmin,
+      dismissExplainer: () => this.setState({ explainer:false }),
+
+      statusChips, pitches,
+      hasPitches: pitches.length > 0, noPitches: pitches.length === 0,
+      emptyTitle: emptyMeta.t, emptyBody: emptyMeta.b, emptyCta: emptyMeta.cta,
+
+      reviewHint,
+      reviewHintText: proposedAll + ' proposed pitch' + (proposedAll === 1 ? '' : 'es') + ' awaiting review — approve or reject inline. Oldest submitted Aug 11.',
+      adminAct: (e) => {
+        e.stopPropagation();
+        const n = (e.currentTarget || e.target).closest('[data-act]');
+        if (!n) return;
+        const act = n.getAttribute('data-act'), k = n.getAttribute('data-pitch');
+        if (act && k) this.setState(s => ({ adminActs: Object.assign({}, s.adminActs, { [k]: act }) }));
+      },
+
+      composeOpen: st.composeOpen,
+      openCompose: () => this.setState({ composeOpen:true }),
+      closeCompose: () => this.setState({ composeOpen:false }),
+      f, typeCards,
+      pickType: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-type]');
+        const k = n && n.getAttribute('data-type');
+        if (k) this.setState(s => ({ f: Object.assign({}, s.f, { type:k }) }));
+      },
+      setTitle:this.setF('title'), setAngle:this.setF('angle'),
+      setAudience:this.setF('audience'), setBrings:this.setF('brings'),
+      submitLabel: canSubmit ? 'Submit pitch' : 'Add a title and a specific angle',
+      submitStyle:'margin-top:18px;padding:12px 0;border-radius:11px;text-align:center;font-size:13px;font-weight:700;'
+        + (canSubmit ? 'background:'+V+';color:#fff' : 'background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+MUT+';cursor:not-allowed'),
+      submitPitch: () => { if (canSubmit) this.setState(s => ({
+        composeOpen:false, filter:'Proposed',
+        submitted: s.submitted.concat([{ k:'new-'+s.submitted.length, mine:true, type:s.f.type, status:'proposed',
+          title:s.f.title, by:'You · Northwind Data', angle:s.f.angle, submitted:'Aug 14' }]),
+        f:{ type:'webinar', title:'', angle:'', audience:'', brings:'' } })); },
+
+      openPitch: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-pitch]');
+        const k = n && n.getAttribute('data-pitch');
+        if (!k) return;
+        const p = PITCHES.find(x => x.k === k);
+        if (p && p.status === 'published') this.setState({ detail:k });
+      },
+      detailOpen: !!detRaw, det,
+      closeDetail: () => this.setState({ detail:null }),
+
+      stop: (e) => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>

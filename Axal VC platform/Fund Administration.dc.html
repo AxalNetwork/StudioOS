@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .fa-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .fa-page{background:#f6f5f8;color:#18181b}
+    .fa-surface{background:#ffffff}
+    .fa-sunken{background:#faf9fc}
+    .fa-border{border-color:#e5e3ec}
+    .fa-bd-b{border-bottom-color:#e5e3ec}
+    .fa-bd-t{border-top-color:#e5e3ec}
+    .fa-bd-l{border-left-color:#e5e3ec}
+    .fa-text{color:#18181b}
+    .fa-muted{color:#6b6577}
+    .fa-strong{color:#3f3f46}
+    .fa-field{background:#faf9fc;border-color:#e5e3ec;color:#18181b}
+    .fa-track{background:#e5e3ec}
+
+    .fa-page.fa-dark{background:#0a090e;color:#ececf1}
+    .fa-dark .fa-surface{background:#17161d}
+    .fa-dark .fa-sunken{background:#1d1b25}
+    .fa-dark .fa-border{border-color:#2a2833}
+    .fa-dark .fa-bd-b{border-bottom-color:#2a2833}
+    .fa-dark .fa-bd-t{border-top-color:#2a2833}
+    .fa-dark .fa-bd-l{border-left-color:#2a2833}
+    .fa-dark .fa-text{color:#ececf1}
+    .fa-dark .fa-muted{color:#a5a0b2}
+    .fa-dark .fa-strong{color:#dcd9e4}
+    .fa-dark .fa-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+    .fa-dark .fa-track{background:#26232f}
+
+    .fa-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .fa-btn:hover{filter:brightness(1.05)}
+    .fa-tab{cursor:pointer;transition:color .13s,border-color .13s}
+    .fa-seg{cursor:pointer;transition:background .13s,color .13s}
+    .fa-row{transition:background .12s}
+    .fa-row:hover{background:#faf9fc}
+    .fa-dark .fa-row:hover{background:#1d1b25}
+    .fa-th{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .fa-fade{animation:faFade .2s ease}
+    @keyframes faFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    input,select{font-family:inherit;outline:none}
+    input:focus,select:focus{border-color:#7c3aed}
+    input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:99px;cursor:pointer}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:#7c3aed;border:2.5px solid #fff;box-shadow:0 1px 3px rgba(10,9,14,.28)}
+    .fa-dark input[type=range]::-webkit-slider-thumb{border-color:#17161d}
+    @media (max-width:1080px){.fa-2{grid-template-columns:1fr!important}.fa-3{grid-template-columns:1fr!important}.fa-4{grid-template-columns:1fr 1fr!important}.fa-wide{overflow-x:auto}}
+  </style>
+</helmet>
+
+<div class="fa-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="fa-surface fa-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:40">
+    <div style="max-width:1440px;margin:0 auto;padding:14px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0">
+          <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ vaultIcon }}"></span>
+          </div>
+          <div style="min-width:0">
+            <div class="fa-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Fund Administration</div>
+            <div class="fa-muted" style="font-size:11.5px;margin-top:1px">{{ chromeSub }}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="{{ asOfChip }}">{{ asOfLabel }}</span>
+          <div class="fa-btn fa-border fa-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+            {{ themeLabel }}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:20px;margin-top:14px;overflow-x:auto">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+          <div class="fa-tab" onClick="{{ t.go }}" style="{{ t.style }}">
+            <span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            <span>{{ t.label }}</span>
+            <sc-if value="{{ t.flag }}"><span style="{{ t.flagStyle }}">{{ t.flag }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1440px;margin:0 auto;padding:22px 24px 90px">
+
+  <!-- ============ 1 · FUND SETUP ============ -->
+  <sc-if value="{{ tabSetup }}">
+  <div class="fa-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="min-width:0">
+        <div class="fa-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em">Fund setup</div>
+        <div class="fa-muted" style="font-size:12.5px;margin-top:4px;max-width:600px;line-height:1.6">These terms drive every downstream calculation — fee accrual, the distribution waterfall, LP statements. Changing them after the first close requires an LPA amendment, so the wizard is deliberately slow.</div>
+      </div>
+      <div class="fa-muted fa-num" style="font-size:11px;flex:none">{{ setupStepLine }}</div>
+    </div>
+
+    <div class="fa-2" style="display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start">
+      <!-- form -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px">
+          <div class="fa-muted fa-th">Identity &amp; size</div>
+          <div class="fa-2" style="display:grid;grid-template-columns:1.6fr 1fr;gap:14px;margin-top:14px">
+            <div>
+              <div class="fa-strong" style="font-size:11.5px;font-weight:600;margin-bottom:6px">Fund name</div>
+              <input class="fa-field" value="{{ f.name }}" onChange="{{ setName }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+            </div>
+            <div>
+              <div class="fa-strong" style="font-size:11.5px;font-weight:600;margin-bottom:6px">Vintage</div>
+              <select class="fa-field" onChange="{{ setVintage }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+                <sc-for list="{{ vintageOpts }}" as="o" hint-placeholder-count="3">
+                  <option selected="{{ o.selected }}">{{ o.label }}</option>
+                </sc-for>
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:15px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+              <div class="fa-strong" style="font-size:11.5px;font-weight:600">Target size</div>
+              <div class="fa-num fa-text" style="font-size:15px;font-weight:700">{{ targetLabel }}</div>
+            </div>
+            <input class="fa-track" type="range" min="2" max="50" step="1" value="{{ target }}" onChange="{{ setTarget }}" style="width:100%;margin-top:9px">
+            <div class="fa-muted" style="font-size:10.5px;margin-top:5px">Hard cap set at 125% of target — {{ hardCapLabel }}.</div>
+          </div>
+        </div>
+
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px">
+          <div class="fa-muted fa-th">Management fee</div>
+          <div class="fa-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+            <div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+                <div class="fa-strong" style="font-size:11.5px;font-weight:600">Annual rate</div>
+                <div class="fa-num fa-text" style="font-size:14px;font-weight:700">{{ feeLabel }}</div>
+              </div>
+              <input class="fa-track" type="range" min="1" max="3" step="0.25" value="{{ fee }}" onChange="{{ setFee }}" style="width:100%;margin-top:9px">
+            </div>
+            <div>
+              <div class="fa-strong" style="font-size:11.5px;font-weight:600;margin-bottom:6px">Step-down</div>
+              <select class="fa-field" onChange="{{ setStep }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+                <sc-for list="{{ stepOpts }}" as="o" hint-placeholder-count="3">
+                  <option selected="{{ o.selected }}">{{ o.label }}</option>
+                </sc-for>
+              </select>
+            </div>
+          </div>
+          <div class="fa-sunken fa-border" style="border-width:1px;border-style:solid;border-radius:11px;padding:12px 14px;margin-top:14px">
+            <div class="fa-muted" style="font-size:11px;line-height:1.6">{{ feeExplain }}</div>
+          </div>
+        </div>
+
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px">
+          <div class="fa-muted fa-th">Carried interest</div>
+          <div class="fa-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+            <div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+                <div class="fa-strong" style="font-size:11.5px;font-weight:600">Carry</div>
+                <div class="fa-num fa-text" style="font-size:14px;font-weight:700">{{ carryLabel }}</div>
+              </div>
+              <input class="fa-track" type="range" min="10" max="30" step="2.5" value="{{ carry }}" onChange="{{ setCarry }}" style="width:100%;margin-top:9px">
+            </div>
+            <div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+                <div class="fa-strong" style="font-size:11.5px;font-weight:600">Preferred return</div>
+                <div class="fa-num fa-text" style="font-size:14px;font-weight:700">{{ hurdleLabel }}</div>
+              </div>
+              <input class="fa-track" type="range" min="0" max="12" step="1" value="{{ hurdle }}" onChange="{{ setHurdle }}" style="width:100%;margin-top:9px">
+            </div>
+          </div>
+
+          <div style="margin-top:16px">
+            <div class="fa-strong" style="font-size:11.5px;font-weight:600;margin-bottom:8px">Waterfall</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <sc-for list="{{ waterfallOpts }}" as="w" hint-placeholder-count="2">
+                <div class="fa-btn" onClick="{{ w.go }}" style="{{ w.style }}">
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:12.5px;font-weight:{{ w.weight }}">{{ w.name }}</div>
+                    <div class="fa-muted" style="font-size:11px;line-height:1.5;margin-top:3px">{{ w.line }}</div>
+                  </div>
+                  <sc-if value="{{ w.on }}">
+                    <span style="width:14px;height:14px;display:flex;flex:none;color:#7c3aed;margin-top:2px" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px">
+          <div class="fa-muted fa-th">Term &amp; commitment</div>
+          <div class="fa-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px">
+            <div>
+              <div class="fa-strong" style="font-size:11.5px;font-weight:600;margin-bottom:6px">Fund term</div>
+              <select class="fa-field" onChange="{{ setTerm }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+                <sc-for list="{{ termOpts }}" as="o" hint-placeholder-count="3">
+                  <option selected="{{ o.selected }}">{{ o.label }}</option>
+                </sc-for>
+              </select>
+            </div>
+            <div>
+              <div class="fa-strong" style="font-size:11.5px;font-weight:600;margin-bottom:6px">Extensions</div>
+              <select class="fa-field" onChange="{{ setExt }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+                <sc-for list="{{ extOpts }}" as="o" hint-placeholder-count="3">
+                  <option selected="{{ o.selected }}">{{ o.label }}</option>
+                </sc-for>
+              </select>
+            </div>
+            <div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+                <div class="fa-strong" style="font-size:11.5px;font-weight:600">GP commitment</div>
+                <div class="fa-num fa-text" style="font-size:14px;font-weight:700">{{ gpLabel }}</div>
+              </div>
+              <input class="fa-track" type="range" min="0.5" max="5" step="0.5" value="{{ gpPct }}" onChange="{{ setGp }}" style="width:100%;margin-top:9px">
+              <div class="fa-muted fa-num" style="font-size:10px;margin-top:5px">{{ gpAmountLabel }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- summary card -->
+      <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden;position:sticky;top:112px">
+        <div style="background:#7c3aed;color:#fff;padding:20px 22px">
+          <div style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;opacity:.78">Fund summary</div>
+          <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1.3">{{ f.name }}</div>
+          <div class="fa-num" style="font-size:11.5px;opacity:.8;margin-top:4px">{{ summarySub }}</div>
+        </div>
+        <div style="padding:6px 22px 18px">
+          <sc-for list="{{ summaryRows }}" as="r" hint-placeholder-count="8">
+            <div class="fa-bd-t" style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:11px 0;border-top-width:1px;border-top-style:solid">
+              <div class="fa-muted" style="font-size:11.5px;min-width:0">{{ r.k }}</div>
+              <div class="fa-num fa-strong" style="font-size:12px;font-weight:700;text-align:right;flex:none">{{ r.v }}</div>
+            </div>
+          </sc-for>
+          <div class="fa-sunken fa-border" style="border-width:1px;border-style:solid;border-radius:11px;padding:12px 14px;margin-top:14px">
+            <div class="fa-strong" style="font-size:11px;font-weight:700">Fee load over term</div>
+            <div class="fa-muted" style="font-size:11px;line-height:1.6;margin-top:5px">{{ feeLoadNote }}</div>
+          </div>
+          <div class="fa-btn" style="margin-top:14px;padding:11px 0;border-radius:10px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700;text-align:center">Create fund &amp; open dashboard</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 2 · DASHBOARD ============ -->
+  <sc-if value="{{ tabDash }}">
+  <div class="fa-fade">
+    <!-- fund header card -->
+    <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:18px;padding:24px 28px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div class="fa-muted fa-th">{{ fund.name }}</div>
+          <div style="display:flex;align-items:baseline;gap:12px;margin-top:8px;flex-wrap:wrap">
+            <div class="fa-num fa-text" style="font-size:34px;font-weight:700;letter-spacing:-.04em;line-height:1">{{ dash.called }}</div>
+            <div class="fa-muted" style="font-size:14px;font-weight:600">called of {{ dash.committed }} committed</div>
+          </div>
+          <div class="fa-muted" style="font-size:12.5px;margin-top:7px">{{ dash.headline }}</div>
+        </div>
+        <div style="display:flex;gap:26px;flex-wrap:wrap;flex:none">
+          <sc-for list="{{ dash.tiles }}" as="t" hint-placeholder-count="3">
+            <div style="text-align:right">
+              <div class="fa-muted fa-th" style="font-size:9px">{{ t.k }}</div>
+              <div class="fa-num" style="font-size:20px;font-weight:700;letter-spacing:-.024em;margin-top:5px;color:{{ t.tone }}">{{ t.v }}</div>
+              <div class="fa-muted fa-num" style="font-size:10px;margin-top:2px">{{ t.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- capital waterfall bar -->
+      <div style="margin-top:22px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div class="fa-muted fa-th">Capital flow</div>
+          <div class="fa-muted fa-num" style="font-size:11px">{{ dash.flowLine }}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-top:13px">
+          <sc-for list="{{ dash.flow }}" as="r" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:13px">
+              <div class="fa-strong" style="font-size:11.5px;font-weight:600;min-width:96px;flex:none">{{ r.k }}</div>
+              <div class="fa-track" style="flex:1;min-width:80px;height:16px;border-radius:5px;overflow:hidden;display:flex">
+                <div style="{{ r.padStyle }}"></div>
+                <div style="{{ r.barStyle }}"></div>
+              </div>
+              <div class="fa-num fa-text" style="font-size:12.5px;font-weight:700;flex:none;width:76px;text-align:right">{{ r.v }}</div>
+              <div class="fa-muted fa-num" style="font-size:10.5px;flex:none;width:52px;text-align:right">{{ r.pct }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="fa-bd-t" style="display:flex;gap:26px;margin-top:20px;padding-top:16px;border-top-width:1px;border-top-style:solid;flex-wrap:wrap">
+        <sc-for list="{{ dash.terms }}" as="t" hint-placeholder-count="5">
+          <div>
+            <div class="fa-muted fa-th" style="font-size:9px">{{ t.k }}</div>
+            <div class="fa-strong fa-num" style="font-size:12.5px;font-weight:700;margin-top:4px">{{ t.v }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div class="fa-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;align-items:start">
+      <!-- next call -->
+      <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div class="fa-muted fa-th">Next planned call</div>
+          <span style="{{ nextCallChip }}">{{ nextCallState }}</span>
+        </div>
+        <div class="fa-num fa-text" style="font-size:26px;font-weight:700;letter-spacing:-.03em;margin-top:9px">{{ nextCall.amount }}</div>
+        <div class="fa-muted" style="font-size:12px;line-height:1.6;margin-top:5px">{{ nextCall.note }}</div>
+        <div style="display:flex;flex-direction:column;gap:0;margin-top:14px">
+          <sc-for list="{{ nextCall.rows }}" as="r" hint-placeholder-count="3">
+            <div class="fa-bd-t" style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top-width:1px;border-top-style:solid">
+              <div class="fa-muted" style="font-size:11.5px">{{ r.k }}</div>
+              <div class="fa-num fa-strong" style="font-size:11.5px;font-weight:700">{{ r.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="fa-btn" onClick="{{ goCall }}" style="margin-top:14px;padding:10px 0;border-radius:9px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700;text-align:center">Open call builder</div>
+      </div>
+
+      <!-- call history -->
+      <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="fa-sunken fa-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px">
+          <div class="fa-muted fa-th">Capital call history</div>
+        </div>
+        <sc-for list="{{ callHistory }}" as="c" hint-placeholder-count="4">
+          <div class="fa-row fa-bd-b" style="display:flex;align-items:center;gap:12px;padding:13px 20px;border-bottom-width:1px;border-bottom-style:solid">
+            <div style="min-width:0;flex:1">
+              <div class="fa-strong" style="font-size:12px;font-weight:700">{{ c.name }}</div>
+              <div class="fa-muted fa-num" style="font-size:10.5px;margin-top:2px">{{ c.meta }}</div>
+            </div>
+            <div style="text-align:right;flex:none;width:74px">
+              <div class="fa-num fa-text" style="font-size:12px;font-weight:700">{{ c.amount }}</div>
+            </div>
+            <div style="flex:none;width:78px">
+              <div class="fa-track" style="height:5px;border-radius:99px;overflow:hidden">
+                <div style="{{ c.barStyle }}"></div>
+              </div>
+              <div class="fa-muted fa-num" style="font-size:9.5px;margin-top:4px;text-align:right">{{ c.pct }}</div>
+            </div>
+            <span style="{{ c.chip }}">{{ c.state }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 3 · CAPITAL CALL ============ -->
+  <sc-if value="{{ tabCall }}">
+  <div class="fa-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="min-width:0">
+        <div class="fa-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em">Capital call</div>
+        <div class="fa-muted" style="font-size:12.5px;margin-top:4px">{{ callSub }}</div>
+      </div>
+      <div class="fa-sunken fa-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex:none">
+        <sc-for list="{{ callSteps }}" as="s" hint-placeholder-count="3">
+          <div class="fa-seg" onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- STEP 1+2 · build -->
+    <sc-if value="{{ callBuild }}">
+      <div class="fa-2 fa-fade" style="display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start">
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="fa-muted fa-th">Amount &amp; purpose</div>
+          <div style="margin-top:14px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+              <div class="fa-strong" style="font-size:11.5px;font-weight:600">Call amount</div>
+              <div class="fa-num fa-text" style="font-size:16px;font-weight:700">{{ newCallLabel }}</div>
+            </div>
+            <input class="fa-track" type="range" min="200" max="2500" step="50" value="{{ newCall }}" onChange="{{ setNewCall }}" style="width:100%;margin-top:9px">
+            <div class="fa-muted fa-num" style="font-size:10.5px;margin-top:5px">{{ newCallPctLine }}</div>
+          </div>
+          <div style="margin-top:15px">
+            <div class="fa-strong" style="font-size:11.5px;font-weight:600;margin-bottom:6px">Purpose</div>
+            <select class="fa-field" onChange="{{ setPurpose }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+              <sc-for list="{{ purposeOpts }}" as="o" hint-placeholder-count="4">
+                <option selected="{{ o.selected }}">{{ o.label }}</option>
+              </sc-for>
+            </select>
+          </div>
+          <div class="fa-bd-t" style="margin-top:16px;padding-top:14px;border-top-width:1px;border-top-style:solid;display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ newCallRows }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;justify-content:space-between;gap:10px">
+                <div class="fa-muted" style="font-size:11.5px">{{ r.k }}</div>
+                <div class="fa-num fa-strong" style="font-size:11.5px;font-weight:700">{{ r.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="fa-btn" onClick="{{ goTrack }}" style="margin-top:16px;padding:11px 0;border-radius:10px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700;text-align:center">Preview notice &amp; send</div>
+        </div>
+
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="fa-sunken fa-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div class="fa-muted fa-th">Pro-rata breakdown · editable per LP</div>
+            <div class="fa-muted fa-num" style="font-size:11px">{{ proRataFootLine }}</div>
+          </div>
+          <div class="fa-wide">
+            <div class="fa-sunken fa-bd-b" style="display:grid;grid-template-columns:1.9fr 1fr .75fr 1.1fr 1fr;border-bottom-width:1px;border-bottom-style:solid;min-width:660px">
+              <div class="fa-muted fa-th" style="padding:8px 20px">Limited partner</div>
+              <div class="fa-muted fa-th" style="padding:8px 10px;text-align:right">Commitment</div>
+              <div class="fa-muted fa-th" style="padding:8px 10px;text-align:right">Share</div>
+              <div class="fa-muted fa-th" style="padding:8px 10px;text-align:right">This call</div>
+              <div class="fa-muted fa-th" style="padding:8px 20px 8px 10px;text-align:right">Unfunded after</div>
+            </div>
+            <sc-for list="{{ proRata }}" as="p" hint-placeholder-count="12">
+              <div class="fa-row fa-bd-b" style="display:grid;grid-template-columns:1.9fr 1fr .75fr 1.1fr 1fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:660px">
+                <div style="padding:10px 20px;display:flex;align-items:center;gap:10px;min-width:0">
+                  <div style="{{ p.avStyle }}">{{ p.initials }}</div>
+                  <div style="min-width:0">
+                    <div class="fa-strong" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</div>
+                    <div class="fa-muted" style="font-size:10px;margin-top:1px">{{ p.type }}</div>
+                  </div>
+                </div>
+                <div class="fa-num fa-muted" style="padding:10px 10px;font-size:11.5px;text-align:right">{{ p.commit }}</div>
+                <div class="fa-num fa-muted" style="padding:10px 10px;font-size:11px;text-align:right">{{ p.share }}</div>
+                <div class="fa-num fa-text" style="padding:10px 10px;font-size:12.5px;font-weight:700;text-align:right">{{ p.amount }}</div>
+                <div class="fa-num fa-muted" style="padding:10px 20px 10px 10px;font-size:11.5px;text-align:right">{{ p.unfunded }}</div>
+              </div>
+            </sc-for>
+            <div class="fa-sunken" style="display:grid;grid-template-columns:1.9fr 1fr .75fr 1.1fr 1fr;align-items:center;min-width:660px">
+              <div class="fa-text" style="padding:12px 20px;font-size:11.5px;font-weight:800">{{ lpCount }} limited partners</div>
+              <div class="fa-num fa-strong" style="padding:12px 10px;font-size:11.5px;font-weight:700;text-align:right">{{ totalCommit }}</div>
+              <div class="fa-num fa-muted" style="padding:12px 10px;font-size:11px;text-align:right">100.0%</div>
+              <div class="fa-num fa-text" style="padding:12px 10px;font-size:13px;font-weight:800;text-align:right">{{ newCallLabel }}</div>
+              <div class="fa-num fa-strong" style="padding:12px 20px 12px 10px;font-size:11.5px;font-weight:700;text-align:right">{{ totalUnfundedAfter }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- STEP 3 · tracking -->
+    <sc-if value="{{ callTrack }}">
+      <div class="fa-fade">
+        <div class="fa-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+          <sc-for list="{{ trackStats }}" as="s" hint-placeholder-count="4">
+            <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:15px 18px">
+              <div class="fa-muted fa-th">{{ s.k }}</div>
+              <div class="fa-num" style="font-size:20px;font-weight:700;letter-spacing:-.024em;margin-top:6px;color:{{ s.tone }}">{{ s.v }}</div>
+              <div class="fa-muted" style="font-size:10.5px;margin-top:2px">{{ s.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="fa-sunken fa-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div style="min-width:0">
+              <div class="fa-muted fa-th">Collection · {{ activeCall.ref }}</div>
+              <div class="fa-strong fa-num" style="font-size:12px;font-weight:700;margin-top:3px">{{ activeCall.line }}</div>
+            </div>
+            <sc-if value="{{ hasOutstanding }}">
+              <div class="fa-btn" onClick="{{ remindAll }}" style="padding:7px 13px;border-radius:8px;background:rgba(124,58,237,.1);color:#6d28d9;font-size:11.5px;font-weight:700">{{ remindAllLabel }}</div>
+            </sc-if>
+          </div>
+          <div class="fa-wide">
+            <div class="fa-sunken fa-bd-b" style="display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr .9fr 1.2fr auto;border-bottom-width:1px;border-bottom-style:solid;min-width:900px">
+              <div class="fa-muted fa-th" style="padding:9px 20px">Limited partner</div>
+              <div class="fa-muted fa-th" style="padding:9px 10px;text-align:right">Called</div>
+              <div class="fa-muted fa-th" style="padding:9px 10px;text-align:right">Received</div>
+              <div class="fa-muted fa-th" style="padding:9px 10px;text-align:right">Outstanding</div>
+              <div class="fa-muted fa-th" style="padding:9px 10px;text-align:right">Aging</div>
+              <div class="fa-muted fa-th" style="padding:9px 10px">Status</div>
+              <div class="fa-muted fa-th" style="padding:9px 20px 9px 10px;text-align:right">Action</div>
+            </div>
+            <sc-for list="{{ collection }}" as="c" hint-placeholder-count="12">
+              <div class="fa-row fa-bd-b" style="display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr .9fr 1.2fr auto;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:900px;background:{{ c.rowBg }}">
+                <div style="padding:11px 20px;display:flex;align-items:center;gap:10px;min-width:0">
+                  <div style="{{ c.avStyle }}">{{ c.initials }}</div>
+                  <div style="min-width:0">
+                    <div class="fa-strong" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.name }}</div>
+                    <div class="fa-muted" style="font-size:10px;margin-top:1px">{{ c.type }}</div>
+                  </div>
+                </div>
+                <div class="fa-num fa-strong" style="padding:11px 10px;font-size:11.5px;font-weight:600;text-align:right">{{ c.called }}</div>
+                <div class="fa-num" style="padding:11px 10px;font-size:12px;font-weight:700;text-align:right;color:{{ c.recvTone }}">{{ c.received }}</div>
+                <div class="fa-num" style="padding:11px 10px;font-size:11.5px;font-weight:600;text-align:right;color:{{ c.outTone }}">{{ c.outstanding }}</div>
+                <div style="padding:11px 10px;text-align:right">
+                  <sc-if value="{{ c.hasAging }}"><span style="{{ c.agingChip }}">{{ c.aging }}</span></sc-if>
+                  <sc-if value="{{ c.noAging }}"><span class="fa-muted" style="font-size:11px">—</span></sc-if>
+                </div>
+                <div style="padding:11px 10px">
+                  <span style="{{ c.chip }}">{{ c.status }}</span>
+                  <sc-if value="{{ c.sub }}"><div class="fa-muted fa-num" style="font-size:10px;margin-top:3px">{{ c.sub }}</div></sc-if>
+                </div>
+                <div style="padding:11px 20px 11px 10px;text-align:right">
+                  <sc-if value="{{ c.canRemind }}">
+                    <div class="fa-btn" data-lp="{{ c.k }}" onClick="{{ remindOne }}" style="{{ c.remindStyle }}">{{ c.remindLabel }}</div>
+                  </sc-if>
+                  <sc-if value="{{ c.noRemind }}">
+                    <div class="fa-muted fa-num" style="font-size:10.5px">{{ c.actionNote }}</div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+            <div class="fa-sunken" style="display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr .9fr 1.2fr auto;align-items:center;min-width:900px">
+              <div class="fa-text" style="padding:13px 20px;font-size:11.5px;font-weight:800">Total</div>
+              <div class="fa-num fa-text" style="padding:13px 10px;font-size:12px;font-weight:800;text-align:right">{{ trackTotals.called }}</div>
+              <div class="fa-num" style="padding:13px 10px;font-size:12.5px;font-weight:800;text-align:right;color:{{ grnTone }}">{{ trackTotals.received }}</div>
+              <div class="fa-num" style="padding:13px 10px;font-size:12px;font-weight:800;text-align:right;color:{{ ambTone }}">{{ trackTotals.outstanding }}</div>
+              <div style="padding:13px 10px"></div>
+              <div class="fa-muted" style="padding:13px 10px;font-size:10.5px">{{ trackTotals.note }}</div>
+              <div style="padding:13px 20px 13px 10px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ============ 4 · DISTRIBUTION ============ -->
+  <sc-if value="{{ tabDist }}">
+  <div class="fa-fade">
+    <div style="margin-bottom:16px">
+      <div class="fa-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em">Distribution</div>
+      <div class="fa-muted" style="font-size:12.5px;margin-top:4px;max-width:620px;line-height:1.6">{{ distSub }}</div>
+    </div>
+
+    <div class="fa-2" style="display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start">
+      <!-- proceeds input -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="fa-muted fa-th">Realisation</div>
+          <div class="fa-strong" style="font-size:13px;font-weight:700;margin-top:9px">{{ exit.name }}</div>
+          <div class="fa-muted" style="font-size:11px;line-height:1.55;margin-top:4px">{{ exit.note }}</div>
+          <div style="margin-top:15px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+              <div class="fa-strong" style="font-size:11.5px;font-weight:600">Net proceeds</div>
+              <div class="fa-num fa-text" style="font-size:16px;font-weight:700">{{ proceedsLabel }}</div>
+            </div>
+            <input class="fa-track" type="range" min="500" max="12000" step="100" value="{{ proceeds }}" onChange="{{ setProceeds }}" style="width:100%;margin-top:9px">
+          </div>
+          <div class="fa-bd-t" style="margin-top:16px;padding-top:14px;border-top-width:1px;border-top-style:solid;display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ distContext }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;justify-content:space-between;gap:10px">
+                <div class="fa-muted" style="font-size:11.5px">{{ r.k }}</div>
+                <div class="fa-num fa-strong" style="font-size:11.5px;font-weight:700">{{ r.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:18px 22px">
+          <div class="fa-muted fa-th">Split</div>
+          <div style="display:flex;align-items:baseline;gap:10px;margin-top:9px">
+            <div>
+              <div class="fa-num fa-text" style="font-size:22px;font-weight:700;letter-spacing:-.026em">{{ distSplit.lp }}</div>
+              <div class="fa-muted fa-th" style="font-size:9px;margin-top:2px">To LPs</div>
+            </div>
+            <div class="fa-muted" style="font-size:13px">/</div>
+            <div>
+              <div class="fa-num" style="font-size:22px;font-weight:700;letter-spacing:-.026em;color:{{ vioTone }}">{{ distSplit.gp }}</div>
+              <div class="fa-muted fa-th" style="font-size:9px;margin-top:2px">To GP</div>
+            </div>
+          </div>
+          <div class="fa-muted" style="font-size:11px;line-height:1.6;margin-top:9px">{{ distSplit.note }}</div>
+          <div class="fa-btn" style="margin-top:14px;padding:10px 0;border-radius:9px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700;text-align:center">Generate statements</div>
+        </div>
+      </div>
+
+      <!-- waterfall -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="fa-sunken fa-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div class="fa-muted fa-th">Waterfall · {{ fund.waterfall }}</div>
+            <div class="fa-muted fa-num" style="font-size:11px">{{ waterfallLine }}</div>
+          </div>
+          <sc-for list="{{ tiers }}" as="t" hint-placeholder-count="4">
+            <div class="fa-bd-b" style="padding:16px 22px;border-bottom-width:1px;border-bottom-style:solid;background:{{ t.rowBg }}">
+              <div style="display:flex;align-items:flex-start;gap:13px;flex-wrap:wrap">
+                <div style="{{ t.numStyle }}">{{ t.n }}</div>
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                    <div class="fa-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.012em">{{ t.name }}</div>
+                    <sc-if value="{{ t.exhausted }}"><span style="{{ t.stateChip }}">{{ t.state }}</span></sc-if>
+                  </div>
+                  <div class="fa-muted" style="font-size:11.5px;line-height:1.6;margin-top:5px;max-width:600px">{{ t.plain }}</div>
+                  <div class="fa-sunken fa-border" style="border-width:1px;border-style:solid;border-radius:9px;padding:9px 12px;margin-top:9px">
+                    <div class="fa-num fa-strong" style="font-size:11px;line-height:1.65">{{ t.math }}</div>
+                  </div>
+                </div>
+                <div style="flex:none;text-align:right;min-width:110px">
+                  <div class="fa-num" style="font-size:17px;font-weight:700;letter-spacing:-.02em;color:{{ t.tone }}">{{ t.amount }}</div>
+                  <div class="fa-muted fa-th" style="font-size:9px;margin-top:3px">{{ t.who }}</div>
+                  <div class="fa-muted fa-num" style="font-size:10px;margin-top:3px">{{ t.remaining }}</div>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+          <div class="fa-sunken" style="display:flex;align-items:center;gap:14px;padding:14px 22px;flex-wrap:wrap">
+            <div class="fa-text" style="font-size:12px;font-weight:800;min-width:0;flex:1">Total distributed</div>
+            <div class="fa-num fa-text" style="font-size:15px;font-weight:800;letter-spacing:-.02em">{{ proceedsLabel }}</div>
+          </div>
+        </div>
+
+        <!-- per-LP preview -->
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="fa-sunken fa-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div class="fa-muted fa-th">Per-LP distribution preview</div>
+            <div class="fa-muted fa-num" style="font-size:11px">{{ distPreviewLine }}</div>
+          </div>
+          <div class="fa-wide">
+            <div class="fa-sunken fa-bd-b" style="display:grid;grid-template-columns:1.9fr 1fr 1fr 1fr 1fr;border-bottom-width:1px;border-bottom-style:solid;min-width:680px">
+              <div class="fa-muted fa-th" style="padding:8px 20px">Limited partner</div>
+              <div class="fa-muted fa-th" style="padding:8px 10px;text-align:right">Share</div>
+              <div class="fa-muted fa-th" style="padding:8px 10px;text-align:right">Return of capital</div>
+              <div class="fa-muted fa-th" style="padding:8px 10px;text-align:right">Preferred + profit</div>
+              <div class="fa-muted fa-th" style="padding:8px 20px 8px 10px;text-align:right">Total</div>
+            </div>
+            <sc-for list="{{ distRows }}" as="r" hint-placeholder-count="12">
+              <div class="fa-row fa-bd-b" style="display:grid;grid-template-columns:1.9fr 1fr 1fr 1fr 1fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:680px">
+                <div style="padding:10px 20px;display:flex;align-items:center;gap:10px;min-width:0">
+                  <div style="{{ r.avStyle }}">{{ r.initials }}</div>
+                  <div class="fa-strong" style="font-size:12px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</div>
+                </div>
+                <div class="fa-num fa-muted" style="padding:10px 10px;font-size:11px;text-align:right">{{ r.share }}</div>
+                <div class="fa-num fa-muted" style="padding:10px 10px;font-size:11.5px;text-align:right">{{ r.roc }}</div>
+                <div class="fa-num fa-muted" style="padding:10px 10px;font-size:11.5px;text-align:right">{{ r.profit }}</div>
+                <div class="fa-num fa-text" style="padding:10px 20px 10px 10px;font-size:12.5px;font-weight:700;text-align:right">{{ r.total }}</div>
+              </div>
+            </sc-for>
+            <div class="fa-sunken" style="display:grid;grid-template-columns:1.9fr 1fr 1fr 1fr 1fr;align-items:center;min-width:680px">
+              <div class="fa-text" style="padding:12px 20px;font-size:11.5px;font-weight:800">{{ lpCount }} limited partners</div>
+              <div class="fa-num fa-muted" style="padding:12px 10px;font-size:11px;text-align:right">100.0%</div>
+              <div class="fa-num fa-strong" style="padding:12px 10px;font-size:11.5px;font-weight:700;text-align:right">{{ distTotals.roc }}</div>
+              <div class="fa-num fa-strong" style="padding:12px 10px;font-size:11.5px;font-weight:700;text-align:right">{{ distTotals.profit }}</div>
+              <div class="fa-num fa-text" style="padding:12px 20px 12px 10px;font-size:13px;font-weight:800;text-align:right">{{ distTotals.total }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 5 · LP STATEMENT ============ -->
+  <sc-if value="{{ tabStatement }}">
+  <div class="fa-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="min-width:0">
+        <div class="fa-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em">LP statement</div>
+        <div class="fa-muted" style="font-size:12.5px;margin-top:4px">Per partner, per period. Prints to one page with the fund's terms in the footer.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+        <div class="fa-sunken fa-border" style="display:flex;gap:3px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex-wrap:wrap">
+          <sc-for list="{{ lpPicker }}" as="l" hint-placeholder-count="4">
+            <div class="fa-seg" onClick="{{ l.go }}" style="{{ l.style }}">{{ l.label }}</div>
+          </sc-for>
+        </div>
+        <div class="fa-btn fa-border fa-strong" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:7px">
+          <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ printIcon }}"></span>
+          Print
+        </div>
+      </div>
+    </div>
+
+    <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden;max-width:900px">
+      <div class="fa-sunken fa-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:22px 30px;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div class="fa-muted fa-th">Capital account statement</div>
+          <div class="fa-text" style="font-size:17px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ stmt.lpName }}</div>
+          <div class="fa-muted" style="font-size:11.5px;margin-top:3px">{{ stmt.lpMeta }}</div>
+        </div>
+        <div style="text-align:right;flex:none">
+          <div class="fa-strong" style="font-size:12.5px;font-weight:700">{{ fund.name }}</div>
+          <div class="fa-muted fa-num" style="font-size:11px;margin-top:3px">{{ stmt.period }}</div>
+          <div class="fa-muted fa-num" style="font-size:10.5px;margin-top:2px">{{ stmt.ref }}</div>
+        </div>
+      </div>
+
+      <div style="padding:24px 30px">
+        <div class="fa-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px">
+          <sc-for list="{{ stmt.headline }}" as="h" hint-placeholder-count="4">
+            <div>
+              <div class="fa-muted fa-th">{{ h.k }}</div>
+              <div class="fa-num" style="font-size:19px;font-weight:700;letter-spacing:-.026em;margin-top:6px;color:{{ h.tone }}">{{ h.v }}</div>
+              <div class="fa-muted" style="font-size:10px;margin-top:2px">{{ h.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="fa-bd-t" style="margin-top:22px;padding-top:18px;border-top-width:1px;border-top-style:solid">
+          <div class="fa-muted fa-th" style="margin-bottom:12px">Capital account activity</div>
+          <div style="display:flex;flex-direction:column;gap:0">
+            <sc-for list="{{ stmt.rows }}" as="r" hint-placeholder-count="8">
+              <div class="fa-bd-b" style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:10px 0;border-bottom-width:1px;border-bottom-style:solid">
+                <div style="min-width:0;flex:1">
+                  <div class="fa-strong" style="font-size:12px;font-weight:{{ r.weight }}">{{ r.k }}</div>
+                  <sc-if value="{{ r.note }}"><div class="fa-muted" style="font-size:10.5px;margin-top:2px">{{ r.note }}</div></sc-if>
+                </div>
+                <div class="fa-num" style="font-size:12.5px;font-weight:{{ r.weight }};color:{{ r.tone }};flex:none">{{ r.v }}</div>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:13px 0 0">
+              <div class="fa-text" style="font-size:13px;font-weight:800">Net asset value</div>
+              <div class="fa-num fa-text" style="font-size:19px;font-weight:800;letter-spacing:-.024em">{{ stmt.nav }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="fa-2 fa-bd-t" style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:20px;padding-top:18px;border-top-width:1px;border-top-style:solid">
+          <div>
+            <div class="fa-muted fa-th" style="margin-bottom:11px">Performance</div>
+            <sc-for list="{{ stmt.perf }}" as="p" hint-placeholder-count="4">
+              <div class="fa-bd-b" style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom-width:1px;border-bottom-style:solid">
+                <div class="fa-muted" style="font-size:11.5px">{{ p.k }}</div>
+                <div class="fa-num fa-strong" style="font-size:11.5px;font-weight:700">{{ p.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div>
+            <div class="fa-muted fa-th" style="margin-bottom:11px">Fund terms</div>
+            <sc-for list="{{ stmt.terms }}" as="t" hint-placeholder-count="4">
+              <div class="fa-bd-b" style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom-width:1px;border-bottom-style:solid">
+                <div class="fa-muted" style="font-size:11.5px">{{ t.k }}</div>
+                <div class="fa-num fa-strong" style="font-size:11.5px;font-weight:700">{{ t.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="fa-sunken fa-border" style="border-width:1px;border-style:solid;border-radius:11px;padding:14px 16px;margin-top:20px">
+          <div class="fa-muted" style="font-size:11px;line-height:1.65">{{ stmt.footer }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 6 · ECONOMICS ============ -->
+  <sc-if value="{{ tabEcon }}">
+  <div class="fa-fade">
+    <div style="margin-bottom:16px">
+      <div class="fa-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em">GP economics</div>
+      <div class="fa-muted" style="font-size:12.5px;margin-top:4px;max-width:620px;line-height:1.6">The GP's own position. Accrued is what the LPA entitles the GP to; collected is what has actually been drawn. Carry is unrealised until a distribution clears the preferred return.</div>
+    </div>
+
+    <div class="fa-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+      <sc-for list="{{ econTiles }}" as="e" hint-placeholder-count="3">
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:18px 20px">
+          <div class="fa-muted fa-th">{{ e.k }}</div>
+          <div class="fa-num" style="font-size:25px;font-weight:700;letter-spacing:-.032em;margin-top:7px;color:{{ e.tone }}">{{ e.v }}</div>
+          <div class="fa-muted" style="font-size:11px;line-height:1.55;margin-top:4px">{{ e.note }}</div>
+          <sc-if value="{{ e.hasBar }}">
+            <div class="fa-track" style="height:6px;border-radius:99px;overflow:hidden;margin-top:11px">
+              <div style="{{ e.barStyle }}"></div>
+            </div>
+            <div class="fa-muted fa-num" style="font-size:10px;margin-top:5px">{{ e.barNote }}</div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <div class="fa-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;align-items:start">
+      <!-- fee ledger -->
+      <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="fa-sunken fa-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div class="fa-muted fa-th">Management fee by period</div>
+          <div class="fa-muted fa-num" style="font-size:11px">{{ feeLedgerLine }}</div>
+        </div>
+        <div class="fa-wide">
+          <div class="fa-sunken fa-bd-b" style="display:grid;grid-template-columns:1fr 1fr 1fr 1.1fr;border-bottom-width:1px;border-bottom-style:solid;min-width:440px">
+            <div class="fa-muted fa-th" style="padding:8px 20px">Period</div>
+            <div class="fa-muted fa-th" style="padding:8px 10px;text-align:right">Accrued</div>
+            <div class="fa-muted fa-th" style="padding:8px 10px;text-align:right">Collected</div>
+            <div class="fa-muted fa-th" style="padding:8px 20px 8px 10px">Status</div>
+          </div>
+          <sc-for list="{{ feeLedger }}" as="f" hint-placeholder-count="6">
+            <div class="fa-row fa-bd-b" style="display:grid;grid-template-columns:1fr 1fr 1fr 1.1fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:440px">
+              <div style="padding:11px 20px;min-width:0">
+                <div class="fa-strong fa-num" style="font-size:11.5px;font-weight:600">{{ f.period }}</div>
+                <div class="fa-muted" style="font-size:10px;margin-top:1px">{{ f.basis }}</div>
+              </div>
+              <div class="fa-num fa-strong" style="padding:11px 10px;font-size:11.5px;font-weight:600;text-align:right">{{ f.accrued }}</div>
+              <div class="fa-num" style="padding:11px 10px;font-size:11.5px;font-weight:700;text-align:right;color:{{ f.tone }}">{{ f.collected }}</div>
+              <div style="padding:11px 20px 11px 10px"><span style="{{ f.chip }}">{{ f.state }}</span></div>
+            </div>
+          </sc-for>
+          <div class="fa-sunken" style="display:grid;grid-template-columns:1fr 1fr 1fr 1.1fr;align-items:center;min-width:440px">
+            <div class="fa-text" style="padding:12px 20px;font-size:11.5px;font-weight:800">Total</div>
+            <div class="fa-num fa-text" style="padding:12px 10px;font-size:12px;font-weight:800;text-align:right">{{ feeTotals.accrued }}</div>
+            <div class="fa-num fa-text" style="padding:12px 10px;font-size:12px;font-weight:800;text-align:right">{{ feeTotals.collected }}</div>
+            <div class="fa-muted" style="padding:12px 20px 12px 10px;font-size:10.5px">{{ feeTotals.note }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- carry + gp commitment -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="fa-muted fa-th">Carried interest</div>
+          <div style="display:flex;flex-direction:column;gap:0;margin-top:12px">
+            <sc-for list="{{ carryRows }}" as="c" hint-placeholder-count="5">
+              <div class="fa-bd-t" style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:11px 0;border-top-width:1px;border-top-style:solid">
+                <div style="min-width:0;flex:1">
+                  <div class="fa-strong" style="font-size:12px;font-weight:{{ c.weight }}">{{ c.k }}</div>
+                  <sc-if value="{{ c.note }}"><div class="fa-muted" style="font-size:10.5px;line-height:1.5;margin-top:2px">{{ c.note }}</div></sc-if>
+                </div>
+                <div class="fa-num" style="font-size:12.5px;font-weight:{{ c.weight }};color:{{ c.tone }};flex:none">{{ c.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="fa-sunken fa-border" style="border-width:1px;border-style:solid;border-radius:11px;padding:12px 14px;margin-top:14px">
+            <div class="fa-muted" style="font-size:11px;line-height:1.6">{{ carryNote }}</div>
+          </div>
+        </div>
+
+        <div class="fa-surface fa-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="fa-muted fa-th">GP commitment</div>
+          <div style="display:flex;align-items:baseline;gap:10px;margin-top:8px">
+            <div class="fa-num fa-text" style="font-size:24px;font-weight:700;letter-spacing:-.03em">{{ gpFunded }}</div>
+            <div class="fa-muted" style="font-size:12px">of {{ gpTotal }} funded</div>
+          </div>
+          <div class="fa-track" style="height:8px;border-radius:99px;overflow:hidden;margin-top:11px">
+            <div style="{{ gpBar }}"></div>
+          </div>
+          <div class="fa-muted" style="font-size:11px;line-height:1.6;margin-top:9px">{{ gpNote }}</div>
+          <div style="display:flex;flex-direction:column;gap:0;margin-top:12px">
+            <sc-for list="{{ gpRows }}" as="g" hint-placeholder-count="3">
+              <div class="fa-bd-t" style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top-width:1px;border-top-style:solid">
+                <div class="fa-muted" style="font-size:11.5px">{{ g.k }}</div>
+                <div class="fa-num fa-strong" style="font-size:11.5px;font-weight:700">{{ g.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440}}">
+class Component extends DCLogic {
+  state = { theme:'light', tab:'dash',
+    name:'Axal VC Ventures Fund II, L.P.', vintage:'2026', target:10, fee:2, step:'yr5', carry:20, hurdle:8,
+    waterfall:'european', term:'10 years', ext:'2 × 1 year', gpPct:2,
+    callStep:'track', newCall:1200, purpose:'Follow-on reserve deployment',
+    proceeds:4200, lp:'meridian', reminded:{} };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+    const GRN = dark ? '#6ee7b7' : '#116632';
+    const AMB = dark ? '#fcd34d' : '#92400e';
+    const RED = dark ? '#fca5a5' : '#b91c1c';
+    const INK = dark ? '#ececf1' : '#18181b';
+    const MUT = dark ? '#a5a0b2' : '#6b6577';
+    const VIO = dark ? '#c4b5fd' : V7;
+
+    const I = {
+      vault: this.ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="4"/><path d="M12 8v1M12 15v1M8 12h1M15 12h1"/>'),
+      wand: this.ic('<path d="m14 6 4 4L7 21H3v-4z"/><path d="M18 2v4M16 4h4"/>'),
+      gauge: this.ic('<path d="M12 14a2 2 0 1 0 2-2"/><path d="M3.5 18a10 10 0 1 1 17 0"/>'),
+      call: this.ic('<path d="M12 3v18"/><path d="m7 8 5-5 5 5"/><path d="M20 21H4"/>'),
+      dist: this.ic('<path d="M12 21V3"/><path d="m7 16 5 5 5-5"/><path d="M4 3h16"/>'),
+      doc: this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      coin: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.8 9.4A2.8 2.8 0 0 0 12 8.2c-1.6 0-2.8.9-2.8 2.1s1.2 1.9 2.8 1.9 2.8.7 2.8 1.9-1.2 2.1-2.8 2.1a2.8 2.8 0 0 1-2.8-1.2"/>'),
+      check: this.ic('<path d="M20 6 9 17l-5-5"/>', 2.5),
+      print: this.ic('<path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="2"/><path d="M6 17h12v4H6z"/>'),
+      sun: this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon: this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:99px;font-size:9.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const cGreen = chip('rgba(17,102,50,.1)', GRN);
+    const cAmber = chip('rgba(180,83,9,.1)', AMB);
+    const cRed = chip('rgba(185,28,28,.09)', RED);
+    const cViolet = chip('rgba(124,58,237,.1)', VIO);
+    const cGrey = chip(dark ? '#2a2833' : '#f1f0f5', MUT);
+    const av = (bg, sz) => 'width:'+(sz||24)+'px;height:'+(sz||24)+'px;border-radius:7px;background:'+bg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const seg = (on) => 'padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? VIO : MUT)+';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none')+';white-space:nowrap';
+
+    const usd = (n) => n >= 1e6 ? '$' + (n/1e6).toFixed(n % 1e6 === 0 ? 1 : 2) + 'M' : '$' + Math.round(n/1e3) + 'k';
+    const usdEx = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const pct1 = (x) => x.toFixed(1) + '%';
+    const AS_OF = 'Aug 14, 2026';
+
+    // ============ LPs · single source ============
+    const LPS = [
+      { k:'meridian', name:'Meridian Endowment Trust', initials:'ME', bg:'#1d4ed8', type:'Endowment', commit:2000000, paid:true, paidOn:'Jul 24' },
+      { k:'stellar', name:'Stellar Point Ventures SCSp', initials:'SP', bg:'#7c3aed', type:'Fund of funds', commit:1500000, paid:true, paidOn:'Jul 22' },
+      { k:'kestrel', name:'Kestrel Family Office', initials:'KF', bg:'#0f766e', type:'Family office', commit:1250000, paid:true, paidOn:'Jul 23' },
+      { k:'harbour', name:'Harbour Rock Pension', initials:'HR', bg:'#b45309', type:'Pension', commit:1000000, paid:false, days:22 },
+      { k:'olveston', name:'Olveston Trust', initials:'OT', bg:'#4338ca', type:'Private trust', commit:900000, paid:true, paidOn:'Jul 28' },
+      { k:'pemberton', name:'Pemberton Angels', initials:'PA', bg:'#be185d', type:'Angel syndicate', commit:750000, paid:true, paidOn:'Jul 25' },
+      { k:'wexford', name:'Wexford Nominees', initials:'WN', bg:'#334155', type:'Nominee', commit:600000, paid:false, days:9 },
+      { k:'ashgrove', name:'Ashgrove Capital', initials:'AC', bg:'#0f766e', type:'Family office', commit:500000, paid:true, paidOn:'Jul 21' },
+      { k:'linfield', name:'Linfield Partners', initials:'LP', bg:'#6b6577', type:'Fund of funds', commit:450000, paid:false, days:36, sinceIssue:true },
+      { k:'marchetti', name:'Marchetti Family Office', initials:'MF', bg:'#b45309', type:'Family office', commit:400000, paid:true, paidOn:'Jul 26' },
+      { k:'thorne', name:'Thorne Nominees', initials:'TN', bg:'#4338ca', type:'Nominee', commit:350000, paid:false, days:4 },
+      { k:'redgate', name:'Redgate Angels', initials:'RA', bg:'#be185d', type:'Angel syndicate', commit:300000, paid:false, days:14 },
+    ];
+    const totalCommitN = LPS.reduce((a,l) => a + l.commit, 0);
+
+    // ============ 1 · SETUP ============
+    const targetN = st.target * 1e6;
+    const gpAmountN = targetN * st.gpPct / 100;
+    const WF = {
+      european:{ name:'European · whole-of-fund', line:'GP takes carry only after every LP has their capital and preferred return back, across the entire fund.' },
+      american:{ name:'American · deal-by-deal', line:'GP takes carry as each investment exits, with a clawback if the fund later underperforms.' },
+    };
+    const waterfallOpts = Object.keys(WF).map(k => {
+      const on = st.waterfall === k;
+      return { name: WF[k].name, line: WF[k].line, on, weight: on ? '700' : '600',
+        go: () => this.setState({ waterfall:k }),
+        style:'display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border-radius:10px;border-width:1px;border-style:solid;text-align:left;'
+          + 'border-color:'+(on ? V : (dark ? '#2a2833' : '#e5e3ec'))
+          + ';background:'+(on ? (dark ? 'rgba(124,58,237,.07)' : 'rgba(124,58,237,.035)') : 'transparent')
+          + ';color:'+(on ? VIO : INK) };
+    });
+    const STEPS = { none:{ l:'None · flat for term', drop:0, from:99 },
+      yr5:{ l:'0.25%/yr from year 5', drop:0.25, from:5 },
+      yr6:{ l:'0.50%/yr from year 6', drop:0.5, from:6 } };
+    const stepOpts = Object.keys(STEPS).map(k => ({ label: STEPS[k].l, selected: st.step === k }));
+    const stp = STEPS[st.step];
+    const termYears = parseInt(st.term, 10);
+    // Fee load: flat until step-down year, then declining
+    let feeLoad = 0;
+    for (let y = 1; y <= termYears; y++) {
+      const r = y < stp.from ? st.fee : Math.max(0.5, st.fee - stp.drop * (y - stp.from + 1));
+      feeLoad += targetN * r / 100;
+    }
+
+    const vintageOpts = ['2025','2026','2027'].map(v => ({ label:v, selected: st.vintage === v }));
+    const termOpts = ['8 years','10 years','12 years'].map(v => ({ label:v, selected: st.term === v }));
+    const extOpts = ['None','1 × 1 year','2 × 1 year'].map(v => ({ label:v, selected: st.ext === v }));
+
+    const summaryRows = [
+      { k:'Target size', v: usd(targetN) },
+      { k:'Hard cap', v: usd(targetN * 1.25) },
+      { k:'Management fee', v: st.fee.toFixed(2) + '% · ' + (stp.drop ? 'stepping down' : 'flat') },
+      { k:'Carried interest', v: st.carry.toFixed(1) + '%' },
+      { k:'Preferred return', v: st.hurdle + '% · ' + (st.hurdle ? 'compounding' : 'none') },
+      { k:'Waterfall', v: st.waterfall === 'european' ? 'European' : 'American' },
+      { k:'Term', v: st.term + ' + ' + st.ext },
+      { k:'GP commitment', v: st.gpPct.toFixed(1) + '% · ' + usd(gpAmountN) },
+    ];
+
+    // ============ 2 · DASHBOARD ============
+    const CALLS = [
+      { ref:'CC-2025-01', name:'Call 1 · Initial close', pct:0.20, collected:1.00, issued:'Nov 18, 2025', due:'Dec 5, 2025' },
+      { ref:'CC-2026-02', name:'Call 2 · Deployment', pct:0.15, collected:1.00, issued:'Mar 12, 2026', due:'Mar 31, 2026' },
+      { ref:'CC-2026-03', name:'Call 3 · Deployment', pct:0.12, collected:1.00, issued:'May 20, 2026', due:'Jun 8, 2026' },
+      { ref:'CC-2026-04', name:'Call 4 · Follow-on reserve', pct:0.12, collected:null, issued:'Jun 20, 2026', due:'Jul 9, 2026' },
+    ];
+    // Days past due derives from the call's own due date against the as-of date, so
+    // an LP can never be more overdue than the notice has existed.
+    const DUE_DAY = 190;   // Jul 9, 2026, day-of-year
+    const ASOF_DAY = 226;  // Aug 14, 2026
+    const maxDays = ASOF_DAY - DUE_DAY;
+    // Active call collection derives from LP paid flags
+    const activeRaw = CALLS[CALLS.length - 1];
+    const activeCallAmt = totalCommitN * activeRaw.pct;
+    const lpShare = (l) => l.commit / totalCommitN;
+    const lpCalled = (l) => activeCallAmt * lpShare(l);
+    const receivedN = LPS.filter(l => l.paid).reduce((a,l) => a + lpCalled(l), 0);
+    const outstandingN = activeCallAmt - receivedN;
+    const paidCount = LPS.filter(l => l.paid).length;
+
+    const priorCalledN = CALLS.slice(0, -1).reduce((a,c) => a + totalCommitN * c.pct, 0);
+    const calledN = priorCalledN + activeCallAmt;
+    const DEPLOYED = 5850000;
+    const DISTRIBUTED = 0;
+    const dryPowderN = calledN - DEPLOYED;
+    const uncalledN = totalCommitN - calledN;
+    // Fee ledger is the single source — the dashboard tile, the LP statement and the
+    // economics tab all read these, so they cannot disagree.
+    const FEE_LEDGER = [
+      { period:'Q4 2025', accrued:37500, collected:37500 },
+      { period:'Q1 2026', accrued:50000, collected:50000 },
+      { period:'Q2 2026', accrued:50000, collected:50000 },
+      { period:'Q3 2026', accrued:50000, collected:0 },
+    ];
+    const FEE_ACCRUED = FEE_LEDGER.reduce((a,f) => a + f.accrued, 0);
+    const FEE_COLLECTED = FEE_LEDGER.reduce((a,f) => a + f.collected, 0);
+
+    const flowRows = [
+      { k:'Committed', n:totalCommitN, pad:0, color:V },
+      { k:'Called', n:calledN, pad:0, color: dark ? '#8b5cf6' : '#8b5cf6' },
+      { k:'Deployed', n:DEPLOYED, pad:0, color: dark ? '#5b4494' : '#c4b5fd' },
+      { k:'Distributed', n:DISTRIBUTED, pad:0, color: dark ? '#3a3648' : '#9b96a8' },
+    ].map(r => ({ k:r.k,
+      v: r.n ? usd(r.n) : usd(0),
+      pct: pct1(r.n / totalCommitN * 100),
+      padStyle:'flex:none;width:0%;height:100%',
+      barStyle:'flex:none;width:'+(r.n / totalCommitN * 100).toFixed(2)+'%;height:100%;background:'+r.color }));
+
+    const dash = {
+      committed: usd(totalCommitN), called: usd(calledN),
+      headline: usd(DEPLOYED) + ' deployed across 12 positions · ' + usd(dryPowderN) + ' dry powder · ' + usd(uncalledN) + ' uncalled',
+      tiles:[
+        { k:'Dry powder', v: usd(dryPowderN), sub:'called, not deployed', tone:INK },
+        { k:'Fee accrued', v: usd(FEE_ACCRUED), sub: usd(FEE_ACCRUED - FEE_COLLECTED) + ' uncollected', tone:INK },
+        { k:'Positions', v:'12', sub:'0 realisations', tone:INK },
+      ],
+      flowLine: pct1(calledN / totalCommitN * 100) + ' called · ' + pct1(DEPLOYED / totalCommitN * 100) + ' deployed',
+      flow: flowRows,
+      terms:[
+        { k:'Vintage', v: st.vintage }, { k:'Fee', v: st.fee.toFixed(2) + '%' },
+        { k:'Carry', v: st.carry.toFixed(1) + '%' }, { k:'Pref', v: st.hurdle + '%' },
+        { k:'Waterfall', v: st.waterfall === 'european' ? 'European' : 'American' },
+        { k:'Term', v: st.term },
+      ],
+    };
+
+    const callHistory = CALLS.slice().reverse().map(c => {
+      const amt = totalCommitN * c.pct;
+      const isActive = c.ref === activeRaw.ref;
+      const coll = isActive ? receivedN / amt : c.collected;
+      return { name:c.name, amount: usd(amt),
+        meta: c.ref + ' · due ' + c.due,
+        pct: Math.round(coll * 100) + '%',
+        barStyle:'height:100%;width:'+(coll * 100).toFixed(0)+'%;border-radius:99px;background:'+(coll >= 1 ? '#116632' : V),
+        state: coll >= 1 ? 'Closed' : 'Collecting', chip: coll >= 1 ? cGreen : cAmber };
+    });
+
+    const nextCallAmt = totalCommitN * 0.10;
+    const nextCall = {
+      amount: usd(nextCallAmt),
+      note:'Planned for the Q4 deployment window. Not yet issued — the current call must close first.',
+      rows:[
+        { k:'Target issue', v:'Oct 6, 2026' },
+        { k:'Share of commitments', v:'10.0%' },
+        { k:'Uncalled after', v: usd(uncalledN - nextCallAmt) },
+      ],
+    };
+
+    // ============ 3 · CAPITAL CALL ============
+    const newCallN = st.newCall * 1000;
+    const purposeOpts = ['Follow-on reserve deployment','New investment','Management fee','Fund expenses']
+      .map(p => ({ label:p, selected: st.purpose === p }));
+    const proRata = LPS.map(l => {
+      const amt = newCallN * lpShare(l);
+      const calledSoFar = calledN * lpShare(l);
+      return { name:l.name, initials:l.initials, type:l.type, avStyle: av(l.bg),
+        commit: usdEx(l.commit), share: pct1(lpShare(l) * 100),
+        amount: usdEx(amt),
+        unfunded: usdEx(Math.max(0, l.commit - calledSoFar - amt)) };
+    });
+    const totalUnfundedAfterN = LPS.reduce((a,l) => a + Math.max(0, l.commit - calledN * lpShare(l) - newCallN * lpShare(l)), 0);
+
+    const collection = LPS.map(l => {
+      const called = lpCalled(l);
+      const reminded = !!st.reminded[l.k];
+      const days = Math.min(l.days, maxDays);
+      const overdue = !l.paid && days > 0;
+      const bucket = !overdue ? '' : days <= 15 ? '1–15d' : days <= 30 ? '16–30d' : '30d+';
+      return { k:l.k, name:l.name, initials:l.initials, type:l.type, avStyle: av(l.bg),
+        called: usdEx(called),
+        received: l.paid ? usdEx(called) : usdEx(0),
+        recvTone: l.paid ? GRN : MUT,
+        outstanding: l.paid ? '—' : usdEx(called),
+        outTone: l.paid ? MUT : AMB,
+        hasAging: overdue, noAging: !overdue,
+        aging: bucket,
+        agingChip: days > 30 ? cRed : days > 15 ? cAmber : cGrey,
+        status: l.paid ? 'Received' : days > 30 ? 'Overdue' : 'Outstanding',
+        chip: l.paid ? cGreen : days > 30 ? cRed : cAmber,
+        sub: l.paid ? 'wired ' + l.paidOn : days + ' days past due',
+        canRemind: !l.paid && !reminded, noRemind: l.paid || reminded,
+        actionNote: l.paid ? 'settled' : 'reminded today',
+        remindLabel:'Remind',
+        remindStyle:'display:inline-block;padding:6px 12px;border-radius:8px;background:'+(days > 30 ? 'rgba(185,28,28,.09)' : 'rgba(124,58,237,.1)')+';color:'+(days > 30 ? RED : VIO)+';font-size:10.5px;font-weight:700',
+        rowBg: !l.paid && days > 30 ? (dark ? 'rgba(185,28,28,.05)' : 'rgba(185,28,28,.024)') : 'transparent' };
+    });
+    const outstandingCount = LPS.filter(l => !l.paid).length;
+    const remindedCount = LPS.filter(l => !l.paid && st.reminded[l.k]).length;
+
+    const trackStats = [
+      { k:'Called', v: usd(activeCallAmt), note: activeRaw.ref + ' · issued ' + activeRaw.issued, tone:INK },
+      { k:'Received', v: usd(receivedN), note: paidCount + ' of ' + LPS.length + ' LPs', tone:GRN },
+      { k:'Outstanding', v: usd(outstandingN), note: outstandingCount + ' LPs · due ' + activeRaw.due, tone:AMB },
+      { k:'Collected', v: Math.round(receivedN / activeCallAmt * 100) + '%', note: 'oldest ' + Math.min(maxDays, Math.max.apply(null, LPS.filter(l => !l.paid).map(l => l.days))) + ' days past due', tone:INK },
+    ];
+
+    // ============ 4 · DISTRIBUTION ============
+    const proceedsN = st.proceeds * 1000;
+    // Tier 1 · return of capital (called capital, whole-of-fund under European)
+    const t1 = Math.min(proceedsN, calledN);
+    let rem = proceedsN - t1;
+    // Tier 2 · preferred return on called capital, simple annual for legibility
+    const YEARS = 0.75;
+    const prefDue = calledN * (st.hurdle / 100) * YEARS;
+    const t2 = Math.min(rem, prefDue);
+    rem -= t2;
+    // Tier 3 · GP catch-up to bring GP to carry% of profit distributed so far
+    const carryFrac = st.carry / 100;
+    const catchUpTarget = t2 * carryFrac / (1 - carryFrac);
+    const t3 = Math.min(rem, catchUpTarget);
+    rem -= t3;
+    // Tier 4 · residual split
+    const t4gp = rem * carryFrac;
+    const t4lp = rem - t4gp;
+
+    const tierDefs = [
+      { n:'1', name:'Return of capital', who:'To LPs', amount:t1, color:V,
+        plain:'Every dollar the LPs put in comes back before anyone sees profit. Under a European waterfall this is measured across the whole fund, not this deal alone.',
+        math:'min(proceeds ' + usdEx(proceedsN) + ', called capital ' + usdEx(calledN) + ') = ' + usdEx(t1),
+        exhausted: t1 >= calledN, state:'Fully returned' },
+      { n:'2', name:'Preferred return', who:'To LPs', amount:t2, color: dark ? '#8b5cf6' : '#8b5cf6',
+        plain:'A minimum annual return on the capital LPs advanced, paid before the GP takes any carry. It is a hurdle, not a guarantee — if the fund does not earn it, it is not paid.',
+        math: st.hurdle + '% × ' + usdEx(calledN) + ' × ' + YEARS.toFixed(2) + ' yr = ' + usdEx(prefDue) + ' due · ' + usdEx(t2) + ' paid',
+        exhausted: t2 >= prefDue && prefDue > 0, state:'Hurdle cleared' },
+      { n:'3', name:'GP catch-up', who:'To GP', amount:t3, color: dark ? '#5b4494' : '#c4b5fd',
+        plain:'The LPs have just been paid a preferred return the GP got no share of. Catch-up pays the GP enough that, of the profit distributed so far, it holds its full carry percentage — then the plain split resumes.',
+        math:'brings GP to ' + st.carry.toFixed(0) + '% of profit paid · target ' + usdEx(catchUpTarget) + ' · ' + usdEx(t3) + ' paid',
+        exhausted: t3 >= catchUpTarget && catchUpTarget > 0, state:'Caught up' },
+      { n:'4', name:'Carry split', who:'Split', amount:rem, color: dark ? '#3a3648' : '#9b96a8',
+        plain:'Everything left over is split on the fund\u2019s carry terms for the rest of the fund\u2019s life.',
+        math: usdEx(rem) + ' × ' + (100 - st.carry).toFixed(0) + '/' + st.carry.toFixed(0) + ' = ' + usdEx(t4lp) + ' LP · ' + usdEx(t4gp) + ' GP',
+        exhausted:false, state:'' },
+    ];
+    let running = proceedsN;
+    const tiers = tierDefs.map(t => {
+      running -= t.amount;
+      return { n:t.n, name:t.name, who:t.who, plain:t.plain, math:t.math,
+        amount: t.amount > 0 ? usdEx(t.amount) : usdEx(0),
+        tone: t.who === 'To GP' ? VIO : INK,
+        remaining: running > 0.5 ? usdEx(running) + ' remaining' : 'proceeds exhausted',
+        exhausted: t.exhausted, state:t.state, stateChip: cGreen,
+        numStyle:'width:26px;height:26px;border-radius:8px;background:'+t.color+(dark ? '2e' : '20')+';color:'+(dark ? '#dcd9e4' : t.color)+';font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;font-family:\'Roboto Mono\',monospace',
+        rowBg: t.who === 'To GP' ? (dark ? 'rgba(124,58,237,.05)' : 'rgba(124,58,237,.024)') : 'transparent' };
+    });
+
+    const lpTotal = t1 + t2 + t4lp;
+    const gpTotal2 = t3 + t4gp;
+    const distRows = LPS.map(l => {
+      const s = lpShare(l);
+      return { name:l.name, initials:l.initials, avStyle: av(l.bg),
+        share: pct1(s * 100),
+        roc: usdEx(t1 * s), profit: usdEx((t2 + t4lp) * s),
+        total: usdEx(lpTotal * s) };
+    });
+
+    // ============ 5 · LP STATEMENT ============
+    const lpRaw = LPS.find(l => l.k === st.lp) || LPS[0];
+    const s = lpShare(lpRaw);
+    const lpCalledTotal = calledN * s;
+    const lpPaidTotal = lpRaw.paid ? lpCalledTotal : lpCalledTotal - lpCalled(lpRaw);
+    const lpFee = FEE_ACCRUED * s;
+    const lpDistributed = 0;
+    // NAV is the SUM of the activity rows, not a parallel calculation — so the statement
+    // foots to its own bottom line by construction.
+    const stOpen = (DEPLOYED * 2.45 + dryPowderN) * s * 0.82 - lpFee * 0.75;
+    const stContrib = totalCommitN * 0.12 * s * 2;   // CC-03 and CC-04, each 12% of commitments
+    const stFee = lpFee * 0.25;
+    const stExpense = 1450 * s * 12;
+    const stRealised = 0;
+    const stUnreal = (DEPLOYED * 2.45 + dryPowderN) * s * 0.19;
+    const lpNavShare = stOpen + stContrib - stFee - stExpense + stRealised + stUnreal - lpDistributed;
+    const lpTvpi = (lpNavShare + lpDistributed) / lpCalledTotal;
+    const lpDpi = lpDistributed / lpCalledTotal;
+    const lpRvpi = lpNavShare / lpCalledTotal;
+
+    const stmt = {
+      lpName: lpRaw.name,
+      lpMeta: lpRaw.type + ' · ' + pct1(s * 100) + ' of commitments · admitted Nov 2025',
+      period:'Period ended Jun 30, 2026',
+      ref:'STMT-2026-Q2-' + lpRaw.initials,
+      nav: usdEx(lpNavShare),
+      headline:[
+        { k:'Commitment', v: usdEx(lpRaw.commit), note:'signed Nov 18, 2025', tone:INK },
+        { k:'Called to date', v: usdEx(lpCalledTotal), note: pct1(lpCalledTotal / lpRaw.commit * 100) + ' of commitment', tone:INK },
+        { k:'Distributed', v: usdEx(lpDistributed), note:'no realisations to date', tone:MUT },
+        { k:'Net IRR', v:'24.8%', note:'since admission · 8 months', tone:INK },
+      ],
+      rows:[
+        { k:'Opening balance, Apr 1 2026', v: usdEx(stOpen), weight:'600', tone:INK, note:'' },
+        { k:'Capital contributions', v: usdEx(stContrib), weight:'400', tone:INK, note:'CC-2026-03 and CC-2026-04, 12% of commitments each' },
+        { k:'Management fee', v:'(' + usdEx(stFee) + ')', weight:'400', tone:RED, note:'quarterly, on committed capital' },
+        { k:'Fund expenses', v:'(' + usdEx(stExpense) + ')', weight:'400', tone:RED, note:'audit, admin, legal' },
+        { k:'Realised gain', v: usdEx(stRealised), weight:'400', tone:MUT, note:'no realisations' },
+        { k:'Unrealised change in value', v: usdEx(stUnreal), weight:'400', tone:INK, note:'portfolio marks, Jun 30' },
+        { k:'Distributions', v: usdEx(lpDistributed), weight:'400', tone:MUT, note:'' },
+      ],
+      perf:[
+        { k:'TVPI', v: lpTvpi.toFixed(2) + '×' }, { k:'DPI', v: lpDpi.toFixed(2) + '×' },
+        { k:'RVPI', v: lpRvpi.toFixed(2) + '×' }, { k:'Net IRR', v:'24.8%' },
+      ],
+      terms:[
+        { k:'Management fee', v: st.fee.toFixed(2) + '%' },
+        { k:'Carried interest', v: st.carry.toFixed(1) + '%' },
+        { k:'Preferred return', v: st.hurdle + '%' },
+        { k:'Waterfall', v: st.waterfall === 'european' ? 'European' : 'American' },
+      ],
+      footer:'Prepared on an unaudited basis by the General Partner. Portfolio holdings are private and carried at fair value under the fund\u2019s valuation policy; reported multiples are unrealised estimates, not prices at which positions could be sold. Net IRR is money-weighted on dated cash flows and is net of management fees, expenses and accrued carry. Eight months of history — treat any IRR at this stage with caution.',
+    };
+    const lpPicker = ['meridian','stellar','harbour','redgate'].map(k => LPS.find(l => l.k === k))
+      .map(l => ({ label: l.name.split(' ')[0], style: seg(st.lp === l.k), go: () => this.setState({ lp:l.k }) }));
+
+    // ============ 6 · ECONOMICS ============
+    const feeAccruedN = FEE_ACCRUED;
+    const feeCollectedN = FEE_COLLECTED;
+    const feeLedger = FEE_LEDGER.map(f => ({ period:f.period,
+      basis: st.fee.toFixed(2) + '% on ' + usd(totalCommitN) + ' committed',
+      accrued: usdEx(f.accrued), collected: usdEx(f.collected),
+      tone: f.collected >= f.accrued ? GRN : AMB,
+      state: f.collected >= f.accrued ? 'Collected' : f.collected > 0 ? 'Partial' : 'Accrued',
+      chip: f.collected >= f.accrued ? cGreen : f.collected > 0 ? cAmber : cGrey }));
+
+    const unrealGain = DEPLOYED * 2.45 - DEPLOYED;
+    const carryUnreal = Math.max(0, (unrealGain - calledN * (st.hurdle/100) * YEARS) * carryFrac);
+
+    const econTiles = [
+      { k:'Management fee accrued', v: usdEx(feeAccruedN),
+        note: usdEx(feeAccruedN - feeCollectedN) + ' not yet drawn · Q3 invoice pending', tone:INK,
+        hasBar:true, barStyle:'height:100%;width:'+(feeCollectedN / feeAccruedN * 100).toFixed(0)+'%;border-radius:99px;background:'+V,
+        barNote: Math.round(feeCollectedN / feeAccruedN * 100) + '% collected · ' + usdEx(feeCollectedN) },
+      { k:'Carry accrued', v: usdEx(carryUnreal),
+        note:'Entirely unrealised. Nothing is payable until a distribution clears return of capital and the preferred return.', tone:VIO,
+        hasBar:true, barStyle:'height:100%;width:0%;border-radius:99px;background:'+V,
+        barNote:'0% realised · ' + usdEx(0) + ' received' },
+      { k:'GP commitment funded', v: usdEx(gpAmountN * 0.47),
+        note:'Drawn alongside LP calls at the same ' + pct1(calledN / totalCommitN * 100) + ' rate.', tone:INK,
+        hasBar:true, barStyle:'height:100%;width:47%;border-radius:99px;background:'+V,
+        barNote:'47% of ' + usd(gpAmountN) + ' commitment' },
+    ];
+
+    const carryRows = [
+      { k:'Unrealised gain, portfolio', v: usdEx(unrealGain), weight:'600', tone:INK, note:'marks at Jun 30, 2026' },
+      { k:'Less preferred return due', v:'(' + usdEx(calledN * (st.hurdle/100) * YEARS) + ')', weight:'400', tone:RED, note:st.hurdle + '% on called capital' },
+      { k:'Profit above hurdle', v: usdEx(Math.max(0, unrealGain - calledN * (st.hurdle/100) * YEARS)), weight:'600', tone:INK, note:'' },
+      { k:'Carry at ' + st.carry.toFixed(0) + '%, unrealised', v: usdEx(carryUnreal), weight:'700', tone:VIO, note:'not payable, not accrued to cash' },
+      { k:'Carry realised to date', v: usdEx(0), weight:'700', tone:MUT, note:'no distributions have occurred' },
+    ];
+
+    const gpRows = [
+      { k:'Total commitment', v: usdEx(gpAmountN) },
+      { k:'Funded to date', v: usdEx(gpAmountN * 0.47) },
+      { k:'Unfunded', v: usdEx(gpAmountN * 0.53) },
+    ];
+
+    // ============ TABS ============
+    const TABS = [
+      { k:'setup', l:'Fund setup', i:I.wand },
+      { k:'dash', l:'Dashboard', i:I.gauge },
+      { k:'call', l:'Capital call', i:I.call, flag: outstandingCount ? String(outstandingCount) : '' },
+      { k:'dist', l:'Distribution', i:I.dist },
+      { k:'statement', l:'LP statement', i:I.doc },
+      { k:'econ', l:'Economics', i:I.coin },
+    ];
+    const tabs = TABS.map(t => ({
+      label:t.l, icon:t.i, flag: t.flag || '',
+      go: () => this.setState({ tab:t.k }),
+      flagStyle:'display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:800;background:'
+        + (st.tab === t.k ? V : 'rgba(180,83,9,.15)') + ';color:' + (st.tab === t.k ? '#fff' : AMB),
+      style:'display:flex;align-items:center;gap:7px;padding:0 0 11px;font-size:13px;font-weight:'+(st.tab === t.k ? '700' : '600')
+        + ';color:' + (st.tab === t.k ? VIO : MUT)
+        + ';border-bottom:2px solid ' + (st.tab === t.k ? V : 'transparent') + ';white-space:nowrap;flex:none',
+    }));
+
+    return {
+      themeClass: dark ? 'fa-dark' : '',
+      themeIcon: dark ? I.sun : I.moon, themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      vaultIcon:I.vault, checkIcon:I.check, printIcon:I.print,
+      chromeSub: st.name + ' · ' + LPS.length + ' LPs · ' + usd(totalCommitN) + ' committed',
+      asOfChip: cGrey, asOfLabel:'As of ' + AS_OF,
+      tabs,
+      tabSetup: st.tab === 'setup', tabDash: st.tab === 'dash', tabCall: st.tab === 'call',
+      tabDist: st.tab === 'dist', tabStatement: st.tab === 'statement', tabEcon: st.tab === 'econ',
+      grnTone:GRN, ambTone:AMB, vioTone:VIO,
+      fund:{ name: st.name, waterfall: st.waterfall === 'european' ? 'European, whole-of-fund' : 'American, deal-by-deal' },
+
+      // setup
+      setupStepLine:'Terms drive fee accrual, the waterfall, and every LP statement',
+      f:{ name: st.name }, setName:(e) => this.setState({ name:e.target.value }),
+      vintageOpts, setVintage:(e) => this.setState({ vintage:e.target.value }),
+      target:String(st.target), targetLabel: usd(targetN), hardCapLabel: usd(targetN * 1.25),
+      setTarget:(e) => this.setState({ target: parseFloat(e.target.value) }),
+      fee:String(st.fee), feeLabel: st.fee.toFixed(2) + '%',
+      setFee:(e) => this.setState({ fee: parseFloat(e.target.value) }),
+      stepOpts, setStep:(e) => {
+        const k = Object.keys(STEPS).find(x => STEPS[x].l === e.target.value);
+        if (k) this.setState({ step:k });
+      },
+      feeExplain: stp.drop
+        ? 'Fee holds at ' + st.fee.toFixed(2) + '% through year ' + (stp.from - 1) + ', then falls ' + stp.drop.toFixed(2) + ' points a year — recognising that active management tapers once the fund is fully deployed.'
+        : 'Flat ' + st.fee.toFixed(2) + '% for the full term. LPs increasingly resist this on funds above ' + usd(20e6) + ', since fee load keeps rising after deployment ends.',
+      carry:String(st.carry), carryLabel: st.carry.toFixed(1) + '%',
+      setCarry:(e) => this.setState({ carry: parseFloat(e.target.value) }),
+      hurdle:String(st.hurdle), hurdleLabel: st.hurdle + '%',
+      setHurdle:(e) => this.setState({ hurdle: parseFloat(e.target.value) }),
+      waterfallOpts,
+      termOpts, setTerm:(e) => this.setState({ term:e.target.value }),
+      extOpts, setExt:(e) => this.setState({ ext:e.target.value }),
+      gpPct:String(st.gpPct), gpLabel: st.gpPct.toFixed(1) + '%', gpAmountLabel: usd(gpAmountN) + ' alongside LPs',
+      setGp:(e) => this.setState({ gpPct: parseFloat(e.target.value) }),
+      summarySub: st.vintage + ' vintage · ' + (st.waterfall === 'european' ? 'European' : 'American') + ' waterfall · ' + st.term,
+      summaryRows,
+      feeLoadNote: usd(feeLoad) + ' over ' + termYears + ' years — ' + pct1(feeLoad / targetN * 100) + ' of the fund. Every dollar of fee is a dollar not invested, so this figure belongs in the LPA conversation.',
+
+      // dashboard
+      dash, callHistory, nextCall,
+      nextCallChip: cGrey, nextCallState:'Not yet issued',
+      goCall: () => this.setState({ tab:'call', callStep:'build' }),
+
+      // capital call
+      callSub: st.callStep === 'build'
+        ? 'Amount is allocated pro-rata across commitments; any row can be edited and the total re-sums.'
+        : activeRaw.ref + ' issued ' + activeRaw.issued + ', due ' + activeRaw.due + ' · ' + paidCount + ' of ' + LPS.length + ' LPs have paid',
+      callSteps:[{ k:'build', l:'1 · Build' }, { k:'track', l:'2 · Collection' }].map(x => ({
+        label:x.l, style: seg(st.callStep === x.k), go: () => this.setState({ callStep:x.k }) })),
+      callBuild: st.callStep === 'build', callTrack: st.callStep === 'track',
+      newCall:String(st.newCall), newCallLabel: usdEx(newCallN),
+      setNewCall:(e) => this.setState({ newCall: parseFloat(e.target.value) }),
+      newCallPctLine: pct1(newCallN / totalCommitN * 100) + ' of commitments · ' + usd(uncalledN) + ' uncalled today',
+      purposeOpts, setPurpose:(e) => this.setState({ purpose:e.target.value }),
+      newCallRows:[
+        { k:'Purpose', v: st.purpose.length > 22 ? st.purpose.slice(0,20) + '…' : st.purpose },
+        { k:'Share of commitments', v: pct1(newCallN / totalCommitN * 100) },
+        { k:'Called after this', v: usd(calledN + newCallN) },
+        { k:'Uncalled after', v: usd(Math.max(0, uncalledN - newCallN)) },
+      ],
+      goTrack: () => this.setState({ callStep:'track' }),
+      proRata, proRataFootLine:'Sums to ' + usdEx(newCallN) + ' · ' + LPS.length + ' LPs',
+      totalCommit: usdEx(totalCommitN), totalUnfundedAfter: usdEx(totalUnfundedAfterN),
+      lpCount: String(LPS.length),
+      trackStats, collection,
+      activeCall:{ ref: activeRaw.ref,
+        line: usdEx(receivedN) + ' of ' + usdEx(activeCallAmt) + ' received · ' + Math.round(receivedN / activeCallAmt * 100) + '%' },
+      trackTotals:{ called: usdEx(activeCallAmt), received: usdEx(receivedN), outstanding: usdEx(outstandingN),
+        note: paidCount + ' paid · ' + outstandingCount + ' outstanding' },
+      hasOutstanding: outstandingCount - remindedCount > 0,
+      remindAllLabel:'Remind all ' + (outstandingCount - remindedCount),
+      remindOne: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-lp]');
+        const k = n && n.getAttribute('data-lp');
+        if (k) this.setState(s2 => ({ reminded: Object.assign({}, s2.reminded, { [k]:1 }) }));
+      },
+      remindAll: () => this.setState(s2 => {
+        const nx = Object.assign({}, s2.reminded);
+        LPS.filter(l => !l.paid).forEach(l => { nx[l.k] = 1; });
+        return { reminded:nx };
+      }),
+
+      // distribution
+      distSub:'Proceeds run through the fund\u2019s ' + (st.waterfall === 'european' ? 'European' : 'American') + ' waterfall in order. Each tier shows the arithmetic, because a GP should be able to defend the split line by line.',
+      exit:{ name:'Sablefin · secondary sale', note:'Partial position sold to a growth fund, Aug 2026. Cost basis ' + usd(1400000) + '.' },
+      proceeds:String(st.proceeds), proceedsLabel: usdEx(proceedsN),
+      setProceeds:(e) => this.setState({ proceeds: parseFloat(e.target.value) }),
+      distContext:[
+        { k:'Called capital', v: usdEx(calledN) },
+        { k:'Preferred return due', v: usdEx(prefDue) },
+        { k:'Carry rate', v: st.carry.toFixed(1) + '%' },
+        { k:'Waterfall', v: st.waterfall === 'european' ? 'European' : 'American' },
+      ],
+      distSplit:{ lp: usdEx(lpTotal), gp: usdEx(gpTotal2),
+        note: pct1(lpTotal / proceedsN * 100) + ' to LPs, ' + pct1(gpTotal2 / proceedsN * 100) + ' to GP. '
+          + (t1 < calledN ? 'Capital is not yet fully returned, so no carry is payable at this proceeds level.'
+             : 'Capital returned in full, hurdle cleared, so carry is live.') },
+      waterfallLine:'4 tiers · applied in order',
+      tiers, distRows,
+      distPreviewLine: usdEx(lpTotal) + ' across ' + LPS.length + ' LPs',
+      distTotals:{ roc: usdEx(t1), profit: usdEx(t2 + t4lp), total: usdEx(lpTotal) },
+
+      // statement
+      stmt, lpPicker,
+
+      // economics
+      econTiles, feeLedger,
+      feeLedgerLine: st.fee.toFixed(2) + '% on committed capital',
+      feeTotals:{ accrued: usdEx(feeAccruedN), collected: usdEx(feeCollectedN),
+        note: usdEx(feeAccruedN - feeCollectedN) + ' outstanding' },
+      carryRows,
+      carryNote:'Under a European waterfall none of this is payable until the whole fund has returned capital and cleared the hurdle. Showing accrued carry as GP income before that point is the most common way a fund\u2019s own reporting misleads its partners.',
+      gpFunded: usdEx(gpAmountN * 0.47), gpTotal: usdEx(gpAmountN),
+      gpBar:'height:100%;width:47%;border-radius:99px;background:'+V,
+      gpNote:'The GP is drawn down alongside LPs at the same rate, on the same notices — no deferral, which is what an LP will check.',
+      gpRows,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#6B46C1;text-decoration:none}a:hover{color:#553C9A}
+    .eb-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .eb-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa}
+    .eb-btn{transition:background .12s,border-color .12s,box-shadow .12s;cursor:pointer;font-family:inherit}
+    .eb-card{transition:border-color .12s,box-shadow .12s}
+    .eb-row:hover{background:#faf9fc}
+    .eb-root.eb-embedded .eb-topbar{display:none!important}
+    @keyframes ebFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    @keyframes ebPulse{0%,100%{opacity:1}50%{opacity:.45}}
+    @media (max-width:1080px){.eb-2col{grid-template-columns:1fr!important}.eb-kpi{grid-template-columns:repeat(2,1fr)!important}.eb-tl{grid-template-columns:1fr!important}}
+  </style>
+</helmet>
+
+<div class="eb-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="eb-topbar" style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px;margin-bottom:16px"></div>
+  <div class="eb-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 18px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:12px;min-width:0">
+      <div style="width:34px;height:34px;border-radius:9px;background:#f4f0ff;display:flex;align-items:center;justify-content:center;color:#7c3aed;flex:none">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg>
+      </div>
+      <div style="min-width:0">
+        <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">83(b) Election Tracker</h1>
+        <div style="font-size:13px;color:#71717a;margin-top:2px">Track your 83(b) filing deadline, documents, and proof of submission.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATE SWITCHER -->
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px">
+    <span class="eb-lbl">Scenario</span>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <sc-for list="{{ scenarioTabs }}" as="t" hint-placeholder-count="5">
+        <button class="eb-btn" onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</button>
+      </sc-for>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="eb-btn" onClick="{{ openProof }}" style="padding:8px 13px;border-radius:8px;border:1px solid #ececf1;background:#fff;font-size:12.5px;font-weight:600;color:#3f3f46">Upload proof</button>
+      <button class="eb-btn" onClick="{{ openFiled }}" style="padding:8px 13px;border-radius:8px;border:1px solid #ececf1;background:#fff;font-size:12.5px;font-weight:600;color:#3f3f46">Download template</button>
+      <button class="eb-btn" onClick="{{ markFiled }}" style="padding:8px 14px;border-radius:8px;border:1px solid #7c3aed;background:#7c3aed;font-size:12.5px;font-weight:700;color:#fff">Mark as filed</button>
+    </div>
+  </div>
+
+  <!-- URGENCY CARD -->
+  <div class="eb-card" style="{{ hero.wrapStyle }}">
+    <div style="display:grid;grid-template-columns:1fr auto;gap:28px;align-items:center">
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px">
+          <span style="{{ hero.chipStyle }}">{{ hero.chip }}</span>
+          <span style="font-size:12px;color:#71717a">{{ company }} · {{ founder }}</span>
+        </div>
+        <div style="font-size:19px;font-weight:700;letter-spacing:-.015em;line-height:1.4;max-width:640px">{{ hero.headline }}</div>
+        <div style="font-size:13px;color:#52525b;line-height:1.65;margin-top:9px;max-width:620px">{{ hero.body }}</div>
+        <div class="eb-kpi" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px;max-width:560px">
+          <sc-for list="{{ hero.facts }}" as="f" hint-placeholder-count="3">
+            <div style="background:#fff;border:1px solid #ececf1;border-radius:11px;padding:12px 13px">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">{{ f.k }}</div>
+              <div class="eb-mono" style="font-size:14.5px;font-weight:600;margin-top:5px;color:#18181b">{{ f.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="flex:none;text-align:center;padding-left:8px">
+        <div style="{{ hero.countStyle }}">
+          <div class="eb-mono" style="font-size:40px;font-weight:700;line-height:1;letter-spacing:-.03em">{{ hero.countNum }}</div>
+          <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;margin-top:6px;opacity:.85">{{ hero.countLabel }}</div>
+        </div>
+        <div style="font-size:11px;color:#71717a;margin-top:11px;max-width:170px;line-height:1.55">{{ hero.countNote }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TIMELINE -->
+  <div style="margin-top:22px">
+    <div class="eb-lbl" style="margin-bottom:12px">Filing timeline · 30-day window</div>
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px 24px 20px">
+      <div style="position:relative;height:6px;background:#f1f0f5;border-radius:99px;margin:0 0 4px">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:{{ timelinePct }};background:{{ timelineColor }};border-radius:99px"></div>
+        <div style="position:absolute;right:0;top:-5px;width:2px;height:16px;background:#dc2626;border-radius:2px"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#a1a1aa;margin-bottom:20px">
+        <span>Day 0 · stock transferred</span>
+        <span style="color:#b91c1c;font-weight:600">Day 30 · IRS deadline</span>
+      </div>
+      <div class="eb-tl" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px">
+        <sc-for list="{{ timeline }}" as="s" hint-placeholder-count="6">
+          <div style="{{ s.wrapStyle }}">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px">
+              <div style="{{ s.dotStyle }}">{{ s.dotGlyph }}</div>
+              <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:{{ s.tone }}">{{ s.state }}</div>
+            </div>
+            <div style="font-size:12.5px;font-weight:600;line-height:1.4;color:#18181b">{{ s.label }}</div>
+            <div class="eb-mono" style="font-size:10.5px;color:#a1a1aa;margin-top:4px">{{ s.date }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div class="eb-2col" style="display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:22px;margin-top:22px;align-items:start">
+    <!-- LEFT -->
+    <div style="display:flex;flex-direction:column;gap:22px;min-width:0">
+      <!-- ELIGIBILITY -->
+      <div>
+        <div class="eb-lbl" style="margin-bottom:12px">Do you need to file?</div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:20px 22px">
+          <div style="display:flex;align-items:flex-start;gap:12px;padding-bottom:16px;border-bottom:1px solid #f4f4f5;margin-bottom:16px">
+            <div style="{{ elig.badgeStyle }}">{{ elig.badge }}</div>
+            <div style="min-width:0">
+              <div style="font-size:14px;font-weight:700;line-height:1.4">{{ elig.title }}</div>
+              <div style="font-size:12.5px;color:#52525b;line-height:1.6;margin-top:5px">{{ elig.body }}</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ eligRows }}" as="r" hint-placeholder-count="4">
+              <div style="{{ r.wrapStyle }}">
+                <div style="min-width:0">
+                  <div style="font-size:12.5px;font-weight:600;color:#18181b">{{ r.cond }}</div>
+                  <div style="font-size:11.5px;color:#71717a;margin-top:2px">{{ r.note }}</div>
+                </div>
+                <span style="{{ r.tagStyle }}">{{ r.tag }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#a1a1aa;line-height:1.6;margin-top:14px">Eligibility is inferred from your Cap Table and Incorporate records. Confirm with counsel before marking this step not required.</div>
+        </div>
+      </div>
+
+      <!-- CHECKLIST -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap">
+          <div class="eb-lbl">Filing checklist</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="eb-mono" style="font-size:11.5px;color:#71717a">{{ checkDone }} of {{ checkTotal }} complete</span>
+            <div style="width:90px;height:5px;background:#f1f0f5;border-radius:99px;overflow:hidden">
+              <div style="height:100%;width:{{ checkPct }};background:#7c3aed"></div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <sc-for list="{{ checklist }}" as="c" hint-placeholder-count="9">
+            <div class="eb-row" style="{{ c.wrapStyle }}">
+              <button class="eb-btn" onClick="{{ c.toggle }}" style="{{ c.boxStyle }}">{{ c.boxGlyph }}</button>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <div style="{{ c.titleStyle }}">{{ c.title }}</div>
+                  <span style="{{ c.statusStyle }}">{{ c.status }}</span>
+                </div>
+                <div style="font-size:11.5px;color:#71717a;line-height:1.55;margin-top:3px">{{ c.help }}</div>
+              </div>
+              <div style="flex:none;display:flex;align-items:center;gap:10px">
+                <span class="eb-mono" style="font-size:10.5px;color:#a1a1aa">{{ c.owner }}</span>
+                <button class="eb-btn" onClick="{{ c.action }}" style="padding:6px 11px;border-radius:7px;border:1px solid #ececf1;background:#fff;font-size:11.5px;font-weight:600;color:#3f3f46;white-space:nowrap">{{ c.cta }}</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- FILING METHOD -->
+      <div>
+        <div class="eb-lbl" style="margin-bottom:12px">Filing method &amp; submission record</div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:20px 22px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+            <sc-for list="{{ methods }}" as="m" hint-placeholder-count="3">
+              <button class="eb-btn" onClick="{{ m.onClick }}" style="{{ m.style }}">{{ m.label }}</button>
+            </sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+            <sc-for list="{{ methodMeta }}" as="m" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;background:#fafafa;border:1px solid #f4f4f5;border-radius:10px">
+                <div style="font-size:11.5px;color:#71717a">{{ m.k }}</div>
+                <div class="eb-mono" style="font-size:11.5px;font-weight:600;color:{{ m.tone }};text-align:right">{{ m.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#a1a1aa;line-height:1.6;margin-top:14px">{{ methodNote }}</div>
+        </div>
+      </div>
+
+      <!-- RISK -->
+      <div style="{{ risk.wrapStyle }}">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:11px">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="{{ risk.tone }}" stroke-width="1.8" stroke-linecap="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:{{ risk.tone }}">{{ risk.label }}</div>
+        </div>
+        <div style="font-size:13px;font-weight:600;line-height:1.5;color:#18181b">{{ risk.title }}</div>
+        <div style="display:flex;flex-direction:column;gap:7px;margin-top:11px">
+          <sc-for list="{{ risk.points }}" as="p" hint-placeholder-count="3">
+            <div style="display:flex;gap:8px;font-size:12.5px;color:#52525b;line-height:1.6">
+              <span style="color:{{ risk.tone }};flex:none">·</span><span>{{ p }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div style="display:flex;flex-direction:column;gap:22px;min-width:0">
+      <!-- PROOF -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px">
+          <div class="eb-lbl">Compliance proof</div>
+          <button class="eb-btn" onClick="{{ openProof }}" style="padding:5px 10px;border-radius:7px;border:1px solid #ececf1;background:#fff;font-size:11px;font-weight:600;color:#3f3f46">+ Upload</button>
+        </div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:16px 18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding-bottom:13px;border-bottom:1px solid #f4f4f5;margin-bottom:13px">
+            <div style="font-size:12px;color:#71717a">Evidence coverage</div>
+            <span class="eb-mono" style="font-size:12px;font-weight:700;color:{{ proofTone }}">{{ proofHave }} of {{ proofTotal }}</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ proofs }}" as="p" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="{{ p.iconStyle }}">{{ p.glyph }}</div>
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:12.5px;font-weight:600;color:#18181b;line-height:1.35">{{ p.name }}</div>
+                  <div class="eb-mono" style="font-size:10.5px;color:#a1a1aa;margin-top:2px">{{ p.meta }}</div>
+                </div>
+                <span style="{{ p.tagStyle }}">{{ p.tag }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#a1a1aa;line-height:1.6;margin-top:14px;padding-top:13px;border-top:1px solid #f4f4f5">All uploads are mirrored into the Capital data room under <span style="color:#7c3aed">Compliance · 83(b)</span>.</div>
+        </div>
+      </div>
+
+      <!-- OPERATOR -->
+      <div>
+        <div class="eb-lbl" style="margin-bottom:12px">Operator assist</div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:16px 18px">
+          <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px">
+            <div style="width:32px;height:32px;border-radius:50%;background:#ede9fe;color:#6d28d9;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:700;flex:none">MR</div>
+            <div style="min-width:0">
+              <div style="font-size:12.5px;font-weight:600">Maya Reyes</div>
+              <div style="font-size:11px;color:#a1a1aa">Program operator · legal ops</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ opRows }}" as="o" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11.5px">
+                <span style="color:#71717a">{{ o.k }}</span>
+                <span style="font-weight:600;color:{{ o.tone }}">{{ o.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <button class="eb-btn" onClick="{{ requestHelp }}" style="width:100%;margin-top:14px;padding:9px;border-radius:8px;border:1px solid #ececf1;background:#fafafa;font-size:12px;font-weight:600;color:#3f3f46">{{ helpCta }}</button>
+        </div>
+      </div>
+
+      <!-- CONNECTED -->
+      <div>
+        <div class="eb-lbl" style="margin-bottom:12px">Connected workflow</div>
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:16px 18px">
+          <div style="display:flex;flex-direction:column;gap:11px">
+            <sc-for list="{{ connections }}" as="c" hint-placeholder-count="5">
+              <div style="display:flex;align-items:flex-start;gap:10px">
+                <div style="width:5px;height:5px;border-radius:50%;background:#7c3aed;margin-top:6px;flex:none"></div>
+                <div style="min-width:0">
+                  <div style="font-size:12.5px;font-weight:600;color:#18181b">{{ c.tool }}</div>
+                  <div style="font-size:11.5px;color:#71717a;line-height:1.55;margin-top:2px">{{ c.rel }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="margin-top:15px;padding-top:13px;border-top:1px solid #f4f4f5;font-size:11.5px;color:#52525b;line-height:1.6">{{ unlockNote }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<sc-if value="{{ modalOpen }}">
+<div onClick="{{ closeModal }}" style="position:fixed;inset:0;background:rgba(24,24,27,.55);z-index:200;display:flex;align-items:center;justify-content:center;padding:24px;animation:ebFade .16s ease">
+  <div onClick="{{ stop }}" style="background:#fff;border-radius:18px;max-width:520px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.28);overflow:hidden">
+    <div style="padding:20px 24px;border-bottom:1px solid #f4f4f5;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div>
+        <div style="font-size:16px;font-weight:700;letter-spacing:-.01em">{{ modal.title }}</div>
+        <div style="font-size:12.5px;color:#71717a;margin-top:3px">{{ modal.sub }}</div>
+      </div>
+      <button class="eb-btn" onClick="{{ closeModal }}" style="border:none;background:transparent;font-size:19px;color:#a1a1aa;line-height:1;padding:0">×</button>
+    </div>
+    <div style="padding:22px 24px">
+      <div style="font-size:13px;color:#52525b;line-height:1.7">{{ modal.body }}</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:16px">
+        <sc-for list="{{ modal.items }}" as="i" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:10px;padding:11px 13px;background:#fafafa;border:1px solid #f4f4f5;border-radius:10px">
+            <div style="width:22px;height:22px;border-radius:6px;background:#ede9fe;color:#6d28d9;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex:none">{{ i.n }}</div>
+            <div style="font-size:12.5px;color:#3f3f46;line-height:1.5">{{ i.t }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="padding:16px 24px;border-top:1px solid #f4f4f5;display:flex;justify-content:flex-end;gap:9px">
+      <button class="eb-btn" onClick="{{ closeModal }}" style="padding:9px 15px;border-radius:8px;border:1px solid #ececf1;background:#fff;font-size:12.5px;font-weight:600;color:#3f3f46">Close</button>
+      <button class="eb-btn" onClick="{{ modal.confirm }}" style="padding:9px 16px;border-radius:8px;border:1px solid #7c3aed;background:#7c3aed;font-size:12.5px;font-weight:700;color:#fff">{{ modal.cta }}</button>
+    </div>
+  </div>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = {
+    scenario: 'due',
+    method: 'mail',
+    done: { transfer:true, restrict:true, form:true, sign:true, companyCopy:false, personalCopy:false, file:false, proof:false, complete:false },
+    modal: null,
+    helpRequested: false,
+  };
+
+  set(k, v) { this.setState({ [k]: v }); }
+
+  toggleItem(k) {
+    this.setState(s => ({ done: Object.assign({}, s.done, { [k]: !s.done[k] }) }));
+  }
+
+  renderVals() {
+    const st = this.state;
+    const scen = st.scenario;
+    const P = '#7c3aed';
+
+    const SC = [
+      { k:'safe',   label:'Safe · 24d' },
+      { k:'due',    label:'Due soon · 11d' },
+      { k:'crit',   label:'Critical · 3d' },
+      { k:'filed',  label:'Filed' },
+      { k:'overdue',label:'Overdue' },
+      { k:'none',   label:'Not required' },
+    ];
+    const scenarioTabs = SC.map(s => ({
+      label: s.label,
+      onClick: () => this.set('scenario', s.k),
+      style: 'padding:6px 12px;border-radius:99px;font-size:11.5px;font-weight:600;border:1px solid '
+        + (scen===s.k ? P : '#ececf1') + ';background:' + (scen===s.k ? '#f4f0ff' : '#fff')
+        + ';color:' + (scen===s.k ? '#6d28d9' : '#71717a'),
+    }));
+
+    const chip = (t, bg, fg) => 'display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:99px;font-size:11px;font-weight:700;background:'+bg+';color:'+fg;
+    const tag  = (bg, fg) => 'flex:none;padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:700;background:'+bg+';color:'+fg;
+
+    const HERO = {
+      safe: { chip:'Safe · on track', chipStyle:chip('','#dcfce7','#15803d'), tint:'#f6fefa', border:'#bbf7d0',
+        countNum:'24', countLabel:'days left', countTone:'#15803d', countBg:'#ecfdf5',
+        headline:'An 83(b) election is required for your founder stock.',
+        body:'Your Cap Table shows 8,000,000 restricted shares subject to a 4-year vest with a 1-year cliff. You have comfortable time, but prepare the package now — the deadline does not move.',
+        countNote:'Deadline Sep 2, 2026. No extensions are available.' },
+      due: { chip:'Due soon · act this week', chipStyle:chip('','#fef3c7','#92400e'), tint:'#fffdf5', border:'#fde68a',
+        countNum:'11', countLabel:'days left', countTone:'#b45309', countBg:'#fffbeb',
+        headline:'You have 11 days remaining to file your 83(b) election.',
+        body:'Your form is drafted and signed. Remaining: deliver the company copy, retain a personal copy, mail to the IRS, and upload proof of submission.',
+        countNote:'Deadline Aug 15, 2026. Mail early — postmark date governs.' },
+      crit: { chip:'Critical · file immediately', chipStyle:chip('','#fee2e2','#b91c1c'), tint:'#fffaf9', border:'#fecaca',
+        countNum:'3', countLabel:'days left', countTone:'#b91c1c', countBg:'#fef2f2',
+        headline:'Three days remain before your 83(b) filing window closes.',
+        body:'Send the election by certified mail today. Retain the certified-mail receipt as proof of timely filing — the postmark, not the IRS receipt date, is what counts.',
+        countNote:'Deadline Aug 7, 2026. Contact your operator if you are blocked.' },
+      filed: { chip:'Filed · complete', chipStyle:chip('','#dcfce7','#15803d'), tint:'#f6fefa', border:'#bbf7d0',
+        countNum:'✓', countLabel:'filed on time', countTone:'#15803d', countBg:'#ecfdf5',
+        headline:'Your 83(b) election was filed and proof is on record.',
+        body:'Filed by certified mail on Jul 24, 2026 — day 12 of 30. Receipt, signed election, and company acknowledgment are archived in the data room.',
+        countNote:'Attach a copy to your next personal tax return.' },
+      overdue: { chip:'Overdue · escalate', chipStyle:chip('','#fee2e2','#b91c1c'), tint:'#fffaf9', border:'#fecaca',
+        countNum:'−6', countLabel:'days past due', countTone:'#b91c1c', countBg:'#fef2f2',
+        headline:'The 30-day filing window has closed without a recorded filing.',
+        body:'If you mailed the election but have not uploaded proof, upload it now — the postmark may still establish timely filing. Otherwise contact counsel today.',
+        countNote:'Deadline was Jul 29, 2026. There are generally no extensions.' },
+      none: { chip:'Not required', chipStyle:chip('','#f4f4f5','#52525b'), tint:'#fcfcfd', border:'#ececf1',
+        countNum:'—', countLabel:'no deadline', countTone:'#52525b', countBg:'#fafafa',
+        headline:'No 83(b) election appears necessary for your current equity.',
+        body:'Your Cap Table records 8,000,000 fully vested shares with no repurchase restriction. An 83(b) election applies to equity still subject to a substantial risk of forfeiture.',
+        countNote:'Re-check if you later issue restricted stock.' },
+    }[scen];
+
+    const factSet = scen==='none'
+      ? [{k:'Stock transferred',v:'Aug 4, 2026'},{k:'Restriction',v:'None on record'},{k:'Deadline',v:'Not applicable'}]
+      : scen==='filed'
+      ? [{k:'Stock transferred',v:'Jul 12, 2026'},{k:'Filed',v:'Jul 24, 2026'},{k:'Method',v:'Certified mail'}]
+      : [{k:'Stock transferred',v: scen==='overdue' ? 'Jun 29, 2026' : scen==='crit' ? 'Jul 8, 2026' : scen==='due' ? 'Jul 16, 2026' : 'Jul 29, 2026'},
+         {k:'Filing deadline',v: scen==='overdue' ? 'Jul 29, 2026' : scen==='crit' ? 'Aug 7, 2026' : scen==='due' ? 'Aug 15, 2026' : 'Sep 2, 2026'},
+         {k:'Shares',v:'8,000,000 restricted'}];
+
+    const hero = {
+      wrapStyle:'background:'+HERO.tint+';border:1px solid '+HERO.border+';border-radius:18px;padding:24px 26px',
+      chip:HERO.chip, chipStyle:HERO.chipStyle, headline:HERO.headline, body:HERO.body, facts:factSet,
+      countNum:HERO.countNum, countLabel:HERO.countLabel, countNote:HERO.countNote,
+      countStyle:'width:132px;height:132px;border-radius:50%;background:'+HERO.countBg+';border:2px solid '+HERO.countTone
+        +';color:'+HERO.countTone+';display:flex;flex-direction:column;align-items:center;justify-content:center',
+    };
+
+    // ---- timeline ----
+    const dayUsed = { safe:6, due:19, crit:27, filed:12, overdue:36, none:0 }[scen];
+    const timelinePct = Math.min(100, Math.round(dayUsed/30*100)) + '%';
+    const timelineColor = scen==='overdue' ? '#dc2626' : scen==='crit' ? '#f59e0b' : scen==='none' ? '#d4d4d8' : scen==='filed' ? '#16a34a' : P;
+
+    const stepStates = {
+      safe:    ['done','active','todo','todo','todo','todo'],
+      due:     ['done','done','active','todo','todo','todo'],
+      crit:    ['done','done','active','todo','todo','todo'],
+      filed:   ['done','done','done','done','done','active'],
+      overdue: ['done','done','miss','todo','todo','todo'],
+      none:    ['done','na','na','na','na','na'],
+    }[scen];
+    const stepDates = {
+      safe:    ['Jul 29','In progress','—','—','—','—'],
+      due:     ['Jul 16','Jul 22','Due Aug 15','—','—','—'],
+      crit:    ['Jul 8','Jul 30','Due Aug 7','—','—','—'],
+      filed:   ['Jul 12','Jul 20','Jul 24','Jul 24','Jul 25','Apr 2027'],
+      overdue: ['Jun 29','Jul 15','Missed Jul 29','—','—','—'],
+      none:    ['Aug 4','n/a','n/a','n/a','n/a','n/a'],
+    }[scen];
+    const stepLabels = ['Stock transferred','Filing prepared','Filed with IRS','Personal copy stored','Company copy delivered','Tax-return copy'];
+    const stepTone = { done:'#15803d', active:P, todo:'#a1a1aa', miss:'#b91c1c', na:'#a1a1aa' };
+    const stepWord = { done:'Complete', active:'In progress', todo:'Pending', miss:'Missed', na:'N/A' };
+    const timeline = stepLabels.map((label, i) => {
+      const s = stepStates[i];
+      return {
+        label, date: stepDates[i], state: stepWord[s], tone: stepTone[s],
+        dotGlyph: s==='done' ? '✓' : s==='miss' ? '!' : '',
+        dotStyle:'width:16px;height:16px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:800;color:#fff;background:'
+          + (s==='done' ? '#16a34a' : s==='active' ? P : s==='miss' ? '#dc2626' : '#e4e4e7')
+          + (s==='active' ? ';animation:ebPulse 2s ease-in-out infinite' : ''),
+        wrapStyle:'padding:13px 14px;border-radius:12px;border:1px solid '
+          + (s==='active' ? 'rgba(124,58,237,.28)' : s==='miss' ? '#fecaca' : '#f4f4f5')
+          + ';background:' + (s==='active' ? '#faf7ff' : s==='miss' ? '#fffaf9' : '#fafafa')
+          + (s==='na' ? ';opacity:.55' : ''),
+      };
+    });
+
+    // ---- eligibility ----
+    const eligMap = {
+      none: { badge:'NO', badgeBg:'#f4f4f5', badgeFg:'#52525b', title:'Likely not required',
+        body:'No unvested or repurchasable shares are recorded against your holdings. An 83(b) election has no effect on equity that is already fully vested.' },
+      _yes: { badge:'YES', badgeBg:'#ede9fe', badgeFg:'#6d28d9', title:'Likely required',
+        body:'Your founder stock is subject to a 4-year vest with a 1-year cliff and a company repurchase right — a substantial risk of forfeiture, which is what triggers the election.' },
+    };
+    const E = scen==='none' ? eligMap.none : eligMap._yes;
+    const elig = { badge:E.badge, title:E.title, body:E.body,
+      badgeStyle:'flex:none;padding:5px 10px;border-radius:8px;font-size:11px;font-weight:800;letter-spacing:.04em;background:'+E.badgeBg+';color:'+E.badgeFg };
+
+    const eligRows = [
+      { cond:'Restricted founder stock with vesting', note:'Shares can be repurchased if you depart early', tag: scen==='none' ? 'Not on record' : 'Matches you', hit: scen!=='none' },
+      { cond:'Early-exercised options with restrictions', note:'Exercised before vest, subject to forfeiture', tag:'Not applicable', hit:false },
+      { cond:'Fully vested stock, no repurchase right', note:'No forfeiture risk to elect against', tag: scen==='none' ? 'Matches you' : 'Not applicable', hit: scen==='none' },
+      { cond:'Equity terms incomplete in Cap Table', note:'Vesting schedule or transfer date missing', tag:'Resolved', hit:false },
+    ].map(r => ({
+      cond:r.cond, note:r.note, tag:r.tag,
+      wrapStyle:'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border-radius:10px;border:1px solid '
+        + (r.hit ? 'rgba(124,58,237,.25)' : '#f4f4f5') + ';background:' + (r.hit ? '#faf7ff' : '#fafafa'),
+      tagStyle: r.hit ? tag('#ede9fe','#6d28d9') : tag('#f4f4f5','#a1a1aa'),
+    }));
+
+    // ---- checklist ----
+    const baseList = [
+      { k:'transfer', title:'Confirm stock transfer date', help:'Pulled from Incorporate · ' + factSet[0].v + (scen==='none' ? '. No forfeiture risk, so no filing clock runs.' : '. This date starts the 30-day clock.'), owner:'Auto', cta:'View record' },
+      { k:'restrict', title:'Confirm vesting and repurchase terms', help: scen==='none' ? 'No vesting or repurchase restriction on record.' : '4-year vest, 1-year cliff, company repurchase right on departure.', owner:'Auto', cta:'Open Cap Table' },
+      { k:'form',     title:'Generate the 83(b) election statement', help:'Pre-filled with your name, SSN placeholder, share count, and fair market value.', owner:'You', cta:'Download' },
+      { k:'sign',     title:'Sign the filing package', help:'Wet or e-signature accepted. Date the signature on or before the mailing date.', owner:'You', cta:'Sign' },
+      { k:'companyCopy', title:'Prepare the company copy', help:'The company retains a copy for its corporate records and cap table file.', owner:'You', cta:'Attach' },
+      { k:'personalCopy',title:'Retain your personal copy', help:'Keep a copy indefinitely — you may need it years later on a sale.', owner:'You', cta:'Attach' },
+      { k:'file',     title:'File with the IRS', help:'Send to the IRS service center for your filing address. Certified mail recommended.', owner:'You', cta:'Mark sent' },
+      { k:'proof',    title:'Save proof of filing', help:'Upload the certified-mail receipt or electronic confirmation.', owner:'You', cta:'Upload' },
+      { k:'complete', title:'Mark the election complete', help:'Closes the Week 4 compliance deliverable and archives to the data room.', owner:'You', cta:'Complete' },
+    ];
+    const autoDone = {
+      filed:   ['transfer','restrict','form','sign','companyCopy','personalCopy','file','proof','complete'],
+      overdue: ['transfer','restrict','form','sign'],
+      crit:    ['transfer','restrict','form','sign'],
+      safe:    ['transfer','restrict'],
+      none:    ['transfer','restrict'],
+    }[scen];
+    const isDone = (k) => scen==='due' ? !!st.done[k] : autoDone.indexOf(k) >= 0;
+    const activeK = scen==='none' ? null : (baseList.find(i => !isDone(i.k)) || {}).k;
+
+    const checklist = baseList.map((i, idx) => {
+      const d = isDone(i.k);
+      const act = i.k===activeK;
+      const na = scen==='none' && idx > 1;
+      return {
+        title:i.title, help:i.help, owner:i.owner, cta:i.cta,
+        toggle: () => this.toggleItem(i.k),
+        action: () => this.set('modal', i.k==='proof' ? 'proof' : 'template'),
+        boxGlyph: d ? '✓' : '',
+        boxStyle:'flex:none;width:19px;height:19px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;background:'
+          + (d ? '#16a34a' : 'transparent') + ';border:1.5px solid ' + (d ? '#16a34a' : '#d4d4d8'),
+        titleStyle:'font-size:13.5px;font-weight:600;color:' + (d ? '#71717a' : '#18181b') + (d ? ';text-decoration:line-through' : ''),
+        status: na ? 'N/A' : d ? 'Done' : act ? 'Next' : 'Not started',
+        statusStyle: na ? tag('#f4f4f5','#a1a1aa') : d ? tag('#dcfce7','#15803d') : act ? tag('#ede9fe','#6d28d9') : tag('#f4f4f5','#a1a1aa'),
+        wrapStyle:'display:flex;align-items:flex-start;gap:12px;padding:14px 18px;border-bottom:1px solid #f6f6f7;background:'
+          + (act ? '#faf7ff' : '#fff') + (na ? ';opacity:.5' : ''),
+      };
+    });
+    const checkDone = baseList.filter(i => isDone(i.k)).length;
+    const checkTotal = baseList.length;
+
+    // ---- filing method ----
+    const M = [{k:'mail',label:'Certified mail'},{k:'electronic',label:'Electronic'},{k:'undecided',label:'Undecided'}];
+    const methods = M.map(m => ({
+      label:m.label, onClick: () => this.set('method', m.k),
+      style:'padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid '
+        + (st.method===m.k ? P : '#ececf1') + ';background:' + (st.method===m.k ? '#f4f0ff' : '#fff')
+        + ';color:' + (st.method===m.k ? '#6d28d9' : '#71717a'),
+    }));
+    const filedYet = scen==='filed';
+    const methodMeta = [
+      { k:'Submitted', v: filedYet ? 'Jul 24, 2026' : 'Not sent', tone: filedYet ? '#15803d' : '#a1a1aa' },
+      { k:'Tracking number', v: filedYet ? '9405 5118 9956 2201' : '—', tone: filedYet ? '#18181b' : '#a1a1aa' },
+      { k:'Proof uploaded', v: filedYet ? 'Yes' : 'Pending', tone: filedYet ? '#15803d' : '#b45309' },
+      { k:'Company acknowledged', v: filedYet ? 'Jul 25, 2026' : 'Pending', tone: filedYet ? '#15803d' : '#a1a1aa' },
+      { k:'IRS service center', v:'Kansas City, MO', tone:'#18181b' },
+      { k:'Tax-return reminder', v: filedYet ? 'Set · Apr 2027' : 'Not set', tone: filedYet ? '#6d28d9' : '#a1a1aa' },
+    ];
+    const methodNote = st.method==='mail'
+      ? 'Certified mail with return receipt gives you a dated postmark — the strongest evidence of timely filing.'
+      : st.method==='electronic'
+      ? 'If your filing path supports electronic submission, retain the confirmation ID as your proof of record.'
+      : 'Choose a filing method to unlock submission tracking. Mail is the most commonly used path.';
+
+    // ---- risk ----
+    const riskMap = {
+      overdue: { tone:'#b91c1c', bg:'#fffaf9', border:'#fecaca', label:'Overdue',
+        title:'The filing window has closed. Treat this as urgent.',
+        points:['If the election was mailed before the deadline, the postmark may still establish timely filing — upload proof now.',
+                'Without a timely election, future vesting is generally taxed as it vests, at the value on each vesting date.',
+                'Contact your tax advisor and program operator today to review your options.'] },
+      crit: { tone:'#b45309', bg:'#fffdf5', border:'#fde68a', label:'What happens if you miss it',
+        title:'The 30-day deadline is strict and generally cannot be extended.',
+        points:['Missing it usually forfeits the ability to make the election at all.',
+                'Each vesting tranche would then be taxed at its value on the vest date, not at grant.',
+                'Postmark date controls, so mailing today still counts as timely.'] },
+      filed: { tone:'#15803d', bg:'#f6fefa', border:'#bbf7d0', label:'On record',
+        title:'Filed within the window. Keep the evidence permanently.',
+        points:['Retain your copy indefinitely — it may be requested at a financing or exit.',
+                'Attach a copy to your personal tax return for the year of the grant.',
+                'If share details change, reissue the record rather than editing the filed copy.'] },
+      none: { tone:'#52525b', bg:'#fcfcfd', border:'#ececf1', label:'Context',
+        title:'No election is needed while there is no forfeiture risk.',
+        points:['The election only matters for equity that can still be forfeited or repurchased.',
+                'If you later issue restricted stock, a new 30-day window opens on that transfer.',
+                'Confirm with counsel before treating this as settled.'] },
+    };
+    const risk = Object.assign({}, riskMap[scen] || riskMap.crit);
+    risk.wrapStyle = 'background:'+risk.bg+';border:1px solid '+risk.border+';border-radius:16px;padding:20px 22px';
+
+    // ---- proof ----
+    const proofDefs = [
+      { name:'Signed 83(b) election', meta: filedYet ? 'PDF · Jul 24, 2026' : (scen==='due' ? 'PDF · signed Jul 22, 2026' : scen==='crit' ? 'PDF · signed Jul 30, 2026' : scen==='overdue' ? 'PDF · signed Jul 15, 2026' : 'Draft ready · unsigned'), have: filedYet || scen==='due' || scen==='crit' || scen==='overdue' },
+      { name:'Certified mail receipt', meta: filedYet ? 'JPG · 9405 5118 9956' : 'Awaiting mailing', have: filedYet },
+      { name:'Company acknowledgment', meta: filedYet ? 'PDF · Jul 25, 2026' : 'Not delivered', have: filedYet },
+      { name:'Personal records copy', meta: filedYet ? 'PDF · archived' : 'Not attached', have: filedYet },
+      { name:'Counsel review note', meta: scen==='overdue' ? 'Escalation opened' : 'Optional', have: scen==='overdue', optional:true },
+    ];
+    const proofs = proofDefs.map(p => ({
+      name:p.name, meta:p.meta, glyph: p.have ? '✓' : '·', tag: p.have ? 'On file' : 'Missing',
+      iconStyle:'width:26px;height:26px;border-radius:8px;flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:'
+        + (p.have ? '#dcfce7' : '#f4f4f5') + ';color:' + (p.have ? '#15803d' : '#a1a1aa'),
+      tagStyle: p.have ? tag('#dcfce7','#15803d') : tag('#f4f4f5','#a1a1aa'),
+    }));
+    const proofHave = proofDefs.filter(p => p.have).length;
+    const missingReq = proofDefs.filter(p => !p.have && !p.optional).length;
+
+    // ---- operator ----
+    const opRows = [
+      { k:'Assigned', v:'Maya Reyes', tone:'#18181b' },
+      { k:'Status', v: scen==='overdue' ? 'Escalation open' : st.helpRequested ? 'Help requested' : 'Monitoring', tone: scen==='overdue' ? '#b91c1c' : st.helpRequested ? '#6d28d9' : '#15803d' },
+      { k:'Missing proof', v: missingReq===0 ? 'None' : missingReq + (missingReq===1 ? ' item' : ' items'), tone: missingReq===0 ? '#15803d' : '#b45309' },
+      { k:'Last follow-up', v:'Aug 2, 2026', tone:'#18181b' },
+    ];
+
+    const MODALS = {
+      template: { title:'83(b) election package', sub:'Pre-filled from your Cap Table and Incorporate records', cta:'Download package',
+        body:'Your election statement is generated from platform records — no manual data entry. Review each field before signing.',
+        items:[{n:'1',t:'Election statement, pre-filled with taxpayer, entity, share count, and grant-date value'},
+               {n:'2',t:'Cover letter and IRS mailing address for your filing state'},
+               {n:'3',t:'Company copy and personal records copy, ready to archive'}] },
+      proof: { title:'Upload proof of filing', sub:'Accepted: certified-mail receipt, postmark photo, electronic confirmation', cta:'Upload and record',
+        body:'Proof establishes that you filed within the 30-day window. Uploads are mirrored into the Capital data room under Compliance · 83(b).',
+        items:[{n:'1',t:'Certified-mail receipt showing the postmark date'},
+               {n:'2',t:'Signed election copy as mailed'},
+               {n:'3',t:'Company acknowledgment, once countersigned'}] },
+      filed: { title:'Mark as filed', sub:'Records the submission date and opens proof capture', cta:'Confirm filed',
+        body:'This records your submission and starts the proof-review step. The date you enter should match your postmark or electronic confirmation.',
+        items:[{n:'1',t:'Submission date and filing method'},
+               {n:'2',t:'Tracking or confirmation number'},
+               {n:'3',t:'Upload proof to complete the deliverable'}] },
+      help: { title:'Request operator support', sub:'Maya Reyes · legal ops', cta:'Send request',
+        body:'Your operator will review your filing status, confirm your deadline math, and escalate to counsel if the window is at risk.',
+        items:[{n:'1',t:'Deadline and transfer-date verification'},
+               {n:'2',t:'Package review before you sign'},
+               {n:'3',t:'Counsel escalation if the window has closed'}] },
+    };
+    const modal = MODALS[st.modal] || MODALS.template;
+    modal.confirm = () => this.setState({ modal: null, helpRequested: st.modal==='help' ? true : st.helpRequested });
+
+    return {
+      embeddedClass: this.props.embedded ? 'eb-embedded' : '',
+      company:'NovaCraft AI', founder:'Guillaume L.',
+      scenarioTabs, hero, timeline, timelinePct, timelineColor,
+      elig, eligRows,
+      checklist, checkDone, checkTotal, checkPct: Math.round(checkDone/checkTotal*100) + '%',
+      methods, methodMeta, methodNote,
+      risk,
+      proofs, proofHave, proofTotal: proofDefs.length,
+      proofTone: proofHave===proofDefs.length ? '#15803d' : '#b45309',
+      opRows, helpCta: st.helpRequested ? 'Support request sent' : 'Request operator support',
+      requestHelp: () => this.set('modal','help'),
+      connections: [
+        { tool:'Incorporate', rel:'Supplies the stock transfer date that starts your 30-day window.' },
+        { tool:'Cap Table', rel:'Supplies share count, grant-date value, and vesting terms.' },
+        { tool:'Co-founder Agreement', rel:'Repurchase and vesting language must match the election.' },
+        { tool:'Capital · Data room', rel:'Receives the filed election and proof as diligence artifacts.' },
+        { tool:'Compliance checklist', rel:'Completion clears the Week 4 compliance requirement.' },
+      ],
+      unlockNote: scen==='filed'
+        ? 'Week 4 compliance deliverable complete. The filed election is visible to investors in the data room.'
+        : 'Completing this tracker clears "File 83(b) election" in your Week 4 deliverables.',
+      modalOpen: !!st.modal, modal,
+      closeModal: () => this.set('modal', null),
+      stop: (e) => e.stopPropagation(),
+      openProof: () => this.set('modal','proof'),
+      openFiled: () => this.set('modal','template'),
+      markFiled: () => this.set('modal','filed'),
+    };
+  }
+}
+</script>
+</body>
+</html>

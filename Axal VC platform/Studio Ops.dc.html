@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}
+    .tnum{font-variant-numeric:tabular-nums}
+    .so-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa}
+    .so-root.so-embedded{padding:0 0 90px!important}
+    .so-root.so-embedded .so-topline{display:none!important}
+    .so-root.so-embedded .so-header{display:none!important}
+    @media (max-width:900px){.so-2col{grid-template-columns:1fr!important}}
+  </style>
+</helmet>
+
+<div class="so-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 90px">
+  <div class="so-topline" style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px"></div>
+
+  <!-- HEADER -->
+  <div class="so-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:22px 0 20px">
+    <div style="min-width:0">
+      <div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+        <span style="width:30px;height:30px;flex:none;border-radius:9px;background:#f3effe;color:#6d28d9;display:flex;align-items:center;justify-content:center;padding:6px" dangerouslySetInnerHTML="{{ opsIcon }}"></span>
+        <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Studio Ops</h1>
+        <span style="font-size:11px;font-weight:700;border-radius:99px;padding:3px 10px;background:#dcfce7;color:#15803d">Active</span>
+      </div>
+      <div style="font-size:13.5px;color:#71717a;margin-top:6px;max-width:600px">Weekly cadence and accountability — the operating rhythm that keeps commitments, blockers, and closeout visible across the founding team.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+      <div style="padding:8px 14px;border-radius:9px;border:1px solid #ececf1;background:#fff;font-size:12.5px;font-weight:600;color:#3f3f46">Share</div>
+      <div style="padding:8px 14px;border-radius:9px;border:1px solid #ececf1;background:#fff;font-size:12.5px;font-weight:600;color:#3f3f46">Export</div>
+    </div>
+  </div>
+
+  <!-- WEEKLY FOCUS -->
+  <div style="background:linear-gradient(135deg,#f5f3ff,#faf9ff);border:1px solid #e4defb;border-radius:16px;padding:22px;margin-bottom:20px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px">
+        <div class="so-lbl" style="color:#6d28d9;margin-bottom:6px">Weekly focus · {{ opsWeekLabel }}</div>
+        <div style="font-size:19px;font-weight:800;color:#1A202C;letter-spacing:-.01em;line-height:1.25;margin-bottom:14px">{{ opsObjective }}</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <sc-for list="{{ opsMustHit }}" as="m" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:9px"><span style="width:16px;height:16px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;{{ m.dotStyle }}" dangerouslySetInnerHTML="{{ m.icon }}"></span><span style="font-size:13px;color:#3f3f46">{{ m.text }}</span></div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;min-width:200px">
+        <div style="background:#fff;border:1px solid #ece7fb;border-radius:12px;padding:14px 16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:11px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:.05em">Execution health</span><span style="font-size:11px;font-weight:700;border-radius:99px;padding:3px 10px;{{ opsHealthStyle }}">{{ opsHealth }}</span></div>
+          <div style="height:7px;border-radius:99px;background:#f1f0f5;overflow:hidden;margin-bottom:6px"><div style="height:100%;width:{{ opsProgress }};border-radius:99px;background:{{ opsHealthBar }}"></div></div>
+          <div style="font-size:11.5px;color:#8a7cae">{{ opsProgressNote }}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #ece7fb;border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12.5px;font-weight:600;color:#3f3f46">Cadence lock</span>
+          <span style="font-size:11px;font-weight:700;border-radius:99px;padding:3px 10px;{{ cadenceLockStyle }}">{{ cadenceLock }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="so-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+    <!-- CADENCE -->
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div class="so-lbl">Cadence</div><button onClick="{{ lockCadence }}" style="font-size:11px;font-weight:700;color:#fff;background:#7c3aed;border:none;border-radius:99px;padding:5px 12px;cursor:pointer;{{ lockCadenceStyle }}">{{ lockCadenceLabel }}</button></div>
+      <sc-for list="{{ cadence }}" as="c" hint-placeholder-count="4">
+        <div style="padding:12px 0;border-top:1px solid #f4f4f5">
+          <div style="display:flex;align-items:center;gap:13px">
+            <div class="tnum" style="width:42px;flex:none;font-size:12px;font-weight:700;color:#6d28d9">{{ c.day }}</div>
+            <div style="flex:1"><div style="font-size:13px;font-weight:600;color:#27272a">{{ c.name }}</div><div style="font-size:11.5px;color:#a1a1aa">{{ c.time }} · {{ c.owner }}</div></div>
+            <span style="font-size:10.5px;font-weight:600;border-radius:6px;padding:3px 8px;{{ c.tagStyle }}">{{ c.tag }}</span>
+          </div>
+          <div style="margin:7px 0 0 55px;font-size:11.5px;color:#71717a;line-height:1.45">{{ c.agenda }}<sc-if value="{{ c.outcome }}"><span style="color:#15803d;font-weight:600"> · {{ c.outcome }}</span></sc-if></div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- EXECUTION TRACKER -->
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div class="so-lbl">Execution tracker</div><span style="font-size:11px;font-weight:600;color:#a1a1aa">{{ commitDoneCount }} done · {{ commitTotal }} total</span></div>
+      <div style="font-size:11.5px;color:#a1a1aa;margin-bottom:6px">Commitments pulled from your modules this week</div>
+      <sc-for list="{{ commitments }}" as="c" hint-placeholder-count="4">
+        <div style="padding:12px 0;border-top:1px solid #f4f4f5">
+          <div style="display:flex;align-items:flex-start;gap:11px">
+            <span style="width:18px;height:18px;flex:none;margin-top:1px;border-radius:5px;display:flex;align-items:center;justify-content:center;{{ c.boxStyle }}" dangerouslySetInnerHTML="{{ c.boxIcon }}"></span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13px;font-weight:600;color:{{ c.color }};line-height:1.4;{{ c.strike }}">{{ c.title }}</span><span style="font-size:10px;font-weight:700;border-radius:99px;padding:2px 8px;{{ c.statusStyle }}">{{ c.status }}</span><sc-if value="{{ c.blocked }}"><span style="font-size:10px;font-weight:700;border-radius:99px;padding:2px 8px;background:#fee2e2;color:#b91c1c">Blocked</span></sc-if></div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap"><span style="font-size:10.5px;font-weight:600;color:#6d28d9;background:#f3effe;border-radius:6px;padding:2px 7px">{{ c.module }}</span><span style="font-size:11px;color:#a1a1aa">{{ c.owner }} · due {{ c.due }}</span></div>
+              <sc-if value="{{ c.nextAction }}"><div style="font-size:11.5px;color:#71717a;margin-top:5px;line-height:1.4">{{ c.nextAction }}</div></sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div class="so-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;margin-top:20px">
+    <!-- BLOCKERS & RISKS -->
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+      <div class="so-lbl" style="margin-bottom:14px">Blockers &amp; risks</div>
+      <sc-for list="{{ blockers }}" as="b" hint-placeholder-count="2">
+        <div style="padding:13px 0;border-top:1px solid #f4f4f5">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px"><span style="font-size:13px;font-weight:700;color:#27272a">{{ b.title }}</span><span style="font-size:10px;font-weight:700;border-radius:99px;padding:2px 8px;{{ b.sevStyle }}">{{ b.severity }}</span><span style="font-size:10px;font-weight:600;border-radius:99px;padding:2px 8px;background:#f4f4f5;color:#52525b">{{ b.type }}</span></div>
+          <div style="font-size:11.5px;color:#71717a;line-height:1.45">{{ b.recommended }}</div>
+          <sc-if value="{{ b.escalate }}"><div style="font-size:11px;font-weight:600;color:#b45309;margin-top:5px">↑ Advisor escalation recommended</div></sc-if>
+        </div>
+      </sc-for>
+      <sc-if value="{{ noBlockers }}"><div style="padding:13px 0;border-top:1px solid #f4f4f5;font-size:12.5px;color:#15803d;font-weight:600">No active blockers this week.</div></sc-if>
+    </div>
+
+    <!-- WEEKLY REVIEW / CLOSEOUT -->
+    <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px;box-shadow:0 1px 2px rgba(24,24,27,.03)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="so-lbl">Weekly review · closeout</div><span style="font-size:10.5px;font-weight:700;border-radius:99px;padding:3px 9px;{{ reviewStatusStyle }}">{{ reviewStatus }}</span></div>
+      <sc-for list="{{ reviewRows }}" as="r" hint-placeholder-count="4">
+        <div style="padding:10px 0;border-top:1px solid #f4f4f5">
+          <div style="font-size:11px;font-weight:700;color:#a1a1aa;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">{{ r.label }}</div>
+          <div style="font-size:12.5px;color:#3f3f46;line-height:1.45">{{ r.value }}</div>
+        </div>
+      </sc-for>
+      <button onClick="{{ completeReview }}" style="margin-top:14px;width:100%;height:36px;border-radius:9px;border:none;background:#7c3aed;color:#fff;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;{{ completeReviewStyle }}">{{ completeReviewLabel }}</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240},&quot;embedded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { opsCadenceLocked:false, opsReviewDone:false };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||2)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const ic = (p, sw) => this.ic(p, sw);
+    const check = ic('<path d="M20 6 9 17l-5-5"/>', 2.6);
+    const box = (done) => done
+      ? { boxStyle:'background:#22c55e;color:#fff', boxIcon: check }
+      : { boxStyle:'border:1.5px solid #d4d4d8;background:#fff;color:transparent', boxIcon: ic('<path d="M20 6 9 17l-5-5"/>') };
+
+    const cadenceLocked = this.state.opsCadenceLocked;
+    const reviewDone = this.state.opsReviewDone;
+    const cadenceTag = (t) => t==='Set' ? 'background:#dcfce7;color:#15803d' : 'background:#f4f4f5;color:#a1a1aa';
+    const cadence = [
+      { day:'Mon', name:'Async standup', time:'9:00', owner:'Both founders', agenda:'Written check-in: yesterday, today, blockers.', outcome:'', tag:'Set', tagStyle:cadenceTag('Set') },
+      { day:'Wed', name:'Build review', time:'15:00', owner:'With advisor', agenda:'Demo MVP progress against Cycle 2 scope.', outcome: cadenceLocked?'Locked':'', tag: cadenceLocked?'Set':'Proposed', tagStyle:cadenceTag(cadenceLocked?'Set':'Proposed') },
+      { day:'Fri', name:'Metrics review', time:'16:00', owner:'Both founders', agenda:'OKR + traction check against 90-day targets.', outcome: cadenceLocked?'Locked':'', tag: cadenceLocked?'Set':'Proposed', tagStyle:cadenceTag(cadenceLocked?'Set':'Proposed') },
+      { day:'Fri', name:'Founder reflection', time:'17:00', owner:'Solo · optional', agenda:'What worked, what to change next week.', outcome:'', tag:'Optional', tagStyle:cadenceTag('Optional') },
+    ];
+
+    const commitStatusStyle = { Planned:'background:#f4f4f5;color:#71717a', 'In Progress':'background:#fef3c7;color:#b45309', Review:'background:#eff6ff;color:#2563eb', Done:'background:#dcfce7;color:#15803d', Blocked:'background:#fee2e2;color:#b91c1c' };
+    const mkCommit = (status, title, module, owner, due, nextAction) => Object.assign({}, box(status==='Done'), { title, module, owner, due, status, nextAction,
+      blocked: status==='Blocked', statusStyle:commitStatusStyle[status],
+      color: status==='Done'?'#a1a1aa':'#27272a', strike: status==='Done'?'text-decoration:line-through':'' });
+    const commitments = [
+      mkCommit('In Progress','Lock MVP scope with advisor','MVP Scope','Guillaume','Wed','Bring value-ranked feature list to Build review.'),
+      mkCommit('In Progress','Draft first 3 pitch-deck slides','Pitch Deck','Maya','Thu','Problem, Solution, Market drafted from module data.'),
+      mkCommit('Planned','Decide working brand name','Brand','Guillaume','Fri','Shortlist of 3 ready in Brand Builder.'),
+      mkCommit('Blocked','Confirm co-founder equity split','Co-founder Match','Both','Fri','Waiting on advisor input — escalated below.'),
+      mkCommit('Done','Publish customer waitlist page','Brand','Maya','Mon','Live · 142 views, 23 signups.'),
+    ];
+    const commitTotal = commitments.length;
+    const commitDoneCount = commitments.filter(c=>c.status==='Done').length;
+
+    const sevStyle = { High:'background:#fee2e2;color:#b91c1c', Medium:'background:#fef3c7;color:#b45309', Low:'background:#f4f4f5;color:#71717a' };
+    const blockers = [
+      { title:'Co-founder equity split unresolved', severity:'High', type:'Decision', recommended:'Bring the vesting scenarios to Wednesday\u2019s advisor Build review and decide.', escalate:true },
+      { title:'Slack integration scope uncertain', severity:'Medium', type:'Technical', recommended:'Timebox a spike in Cycle 2; if >3 days, defer to v2.', escalate:false },
+    ].map(b => Object.assign({}, b, { sevStyle: sevStyle[b.severity] }));
+    const noBlockers = blockers.length===0;
+
+    const reviewRows = [
+      { label:'What shipped', value:'Customer waitlist page live (142 views, 23 signups).' },
+      { label:'What slipped', value:'Brand name decision moved to Friday.' },
+      { label:'What changed', value:'Slack integration flagged as scope risk — spike planned.' },
+      { label:'Rolls into next week', value:'Lock brand v1, finish pitch slides 4\u20136, resolve equity split.' },
+    ];
+    const reviewStatus = reviewDone ? 'Completed' : 'Open';
+    const reviewStatusStyle = reviewDone ? 'background:#dcfce7;color:#15803d' : 'background:#fef3c7;color:#b45309';
+
+    const blockerPenalty = blockers.some(b=>b.severity==='High') ? 1 : 0;
+    const doneRatio = commitDoneCount/commitTotal;
+    const opsProgress = Math.round(doneRatio*100)+'%';
+    const opsHealth = blockerPenalty ? 'At risk' : 'On track';
+    const opsHealthStyle = blockerPenalty ? 'background:#fef3c7;color:#b45309' : 'background:#dcfce7;color:#15803d';
+    const opsHealthBar = blockerPenalty ? '#d97706' : '#22c55e';
+    const opsProgressNote = commitDoneCount+' of '+commitTotal+' commitments done \u00b7 1 high blocker';
+    const cadenceLock = cadenceLocked ? 'Locked' : 'Not locked';
+    const cadenceLockStyle = cadenceLocked ? 'background:#dcfce7;color:#15803d' : 'background:#fef3c7;color:#b45309';
+
+    const mhIcon = (ok) => ok
+      ? { icon: check, dotStyle:'background:#dcfce7;color:#16a34a' }
+      : { icon: ic('<circle cx="12" cy="12" r="9"/>',1.6), dotStyle:'background:#f4f4f5;color:#cbcbd2' };
+    const opsMustHit = [
+      Object.assign({ text:'Lock MVP scope with advisor' }, mhIcon(false)),
+      Object.assign({ text:'Draft pitch deck v1 (problem \u2192 ask)' }, mhIcon(false)),
+      Object.assign({ text:'Resolve co-founder equity split' }, mhIcon(false)),
+    ];
+
+    return {
+      embeddedClass: this.props.embedded ? 'so-embedded' : '',
+      opsIcon: ic('<path d="M12 3v3m0 12v3m9-9h-3M6 12H3"/><circle cx="12" cy="12" r="4"/>'),
+      opsWeekLabel:'Week 2 \u00b7 Day 11',
+      opsObjective:'Scope the MVP, draft the pitch, and lock a co-founder decision.',
+      opsMustHit, opsHealth, opsHealthStyle, opsHealthBar, opsProgress, opsProgressNote,
+      cadence, cadenceLock, cadenceLockStyle,
+      commitments, commitTotal, commitDoneCount,
+      blockers, noBlockers, reviewRows, reviewStatus, reviewStatusStyle,
+      lockCadence: () => this.setState({ opsCadenceLocked:true }),
+      lockCadenceLabel: cadenceLocked ? 'Cadence locked' : 'Lock cadence',
+      lockCadenceStyle: cadenceLocked ? 'background:#dcfce7;color:#15803d;cursor:default' : '',
+      completeReview: () => this.setState({ opsReviewDone:true }),
+      completeReviewLabel: reviewDone ? 'Review completed' : 'Complete weekly review',
+      completeReviewStyle: reviewDone ? 'background:#dcfce7;color:#15803d;cursor:default' : '',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeedf2;color:#241f38;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:40px 44px 32px;border-bottom:1px solid rgba(36,31,56,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',monospace;padding:4px 8px;background:#241f38;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,sans-serif;color:rgba(36,31,56,.58)}
+    .fr{width:1080px;min-width:1080px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden}
+    .mono{font-family:'Roboto Mono',monospace;font-variant-numeric:tabular-nums}
+    .lbl{font-family:'Roboto Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.11em;color:#6b6577}
+    .c{background:#fff;border:1px solid #e8e6ee;border-radius:14px}
+    .row:hover{background:#fbfaff}
+    .btn{display:inline-block;text-align:center;font-size:13px;font-weight:700;padding:10px 20px;border-radius:9px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;cursor:pointer;white-space:nowrap}
+    .btn:hover{background:#6d28d9;border-color:#6d28d9}
+    .btn2{display:inline-block;text-align:center;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:8px;background:#fff;color:#4a4459;border:1px solid #e8e6ee;cursor:pointer;white-space:nowrap}
+    .prog{display:inline-flex;align-items:center;gap:5px;font-family:'Roboto Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:99px;background:#f4f0fe;color:#6d28d9;border:1px solid #ddd0fb;white-space:nowrap}
+    .dateb{font-family:'Roboto Mono',monospace;text-align:center;flex:none;width:58px}
+    .cap{font-size:11.5px;color:rgba(36,31,56,.55);line-height:1.55;margin-top:11px;max-width:1080px}
+  </style>
+</helmet>
+
+<!-- ══════════ E1 · EVENTS ══════════ -->
+<section class="ab" id="e1">
+  <div class="ab-hd"><a class="ab-id" href="#e1">E1</a><span class="ab-nm">Events · platform-wide</span><span class="ab-sub">all personas · Demo Day appears as one programme event among many</span></div>
+  <div class="fr">
+    <div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #e8e6ee">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">A</span>
+        <span style="font-size:13.5px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+        <span class="lbl" style="margin-left:4px">Events</span>
+      </div>
+      <span class="mono" style="font-size:11px;color:#6b6577">{{ personaNote }}</span>
+    </div>
+
+    <div style="padding:26px 30px 32px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2">Events</h1>
+          <div style="font-size:13.5px;color:#6b6577;margin-top:6px;line-height:1.55">{{ lede }}</div>
+        </div>
+        <span class="btn2" style="flex:none">Subscribe to calendar</span>
+      </div>
+
+      <div class="c" style="padding:14px 16px;margin-top:18px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="width:16px;height:16px;display:block;flex:none;color:#6b6577;cursor:pointer" dangerouslySetInnerHTML="{{ prevIcon }}"></span>
+          <div style="display:flex;gap:5px;flex:1;overflow:hidden">
+            <sc-for list="{{ months }}" as="m" hint-placeholder-count="6">
+              <div style="{{ m.style }}">
+                <span class="mono" style="font-size:12px;font-weight:{{ m.weight }}">{{ m.name }}</span>
+                <sc-if value="{{ m.n }}"><span class="mono" style="{{ m.nStyle }}">{{ m.n }}</span></sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <span style="width:16px;height:16px;display:block;flex:none;color:#6b6577;cursor:pointer" dangerouslySetInnerHTML="{{ nextIcon }}"></span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:16px">
+        <sc-for list="{{ filters }}" as="f" hint-placeholder-count="5">
+          <span style="{{ f.style }}">{{ f.label }}<sc-if value="{{ f.n }}"><span class="mono" style="{{ f.nStyle }}">{{ f.n }}</span></sc-if></span>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;gap:11px;margin-top:16px">
+        <sc-for list="{{ events }}" as="e" hint-placeholder-count="6">
+          <div class="row" style="{{ e.cardStyle }}">
+            <div style="display:flex;align-items:flex-start;gap:16px">
+              <div class="dateb">
+                <div style="font-size:10px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:{{ e.monInk }}">{{ e.mon }}</div>
+                <div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.05;margin-top:2px;color:{{ e.dayInk }}">{{ e.day }}</div>
+                <div style="font-size:10px;color:#6b6577;margin-top:3px">{{ e.dow }}</div>
+              </div>
+
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="{{ e.typePill }}">{{ e.type }}</span>
+                  <sc-if value="{{ e.program }}"><span class="prog"><span style="width:4px;height:4px;border-radius:50%;background:#7c3aed"></span>{{ e.program }}</span></sc-if>
+                  <sc-if value="{{ e.replay }}"><span style="{{ e.replayStyle }}">{{ e.replay }}</span></sc-if>
+                </div>
+                <div style="font-size:{{ e.titleSize }}px;font-weight:800;letter-spacing:-.015em;margin-top:9px;line-height:1.3">{{ e.title }}</div>
+                <div style="font-size:12.5px;color:#4a4459;margin-top:6px;line-height:1.55;max-width:600px">{{ e.body }}</div>
+                <div style="display:flex;align-items:center;gap:9px;margin-top:10px;flex-wrap:wrap">
+                  <span class="mono" style="font-size:11px;color:#6b6577">{{ e.time }}</span>
+                  <span style="font-size:10px;color:#d3cfdc">·</span>
+                  <span style="display:inline-flex;align-items:center;gap:5px">
+                    <span style="width:13px;height:13px;display:block;flex:none;color:#6b6577" dangerouslySetInnerHTML="{{ e.locIcon }}"></span>
+                    <span class="mono" style="font-size:11px;color:#6b6577">{{ e.where }}</span>
+                  </span>
+                  <sc-if value="{{ e.audience }}">
+                    <span style="font-size:10px;color:#d3cfdc">·</span>
+                    <span class="mono" style="font-size:11px;color:#6b6577">{{ e.audience }}</span>
+                  </sc-if>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:9px;flex:none">
+                <span style="{{ e.rsvpPill }}">{{ e.rsvp }}</span>
+                <sc-if value="{{ e.cta }}"><span style="{{ e.ctaStyle }}">{{ e.cta }}</span></sc-if>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="c" style="padding:16px 18px;margin-top:14px;background:#fbfaff">
+        <div style="display:flex;align-items:flex-start;gap:11px">
+          <span class="prog" style="flex:none;margin-top:1px"><span style="width:4px;height:4px;border-radius:50%;background:#7c3aed"></span>PROGRAMME BADGE</span>
+          <div style="font-size:12px;color:#4a4459;line-height:1.6">{{ badgeNote }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">{{ e1Cap }}</div>
+</section>
+
+<!-- ══════════ E2 · DEMO DAY ══════════ -->
+<section class="ab" id="e2">
+  <div class="ab-hd"><a class="ab-id" href="#e2">E2</a><span class="ab-nm">Demo Day · Spin-Out Lab Cohort 6</span><span class="ab-sub">programme event · running order, attendees, post-event strip</span></div>
+  <div class="fr">
+    <div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #e8e6ee">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span style="width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">A</span>
+        <span style="font-size:13.5px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+        <span class="lbl" style="margin-left:2px">Events</span>
+        <span style="font-size:11px;color:#d3cfdc">/</span>
+        <span class="lbl">Demo Day</span>
+      </div>
+      <span class="mono" style="font-size:11px;color:#6b6577">{{ investorNote }}</span>
+    </div>
+
+    <div style="padding:28px 30px 34px">
+      <div style="background:#f4f0fe;border:1px solid #ddd0fb;border-radius:16px;padding:24px 26px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:22px;flex-wrap:wrap">
+          <div style="min-width:0;flex:1">
+            <span class="prog"><span style="width:4px;height:4px;border-radius:50%;background:#7c3aed"></span>SPIN-OUT LAB · PROGRAMME EVENT</span>
+            <h1 style="margin:12px 0 0;font-size:29px;font-weight:800;letter-spacing:-.025em;line-height:1.12">Demo Day · Cohort 6</h1>
+            <div style="font-size:14px;color:#4a4459;margin-top:9px;line-height:1.6;max-width:520px">{{ heroBody }}</div>
+            <div style="display:flex;align-items:center;gap:16px;margin-top:16px;flex-wrap:wrap">
+              <div>
+                <div class="lbl" style="color:#6d28d9">When</div>
+                <div class="mono" style="font-size:13px;font-weight:700;margin-top:5px">{{ when }}</div>
+              </div>
+              <div style="width:1px;height:30px;background:#ddd0fb"></div>
+              <div>
+                <div class="lbl" style="color:#6d28d9">Venue</div>
+                <div class="mono" style="font-size:13px;font-weight:700;margin-top:5px">{{ venue }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="width:236px;flex:none">
+            <div style="background:#fff;border:1px solid #ddd0fb;border-radius:13px;padding:16px 17px">
+              <div class="lbl" style="color:#6d28d9">Starts in</div>
+              <div class="mono" style="font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:7px;line-height:1">{{ countdown }}</div>
+              <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:5px">{{ countdownNote }}</div>
+              <div style="margin-top:14px"><span class="btn" style="display:block">{{ rsvpCta }}</span></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #f0eef5">
+                <span style="font-size:12px;font-weight:600">Livestream</span>
+                <span style="{{ streamToggle }}"><span style="{{ streamKnob }}"></span></span>
+              </div>
+              <div class="mono" style="font-size:10px;color:#6b6577;margin-top:7px;line-height:1.55">{{ streamNote }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 274px;gap:16px;margin-top:16px;align-items:start">
+        <div class="c" style="overflow:hidden">
+          <div style="padding:17px 20px;border-bottom:1px solid #f0eef5;display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Running order</div>
+              <div style="font-size:12px;color:#6b6577;margin-top:5px;line-height:1.5">{{ orderNote }}</div>
+            </div>
+            <span class="mono" style="font-size:11px;color:#6b6577">{{ orderMeta }}</span>
+          </div>
+
+          <sc-for list="{{ pitches }}" as="p" hint-placeholder-count="8">
+            <div class="row" style="{{ p.rowStyle }}">
+              <span class="mono" style="font-size:12px;font-weight:700;color:#6b6577;width:18px;flex:none;padding-top:11px">{{ p.n }}</span>
+              <span style="{{ p.markStyle }}">{{ p.initials }}</span>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:14px;font-weight:800;letter-spacing:-.01em">{{ p.name }}</span>
+                  <sc-if value="{{ p.tag }}"><span style="{{ p.tagStyle }}">{{ p.tag }}</span></sc-if>
+                </div>
+                <div style="font-size:12.5px;color:#4a4459;margin-top:5px;line-height:1.5">{{ p.one }}</div>
+                <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:5px">{{ p.founder }}</div>
+              </div>
+              <span class="mono" style="font-size:12px;font-weight:700;flex:none;padding-top:11px;width:52px;text-align:right">{{ p.slot }}</span>
+              <span class="btn2" style="flex:none;margin-top:6px">Request intro</span>
+            </div>
+          </sc-for>
+
+          <div style="padding:14px 20px;border-top:1px solid #f0eef5;background:#fbfaff">
+            <div class="mono" style="font-size:10.5px;color:#6b6577;line-height:1.6">{{ introNote }}</div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:14px">
+          <div class="c" style="padding:18px 19px">
+            <div class="lbl">Attending</div>
+            <div class="mono" style="font-size:23px;font-weight:700;letter-spacing:-.02em;margin-top:8px;line-height:1">{{ confirmed }}</div>
+            <div style="font-size:12px;color:#6b6577;margin-top:5px;line-height:1.5">{{ confirmedNote }}</div>
+            <div style="display:flex;align-items:center;margin-top:13px">
+              <sc-for list="{{ avatars }}" as="a" hint-placeholder-count="6"><span style="{{ a.style }}">{{ a.initials }}</span></sc-for>
+            </div>
+            <div style="display:grid;gap:7px;margin-top:14px;padding-top:13px;border-top:1px solid #f0eef5">
+              <sc-for list="{{ attendeeMix }}" as="m" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                  <span style="font-size:12px;color:#4a4459">{{ m.k }}</span>
+                  <span class="mono" style="font-size:12px;font-weight:700">{{ m.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="c" style="padding:18px 19px">
+            <div class="lbl">Logistics</div>
+            <div style="display:grid;gap:11px;margin-top:12px">
+              <sc-for list="{{ logistics }}" as="l" hint-placeholder-count="4">
+                <div>
+                  <div style="font-size:11.5px;font-weight:700">{{ l.k }}</div>
+                  <div style="font-size:11.5px;color:#4a4459;margin-top:4px;line-height:1.55">{{ l.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div class="mono" style="font-size:10px;color:#6b6577;margin-top:13px;padding-top:12px;border-top:1px solid #f0eef5;line-height:1.6">{{ logisticsFoot }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;padding:20px 22px;margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:9px">
+            <span class="lbl">Variant · after the event</span>
+            <span style="font-size:9.5px;font-weight:700;font-family:'Roboto Mono',monospace;letter-spacing:.06em;padding:3px 8px;border-radius:99px;background:#f4f3f7;color:#6b6577;border:1px solid #e8e6ee">SAME PAGE, 3 DAYS LATER</span>
+          </div>
+          <span class="mono" style="font-size:11px;color:#6b6577">{{ postMeta }}</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 274px;gap:16px;margin-top:14px;align-items:start">
+          <div style="border:1px solid #e8e6ee;border-radius:12px;overflow:hidden">
+            <sc-for list="{{ replays }}" as="r" hint-placeholder-count="4">
+              <div class="row" style="display:flex;align-items:center;gap:12px;padding:12px 15px;border-top:1px solid #f0eef5">
+                <span class="mono" style="font-size:11.5px;font-weight:700;color:#6b6577;width:16px;flex:none">{{ r.n }}</span>
+                <span style="{{ r.markStyle }}">{{ r.initials }}</span>
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:13px;font-weight:700">{{ r.name }}</div>
+                  <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:4px">{{ r.meta }}</div>
+                </div>
+                <sc-if value="{{ r.requested }}"><span style="{{ r.reqPill }}">{{ r.requested }}</span></sc-if>
+                <span style="font-size:12.5px;font-weight:700;color:#6d28d9;flex:none;cursor:pointer">Watch replay</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="background:#f4f0fe;border:1px solid #ddd0fb;border-radius:12px;padding:17px 18px">
+            <div class="lbl" style="color:#6d28d9">Your recap</div>
+            <div class="mono" style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:8px;line-height:1">{{ introsMade }}</div>
+            <div style="font-size:12px;color:#4a4459;margin-top:6px;line-height:1.55">{{ recapBody }}</div>
+            <div style="display:grid;gap:7px;margin-top:13px">
+              <sc-for list="{{ recapRows }}" as="r" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:#fff;border:1px solid #ddd0fb;border-radius:8px">
+                  <span style="font-size:11.5px;font-weight:600">{{ r.k }}</span>
+                  <span style="{{ r.pill }}">{{ r.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div class="mono" style="font-size:10px;color:#6b6577;margin-top:12px;line-height:1.6">{{ recapFoot }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">{{ e2Cap }}</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const V = '#7c3aed', VD = '#6d28d9', VT = '#f4f0fe', HAIR = '#e8e6ee', MUT = '#6b6577';
+    const I = {
+      prev: this.ic('<path d="m14 6-6 6 6 6"/>'),
+      next: this.ic('<path d="m10 6 6 6-6 6"/>'),
+      pin:  this.ic('<path d="M12 21s-6.5-5.6-6.5-10a6.5 6.5 0 0 1 13 0c0 4.4-6.5 10-6.5 10Z"/><circle cx="12" cy="11" r="2.2"/>'),
+      cam:  this.ic('<rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4Z"/>')
+    };
+
+    // ══ ONE event record. Month counts, filter counts and the lede derive from it. ══
+    const TYPES = {
+      Workshop:      { tint:'#eefbf5', ink:'#047857', edge:'#a7f3d0' },
+      'Office Hours':{ tint:'#f4f3f7', ink:'#4a4459', edge:HAIR },
+      LP:            { tint:'#eef0ff', ink:'#4338ca', edge:'#c7d2fe' },
+      'Demo Day':    { tint:VT,        ink:VD,        edge:'#ddd0fb' }
+    };
+    const RSVP = {
+      Going:    { tint:'#eefbf5', ink:'#047857', edge:'#a7f3d0' },
+      Waitlist: { tint:'#fef9e7', ink:'#92400e', edge:'#fcd34d' },
+      Closed:   { tint:'#f4f3f7', ink:MUT,        edge:HAIR },
+      Open:     { tint:VT,        ink:VD,         edge:'#ddd0fb' }
+    };
+
+    // ONE clock. Weekday labels and the countdown derive from the date, so a mono data field
+    // cannot state a day the calendar disagrees with.
+    const TODAY = new Date('2026-08-26T09:00:00Z');
+    const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dowOf = (iso) => DOW[new Date(iso + 'T12:00:00Z').getUTCDay()];
+
+    const EV = [
+      { mon:'SEP', day:'02', iso:'2026-09-02', type:'Office Hours', title:'Office hours · Priya Nair',
+        body:'Pricing and packaging for pre-seed hardware. Four 45-minute slots, first come.',
+        time:'14:00–17:00 CEST', where:'Video', video:true, rsvp:'Going', month:'Sep' },
+      { mon:'SEP', day:'09', iso:'2026-09-09', type:'Workshop', title:'Pricing pressure-test workshop',
+        body:'Bring a live pricing page. Two partners and an operator take it apart in front of the room.',
+        time:'10:00–12:30 CEST', where:'Amsterdam · Keizersgracht', rsvp:'Waitlist', month:'Sep',
+        audience:'Founders · 24 seats' },
+      { mon:'SEP', day:'16', iso:'2026-09-16', type:'LP', title:'Fund II · Q3 LP briefing',
+        body:'Portfolio marks, capital-call schedule and the two exits under discussion.',
+        time:'16:00–17:00 CEST', where:'Video', video:true, rsvp:'Going', month:'Sep',
+        audience:'LPs only' },
+      { mon:'SEP', day:'28', iso:'2026-09-28', type:'Demo Day', title:'Demo Day · Cohort 6', hero:true,
+        program:'SPIN-OUT LAB',
+        body:'Eight companies pitch after 28 days in the programme. Investors attend by invitation; founders and advisors are welcome in the room.',
+        time:'13:00–17:00 CEST', where:'Amsterdam · Beurs van Berlage', rsvp:'Open', cta:'RSVP', month:'Sep',
+        audience:'42 investors confirmed' },
+      { mon:'OCT', day:'07', iso:'2026-10-07', type:'Workshop', title:'Term-sheet teardown',
+        body:'A real SAFE and a real priced round, redlined line by line with counsel.',
+        time:'10:00–12:00 CEST', where:'Video', video:true, rsvp:'Open', cta:'RSVP', month:'Oct' },
+      { mon:'AUG', day:'19', iso:'2026-08-19', type:'Workshop', title:'Customer discovery intensive',
+        body:'Interview technique, then live calls with two design partners in the room.',
+        time:'10:00–15:00 CEST', where:'Amsterdam · Keizersgracht', rsvp:'Closed', replay:'REPLAY', month:'Aug', past:true },
+      { mon:'AUG', day:'11', iso:'2026-08-11', type:'Demo Day', title:'Demo Day · Cohort 5', program:'SPIN-OUT LAB',
+        body:'Seven companies. Six raised within the following quarter.',
+        time:'13:00–17:00 CEST', where:'Amsterdam · Beurs van Berlage', rsvp:'Closed', replay:'REPLAY', month:'Aug', past:true }
+    ];
+
+    const MONTHS = ['Jul','Aug','Sep','Oct','Nov','Dec'];
+    const CURM = 'Sep';
+    const upcoming = EV.filter(e => !e.past);
+    const past = EV.filter(e => e.past);
+    const demoDays = EV.filter(e => e.type === 'Demo Day');
+    const mine = EV.filter(e => e.rsvp === 'Going' || e.rsvp === 'Waitlist');
+
+    const pill = (t, m) => {
+      const c = m[t] || { tint:'#f4f3f7', ink:MUT, edge:HAIR };
+      return 'font-family:\'Roboto Mono\',monospace;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:99px;background:'
+        + c.tint + ';color:' + c.ink + ';border:1px solid ' + c.edge + ';white-space:nowrap';
+    };
+
+    const chip = (label, n, on) => ({
+      label, n: n == null ? null : String(n),
+      style:'display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:' + (on ? '700' : '600')
+        + ';padding:8px 14px;border-radius:99px;cursor:pointer;border:'
+        + (on ? '1px solid '+V+';background:'+VT+';color:'+VD : '1px solid '+HAIR+';background:#fff;color:#4a4459'),
+      nStyle:'font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;background:'
+        + (on ? '#fff' : '#f4f3f7') + ';color:' + (on ? VD : MUT)
+    });
+
+    // ══ E2 · running order. Slot times derive from a 13:00 start and a fixed cadence. ══
+    const START = 13 * 60 + 15, GAP = 18;
+    const CO = [
+      { name:'Meridian Robotics', initials:'MR', tag:'TU DELFT SPIN-OUT',
+        one:'Autonomous inspection for offshore wind — cuts a two-day rope-access job to four hours.',
+        founder:'Ines Marchetti · CEO', req:2 },
+      { name:'Kelp Bio', initials:'KB', tag:'WAGENINGEN SPIN-OUT',
+        one:'Seaweed-derived protein at feed-grade cost. Two pilot contracts with Dutch feed mills.',
+        founder:'Joost Bakker · CEO' },
+      { name:'Verrel', initials:'VR',
+        one:'Compliance evidence collection for medical-device makers under the new EU MDR.',
+        founder:'Sanne de Vries · CEO', req:1 },
+      { name:'Northwind Grid', initials:'NG', tag:'TNO SPIN-OUT',
+        one:'Congestion forecasting for grid operators. Live with one regional DSO.',
+        founder:'Thomas Roeland · CTO' },
+      { name:'Amble', initials:'AM',
+        one:'Logistics routing for last-mile cargo bikes. 40 riders in Utrecht.',
+        founder:'Fatima Ouazzani · CEO' },
+      { name:'Solvent', initials:'SO', tag:'EINDHOVEN SPIN-OUT',
+        one:'Solvent recovery for speciality chemicals. Payback under fourteen months.',
+        founder:'Dr. Rik Janssen · CEO' },
+      { name:'Halcyon Health', initials:'HH',
+        one:'Post-operative monitoring from a single wrist sensor. Two hospital pilots.',
+        founder:'Nadia Osei · CEO' },
+      { name:'Frameshift', initials:'FS',
+        one:'Protein-structure search for antibody discovery teams.',
+        founder:'Lukas Meyer · CEO' }
+    ];
+    const fmt = (mins) => String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+    const requested = CO.filter(c => c.req).reduce((a, c) => a + c.req, 0);
+
+    const mark = (i) => 'width:34px;height:34px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;font-family:\'Roboto Mono\',monospace;font-size:11px;font-weight:700;margin-top:6px;'
+      + (i === 0 ? 'background:'+VT+';color:'+VD+';border:1px solid #ddd0fb' : 'background:#f4f3f7;color:#4a4459;border:1px solid '+HAIR);
+
+    const INVESTORS = ['KS','LT','MV','JH','AR','+37'];
+    const CONFIRMED = 42;
+
+    return {
+      prevIcon: I.prev, nextIcon: I.next,
+      personaNote:'Founder view · LP briefings shown but not bookable',
+      // Scoped explicitly: the Demo Day count spans all records, not just the upcoming ones.
+      lede: upcoming.length + ' upcoming across the platform, ' + past.length + ' with replays. '
+        + demoDays.length + ' of the ' + EV.length + ' are Spin-Out Lab events — everything else is open platform-wide.',
+
+      months: MONTHS.map(m => {
+        const n = EV.filter(e => e.month === m).length;
+        const on = m === CURM;
+        return { name:m, n: n ? String(n) : null, weight: on ? '700' : '500',
+          style:'display:flex;align-items:center;justify-content:center;gap:6px;flex:1;padding:9px 0;border-radius:9px;cursor:pointer;'
+            + (on ? 'background:'+VT+';color:'+VD+';border:1px solid '+V : 'background:#fff;color:#4a4459;border:1px solid transparent'),
+          nStyle:'font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:99px;background:' + (on ? '#fff' : '#f4f3f7') + ';color:' + (on ? VD : MUT) };
+      }),
+
+      filters: [
+        chip('All', EV.length, true), chip('My events', mine.length, false),
+        chip('Spin-Out Lab', demoDays.length, false), chip('Open to all', EV.length - demoDays.length, false),
+        chip('Past', past.length, false)
+      ],
+
+      events: EV.map(e => ({
+        mon:e.mon, day:e.day, dow:dowOf(e.iso), type:e.type, title:e.title, body:e.body, time:e.time,
+        where:e.where, audience:e.audience || null, program:e.program || null,
+        replay:e.replay || null, rsvp:e.rsvp, cta:e.cta || null,
+        titleSize: e.hero ? 19 : 15.5,
+        monInk: e.hero ? VD : MUT, dayInk: e.hero ? VD : '#241f38',
+        locIcon: e.video ? I.cam : I.pin,
+        typePill: pill(e.type, TYPES), rsvpPill: pill(e.rsvp, RSVP),
+        replayStyle:'font-family:\'Roboto Mono\',monospace;font-size:9.5px;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:99px;background:#f4f3f7;color:'+MUT+';border:1px solid '+HAIR,
+        ctaStyle:'font-size:12.5px;font-weight:700;padding:8px 16px;border-radius:8px;background:'+V+';color:#fff;border:1px solid '+V+';cursor:pointer;white-space:nowrap',
+        cardStyle:'padding:18px 20px;border-radius:14px;cursor:pointer;'
+          // Past state is fill + hairline only — no wrapper opacity, which would re-tint mono
+          // metadata already sitting at the contrast floor.
+          + (e.hero ? 'background:#fff;border:1.5px solid '+V+';box-shadow:0 2px 12px rgba(124,58,237,.1)'
+              : (e.past ? 'background:#fbfaff;border:1px dashed #ddd9e6' : 'background:#fff;border:1px solid '+HAIR))
+      })),
+      badgeNote:'The violet programme badge marks the two Demo Days, because they belong to a Spin-Out Lab cohort rather than to the platform. Everything else on this list is open to whoever the audience line names. Violet is reserved for programme events for exactly this reason — if every type pill were violet the badge would carry no information.',
+      e1Cap:'Month counts, the five filter counts and the lede all derive from one seven-event record. The type palette is deliberately muted apart from Demo Day: the accent is a scoping signal here, not decoration.',
+
+      investorNote:'Investor view · intro requests enabled',
+      heroBody:'Eight companies, eighteen minutes apart, after twenty-eight days in the programme. Investors attend by invitation; founders and advisors from other cohorts are welcome in the room.',
+      when:'Mon 28 Sep 2026 · 13:00 CEST',
+      venue:'Beurs van Berlage, Amsterdam',
+      countdown: (function(){
+        const ms = new Date('2026-09-28T13:00:00+02:00') - TODAY;
+        const d = Math.floor(ms / 86400000);
+        return d + 'd ' + String(Math.floor((ms % 86400000) / 3600000)).padStart(2, '0') + 'h';
+      })(),
+      countdownNote:'Doors 12:30 · pitches from 13:15',
+      rsvpCta:'RSVP · 2 seats held',
+      streamToggle:'width:40px;height:23px;border-radius:99px;position:relative;flex:none;background:'+V,
+      streamKnob:'position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:50%;background:#fff',
+      streamNote:'Livestream on. Pitches are recorded; the Q&A after each is not.',
+
+      orderNote:'Eighteen minutes each — twelve to pitch, six to answer.',
+      orderMeta:'8 companies · 13:15–15:39',
+      pitches: CO.map((c, i) => ({
+        n:String(i + 1), name:c.name, initials:c.initials, one:c.one, founder:c.founder,
+        slot: fmt(START + i * GAP), tag:c.tag || null,
+        tagStyle:'font-family:\'Roboto Mono\',monospace;font-size:9px;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:99px;background:'+VT+';color:'+VD+';border:1px solid #ddd0fb;white-space:nowrap',
+        markStyle: mark(i),
+        rowStyle:'display:flex;align-items:flex-start;gap:12px;padding:14px 20px;border-top:1px solid #f0eef5'
+      })),
+      introNote:'An intro request reaches the founder after the event, never during it. Nothing is sent while someone is still on stage.',
+
+      confirmed: String(CONFIRMED) + ' investors',
+      confirmedNote:'Confirmed. Room capacity 90, so founders and advisors can still be added.',
+      avatars: INVESTORS.map((a, i) => ({ initials:a,
+        style:'width:30px;height:30px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:\'Roboto Mono\',monospace;font-size:9.5px;font-weight:700;border:2px solid #fff;margin-left:'
+          + (i === 0 ? '0' : '-8px') + ';'
+          + (a.charAt(0) === '+' ? 'background:'+VT+';color:'+VD : 'background:#f4f3f7;color:#4a4459') })),
+      attendeeMix: [
+        { k:'Investors', v:String(CONFIRMED) },
+        { k:'Founders · other cohorts', v:'19' },
+        { k:'Advisors and partners', v:'11' }
+      ],
+
+      logistics: [
+        { k:'Doors', v:'12:30. Pitches start at 13:15 and run without a break until 15:39.' },
+        { k:'Format', v:'Twelve minutes on stage, six of questions. No slides after the deadline.' },
+        { k:'After', v:'Drinks from 16:00 in the same room. This is where the intros actually happen.' },
+        { k:'Getting there', v:'Damrak entrance. No parking; Amsterdam Centraal is four minutes on foot.' }
+      ],
+      logisticsFoot:'Deck deadline is 25 Sep 18:00 CEST. Anything later goes in the replay page, not on the screen.',
+
+      postMeta:'1 Oct 2026 · replays live',
+      replays: CO.slice(0, 4).map((c, i) => ({
+        n:String(i + 1), name:c.name, initials:c.initials, markStyle: mark(i),
+        meta:'18 min · ' + (c.req ? 'you requested an intro' : 'watched'),
+        requested: c.req ? 'INTRO SENT' : null,
+        reqPill:'font-family:\'Roboto Mono\',monospace;font-size:9px;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:99px;background:#eefbf5;color:#047857;border:1px solid #a7f3d0;white-space:nowrap;flex:none'
+      })),
+      introsMade: String(requested) + ' intros requested',
+      recapBody:'Sent the morning after, with your notes attached. Two have replied.',
+      recapRows: [
+        { k:'Meridian Robotics', v:'Call booked', pill:pill('Going', RSVP) },
+        { k:'Meridian Robotics · partner', v:'Replied', pill:pill('Going', RSVP) },
+        { k:'Verrel', v:'Awaiting', pill:pill('Waitlist', RSVP) }
+      ],
+      recapFoot:'Replays stay up for twelve months. Intro requests expire after thirty days if unanswered.',
+      e2Cap:'Slot times derive from a 13:15 start and an eighteen-minute cadence, so the running order, the "13:15–15:39" header and the logistics card cannot drift apart. The recap count is the sum of the requests recorded against companies, and the post-event strip is the same page three days later rather than a separate screen.'
+    };
+  }
+}
+</script>
+</body>
+</html>

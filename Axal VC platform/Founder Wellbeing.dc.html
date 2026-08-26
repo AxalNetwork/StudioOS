@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f8f8fa;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}
+    .fw-num{font-variant-numeric:tabular-nums}
+    .fw-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#615c6e}
+    .fw-link{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:#7c3aed;white-space:nowrap;cursor:pointer}
+    .fw-link:hover{color:#6d28d9}
+    .fw-btn{font:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;border:1px solid #e2e1e8;background:#fff;color:#18181b;cursor:pointer;white-space:nowrap}
+    .fw-btn:hover{border-color:#d4d2dc;background:#fbfbfc}
+    .fw-btnp{font:inherit;font-size:13px;font-weight:700;padding:10px 17px;border-radius:9px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;cursor:pointer;white-space:nowrap}
+    .fw-btnp:hover{background:#6d28d9;border-color:#6d28d9}
+    .fw-row:hover{background:#fcfcfd}
+    .fw-card:hover{border-color:#ddd9e6}
+    textarea.fw-in{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:10px 12px;border:1px solid #e2e1e8;border-radius:9px;background:#fff;resize:vertical}
+    textarea.fw-in:focus{outline:none;border-color:#7c3aed;box-shadow:0 0 0 3px rgba(124,58,237,.12)}
+    @media (max-width:980px){
+      .fw-head{flex-direction:column!important;align-items:flex-start!important;gap:14px!important}
+      .fw-main{grid-template-columns:1fr!important}
+      .fw-scale{flex-wrap:wrap}
+      .fw-trend{grid-template-columns:1fr!important}
+      .fw-dir{grid-template-columns:1fr!important}
+      .fw-exp{flex-direction:column!important;align-items:flex-start!important;gap:12px!important}
+      .fw-expr{width:100%!important;justify-content:flex-start!important}
+    }
+  </style>
+</helmet>
+
+<div style="min-height:100vh;padding:0 0 80px">
+
+  <!-- ============ HEADER ============ -->
+  <div style="background:#fff;border-bottom:1px solid #ececf1;padding:26px 28px 22px">
+    <div style="max-width:1160px;margin:0 auto">
+      <div class="fw-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px">
+        <div style="min-width:0">
+          <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-.025em;line-height:1.1">Founder Wellbeing</h1>
+          <div style="font-size:13.5px;color:#4a4553;margin-top:6px;line-height:1.55;max-width:640px">A short daily check-in, the pattern it reveals over time, and vetted people to talk to. Your entries are encrypted and never leave your account.</div>
+        </div>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;flex:none">
+          <div onClick="{{ openCrisis }}" style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;padding:10px 15px;border-radius:9px;border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;cursor:pointer;white-space:nowrap">
+            <span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ lifeIcon }}"></span>
+            <span>Need help now</span>
+          </div>
+          <div class="fw-btn">Export my data</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:#faf9fc;border:1px solid #ececf1;border-radius:11px;padding:11px 15px;margin-top:18px;flex-wrap:wrap">
+        <span style="width:14px;height:14px;display:block;flex:none;color:#6d28d9" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+        <span style="font-size:12.5px;color:#3f3a49;line-height:1.5;flex:1;min-width:240px">{{ privacyLine }}</span>
+        <span class="fw-link">How this is stored →</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1160px;margin:0 auto;padding:22px 28px 0">
+    <div class="fw-main" style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start">
+
+      <!-- ============ CHECK-IN ============ -->
+      <div style="display:grid;gap:16px">
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">{{ checkinTitle }}</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ checkinSub }}</div>
+            </div>
+            <span style="{{ streakPill }}">{{ streakLabel }}</span>
+          </div>
+
+          <div style="padding:20px 22px">
+            <sc-for list="{{ coreScales }}" as="s" hint-placeholder-count="3">
+              <div style="margin-bottom:20px">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+                  <span style="font-size:14px;font-weight:700">{{ s.name }}</span>
+                  <span class="fw-num" style="font-size:12px;font-weight:700;color:{{ s.valueInk }}">{{ s.valueLabel }}</span>
+                </div>
+                <div class="fw-scale" style="display:flex;gap:7px;margin-top:9px">
+                  <sc-for list="{{ s.options }}" as="o" hint-placeholder-count="5">
+                    <div onClick="{{ o.go }}" style="{{ o.style }}">{{ o.n }}</div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:12px;margin-top:7px">
+                  <span style="font-size:11px;color:#7d7889">{{ s.low }}</span>
+                  <span style="font-size:11px;color:#7d7889">{{ s.high }}</span>
+                </div>
+              </div>
+            </sc-for>
+
+            <div onClick="{{ toggleMore }}" class="fw-link" style="margin-bottom:4px">{{ moreLabel }}</div>
+
+            <sc-if value="{{ showMore }}">
+              <div style="margin-top:16px;padding-top:16px;border-top:1px solid #f6f5f9">
+                <sc-for list="{{ extraScales }}" as="s" hint-placeholder-count="3">
+                  <div style="margin-bottom:18px">
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+                      <span style="font-size:13.5px;font-weight:700">{{ s.name }}</span>
+                      <span class="fw-num" style="font-size:12px;font-weight:700;color:{{ s.valueInk }}">{{ s.valueLabel }}</span>
+                    </div>
+                    <div class="fw-scale" style="display:flex;gap:7px;margin-top:9px">
+                      <sc-for list="{{ s.options }}" as="o" hint-placeholder-count="5">
+                        <div onClick="{{ o.go }}" style="{{ o.style }}">{{ o.n }}</div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+                <div class="fw-lbl" style="margin-top:4px">On your mind (optional)</div>
+                <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:11px">
+                  <sc-for list="{{ topics }}" as="t" hint-placeholder-count="12">
+                    <div onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</div>
+                  </sc-for>
+                </div>
+                <div style="margin-top:16px">
+                  <textarea class="fw-in" rows="3" placeholder="Anything else. Encrypted — only you can read this."></textarea>
+                </div>
+              </div>
+            </sc-if>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:18px;padding-top:16px;border-top:1px solid #f2f1f5;flex-wrap:wrap">
+              <div style="font-size:11.5px;color:#7d7889;line-height:1.5;flex:1;min-width:180px">{{ saveHint }}</div>
+              <div style="display:flex;gap:9px;flex-wrap:wrap">
+                <div class="fw-btn">Skip today</div>
+                <div onClick="{{ save }}" style="{{ saveStyle }}">{{ saveLabel }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ 30-DAY TREND ============ -->
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Last 30 days</div>
+              <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ trendSub }}</div>
+            </div>
+            <div style="display:inline-flex;background:#f4f4f6;border:1px solid #ececf1;border-radius:9px;padding:3px">
+              <sc-for list="{{ ranges }}" as="r" hint-placeholder-count="2">
+                <div onClick="{{ r.go }}" style="{{ r.style }}">{{ r.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="fw-trend" style="display:grid;grid-template-columns:repeat(3,1fr);gap:0">
+            <sc-for list="{{ trends }}" as="t" hint-placeholder-count="3">
+              <div style="{{ t.cellStyle }}">
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                  <span style="font-size:13px;font-weight:700">{{ t.name }}</span>
+                  <span class="fw-num" style="font-size:11.5px;font-weight:700;color:{{ t.deltaInk }}">{{ t.delta }}</span>
+                </div>
+                <div class="fw-num" style="font-size:24px;font-weight:800;letter-spacing:-.02em;margin-top:7px;line-height:1">{{ t.avg }}</div>
+                <div class="fw-lbl" style="font-size:10px;margin-top:4px">7-day average</div>
+                <div style="display:flex;align-items:flex-end;gap:2px;height:38px;margin-top:13px">
+                  <sc-for list="{{ t.bars }}" as="b" hint-placeholder-count="30">
+                    <div style="{{ b.style }}"></div>
+                  </sc-for>
+                </div>
+                <div style="font-size:11px;color:#7d7889;margin-top:8px;line-height:1.45">{{ t.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="padding:15px 22px;border-top:1px solid #f2f1f5;background:#fbfbfc;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <span class="fw-num" style="font-size:12px;color:#615c6e;flex:1;min-width:200px">{{ coverageNote }}</span>
+            <span class="fw-link">See full history →</span>
+          </div>
+        </div>
+
+        <!-- ============ PATTERNS ============ -->
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5">
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">What the pattern shows</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Observations from your own entries, set against what was happening at the company. Not a diagnosis.</div>
+          </div>
+          <sc-for list="{{ patterns }}" as="p" hint-placeholder-count="3">
+            <div class="fw-row" style="{{ p.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:13px;min-width:0;flex:1">
+                <div style="width:30px;height:30px;border-radius:9px;background:{{ p.chipBg }};color:{{ p.chipInk }};display:flex;align-items:center;justify-content:center;flex:none;padding:7px;box-sizing:border-box" dangerouslySetInnerHTML="{{ p.icon }}"></div>
+                <div style="min-width:0">
+                  <div style="font-size:13.5px;font-weight:700;line-height:1.45">{{ p.title }}</div>
+                  <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.55">{{ p.body }}</div>
+                  <sc-if value="{{ p.context }}">
+                    <div style="font-size:11.5px;color:#7d7889;margin-top:6px;line-height:1.5">{{ p.context }}</div>
+                  </sc-if>
+                </div>
+              </div>
+              <sc-if value="{{ p.action }}"><span class="fw-link" style="flex:none">{{ p.action }}</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- ============ RIGHT RAIL ============ -->
+      <div style="display:grid;gap:16px">
+
+        <!-- CRISIS, PINNED -->
+        <div style="background:#fff;border:1px solid #fecaca;border-radius:16px;overflow:hidden">
+          <div style="padding:17px 20px 14px;background:#fef2f2;border-bottom:1px solid #fecaca">
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="width:15px;height:15px;display:block;flex:none;color:#b91c1c" dangerouslySetInnerHTML="{{ lifeIcon }}"></span>
+              <span style="font-size:14px;font-weight:800;color:#991b1b;letter-spacing:-.01em">If you need help right now</span>
+            </div>
+            <div style="font-size:12px;color:#7f1d1d;margin-top:6px;line-height:1.5">Free, confidential, 24/7. You do not need to be in crisis to call.</div>
+          </div>
+          <sc-for list="{{ crisis }}" as="c" hint-placeholder-count="3">
+            <div class="fw-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 20px;border-top:1px solid #f6f5f9">
+              <div style="min-width:0">
+                <div style="font-size:13px;font-weight:700">{{ c.name }}</div>
+                <div class="fw-num" style="font-size:11.5px;color:#615c6e;margin-top:3px">{{ c.how }}</div>
+              </div>
+              <span style="font-size:10.5px;font-weight:700;color:#615c6e;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:5px;padding:3px 7px;flex:none">{{ c.region }}</span>
+            </div>
+          </sc-for>
+          <div style="padding:12px 20px;border-top:1px solid #f6f5f9">
+            <a href="#international" class="fw-link">Find a line in another country →</a>
+          </div>
+        </div>
+
+        <!-- MATCHED EXPERTS -->
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+          <div style="padding:19px 20px 16px;border-bottom:1px solid #f2f1f5">
+            <div style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">People you can talk to</div>
+            <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ expertSub }}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:13px">
+              <sc-for list="{{ expertFilters }}" as="f" hint-placeholder-count="4">
+                <div onClick="{{ f.go }}" style="{{ f.style }}">{{ f.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+          <sc-for list="{{ experts }}" as="e" hint-placeholder-count="3">
+            <div class="fw-row" style="padding:16px 20px;border-top:1px solid #f2f1f5">
+              <div style="display:flex;align-items:flex-start;gap:12px;min-width:0">
+                <div style="width:36px;height:36px;border-radius:10px;background:{{ e.avBg }};color:{{ e.avInk }};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:none">{{ e.initials }}</div>
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                    <span style="font-size:13.5px;font-weight:700;letter-spacing:-.01em">{{ e.name }}</span>
+                    <span style="{{ e.kindStyle }}">{{ e.kind }}</span>
+                  </div>
+                  <div style="font-size:12px;color:#4a4553;margin-top:4px;line-height:1.5">{{ e.credential }}</div>
+                  <div style="font-size:11.5px;color:#6d28d9;margin-top:6px;line-height:1.5">{{ e.why }}</div>
+                  <div class="fw-num" style="font-size:11px;color:#7d7889;margin-top:6px;line-height:1.5">{{ e.detail }}</div>
+                  <div style="display:flex;align-items:center;gap:12px;margin-top:11px;flex-wrap:wrap">
+                    <span class="fw-link">Book {{ e.slot }}</span>
+                    <span class="fw-link" style="color:#615c6e">Read profile</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ noExperts }}">
+            <div style="padding:26px 20px;border-top:1px solid #f2f1f5;text-align:center">
+              <div style="font-size:13px;font-weight:700">Nobody matches that filter</div>
+              <div style="font-size:12px;color:#615c6e;margin-top:5px;line-height:1.5">Widen it, or browse the full directory below — every entry there is open to anyone.</div>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- CADENCE -->
+        <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:20px">
+          <div style="font-size:15px;font-weight:800;letter-spacing:-.015em">Reminders</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">A daily check-in only works if it's short and expected. Pick the rhythm you'll keep.</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">
+            <sc-for list="{{ cadences }}" as="c" hint-placeholder-count="4">
+              <div onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</div>
+            </sc-for>
+          </div>
+          <div style="font-size:11.5px;color:#7d7889;margin-top:13px;line-height:1.5">{{ cadenceNote }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ DIRECTORY ============ -->
+    <div style="margin-top:24px;background:#fff;border:1px solid #ececf1;border-radius:16px;overflow:hidden">
+      <div style="padding:20px 22px 17px;border-bottom:1px solid #f2f1f5;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:16px;font-weight:800;letter-spacing:-.015em">Resource directory</div>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ dirSub }}</div>
+        </div>
+        <div style="display:inline-flex;background:#f4f4f6;border:1px solid #ececf1;border-radius:9px;padding:3px;flex-wrap:wrap">
+          <sc-for list="{{ dirFilters }}" as="f" hint-placeholder-count="4">
+            <div onClick="{{ f.go }}" style="{{ f.style }}">{{ f.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="padding:20px 22px">
+        <sc-for list="{{ dirGroups }}" as="g" hint-placeholder-count="4">
+          <div style="margin-bottom:24px">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
+              <span style="width:15px;height:15px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ g.icon }}"></span>
+              <span style="font-size:13.5px;font-weight:800;letter-spacing:-.01em">{{ g.title }}</span>
+              <span class="fw-num" style="font-size:11px;color:#a8a4b4">{{ g.count }}</span>
+            </div>
+            <div class="fw-dir" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <sc-for list="{{ g.items }}" as="i" hint-placeholder-count="2">
+                <div class="fw-card" style="{{ i.cardStyle }}">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                    <span style="font-size:13.5px;font-weight:700;letter-spacing:-.01em">{{ i.name }}</span>
+                    <span style="width:13px;height:13px;display:block;flex:none;color:#a8a4b4" dangerouslySetInnerHTML="{{ extIcon }}"></span>
+                  </div>
+                  <div style="font-size:12px;color:#4a4553;margin-top:6px;line-height:1.55">{{ i.desc }}</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+                    <sc-for list="{{ i.tags }}" as="t" hint-placeholder-count="3">
+                      <span style="{{ t.style }}">{{ t.label }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+        <div style="font-size:11.5px;color:#7d7889;line-height:1.55;padding-top:4px">{{ dirDisclaimer }}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;padding-top:18px;border-top:1px solid #ececf1;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div style="font-size:11.5px;color:#7d7889">© Copyright 2026, Axal VC Management LLC. Axal VC Holdings LLC. All rights reserved.</div>
+      <div style="display:flex;gap:18px;font-size:11.5px"><a href="#terms">Terms of service</a><a href="#privacy">Privacy policy</a></div>
+    </div>
+  </div>
+
+  <!-- ============ CRISIS OVERLAY ============ -->
+  <sc-if value="{{ crisisOpen }}">
+    <div onClick="{{ closeCrisis }}" style="position:fixed;inset:0;background:rgba(24,24,27,.4);z-index:60"></div>
+    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:440px;max-width:calc(100vw - 40px);max-height:calc(100vh - 60px);overflow-y:auto;background:#fff;border-radius:18px;box-shadow:0 24px 60px rgba(24,24,27,.24);z-index:61">
+      <div style="padding:22px 24px 18px;background:#fef2f2;border-bottom:1px solid #fecaca;display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+        <div>
+          <div style="font-size:18px;font-weight:800;color:#991b1b;letter-spacing:-.02em">Immediate support</div>
+          <div style="font-size:12.5px;color:#7f1d1d;margin-top:6px;line-height:1.55">Free and confidential. If you're in danger right now, call your local emergency number.</div>
+        </div>
+        <div onClick="{{ closeCrisis }}" class="fw-link" style="font-size:16px;color:#b91c1c;flex:none">✕</div>
+      </div>
+      <sc-for list="{{ crisisFull }}" as="c" hint-placeholder-count="4">
+        <div style="padding:15px 24px;border-bottom:1px solid #f6f5f9">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <span style="font-size:14px;font-weight:700">{{ c.name }}</span>
+            <span style="font-size:10.5px;font-weight:700;color:#615c6e;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:5px;padding:3px 7px;flex:none">{{ c.region }}</span>
+          </div>
+          <div class="fw-num" style="font-size:13px;font-weight:700;color:#7c3aed;margin-top:6px">{{ c.how }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:5px;line-height:1.5">{{ c.note }}</div>
+        </div>
+      </sc-for>
+      <div style="padding:18px 24px 22px">
+        <div style="font-size:11.5px;color:#7d7889;line-height:1.55">Axal VC does not see that you opened this. Nothing here is logged to your check-in history.</div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { today:{}, more:false, topics:[], saved:false, range:'30', expertFilter:'All',
+            dirFilter:'All', cadence:'Weekdays', crisis:false };
+
+  ic(p, sw){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.9)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const S = this.state;
+    const I = {
+      lock:  this.ic('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+      life:  this.ic('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6"/><path d="m5.6 5.6 3.8 3.8M18.4 5.6l-3.8 3.8M5.6 18.4l3.8-3.8M18.4 18.4l-3.8-3.8"/>'),
+      phone: this.ic('<path d="M6 3h3l2 5-2.5 1.5a11 11 0 0 0 5 5L15 12l5 2v3a2 2 0 0 1-2.2 2A16 16 0 0 1 4 5.2A2 2 0 0 1 6 3Z"/>'),
+      heart: this.ic('<path d="M12 20s-7-4.4-7-9.4A4 4 0 0 1 12 8a4 4 0 0 1 7 2.6C19 15.6 12 20 12 20Z"/>'),
+      users: this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/><path d="M18 14.5c1.7.6 3 2.2 3 4.5"/><circle cx="17.5" cy="8.5" r="2.4"/>'),
+      chat:  this.ic('<path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z"/>'),
+      book:  this.ic('<path d="M4 5a2 2 0 0 1 2-2h5v18H6a2 2 0 0 1-2-2Z"/><path d="M20 5a2 2 0 0 0-2-2h-5v18h5a2 2 0 0 0 2-2Z"/>'),
+      trend: this.ic('<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/>'),
+      moon:  this.ic('<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>'),
+      alert: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>'),
+      ext:   this.ic('<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/>')
+    };
+
+    // ---- ONE 30-day series drives every average, delta, bar, streak and pattern ----
+    // index 0 = Jul 27, 2026 · index 29 = Aug 25, 2026 (today). null = no check-in that day.
+    // HISTORY is the 29 closed days, Jul 27 – Aug 24. Today is NOT in here — it comes from
+    // state, so an unanswered form cannot inflate the streak and saving genuinely appends.
+    const HISTORY = {
+      mood:   [4,4,null,4,3,4,4, 3,3,3,null,3,2,3, 3,2,3,3,null,2,2, 3,2,2,3,null,3,2,3],
+      stress: [2,2,null,2,3,2,2, 4,4,3,null,4,5,4, 4,5,4,4,null,5,5, 4,5,5,4,null,4,5,4],
+      sleep:  [4,4,null,4,3,4,4, 3,3,3,null,2,2,3, 3,2,2,3,null,2,2, 3,2,2,3,null,2,2,3]
+    };
+    const todayVal = (k) => (this.state.saved && this.state.today[k] != null) ? this.state.today[k] : null;
+    const SERIES = {
+      mood:   HISTORY.mood.concat([todayVal('mood')]),
+      stress: HISTORY.stress.concat([todayVal('stress')]),
+      sleep:  HISTORY.sleep.concat([todayVal('sleep')])
+    };
+    const N = SERIES.mood.length;
+    // A DAY is logged if any dimension has a value that day — never a single-dimension lookup.
+    const DAY_LOGGED = [];
+    for (let i = 0; i < N; i++) {
+      DAY_LOGGED.push(SERIES.mood[i] != null || SERIES.stress[i] != null || SERIES.sleep[i] != null);
+    }
+    const todayLogged = DAY_LOGGED[N - 1];
+    const dateAt = (i) => { const d = new Date('2026-07-27'); d.setDate(d.getDate() + i); return d; };
+    const fmt = (d) => d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+
+    const win = S.range === '7' ? 7 : N;
+    const slice = (arr, n) => arr.slice(arr.length - n);
+    const mean = (arr) => { const v = arr.filter(x => x != null); return v.length ? v.reduce((a,b) => a + b, 0) / v.length : null; };
+
+    const logged = DAY_LOGGED.filter(Boolean).length;
+    // Streak runs back from the most recent logged day; an unlogged today doesn't break it.
+    let cursor = N - 1;
+    while (cursor >= 0 && !DAY_LOGGED[cursor]) cursor--;
+    let streak = 0;
+    for (let i = cursor; i >= 0; i--) { if (!DAY_LOGGED[i]) break; streak++; }
+
+    // ---- scales: no pre-selected value, so an untouched form reads as unanswered ----
+    const SCALE_DEFS = [
+      { k:'mood', name:'Mood', low:'1 — Low', high:'5 — Good', invert:false, core:true },
+      { k:'stress', name:'Stress', low:'1 — Calm', high:'5 — Overwhelmed', invert:true, core:true },
+      { k:'sleep', name:'Sleep', low:'1 — Poor', high:'5 — Restful', invert:false, core:true },
+      { k:'energy', name:'Energy', low:'1 — Drained', high:'5 — Charged', invert:false, core:false },
+      { k:'focus', name:'Focus', low:'1 — Scattered', high:'5 — Sharp', invert:false, core:false },
+      { k:'connection', name:'Connection', low:'1 — Isolated', high:'5 — Supported', invert:false, core:false }
+    ];
+    const mkScale = (d) => {
+      const v = S.today[d.k];
+      return {
+        name:d.name, low:d.low, high:d.high,
+        valueLabel: v == null ? 'Not answered' : String(v),
+        valueInk: v == null ? '#a8a4b4' : '#18181b',
+        options: [1,2,3,4,5].map(n => ({
+          n:String(n),
+          go: () => { const t = Object.assign({}, S.today); t[d.k] = n; this.setState({ today:t, saved:false }); },
+          style:'flex:1;text-align:center;font-size:13.5px;font-weight:700;padding:10px 0;border-radius:9px;cursor:pointer;'
+            + (v === n ? 'background:#7c3aed;color:#fff;border:1px solid #7c3aed'
+                       : 'background:#fff;color:#4a4553;border:1px solid #e2e1e8')
+        }))
+      };
+    };
+    const coreAnswered = SCALE_DEFS.filter(d => d.core && S.today[d.k] != null).length;
+    const coreTotal = SCALE_DEFS.filter(d => d.core).length;
+
+    // ---- trend cells ----
+    const trendDefs = [
+      { k:'mood', name:'Mood', good:'up' },
+      { k:'stress', name:'Stress', good:'down' },
+      { k:'sleep', name:'Sleep', good:'up' }
+    ];
+    const trends = trendDefs.map((d, idx) => {
+      const arr = SERIES[d.k];
+      // ONE baseline for the headline judgement — late July — shared with the pattern cards,
+      // so a cell and the pattern beneath it can never read opposite ways.
+      const recent = mean(slice(arr, 7));
+      const prior = mean(arr.slice(0, 7));
+      const diff = (recent != null && prior != null) ? recent - prior : 0;
+      const improving = d.good === 'up' ? diff > 0.15 : diff < -0.15;
+      const worsening = d.good === 'up' ? diff < -0.15 : diff > 0.15;
+      const shown = slice(arr, win);
+      return {
+        name:d.name,
+        avg: recent == null ? '—' : recent.toFixed(1),
+        delta: (diff === 0 ? '±0.0' : (diff > 0 ? '+' : '') + diff.toFixed(1)) + ' vs late July',
+        deltaInk: improving ? '#047857' : (worsening ? '#b91c1c' : '#7d7889'),
+        note: worsening ? 'Moving the wrong way since early August.' : (improving ? 'Improved since late July.' : 'Broadly flat since late July.'),
+        bars: shown.map((v, i) => ({
+          style:'flex:1;min-width:2px;border-radius:2px 2px 0 0;height:' + (v == null ? 3 : Math.round(v / 5 * 100)) + '%;'
+            + 'background:' + (v == null ? '#eceaf2' : (worsening ? '#f9a8a8' : '#c4b5fd'))
+            + (i === shown.length - 1 && v != null ? ';background:' + (worsening ? '#dc2626' : '#7c3aed') : '')
+        })),
+        cellStyle:'padding:18px 20px;' + (idx < trendDefs.length - 1 ? 'border-right:1px solid #f2f1f5' : '')
+      };
+    });
+
+    // ---- patterns derived from the series, dated against company events ----
+    const last14sleep = slice(SERIES.sleep, 14).filter(x => x != null);
+    const poorSleep = last14sleep.filter(x => x <= 2).length;
+    const last14stress = slice(SERIES.stress, 14).filter(x => x != null);
+    const highStress = last14stress.filter(x => x >= 4).length;
+    const patterns = [
+      { title:'Sleep has been ' + poorSleep + ' poor nights out of the last ' + last14sleep.length + ' you logged.',
+        body:'Your sleep average dropped from ' + mean(SERIES.sleep.slice(0,7)).toFixed(1) + ' in late July to '
+          + mean(slice(SERIES.sleep,7)).toFixed(1) + ' this week — the clearest signal in your data.',
+        context:'Overlaps with the raise opening Aug 3 and the GTM offer going out Aug 20.',
+        tone:'bad', icon:I.moon, action:'Find a sleep resource' },
+      { title:'Stress at 4 or above on ' + highStress + ' of ' + last14stress.length + ' logged days.',
+        body:'Sustained rather than spiky. Founders in an open round commonly report this; it is still worth naming out loud with someone.',
+        context:null, tone:'prog', icon:I.alert, action:'Book a session' },
+      { title:'Mood is holding steadier than either sleep or stress.',
+        body:'Averaging ' + mean(slice(SERIES.mood,7)).toFixed(1) + ' this week against ' + mean(SERIES.mood.slice(0,7)).toFixed(1)
+          + ' in late July — a smaller fall than the other two.',
+        context:null, tone:'ok', icon:I.trend, action:null }
+    ].map(p => {
+      const M = { ok:['#ecfdf5','#047857','#10b981'], prog:['#fffbeb','#92400e','#f59e0b'], bad:['#fef2f2','#b91c1c','#ef4444'] };
+      const c = M[p.tone];
+      return { title:p.title, body:p.body, context:p.context, icon:p.icon, action:p.action,
+        chipBg:c[0], chipInk:c[1],
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 22px;border-top:1px solid #f2f1f5;border-left:3px solid ' + c[2] };
+    });
+
+    // ---- experts ----
+    const ALL_EXPERTS = [
+      { initials:'HM', name:'Dr. Helena Mbeki', kind:'Therapist', avBg:'#ede9fe', avInk:'#6d28d9',
+        credential:'Clinical psychologist, PsyD · 11 years · founder and high-pressure caseload',
+        why:'Matches your sleep and sustained-stress pattern.',
+        detail:'English, Portuguese · video · $180/session · sliding scale available',
+        slot:'Thu 8:00 AM PT', tags:['Therapy','Sleep','Burnout'] },
+      { initials:'JO', name:'Jonas Okafor', kind:'Coach', avBg:'#f0fdfa', avInk:'#0f766e',
+        credential:'Executive coach, ICF PCC · ex-COO, two venture-backed exits',
+        why:'Works with founders mid-raise on decision load.',
+        detail:'English · video or phone · $250/session · 45 min',
+        slot:'Wed 4:00 PM PT', tags:['Executive coaching','Fundraising'] },
+      { initials:'PC', name:'Founders Peer Circle', kind:'Peer group', avBg:'#f4f4f6', avInk:'#4a4553',
+        credential:'Facilitated group of 8 pre-seed founders · closed cohort, confidential',
+        why:'Connection scored lowest of your optional dimensions.',
+        detail:'English · video · free for Axal VC founders · biweekly, 90 min',
+        slot:'Mon 5:00 PM PT', tags:['Peer support'] },
+      { initials:'AR', name:'Dr. Amara Reyes', kind:'Psychiatrist', avBg:'#eff6ff', avInk:'#1d4ed8',
+        credential:'MD, psychiatry · medication review and sleep disorders',
+        why:'If sleep does not respond to behavioural changes.',
+        detail:'English, Spanish · video · $320 initial consult · insurance accepted',
+        slot:'Tue 11:00 AM PT', tags:['Sleep','Therapy'] }
+    ];
+    const expertCats = ['All','Therapy','Coaching','Peer support'];
+    const catMatch = (e) => S.expertFilter === 'All'
+      || (S.expertFilter === 'Therapy' && (e.kind === 'Therapist' || e.kind === 'Psychiatrist'))
+      || (S.expertFilter === 'Coaching' && e.kind === 'Coach')
+      || (S.expertFilter === 'Peer support' && e.kind === 'Peer group');
+    const shownExperts = ALL_EXPERTS.filter(catMatch);
+
+    const kindChip = (k) => {
+      const M = { Therapist:['#f5f2ff','#6d28d9','#e6dcff'], Psychiatrist:['#eff6ff','#1d4ed8','#dbeafe'],
+                  Coach:['#f0fdfa','#0f766e','#99f6e4'], 'Peer group':['#f4f4f6','#4a4553','#e4e4e8'] };
+      const c = M[k] || M['Peer group'];
+      return 'font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:3px 7px;border-radius:5px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2];
+    };
+
+    // ---- directory ----
+    const DIR = [
+      { title:'Crisis & hotlines', icon:I.phone, items:[
+        { name:'988 Suicide & Crisis Lifeline', desc:'Call or text 988. Free, confidential, 24/7 — including if you are worried about someone else.', tags:['24/7','Free','US'] },
+        { name:'Samaritans', desc:'Call 116 123 free from any phone in the UK or Ireland, any hour.', tags:['24/7','Free','UK & IE'] }
+      ]},
+      { title:'Therapy & counselling', icon:I.heart, items:[
+        { name:'Open Path Collective', desc:'Vetted clinicians at $30–$80 per session for people without adequate insurance.', tags:['Low cost','US']},
+        { name:'BetterHelp', desc:'Matched 1:1 with a licensed therapist; video, phone or written sessions.', tags:['Paid','Global'] }
+      ]},
+      { title:'Peer & founder groups', icon:I.users, items:[
+        { name:'Founders Network — Mental Health Circle', desc:'Peer group for founders working through burnout, isolation and co-founder strain.', tags:['Free','Global'] },
+        { name:'Reboot.io', desc:'Coaching circles and writing on the inner work of leadership.', tags:['Paid','Global'] }
+      ]},
+      { title:'Reading', icon:I.book, items:[
+        { name:'It\u2019s Called Imposter Syndrome — First Round Review', desc:'Free essay on naming and working through imposter syndrome as a founder.', tags:['Free','Global'] },
+        { name:'The Founder\u2019s Dilemmas — Noam Wasserman', desc:'Evidence-based read on co-founder splits, equity and control.', tags:['Paid','Global'] }
+      ]}
+    ];
+    const dirCats = ['All','Free only','24/7','US','Global'];
+    const itemMatch = (i) => S.dirFilter === 'All'
+      || (S.dirFilter === 'Free only' && i.tags.indexOf('Free') >= 0)
+      || i.tags.indexOf(S.dirFilter) >= 0
+      || (S.dirFilter === 'US' && i.tags.indexOf('US') >= 0);
+    const dirGroups = DIR.map(g => ({
+      title:g.title, icon:g.icon,
+      items: g.items.filter(itemMatch).map(i => ({
+        name:i.name, desc:i.desc,
+        cardStyle:'border:1px solid #ececf1;border-radius:13px;padding:15px 17px;background:#fff;cursor:pointer',
+        tags: i.tags.map(t => ({ label:t,
+          style:'font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;'
+            + (t === 'Free' || t === '24/7' ? 'background:#ecfdf5;color:#047857;border:1px solid #a7f3d0'
+                                            : 'background:#f4f4f6;color:#615c6e;border:1px solid #e8e8ec') }))
+      }))
+    })).filter(g => g.items.length > 0).map(g => Object.assign({}, g, { count:g.items.length + (g.items.length === 1 ? ' entry' : ' entries') }));
+    const dirTotal = dirGroups.reduce((a,g) => a + g.items.length, 0);
+
+    const seg = (on) => 'font-size:12px;font-weight:700;padding:6px 12px;border-radius:7px;cursor:pointer;'
+      + (on ? 'background:#fff;color:#7c3aed;box-shadow:0 1px 2px rgba(24,24,27,.07)' : 'color:#4a4553');
+    const chip = (on) => 'font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:999px;cursor:pointer;'
+      + (on ? 'background:#7c3aed;color:#fff;border:1px solid #7c3aed' : 'background:#fff;color:#3f3a49;border:1px solid #e2e1e8');
+
+    const CRISIS = [
+      { name:'988 Suicide & Crisis Lifeline', how:'Call or text 988', region:'US', note:'Free and confidential, 24/7. Also for anyone worried about another person.' },
+      { name:'Crisis Text Line', how:'Text HOME to 741741', region:'US · CA · UK', note:'Text-based, if speaking aloud is hard right now.' },
+      { name:'Samaritans', how:'Call 116 123', region:'UK · IE', note:'Free from any phone, any hour, no referral needed.' },
+      { name:'Befrienders Worldwide', how:'befrienders.org', region:'Global', note:'Directory of local helplines in over 30 countries.' }
+    ];
+
+    return {
+      lockIcon: I.lock, lifeIcon: I.life, extIcon: I.ext,
+      privacyLine: 'Encrypted at rest and readable only by you. Admins see anonymised cohort averages, never your entries — and nothing here reaches investors, Market Intelligence, or your scoring.',
+
+      checkinTitle: S.saved ? 'Saved for today' : 'Today\u2019s check-in',
+      checkinSub: S.saved
+        ? 'Recorded ' + fmt(dateAt(N - 1)) + '. You can still edit it until midnight.'
+        : 'Three questions, about twenty seconds. ' + coreAnswered + ' of ' + coreTotal + ' answered.',
+      streakPill:'display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;background:#f5f2ff;color:#6d28d9;border:1px solid #e6dcff;white-space:nowrap',
+      streakLabel: streak + ' day' + (streak === 1 ? '' : 's') + ' in a row'
+        + (todayLogged ? '' : ' · today open'),
+
+      coreScales: SCALE_DEFS.filter(d => d.core).map(mkScale),
+      extraScales: SCALE_DEFS.filter(d => !d.core).map(mkScale),
+      showMore: S.more,
+      moreLabel: S.more ? 'Hide the optional questions' : '+ Add energy, focus, connection and a note',
+      toggleMore: () => this.setState({ more: !S.more }),
+
+      topics: ['Burnout','Sleep','Anxiety','Co-founder','Fundraising','Team','Loneliness','Money','Health','Family','Focus','Purpose'].map(t => {
+        const on = S.topics.indexOf(t) >= 0;
+        return { label:t, style:chip(on),
+          go: () => this.setState({ topics: on ? S.topics.filter(x => x !== t) : S.topics.concat([t]) }) };
+      }),
+
+      saveHint: S.saved
+        ? 'Today is in the trend below. Editing and saving again updates it.'
+        : (coreAnswered === coreTotal
+            ? 'Everything answered. Saving adds today to the trend below.'
+            : (coreTotal - coreAnswered) + ' still unanswered — you can save a partial check-in.'),
+      saveLabel: S.saved ? 'Saved' : 'Save check-in',
+      saveStyle: coreAnswered === 0
+        ? 'font-size:13px;font-weight:700;padding:10px 17px;border-radius:9px;border:1px solid #e2e1e8;background:#f4f4f6;color:#a8a4b4;cursor:default;white-space:nowrap'
+        : 'font-size:13px;font-weight:700;padding:10px 17px;border-radius:9px;border:1px solid #7c3aed;background:'
+          + (S.saved ? '#ecfdf5;border-color:#a7f3d0;color:#047857' : '#7c3aed;color:#fff') + ';cursor:pointer;white-space:nowrap',
+      save: () => { if (coreAnswered > 0) this.setState({ saved:true }); },
+
+      trendSub: 'Built from ' + logged + ' check-ins between ' + fmt(dateAt(0)) + ' and '
+        + fmt(dateAt(todayLogged ? N - 1 : N - 2)) + '.',
+      ranges: [{ k:'7', label:'7 days' }, { k:'30', label:'30 days' }].map(r => ({
+        label:r.label, go: () => this.setState({ range:r.k }), style: seg(S.range === r.k) })),
+      trends,
+      coverageNote: logged + ' of ' + N + ' days logged · ' + (N - logged - (todayLogged ? 0 : 1)) + ' skipped · '
+        + (todayLogged ? 'today recorded' : 'today still open') + ' · current streak ' + streak + ' days',
+      patterns,
+
+      crisis: CRISIS.slice(0,3),
+      crisisFull: CRISIS,
+      crisisOpen: S.crisis,
+      openCrisis: () => this.setState({ crisis:true }),
+      closeCrisis: () => this.setState({ crisis:false }),
+
+      expertSub: shownExperts.length + ' of ' + ALL_EXPERTS.length + ' vetted, ranked against your own entries — not a marketplace listing.',
+      expertFilters: expertCats.map(c => ({ label:c, go: () => this.setState({ expertFilter:c }), style: chip(S.expertFilter === c) })),
+      experts: shownExperts.map(e => Object.assign({}, e, { kindStyle: kindChip(e.kind) })),
+      noExperts: shownExperts.length === 0,
+
+      cadences: ['Daily','Weekdays','Weekly','Off'].map(c => ({
+        label:c, go: () => this.setState({ cadence:c }), style: chip(S.cadence === c) })),
+      cadenceNote: S.cadence === 'Off'
+        ? 'No reminders. The page still works whenever you open it.'
+        : (S.cadence === 'Weekly' ? 'One nudge on Monday mornings — enough for a trend, not enough to nag.'
+            : S.cadence + ' at 9:00 AM PT. Missed days stay blank rather than counting against you.'),
+
+      dirSub: dirTotal + ' curated ' + (dirTotal === 1 ? 'entry' : 'entries') + ' · open to anyone, no Axal VC account needed.',
+      dirFilters: dirCats.map(c => ({ label:c, go: () => this.setState({ dirFilter:c }), style: seg(S.dirFilter === c) })),
+      dirGroups,
+      dirDisclaimer: 'These are third-party services listed for convenience. Axal VC does not receive referral fees, does not see whether you contact them, and none of this is medical advice.'
+    };
+  }
+}
+</script>
+</body>
+</html>

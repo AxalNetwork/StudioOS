@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#0d9488;text-decoration:none}a:hover{color:#0f766e}
+    .oh-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+    .oh-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa}
+    .oh-card{background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.03)}
+    .oh-partner{transition:border-color .12s,box-shadow .12s}
+    .oh-partner:hover{border-color:#99f6e4;box-shadow:0 4px 14px rgba(13,148,136,.1)}
+    .oh-root.oh-embedded .oh-topbar{display:none!important}
+    @keyframes ohFade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    @media (max-width:1080px){.oh-2col{grid-template-columns:1fr!important}.oh-drawer{width:100%!important}.oh-recgrid{grid-template-columns:1fr!important}}
+    @media (max-width:720px){.oh-partners{grid-template-columns:1fr!important}}
+  </style>
+</helmet>
+
+<div class="oh-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="oh-topbar" style="height:3px;background:#0d9488;border-radius:0 0 3px 3px;margin-bottom:16px"></div>
+  <div class="oh-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 18px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="#" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px 0 9px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-size:13px;font-weight:600">← Back to Workspace</a>
+      <div><div style="display:flex;align-items:center;gap:9px"><h1 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Office Hours</h1><span style="font-size:10.5px;font-weight:700;color:#166534;background:#dcfce7;border-radius:99px;padding:3px 9px">Active</span></div><div style="font-size:13px;color:#71717a;margin-top:2px">Live sessions with partners — investors, lawyers, and operators — turned into tracked execution.</div></div>
+    </div>
+    <span style="font-size:11px;font-weight:600;color:#0f766e;background:#ecfdf5;border:1px solid #99f6e4;padding:5px 11px;border-radius:99px">Unlocked · Wk 3</span>
+  </div>
+
+  <!-- QUICK ACTIONS + SUMMARY -->
+  <div style="display:flex;gap:4px;padding:0 0 16px;flex-wrap:wrap;align-items:center">
+    <button style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px;border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer">↗ Share</button>
+    <button style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px;border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer">⬇ Export</button>
+    <button style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px;border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer">📋 Copy link</button>
+    <button style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#0d9488;padding:7px 12px;border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer">👁 Preview as investor</button>
+  </div>
+
+  <!-- SESSION SUMMARY STRIP -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px" class="oh-recgrid">
+    <sc-for list="{{ summary }}" as="s" hint-placeholder-count="4">
+      <div class="oh-card" style="padding:16px 18px"><div class="oh-mono" style="font-size:24px;font-weight:700;color:{{ s.color }};line-height:1">{{ s.value }}</div><div style="font-size:11.5px;color:#71717a;margin-top:5px">{{ s.label }}</div></div>
+    </sc-for>
+  </div>
+
+  <!-- RECOMMENDED HELP NOW -->
+  <div class="oh-card" style="padding:22px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="oh-lbl">Recommended help now</div><span style="font-size:11px;color:#a1a1aa">From your Week 3 context, scoring gaps, and open blockers</span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px" class="oh-recgrid">
+      <sc-for list="{{ recommendations }}" as="r" hint-placeholder-count="3">
+        <div style="border:1px solid {{ r.border }};background:{{ r.bg }};border-radius:14px;padding:16px;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:{{ r.typeColor }};background:{{ r.typeBg }};border-radius:6px;padding:3px 8px">{{ r.type }}</span><span style="font-size:10px;font-weight:700;color:{{ r.urgencyColor }}">{{ r.urgency }}</span></div>
+          <div style="font-size:14px;font-weight:700;color:#27272a;letter-spacing:-.01em">{{ r.topic }}</div>
+          <div style="font-size:11.5px;color:#71717a;margin:7px 0 12px;line-height:1.45;flex:1">{{ r.why }}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#52525b">{{ r.partner }} · {{ r.length }}</span><button onClick="{{ r.onBook }}" style="font-size:11.5px;font-weight:600;color:#fff;background:#0d9488;border:none;border-radius:8px;padding:7px 13px;cursor:pointer">Book now</button></div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- UPCOMING SESSIONS -->
+  <div class="oh-card" style="padding:22px;margin-bottom:20px">
+    <div class="oh-lbl" style="margin-bottom:14px">Upcoming sessions</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <sc-for list="{{ upcoming }}" as="u" hint-placeholder-count="2">
+        <div onClick="{{ u.onOpen }}" style="border:1px solid #f0f0f3;border-radius:13px;padding:15px 17px;cursor:pointer;display:flex;align-items:center;gap:15px" style-hover="border-color:#99f6e4;background:#fafffe">
+          <div style="width:48px;height:48px;flex:none;border-radius:12px;background:{{ u.avatarBg }};color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ u.initials }}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span style="font-size:14px;font-weight:700;color:#27272a">{{ u.partner }}</span><span style="font-size:10px;font-weight:700;border-radius:6px;padding:2px 8px;{{ u.typeStyle }}">{{ u.typeLabel }}</span></div>
+            <div style="font-size:12.5px;color:#52525b;margin-top:3px">{{ u.topic }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap"><span style="font-size:11px;font-weight:600;color:{{ u.readyColor }};background:{{ u.readyBg }};border-radius:99px;padding:2px 9px">{{ u.readiness }}</span><span style="font-size:11px;color:#a1a1aa">{{ u.when }} · {{ u.duration }}</span></div>
+          </div>
+          <div style="text-align:right;flex:none">
+            <div class="oh-mono" style="font-size:18px;font-weight:700;color:#0d9488">{{ u.countdown }}</div>
+            <button onClick="{{ u.onJoin }}" style="margin-top:8px;font-size:11px;font-weight:600;color:#fff;background:#0d9488;border:none;border-radius:7px;padding:6px 13px;cursor:pointer">Join</button>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div class="oh-2col" style="display:grid;grid-template-columns:1.5fr 1fr;gap:20px;align-items:start">
+    <!-- LEFT: booking + directory -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div class="oh-card" style="padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+          <div class="oh-lbl">Partner directory · book a session</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap"><sc-for list="{{ filters }}" as="f" hint-placeholder-count="4"><button onClick="{{ f.onClick }}" style="font-size:11px;font-weight:600;padding:5px 11px;border-radius:99px;cursor:pointer;{{ f.style }}">{{ f.label }}</button></sc-for></div>
+        </div>
+        <div style="font-size:11.5px;color:#a1a1aa;margin-bottom:16px">{{ dirNote }}</div>
+        <div class="oh-partners" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <sc-for list="{{ partners }}" as="p" hint-placeholder-count="4">
+            <div class="oh-partner oh-card" onClick="{{ p.onOpen }}" style="padding:16px;cursor:pointer;box-shadow:none;border-color:#f0f0f3">
+              <div style="display:flex;align-items:flex-start;gap:11px;margin-bottom:10px">
+                <span style="width:40px;height:40px;flex:none;border-radius:11px;background:{{ p.avatarBg }};color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ p.initials }}</span>
+                <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:700;color:#27272a">{{ p.name }}</div><div style="font-size:11px;color:#71717a">{{ p.title }}</div></div>
+                <span style="font-size:9.5px;font-weight:700;border-radius:6px;padding:2px 7px;{{ p.typeStyle }}">{{ p.typeLabel }}</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px"><sc-for list="{{ p.tags }}" as="t" hint-placeholder-count="3"><span style="font-size:10px;font-weight:600;color:#0f766e;background:#ecfdf5;border-radius:5px;padding:2px 7px">{{ t }}</span></sc-for></div>
+              <div style="font-size:11.5px;color:#52525b;line-height:1.45;margin-bottom:12px">{{ p.useCase }}</div>
+              <sc-if value="{{ p.recommended }}"><div style="font-size:10.5px;font-weight:600;color:#0d9488;background:#f0fdfa;border:1px solid #ccfbf1;border-radius:8px;padding:6px 9px;margin-bottom:11px;line-height:1.4">✓ {{ p.recReason }}</div></sc-if>
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:4px"><span style="color:#f59e0b;font-size:11px">★</span><span class="oh-mono" style="font-size:11.5px;font-weight:600;color:#52525b">{{ p.rating }}</span><span style="font-size:10.5px;color:#a1a1aa">· {{ p.availability }}</span></div>
+                <button onClick="{{ p.onBookStop }}" style="font-size:11px;font-weight:600;color:#0d9488;background:#ecfdf5;border:1px solid #99f6e4;border-radius:7px;padding:5px 11px;cursor:pointer">Book →</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- SESSION HISTORY -->
+      <div class="oh-card" style="padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div class="oh-lbl">Session history · advice archive</div><input type="text" value="{{ historyQuery }}" onChange="{{ setHistoryQuery }}" placeholder="Search summaries…" style="height:30px;padding:0 11px;border:1px solid #e4e4e7;border-radius:8px;font-size:12px;outline:none;font-family:inherit;width:180px"></div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ history }}" as="h" hint-placeholder-count="3">
+            <div onClick="{{ h.onOpen }}" style="border:1px solid #f0f0f3;border-radius:12px;padding:13px 15px;cursor:pointer" style-hover="background:#fafafa">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:5px"><span style="font-size:13px;font-weight:700;color:#27272a">{{ h.partner }}</span><span style="font-size:9.5px;font-weight:700;border-radius:6px;padding:2px 7px;{{ h.typeStyle }}">{{ h.typeLabel }}</span><span style="font-size:10.5px;color:#a1a1aa;margin-left:auto">{{ h.date }}</span></div>
+              <div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:3px">{{ h.topic }}</div>
+              <div style="font-size:11.5px;color:#71717a;line-height:1.45">{{ h.summary }}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px"><sc-for list="{{ h.outcomes }}" as="o" hint-placeholder-count="2"><span style="font-size:10px;font-weight:600;color:#52525b;background:#f4f4f5;border-radius:6px;padding:3px 8px">{{ o }}</span></sc-for></div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ historyEmpty }}"><div style="font-size:12px;color:#a1a1aa;text-align:center;padding:12px 0">No sessions match "{{ historyQuery }}".</div></sc-if>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: brief + action items + feeds -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <!-- PRE-SESSION BRIEF -->
+      <div class="oh-card" style="padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div class="oh-lbl">Pre-session brief</div><span style="font-size:10px;font-weight:700;color:#0f766e;background:#ecfdf5;border-radius:99px;padding:2px 8px">{{ brief.status }}</span></div>
+        <div style="font-size:11px;color:#a1a1aa;margin-bottom:14px">Auto-generated from your startup data · sent to {{ brief.partner }}</div>
+        <div style="background:#fafafa;border:1px solid #f0f0f3;border-radius:12px;padding:15px">
+          <sc-for list="{{ brief.fields }}" as="f" hint-placeholder-count="4"><div style="padding:7px 0;border-top:1px solid #f0f0f3"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#a1a1aa">{{ f.k }}</div><div style="font-size:12px;color:#3f3f46;margin-top:2px;line-height:1.45">{{ f.v }}</div></div></sc-for>
+          <div style="padding:9px 0 0;border-top:1px solid #f0f0f3;margin-top:4px">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#a1a1aa;margin-bottom:6px">Questions for partner</div>
+            <sc-for list="{{ brief.questions }}" as="q" hint-placeholder-count="3"><div style="font-size:12px;color:#3f3f46;display:flex;gap:7px;padding:2px 0"><span style="color:#0d9488">›</span>{{ q }}</div></sc-for>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px"><button style="flex:1;height:34px;border-radius:9px;border:1px solid #e4e4e7;background:#fff;color:#52525b;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Edit brief</button><button style="flex:1;height:34px;border-radius:9px;border:none;background:#0d9488;color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer">Resend to partner</button></div>
+      </div>
+
+      <!-- POST-SESSION ACTION ITEMS -->
+      <div class="oh-card" style="padding:20px">
+        <div class="oh-lbl" style="margin-bottom:14px">Action items · execution handoff</div>
+        <div style="display:flex;flex-direction:column;gap:11px">
+          <sc-for list="{{ actionItems }}" as="a" hint-placeholder-count="3">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span onClick="{{ a.onToggle }}" style="width:18px;height:18px;flex:none;margin-top:1px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;{{ a.boxStyle }}">{{ a.check }}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12.5px;font-weight:600;color:{{ a.titleColor }};{{ a.strike }}">{{ a.title }}</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:4px;flex-wrap:wrap"><span style="font-size:10px;font-weight:600;color:#6d28d9;background:#f5f3ff;border-radius:6px;padding:2px 7px">→ {{ a.linkedTool }}</span><span style="font-size:10.5px;color:#a1a1aa">{{ a.owner }} · {{ a.due }}</span></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- FEEDS INTO -->
+      <div class="oh-card" style="padding:20px">
+        <div class="oh-lbl" style="margin-bottom:12px">Feeds into</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ feeds }}" as="f" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:2px;background:{{ f.dot }}"></span><div style="flex:1"><span style="font-size:12.5px;font-weight:600;color:#27272a">{{ f.tool }}</span><span style="font-size:11px;color:#a1a1aa"> · {{ f.via }}</span></div></div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PARTNER / SESSION DRAWER -->
+<sc-if value="{{ drawerOpen }}">
+  <div onClick="{{ closeDrawer }}" style="position:fixed;inset:0;z-index:80;background:rgba(24,24,27,.4);backdrop-filter:blur(2px);animation:ohFade .18s ease"></div>
+  <div class="oh-drawer" style="position:fixed;top:0;right:0;bottom:0;width:520px;background:#fff;z-index:81;box-shadow:-8px 0 40px rgba(24,24,27,.14);overflow-y:auto;animation:ohFade .2s ease">
+    <div style="position:sticky;top:0;background:#fff;border-bottom:1px solid #f0f0f3;padding:20px 24px;z-index:2;display:flex;align-items:center;gap:13px">
+      <span style="width:46px;height:46px;flex:none;border-radius:12px;background:{{ sel.avatarBg }};color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ sel.initials }}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:800;letter-spacing:-.01em">{{ sel.name }}</div><div style="font-size:12px;color:#71717a">{{ sel.title }} · {{ sel.location }}</div></div>
+      <button onClick="{{ closeDrawer }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;font-size:16px;cursor:pointer">×</button>
+    </div>
+    <div style="padding:22px 24px;display:flex;flex-direction:column;gap:20px">
+      <div><div class="oh-lbl" style="margin-bottom:9px">When to book {{ sel.firstName }}</div><div style="font-size:13px;color:#3f3f46;line-height:1.55">{{ sel.whenToBook }}</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="background:#fafafa;border:1px solid #f0f0f3;border-radius:11px;padding:13px"><div class="oh-lbl" style="margin-bottom:6px">Best for stage</div><div style="font-size:12.5px;font-weight:600;color:#27272a">{{ sel.stageFit }}</div></div>
+        <div style="background:#fafafa;border:1px solid #f0f0f3;border-radius:11px;padding:13px"><div class="oh-lbl" style="margin-bottom:6px">One session gets you</div><div style="font-size:12.5px;font-weight:600;color:#27272a">{{ sel.outcome }}</div></div>
+      </div>
+      <div><div class="oh-lbl" style="margin-bottom:9px">Bring to the session</div><div style="display:flex;flex-direction:column;gap:6px"><sc-for list="{{ sel.bring }}" as="b" hint-placeholder-count="2"><div style="font-size:12.5px;color:#3f3f46;display:flex;gap:8px"><span style="color:#0d9488">›</span>{{ b }}</div></sc-for></div></div>
+
+      <div style="border-top:1px solid #f0f0f3;padding-top:18px">
+        <div class="oh-lbl" style="margin-bottom:12px">Book a session</div>
+        <div style="margin-bottom:14px"><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:6px">Objective template</div><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ objectivePills }}" as="o" hint-placeholder-count="4"><button onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</button></sc-for></div></div>
+        <div style="margin-bottom:14px"><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:6px">Desired outcome</div><input type="text" value="{{ bookOutcome }}" onChange="{{ setBookOutcome }}" placeholder="What does a good session produce?" style="width:100%;height:38px;padding:0 12px;border:1px solid #e4e4e7;border-radius:9px;font-size:13px;outline:none;font-family:inherit"></div>
+        <div style="display:flex;gap:16px;margin-bottom:14px">
+          <div><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:6px">Length</div><div style="display:flex;gap:6px"><sc-for list="{{ lengthPills }}" as="l" hint-placeholder-count="2"><button onClick="{{ l.onClick }}" style="{{ l.style }}">{{ l.label }}</button></sc-for></div></div>
+          <div style="flex:1"><div style="font-size:12px;font-weight:600;color:#3f3f46;margin-bottom:6px">Slot</div><div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ slotPills }}" as="sl" hint-placeholder-count="3"><button onClick="{{ sl.onClick }}" style="{{ sl.style }}">{{ sl.label }}</button></sc-for></div></div>
+        </div>
+        <sc-if value="{{ readinessWarn }}"><div style="font-size:11.5px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:10px 12px;margin-bottom:12px;line-height:1.4">Founder readiness low — add a desired outcome and objective so the partner can prep. Weak briefs waste the session.</div></sc-if>
+        <button onClick="{{ confirmBook }}" style="width:100%;height:40px;border-radius:10px;border:none;background:#0d9488;color:#fff;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">Confirm booking · auto-generates video link + brief</button>
+        <sc-if value="{{ bookedToast }}"><div style="margin-top:10px;font-size:11.5px;color:#15803d;text-align:center">✓ Session booked. Calendar invite, video link, and pre-session brief generated.</div></sc-if>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = {
+    drawerOpen:false, selKey:null, filter:'recommended',
+    historyQuery:'', bookLength:'30 min', bookSlot:'', bookObjective:'', bookOutcome:'',
+    bookedToast:false, doneItems:{ a2:true },
+  };
+
+  partners(){
+    return [
+      { key:'sofia', type:'operator', name:'Sofia Menendez', firstName:'Sofia', initials:'SM', title:'Enterprise GTM & Pricing', location:'San Francisco · PT', rating:'4.9', availability:'This week',
+        tags:['GTM','Pricing','First sales hires'], useCase:'Stand up your outbound motion and set ICP-based pricing before you talk to investors.', recommended:true, recReason:'Recommended — Week 3, weak pricing signals, and your SaaS sector match her background.',
+        whenToBook:'Book Sofia when your commercial motion is undefined: no pricing model, no outbound process, or unsure who your first sales hire should be. She works best once you have 5+ customer interviews logged.',
+        stageFit:'Pre-seed → Seed', outcome:'A pricing model + 30-day GTM plan', bring:['Your customer discovery log','Current pricing hypothesis','Target ICP definition'] },
+      { key:'raj', type:'investor', name:'Raj Patel', firstName:'Raj', initials:'RP', title:'Pre-seed / Seed Investor', location:'New York · ET', rating:'4.8', availability:'Next week',
+        tags:['Fundraise','Narrative','Investor intros'], useCase:'Pressure-test your raise narrative and round construction before you go out.', recommended:false, recReason:'',
+        whenToBook:'Book Raj when you are 2–4 weeks from raising: deck drafted, ask roughly sized, and you want an investor\u2019s read on narrative and target list.',
+        stageFit:'Pre-seed → Series A', outcome:'Narrative feedback + target investor list', bring:['Current pitch deck','Fundraise ask + use of funds','Traction summary'] },
+      { key:'dana', type:'lawyer', name:'Dana Osei', firstName:'Dana', initials:'DO', title:'Startup Formation Counsel', location:'Delaware · ET', rating:'5.0', availability:'This week',
+        tags:['Incorporation','83(b)','Cap table'], useCase:'Get incorporation, founder stock, and 83(b) timing right the first time.', recommended:true, recReason:'Recommended — you have an open Incorporate blocker heading into Week 4.',
+        whenToBook:'Book Dana when you are about to incorporate, issue founder stock, or file 83(b). Best before you sign anything, not after.',
+        stageFit:'Formation → Seed', outcome:'A clear incorporation + equity plan', bring:['Founder split intentions','Co-founder decision status','Any prior IP/university ties'] },
+      { key:'marcus', type:'operator', name:'Marcus Webb', firstName:'Marcus', initials:'MW', title:'Ops & Early Hiring', location:'Austin · CT', rating:'4.6', availability:'2 weeks',
+        tags:['Hiring','Org design','Onboarding'], useCase:'Design your first operating cadence and hiring pipeline for the 5-to-30 phase.', recommended:false, recReason:'',
+        whenToBook:'Book Marcus once you are ready to hire beyond the founding team and need repeatable operating rhythm.',
+        stageFit:'Seed → Series A', outcome:'A hiring plan + operating cadence', bring:['Current org chart','Next 3 roles to hire','Budget / runway'] },
+    ];
+  }
+
+  renderVals(){
+    const st=this.state;
+    const pill=(active)=> active
+      ? 'font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:99px;border:1px solid #0d9488;background:#0d9488;color:#fff;cursor:pointer;font-family:inherit'
+      : 'font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:99px;border:1px solid #e4e4e7;background:#fff;color:#52525b;cursor:pointer;font-family:inherit';
+    const typeStyle={ investor:'color:#2563eb;background:#eff6ff', lawyer:'color:#b45309;background:#fef3c7', operator:'color:#0f766e;background:#ecfdf5' };
+    const typeLabel={ investor:'Investor', lawyer:'Lawyer', operator:'Operator' };
+
+    const summary=[
+      { value:'2', label:'Upcoming sessions', color:'#0d9488' },
+      { value:'5', label:'Sessions completed', color:'#27272a' },
+      { value:'3', label:'Follow-ups pending', color:'#b45309' },
+      { value:'4', label:'Deliverables created', color:'#27272a' },
+    ];
+
+    const all=this.partners(); const byKey={}; all.forEach(p=>byKey[p.key]=p);
+
+    // recommendations
+    const recDefs=[
+      { key:'dana', type:'lawyer', topic:'Incorporation & 83(b) timing', length:'30 min', urgency:'Urgent', urgencyColor:'#dc2626', why:'You have an open Incorporate blocker and Week 4 starts soon. Get founder stock and 83(b) timing right before signing.', partner:'Dana Osei' },
+      { key:'sofia', type:'operator', topic:'Pricing & GTM motion', length:'60 min', urgency:'This week', urgencyColor:'#b45309', why:'Your scoring flags weak commercial readiness. Sofia can turn your discovery into a pricing model and outbound plan.', partner:'Sofia Menendez' },
+      { key:'raj', type:'investor', topic:'Raise narrative check', length:'30 min', urgency:'Soon', urgencyColor:'#0f766e', why:'Deck v3 is drafted. A pre-raise investor read tightens the narrative before you go to the Axal VC network.', partner:'Raj Patel' },
+    ];
+    const recBg={ lawyer:'#fffdf7', operator:'#f7fffd', investor:'#f7faff' };
+    const recBorder={ lawyer:'#fde68a', operator:'#ccfbf1', investor:'#dbeafe' };
+    const recommendations=recDefs.map(r=>({ ...r, typeColor:typeStyle[r.type].split(';')[0].replace('color:',''), typeBg:typeStyle[r.type].split('background:')[1], bg:recBg[r.type], border:recBorder[r.type], onBook:()=>this.openBook(r.key) }));
+
+    // upcoming
+    const upcoming=[
+      { key:'dana', partner:'Dana Osei', initials:'DO', avatarBg:'#f59e0b', type:'lawyer', topic:'Incorporation & 83(b) timing', when:'Tomorrow, 2:00 PM ET', duration:'30 min', countdown:'18h', readiness:'Brief complete', readyColor:'#166534', readyBg:'#dcfce7' },
+      { key:'sofia', partner:'Sofia Menendez', initials:'SM', avatarBg:'#0d9488', type:'operator', topic:'Pricing & GTM motion', when:'Thu, 11:00 AM PT', duration:'60 min', countdown:'3d', readiness:'Questions missing', readyColor:'#b45309', readyBg:'#fef3c7' },
+    ].map(u=>({ ...u, typeStyle:typeStyle[u.type], typeLabel:typeLabel[u.type], onOpen:()=>this.openDrawer(u.key), onJoin:(e)=>{e.stopPropagation();} }));
+
+    // directory + filter
+    const f=st.filter;
+    let list=all.slice();
+    if(f==='recommended') list=list.filter(p=>p.recommended).concat(all.filter(p=>!p.recommended));
+    else if(f!=='all') list=all.filter(p=>p.type===f);
+    const partners=list.map(p=>({ ...p, typeStyle:typeStyle[p.type], typeLabel:typeLabel[p.type],
+      onOpen:()=>this.openDrawer(p.key), onBookStop:(e)=>{e.stopPropagation();this.openBook(p.key);} }));
+    const filters=[['recommended','Recommended'],['investor','Investors'],['lawyer','Lawyers'],['operator','Operators'],['all','All']].map(([k,lab])=>({
+      label:lab, onClick:()=>this.setState({filter:k}),
+      style: f===k?'color:#fff;background:#0d9488;border:1px solid #0d9488':'color:#71717a;background:#fff;border:1px solid #e4e4e7' }));
+    const dirNote={ recommended:'Matched to your Week 3 context, scoring gaps, and open blockers.', investor:'Pre-seed and seed investors — book before and during your raise.', lawyer:'Formation and financing counsel — book before you sign.', operator:'Service partners for tactical execution — GTM, hiring, ops, product.', all:'Every partner in the Axal VC network.' }[f];
+
+    // history
+    const histDefs=[
+      { partner:'Sofia Menendez', type:'operator', date:'Jul 12', topic:'Customer discovery plan', summary:'Built a 15-interview plan and ICP screener. Recommended tightening segment to 50–200 employees.', outcomes:['Interview plan','ICP screener'] },
+      { partner:'Dana Osei', type:'lawyer', date:'Jul 9', topic:'Entity structure review', summary:'Confirmed Delaware C-Corp over LLC given fundraise intent. Flagged university IP assignment as a dependency.', outcomes:['Entity decision','IP checklist'] },
+      { partner:'Raj Patel', type:'investor', date:'Jul 4', topic:'Early narrative feedback', summary:'Narrative too feature-led. Reframe around the async-work wedge. Come back once traction is clearer.', outcomes:['Narrative notes'] },
+    ];
+    const q=st.historyQuery.toLowerCase();
+    const history=histDefs.filter(h=> !q || (h.partner+h.topic+h.summary).toLowerCase().includes(q))
+      .map(h=>({ ...h, typeStyle:typeStyle[h.type], typeLabel:typeLabel[h.type], onOpen:()=>{} }));
+
+    // pre-session brief
+    const brief={ status:'Partner prep sent', partner:'Dana Osei',
+      fields:[
+        { k:'Company', v:'NovaCraft AI — intelligent async layer for distributed teams' },
+        { k:'Sector · Week', v:'Workflow SaaS · Week 3, Validate & Team' },
+        { k:'Thesis', v:'Distributed teams lose hours to fragmented async work; consolidation is the wedge.' },
+        { k:'Active blockers', v:'Incorporation not started; co-founder decision pending; 83(b) window approaching.' },
+        { k:'Scoring', v:'Team 72 · Legal 40 (weakest) · Market 78' },
+      ],
+      questions:['C-Corp vs PBC given our mission framing?','83(b) timing if we incorporate next week?','How does a pending co-founder decision affect formation?'] };
+
+    // action items
+    const items=[
+      { id:'a1', title:'File 83(b) within 30-day window', linkedTool:'Section 83(b)', owner:'You', due:'Due Jul 30' },
+      { id:'a2', title:'Confirm Delaware C-Corp in Incorporate', linkedTool:'Incorporate', owner:'You', due:'Done Jul 20' },
+      { id:'a3', title:'Draft pricing tiers from GTM session', linkedTool:'Use of Funds', owner:'You', due:'Due Jul 24' },
+    ];
+    const actionItems=items.map(a=>{ const done=!!st.doneItems[a.id]; return { ...a,
+      onToggle:()=>this.setState(s=>({doneItems:{...s.doneItems,[a.id]:!s.doneItems[a.id]}})),
+      check: done?'✓':'', boxStyle: done?'background:#16a34a;color:#fff;border:none':'background:#fff;border:1.5px solid #d4d4d8;color:transparent',
+      titleColor: done?'#a1a1aa':'#27272a', strike: done?'text-decoration:line-through':'' }; });
+
+    const feeds=[
+      { tool:'Advisors', via:'operator matches & value-add', dot:'#0d9488' },
+      { tool:'Capital', via:'investor intros & narrative', dot:'#2563eb' },
+      { tool:'Incorporate', via:'legal formation plan', dot:'#f59e0b' },
+    ];
+
+    // drawer / booking
+    const sel0=byKey[st.selKey]||all[0];
+    const objectivePills=['Fundraising','Incorporation','Customer validation','GTM & pricing','Hiring','Deck feedback'].map(l=>({label:l,onClick:()=>this.setState({bookObjective:l}),style:pill(st.bookObjective===l)}));
+    const lengthPills=['30 min','60 min'].map(l=>({label:l,onClick:()=>this.setState({bookLength:l}),style:pill(st.bookLength===l)}));
+    const slotPills=['Tomorrow AM','Thu PM','Fri AM'].map(l=>({label:l,onClick:()=>this.setState({bookSlot:l}),style:pill(st.bookSlot===l)}));
+    const readinessWarn = st.drawerOpen && (!st.bookObjective || !st.bookOutcome);
+
+    return {
+      embeddedClass: this.props.embedded ? 'oh-embedded' : '',
+      summary, recommendations, upcoming, partners, filters, dirNote,
+      historyQuery:st.historyQuery, setHistoryQuery:(e)=>this.setState({historyQuery:e.target.value}), history, historyEmpty:history.length===0,
+      brief, actionItems, feeds,
+      drawerOpen:st.drawerOpen, sel:sel0, closeDrawer:()=>this.setState({drawerOpen:false,bookedToast:false}),
+      objectivePills, lengthPills, slotPills,
+      bookOutcome:st.bookOutcome, setBookOutcome:(e)=>this.setState({bookOutcome:e.target.value}),
+      readinessWarn, bookedToast:st.bookedToast, confirmBook:()=>{ this.setState({bookedToast:true}); },
+      stop:(e)=>e.stopPropagation(),
+      back:(e)=>{e.preventDefault();try{window.parent&&window.parent.postMessage({type:'oh-back'},'*');}catch(x){}},
+    };
+  }
+  openDrawer(key){ this.setState({drawerOpen:true, selKey:key, bookedToast:false}); }
+  openBook(key){ this.setState({drawerOpen:true, selKey:key, bookedToast:false}); }
+}
+</script>
+</body>
+</html>

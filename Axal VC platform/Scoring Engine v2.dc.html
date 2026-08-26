@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .sc-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .sc-page{background:#f8f8fa;color:#18181b}
+    .sc-surface{background:#ffffff}
+    .sc-sunken{background:#faf9fc}
+    .sc-border{border-color:#e8e6ee}
+    .sc-bd-b{border-bottom-color:#e8e6ee}
+    .sc-bd-t{border-top-color:#e8e6ee}
+    .sc-bd-l{border-left-color:#e8e6ee}
+    .sc-text{color:#18181b}
+    .sc-muted{color:#6b6577}
+    .sc-strong{color:#3f3f46}
+    .sc-field{background:#faf9fc;border-color:#e8e6ee;color:#18181b}
+    .sc-track{background:#eceaf2}
+
+    .sc-page.sc-dark{background:#0b0a0f;color:#ececf1}
+    .sc-dark .sc-surface{background:#17161d}
+    .sc-dark .sc-sunken{background:#1d1b25}
+    .sc-dark .sc-border{border-color:#2a2833}
+    .sc-dark .sc-bd-b{border-bottom-color:#2a2833}
+    .sc-dark .sc-bd-t{border-top-color:#2a2833}
+    .sc-dark .sc-bd-l{border-left-color:#2a2833}
+    .sc-dark .sc-text{color:#ececf1}
+    .sc-dark .sc-muted{color:#a5a0b2}
+    .sc-dark .sc-strong{color:#dcd9e4}
+    .sc-dark .sc-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+    .sc-dark .sc-track{background:#26232f}
+
+    .sc-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .sc-btn:hover{filter:brightness(1.05)}
+    .sc-tab{cursor:pointer;transition:color .13s,border-color .13s}
+    .sc-seg{cursor:pointer;transition:background .13s,color .13s}
+    .sc-row{transition:background .12s}
+    .sc-row:hover{background:#faf9fc}
+    .sc-dark .sc-row:hover{background:#1d1b25}
+    .sc-th{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .sc-fade{animation:scFade .2s ease}
+    @keyframes scFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:99px;outline:none;cursor:pointer}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:#7c3aed;border:2.5px solid #fff;box-shadow:0 1px 3px rgba(11,10,15,.28);cursor:pointer}
+    .sc-dark input[type=range]::-webkit-slider-thumb{border-color:#17161d}
+    input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#7c3aed;border:2.5px solid #fff;cursor:pointer}
+    input,select{font-family:inherit;outline:none}
+    input:focus,select:focus{border-color:#7c3aed}
+    ::placeholder{color:#8b8798}
+    @media (max-width:1080px){.sc-2{grid-template-columns:1fr!important}.sc-3{grid-template-columns:1fr!important}.sc-4{grid-template-columns:1fr 1fr!important}.sc-wide{overflow-x:auto}}
+  </style>
+</helmet>
+
+<div class="sc-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="sc-surface sc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:30">
+    <div style="max-width:1340px;margin:0 auto;padding:14px 26px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0">
+          <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ gaugeIcon }}"></span>
+          </div>
+          <div style="min-width:0">
+            <div class="sc-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Scoring Engine</div>
+            <div class="sc-muted" style="font-size:11.5px;margin-top:1px">{{ chromeSub }}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:9px;padding-right:4px">
+            <div style="{{ coAvStyle }}">{{ co.initials }}</div>
+            <div style="min-width:0">
+              <div class="sc-strong" style="font-size:12.5px;font-weight:700">{{ co.name }}</div>
+              <div class="sc-muted" style="font-size:10.5px;margin-top:1px">{{ co.meta }}</div>
+            </div>
+          </div>
+          <div class="sc-btn sc-border sc-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+            {{ themeLabel }}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:22px;margin-top:14px;overflow-x:auto">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+          <div class="sc-tab" onClick="{{ t.go }}" style="{{ t.style }}">
+            <span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            <span>{{ t.label }}</span>
+            <sc-if value="{{ t.flag }}"><span style="{{ t.flagStyle }}">{{ t.flag }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1340px;margin:0 auto;padding:24px 26px 90px">
+
+    <!-- ============ 1 · CONFIGURATION ============ -->
+    <sc-if value="{{ tabConfig }}">
+    <div class="sc-fade">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="sc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Scorecard configuration</div>
+          <div class="sc-muted" style="font-size:13px;margin-top:5px;max-width:560px;line-height:1.6">Define the rubric your fund underwrites against. Weights must total 100% before a scorecard can be saved or run.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+          <div class="sc-btn sc-border sc-strong" onClick="{{ resetWeights }}" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent">Reset to preset</div>
+          <div class="sc-btn" onClick="{{ saveScorecard }}" style="{{ saveBtnStyle }}">{{ saveLabel }}</div>
+        </div>
+      </div>
+
+      <div class="sc-2" style="display:grid;grid-template-columns:1fr 340px;gap:18px;align-items:start">
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <!-- presets -->
+          <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px">
+            <div class="sc-muted sc-th">Stage preset</div>
+            <div class="sc-muted" style="font-size:12px;line-height:1.55;margin-top:6px;max-width:540px">Presets shift the rubric to what actually predicts at that stage. Pick one as a starting point, then adjust.</div>
+            <div class="sc-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px">
+              <sc-for list="{{ presets }}" as="p" hint-placeholder-count="3">
+                <div class="sc-btn" onClick="{{ p.go }}" style="{{ p.style }}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                    <div style="font-size:13px;font-weight:{{ p.weight }}">{{ p.name }}</div>
+                    <sc-if value="{{ p.on }}">
+                      <span style="width:14px;height:14px;display:flex;flex:none;color:#7c3aed" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                    </sc-if>
+                  </div>
+                  <div class="sc-muted" style="font-size:11px;line-height:1.5;margin-top:5px">{{ p.blurb }}</div>
+                  <div class="sc-muted sc-num" style="font-size:10px;margin-top:7px">{{ p.emphasis }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- weight editor -->
+          <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+            <div class="sc-sunken sc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div class="sc-muted sc-th">Criteria &amp; weights</div>
+              <div style="display:flex;align-items:center;gap:9px">
+                <div class="sc-num" style="font-size:12.5px;font-weight:800;color:{{ sumTone }}">{{ weightSum }}%</div>
+                <span style="{{ sumChip }}">{{ sumLabel }}</span>
+              </div>
+            </div>
+            <sc-for list="{{ criteria }}" as="c" hint-placeholder-count="5">
+              <div class="sc-bd-b" style="padding:15px 24px;border-bottom-width:1px;border-bottom-style:solid">
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                  <span style="{{ c.iconWrap }}">
+                    <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ c.icon }}"></span>
+                  </span>
+                  <div style="min-width:0;flex:1">
+                    <div class="sc-text" style="font-size:13.5px;font-weight:700">{{ c.name }}</div>
+                    <div class="sc-muted" style="font-size:11px;margin-top:2px">{{ c.desc }}</div>
+                  </div>
+                  <div class="sc-num" style="font-size:15px;font-weight:800;flex:none;width:52px;text-align:right;color:{{ c.wTone }}">{{ c.wLabel }}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;margin-top:11px">
+                  <input class="sc-track" type="range" min="0" max="50" step="5" value="{{ c.weight }}" onChange="{{ c.set }}" style="flex:1;min-width:0">
+                  <div class="sc-muted sc-num" style="font-size:10.5px;flex:none;width:96px;text-align:right">{{ c.delta }}</div>
+                </div>
+              </div>
+            </sc-for>
+            <div class="sc-sunken" style="padding:13px 24px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div class="sc-muted" style="font-size:11.5px">{{ sumHint }}</div>
+              <div class="sc-num sc-text" style="font-size:13px;font-weight:800">Total {{ weightSum }}%</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- saved scorecards -->
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+            <div class="sc-sunken sc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div class="sc-muted sc-th">Saved scorecards</div>
+              <div class="sc-muted sc-num" style="font-size:10.5px">{{ cardCount }}</div>
+            </div>
+            <sc-for list="{{ savedCards }}" as="s" hint-placeholder-count="4">
+              <div class="sc-row sc-bd-b" data-card="{{ s.k }}" onClick="{{ selectCard }}" style="padding:13px 18px;border-bottom-width:1px;border-bottom-style:solid;cursor:pointer;background:{{ s.selBg }}">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div class="sc-strong" style="font-size:12.5px;font-weight:700;min-width:0;flex:1">{{ s.name }}</div>
+                  <sc-if value="{{ s.active }}"><span style="{{ activeChip }}">In use</span></sc-if>
+                </div>
+                <div class="sc-muted sc-num" style="font-size:10.5px;margin-top:3px">{{ s.meta }}</div>
+                <div class="sc-muted" style="font-size:10.5px;margin-top:4px">{{ s.mix }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div class="sc-sunken sc-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:18px 20px;display:flex;gap:11px;align-items:flex-start">
+            <span class="sc-muted" style="width:15px;height:15px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ infoIcon }}"></span>
+            <div class="sc-muted" style="font-size:11.5px;line-height:1.6">Changing weights on a scorecard already in use does not restate historic runs. Past scores stay tied to the rubric version they were run against — visible in History.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============ 2 · SCORING ============ -->
+    <sc-if value="{{ tabScore }}">
+    <div class="sc-fade">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="sc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Scoring · {{ co.name }}</div>
+          <div class="sc-muted" style="font-size:13px;margin-top:5px">Run by {{ run.by }} · {{ run.when }} · {{ activeCardName }}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+          <div class="sc-btn sc-border sc-strong" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent">Re-run</div>
+          <div class="sc-btn" onClick="{{ goMemo }}" style="padding:9px 17px;border-radius:9px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700">Generate IC memo</div>
+        </div>
+      </div>
+
+      <!-- composite header -->
+      <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:24px 26px">
+        <div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">
+          <div style="flex:none;display:flex;align-items:center;gap:18px">
+            <div style="position:relative;width:96px;height:96px;flex:none">
+              <svg viewBox="0 0 100 100" style="width:100%;height:100%;transform:rotate(-90deg)">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="{{ ringTrack }}" stroke-width="9"></circle>
+                <circle cx="50" cy="50" r="42" fill="none" stroke="{{ ringTone }}" stroke-width="9" stroke-linecap="round" stroke-dasharray="{{ ringDash }}"></circle>
+              </svg>
+              <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                <div class="sc-num sc-text" style="font-size:29px;font-weight:700;letter-spacing:-.03em;line-height:1">{{ composite }}</div>
+                <div class="sc-muted sc-th" style="font-size:8.5px;margin-top:2px">of 100</div>
+              </div>
+            </div>
+            <div>
+              <div class="sc-muted sc-th">Weighted composite</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap">
+                <span style="{{ bandChip }}">{{ band }}</span>
+                <span style="{{ confChip }}">{{ conf.label }}</span>
+              </div>
+              <div class="sc-muted" style="font-size:11.5px;line-height:1.55;margin-top:8px;max-width:270px">{{ conf.note }}</div>
+            </div>
+          </div>
+
+          <div class="sc-bd-l" style="flex:1;min-width:280px;padding-left:26px;border-left-width:1px;border-left-style:solid">
+            <div class="sc-4" style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
+              <sc-for list="{{ scoreStats }}" as="s" hint-placeholder-count="3">
+                <div>
+                  <div class="sc-muted sc-th">{{ s.k }}</div>
+                  <div class="sc-num" style="font-size:18px;font-weight:700;letter-spacing:-.022em;margin-top:6px;color:{{ s.tone }}">{{ s.v }}</div>
+                  <div class="sc-muted" style="font-size:10.5px;margin-top:2px">{{ s.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- integrity flags -->
+        <div class="sc-bd-t" style="margin-top:20px;padding-top:18px;border-top-width:1px;border-top-style:solid">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:11px">
+            <div class="sc-muted sc-th">Integrity flags</div>
+            <div class="sc-muted" style="font-size:10.5px">Raised automatically from source-data behaviour</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ flags }}" as="f" hint-placeholder-count="3">
+              <div style="{{ f.wrapStyle }}">
+                <span style="width:14px;height:14px;display:flex;flex:none;margin-top:1px;color:{{ f.tone }}" dangerouslySetInnerHTML="{{ f.icon }}"></span>
+                <div style="min-width:0;flex:1">
+                  <div class="sc-strong" style="font-size:12px;font-weight:700">{{ f.title }}</div>
+                  <div class="sc-muted" style="font-size:11.5px;line-height:1.55;margin-top:2px">{{ f.body }}</div>
+                </div>
+                <span style="{{ f.chip }}">{{ f.severity }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <!-- criteria breakdown -->
+      <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:16px;overflow:hidden">
+        <div class="sc-sunken sc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div class="sc-muted sc-th">Criteria breakdown</div>
+          <div class="sc-muted" style="font-size:11px">Sub-score × weight = contribution</div>
+        </div>
+        <sc-for list="{{ scored }}" as="c" hint-placeholder-count="5">
+          <div class="sc-bd-b" style="padding:17px 24px;border-bottom-width:1px;border-bottom-style:solid">
+            <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+              <span style="{{ c.iconWrap }}">
+                <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ c.icon }}"></span>
+              </span>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                  <div class="sc-text" style="font-size:14px;font-weight:700">{{ c.name }}</div>
+                  <span style="{{ c.wChip }}">{{ c.wLabel }} weight</span>
+                  <sc-if value="{{ c.thin }}"><span style="{{ thinChip }}">Thin evidence</span></sc-if>
+                </div>
+                <div class="sc-muted" style="font-size:11.5px;line-height:1.6;margin-top:6px;max-width:640px">{{ c.evidence }}</div>
+                <div class="sc-muted sc-num" style="font-size:10.5px;margin-top:6px">{{ c.sources }}</div>
+              </div>
+              <div style="flex:none;text-align:right;min-width:132px">
+                <div style="display:flex;align-items:baseline;gap:6px;justify-content:flex-end">
+                  <div class="sc-num" style="font-size:21px;font-weight:700;letter-spacing:-.026em;color:{{ c.tone }}">{{ c.score }}</div>
+                  <div class="sc-muted sc-num" style="font-size:11px">/ 100</div>
+                </div>
+                <div class="sc-track" style="height:5px;border-radius:99px;overflow:hidden;margin-top:8px">
+                  <div style="{{ c.barStyle }}"></div>
+                </div>
+                <div class="sc-muted sc-num" style="font-size:10.5px;margin-top:6px">contributes {{ c.contrib }}</div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+        <div class="sc-sunken" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 24px;flex-wrap:wrap">
+          <div class="sc-text" style="font-size:12.5px;font-weight:800">Weighted composite</div>
+          <div style="display:flex;align-items:baseline;gap:7px">
+            <div class="sc-num sc-text" style="font-size:19px;font-weight:800;letter-spacing:-.026em">{{ composite }}</div>
+            <div class="sc-muted sc-num" style="font-size:11.5px">/ 100</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============ 3 · PANEL ============ -->
+    <sc-if value="{{ tabPanel }}">
+    <div class="sc-fade">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="sc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Panel scoring</div>
+          <div class="sc-muted" style="font-size:13px;margin-top:5px;max-width:580px;line-height:1.6">Four partners score independently, without seeing each other's marks. Where they diverge is the part worth discussing at IC.</div>
+        </div>
+        <div class="sc-sunken sc-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex:none">
+          <sc-for list="{{ panelStates }}" as="p" hint-placeholder-count="2">
+            <div class="sc-seg" onClick="{{ p.go }}" style="{{ p.style }}">{{ p.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- waiting banner -->
+      <sc-if value="{{ panelWaiting }}">
+        <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="width:38px;height:38px;border-radius:12px;background:rgba(180,83,9,.11);color:{{ ambTone }};display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ clockIcon }}"></span>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div class="sc-text" style="font-size:15px;font-weight:800;letter-spacing:-.016em">Waiting on 2 of 4 partners</div>
+            <div class="sc-muted" style="font-size:12.5px;line-height:1.6;margin-top:5px;max-width:560px">The panel score is provisional until all four have submitted. IC is scheduled for {{ icDate }} — outstanding marks are due 24 hours before.</div>
+          </div>
+          <div class="sc-btn sc-border sc-strong" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent;flex:none">Remind both</div>
+        </div>
+      </sc-if>
+
+      <div class="sc-2" style="display:grid;grid-template-columns:1fr 320px;gap:18px;align-items:start">
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <!-- matrix -->
+          <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+            <div class="sc-sunken sc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div class="sc-muted sc-th">Partner marks by criterion</div>
+              <div class="sc-muted" style="font-size:11px">{{ submittedNote }}</div>
+            </div>
+            <div class="sc-wide">
+              <div class="sc-sunken sc-bd-b" style="display:grid;grid-template-columns:1.5fr repeat(4,1fr) 1.05fr;border-bottom-width:1px;border-bottom-style:solid;min-width:800px">
+                <div class="sc-muted sc-th" style="padding:9px 20px">Criterion</div>
+                <sc-for list="{{ partnerHeads }}" as="h" hint-placeholder-count="4">
+                  <div style="padding:8px 10px;text-align:center">
+                    <div style="{{ h.avStyle }}">{{ h.initials }}</div>
+                    <div class="sc-muted" style="font-size:9.5px;font-weight:700;margin-top:4px">{{ h.short }}</div>
+                  </div>
+                </sc-for>
+                <div class="sc-muted sc-th" style="padding:9px 20px 9px 10px;text-align:right">Spread</div>
+              </div>
+              <sc-for list="{{ matrix }}" as="m" hint-placeholder-count="5">
+                <div class="sc-row sc-bd-b" style="display:grid;grid-template-columns:1.5fr repeat(4,1fr) 1.05fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:800px;background:{{ m.rowBg }}">
+                  <div style="padding:13px 20px;min-width:0;display:flex;align-items:center;gap:10px">
+                    <span style="width:14px;height:14px;display:flex;flex:none;color:{{ m.iconTone }}" dangerouslySetInnerHTML="{{ m.icon }}"></span>
+                    <div style="min-width:0">
+                      <div class="sc-strong" style="font-size:12.5px;font-weight:600">{{ m.name }}</div>
+                      <div class="sc-muted sc-num" style="font-size:10px;margin-top:1px">{{ m.wLabel }}</div>
+                    </div>
+                  </div>
+                  <sc-for list="{{ m.cells }}" as="c" hint-placeholder-count="4">
+                    <div style="padding:13px 10px;text-align:center">
+                      <sc-if value="{{ c.has }}">
+                        <div class="sc-num" style="font-size:14px;font-weight:700;color:{{ c.tone }}">{{ c.v }}</div>
+                      </sc-if>
+                      <sc-if value="{{ c.pending }}">
+                        <div class="sc-muted" style="font-size:13px">—</div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                  <div style="padding:13px 20px 13px 10px;text-align:right">
+                    <span style="{{ m.spreadChip }}">{{ m.spread }}</span>
+                  </div>
+                </div>
+              </sc-for>
+              <div class="sc-sunken" style="display:grid;grid-template-columns:1.5fr repeat(4,1fr) 1.05fr;align-items:center;min-width:800px">
+                <div class="sc-text" style="padding:14px 20px;font-size:12px;font-weight:800">Composite</div>
+                <sc-for list="{{ partnerComposites }}" as="p" hint-placeholder-count="4">
+                  <div style="padding:14px 10px;text-align:center">
+                    <sc-if value="{{ p.has }}">
+                      <div class="sc-num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;color:{{ p.tone }}">{{ p.v }}</div>
+                    </sc-if>
+                    <sc-if value="{{ p.pending }}">
+                      <span style="{{ pendChip }}">Pending</span>
+                    </sc-if>
+                  </div>
+                </sc-for>
+                <div style="padding:14px 20px 14px 10px;text-align:right">
+                  <div class="sc-num sc-text" style="font-size:16px;font-weight:800;letter-spacing:-.02em">{{ panelScore }}</div>
+                  <div class="sc-muted sc-th" style="margin-top:2px">Panel</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- divergence -->
+          <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+            <div class="sc-sunken sc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px">
+              <div class="sc-muted sc-th">Where the panel disagrees</div>
+            </div>
+            <sc-if value="{{ hasDivergence }}">
+            <sc-for list="{{ divergences }}" as="d" hint-placeholder-count="2">
+              <div class="sc-bd-b" style="padding:16px 20px;border-bottom-width:1px;border-bottom-style:solid">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                  <div class="sc-text" style="font-size:13.5px;font-weight:700">{{ d.name }}</div>
+                  <span style="{{ d.chip }}">{{ d.spread }} spread</span>
+                </div>
+                <div class="sc-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px">
+                  <div class="sc-sunken" style="border-radius:11px;padding:13px 15px">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div style="{{ d.lowAv }}">{{ d.lowInitials }}</div>
+                      <div class="sc-strong" style="font-size:11.5px;font-weight:700">{{ d.lowName }}</div>
+                      <div class="sc-num" style="margin-left:auto;font-size:14px;font-weight:800;color:{{ redTone }}">{{ d.low }}</div>
+                    </div>
+                    <div class="sc-muted" style="font-size:11.5px;line-height:1.55;margin-top:8px">{{ d.lowNote }}</div>
+                  </div>
+                  <div class="sc-sunken" style="border-radius:11px;padding:13px 15px">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div style="{{ d.highAv }}">{{ d.highInitials }}</div>
+                      <div class="sc-strong" style="font-size:11.5px;font-weight:700">{{ d.highName }}</div>
+                      <div class="sc-num" style="margin-left:auto;font-size:14px;font-weight:800;color:{{ grnTone }}">{{ d.high }}</div>
+                    </div>
+                    <div class="sc-muted" style="font-size:11.5px;line-height:1.55;margin-top:8px">{{ d.highNote }}</div>
+                  </div>
+                </div>
+                <div class="sc-muted" style="font-size:11.5px;line-height:1.6;margin-top:11px"><strong class="sc-strong" style="font-weight:700">To resolve:</strong> {{ d.resolve }}</div>
+              </div>
+            </sc-for>
+            </sc-if>
+            <sc-if value="{{ noDivergence }}">
+              <div style="padding:26px 20px;text-align:center">
+                <div class="sc-strong" style="font-size:12.5px;font-weight:700">Not enough marks to compare</div>
+                <div class="sc-muted" style="font-size:11.5px;line-height:1.55;margin-top:5px;max-width:400px;margin-left:auto;margin-right:auto">Divergence needs at least two submitted scorecards. It will populate as partners submit.</div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <!-- partner list -->
+        <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="sc-sunken sc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div class="sc-muted sc-th">Panel</div>
+            <div class="sc-muted sc-num" style="font-size:10.5px">{{ submittedCount }}</div>
+          </div>
+          <sc-for list="{{ panelList }}" as="p" hint-placeholder-count="4">
+            <div class="sc-bd-b" style="padding:14px 18px;border-bottom-width:1px;border-bottom-style:solid">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="{{ p.avStyle }}">{{ p.initials }}</div>
+                <div style="min-width:0;flex:1">
+                  <div class="sc-strong" style="font-size:12.5px;font-weight:700">{{ p.name }}</div>
+                  <div class="sc-muted" style="font-size:10.5px;margin-top:1px">{{ p.role }}</div>
+                </div>
+                <sc-if value="{{ p.has }}">
+                  <div class="sc-num" style="font-size:15px;font-weight:800;color:{{ p.tone }}">{{ p.score }}</div>
+                </sc-if>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:9px">
+                <span style="{{ p.chip }}">{{ p.status }}</span>
+                <div class="sc-muted sc-num" style="font-size:10px">{{ p.when }}</div>
+              </div>
+            </div>
+          </sc-for>
+          <div class="sc-sunken" style="padding:15px 18px">
+            <div class="sc-muted sc-th">Combined panel score</div>
+            <div style="display:flex;align-items:baseline;gap:7px;margin-top:7px">
+              <div class="sc-num sc-text" style="font-size:26px;font-weight:700;letter-spacing:-.03em">{{ panelScore }}</div>
+              <div class="sc-muted sc-num" style="font-size:12px">/ 100</div>
+            </div>
+            <div class="sc-muted" style="font-size:11px;line-height:1.55;margin-top:6px">{{ panelNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============ 4 · BENCHMARK ============ -->
+    <sc-if value="{{ tabBench }}">
+    <div class="sc-fade">
+      <div style="margin-bottom:18px">
+        <div class="sc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Benchmark context</div>
+        <div class="sc-muted" style="font-size:13px;margin-top:5px;max-width:580px;line-height:1.6">Where this composite sits against comparable companies scored on the platform. Cohort is matched on stage, sector, and quarter — not the whole database.</div>
+      </div>
+
+      <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:24px 26px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div style="min-width:0">
+            <div class="sc-muted sc-th">Percentile</div>
+            <div style="display:flex;align-items:baseline;gap:9px;margin-top:8px;flex-wrap:wrap">
+              <div class="sc-num sc-text" style="font-size:34px;font-weight:700;letter-spacing:-.035em">{{ bench.pctLabel }}</div>
+              <div class="sc-strong" style="font-size:14px;font-weight:600">percentile</div>
+            </div>
+            <div class="sc-muted" style="font-size:12.5px;line-height:1.6;margin-top:7px;max-width:420px">{{ bench.cohortLine }}</div>
+          </div>
+          <div style="flex:none;text-align:right">
+            <div class="sc-muted sc-th">Cohort size</div>
+            <div class="sc-num sc-text" style="font-size:20px;font-weight:700;margin-top:6px">{{ bench.n }}</div>
+            <div class="sc-muted" style="font-size:10.5px;margin-top:2px">companies</div>
+          </div>
+        </div>
+
+        <!-- percentile strip -->
+        <div style="margin-top:22px">
+          <div class="sc-track" style="position:relative;height:9px;border-radius:99px">
+            <div style="{{ bench.fillStyle }}"></div>
+            <div style="{{ bench.markStyle }}"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:7px">
+            <sc-for list="{{ bench.ticks }}" as="t" hint-placeholder-count="5">
+              <div class="sc-muted sc-num" style="font-size:9.5px">{{ t }}</div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- distribution -->
+        <div class="sc-bd-t" style="margin-top:22px;padding-top:20px;border-top-width:1px;border-top-style:solid">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+            <div class="sc-muted sc-th">Cohort distribution</div>
+            <div class="sc-muted" style="font-size:10.5px">Composite score, 5-point buckets</div>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:4px;height:74px">
+            <sc-for list="{{ bench.dist }}" as="d" hint-placeholder-count="12">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0">
+                <div class="sc-muted sc-num" style="font-size:9px;opacity:{{ d.labelOp }}">{{ d.n }}</div>
+                <div style="{{ d.barStyle }}"></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:4px;margin-top:6px">
+            <sc-for list="{{ bench.dist }}" as="d" hint-placeholder-count="12">
+              <div class="sc-muted sc-num" style="flex:1;font-size:8.5px;text-align:center;min-width:0;color:{{ d.tickTone }}">{{ d.tick }}</div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;margin-top:14px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:7px">
+              <span style="width:11px;height:11px;border-radius:3px;background:{{ violet }};flex:none"></span>
+              <div class="sc-muted" style="font-size:11px">{{ co.name }} · {{ composite }}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:7px">
+              <span class="sc-track" style="width:11px;height:11px;border-radius:3px;flex:none"></span>
+              <div class="sc-muted" style="font-size:11px">Cohort · median {{ bench.median }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- per-criterion vs cohort -->
+      <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:16px;overflow:hidden">
+        <div class="sc-sunken sc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 24px">
+          <div class="sc-muted sc-th">By criterion vs cohort median</div>
+        </div>
+        <sc-for list="{{ benchRows }}" as="b" hint-placeholder-count="5">
+          <div class="sc-bd-b" style="display:flex;align-items:center;gap:16px;padding:14px 24px;border-bottom-width:1px;border-bottom-style:solid;flex-wrap:wrap">
+            <div style="min-width:150px;flex:none">
+              <div class="sc-strong" style="font-size:12.5px;font-weight:600">{{ b.name }}</div>
+              <div class="sc-muted sc-num" style="font-size:10px;margin-top:1px">cohort median {{ b.median }}</div>
+            </div>
+            <div style="flex:1;min-width:180px;position:relative">
+              <div class="sc-track" style="height:6px;border-radius:99px;position:relative">
+                <div style="{{ b.barStyle }}"></div>
+                <div style="{{ b.medStyle }}"></div>
+              </div>
+            </div>
+            <div class="sc-num" style="flex:none;width:44px;text-align:right;font-size:13.5px;font-weight:700;color:{{ b.tone }}">{{ b.score }}</div>
+            <div class="sc-num" style="flex:none;width:56px;text-align:right;font-size:12px;font-weight:700;color:{{ b.deltaTone }}">{{ b.delta }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============ 5 · HISTORY ============ -->
+    <sc-if value="{{ tabHistory }}">
+    <div class="sc-fade">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="sc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">History &amp; audit</div>
+          <div class="sc-muted" style="font-size:13px;margin-top:5px;max-width:580px;line-height:1.6">Every run against this company, with the rubric version it used. Scores are never restated when a scorecard changes — trajectory stays honest.</div>
+        </div>
+        <div style="flex:none;text-align:right">
+          <div class="sc-muted sc-th">Trajectory</div>
+          <div style="display:flex;align-items:baseline;gap:7px;justify-content:flex-end;margin-top:5px">
+            <div class="sc-num" style="font-size:19px;font-weight:800;color:{{ trajTone }}">{{ trajectory }}</div>
+            <div class="sc-muted" style="font-size:11px">over {{ trajSpan }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 26px">
+        <div class="sc-muted sc-th" style="margin-bottom:16px">Score over time</div>
+        <div style="display:flex;align-items:flex-end;gap:0;height:120px">
+          <sc-for list="{{ trend }}" as="t" hint-placeholder-count="4">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0">
+              <div class="sc-num" style="font-size:13px;font-weight:800;color:{{ t.tone }}">{{ t.score }}</div>
+              <div style="{{ t.barStyle }}"></div>
+              <div class="sc-muted sc-num" style="font-size:9.5px;text-align:center">{{ t.date }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:16px;overflow:hidden">
+        <div class="sc-sunken sc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 24px">
+          <div class="sc-muted sc-th">Run log</div>
+        </div>
+        <sc-for list="{{ history }}" as="h" hint-placeholder-count="4">
+          <div class="sc-bd-b" style="display:flex;gap:0;border-bottom-width:1px;border-bottom-style:solid">
+            <div style="flex:none;width:46px;display:flex;flex-direction:column;align-items:center;padding-top:19px">
+              <div style="{{ h.dotStyle }}"></div>
+              <sc-if value="{{ h.line }}"><div class="sc-border" style="width:1.5px;flex:1;border-left-width:1.5px;border-left-style:solid"></div></sc-if>
+            </div>
+            <div style="flex:1;min-width:0;padding:16px 24px 18px 0">
+              <div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+                <div class="sc-num" style="font-size:19px;font-weight:800;letter-spacing:-.024em;color:{{ h.tone }}">{{ h.score }}</div>
+                <sc-if value="{{ h.deltaShow }}">
+                  <span style="{{ h.deltaChip }}">{{ h.delta }}</span>
+                </sc-if>
+                <span style="{{ h.bandChip }}">{{ h.band }}</span>
+                <sc-if value="{{ h.current }}"><span style="{{ activeChip }}">Current</span></sc-if>
+              </div>
+              <div class="sc-strong" style="font-size:12.5px;font-weight:600;margin-top:7px">{{ h.label }}</div>
+              <div class="sc-muted sc-num" style="font-size:11px;margin-top:4px">{{ h.meta }}</div>
+              <div class="sc-muted" style="font-size:11.5px;line-height:1.6;margin-top:8px;max-width:640px">{{ h.note }}</div>
+              <sc-if value="{{ h.hasFlag }}">
+                <div style="{{ h.flagWrap }}">
+                  <span style="width:12px;height:12px;display:flex;flex:none;margin-top:1px;color:{{ h.flagTone }}" dangerouslySetInnerHTML="{{ alertIcon }}"></span>
+                  <div class="sc-muted" style="font-size:11px;line-height:1.5">{{ h.flagNote }}</div>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============ 6 · IC MEMO ============ -->
+    <sc-if value="{{ tabMemo }}">
+    <div class="sc-fade">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="sc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">IC memo</div>
+          <div class="sc-muted" style="font-size:13px;margin-top:5px;max-width:560px;line-height:1.6">One page, generated from this scoring run. Nothing here is typed by hand — it is the score, the divergence, the benchmark, and the evidence behind them.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+          <div class="sc-btn sc-border sc-strong" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:7px">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ linkIcon }}"></span>
+            Copy link
+          </div>
+          <div class="sc-btn" style="padding:9px 17px;border-radius:9px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px">
+            <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ downloadIcon }}"></span>
+            Export PDF
+          </div>
+        </div>
+      </div>
+
+      <div class="sc-surface sc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="sc-sunken sc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:22px 30px;display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+          <div style="display:flex;gap:14px;min-width:0">
+            <div style="{{ coAvStyleLg }}">{{ co.initials }}</div>
+            <div style="min-width:0">
+              <div class="sc-muted sc-th">Investment committee memo</div>
+              <div class="sc-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em;margin-top:5px">{{ co.name }}</div>
+              <div class="sc-muted" style="font-size:12px;margin-top:3px">{{ co.memoLine }}</div>
+            </div>
+          </div>
+          <div style="text-align:right;flex:none">
+            <div class="sc-muted sc-th">Prepared</div>
+            <div class="sc-num sc-strong" style="font-size:12.5px;font-weight:600;margin-top:5px">{{ memo.prepared }}</div>
+            <div class="sc-muted sc-num" style="font-size:11px;margin-top:2px">{{ memo.ref }}</div>
+          </div>
+        </div>
+
+        <div style="padding:26px 30px">
+          <!-- headline row -->
+          <div class="sc-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px">
+            <sc-for list="{{ memo.headline }}" as="h" hint-placeholder-count="4">
+              <div>
+                <div class="sc-muted sc-th">{{ h.k }}</div>
+                <div class="sc-num" style="font-size:23px;font-weight:700;letter-spacing:-.03em;margin-top:6px;color:{{ h.tone }}">{{ h.v }}</div>
+                <div class="sc-muted" style="font-size:10.5px;margin-top:3px;line-height:1.45">{{ h.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- recommendation -->
+          <div class="sc-sunken sc-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:16px 20px;margin-top:22px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="{{ memo.recChip }}">{{ memo.rec }}</span>
+              <div class="sc-strong" style="font-size:12.5px;font-weight:700">{{ memo.recLine }}</div>
+            </div>
+            <div class="sc-muted" style="font-size:12px;line-height:1.65;margin-top:9px">{{ memo.recBody }}</div>
+          </div>
+
+          <!-- score breakdown -->
+          <div class="sc-bd-t" style="margin-top:22px;padding-top:20px;border-top-width:1px;border-top-style:solid">
+            <div class="sc-muted sc-th" style="margin-bottom:12px">Score breakdown</div>
+            <sc-for list="{{ memo.breakdown }}" as="b" hint-placeholder-count="5">
+              <div class="sc-bd-b" style="display:flex;align-items:center;gap:14px;padding:9px 0;border-bottom-width:1px;border-bottom-style:solid;flex-wrap:wrap">
+                <div class="sc-strong" style="font-size:12px;font-weight:600;min-width:130px;flex:none">{{ b.name }}</div>
+                <div class="sc-muted sc-num" style="font-size:11px;flex:none;width:44px">{{ b.wLabel }}</div>
+                <div style="flex:1;min-width:120px">
+                  <div class="sc-track" style="height:5px;border-radius:99px">
+                    <div style="{{ b.barStyle }}"></div>
+                  </div>
+                </div>
+                <div class="sc-num" style="flex:none;width:36px;text-align:right;font-size:12.5px;font-weight:700;color:{{ b.tone }}">{{ b.score }}</div>
+                <div class="sc-muted sc-num" style="flex:none;width:52px;text-align:right;font-size:11px">{{ b.contrib }}</div>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0 0">
+              <div class="sc-text" style="font-size:12px;font-weight:800">Weighted composite</div>
+              <div class="sc-num sc-text" style="font-size:15px;font-weight:800">{{ composite }}</div>
+            </div>
+          </div>
+
+          <!-- divergence + benchmark -->
+          <div class="sc-2 sc-bd-t" style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:20px;padding-top:20px;border-top-width:1px;border-top-style:solid">
+            <div>
+              <div class="sc-muted sc-th" style="margin-bottom:11px">Panel divergence</div>
+              <sc-for list="{{ memo.diverge }}" as="d" hint-placeholder-count="2">
+                <div class="sc-bd-b" style="padding:9px 0;border-bottom-width:1px;border-bottom-style:solid">
+                  <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                    <div class="sc-strong" style="font-size:12px;font-weight:600;min-width:0;flex:1">{{ d.name }}</div>
+                    <span style="{{ d.chip }}">{{ d.range }}</span>
+                  </div>
+                  <div class="sc-muted" style="font-size:11px;line-height:1.55;margin-top:5px">{{ d.note }}</div>
+                </div>
+              </sc-for>
+              <div class="sc-muted" style="font-size:11px;line-height:1.55;margin-top:10px">{{ memo.divergeNote }}</div>
+            </div>
+            <div>
+              <div class="sc-muted sc-th" style="margin-bottom:11px">Benchmark</div>
+              <div style="display:flex;align-items:baseline;gap:8px">
+                <div class="sc-num sc-text" style="font-size:23px;font-weight:700;letter-spacing:-.028em">{{ bench.pctLabel }}</div>
+                <div class="sc-strong" style="font-size:12px;font-weight:600">percentile</div>
+              </div>
+              <div class="sc-muted" style="font-size:11.5px;line-height:1.6;margin-top:6px">{{ bench.cohortLine }}</div>
+              <div style="display:flex;flex-direction:column;gap:0;margin-top:12px">
+                <sc-for list="{{ memo.benchRows }}" as="b" hint-placeholder-count="3">
+                  <div class="sc-bd-b" style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom-width:1px;border-bottom-style:solid">
+                    <div class="sc-muted" style="font-size:11.5px">{{ b.k }}</div>
+                    <div class="sc-num sc-strong" style="font-size:11.5px;font-weight:600">{{ b.v }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <!-- key evidence -->
+          <div class="sc-bd-t" style="margin-top:20px;padding-top:20px;border-top-width:1px;border-top-style:solid">
+            <div class="sc-muted sc-th" style="margin-bottom:11px">Key evidence</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ memo.evidence }}" as="e" hint-placeholder-count="4">
+                <div style="display:flex;gap:11px;align-items:flex-start">
+                  <span style="width:13px;height:13px;display:flex;flex:none;margin-top:2px;color:{{ e.tone }}" dangerouslySetInnerHTML="{{ e.icon }}"></span>
+                  <div class="sc-strong" style="font-size:12px;line-height:1.6;min-width:0">{{ e.text }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- integrity + footer -->
+          <div class="sc-bd-t" style="margin-top:20px;padding-top:16px;border-top-width:1px;border-top-style:solid;display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <span style="width:14px;height:14px;display:flex;flex:none;margin-top:1px;color:{{ ambTone }}" dangerouslySetInnerHTML="{{ alertIcon }}"></span>
+            <div class="sc-muted" style="font-size:11.5px;line-height:1.6;min-width:0;flex:1">{{ memo.integrityNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1340}}">
+class Component extends DCLogic {
+  state = { theme:'light', tab:'score', preset:'seed', card:'seed',
+    weights:null, panelFull:false, saved:false };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+    const GRN = dark ? '#6ee7b7' : '#116632';
+    const AMB = dark ? '#fcd34d' : '#92400e';
+    const RED = dark ? '#fca5a5' : '#b91c1c';
+    const INK = dark ? '#ececf1' : '#18181b';
+    const MUT = dark ? '#a5a0b2' : '#6b6577';
+
+    const I = {
+      gauge: this.ic('<path d="M12 14a2 2 0 1 0 2-2"/><path d="M3.5 18a10 10 0 1 1 17 0"/><path d="m13.5 12.5 4-4"/>'),
+      sliders: this.ic('<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="7" cy="18" r="2"/>'),
+      users: this.ic('<path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.4"/><path d="M22 20v-2a4 4 0 0 0-3-3.8"/>'),
+      chart: this.ic('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>'),
+      clock: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
+      doc: this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      check: this.ic('<path d="M20 6 9 17l-5-5"/>', 2.4),
+      alert: this.ic('<path d="M12 3 2 20h20L12 3z"/><path d="M12 9v5M12 17h.01"/>'),
+      shield: this.ic('<path d="M12 3 4 6v6c0 4.5 3.2 8.5 8 9.6 4.8-1.1 8-5.1 8-9.6V6z"/><path d="m9 12 2 2 4-4"/>'),
+      info: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
+      down: this.ic('<path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/>'),
+      link: this.ic('<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>'),
+      team: this.ic('<path d="M17 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.4"/>'),
+      globe: this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/>'),
+      box: this.ic('<path d="m12 3 9 5v8l-9 5-9-5V8z"/><path d="M3 8l9 5 9-5M12 13v10"/>'),
+      trend: this.ic('<path d="M3 17 9 11l4 4 8-8"/><path d="M14 7h7v7"/>'),
+      scale: this.ic('<path d="M12 3v18M5 7h14"/><path d="m5 7-2.5 6h5zM19 7l-2.5 6h5z"/>'),
+      sun: this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon: this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const cGreen = chip('rgba(17,102,50,.1)', GRN);
+    const cAmber = chip('rgba(180,83,9,.1)', AMB);
+    const cRed = chip('rgba(185,28,28,.09)', RED);
+    const cViolet = chip('rgba(124,58,237,.1)', dark ? '#c4b5fd' : V7);
+    const cGrey = chip(dark ? '#2a2833' : '#f1f0f5', MUT);
+    const av = (bg, sz) => 'width:'+(sz||28)+'px;height:'+(sz||28)+'px;border-radius:9px;background:'+bg+';color:#fff;font-size:'+(sz>=44?'15px':sz===22?'9px':'10.5px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;margin:0 auto';
+    const iconWrap = (c) => 'width:30px;height:30px;border-radius:9px;background:'+c+'1c;color:'+c+';display:flex;align-items:center;justify-content:center;flex:none';
+    const seg = (on) => 'padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? (dark ? '#c4b5fd' : V7) : MUT)
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none');
+    const toneOf = (s) => s >= 70 ? GRN : s >= 50 ? AMB : RED;
+    // Proper ordinal — "83th" is not a word.
+    const ord = (n) => { const r = n % 100; if (r >= 11 && r <= 13) return n + 'th';
+      return n + (['th','st','nd','rd'][n % 10] || 'th'); };
+
+    // ============ COMPANY ============
+    const co = { name:'Thornlie Systems', initials:'TS', bg:'#7c3aed',
+      meta:'Seed · B2B infrastructure · Sydney',
+      memoLine:'Seed · B2B data infrastructure · Sydney, AU · $2.5M raising at $14M post' };
+
+    // ============ CRITERIA + WEIGHTS ============
+    const CRIT = [
+      { k:'team', name:'Team', color:'#7c3aed', icon:I.team, desc:'Founder-market fit, prior operating history, completeness' },
+      { k:'market', name:'Market', color:'#1d4ed8', icon:I.globe, desc:'Size, growth, timing, and structural tailwind' },
+      { k:'product', name:'Product', color:'#0f766e', icon:I.box, desc:'Differentiation, defensibility, technical depth' },
+      { k:'traction', name:'Traction', color:'#b45309', icon:I.trend, desc:'Revenue, retention, pipeline quality, efficiency' },
+      { k:'terms', name:'Deal Terms', color:'#be185d', icon:I.scale, desc:'Entry price, structure, ownership, follow-on room' },
+    ];
+
+    const PRESETS = {
+      preseed: { name:'Pre-Seed', blurb:'Nothing to measure yet — underwrite the people and the insight.',
+        w:{ team:40, market:25, product:20, traction:5, terms:10 }, emphasis:'Team 40% · Traction 5%' },
+      seed: { name:'Seed', blurb:'Early signal exists, but team and market still carry the decision.',
+        w:{ team:30, market:25, product:20, traction:15, terms:10 }, emphasis:'Team 30% · Traction 15%' },
+      seriesb: { name:'Series B', blurb:'The numbers are the argument — efficiency over narrative.',
+        w:{ team:15, market:15, product:20, traction:40, terms:10 }, emphasis:'Traction 40% · Team 15%' },
+    };
+    const presetW = PRESETS[st.preset].w;
+    const W = st.weights || presetW;
+    const weightSumN = CRIT.reduce((a,c) => a + (W[c.k] || 0), 0);
+    const sumOk = weightSumN === 100;
+
+    const presets = Object.keys(PRESETS).map(k => {
+      const p = PRESETS[k], on = st.preset === k;
+      return { name:p.name, blurb:p.blurb, emphasis:p.emphasis, on, weight: on ? '800' : '700',
+        go: () => this.setState({ preset:k, weights:null, saved:false }),
+        style:'text-align:left;padding:14px 16px;border-radius:12px;border-width:1px;border-style:solid;'
+          + 'border-color:'+(on ? V : (dark ? '#2a2833' : '#e8e6ee'))
+          + ';background:'+(on ? 'rgba(124,58,237,.05)' : 'transparent')
+          + ';color:'+(on ? (dark ? '#c4b5fd' : V7) : INK) };
+    });
+
+    const criteria = CRIT.map(c => {
+      const w = W[c.k] || 0, base = presetW[c.k] || 0, d = w - base;
+      return { name:c.name, desc:c.desc, icon:c.icon, iconWrap: iconWrap(c.color),
+        weight: String(w), wLabel: w + '%',
+        wTone: w === 0 ? MUT : INK,
+        delta: d === 0 ? 'at preset' : (d > 0 ? '+' : '') + d + '% vs preset',
+        set: (e) => {
+          const v = parseInt(e.target.value, 10);
+          this.setState(s => {
+            const cur = s.weights || presetW;
+            return { weights: Object.assign({}, cur, { [c.k]: v }), saved:false };
+          });
+        } };
+    });
+
+    const SAVED = [
+      { k:'seed', name:'Seed — B2B default', meta:'v4 · updated Jul 2026 · 38 runs', mix:'Team 30 · Market 25 · Product 20 · Traction 15 · Terms 10', active:true },
+      { k:'preseed', name:'Pre-Seed — conviction', meta:'v2 · updated Mar 2026 · 61 runs', mix:'Team 40 · Market 25 · Product 20 · Traction 5 · Terms 10' },
+      { k:'growth', name:'Series B — efficiency', meta:'v1 · updated Feb 2026 · 9 runs', mix:'Traction 40 · Product 20 · Team 15 · Market 15 · Terms 10' },
+      { k:'deep', name:'Deeptech — IP weighted', meta:'v3 · updated Jun 2026 · 14 runs', mix:'Product 35 · Team 30 · Market 20 · Terms 10 · Traction 5' },
+    ];
+    const savedCards = SAVED.map(s => Object.assign({}, s, {
+      active: !!s.active,
+      selBg: st.card === s.k ? (dark ? '#241f38' : '#f6f3fe') : 'transparent',
+      go: () => this.setState({ card:s.k }),
+    }));
+    const activeCardName = 'Seed — B2B default · v4';
+
+    // ============ SCORES ============
+    const SUB = { team:82, market:71, product:68, traction:54, terms:76 };
+    const compositeN = CRIT.reduce((a,c) => a + SUB[c.k] * (W[c.k] || 0), 0) / (weightSumN || 1);
+    const composite = compositeN.toFixed(1);
+    const bandOf = (s) => s >= 75 ? 'Strong' : s >= 65 ? 'Above bar' : s >= 50 ? 'At bar' : 'Below bar';
+    const band = bandOf(compositeN);
+
+    // Cohort distribution lives here (not in the Benchmark block) so percentile has ONE source
+    // that the Scoring stat strip, Benchmark tab, and IC memo all read from.
+    const DIST_SRC = [
+      { lo:30, n:2 }, { lo:35, n:4 }, { lo:40, n:6 }, { lo:45, n:9 }, { lo:50, n:13 },
+      { lo:55, n:16 }, { lo:60, n:14 }, { lo:65, n:15 }, { lo:70, n:12 }, { lo:75, n:8 },
+      { lo:80, n:5 }, { lo:85, n:3 },
+    ];
+    const cohortN = DIST_SRC.reduce((a,d) => a + d.n, 0);
+    const belowN = DIST_SRC.filter(d => d.lo + 5 <= compositeN).reduce((a,d) => a + d.n, 0);
+    const pctN = Math.round(belowN / cohortN * 100);
+
+    const EVID = {
+      team: { text:'Two-time founder; prior company acquired by Atlassian 2023. CTO built the ingest layer at Canva through 40× volume growth. No commercial hire yet — GTM sits with the CEO.',
+        sources:'6 sources · 3 reference calls · 2 prior-investor conversations', thin:false },
+      market: { text:'Data-infrastructure spend in APAC growing 24% CAGR off a small base. Structural tailwind from data-residency rules taking effect Jan 2027. Buyer is a platform team, budget already exists.',
+        sources:'4 sources · Gartner 2026 · 2 customer interviews', thin:false },
+      product: { text:'Ingest pipeline is genuinely fast — benchmarked 3.1× the incumbent on the customer\u2019s own workload. Defensibility is operational rather than IP-based; no patents filed.',
+        sources:'5 sources · technical review · 1 design-partner test', thin:false },
+      traction: { text:'$18k MRR across 4 paying customers, up from $11k in March. One customer is 44% of revenue. Two of four are on annual contracts; retention history too short to read.',
+        sources:'2 sources · Stripe export · founder-reported pipeline', thin:true },
+      terms: { text:'$2.5M at $14M post gives 17.9% for a $2.5M check with pro-rata. Clean cap table, no prior SAFEs outstanding. Entry price is at the cohort median for the stage.',
+        sources:'3 sources · cap table · term sheet draft', thin:false },
+    };
+
+    const scored = CRIT.map(c => {
+      const s = SUB[c.k], w = W[c.k] || 0;
+      return { name:c.name, icon:c.icon, iconWrap: iconWrap(c.color),
+        score: String(s), tone: toneOf(s),
+        wLabel: w + '%', wChip: cGrey,
+        evidence: EVID[c.k].text, sources: EVID[c.k].sources, thin: EVID[c.k].thin,
+        barStyle:'height:100%;width:'+s+'%;border-radius:99px;background:'+toneOf(s),
+        contrib: (s * w / 100).toFixed(1) + ' pts' };
+    });
+
+    const conf = { label:'Medium confidence', note:'Traction rests on two sources, one of them founder-reported. Everything else is source-backed.' };
+
+    const scoreStats = [
+      { k:'Criteria scored', v:'5 of 5', note:'All rubric lines populated', tone:INK },
+      { k:'Evidence sources', v:'20', note:'3 flagged thin', tone:INK },
+      { k:'Percentile', v: ord(pctN), note:'Seed B2B, this quarter', tone:V7 },
+    ];
+
+    const FLAGS = [
+      { title:'Metric revised after scoring began', severity:'Review', tone:AMB, chip:cAmber, icon:I.alert,
+        body:'MRR was restated from $14k to $18k on Aug 9, two days after the traction sub-score was entered. The revision is supported by the Stripe export, but the sub-score has not been re-run against it.' },
+      { title:'Single-source concentration', severity:'Review', tone:AMB, chip:cAmber, icon:I.alert,
+        body:'Traction relies on two sources, one founder-reported. Below the three-source threshold this rubric sets for a weighted criterion.' },
+      { title:'No self-scoring detected', severity:'Clear', tone:GRN, chip:cGreen, icon:I.shield,
+        body:'No partner scored a deal they sourced. All four panel members are independent of origination on this company.' },
+    ];
+    const flags = FLAGS.map(f => Object.assign({}, f, {
+      wrapStyle:'display:flex;gap:11px;align-items:flex-start;padding:12px 15px;border-radius:11px;background:'
+        + (f.severity === 'Clear' ? 'rgba(17,102,50,.05)' : 'rgba(180,83,9,.06)')
+        + ';border:1px solid ' + (f.severity === 'Clear' ? 'rgba(17,102,50,.16)' : 'rgba(180,83,9,.18)'),
+    }));
+
+    // ============ PANEL ============
+    const PARTNERS = [
+      { k:'gl', name:'Guillaume Lauzier', short:'GL', initials:'GL', bg:'#7c3aed', role:'General Partner',
+        marks:{ team:84, market:74, product:70, traction:58, terms:78 }, when:'Aug 10, 09:14' },
+      { k:'hk', name:'Hana Kaur', short:'HK', initials:'HK', bg:'#0f766e', role:'Partner · Platform',
+        marks:{ team:80, market:68, product:66, traction:41, terms:74 }, when:'Aug 10, 16:40' },
+      { k:'lz', name:'Lin Zhang', short:'LZ', initials:'LZ', bg:'#b45309', role:'Partner · Technical',
+        marks:{ team:78, market:70, product:81, traction:52, terms:72 }, when:'Aug 12, 11:05' },
+      { k:'dr', name:'David Reyes', short:'DR', initials:'DR', bg:'#1d4ed8', role:'Venture Partner',
+        marks:{ team:86, market:79, product:64, traction:66, terms:80 }, when:'Aug 12, 14:22' },
+    ];
+    const submittedN = st.panelFull ? 4 : 2;
+    const submitted = PARTNERS.slice(0, submittedN);
+    const panelWaiting = submittedN < 4;
+
+    const panelStates = [
+      { l:'Waiting on 2', on: !st.panelFull, go: () => this.setState({ panelFull:false }) },
+      { l:'All 4 in', on: st.panelFull, go: () => this.setState({ panelFull:true }) },
+    ].map(p => ({ label:p.l, style: seg(p.on), go:p.go }));
+
+    const partnerHeads = PARTNERS.map((p,i) => ({
+      initials:p.initials, short:p.short, avStyle: av(p.bg, 22) + (i >= submittedN ? ';opacity:.4' : ''),
+    }));
+
+    const compOf = (marks) => CRIT.reduce((a,c) => a + marks[c.k] * (W[c.k] || 0), 0) / (weightSumN || 1);
+
+    const matrix = CRIT.map(c => {
+      const vals = submitted.map(p => p.marks[c.k]);
+      const spread = vals.length > 1 ? Math.max.apply(null, vals) - Math.min.apply(null, vals) : 0;
+      const hot = spread >= 15;
+      return {
+        name:c.name, icon:c.icon, iconTone:c.color, wLabel: (W[c.k] || 0) + '%',
+        rowBg: hot ? (dark ? 'rgba(185,28,28,.06)' : 'rgba(185,28,28,.035)') : 'transparent',
+        cells: PARTNERS.map((p,i) => ({
+          has: i < submittedN, pending: i >= submittedN,
+          v: String(p.marks[c.k]), tone: toneOf(p.marks[c.k]),
+        })),
+        spread: spread + ' pts',
+        spreadChip: hot ? cRed : spread >= 8 ? cAmber : cGrey,
+      };
+    });
+
+    const partnerComposites = PARTNERS.map((p,i) => ({
+      has: i < submittedN, pending: i >= submittedN,
+      v: compOf(p.marks).toFixed(1), tone: toneOf(compOf(p.marks)),
+    }));
+    const panelScoreN = submitted.reduce((a,p) => a + compOf(p.marks), 0) / (submitted.length || 1);
+    const panelScore = panelScoreN.toFixed(1);
+
+    const panelList = PARTNERS.map((p,i) => {
+      const has = i < submittedN;
+      return { name:p.name, role:p.role, initials:p.initials, avStyle: av(p.bg) + (has ? '' : ';opacity:.5'),
+        has, score: compOf(p.marks).toFixed(1), tone: toneOf(compOf(p.marks)),
+        status: has ? 'Submitted' : 'Not yet scored',
+        chip: has ? cGreen : cAmber,
+        when: has ? p.when : 'reminder sent Aug 12' };
+    });
+
+    const DIVERGE = [
+      { k:'traction', lowK:'hk', highK:'gl',
+        lowNote:'Reads the 44% concentration as the whole story — one churn event takes revenue back below March.',
+        highNote:'Weights the growth rate and annual contracts; treats concentration as normal at 4 customers.',
+        resolve:'Pull the two annual contracts and check renewal dates against the concentration risk. If both renew past the raise, Hana\u2019s downside case weakens materially.' },
+      { k:'market', lowK:'hk', highK:'gl',
+        lowNote:'Treats the APAC base as too small to matter until it compounds another two years.',
+        highNote:'Prices in the Jan 2027 residency deadline as a dated, budgeted buying trigger.',
+        resolve:'Size the segment actually subject to the residency rule, rather than the whole APAC market.' },
+      { k:'product', lowK:'hk', highK:'lz',
+        lowNote:'No patents, no data moat — sees the speed advantage as replicable within two quarters.',
+        highNote:'Ran the benchmark himself; considers the ingest architecture non-trivial to copy.',
+        resolve:'Lin to write up the architecture review for the panel so the defensibility claim is assessable rather than asserted.' },
+    ];
+    const divergences = DIVERGE.filter(d => {
+      const li = PARTNERS.findIndex(p => p.k === d.lowK), hi = PARTNERS.findIndex(p => p.k === d.highK);
+      return li < submittedN && hi < submittedN;
+    }).map(d => {
+      const lo = PARTNERS.find(p => p.k === d.lowK), hi = PARTNERS.find(p => p.k === d.highK);
+      const c = CRIT.find(x => x.k === d.k);
+      const spread = hi.marks[d.k] - lo.marks[d.k];
+      return { name:c.name, spread: spread + ' pt',
+        chip: spread >= 15 ? cRed : cAmber,
+        lowName:lo.name.split(' ')[0] + ' ' + lo.name.split(' ')[1].charAt(0) + '.', lowInitials:lo.initials, lowAv: av(lo.bg, 22),
+        highName:hi.name.split(' ')[0] + ' ' + hi.name.split(' ')[1].charAt(0) + '.', highInitials:hi.initials, highAv: av(hi.bg, 22),
+        low: String(lo.marks[d.k]), high: String(hi.marks[d.k]),
+        lowNote:d.lowNote, highNote:d.highNote, resolve:d.resolve };
+    }).sort((a,b) => parseInt(b.spread,10) - parseInt(a.spread,10));
+    const hasDivergence = divergences.length > 0;
+    // Range quoted in the memo must come from SUBMITTED marks only.
+    const tracVals = submitted.map(p => p.marks.traction);
+    const tracRange = Math.min.apply(null, tracVals) + ' to ' + Math.max.apply(null, tracVals);
+
+    // ============ BENCHMARK ============
+    const DIST = DIST_SRC;
+    const maxBar = Math.max.apply(null, DIST.map(d => d.n));
+    const inBucket = (d) => compositeN >= d.lo && compositeN < d.lo + 5;
+    const bench = {
+      pctLabel: ord(pctN), n: String(cohortN), median:'58.4',
+      cohortLine: ord(pctN) + ' percentile of ' + cohortN + ' seed-stage B2B companies scored this quarter on the same rubric version.',
+      fillStyle:'position:absolute;left:0;top:0;bottom:0;width:'+pctN+'%;border-radius:99px;background:'+V,
+      markStyle:'position:absolute;left:'+pctN+'%;top:-4px;width:3px;height:17px;border-radius:99px;background:'+(dark ? '#ececf1' : '#18181b')+';transform:translateX(-1.5px)',
+      ticks:['0','25','50','75','100'],
+      dist: DIST.map(d => {
+        const here = inBucket(d);
+        return { n: String(d.n), tick: String(d.lo),
+          labelOp: here ? '1' : '.55',
+          tickTone: here ? (dark ? '#c4b5fd' : V7) : MUT,
+          barStyle:'width:100%;height:'+Math.max(4, Math.round(d.n / maxBar * 56))+'px;border-radius:3px 3px 0 0;background:'
+            + (here ? V : (dark ? '#26232f' : '#eceaf2')) };
+      }),
+    };
+
+    const CO_MED = { team:64, market:61, product:59, traction:52, terms:63 };
+    const benchRows = CRIT.map(c => {
+      const s = SUB[c.k], m = CO_MED[c.k], d = s - m;
+      return { name:c.name, score: String(s), median: String(m),
+        tone: toneOf(s),
+        delta: (d > 0 ? '+' : '') + d,
+        deltaTone: d > 0 ? GRN : d < 0 ? RED : MUT,
+        barStyle:'position:absolute;left:0;top:0;bottom:0;width:'+s+'%;border-radius:99px;background:'+toneOf(s),
+        medStyle:'position:absolute;left:'+m+'%;top:-3px;width:2px;height:12px;background:'+(dark ? '#6b6577' : '#a8a4b4') };
+    });
+
+    // ============ HISTORY ============
+    const HIST = [
+      { score: panelScoreN, date:'Aug 13, 2026', label:'Panel re-score · Seed — B2B default v4', by: submittedN + ' partners',
+        meta:'Run Aug 13, 2026 · scorecard v4 · panel of ' + submittedN, current:true,
+        note:'Re-scored after the MRR restatement and Lin\u2019s architecture review. Product moved +13, traction +11 off the revised revenue base.',
+        flag:'MRR restated mid-run — traction sub-score not yet re-entered against the revised figure.' },
+      { score:58.2, date:'Feb 14, 2026', label:'Single-scorer run · Seed — B2B default v3', by:'H. Kaur',
+        meta:'Run Feb 14, 2026 · scorecard v3 · single scorer',
+        note:'First pass at seed. Traction scored 41 on $6k MRR and two customers; team already read strongly.' },
+      { score:54.6, date:'Nov 2, 2025', label:'Screening run · Pre-Seed — conviction v2', by:'G. Lauzier',
+        meta:'Run Nov 2, 2025 · scorecard v2 · single scorer',
+        note:'Screened at pre-seed weights before the company had revenue. Scored on team and insight only.' },
+    ];
+    const maxHist = 100;
+    const history = HIST.map((h,i) => {
+      const prev = HIST[i+1];
+      const d = prev ? h.score - prev.score : 0;
+      return { score: h.score.toFixed(1), tone: toneOf(h.score),
+        band: bandOf(h.score), bandChip: h.score >= 65 ? cGreen : h.score >= 50 ? cAmber : cRed,
+        label:h.label, meta:h.meta + ' · ' + h.by, note:h.note,
+        current: !!h.current,
+        deltaShow: !!prev, delta: (d > 0 ? '+' : '') + d.toFixed(1),
+        deltaChip: d > 0 ? cGreen : d < 0 ? cRed : cGrey,
+        hasFlag: !!h.flag, flagNote: h.flag || '', flagTone: AMB,
+        flagWrap:'display:flex;gap:9px;align-items:flex-start;margin-top:10px;padding:10px 13px;border-radius:10px;background:rgba(180,83,9,.06);border:1px solid rgba(180,83,9,.18)',
+        dotStyle:'width:11px;height:11px;border-radius:50%;flex:none;background:'+(h.current ? V : (dark ? '#3a3648' : '#d4d0dc'))
+          + (h.current ? ';box-shadow:0 0 0 4px rgba(124,58,237,.14)' : ''),
+        line: i < HIST.length - 1 };
+    });
+    const trend = HIST.slice().reverse().map(h => ({
+      score: h.score.toFixed(1), tone: toneOf(h.score), date: h.date,
+      barStyle:'width:64%;max-width:52px;height:'+Math.round(h.score / maxHist * 84)+'px;border-radius:5px 5px 0 0;background:'
+        + (h.current ? V : (dark ? '#2f2a45' : '#e4dcfb')),
+    }));
+    const trajN = HIST[0].score - HIST[HIST.length-1].score;
+
+    // ============ MEMO ============
+    const memo = {
+      prepared:'Aug 13, 2026 · 09:41 AEST', ref:'IC-2026-0088',
+      headline:[
+        { k:'Panel score', v: panelScore, note: submittedN + ' of 4 partners submitted', tone: toneOf(panelScoreN) },
+        { k:'Composite', v: composite, note: activeCardName, tone: toneOf(compositeN) },
+        { k:'Percentile', v: bench.pctLabel, note:'of ' + cohortN + ' seed B2B', tone:V7 },
+        { k:'Trajectory', v: (trajN > 0 ? '+' : '') + trajN.toFixed(1), note:'across 3 runs since Nov 2025', tone: trajN > 0 ? GRN : RED },
+      ],
+      rec:'Proceed to IC', recChip: cGreen,
+      recLine:'Recommend a full partner discussion, not a decision on the score alone.',
+      recBody:'Composite clears the bar and trajectory is positive across three runs. The case turns on one unresolved question — whether revenue concentration survives the two annual renewals — which the submitted marks split ' + tracRange + ' on. That is a diligence item, not a scoring dispute.',
+      breakdown: CRIT.map(c => {
+        const s = SUB[c.k], w = W[c.k] || 0;
+        return { name:c.name, wLabel: w + '%', score: String(s), tone: toneOf(s),
+          contrib: (s * w / 100).toFixed(1),
+          barStyle:'height:100%;width:'+s+'%;border-radius:99px;background:'+toneOf(s) };
+      }),
+      diverge: divergences.map(d => ({ name:d.name, range: d.low + '–' + d.high, chip:d.chip,
+        note: d.lowName + ' at ' + d.low + ', ' + d.highName + ' at ' + d.high + '. ' + d.resolve })),
+      divergeNote: panelWaiting
+        ? 'Two partners have not yet scored. Divergence shown is between the two submitted marks and may widen.'
+        : 'All four marks in. Divergence is concentrated in traction and product; team and terms are within 8 points across the panel.',
+      benchRows:[
+        { k:'Cohort median', v:'58.4' },
+        { k:'This company', v: composite },
+        { k:'Strongest line', v:'Team · +18 vs median' },
+        { k:'Weakest line', v:'Traction · +2 vs median' },
+      ],
+      evidence:[
+        { text:'CTO built the ingest layer at Canva through 40× volume growth; benchmarked 3.1× the incumbent on the customer\u2019s own workload.', tone:GRN, icon:I.check },
+        { text:'Data-residency rules effective Jan 2027 create a budgeted, dated buying trigger in the target segment.', tone:GRN, icon:I.check },
+        { text:'$18k MRR across 4 customers, up from $11k in March — but one customer is 44% of revenue.', tone:AMB, icon:I.alert },
+        { text:'No patents filed; defensibility is operational. Two of four customers on annual contracts, retention history too short to read.', tone:AMB, icon:I.alert },
+      ],
+      integrityNote:'Two integrity flags open at time of generation: MRR was restated after the traction sub-score was entered, and traction rests on two sources against a three-source threshold. Neither blocks IC, both should be closed before a term sheet.',
+    };
+
+    // ============ TABS ============
+    const TABS = [
+      { k:'config', l:'Configuration', i:I.sliders },
+      { k:'score', l:'Scoring', i:I.gauge, flag:'2' },
+      { k:'panel', l:'Panel', i:I.users, flag: panelWaiting ? String(4 - submittedN) : '' },
+      { k:'bench', l:'Benchmark', i:I.chart },
+      { k:'history', l:'History', i:I.clock },
+      { k:'memo', l:'IC memo', i:I.doc },
+    ];
+    const tabs = TABS.map(t => ({
+      label:t.l, icon:t.i, flag: t.flag || '',
+      go: () => this.setState({ tab:t.k }),
+      flagStyle:'display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:800;background:'
+        + (st.tab === t.k ? V : 'rgba(180,83,9,.15)') + ';color:' + (st.tab === t.k ? '#fff' : AMB),
+      style:'display:flex;align-items:center;gap:7px;padding:0 0 11px;font-size:13px;font-weight:'+(st.tab === t.k ? '700' : '600')
+        + ';color:' + (st.tab === t.k ? (dark ? '#c4b5fd' : V7) : MUT)
+        + ';border-bottom:2px solid ' + (st.tab === t.k ? V : 'transparent') + ';white-space:nowrap;flex:none',
+    }));
+
+    return {
+      themeClass: dark ? 'sc-dark' : '',
+      themeIcon: dark ? I.sun : I.moon, themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      gaugeIcon:I.gauge, checkIcon:I.check, infoIcon:I.info, alertIcon:I.alert,
+      clockIcon:I.clock, downloadIcon:I.down, linkIcon:I.link,
+      co, coAvStyle: av(co.bg, 30), coAvStyleLg: av(co.bg, 44),
+      chromeSub: activeCardName + ' · run Aug 13, 2026',
+      tabs, tabConfig: st.tab === 'config', tabScore: st.tab === 'score', tabPanel: st.tab === 'panel',
+      tabBench: st.tab === 'bench', tabHistory: st.tab === 'history', tabMemo: st.tab === 'memo',
+      violet:V, ambTone:AMB, grnTone:GRN, redTone:RED,
+      activeChip: cViolet, thinChip: cAmber, pendChip: cGrey,
+
+      // config
+      presets, criteria, savedCards, cardCount: String(SAVED.length),
+      weightSum: String(weightSumN),
+      sumTone: sumOk ? GRN : RED,
+      sumChip: sumOk ? cGreen : cRed,
+      sumLabel: sumOk ? 'Balanced' : (weightSumN > 100 ? (weightSumN - 100) + '% over' : (100 - weightSumN) + '% short'),
+      sumHint: sumOk ? 'Weights balance. This scorecard can be saved and run.' : 'Adjust until weights total 100% — the scorecard cannot be saved otherwise.',
+      resetWeights: () => this.setState({ weights:null, saved:false }),
+      saveLabel: st.saved ? 'Saved' : 'Save scorecard',
+      saveBtnStyle:'padding:9px 17px;border-radius:9px;font-size:13px;font-weight:700;'
+        + (sumOk ? 'background:'+(st.saved ? 'rgba(17,102,50,.12)' : V)+';color:'+(st.saved ? GRN : '#fff')
+                 : 'background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+(dark?'#6b6577':'#8b8798')+';cursor:not-allowed'),
+      saveScorecard: () => { if (sumOk) this.setState({ saved:true }); },
+
+      // scoring
+      run:{ by:'Panel of ' + submittedN, when:'Aug 13, 2026' }, activeCardName,
+      composite, band, bandChip: compositeN >= 65 ? cGreen : compositeN >= 50 ? cAmber : cRed,
+      conf, confChip: cAmber,
+      ringTone: toneOf(compositeN), ringTrack: dark ? '#26232f' : '#eceaf2',
+      ringDash: (compositeN / 100 * 264).toFixed(1) + ' 264',
+      scoreStats, flags, scored,
+      goMemo: () => this.setState({ tab:'memo' }),
+
+      // panel
+      panelStates, panelWaiting, icDate:'Aug 19, 2026',
+      hasDivergence, noDivergence: !hasDivergence,
+      partnerHeads, matrix, partnerComposites, panelScore, panelList, divergences,
+      submittedNote: submittedN + ' of 4 submitted · marks hidden from other partners until all are in',
+      submittedCount: submittedN + ' of 4',
+      panelNote: panelWaiting
+        ? 'Provisional — mean of ' + submittedN + ' submitted marks. Will restate when the remaining 2 arrive.'
+        : 'Mean of all 4 partner composites. Spread across partners is ' + (Math.max.apply(null, PARTNERS.map(p => compOf(p.marks))) - Math.min.apply(null, PARTNERS.map(p => compOf(p.marks)))).toFixed(1) + ' points.',
+
+      // benchmark
+      bench, benchRows,
+
+      // history
+      history, trend,
+      trajectory: (trajN > 0 ? '+' : '') + trajN.toFixed(1),
+      trajTone: trajN > 0 ? GRN : RED,
+      trajSpan:'9 months',
+
+      // memo
+      memo,
+    };
+  }
+}
+</script>
+</body>
+</html>

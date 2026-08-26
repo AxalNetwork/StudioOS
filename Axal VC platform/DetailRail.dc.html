@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="font-family:Inter,system-ui,sans-serif;color:#18181b">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e">Worker AI</span>
+    <span style="font-size:11px;color:#615c6e">›</span>
+  </div>
+
+  <div style="{{ inheritStyle }}">
+    <div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:{{ deep }}">Inherited from {{ page }}</div>
+    <div style="font-size:11.5px;color:#3f3a49;margin-top:6px;line-height:1.55">Mode and model are set on the workspace, not re-picked here — a model choice is about the domain, not the depth.</div>
+  </div>
+
+  <div style="border:1px solid {{ edge }};background:{{ tint }};border-radius:9px;padding:10px 11px;margin-top:9px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span style="font-size:12px;font-weight:800;color:{{ deep }}">{{ modeLabel }}</span>
+      <span style="width:24px;height:14px;border-radius:999px;background:{{ ink }};position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#fff"></span></span>
+    </div>
+    <div style="font-size:10.5px;color:{{ deep }};margin-top:4px;line-height:1.45">{{ modeNote }}</div>
+  </div>
+
+  <div style="border:1px solid {{ edge }};background:{{ tint }};border-radius:9px;padding:10px 11px;margin-top:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+      <span style="font-size:12px;font-weight:800">{{ modelName }}</span>
+      <span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:{{ deep }};background:#fff;border:1px solid {{ edge }};border-radius:3px;padding:2px 5px;flex:none">INHERITED</span>
+    </div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">{{ modelId }}</div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:7px;line-height:1.5">{{ modelWhy }}</div>
+    <sc-if value="{{ modelPrice }}">
+      <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:8px;padding-top:7px;border-top:1px solid {{ edge }};font-variant-numeric:tabular-nums">{{ modelPrice }}</div>
+    </sc-if>
+    <sc-if value="{{ modelCached }}">
+      <div class="num" style="font-size:10.5px;color:#047857;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums">{{ modelCached }}</div>
+    </sc-if>
+    <div style="font-size:10.5px;color:{{ deep }};font-weight:600;margin-top:8px;padding-top:7px;border-top:1px solid {{ edge }};line-height:1.5">Rates come from the {{ page }} curation. Change the model there and this page follows.</div>
+  </div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:16px">Batch on this page</div>
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+    <div style="font-size:11.5px;font-weight:700">{{ batchOp }}</div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.5">{{ batchNote }}</div>
+    <div style="font-size:10.5px;font-weight:700;color:{{ deep }};margin-top:8px;font-variant-numeric:tabular-nums">{{ batchCost }}</div>
+    <div style="font-size:10px;color:#615c6e;margin-top:7px;line-height:1.5">Estimated before it runs. Every item lands as its own proposal.</div>
+  </div>
+
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <span style="font-size:16px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ spend }}</span>
+      <span style="font-size:10.5px;color:#615c6e">of {{ plan }}</span>
+    </div>
+    <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:{{ pct }}%;background:{{ ink }};border-radius:999px"></div></div>
+    <div style="font-size:10px;color:#615c6e;margin-top:8px;line-height:1.5;font-variant-numeric:tabular-nums">{{ pageSpend }}</div>
+  </div>
+
+  <div style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5">
+    <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:3px;padding:2px 5px;flex:none;margin-top:1px">Screened</span>
+    <div style="font-size:10px;color:#615c6e;line-height:1.5">{{ safety }}</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accent&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;violet&quot;,&quot;indigo&quot;],&quot;default&quot;:&quot;violet&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Build&quot;,&quot;Raise&quot;,&quot;Grow&quot;,&quot;Deals&quot;,&quot;Network&quot;,&quot;Fund&quot;,&quot;Portfolio&quot;,&quot;Research&quot;],&quot;default&quot;:&quot;Build&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const A = this.props.accent === 'indigo'
+      ? { ink:'#4f46e5', deep:'#4338ca', tint:'#f5f5ff', edge:'#c7d2fe' }
+      : { ink:'#7c3aed', deep:'#6d28d9', tint:'#faf7ff', edge:'#d8c9ff' };
+    const page = this.props.page || 'Build';
+
+    const P = {
+      // Every curation carries its real per-M rates, so the rail never asserts a rate it does
+      // not show — and the detail pages' arithmetic is checkable against the model beside it.
+      Build:     { mode:'Advisor fills the blanks', name:'Llama 3.1 8B Fast', id:'@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+                   why:'Fast and cheap — right for weekly planning and card grooming.',
+                   price:'$0.045 / M in · $0.384 / M out',
+                   op:'Groom 11 backlog cards', note:'Scope, owner and lane per card.', cost:'11 × the per-card rate',
+                   spend:'$1.10', safety:'Nothing on a board leaves the company. Screening applies when a card becomes an outbound message.' },
+      Raise:     { mode:'Advisor fills the blanks', name:'DeepSeek V4 Pro', id:'@cf/deepseek-ai/deepseek-v4-pro-0813',
+                   why:'Strongest reasoning, which is what legal and terms work needs.',
+                   price:'$1.320 / M in · $3.960 / M out', cached:'Cached input $0.044 / M',
+                   op:'Gap analysis across 6 artifacts', note:'What investors at your stage expect and you have not staged.', cost:'1 × the per-analysis rate',
+                   spend:'$4.60', safety:'Anything an investor will read is screened before the grant goes live.' },
+      Grow:      { mode:'Advisor fills the blanks', name:'GPT-OSS 20B', id:'@cf/openai/gpt-oss-20b',
+                   why:'High-volume outreach copy at commodity cost.',
+                   price:'$0.200 / M in · $0.300 / M out',
+                   op:'Draft 6 first-touch emails', note:'Per fund, from its own thesis language.', cost:'6 × the per-email rate',
+                   spend:'$0.90', safety:'Every outbound email is screened before it can send.' },
+      // Deals default per the Investor curation — screening and IC memos.
+      Deals:     { mode:'Advisor fills the blanks', name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+                   why:'Screening memos and IC packs — long context, strong synthesis, sane rate.',
+                   price:'$0.293 / M in · $2.253 / M out',
+                   op:'Draft 3 stale-deal notes', note:'Last activity, blocker, and the honest option.', cost:'3 × the per-note rate',
+                   spend:'$5.20', safety:'Memos stay internal. Screening applies to anything sent to a founder.' },
+      // Network curation — warm intro drafting, in both products. An intro spends your
+      // reputation, so tone is the deliverable and the polished writer earns its rate.
+      Network:   { mode:'Advisor fills the blanks', name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct',
+                   why:'Warm, context-aware intro drafting — an intro should read like you wrote it.',
+                   price:'$0.351 / M in · $0.555 / M out',
+                   op:'Draft 2 re-engagement lines', note:'From the last real exchange, not "checking in".', cost:'2 × the per-line rate',
+                   spend:'$0.60', safety:'Intros leave for someone else\u2019s inbox — always screened first.' },
+      Fund:      { mode:'Advisor fills the blanks', name:'DeepSeek V4 Pro', id:'@cf/deepseek-ai/deepseek-v4-pro-0813',
+                   why:'Calls, waterfalls and LP letters — the work with the least room for error.',
+                   price:'$1.320 / M in · $3.960 / M out', cached:'Cached input $0.044 / M',
+                   op:'Draft 3 delinquency letters', note:'One per overdue LP, every figure traceable.', cost:'3 × the per-letter rate',
+                   spend:'$7.40', safety:'LP correspondence is screened before send, and the ledger records what went out.' },
+      Portfolio: { mode:'Advisor fills the blanks', name:'Granite 4.0 H Micro', id:'@cf/ibm-granite/granite-4.0-h-micro',
+                   why:'Near-free extraction, which is what makes parsing every update viable.',
+                   price:'$0.017 / M in · $0.112 / M out',
+                   op:'Parse 6 updates', note:'KPIs extracted with a diff against last quarter.', cost:'6 × the per-update rate',
+                   spend:'$0.40', safety:'Parsing is internal. Screening applies to the chase emails, not the extraction.' },
+      // DEFAULT per the Research curation — the cached-input price is what every cost figure
+      // on the Research detail pages is computed from, so it is declared here.
+      Research:  { mode:'Advisor fills the blanks', name:'DeepSeek V4 Flash', id:'@cf/deepseek-ai/deepseek-v4-flash-0731',
+                   why:'Built for interrogating long documents cheaply — the first pass reads the file, every question after is cached.',
+                   price:'$0.440 / M in · $1.320 / M out', cached:'Cached input $0.014 / M — 11× cheaper on follow-ups',
+                   op:'Ask 20 questions of one document', note:'First pass full price, 19 cached.', cost:'$0.0272 + 19 × $0.0025',
+                   spend:'$2.20', safety:'Research stays private until you attach it to a deal or a pack.' }
+    };
+    const p = P[page] || P.Build;
+
+    return {
+      page, ink:A.ink, deep:A.deep, tint:A.tint, edge:A.edge,
+      inheritStyle:'background:#fbfbfc;border:1px dashed ' + A.edge + ';border-radius:9px;padding:10px 11px;margin-top:13px',
+      modeLabel:p.mode,
+      modeNote:'Proposals stay accept/edit/discard here, exactly as on the workspace.',
+      modelName:p.name, modelId:p.id, modelWhy:p.why,
+      modelPrice:p.price || null, modelCached:p.cached || null,
+      batchOp:p.op, batchNote:p.note, batchCost:p.cost,
+      spend:p.spend, plan:'$40.00',
+      pct:String(Math.round(parseFloat(p.spend.slice(1)) / 40 * 100)),
+      pageSpend:'This detail page this month · ' + p.spend,
+      safety:p.safety
+    };
+  }
+}
+</script>
+</body>
+</html>

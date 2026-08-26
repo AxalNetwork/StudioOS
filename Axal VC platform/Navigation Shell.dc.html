@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .nv-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .nv-page{background:#f1f0f4;color:#18181b}
+    .nv-surface{background:#ffffff}
+    .nv-sunken{background:#faf9fc}
+    .nv-border{border-color:#e8e6ee}
+    .nv-bd-b{border-bottom-color:#e8e6ee}
+    .nv-bd-t{border-top-color:#e8e6ee}
+    .nv-text{color:#18181b}
+    .nv-muted{color:#71717a}
+    .nv-strong{color:#3f3f46}
+    .nv-item{color:#3f3f46}
+    .nv-dim{color:#6b6577}
+
+    .nv-page.nv-dark{background:#0b0a0f;color:#ececf1}
+    .nv-dark .nv-surface{background:#17161d}
+    .nv-dark .nv-sunken{background:#1d1b25}
+    .nv-dark .nv-border{border-color:#2a2833}
+    .nv-dark .nv-bd-b{border-bottom-color:#2a2833}
+    .nv-dark .nv-bd-t{border-top-color:#2a2833}
+    .nv-dark .nv-text{color:#ececf1}
+    .nv-dark .nv-muted{color:#9b96a8}
+    .nv-dark .nv-strong{color:#dcd9e4}
+    .nv-dark .nv-item{color:#c9c5d4}
+    .nv-dark .nv-dim{color:#8b8798}
+
+    .nv-btn{cursor:pointer;transition:filter .12s,background .12s}
+    .nv-btn:hover{filter:brightness(1.06)}
+    .nv-seg{cursor:pointer;transition:background .13s,color .13s}
+
+    /* nav rows */
+    .nv-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:9px;cursor:pointer;transition:background .12s,color .12s;position:relative}
+    .nv-row:hover{background:#f4f3f7}
+    .nv-dark .nv-row:hover{background:#22202b}
+    .nv-row.is-active{background:#f4f0fe;color:#6d28d9;font-weight:700}
+    .nv-dark .nv-row.is-active{background:#241f38;color:#c4b5fd}
+    .nv-row.is-active .nv-bar{position:absolute;left:-9px;top:8px;bottom:8px;width:2.5px;border-radius:99px;background:#7c3aed}
+    .nv-row.is-locked{cursor:pointer}
+    .nv-row.is-preview{opacity:1}
+    .nv-row.is-preview:hover{opacity:1}
+    .nv-grp{display:flex;align-items:center;gap:7px;width:100%;padding:9px 10px 5px;cursor:pointer;background:none;border:none;text-align:left}
+    .nv-caret{transition:transform .15s}
+
+    .nv-scroll{overflow-y:auto;scrollbar-width:thin}
+    .nv-scroll::-webkit-scrollbar{width:5px}
+    .nv-scroll::-webkit-scrollbar-thumb{background:#dedce4;border-radius:99px}
+    .nv-dark .nv-scroll::-webkit-scrollbar-thumb{background:#2f2c3a}
+
+    .nv-fade{animation:nvFade .18s ease}
+    @keyframes nvFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    @media (max-width:1180px){.nv-rail{overflow-x:auto}}
+  </style>
+</helmet>
+
+<div class="nv-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="nv-surface nv-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:40">
+    <div style="max-width:1560px;margin:0 auto;padding:14px 26px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:11px;min-width:0">
+        <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex:none">A</div>
+        <div style="min-width:0">
+          <div class="nv-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Navigation shell</div>
+          <div class="nv-muted" style="font-size:11.5px;margin-top:1px">Four role variants · one component system</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+        <div class="nv-sunken nv-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid">
+          <sc-for list="{{ layoutTabs }}" as="l" hint-placeholder-count="3">
+            <div class="nv-seg" onClick="{{ l.go }}" style="{{ l.style }}">{{ l.label }}</div>
+          </sc-for>
+        </div>
+        <div class="nv-btn nv-border nv-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+          <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+          {{ themeLabel }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1560px;margin:0 auto;padding:24px 26px 80px">
+
+    <!-- ============ LEGEND ============ -->
+    <div class="nv-surface nv-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:16px 20px;margin-bottom:20px">
+      <div class="nv-muted" style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.11em;margin-bottom:12px">Item states</div>
+      <div style="display:flex;gap:26px;flex-wrap:wrap">
+        <sc-for list="{{ legend }}" as="lg" hint-placeholder-count="4">
+          <div style="display:flex;gap:10px;align-items:flex-start;min-width:200px;flex:1">
+            <div style="{{ lg.swatch }}">
+              <sc-if value="{{ lg.hasIcon }}"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ lg.icon }}"></span></sc-if>
+              <sc-if value="{{ lg.hasText }}">{{ lg.swatchText }}</sc-if>
+            </div>
+            <div style="min-width:0">
+              <div class="nv-strong" style="font-size:12px;font-weight:700">{{ lg.k }}</div>
+              <div class="nv-muted" style="font-size:11px;line-height:1.5;margin-top:2px">{{ lg.d }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- ============ FOUR SIDEBARS ============ -->
+    <sc-if value="{{ isFull }}">
+    <div class="nv-rail nv-fade" style="display:flex;gap:18px;align-items:flex-start">
+      <sc-for list="{{ variants }}" as="v" hint-placeholder-count="4">
+        <div style="flex:none;width:266px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:9px;padding:0 2px">
+            <div class="nv-text" style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ v.title }}</div>
+            <div class="nv-dim nv-num" style="font-size:10.5px">{{ v.count }}</div>
+          </div>
+
+          <div class="nv-surface nv-border" style="border-width:1px;border-style:solid;border-radius:16px;display:flex;flex-direction:column;height:720px;overflow:hidden">
+            <!-- brand -->
+            <div class="nv-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:14px 14px 12px;display:flex;align-items:center;gap:9px">
+              <div style="width:26px;height:26px;border-radius:8px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:none">A</div>
+              <div class="nv-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.015em">Axal VC</div>
+              <div style="margin-left:auto;display:flex;align-items:center;gap:5px">
+                <span class="nv-dim" style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+                <span class="nv-dim" style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ collapseIcon }}"></span>
+              </div>
+            </div>
+
+            <!-- groups -->
+            <div class="nv-scroll" style="flex:1;padding:6px 12px 10px">
+              <sc-for list="{{ v.groups }}" as="g" hint-placeholder-count="6">
+                <div style="{{ g.wrapStyle }}">
+                  <div class="nv-grp" data-grp="{{ g.id }}" onClick="{{ toggleGroup }}">
+                    <span class="nv-caret nv-dim" style="width:11px;height:11px;display:flex;flex:none;transform:{{ g.caretRot }}" dangerouslySetInnerHTML="{{ caretIcon }}"></span>
+                    <span style="{{ g.labelStyle }}">{{ g.label }}</span>
+                    <sc-if value="{{ g.isPreview }}">
+                      <span style="{{ g.ruleStyle }}"></span>
+                    </sc-if>
+                  </div>
+
+                  <sc-if value="{{ g.open }}">
+                    <div class="nv-fade" style="display:flex;flex-direction:column;gap:1px;padding-left:9px">
+                      <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="4">
+                        <div class="nv-row {{ it.cls }}" data-item="{{ it.id }}" onClick="{{ pickItem }}" style="{{ it.style }}">
+                          <sc-if value="{{ it.active }}"><span class="nv-bar"></span></sc-if>
+                          <span style="width:15px;height:15px;display:flex;flex:none;color:{{ it.iconTone }}" dangerouslySetInnerHTML="{{ it.icon }}"></span>
+                          <span style="font-size:12.5px;min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.label }}</span>
+                          <sc-if value="{{ it.badge }}">
+                            <span style="{{ it.badgeStyle }}">{{ it.badge }}</span>
+                          </sc-if>
+                          <sc-if value="{{ it.locked }}">
+                            <span style="{{ tierTag }}">
+                              <span style="width:9px;height:9px;display:flex" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+                              {{ it.tier }}
+                            </span>
+                          </sc-if>
+                          <sc-if value="{{ it.preview }}">
+                            <span style="{{ previewTag }}">PREVIEW</span>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+
+            <!-- identity -->
+            <div class="nv-bd-t nv-sunken" style="border-top-width:1px;border-top-style:solid;padding:11px 13px;display:flex;align-items:center;gap:10px">
+              <div style="{{ v.avStyle }}">{{ v.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="nv-text" style="font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.user }}</div>
+                <div style="display:flex;align-items:center;gap:5px;margin-top:2px">
+                  <span style="{{ v.roleChip }}">{{ v.role }}</span>
+                  <sc-if value="{{ v.plan }}"><span class="nv-dim" style="font-size:10px">{{ v.plan }}</span></sc-if>
+                </div>
+              </div>
+              <div class="nv-btn nv-dim" data-menu="{{ v.k }}" onClick="{{ toggleMenu }}" style="width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex:none">
+                <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ dotsIcon }}"></span>
+              </div>
+            </div>
+            <sc-if value="{{ v.menuOpen }}">
+              <div class="nv-surface nv-bd-t nv-fade" style="border-top-width:1px;border-top-style:solid;padding:6px 12px 10px">
+                <sc-for list="{{ accountMenu }}" as="m" hint-placeholder-count="4">
+                  <div class="nv-row nv-item" style="padding:7px 10px">
+                    <span style="width:14px;height:14px;display:flex;flex:none;color:{{ m.tone }}" dangerouslySetInnerHTML="{{ m.icon }}"></span>
+                    <span style="font-size:12px;color:{{ m.tone }}">{{ m.label }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    </sc-if>
+
+    <!-- ============ COLLAPSED + MOBILE ============ -->
+    <sc-if value="{{ isCompact }}">
+    <div class="nv-fade" style="display:flex;gap:30px;align-items:flex-start;flex-wrap:wrap">
+
+      <!-- collapsed rail -->
+      <div style="flex:none">
+        <div class="nv-text" style="font-size:13px;font-weight:800;letter-spacing:-.01em;margin-bottom:9px">Collapsed to icons · desktop</div>
+        <div style="display:flex;gap:0;align-items:stretch">
+          <div class="nv-surface nv-border" style="border-width:1px;border-style:solid;border-radius:16px 0 0 16px;border-right-width:0;width:64px;height:640px;display:flex;flex-direction:column;overflow:hidden">
+            <div class="nv-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:14px 0;display:flex;justify-content:center">
+              <div style="width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800">A</div>
+            </div>
+            <div class="nv-scroll" style="flex:1;padding:8px 0;display:flex;flex-direction:column;align-items:center;gap:3px">
+              <sc-for list="{{ collapsedItems }}" as="c" hint-placeholder-count="10">
+                <sc-if value="{{ c.divider }}">
+                  <div class="nv-border" style="width:26px;height:1px;border-top-width:1px;border-top-style:solid;margin:6px 0"></div>
+                </sc-if>
+                <sc-if value="{{ c.isItem }}">
+                  <div class="nv-btn" data-collapsed="{{ c.id }}" onClick="{{ hoverCollapsed }}" style="{{ c.style }}">
+                    <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ c.icon }}"></span>
+                    <sc-if value="{{ c.badge }}"><span style="{{ c.badgeStyle }}">{{ c.badge }}</span></sc-if>
+                    <sc-if value="{{ c.dot }}"><span style="{{ c.dotStyle }}"></span></sc-if>
+                  </div>
+                </sc-if>
+              </sc-for>
+            </div>
+            <div class="nv-bd-t nv-sunken" style="border-top-width:1px;border-top-style:solid;padding:11px 0;display:flex;justify-content:center">
+              <div style="width:28px;height:28px;border-radius:9px;background:#7c3aed;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">GL</div>
+            </div>
+          </div>
+          <!-- flyout -->
+          <div style="padding-top:66px">
+            <div class="nv-surface nv-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:9px 13px;box-shadow:0 8px 24px rgba(11,10,15,.12);display:flex;align-items:center;gap:9px;white-space:nowrap">
+              <span class="nv-strong" style="font-size:12.5px;font-weight:700">{{ flyout.label }}</span>
+              <sc-if value="{{ flyout.locked }}">
+                <span style="{{ tierTag }}">
+                  <span style="width:9px;height:9px;display:flex" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+                  {{ flyout.tier }}
+                </span>
+              </sc-if>
+              <sc-if value="{{ flyout.preview }}"><span style="{{ previewTag }}">PREVIEW</span></sc-if>
+              <sc-if value="{{ flyout.badge }}"><span style="{{ countBadge }}">{{ flyout.badge }}</span></sc-if>
+            </div>
+            <div class="nv-muted" style="font-size:11px;margin-top:8px;max-width:190px;line-height:1.5">Hover any icon to see its label, tier, and state.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- mobile drawer -->
+      <div style="flex:none">
+        <div class="nv-text" style="font-size:13px;font-weight:800;letter-spacing:-.01em;margin-bottom:9px">Mobile drawer · Founder</div>
+        <div style="width:340px;height:640px;border-radius:26px;background:#1b1a20;padding:9px;box-shadow:0 12px 36px rgba(11,10,15,.22)">
+          <div class="nv-surface" style="height:100%;border-radius:19px;overflow:hidden;position:relative;display:flex;flex-direction:column">
+            <!-- scrim -->
+            <div style="position:absolute;inset:0;background:rgba(11,10,15,.42);z-index:1"></div>
+            <!-- drawer -->
+            <div class="nv-surface" style="position:absolute;top:0;bottom:0;left:0;width:280px;z-index:2;display:flex;flex-direction:column;box-shadow:6px 0 24px rgba(11,10,15,.18)">
+              <div class="nv-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:14px 14px 12px;display:flex;align-items:center;gap:9px">
+                <div style="width:26px;height:26px;border-radius:8px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:none">A</div>
+                <div class="nv-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.015em">Axal VC</div>
+                <span class="nv-dim" style="margin-left:auto;width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ closeIcon }}"></span>
+              </div>
+              <div class="nv-scroll" style="flex:1;padding:6px 12px 10px">
+                <sc-for list="{{ mobileGroups }}" as="g" hint-placeholder-count="4">
+                  <div style="{{ g.wrapStyle }}">
+                    <div class="nv-grp" data-grp="{{ g.id }}" onClick="{{ toggleGroup }}">
+                      <span class="nv-caret nv-dim" style="width:11px;height:11px;display:flex;flex:none;transform:{{ g.caretRot }}" dangerouslySetInnerHTML="{{ caretIcon }}"></span>
+                      <span style="{{ g.labelStyle }}">{{ g.label }}</span>
+                      <sc-if value="{{ g.isPreview }}"><span style="{{ g.ruleStyle }}"></span></sc-if>
+                    </div>
+                    <sc-if value="{{ g.open }}">
+                      <div class="nv-fade" style="display:flex;flex-direction:column;gap:1px;padding-left:9px">
+                        <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="4">
+                          <div class="nv-row {{ it.cls }}" data-item="{{ it.id }}" onClick="{{ pickItem }}" style="{{ it.mobStyle }}">
+                            <sc-if value="{{ it.active }}"><span class="nv-bar"></span></sc-if>
+                            <span style="width:16px;height:16px;display:flex;flex:none;color:{{ it.iconTone }}" dangerouslySetInnerHTML="{{ it.icon }}"></span>
+                            <span style="font-size:13.5px;min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.label }}</span>
+                            <sc-if value="{{ it.badge }}"><span style="{{ it.badgeStyle }}">{{ it.badge }}</span></sc-if>
+                            <sc-if value="{{ it.locked }}">
+                              <span style="{{ tierTag }}">
+                                <span style="width:9px;height:9px;display:flex" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+                                {{ it.tier }}
+                              </span>
+                            </sc-if>
+                            <sc-if value="{{ it.preview }}"><span style="{{ previewTag }}">PREVIEW</span></sc-if>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <div class="nv-bd-t nv-sunken" style="border-top-width:1px;border-top-style:solid;padding:12px 13px;display:flex;align-items:center;gap:10px">
+                <div style="width:32px;height:32px;border-radius:10px;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">GL</div>
+                <div style="min-width:0;flex:1">
+                  <div class="nv-text" style="font-size:13px;font-weight:700">Guillaume Lauzier</div>
+                  <div style="display:flex;align-items:center;gap:5px;margin-top:2px">
+                    <span style="{{ founderChip }}">Founder</span>
+                    <span class="nv-dim" style="font-size:10px">Studio plan</span>
+                  </div>
+                </div>
+                <span class="nv-dim" style="width:15px;height:15px;display:flex;flex:none" dangerouslySetInnerHTML="{{ dotsIcon }}"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============ PAYWALL / PREVIEW SHEETS ============ -->
+    <sc-if value="{{ sheetLock }}">
+      <div onClick="{{ closeSheet }}" style="position:fixed;inset:0;z-index:900;background:rgba(11,10,15,.5);display:flex;align-items:center;justify-content:center;padding:24px">
+        <div class="nv-surface" onClick="{{ stop }}" style="width:100%;max-width:430px;border-radius:18px;padding:28px 30px;box-shadow:0 24px 70px rgba(11,10,15,.34)">
+          <div style="width:38px;height:38px;border-radius:12px;background:rgba(124,58,237,.11);color:#7c3aed;display:flex;align-items:center;justify-content:center">
+            <span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+          </div>
+          <div class="nv-text" style="font-size:17px;font-weight:800;letter-spacing:-.022em;margin-top:14px">{{ sheet.label }} is on {{ sheet.tier }}</div>
+          <div class="nv-muted" style="font-size:12.5px;line-height:1.62;margin-top:7px">{{ sheet.body }}</div>
+          <div class="nv-sunken nv-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:14px 16px;margin-top:16px">
+            <div class="nv-strong" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.09em">{{ sheet.tier }} includes</div>
+            <div style="display:flex;flex-direction:column;gap:7px;margin-top:10px">
+              <sc-for list="{{ sheet.includes }}" as="i" hint-placeholder-count="3">
+                <div style="display:flex;gap:9px;align-items:flex-start">
+                  <span style="width:13px;height:13px;display:flex;flex:none;color:#15803d;margin-top:2px" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                  <div class="nv-strong" style="font-size:12px;line-height:1.5">{{ i }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="nv-btn" style="margin-top:16px;padding:12px 0;border-radius:11px;background:#7c3aed;color:#fff;font-size:13.5px;font-weight:700;text-align:center">Upgrade to {{ sheet.tier }}</div>
+          <div class="nv-btn nv-muted" onClick="{{ closeSheet }}" style="margin-top:8px;padding:9px 0;font-size:12px;font-weight:600;text-align:center">Not now</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ sheetPreview }}">
+      <div onClick="{{ closeSheet }}" style="position:fixed;inset:0;z-index:900;background:rgba(11,10,15,.5);display:flex;align-items:center;justify-content:center;padding:24px">
+        <div class="nv-surface" onClick="{{ stop }}" style="width:100%;max-width:430px;border-radius:18px;padding:28px 30px;box-shadow:0 24px 70px rgba(11,10,15,.34)">
+          <span style="{{ previewTag }}">PREVIEW</span>
+          <div class="nv-text" style="font-size:17px;font-weight:800;letter-spacing:-.022em;margin-top:13px">{{ sheet.label }} isn't live yet</div>
+          <div class="nv-muted" style="font-size:12.5px;line-height:1.62;margin-top:7px">You're looking at sample data so you can see the shape of it. Nothing here reflects your account, and nothing you do is saved.</div>
+          <div class="nv-sunken nv-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:14px 16px;margin-top:16px;display:flex;gap:11px;align-items:flex-start">
+            <span class="nv-muted" style="width:14px;height:14px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ infoIcon }}"></span>
+            <div class="nv-muted" style="font-size:11.5px;line-height:1.6">A lock means the feature works and needs a plan. A preview badge means we're still building it — no plan unlocks it today.</div>
+          </div>
+          <div class="nv-btn" style="margin-top:16px;padding:12px 0;border-radius:11px;background:#7c3aed;color:#fff;font-size:13.5px;font-weight:700;text-align:center">Notify me at launch</div>
+          <div class="nv-btn nv-muted" onClick="{{ closeSheet }}" style="margin-top:8px;padding:9px 0;font-size:12px;font-weight:600;text-align:center">Close</div>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1560}}">
+class Component extends DCLogic {
+  state = { theme:'light', layout:'full',
+    closed:{ 'founder:Preview':1,'founder:More':1,'investor:Preview':1,'partner:Preview':1,'advisor:Preview':1,
+             'mobile:Preview':1,'mobile:More':1 },
+    active:{ founder:'Studio', investor:'Deal Flow', partner:'AI Matches', advisor:'Office Hours', mobile:'Studio' },
+    menu:null, sheet:null, hovered:'Signals' };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.8)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+
+    const P = {
+      home:'<path d="M3 10 12 3l9 7"/><path d="M5 10v10h14V10"/>',
+      flask:'<path d="M10 2v7.5L4 20a2 2 0 0 0 1.7 3h12.6A2 2 0 0 0 20 20l-6-10.5V2"/><path d="M8 2h8"/>',
+      grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+      signal:'<path d="M4 20V10M10 20V4M16 20v-7M22 20v-4"/>',
+      users:'<path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.4"/><path d="M22 20v-2a4 4 0 0 0-3-3.8"/>',
+      chart:'<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>',
+      brush:'<path d="M4 20c2 0 3-1 3-3 0-1.4 1.1-2.5 2.5-2.5S12 15.6 12 17"/><path d="M14.5 12.5 21 6a2.1 2.1 0 0 0-3-3l-6.5 6.5"/>',
+      search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/>',
+      store:'<path d="M3 8h18l-1 3a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 12v8h14v-8"/>',
+      spark:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
+      intro:'<path d="M4 12h11"/><path d="m11 7 5 5-5 5"/><circle cx="20" cy="12" r="2"/>',
+      link:'<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>',
+      bldg:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8h2M13 8h2M9 12h2M13 12h2M9 16h6"/>',
+      deck:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8"/>',
+      coin:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.8 9.4A2.8 2.8 0 0 0 12 8.2c-1.6 0-2.8.9-2.8 2.1s1.2 1.9 2.8 1.9 2.8.7 2.8 1.9-1.2 2.1-2.8 2.1a2.8 2.8 0 0 1-2.8-1.2"/>',
+      scale:'<path d="M12 3v18M5 7h14"/><path d="m5 7-2.5 6h5zM19 7l-2.5 6h5z"/>',
+      cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/>',
+      mega:'<path d="M3 11v2a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M17 9a4 4 0 0 1 0 6"/>',
+      doc:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+      badge:'<circle cx="12" cy="9" r="5"/><path d="m9 13-1 8 4-2 4 2-1-8"/>',
+      heart:'<path d="M12 20s-7-4.4-7-9.2A3.9 3.9 0 0 1 12 8a3.9 3.9 0 0 1 7 2.8C19 15.6 12 20 12 20z"/>',
+      net:'<circle cx="12" cy="5" r="2.4"/><circle cx="5" cy="19" r="2.4"/><circle cx="19" cy="19" r="2.4"/><path d="M12 7.4v4M12 11.4H5v5M12 11.4h7v5"/>',
+      exit:'<path d="M3 17 10 10l4 4 7-7"/><path d="M14 7h7v7"/>',
+      shield:'<path d="M12 3 4 6v6c0 4.5 3.2 8.5 8 9.6 4.8-1.1 8-5.1 8-9.6V6z"/><path d="m9 12 2 2 4-4"/>',
+      filter:'<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+      check:'<path d="M20 6 9 17l-5-5"/>',
+      swap:'<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+      briefcase:'<rect x="2" y="7" width="20" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+      report:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M9 13h6M9 17h4"/>',
+      growth:'<path d="M3 17 9 11l4 4 8-8"/><path d="M14 7h7v7"/>',
+      layers:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+      book:'<path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z"/><path d="M8 3v18"/>',
+      calc:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2"/>',
+      globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/>',
+      news:'<path d="M4 5h13v14H4z"/><path d="M17 9h3v8a2 2 0 0 1-3 1.7"/><path d="M7 9h7M7 13h7"/>',
+      clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+      board:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h4v8H7zM14 8h3v5h-3z"/>',
+      book2:'<path d="M4 19V6a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/>',
+      insight:'<path d="M12 3a6 6 0 0 1 3.5 10.9V17h-7v-3.1A6 6 0 0 1 12 3z"/><path d="M9.5 20h5"/>',
+      gear:'<circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+      out:'<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8 6 12l4 4"/><path d="M6 12h10"/>',
+      dots:'<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
+      caret:'<path d="m9 6 6 6-6 6"/>',
+      lock:'<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+      close:'<path d="M6 6 18 18M18 6 6 18"/>',
+      collapse:'<path d="M9 4v16"/><rect x="3" y="4" width="18" height="16" rx="2"/>',
+      info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+      sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>',
+      moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+    };
+    const ico = {}; Object.keys(P).forEach(k => { ico[k] = this.ic(P[k]); });
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:99px;font-size:9.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none;letter-spacing:.01em';
+    const tierTag = chip(dark ? 'rgba(180,83,9,.2)' : 'rgba(180,83,9,.1)', dark ? '#fcd34d' : '#92400e');
+    const previewTag = 'display:inline-flex;align-items:center;padding:2px 7px;border-radius:5px;font-size:9.5px;font-weight:800;letter-spacing:.08em;white-space:nowrap;flex:none;border:1px dashed '
+      + (dark ? '#57506b' : '#b3aec2') + ';color:' + (dark ? '#b6b1c4' : '#6b6577') + ';background:transparent';
+    const countBadge = 'display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 5px;border-radius:99px;font-size:9.5px;font-weight:800;background:'+V+';color:#fff;flex:none';
+    // Per-theme text per hue — a raw mid-tone reads as text on light only; dark needs a light tint of the same hue.
+    const ROLE_INK = {
+      '#7c3aed': { light:'#6d28d9', dark:'#c4b5fd' },
+      '#1d4ed8': { light:'#1e40af', dark:'#93b4fc' },
+      '#0f766e': { light:'#115e59', dark:'#5eead4' },
+      '#b45309': { light:'#92400e', dark:'#fcd34d' },
+    };
+    const roleChipOf = (c) => { const k = ROLE_INK[c] || { light:c, dark:c }; return chip(c+(dark?'2e':'18'), dark ? k.dark : k.light); };
+
+    const seg = (on) => 'padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? (dark ? '#c4b5fd' : V7) : (dark ? '#9b96a8' : '#71717a'))
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none');
+
+    // ---------- nav definitions ----------
+    // i = icon key · lock:[tier] · prev:true · badge
+    const NAV = {
+      founder: {
+        title:'Founder', user:'Guillaume Lauzier', initials:'GL', role:'Founder', roleColor:'#7c3aed', plan:'Studio plan',
+        groups:[
+          { label:'Home', items:[ {l:'Studio',i:'home'}, {l:'Spin-Out Lab',i:'flask'} ] },
+          { label:'Build', items:[ {l:'Command Center',i:'grid'}, {l:'Signals',i:'signal',lock:'Growth'}, {l:'Team',i:'users'}, {l:'Metrics',i:'chart',lock:'Growth'}, {l:'Brand & Landing',i:'brush'} ] },
+          { label:'Validate', items:[ {l:'Customer Discovery',i:'search'}, {l:'Marketplace',i:'store'}, {l:'AI Advisor',i:'spark',lock:'Studio'} ] },
+          { label:'Network', items:[ {l:'Introductions',i:'intro',badge:'3'}, {l:'Relationships',i:'link'}, {l:'Organizations',i:'bldg'} ] },
+          { label:'Raise', items:[ {l:'Pitch',i:'deck'}, {l:'Capital',i:'coin',lock:'Growth'}, {l:'Legal Engine',i:'scale',lock:'Studio'} ] },
+          { label:'Launch', items:[ {l:'Events',i:'cal'}, {l:'Co-Marketing',i:'mega'}, {l:'Articles',i:'doc'} ] },
+          { label:'Preview', preview:true, items:[ {l:'Talent',i:'badge',prev:1}, {l:'Customers',i:'users',prev:1}, {l:'Partnerships',i:'link',prev:1}, {l:'Capital Match',i:'coin',prev:1}, {l:'Experts',i:'insight',prev:1}, {l:'Research',i:'book',prev:1} ] },
+          { label:'More', items:[ {l:'Founder Wellbeing',i:'heart'}, {l:'Network Effects',i:'net',lock:'Growth'}, {l:'Liquidity & Exits',i:'exit',lock:'Growth'}, {l:'Calendar',i:'cal'} ] },
+          { label:'Account', items:[ {l:'Trust Center',i:'shield'} ] },
+        ] },
+      investor: {
+        title:'Investor', user:'Marguerite Aubry', initials:'MA', role:'Investor', roleColor:'#1d4ed8', plan:'Fund plan',
+        groups:[
+          { label:'Home', items:[ {l:'Studio',i:'home'}, {l:'Spin-Out Lab',i:'flask'} ] },
+          { label:'Network', items:[ {l:'Introductions',i:'intro',badge:'7'}, {l:'Relationships',i:'link'}, {l:'Organizations',i:'bldg'} ] },
+          { label:'Pipeline', items:[ {l:'Deal Flow',i:'filter'}, {l:'Screening',i:'check'}, {l:'Commit',i:'coin'}, {l:'Transactions',i:'swap',lock:'Fund'} ] },
+          { label:'Portfolio', items:[ {l:'Companies',i:'briefcase'}, {l:'Performance',i:'chart'}, {l:'Reporting',i:'report'}, {l:'Growth',i:'growth',lock:'Fund'} ] },
+          { label:'Funds', items:[ {l:'Fund Management',i:'layers',lock:'Fund'}, {l:'LP Management',i:'users',lock:'Fund'}, {l:'Fund Performance',i:'chart',lock:'Fund'}, {l:'Accounting',i:'calc',lock:'Fund'} ] },
+          { label:'Preview', preview:true, items:[ {l:'Market',i:'globe',prev:1}, {l:'Companies',i:'briefcase',prev:1}, {l:'Funds',i:'layers',prev:1}, {l:'AI Research',i:'spark',prev:1}, {l:'News',i:'news',prev:1}, {l:'Documents',i:'doc',prev:1} ] },
+          { label:'Account', items:[ {l:'Trust Center',i:'shield'}, {l:'Calendar',i:'cal'}, {l:'Events',i:'mega'} ] },
+        ] },
+      partner: {
+        title:'Service Partner', user:'Anneke Kern', initials:'AK', role:'Partner', roleColor:'#0f766e', plan:'Studio plan',
+        groups:[
+          { label:'Home', items:[ {l:'Studio',i:'home'} ] },
+          { label:'Sourcing', items:[ {l:'My Services',i:'briefcase'}, {l:'AI Matches',i:'spark'}, {l:'Needs Board',i:'board'}, {l:'Directory',i:'book2'}, {l:'Demand Insights',i:'insight',lock:'Growth'} ] },
+          { label:'Deliver', items:[ {l:'My Office Hours',i:'clock'}, {l:'Calendar',i:'cal'}, {l:'Co-Marketing',i:'mega'}, {l:'Events',i:'mega'}, {l:'Jobs',i:'badge'} ] },
+          { label:'Network', items:[ {l:'Introductions',i:'intro',badge:'2'}, {l:'Relationships',i:'link'}, {l:'Organizations',i:'bldg'} ] },
+          { label:'Preview', preview:true, items:[ {l:'Operations',i:'grid',prev:1}, {l:'Growth',i:'growth',prev:1}, {l:'Research',i:'book',prev:1} ] },
+          { label:'Account', items:[ {l:'Trust Center',i:'shield'} ] },
+        ] },
+      advisor: {
+        title:'Advisor', user:'Elena Voss', initials:'EV', role:'Advisor', roleColor:'#b45309', plan:'Studio plan',
+        groups:[
+          { label:'Home', items:[ {l:'Office Hours',i:'clock',front:1} ] },
+          { label:'Network', items:[ {l:'Introductions',i:'intro',badge:'4'}, {l:'Relationships',i:'link'}, {l:'Organizations',i:'bldg'} ] },
+          { label:'Practice', items:[ {l:'Calendar',i:'cal'}, {l:'Events',i:'mega'}, {l:'Jobs',i:'badge'}, {l:'Advisor Directory',i:'book2'}, {l:'Signals',i:'signal',lock:'Growth'}, {l:'Due Diligence',i:'shield',lock:'Growth'} ] },
+          { label:'Preview', preview:true, items:[ {l:'Advisory',i:'insight',prev:1}, {l:'Growth',i:'growth',prev:1}, {l:'Research',i:'book',prev:1} ] },
+          { label:'Account', items:[ {l:'Articles',i:'doc'} ] },
+        ] },
+    };
+
+    const buildGroups = (roleKey, def) => def.groups.map(g => {
+      const gid = roleKey + ':' + g.label;
+      const open = !st.closed[gid];
+      return {
+        id:gid, label:g.label, open, isPreview: !!g.preview,
+        caretRot: open ? 'rotate(90deg)' : 'none',
+        wrapStyle: g.preview
+          ? 'margin-top:6px;padding-top:2px;border-top:1px dashed '+(dark ? '#2f2c3a' : '#e2e0e9')
+          : '',
+        labelStyle:'font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.11em;color:'
+          + (g.preview ? (dark ? '#b6b1c4' : '#6b6577') : (dark ? '#b6b1c4' : '#6b6577'))
+          + (g.preview ? ';font-style:italic' : ''),
+        ruleStyle:'flex:1;height:1px;margin-left:6px;border-top:1px dashed '+(dark ? '#2f2c3a' : '#e2e0e9'),
+        items: g.items.map(it => {
+          const active = st.active[roleKey] === it.l && !it.lock && !it.prev;
+          const front = !!it.front;
+          const cls = (active ? 'is-active ' : '') + (it.lock ? 'is-locked ' : '') + (it.prev ? 'is-preview ' : '');
+          const base = 'color:' + (active ? (dark ? '#c4b5fd' : V7) : it.prev ? (dark ? '#b6b1c4' : '#6b6577') : (dark ? '#c9c5d4' : '#3f3f46'));
+          return {
+            id: roleKey + '|' + it.l + '|' + (it.lock || '') + '|' + (it.prev ? '1' : ''),
+            label:it.l, icon: ico[it.i] || ico.doc, active,
+            locked: !!it.lock, tier: it.lock || '', preview: !!it.prev,
+            badge: it.badge || '', badgeStyle: countBadge,
+            iconTone: active ? (dark ? '#c4b5fd' : V7) : it.prev ? (dark ? '#8b8798' : '#8b8798') : (dark ? '#8b8798' : '#6b6577'),
+            cls,
+            style: base + (front && !active ? ';background:'+(dark ? '#241f38' : '#f4f0fe')+';font-weight:700' : ''),
+            mobStyle: base + ';padding:10px 11px' + (front && !active ? ';background:'+(dark ? '#241f38' : '#f4f0fe')+';font-weight:700' : ''),
+          };
+        }),
+      };
+    });
+
+    const ROLE_KEYS = ['founder','investor','partner','advisor'];
+    const variants = ROLE_KEYS.map(k => {
+      const d = NAV[k];
+      const n = d.groups.reduce((a,g) => a + g.items.length, 0);
+      return {
+        k, title:d.title, user:d.user, initials:d.initials, role:d.role, plan:d.plan,
+        count: n + ' items',
+        avStyle:'width:30px;height:30px;border-radius:9px;background:'+d.roleColor+';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none',
+        roleChip: roleChipOf(d.roleColor),
+        groups: buildGroups(k, d),
+        menuOpen: st.menu === k,
+      };
+    });
+
+    const mobileGroups = buildGroups('mobile', NAV.founder);
+
+    // ---------- collapsed rail ----------
+    const COLLAPSED = [
+      { l:'Studio', i:'home' }, { l:'Spin-Out Lab', i:'flask' }, { div:1 },
+      { l:'Command Center', i:'grid' }, { l:'Signals', i:'signal', lock:'Growth' }, { l:'Team', i:'users' }, { div:1 },
+      { l:'Customer Discovery', i:'search' }, { l:'Introductions', i:'intro', badge:'3' }, { l:'Pitch', i:'deck' }, { div:1 },
+      { l:'Capital Match', i:'coin', prev:1 }, { l:'Research', i:'book', prev:1 },
+    ];
+    const collapsedItems = COLLAPSED.map(c => {
+      if (c.div) return { divider:true, isItem:false };
+      const active = c.l === st.active.founder;
+      const hov = c.l === st.hovered;
+      return {
+        divider:false, isItem:true, id:c.l, icon: ico[c.i],
+        badge: c.badge || '', dot: !!c.prev,
+        badgeStyle:'position:absolute;top:2px;right:2px;min-width:15px;height:15px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:800;background:'+V+';color:#fff;display:flex;align-items:center;justify-content:center',
+        dotStyle:'position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;border:1.5px dashed '+(dark ? '#57506b' : '#b3aec2'),
+        style:'position:relative;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;'
+          + 'background:' + (active ? (dark ? '#241f38' : '#f4f0fe') : hov ? (dark ? '#22202b' : '#f4f3f7') : 'transparent')
+          + ';color:' + (active ? (dark ? '#c4b5fd' : V7) : c.prev ? (dark ? '#b6b1c4' : '#6b6577') : (dark ? '#9b96a8' : '#71717a'))
+          + '',
+      };
+    });
+    const hovRaw = COLLAPSED.find(c => c.l === st.hovered) || COLLAPSED[0];
+    const flyout = { label:hovRaw.l, locked: !!hovRaw.lock, tier: hovRaw.lock || '', preview: !!hovRaw.prev, badge: hovRaw.badge || '' };
+
+    // ---------- sheets ----------
+    const TIER_COPY = {
+      Growth:{ body:'Signals reads live market data across your sector and surfaces where demand is moving. It works today — it sits on the Growth plan.',
+        includes:['Signals, Metrics and Network Effects','Capital and Liquidity & Exits','Demand Insights and Due Diligence'] },
+      Studio:{ body:'This feature is built and running for Studio accounts. Upgrading turns it on immediately — no setup, no migration.',
+        includes:['AI Advisor and Legal Engine','Unlimited documents and e-sign','Priority office hours booking'] },
+      Fund:{ body:'Fund tooling is live for accounts managing a vehicle. It covers LP records, capital calls, and fund-level reporting.',
+        includes:['Fund and LP management','Fund performance and accounting','Transaction records and audit trail'] },
+    };
+    const sheetRaw = st.sheet;
+    const sheet = sheetRaw
+      ? Object.assign({ label:sheetRaw.label, tier:sheetRaw.tier }, TIER_COPY[sheetRaw.tier] || { body:'', includes:[] })
+      : { label:'', tier:'', body:'', includes:[] };
+
+    const LAYOUTS = [{ k:'full', l:'Four variants' }, { k:'compact', l:'Collapsed & mobile' }];
+    const layoutTabs = LAYOUTS.map(l => ({ label:l.l, style: seg(st.layout === l.k), go: () => this.setState({ layout:l.k }) }));
+
+    const legend = [
+      { k:'Active', d:'Current page. Tinted row plus a left bar — calm, no heavy fill.',
+        swatch:'width:24px;height:24px;border-radius:7px;background:'+(dark?'#241f38':'#f4f0fe')+';border-left:2.5px solid '+V+';flex:none', hasIcon:false, hasText:false, icon:ico.check, swatchText:'' },
+      { k:'Hover', d:'Neutral wash on any interactive row, including locked and preview.',
+        swatch:'width:24px;height:24px;border-radius:7px;background:'+(dark?'#22202b':'#f4f3f7')+';flex:none', hasIcon:false, hasText:false, icon:ico.check, swatchText:'' },
+      { k:'Locked', d:'Works today, needs a plan. Amber tier tag with a lock — opens the paywall.',
+        swatch:'width:24px;height:24px;border-radius:7px;background:'+(dark?'rgba(180,83,9,.2)':'rgba(180,83,9,.1)')+';color:'+(dark?'#fcd34d':'#92400e')+';display:flex;align-items:center;justify-content:center;flex:none',
+        hasIcon:true, hasText:false, icon:ico.lock, swatchText:'' },
+      { k:'Preview', d:'Sample data — not built yet. Dashed outline, no colour, no plan unlocks it.',
+        swatch:'width:24px;height:24px;border-radius:7px;border:1px dashed '+(dark?'#57506b':'#b3aec2')+';color:'+(dark?'#b6b1c4':'#6b6577')+';display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;flex:none',
+        hasIcon:false, hasText:true, icon:ico.info, swatchText:'PR' },
+    ];
+
+    const accountMenu = [
+      { label:'Settings', icon:ico.gear, tone: dark ? '#c9c5d4' : '#3f3f46' },
+      { label:'Trust Center', icon:ico.shield, tone: dark ? '#c9c5d4' : '#3f3f46' },
+      { label:'Switch workspace', icon:ico.swap, tone: dark ? '#c9c5d4' : '#3f3f46' },
+      { label:'Log out', icon:ico.out, tone:'#b91c1c' },
+    ];
+
+    return {
+      themeClass: dark ? 'nv-dark' : '',
+      themeIcon: dark ? ico.sun : ico.moon,
+      themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      layoutTabs, isFull: st.layout === 'full', isCompact: st.layout === 'compact',
+
+      caretIcon: ico.caret, lockIcon: ico.lock, searchIcon: ico.search,
+      collapseIcon: ico.collapse, dotsIcon: ico.dots, closeIcon: ico.close,
+      checkIcon: ico.check, infoIcon: ico.info,
+      tierTag, previewTag, countBadge, founderChip: roleChipOf('#7c3aed'),
+
+      legend, variants, mobileGroups, collapsedItems, flyout, accountMenu,
+
+      toggleGroup: (e) => {
+        const node = (e.currentTarget || e.target).closest('[data-grp]');
+        const id = node && node.getAttribute('data-grp');
+        if (id) this.setState(s => {
+          const c = Object.assign({}, s.closed);
+          if (c[id]) delete c[id]; else c[id] = 1;
+          return { closed:c };
+        });
+      },
+      pickItem: (e) => {
+        const node = (e.currentTarget || e.target).closest('[data-item]');
+        const id = node && node.getAttribute('data-item');
+        if (!id) return;
+        const parts = id.split('|');
+        const role = parts[0], label = parts[1], tier = parts[2], prev = parts[3];
+        if (prev) { this.setState({ sheet:{ kind:'preview', label } }); return; }
+        if (tier) { this.setState({ sheet:{ kind:'lock', label, tier } }); return; }
+        this.setState(s => ({ active: Object.assign({}, s.active, { [role]: label }) }));
+      },
+      hoverCollapsed: (e) => {
+        const node = (e.currentTarget || e.target).closest('[data-collapsed]');
+        const id = node && node.getAttribute('data-collapsed');
+        if (id) this.setState({ hovered:id });
+      },
+      toggleMenu: (e) => {
+        const node = (e.currentTarget || e.target).closest('[data-menu]');
+        const k = node && node.getAttribute('data-menu');
+        if (k) this.setState(s => ({ menu: s.menu === k ? null : k }));
+      },
+
+      sheetLock: !!sheetRaw && sheetRaw.kind === 'lock',
+      sheetPreview: !!sheetRaw && sheetRaw.kind === 'preview',
+      sheet,
+      closeSheet: () => this.setState({ sheet:null }),
+      stop: (e) => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>

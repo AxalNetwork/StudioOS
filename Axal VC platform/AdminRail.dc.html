@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="font-family:Inter,system-ui,sans-serif;color:#18181b">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e">Worker AI · {{ page }}</span>
+    <span style="font-size:11px;color:#615c6e">›</span>
+  </div>
+
+  <div style="border:1px solid {{ edge }};background:{{ tint }};border-radius:9px;padding:10px 11px;margin-top:13px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span style="font-size:12px;font-weight:800;color:{{ deep }}">Personal Advisor</span>
+      <span style="width:24px;height:14px;border-radius:999px;background:{{ fill }};position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#fff"></span></span>
+    </div>
+    <div style="font-size:10.5px;color:{{ deep }};margin-top:4px;line-height:1.45">{{ modeNote }}</div>
+  </div>
+
+  <div style="border:1px solid {{ edge }};background:{{ tint }};border-radius:9px;padding:10px 11px;margin-top:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+      <span style="font-size:12px;font-weight:800">{{ modelName }}</span>
+      <span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:{{ deep }};background:#fff;border:1px solid {{ edge }};border-radius:3px;padding:2px 5px;flex:none">RECOMMENDED</span>
+    </div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">{{ modelId }}</div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:6px;line-height:1.5">{{ modelWhy }}</div>
+    <div style="font-size:10.5px;color:#615c6e;font-variant-numeric:tabular-nums;margin-top:8px;padding-top:7px;border-top:1px solid {{ edge }}">{{ price }}</div>
+    <div style="font-size:11px;font-weight:700;color:#047857;font-variant-numeric:tabular-nums;margin-top:5px">{{ est }}</div>
+  </div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:16px">Admin assist</div>
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+    <div style="font-size:11.5px;font-weight:700">{{ assistOp }}</div>
+    <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.5">{{ assistNote }}</div>
+    <div style="font-size:10.5px;font-weight:700;color:{{ deep }};margin-top:8px;font-variant-numeric:tabular-nums">{{ assistCost }}</div>
+  </div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:16px">Usage</div>
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <span style="font-size:17px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ spend }}</span>
+      <span style="font-size:10.5px;color:#615c6e">of {{ plan }}</span>
+    </div>
+    <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:{{ pct }}%;background:{{ fill }};border-radius:999px"></div></div>
+    <sc-if value="{{ margin }}">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:9px;padding-top:8px;border-top:1px solid #f4f3f7">
+        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#615c6e">Axal VC margin</span>
+        <span style="font-size:12.5px;font-weight:800;color:#047857;font-variant-numeric:tabular-nums">{{ margin }}</span>
+      </div>
+      <div style="font-size:10px;color:#615c6e;margin-top:5px;line-height:1.5">{{ marginNote }}</div>
+    </sc-if>
+  </div>
+
+  <div style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5">
+    <span style="{{ scopeChipStyle }}">{{ scopeChip }}</span>
+  </div>
+  <div style="font-size:10px;color:#615c6e;margin-top:8px;line-height:1.5">{{ scopeNote }}</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;tier&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;subsidiary&quot;,&quot;super&quot;],&quot;default&quot;:&quot;subsidiary&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Home&quot;,&quot;Approvals&quot;,&quot;Accounts&quot;,&quot;Insights&quot;,&quot;Licenses&quot;,&quot;Revenue&quot;,&quot;Governance&quot;],&quot;default&quot;:&quot;Home&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const sup = this.props.tier === 'super';
+    // Steel for subsidiary, oxblood for HQ. Both text tokens are the deep step — the fills
+    // below are non-text only, same rule the four license products already follow.
+    const A = sup
+      ? { deep:'#881337', fill:'#9f1239', tint:'#fff5f7', edge:'#fbcfe0' }
+      : { deep:'#334155', fill:'#475569', tint:'#f6f8fa', edge:'#cbd5e1' };
+    const page = this.props.page || 'Home';
+
+    const c4 = (n) => '$' + n.toFixed(4);
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+
+    const P = {
+      Home:      { name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+                   why:'Synthesis across every queue and programme in one read.',
+                   price:'$0.293 / M in · $2.253 / M out', tin:16800, tout:1240, pin:0.293, pout:2.253,
+                   op:'Compose the operating digest', note:'Queue pressure, deadlines, anomalies — one brief.', spend:2.10 },
+      Approvals: { name:'Granite 4.0 H Micro', id:'@cf/ibm-granite/granite-4.0-h-micro',
+                   why:'Near-free triage, which is what makes summarising every pending item viable.',
+                   price:'$0.017 / M in · $0.112 / M out', tin:3200, tout:520, pin:0.017, pout:0.112,
+                   op:'Triage 14 pending applications', note:'Summarise each, flag the ones needing legal review.', spend:0.90 },
+      Accounts:  { name:'BGE-M3', id:'@cf/baai/bge-m3',
+                   why:'Semantic search across a member table without leaving the tenant.',
+                   price:'$0.012 / M in', tin:9400, tout:0, pin:0.012, pout:0,
+                   op:'Find lapsed seats', note:'Licensed but unused for 60 days.', spend:0.30 },
+      Insights:  { name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct',
+                   why:'Narrative where the reader is deciding something.',
+                   price:'$0.351 / M in · $0.555 / M out', tin:8600, tout:1180, pin:0.351, pout:0.555,
+                   op:'Narrate the quarter', note:'Growth, funnel and throughput, each figure sourced.', spend:1.40 },
+      Licenses:  { name:'DeepSeek V4 Pro', id:'@cf/deepseek-ai/deepseek-v4-pro-0813',
+                   why:'Strongest reasoning, which is what territory conflicts and licence terms need.',
+                   price:'$1.320 / M in · $3.960 / M out', tin:21400, tout:1620, pin:1.320, pout:3.960,
+                   op:'Check territory conflicts', note:'Proposed countries against every active licence.', spend:9.80 },
+      Revenue:   { name:'DeepSeek R1 Distill 32B', id:'@cf/deepseek-ai/deepseek-r1-distill-qwen-32b',
+                   why:'Shows its arithmetic, which is the point on a page that splits money.',
+                   price:'$0.497 / M in · $4.881 / M out', tin:14200, tout:2100, pin:0.497, pout:4.881,
+                   op:'Reconcile a revenue share', note:'Statement against the ledger, line by line.', spend:6.40 },
+      Governance:{ name:'Llama Guard 3 8B', id:'@cf/meta/llama-guard-3-8b',
+                   why:'The screening model itself — here it is the subject, not the filter.',
+                   price:'$0.045 / M in · $0.384 / M out', tin:11200, tout:640, pin:0.045, pout:0.384,
+                   op:'Cluster guardrail hits', note:'Group flagged outputs by what tripped them.', spend:1.10 }
+    };
+    const p = P[page] || P.Home;
+    const cost = run(p.tin, p.tout, p.pin, p.pout);
+    const PLAN = sup ? 400 : 80;
+    const MARGIN = 0.31;
+
+    return {
+      page, deep:A.deep, fill:A.fill, tint:A.tint, edge:A.edge,
+      modeNote:'Drafts decision notes, digests and reconciliations as accept / edit / discard proposals. Never auto-committed, and never an approval on your behalf.',
+      modelName:p.name, modelId:p.id, modelWhy:p.why, price:p.price,
+      est:'≈ ' + c4(cost) + ' per run',
+      assistOp:p.op, assistNote:p.note, assistCost:'≈ ' + c4(cost) + ' · estimated before it runs',
+      spend:'$' + p.spend.toFixed(2), plan:'$' + PLAN.toFixed(2),
+      pct:String(Math.round(p.spend / PLAN * 100)),
+      margin: sup ? '$' + (p.spend * MARGIN).toFixed(2) : null,
+      marginNote: sup ? 'Axal VC\u2019s cut of this page\u2019s consumption at the ' + Math.round(MARGIN * 100)
+        + '% split. Subsidiaries see their spend; only HQ sees what it earned.' : null,
+      scopeChip: sup ? 'Cross-tenant' : 'Axal VC France only',
+      scopeChipStyle: sup
+        ? 'display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#881337;background:#fff5f7;border:1px solid #fbcfe0;border-radius:4px;padding:3px 7px'
+        : 'display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:3px 7px',
+      scopeNote: sup
+        ? 'Answers may span every subsidiary. Anything the rail surfaces about a named tenant is written to the Governance audit log.'
+        : 'The rail answers within your territory only. Asked about another subsidiary it declines and says so — there is no cross-tenant read behind it to decline politely on top of.'
+    };
+  }
+}
+</script>
+</body>
+</html>

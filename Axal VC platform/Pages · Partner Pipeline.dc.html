@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeeec;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#b45309;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 16px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8f7;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:284px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .zt{font-size:15px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:12px;padding:9px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .tag{font-size:10px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e}
+    .seam{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .seamd{width:5px;height:5px;border-radius:50%;background:#0891b2;flex:none}
+    .prop{background:#fffbf2;border:1px solid #fde68a;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #b45309;background:#b45309;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    .shield{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:4px;padding:2px 6px}
+    .vm{font-size:11.5px;font-weight:700;color:#b45309}
+  </style>
+</helmet>
+
+<!-- ══════════ P1 · LEADS ══════════ -->
+<section class="ab" id="p1">
+  <div class="ab-hd"><a class="ab-id" href="#p1">P1</a><span class="ab-nm">Leads — MATCH ENGINE</span><span class="ab-sub">amber · /pipeline/leads</span></div>
+  <div class="ab-sub" style="max-width:900px;margin:-6px 0 16px">All sources with provenance and need-to-capability scores. The compressed zone shows the top three; depth adds the receipt behind every score and the pass reason — because a pass without a reason is a lead you re-evaluate next quarter. Leads that already produced a bid have left this list for P2.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPipe }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#b45309;font-weight:700">Pipeline</span><span>‹</span><span style="font-weight:700;color:#18181b">Leads</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Leads</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Every source, scored against what this firm can actually do, with the provenance that says how it arrived.</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ l_views }}" as="v" hint-placeholder-count="5"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span class="zs" style="margin-left:4px">·</span><span class="vm" style="cursor:pointer">Edit capability weights</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ l_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Open leads</span><span class="zs">Score receipts and provenance · only here</span></div>
+        <div style="display:grid;gap:11px">
+          <sc-for list="{{ l_leads }}" as="l" hint-placeholder-count="5">
+            <div style="{{ l.cardStyle }}">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:13.5px;font-weight:800;letter-spacing:-.01em">{{ l.who }}</span>
+                    <sc-if value="{{ l.seam }}"><span class="seam"><span class="seamd"></span>{{ l.seam }}</span></sc-if>
+                    <sc-if value="{{ l.plain }}"><span class="tag">{{ l.plain }}</span></sc-if>
+                  </div>
+                  <div style="font-size:11.5px;color:#3f3a49;margin-top:6px;line-height:1.55">{{ l.need }}</div>
+                  <div style="font-size:11px;color:#b45309;margin-top:6px;line-height:1.55">{{ l.why }}</div>
+                </div>
+                <div style="width:118px;flex:none;text-align:right">
+                  <div class="num" style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ l.scoreInk }}">{{ l.score }}</div>
+                  <div class="lbl" style="font-size:9px;margin-top:3px">match</div>
+                  <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:9px"><span class="acc" style="padding:5px 10px;font-size:11px">Accept</span><span class="gho" style="padding:5px 10px;font-size:11px">Pass</span></div>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px;padding-top:10px;border-top:1px solid #f4f3f7">
+                <sc-for list="{{ l.receipts }}" as="r" hint-placeholder-count="3"><span style="{{ r.style }}">{{ r.label }}</span></sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Proposal · drafted on accept</span><span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ l_cost }}</span></div>
+          <div style="font-size:12px;color:#78350f;line-height:1.65">{{ l_draft }}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Open the draft</span><span class="gho">Change the shape</span><span class="dis">Discard</span></div>
+        </div>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Passed · with reasons</span><span class="zs">Only here · the record that stops re-litigation</span></div>
+        <div style="display:grid;grid-template-columns:1.1fr .8fr 1.6fr;gap:11px"><span class="th">Lead</span><span class="th">Reason</span><span class="th">Note</span></div>
+        <sc-for list="{{ l_passed }}" as="p" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:1.1fr .8fr 1.6fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ p.who }}</span><span class="td"><span class="tag">{{ p.reason }}</span></span><span class="td">{{ p.note }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ l_passNote }}</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="amber" page="Pipeline" hint-size="100%,760px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ P2 · PROPOSALS ══════════ -->
+<section class="ab" id="p2">
+  <div class="ab-hd"><a class="ab-id" href="#p2">P2</a><span class="ab-nm">Proposals — COLLECTION</span><span class="ab-sub">amber · /pipeline/proposals</span></div>
+  <div class="ab-sub" style="max-width:900px;margin:-6px 0 16px">Drafts, sent, opened, decided — with win and loss reasons. The lifecycle is the subject: a proposal opened four times and not answered is a different object from one never opened, and only the detail page can tell you which you have.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPipe }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#b45309;font-weight:700">Pipeline</span><span>‹</span><span style="font-weight:700;color:#18181b">Proposals</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Proposals</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Every proposal with its version history, who opened it and when, and the reason it was won or lost.</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ pr_views }}" as="v" hint-placeholder-count="5"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span class="zs" style="margin-left:4px">·</span><span class="vm" style="cursor:pointer">Bulk: nudge unopened</span><span class="vm" style="cursor:pointer">Export win/loss CSV</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ pr_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">All proposals</span><span class="zs">Read receipts and versions · only here</span></div>
+        <div style="display:grid;grid-template-columns:1.1fr .8fr .55fr .95fr 1.3fr;gap:11px">
+          <span class="th">Client</span><span class="th">Shape · value</span><span class="th">Ver</span><span class="th">State</span><span class="th">Signal</span>
+        </div>
+        <sc-for list="{{ pr_rows }}" as="r" hint-placeholder-count="6">
+          <div style="{{ r.rowStyle }}">
+            <span class="td" style="font-weight:600;border-top:none;padding:10px 0">{{ r.client }}</span>
+            <span class="td num" style="border-top:none;padding:10px 0">{{ r.shape }}</span>
+            <span class="td num" style="border-top:none;padding:10px 0">{{ r.ver }}</span>
+            <span class="td" style="border-top:none;padding:10px 0"><span style="{{ r.pill }}">{{ r.state }}</span></span>
+            <span class="td" style="border-top:none;padding:10px 0;color:{{ r.sigInk }}">{{ r.signal }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ pr_note }}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Version history · Verwood</span><span class="zs">What changed, and what it cost</span></div>
+          <div style="display:grid;gap:8px">
+            <sc-for list="{{ pr_versions }}" as="v" hint-placeholder-count="3">
+              <div style="display:flex;align-items:flex-start;gap:11px;padding:11px 12px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                <span class="num" style="font-size:11px;font-weight:800;color:#b45309;flex:none">{{ v.ver }}</span>
+                <div style="min-width:0"><div style="font-size:12px;font-weight:700">{{ v.change }}</div><div style="font-size:11px;color:#615c6e;margin-top:4px;line-height:1.55">{{ v.note }}</div></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Loss reasons</span><span class="zs">Taxonomy, not prose</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ pr_loss }}" as="l" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;justify-content:space-between;gap:10px"><span style="font-size:11.5px;font-weight:600">{{ l.reason }}</span><span class="num" style="font-size:11.5px;font-weight:700">{{ l.n }}</span></div>
+                <div style="height:6px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:{{ l.pct }}%;background:{{ l.ink }};border-radius:999px"></div></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.55">{{ pr_lossNote }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="amber" page="Pipeline" hint-size="100%,720px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ P3 · NEGOTIATIONS ══════════ -->
+<section class="ab" id="p3">
+  <div class="ab-hd"><a class="ab-id" href="#p3">P3</a><span class="ab-nm">Negotiations — WORK BOARD</span><span class="ab-sub">amber · /pipeline/negotiations</span></div>
+  <div class="ab-sub" style="max-width:900px;margin:-6px 0 16px">Scope and terms, retainer versus project state. Every card carries the one open question blocking it — a negotiation without a named blocker is a negotiation nobody is running.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPipe }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#b45309;font-weight:700">Pipeline</span><span>‹</span><span style="font-weight:700;color:#18181b">Negotiations</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Negotiations</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Four live, each with the term still open and who owes the next move.</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ n_views }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span class="zs" style="margin-left:4px">·</span><span class="vm" style="cursor:pointer">WIP limit: 5 per stage</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ n_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:15px">
+        <sc-for list="{{ n_lanes }}" as="ln" hint-placeholder-count="4">
+          <div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:9px">
+              <span style="font-size:12px;font-weight:800">{{ ln.name }}</span>
+              <span class="num" style="font-size:11px;color:{{ ln.countInk }};font-weight:700">{{ ln.count }}</span>
+            </div>
+            <div style="display:grid;gap:9px">
+              <sc-for list="{{ ln.cards }}" as="c" hint-placeholder-count="2">
+                <div style="{{ c.cardStyle }}">
+                  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:12.5px;font-weight:800">{{ c.client }}</span><span class="tag">{{ c.shape }}</span></div>
+                  <div class="num" style="font-size:13px;font-weight:800;color:#b45309;margin-top:7px">{{ c.value }}</div>
+                  <div style="font-size:10.5px;color:#3f3a49;margin-top:7px;line-height:1.5">{{ c.open }}</div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding-top:8px;border-top:1px solid #f4f3f7">
+                    <span style="{{ c.ballPill }}">{{ c.ball }}</span>
+                    <span class="num" style="font-size:10px;color:{{ c.ageInk }}">{{ c.age }}</span>
+                  </div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ ln.empty }}"><div style="border:1px dashed #e2e1e8;border-radius:10px;padding:14px;text-align:center;font-size:11px;color:#615c6e">Nothing here</div></sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:15px">
+        <div class="zh"><span class="zt">Terms in play</span><span class="zs">The clause-level view · only here</span></div>
+        <div style="display:grid;grid-template-columns:1fr .9fr .9fr 1.4fr;gap:11px"><span class="th">Client</span><span class="th">You asked</span><span class="th">They asked</span><span class="th">Where it lands</span></div>
+        <sc-for list="{{ n_terms }}" as="t" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:1fr .9fr .9fr 1.4fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ t.client }}</span><span class="td num">{{ t.you }}</span><span class="td num" style="color:#b45309">{{ t.them }}</span><span class="td">{{ t.land }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ n_note }}</div>
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Proposal · counter drafted</span><span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ n_cost }}</span></div>
+          <div style="font-size:12px;color:#78350f;line-height:1.65">{{ n_draft }}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Send counter</span><span class="gho">Edit terms</span><span class="dis">Discard</span><span class="shield" style="margin-left:auto">Screened</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="amber" page="Pipeline" hint-size="100%,720px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ P4 · RETAINERS ══════════ -->
+<section class="ab" id="p4">
+  <div class="ab-hd"><a class="ab-id" href="#p4">P4</a><span class="ab-nm">Retainers — LEDGER</span><span class="ab-sub">amber · /pipeline/retainers</span></div>
+  <div class="ab-sub" style="max-width:900px;margin:-6px 0 16px">The recurring book, renewal dates, and utilization against scope. Utilization is the point: a client using 34% of retained hours is a churn risk that no complaint has surfaced yet, and a client at 118% is unbilled work.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPipe }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#b45309;font-weight:700">Pipeline</span><span>‹</span><span style="font-weight:700;color:#18181b">Retainers</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Retainers</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Recurring revenue, what each client is actually consuming, and when each one renews.</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ r_views }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span class="zs" style="margin-left:4px">·</span><span class="vm" style="cursor:pointer">Export MRR schedule</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ r_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">The book</span><span class="zs">Utilization against retained scope · only here</span></div>
+        <div style="display:grid;grid-template-columns:1.05fr .7fr .7fr 1.05fr .75fr .9fr;gap:11px">
+          <span class="th">Client</span><span class="th">Monthly</span><span class="th">Hours</span><span class="th">Utilization</span><span class="th">Renews</span><span class="th">Read</span>
+        </div>
+        <sc-for list="{{ r_rows }}" as="r" hint-placeholder-count="5">
+          <div style="{{ r.rowStyle }}">
+            <span class="td" style="font-weight:{{ r.weight }};border-top:none;padding:10px 0">{{ r.client }}</span>
+            <span class="td num" style="font-weight:{{ r.weight }};border-top:none;padding:10px 0">{{ r.monthly }}</span>
+            <span class="td num" style="border-top:none;padding:10px 0">{{ r.hours }}</span>
+            <span class="td" style="border-top:none;padding:10px 0">
+              <sc-if value="{{ r.hasBar }}">
+                <div style="height:6px;background:#eceaf2;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ r.utilPct }}%;background:{{ r.utilInk }};border-radius:999px"></div></div>
+                <span class="num" style="font-size:10.5px;color:{{ r.utilInk }};font-weight:700">{{ r.util }}</span>
+              </sc-if>
+            </span>
+            <span class="td num" style="border-top:none;padding:10px 0;color:{{ r.renewInk }}">{{ r.renews }}</span>
+            <span class="td" style="border-top:none;padding:10px 0;font-size:11px">{{ r.read }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ r_bookNote }}</div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:8px;line-height:1.6">{{ r_note }}</div>
+      </div>
+      <div class="prop" style="margin-top:14px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Proposal · renewal risk</span><span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ r_cost }}</span></div>
+        <div style="font-size:12px;color:#78350f;line-height:1.65">{{ r_draft }}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Draft the conversation</span><span class="gho">See the hours</span><span class="dis">Discard</span></div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="amber" page="Pipeline" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ P5 · ANALYTICS ══════════ -->
+<section class="ab" id="p5">
+  <div class="ab-hd"><a class="ab-id" href="#p5">P5</a><span class="ab-nm">Analytics — ANALYTICS</span><span class="ab-sub">amber · /pipeline/analytics</span></div>
+  <div class="ab-sub" style="max-width:900px;margin:-6px 0 16px">Win rate, cycle time, forecast, loss patterns. Depth adds the one thing that changes behaviour: the loss pattern broken out by shape, with the on-price count stated per shape rather than asserted as a universal.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navPipe }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="crumb"><span style="color:#b45309;font-weight:700">Pipeline</span><span>‹</span><span style="font-weight:700;color:#18181b">Analytics</span></div>
+      <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Analytics</h1>
+      <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Win rate, cycle time and forecast — and the loss pattern that explains all three.</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <sc-for list="{{ a_views }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+        <span class="zs" style="margin-left:4px">·</span><span class="vm" style="cursor:pointer">Export chart</span><span class="vm" style="cursor:pointer">Save benchmark</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+        <sc-for list="{{ a_stats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:13px 15px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">By shape</span><span class="zs">On-price losses stated per shape</span></div>
+          <div style="display:grid;grid-template-columns:1.1fr .6fr .6fr 1.5fr;gap:11px"><span class="th">Shape</span><span class="th">Win</span><span class="th">Cycle</span><span class="th">Read</span></div>
+          <sc-for list="{{ a_shape }}" as="s" hint-placeholder-count="3">
+            <div style="display:grid;grid-template-columns:1.1fr .6fr .6fr 1.5fr;gap:11px;align-items:center">
+              <span class="td" style="font-weight:600">{{ s.shape }}</span><span class="td num" style="font-weight:700;color:{{ s.ink }}">{{ s.win }}</span><span class="td num">{{ s.cycle }}</span><span class="td">{{ s.read }}</span>
+            </div>
+          </sc-for>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">{{ a_shapeNote }}</div>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Quarter over quarter</span><span class="zs">Win rate by shape</span></div>
+          <div style="display:flex;align-items:flex-end;gap:12px;height:132px;margin-top:6px">
+            <sc-for list="{{ a_chart }}" as="q" hint-placeholder-count="3">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+                <div style="display:flex;align-items:flex-end;gap:4px;height:100%"><sc-for list="{{ q.bars }}" as="b" hint-placeholder-count="3"><div style="{{ b.style }}"></div></sc-for></div>
+                <div class="lbl" style="font-size:9px;text-align:center;margin-top:8px">{{ q.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px">
+            <sc-for list="{{ a_legend }}" as="l" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:3px;background:{{ l.color }};flex:none"></span><span style="font-size:11px;color:#3f3a49">{{ l.label }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Loss reasons</span><span class="zs">The taxonomy, not a summary sentence</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ a_losses }}" as="l" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;justify-content:space-between;gap:10px"><span style="font-size:11.5px;font-weight:600">{{ l.reason }}</span><span class="num" style="font-size:11.5px;font-weight:700">{{ l.n }}</span></div>
+                <div style="height:6px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:{{ l.pct }}%;background:{{ l.ink }};border-radius:999px"></div></div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="prop">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Proposal · the quarter, narrated</span><span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ a_cost }}</span></div>
+            <div style="font-size:12px;color:#78350f;line-height:1.65">{{ a_narrative }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Accept read</span><span class="gho">See the sources</span><span class="dis">Discard</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="EmberRail" accent="amber" page="Analytics" hint-size="100%,740px"></dc-import></div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const I = {
+      home:  this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      pipe:  this.ic('<path d="M3 7h18M6 12h12M9 17h6"/>'),
+      del:   this.ic('<path d="M3 8 12 3l9 5v8l-9 5-9-5Z"/><path d="M3 8l9 5 9-5"/>'),
+      off:   this.ic('<path d="M4 7h16v13H4Z"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+      net:   this.ic('<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'),
+      res:   this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      cog:   this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>')
+    };
+    const AM = '#b45309', AMT = '#fffbf2';
+    const rows = [['Home',I.home],['Pipeline',I.pipe],['Delivery',I.del],['Offers',I.off],['Network',I.net],['Research',I.res],['Firm Settings',I.cog]];
+    const navPipe = rows.map(([label, icon]) => ({ label, icon,
+      style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
+        + (label === 'Pipeline' ? 'font-weight:700;color:' + AM + ';background:' + AMT + ';box-shadow:inset 2px 0 0 ' + AM
+                                : 'font-weight:600;color:#4a4553') }));
+
+    const c4 = (n) => '$' + n.toFixed(4);
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    const usd = (n) => '$' + n.toLocaleString('en-US');
+    const seg = (on) => 'font-size:11.5px;font-weight:' + (on ? '700' : '600')
+      + ';padding:6px 12px;border-radius:8px;cursor:pointer;'
+      + (on ? 'background:#fffbf2;color:' + AM + ';border:1px solid #fde68a' : 'background:#fff;color:#4a4553;border:1px solid #ececf1');
+    const views = (list) => list.map((l, i) => ({ label:l, style:seg(i === 0) }));
+    const pill = (t) => {
+      const M = { 'Won':['#ecfdf5','#047857','#a7f3d0'], 'Signed':['#ecfdf5','#047857','#a7f3d0'],
+                  'Opened':['#fffbf2','#b45309','#fde68a'], 'Sent':['#f4f4f6','#615c6e','#e4e4e8'],
+                  'Draft':['#f4f4f6','#615c6e','#e4e4e8'], 'Lost':['#fef2f2','#b91c1c','#fecaca'],
+                  'You':['#fffbf2','#b45309','#fde68a'], 'Them':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M.Sent;
+      return 'font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+
+    // ══ P1 · leads. A client appears in exactly one of {open lead, proposal, pass} — the
+    // filters below enforce it, so no hand-typed name can claim two states at once. ══
+    const PASSED = [
+      { who:'Sable Grove', reason:'Below floor', note:'Under $10k and outside the catalog. Referred out to a brand studio.' },
+      { who:'Ferrous Type', reason:'No capability', note:'Native mobile. Honest gap — said so rather than bidding to learn.' },
+      { who:'Halcyon Works', reason:'Timing', note:'Wanted a start in two weeks; capacity opens in six. Asked to revisit.' }
+    ];
+    const LEAD_POOL = [
+      { who:'Tessellate', score:91, seam:'Marketplace need · 2h ago',
+        need:'Design system and component library, pre-seed, 8 weeks.',
+        why:'Matches your two strongest capabilities and the shape you win most.',
+        receipts:[['Design system · exact match','hit'],['Retainer-shaped','hit'],['Budget stated $32k','hit']] },
+      { who:'Corvid Labs', score:74, seam:'Investor portfolio intro · Thornbury',
+        need:'Front-end rebuild with an ambiguous scope and no date.',
+        why:'Capability fits; the scope does not. Worth a call before a proposal.',
+        receipts:[['Front-end · match','hit'],['Scope undefined','miss'],['Warm intro','hit']] },
+      { who:'Meriwether Health', score:58, plain:'Inbound · website',
+        need:'HIPAA-adjacent data work, 4 months, procurement-led.',
+        why:'Same regulated-sector gap Solano is testing at Terms. Wait for that outcome before bidding a second one.',
+        receipts:[['Data engineering · partial','part'],['Compliance · no evidence','miss'],['Long cycle','miss']] },
+      { who:'Brackish', score:41, plain:'Inbound · referral',
+        need:'Logo and brand refresh, two weeks.',
+        why:'Below your floor and outside the catalog. Pass with a referral out.',
+        receipts:[['Brand · not offered','miss'],['Under $10k','miss']] }
+    ];
+    const RC = { hit:['#ecfdf5','#047857','#a7f3d0'], part:['#fffbeb','#92400e','#fde68a'], miss:['#fef2f2','#b91c1c','#fecaca'] };
+
+    // ══ THE quarter record. P2's table and stats, P5's win rate, by-shape table, forecast base
+    // and loss taxonomy all derive from this one array — there is no second bid record. ══
+    const PROPS = [
+      { client:'Verwood',       shape:'Fixed scope', value:48000, ver:4, state:'Won',    opens:6 },
+      { client:'Ostara',        shape:'Fixed scope', value:31000, ver:2, state:'Lost',   opens:5, reason:'Price' },
+      { client:'Kelso Freight', shape:'Fixed scope', value:22000, ver:1, state:'Lost',   opens:3, reason:'Price' },
+      { client:'Marrow Studio', shape:'Fixed scope', value:17500, ver:2, state:'Lost',   opens:4, reason:'Price' },
+      { client:'Dunlin Retail', shape:'Fixed scope', value:29000, ver:1, state:'Lost',   opens:2, reason:'Price' },
+      { client:'Padma Systems', shape:'Fixed scope', value:24000, ver:1, state:'Lost',   opens:3, reason:'Timing' },
+      { client:'Thornfield',    shape:'Retainer',    value:7500,  ver:2, state:'Won',    opens:3 },
+      { client:'Halverton',     shape:'Retainer',    value:4500,  ver:1, state:'Won',    opens:2 },
+      { client:'Ridgeline Ops', shape:'Retainer',    value:6000,  ver:3, state:'Lost',   opens:4, reason:'Scope mismatch' },
+      { client:'Novacraft Labs',shape:'Embedded seat',value:9000, ver:2, state:'Won',    opens:3 },
+      // Live rows carry their negotiation STAGE, so P3's lanes and terms table read this row
+      // rather than re-typing the client, its shape and its value.
+      { client:'Aperture',      shape:'Fixed scope', value:26000, ver:1, state:'Sent',   opens:0, days:9,
+        stage:'Scoping', ball:'You', open:'Scope still undefined — no deliverable list and no date.',
+        you:'Fixed scope', them:'"Flexible"', land:'Retainer instead. Flexible and fixed-price cannot both be true.' },
+      { client:'Kelp Bio',      shape:'Retainer',    value:10500, ver:3, state:'Opened', opens:4, days:2,
+        stage:'Terms', ball:'Them', open:'They want month-to-month; you asked for a three-month minimum.',
+        you:'3-month min', them:'Month-to-month', land:'Two months with a 30-day notice. Both sides move.' },
+      { client:'Solano Health', shape:'Fixed scope', value:58000, ver:2, state:'Sent',   opens:3, days:5,
+        stage:'Terms', ball:'Them', open:'Compliance review before terms. Their counsel has it.',
+        you:'Net 30', them:'Net 60', land:'Net 45 with 2% early-pay. Procurement will take it.' },
+      { client:'Marchetti',     shape:'Retainer',    value:6000,  ver:3, state:'Opened', opens:5, days:3,
+        stage:'Legal', ball:'You', open:'MSA redlines returned. Indemnity cap is the only open item.',
+        you:'Cap at fees paid', them:'2× fees paid', land:'1.5×. Standard for this size, and your insurer covers it.' },
+      { client:'Linden Grove',  shape:'Fixed scope', value:19000, ver:1, state:'Draft',  opens:0 }
+    ];
+    const decided = PROPS.filter(p => p.state === 'Won' || p.state === 'Lost');
+    const wonProps = PROPS.filter(p => p.state === 'Won');
+    const lostProps = PROPS.filter(p => p.state === 'Lost');
+    const wonN = wonProps.length;
+    const liveProps = PROPS.filter(p => p.state === 'Opened' || p.state === 'Sent');
+    const openedUnanswered = PROPS.filter(p => p.state === 'Opened' || (p.state === 'Sent' && p.opens > 0));
+    const neverOpened = PROPS.filter(p => p.state === 'Sent' && p.opens === 0);
+    const liveValue = liveProps.reduce((a, p) => a + p.value, 0);
+    const negotiating = liveProps.filter(p => p.stage);
+    const propNames = PROPS.map(p => p.client);
+    // An open lead is a lead with no proposal and no pass. Enforced, not asserted.
+    const OPEN_LEADS = LEAD_POOL.filter(l => propNames.indexOf(l.who) < 0 && PASSED.map(p => p.who).indexOf(l.who) < 0);
+    const topLead = OPEN_LEADS.slice().sort((a, b) => b.score - a.score)[0];
+    const solano = PROPS.filter(p => p.client === 'Solano Health')[0];
+
+    // ══ P4 · retainers · utilization drives the read and every stat ══
+    // ONE today, ONE countdown. Every "in N days" and the 30-day window derive from daysUntil —
+    // never from string surgery on the date, and never from a hand-set flag.
+    const TODAY = new Date('2026-08-26');
+    const WINDOW = 30;
+    const daysUntil = (d) => Math.round((new Date(d + ', 2026') - TODAY) / 86400000);
+    // The book IS the won recurring bids. Monthly rate comes from the won PROPS row, so a
+    // client's rate exists once; utilization and renewal are the only facts added here.
+    const UTIL = {
+      'Halverton':      { retained:20, used:19, renews:'Sep 4' },
+      'Thornfield':     { retained:32, used:11, renews:'Sep 12' },
+      'Novacraft Labs': { retained:40, used:47, renews:'Nov 1' }
+    };
+    const RET = PROPS.filter(p => p.state === 'Won' && UTIL[p.client]).map(p => {
+      const u = UTIL[p.client];
+      return { client:p.client, shape:p.shape, monthly:p.value, retained:u.retained, used:u.used,
+        renews:u.renews, days:daysUntil(u.renews), close:daysUntil(u.renews) <= WINDOW };
+    });
+    const THORN = RET.filter(r => r.client === 'Thornfield')[0];
+    const NOVA = RET.filter(r => r.client === 'Novacraft Labs')[0];
+    const mrr = RET.reduce((a, r) => a + r.monthly, 0);
+    const utilOf = (r) => Math.round(r.used / r.retained * 100);
+    const under = RET.filter(r => utilOf(r) < 60);
+    const over = RET.filter(r => utilOf(r) > 100);
+    const soon = RET.filter(r => r.close);
+    const atRiskMrr = under.reduce((a, r) => a + r.monthly, 0);
+
+    // ══ P5 · aggregated FROM PROPS. Median cycle per shape is the one independent fact here. ══
+    const CYCLE = { 'Fixed scope':'22 d', 'Retainer':'14 d', 'Embedded seat':'11 d' };
+    const SHAPE_LABEL = { 'Fixed scope':'Fixed-scope projects', 'Retainer':'Retainers', 'Embedded seat':'Embedded seats' };
+    const BIDS = ['Fixed scope','Retainer','Embedded seat'].map(sh => {
+      const d = decided.filter(p => p.shape === sh);
+      return { shape:SHAPE_LABEL[sh], bids:d.length, won:d.filter(p => p.state === 'Won').length,
+        cycle:CYCLE[sh], onPrice:d.filter(p => p.reason === 'Price').length };
+    });
+    const nW = ['no','one','two','three','four','five','six','seven'];
+    const WON = wonN;
+    const DEC = decided.length;
+    const LOST = lostProps.length;
+    const onPrice = lostProps.filter(p => p.reason === 'Price').length;
+    const winPct = (b) => Math.round(b.won / b.bids * 100);
+    const OPEN_VAL = liveValue;
+    const forecast = Math.round(OPEN_VAL * (WON / DEC));
+    // Cycle days per decided bid, read through CYCLE — so the headline is the median of the
+    // same values the by-shape table prints, not a mean mislabelled as one.
+    const cycleDays = decided.map(p => parseInt(CYCLE[p.shape], 10)).sort((a, b) => a - b);
+    const mid = Math.floor(cycleDays.length / 2);
+    const medianCycle = cycleDays.length % 2
+      ? cycleDays[mid]
+      : Math.round((cycleDays[mid - 1] + cycleDays[mid]) / 2);
+    const REASONS = ['Price','Scope mismatch','Timing'];
+    const LOSSES = REASONS.map(r => ({ reason:r, n:lostProps.filter(p => p.reason === r).length }));
+    const lossMax = Math.max.apply(null, LOSSES.map(l => l.n));
+
+    return {
+      navPipe,
+
+      // ── P1 ──
+      l_views: views(['Open','Strong fit','Warm intros','Passed','All sources']),
+      l_stats: [
+        { label:'Open leads', value:String(OPEN_LEADS.length), note:'none of them already bid', ink:'#18181b' },
+        { label:'Strong fit', value:String(OPEN_LEADS.filter(l => l.score >= 80).length), note:'80 or above', ink:'#047857' },
+        { label:'Warm path', value:String(OPEN_LEADS.filter(l => l.seam).length), note:'via investors or the marketplace', ink:'#18181b' },
+        { label:'Passed this quarter', value:String(PASSED.length), note:'all with a reason on record', ink:'#615c6e' }
+      ],
+      l_leads: OPEN_LEADS.map(l => ({
+        who:l.who, score:String(l.score), seam:l.seam || null, plain:l.plain || null, need:l.need, why:l.why,
+        scoreInk: l.score >= 80 ? '#047857' : (l.score >= 60 ? '#b45309' : '#615c6e'),
+        cardStyle:'border:1px solid ' + (l.score >= 80 ? '#fde68a;background:#fffdf5' : '#f0eff4;background:#fbfbfc') + ';border-radius:11px;padding:14px 16px',
+        receipts:l.receipts.map(([label, kind]) => {
+          const c = RC[kind];
+          return { label, style:'font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2] };
+        })
+      })),
+      l_cost: '≈ ' + c4(run(3100, 1900, 0.200, 0.300)),
+      l_draft: 'Accepting ' + topLead.who + ' drafts a proposal shaped as a retainer rather than a project — because retainers are where you win, and their eight-week framing is a project only by habit. Their stated budget covers three months at your rate.',
+      // Passed = leads that never became a proposal. None of these appear in PROPS, by design:
+      // a lead you declined to bid on cannot also be a bid.
+      l_passed: PASSED,
+      l_passNote: 'These never became proposals, which is what separates this table from a loss. A lost bid is on P2 with its reason; a pass is a bid you chose not to make. '
+        + propNames.length + ' clients appear on P2, ' + OPEN_LEADS.length + ' leads are open above, and the three sets share no name — a lead you already bid is not a lead, and a lead you declined is not one either.',
+
+      // ── P2 ──
+      pr_views: views(['All','Opened, unanswered','Never opened','Won','Lost']),
+      pr_stats: [
+        { label:'Live proposals', value:String(PROPS.filter(p => p.state === 'Opened' || p.state === 'Sent').length), note:usd(liveValue) + ' in play', ink:'#18181b' },
+        { label:'Opened, unanswered', value:String(openedUnanswered.length), note:'read but not decided', ink:'#b45309' },
+        { label:'Never opened', value:String(neverOpened.length), note:'sent, no read receipt', ink:'#b91c1c' },
+        { label:'Won this quarter', value:String(wonN) + ' of ' + decided.length, note:Math.round(wonN / decided.length * 100) + '% — the rate P5 reports', ink:'#047857' }
+      ],
+      pr_rows: PROPS.map(p => ({
+        client:p.client, shape:p.shape + ' · ' + usd(p.value), ver:'v' + p.ver, state:p.state, pill:pill(p.state),
+        signal: p.state === 'Draft' ? 'Not sent'
+          : (p.opens === 0 ? 'No read receipt · ' + p.days + ' days'
+              : (p.state === 'Opened' || p.state === 'Sent'
+                  ? 'Opened ' + p.opens + '× · silent ' + p.days + ' days'
+                  : 'Opened ' + p.opens + '× before deciding')),
+        sigInk: (p.opens === 0 && p.state !== 'Draft') ? '#b91c1c' : (p.state === 'Opened' ? '#b45309' : '#3f3a49'),
+        rowStyle:'display:grid;grid-template-columns:1.1fr .8fr .55fr .95fr 1.3fr;gap:11px;align-items:center;border-bottom:1px solid #f6f5f9;'
+          + (p.opens === 0 && p.state === 'Sent' ? 'background:#fffbfb;' : '')
+      })),
+      pr_note: 'Aperture has been sent for nine days with no read receipt at all, which is a different problem from Kelp Bio opening theirs four times and going quiet. The first is a delivery failure; the second is a decision in progress. A compressed zone showing only "2 sent" cannot separate them. This table is also the record P5 aggregates — '
+        + decided.length + ' decided, ' + wonN + ' won, ' + liveProps.length + ' still live at ' + usd(liveValue) + '.',
+      pr_versions: [
+        { ver:'v1', change:'Fixed-scope, 12 weeks, ' + usd(52000), note:'Their procurement asked for a phased breakdown.' },
+        { ver:'v2', change:'Split into 3 phases, same total', note:'They asked to drop phase 3 to fit the budget cycle.' },
+        { ver:'v3', change:'Two phases, ' + usd(41000), note:'You added a change-order clause after the Verwood drift.' },
+        { ver:'v4', change:'Signed at ' + usd(48000), note:'Phase 3 restored once the budget cleared. The clause stayed in.' }
+      ],
+      pr_loss: LOSSES.map(l => ({ reason:l.reason, n:String(l.n), pct:String(Math.round(l.n / lossMax * 100)),
+        ink: l.reason === 'Price' ? '#b91c1c' : '#d97706' })),
+      pr_lossNote: 'Reasons are picked from a fixed taxonomy, not typed. Free text would make this chart unreadable within a quarter.',
+
+      // ── P3 ──
+      n_views: views(['All','Awaiting you','Awaiting them','Stalled 7d+']),
+      n_stats: [
+        { label:'Live negotiations', value:String(negotiating.length), note:usd(liveValue) + ' carried', ink:'#18181b' },
+        { label:'Awaiting you', value:String(negotiating.filter(p => p.ball === 'You').length), note:'your move to make', ink:'#b45309' },
+        { label:'Awaiting them', value:String(negotiating.filter(p => p.ball === 'Them').length), note:'waiting on a client', ink:'#615c6e' },
+        { label:'Stalled 7d+', value:String(negotiating.filter(p => p.days >= 7).length), note:'no movement either way', ink:'#b91c1c' }
+      ],
+      // Lanes and terms both filter PROPS on `stage` — one row per client, one value, one state.
+      n_lanes: ['Scoping','Terms','Legal','Ready to sign'].map(name => {
+        const cards = negotiating.filter(p => p.stage === name);
+        return {
+          name, count:String(cards.length) + ' / 5',
+          countInk: cards.length >= 5 ? '#b91c1c' : '#615c6e',
+          empty: cards.length === 0,
+          cards: cards.map(c => ({
+            client:c.client, shape:c.shape,
+            value: c.shape === 'Retainer' ? usd(c.value) + '/mo' : usd(c.value),
+            open:c.open, ball:c.ball, age:c.days + ' d',
+            ballPill:pill(c.ball), ageInk: c.days >= 7 ? '#b91c1c' : '#615c6e',
+            cardStyle:'border:1px solid ' + (c.days >= 7 ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:12px 13px'
+          }))
+        };
+      }),
+      n_terms: negotiating.map(p => ({ client:p.client, you:p.you, them:p.them, land:p.land })),
+      n_note: negotiating.length + ' live negotiations carrying ' + usd(liveValue)
+        + ' — the same rows P2 lists and the same base P5 weights. Solano is the largest and the least certain: you bid a regulated-sector project without regulated-sector evidence, and their counsel now has it. That is a defensible decision, but it is '
+        + Math.round(solano.value / liveValue * 100)
+        + '% of the live pipeline resting on a capability you cannot yet show — the same gap holding Meriwether Health at lead stage on P1.',
+      n_cost: '≈ ' + c4(run(4200, 1100, 0.351, 0.555)),
+      n_draft: 'Aperture has asked for a flexible scope at a fixed price twice, and has sat in Scoping for nine days. The counter reframes it as a retainer at the same monthly figure — which gives them the flexibility they actually want and gives you the utilization data to price the next quarter. It also names, in one line, why fixed-price and flexible cannot coexist.',
+
+      // ── P4 ──
+      r_views: views(['All','Renewing 30d','Under-consuming','Over scope']),
+      r_stats: [
+        // Counted by shape: an embedded seat is recurring revenue but it is not a retainer,
+        // and this is the page that exists to tell those economics apart.
+        { label:'MRR', value:usd(mrr), note:['Retainer','Embedded seat'].map(sh => {
+            const n = RET.filter(r => r.shape === sh).length;
+            return n ? n + ' ' + (sh === 'Retainer' ? (n === 1 ? 'retainer' : 'retainers') : (n === 1 ? 'embedded seat' : 'embedded seats')) : null;
+          }).filter(Boolean).join(' · '), ink:'#18181b' },
+        { label:'Renewing in ' + WINDOW + ' d', value:String(soon.length), note:soon.map(r => r.client + ' (' + r.days + 'd)').join(', '), ink:'#b45309' },
+        { label:'Under-consuming', value:String(under.length), note:usd(atRiskMrr) + '/mo at churn risk', ink:'#b91c1c' },
+        { label:'Over scope', value:String(over.length), note:'unbilled hours to reconcile', ink:'#92400e' }
+      ],
+      r_rows: RET.map(r => {
+        const u = utilOf(r);
+        const ink = u > 100 ? '#92400e' : (u < 60 ? '#b91c1c' : '#047857');
+        return { client:r.client, monthly:usd(r.monthly) + '/mo', hours:r.used + ' / ' + r.retained + ' h',
+          util:u + '%', utilPct:String(Math.min(100, u)), utilInk:ink, hasBar:true, weight:'500',
+          renews:r.renews + (r.close ? ' · ' + r.days + 'd' : ''), renewInk: r.close ? '#b45309' : '#615c6e',
+          read: u > 100 ? 'Over scope' : (u < 60 ? 'Churn risk' : 'Healthy'),
+          rowStyle:'display:grid;grid-template-columns:1.05fr .7fr .7fr 1.05fr .75fr .9fr;gap:11px;align-items:center;border-bottom:1px solid #f6f5f9;'
+            + (u < 60 ? 'background:#fffbfb;' : (u > 100 ? 'background:#fffdf5;' : ''))
+        };
+      }).concat([{ client:'Total', monthly:usd(mrr) + '/mo', hours:RET.reduce((a,r) => a + r.used, 0) + ' / ' + RET.reduce((a,r) => a + r.retained, 0) + ' h',
+        util:'', utilPct:'0', utilInk:'#615c6e', hasBar:false, weight:'800', renews:'', renewInk:'#615c6e', read:'',
+        rowStyle:'display:grid;grid-template-columns:1.05fr .7fr .7fr 1.05fr .75fr .9fr;gap:11px;align-items:center;border-top:1px solid #ececf1;margin-top:2px' }]),
+      // Generated by mapping RET, so no row can be reordered, omitted or misattributed.
+      r_bookNote: 'Every rate here is the won bid from P2 — '
+        + RET.map(r => r.client + ' ' + usd(r.monthly)).join(', ') + ' — so the book cannot drift from what was signed. '
+        + 'Kelp Bio is deliberately absent: its ' + usd(10500) + '/mo retainer is still at Terms on P3, which is why it sits in the '
+        + usd(liveValue) + ' live pipeline and not in this ' + usd(mrr) + ' MRR. It joins the book on signature, not on optimism.',
+      r_note: 'Thornfield is the largest retainer in the book and the least consumed — ' + utilOf(THORN)
+        + '% of retained hours. That combination is the most expensive thing on this page: it renews in '
+        + THORN.days + ' days and nobody has complained, which is exactly how a '
+        + usd(THORN.monthly) + '/mo line disappears. Novacraft is the opposite problem — '
+        + utilOf(NOVA) + '% means you are giving away roughly ' + (NOVA.used - NOVA.retained) + ' hours a month.',
+      r_cost: '≈ ' + c4(run(6800, 900, 0.351, 0.555)),
+      r_draft: 'Thornfield renews in ' + THORN.days + ' days at ' + utilOf(THORN) + '% utilization. The draft opens with what they have not used rather than what they owe — a right-sizing conversation at ' + usd(5000)
+        + '/mo keeps the relationship, where a renewal notice at the current figure invites them to do the arithmetic themselves and leave.',
+
+      // ── P5 ──
+      a_views: views(['Q3 2026','Q2 2026','Year to date','By shape']),
+      a_stats: [
+        { label:'Win rate', value:Math.round(WON / DEC * 100) + '%', note:WON + ' of ' + DEC + ' decided', ink:'#18181b' },
+        { label:'Median cycle', value:medianCycle + ' d', note:'contact to signature · ' + decided.length + ' decided bids', ink:'#18181b' },
+        { label:'Weighted forecast', value:usd(forecast), note:usd(OPEN_VAL) + ' live × ' + Math.round(WON / DEC * 100) + '%', ink:'#b45309' },
+        { label:'On-price losses', value:String(onPrice) + ' of ' + LOST, note:'all fixed-scope', ink:'#b91c1c' }
+      ],
+      a_shape: BIDS.map(b => ({
+        shape:b.shape, win:winPct(b) + '%', cycle:b.cycle,
+        ink: winPct(b) >= 50 ? '#047857' : '#b45309',
+        read: b.bids === 1 ? 'One bid, one won. Too few to claim a pattern.'
+          : b.bids + ' bids, ' + nW[b.won] + ' won — '
+            + (b.onPrice === 0 ? 'no loss was on price.' : nW[b.onPrice] + ' of the ' + nW[b.bids - b.won] + ' losses on price.')
+      })),
+      a_shapeNote: 'The median sits at ' + medianCycle + ' days because fixed-scope is '
+        + BIDS[0].bids + ' of the ' + decided.length + ' decided bids and drags the middle of the distribution to its own '
+        + BIDS[0].cycle + '. Retainers win at ' + winPct(BIDS[1]) + '% against ' + winPct(BIDS[0])
+        + '% for fixed-scope and close '
+        + (parseInt(CYCLE['Fixed scope'], 10) - parseInt(CYCLE.Retainer, 10)) + ' days faster. The read is not that you are expensive — it is that a fixed-scope line item invites a price comparison and a retainer does not.',
+      a_chart: [
+        { label:'Q1', vals:[14, 40, 0] }, { label:'Q2', vals:[20, 50, 0] }, { label:'Q3', vals:[17, 67, 100] }
+      ].map(q => ({ label:q.label, bars:q.vals.map((v, i) => ({
+        style:'flex:1;min-width:0;border-radius:3px 3px 0 0;height:' + (v === 0 ? 2 : v) + '%;background:' + ['#fcd34d','#d97706','#92400e'][i] })) })),
+      a_legend: [{ color:'#fcd34d', label:'Fixed-scope' }, { color:'#d97706', label:'Retainers' }, { color:'#92400e', label:'Embedded seats' }],
+      a_losses: LOSSES.map(l => ({ reason:l.reason, n:String(l.n), pct:String(Math.round(l.n / lossMax * 100)),
+        ink: l.reason === 'Price' ? '#b91c1c' : '#d97706' })),
+      a_cost: '≈ ' + c4(run(9200, 1300, 0.351, 0.555)),
+      a_narrative: 'You lost ' + LOST + ' of ' + DEC + ' decided bids this quarter and ' + nW[onPrice]
+        + ' of those losses were on price, every one of them fixed-scope, all against smaller shops. Retainers lost '
+        + nW[BIDS[1].bids - BIDS[1].won] + ', and not on price. The forecast of ' + usd(forecast) + ' assumes the current '
+        + Math.round(WON / DEC * 100) + '% rate holds across ' + usd(OPEN_VAL)
+        + ' still live — reshape the open fixed-scope bids into retainers and that number moves without discounting anything.'
+    };
+  }
+}
+</script>
+</body>
+</html>

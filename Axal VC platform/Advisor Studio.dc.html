@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#6B46C1;text-decoration:none}a:hover{color:#553C9A}
+    .ad-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .ad-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}.ad-btn:hover{filter:brightness(.97)}
+    .ad-card{background:#fff;border:1px solid #ececf1;border-radius:16px}
+    .ad-row{transition:background .12s}.ad-row:hover{background:#faf9fc}
+    .ad-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a1a1aa}
+    input,textarea,select{font-family:Inter,system-ui,sans-serif}
+    ::placeholder{color:#c4c2cf}
+    @media (max-width:1100px){.ad-2col{grid-template-columns:1fr!important}.ad-3col{grid-template-columns:repeat(2,1fr)!important}}
+    @media (max-width:720px){.ad-3col{grid-template-columns:1fr!important}.ad-gate{grid-template-columns:1fr!important}}
+  </style>
+</helmet>
+
+<div style="max-width:1500px;margin:0 auto;padding:0 24px 100px">
+  <div style="height:3px;background:#0d9488;border-radius:0 0 3px 3px"></div>
+
+  <!-- HEADER -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 0 16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:flex-start;gap:13px;min-width:0">
+      <div style="width:38px;height:38px;border-radius:11px;background:#f4f1fe;border:1px solid #e6e0fb;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#6B46C1" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:19px;height:19px"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+      </div>
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Advisor Program</h1>
+          <span style="{{ stageChipStyle }}">{{ stageChip }}</span>
+          <span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:10.5px;font-weight:700;background:#f4f4f5;color:#71717a;border:1px solid #ececf1">Cohort 4 · Week 2</span>
+        </div>
+        <div style="font-size:13px;color:#71717a;margin-top:3px">Apply to advise Spin-Out Lab founders — approval, assessment, and agreement gate cohort matching.</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <span class="ad-lbl" style="margin-right:2px">Lifecycle stage</span>
+      <sc-for list="{{ personas }}" as="p" hint-placeholder-count="5">
+        <button class="ad-btn" onClick="{{ p.go }}" style="{{ p.style }}">{{ p.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- ============ ADMIN SUMMARY · replaces the advisor-side gate ============ -->
+  <sc-if value="{{ isAdmin }}">
+  <div class="ad-card" style="padding:22px 26px;margin-bottom:18px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+      <div>
+        <div class="ad-lbl">Admin · access decisioning</div>
+        <div style="font-size:15px;font-weight:700;margin-top:5px">Cohort 4 advisor bench</div>
+        <div style="font-size:12.5px;color:#71717a;margin-top:3px;max-width:660px;line-height:1.6">Approval unlocks matching only when the advisor's assessment and signed agreement are also in place. Every grant is logged.</div>
+      </div>
+      <div style="display:flex;gap:22px;flex-wrap:wrap;flex:none">
+        <sc-for list="{{ adminStats }}" as="a" hint-placeholder-count="4">
+          <div style="text-align:right">
+            <div class="ad-mono" style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:{{ a.tone }}">{{ a.v }}</div>
+            <div class="ad-lbl" style="font-size:10px">{{ a.k }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ LIFECYCLE GATE · advisor-side only ============ -->
+  <sc-if value="{{ isAdvisorSide }}">
+  <div class="ad-card" style="padding:22px 26px;margin-bottom:18px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div>
+        <div class="ad-lbl">Advisor lifecycle · Spin-Out Lab</div>
+        <div style="font-size:15px;font-weight:700;margin-top:5px">{{ gateHeadline }}</div>
+        <div style="font-size:12.5px;color:#71717a;margin-top:3px;max-width:660px;line-height:1.6">{{ gateSub }}</div>
+      </div>
+      <div style="text-align:right;flex:none">
+        <div class="ad-mono" style="font-size:26px;font-weight:800;letter-spacing:-.02em;color:{{ gateTone }}">{{ gatePct }}</div>
+        <div class="ad-lbl" style="font-size:10px">Preconditions met</div>
+      </div>
+    </div>
+    <div style="height:6px;background:#f1f0f5;border-radius:99px;overflow:hidden;margin-bottom:18px">
+      <div style="height:100%;width:{{ gateBar }};background:{{ gateTone }};transition:width .3s"></div>
+    </div>
+    <div class="ad-gate" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">
+      <sc-for list="{{ lifecycle }}" as="l" hint-placeholder-count="5">
+        <div style="{{ l.cardStyle }}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+            <span style="{{ l.dotStyle }}">{{ l.glyph }}</span>
+            <span class="ad-mono" style="font-size:10px;font-weight:700;color:#a1a1aa">{{ l.n }}</span>
+          </div>
+          <div style="font-size:12.5px;font-weight:700;color:{{ l.ink }};line-height:1.35">{{ l.t }}</div>
+          <div style="font-size:11px;color:#a1a1aa;margin-top:4px;line-height:1.45">{{ l.sub }}</div>
+          <div style="margin-top:8px"><span style="{{ l.chip }}">{{ l.status }}</span></div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px 16px;background:{{ nextBg }};border:1px solid {{ nextBorder }};border-radius:11px;flex-wrap:wrap">
+      <span class="ad-lbl" style="color:{{ gateTone }};flex:none">Next step</span>
+      <span style="font-size:12.5px;color:#3f3f46;flex:1;min-width:200px;line-height:1.5">{{ nextStep }}</span>
+      <button class="ad-btn" onClick="{{ nextGo }}" style="flex:none;padding:8px 16px;border-radius:9px;border:none;background:{{ ctaTone }};color:#fff;font-size:12.5px;font-weight:700">{{ nextCta }}</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ APPLY ============ -->
+  <sc-if value="{{ isApply }}">
+  <div class="ad-2col" style="display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start">
+    <div class="ad-card" style="padding:24px 28px">
+      <div class="ad-lbl" style="margin-bottom:5px">Application · Spin-Out Lab Advisor program</div>
+      <div style="font-size:12.5px;color:#71717a;line-height:1.6;margin-bottom:18px">This is not an open advisor network. You are applying to advise founders inside a specific 28-day cohort. Every application is reviewed by the fund team; matching is admin-governed.</div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div>
+          <div style="font-size:11.5px;font-weight:700;color:#3f3f46;margin-bottom:8px">Identity</div>
+          <div class="ad-3col" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <input value="{{ f.name }}" onChange="{{ setName }}" placeholder="Full name" style="{{ inputStyle }}">
+            <input value="{{ f.email }}" onChange="{{ setEmail }}" placeholder="Email" style="{{ inputStyle }}">
+            <input value="{{ f.linkedin }}" onChange="{{ setLinkedin }}" placeholder="LinkedIn URL" style="{{ inputStyle }}">
+            <input value="{{ f.location }}" onChange="{{ setLocation }}" placeholder="City · time zone" style="{{ inputStyle }}">
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11.5px;font-weight:700;color:#3f3f46;margin-bottom:8px">Primary role</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <sc-for list="{{ rolePills }}" as="r" hint-placeholder-count="3">
+              <button class="ad-btn" onClick="{{ r.go }}" style="{{ r.style }}">{{ r.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11.5px;font-weight:700;color:#3f3f46;margin-bottom:4px">Functional expertise</div>
+          <div style="font-size:11.5px;color:#a1a1aa;margin-bottom:8px">Scored against founder Profiling gaps — this drives the matching engine after approval.</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <sc-for list="{{ skillPills }}" as="s" hint-placeholder-count="8">
+              <button class="ad-btn" onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+        <div class="ad-3col" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <input value="{{ f.sectors }}" onChange="{{ setSectors }}" placeholder="Sector focus" style="{{ inputStyle }}">
+          <input value="{{ f.stages }}" onChange="{{ setStages }}" placeholder="Stage fit" style="{{ inputStyle }}">
+        </div>
+        <div>
+          <div style="font-size:11.5px;font-weight:700;color:#3f3f46;margin-bottom:8px">Value-add statement</div>
+          <textarea value="{{ f.thesis }}" onChange="{{ setThesis }}" placeholder="What does a founder leave your session with? Be specific." rows="3" style="{{ inputStyle }};resize:vertical;width:100%;box-sizing:border-box"></textarea>
+        </div>
+        <div class="ad-3col" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <select onChange="{{ setHours }}" style="{{ inputStyle }}"><option>2–3 hours / month</option><option>4–6 hours / month</option><option>8+ hours / month</option></select>
+          <select onChange="{{ setComp }}" style="{{ inputStyle }}"><option>Equity only (FAST)</option><option>Stipend + equity</option><option>Pro bono</option></select>
+        </div>
+        <label style="display:flex;align-items:center;gap:10px;font-size:12.5px;color:#3f3f46;cursor:pointer">
+          <button class="ad-btn" onClick="{{ toggleUni }}" style="{{ uniBoxStyle }}">{{ uniGlyph }}</button>
+          I have university spin-out, IP licensing, or tech-transfer experience
+        </label>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding-top:14px;border-top:1px solid #f4f4f5">
+          <div style="font-size:11.5px;color:#a1a1aa;max-width:440px;line-height:1.55">Submitting starts the review. You will complete the skills and values-archetype assessment and sign the advisor agreement before matching unlocks.</div>
+          <button class="ad-btn" onClick="{{ submitApp }}" style="padding:11px 22px;border-radius:10px;border:none;background:#6B46C1;color:#fff;font-size:13px;font-weight:700">Submit application →</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="ad-card" style="padding:20px 24px">
+        <div class="ad-lbl" style="margin-bottom:14px">Program at a glance</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 18px">
+          <sc-for list="{{ programStats }}" as="ps" hint-placeholder-count="4">
+            <div><div class="ad-mono" style="font-size:17px;font-weight:700">{{ ps.v }}</div><div style="font-size:11px;color:#71717a;margin-top:2px;line-height:1.4">{{ ps.k }}</div></div>
+          </sc-for>
+        </div>
+      </div>
+      <div class="ad-card" style="padding:20px 24px;background:#faf9fc">
+        <div class="ad-lbl" style="margin-bottom:12px">What advising here involves</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ involves }}" as="iv" hint-placeholder-count="4">
+            <div style="display:flex;gap:9px;font-size:12.5px;color:#3f3f46;line-height:1.55"><span style="flex:none;color:#0d9488;font-weight:700">·</span>{{ iv }}</div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ IN-PROGRESS · review / assessment / agreement ============ -->
+  <sc-if value="{{ isProgress }}">
+  <div class="ad-2col" style="display:grid;grid-template-columns:1.35fr 1fr;gap:18px;align-items:start">
+    <div class="ad-card" style="padding:24px 28px">
+      <div class="ad-lbl" style="margin-bottom:14px">Clearance checklist</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ clearance }}" as="c" hint-placeholder-count="4">
+          <div style="display:flex;align-items:flex-start;gap:13px;padding:15px 17px;border:1px solid {{ c.border }};border-radius:12px;background:{{ c.bg }}">
+            <span style="{{ c.dotStyle }}">{{ c.glyph }}</span>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <span style="font-size:13.5px;font-weight:700">{{ c.t }}</span>
+                <span style="{{ c.chip }}">{{ c.status }}</span>
+              </div>
+              <div style="font-size:12px;color:#71717a;margin-top:4px;line-height:1.55">{{ c.sub }}</div>
+              <sc-if value="{{ c.detail }}">
+                <div style="font-size:11.5px;color:#a1a1aa;margin-top:6px;line-height:1.5">{{ c.detail }}</div>
+              </sc-if>
+            </div>
+            <sc-if value="{{ c.cta }}">
+              <button class="ad-btn" onClick="{{ c.go }}" style="flex:none;padding:7px 14px;border-radius:9px;border:1px solid {{ c.ctaBorder }};background:{{ c.ctaBg }};color:{{ c.ctaInk }};font-size:12px;font-weight:700">{{ c.cta }}</button>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="ad-card" style="padding:20px 24px">
+      <div class="ad-lbl" style="margin-bottom:12px">Review activity</div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <sc-for list="{{ reviewLog }}" as="r" hint-placeholder-count="4">
+          <div style="display:flex;gap:10px;font-size:11.5px;color:#71717a;line-height:1.5"><span class="ad-mono" style="flex:none;color:#a1a1aa;width:38px">{{ r.t }}</span><span>{{ r.e }}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  </sc-if>
+
+  <!-- ===== ASSESSMENT REPORT · durable, renders advisor-side and when approved ===== -->
+  <sc-if value="{{ showAssessment }}">
+  <div class="ad-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-top:18px">
+    <!-- SKILLS GRAPH -->
+    <div class="ad-card" style="padding:24px 28px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div>
+          <div class="ad-lbl">Skills graph</div>
+          <div style="font-size:13px;color:#a1a1aa;margin-top:4px">Radar of nine advisor skill dimensions</div>
+        </div>
+        <span style="{{ skillsPctChip }}">{{ skillsPct }}</span>
+      </div>
+      <div style="display:flex;justify-content:center;padding:14px 0 6px">
+        <!-- Axis labels are HTML positioned over the SVG: text content inside an SVG
+             <text> cannot be interpolated (the runtime emits a <span>, which SVG
+             cannot lay out), so only the geometry lives in the SVG. -->
+        <div style="position:relative;width:100%;max-width:430px">
+          <svg viewBox="-30 0 460 316" style="display:block;width:100%;height:auto">
+            <sc-for list="{{ radarRings }}" as="rg" hint-placeholder-count="4">
+              <polygon points="{{ rg.pts }}" fill="none" stroke="#ececf1" stroke-width="1"></polygon>
+            </sc-for>
+            <sc-for list="{{ radarSpokes }}" as="sp" hint-placeholder-count="9">
+              <line x1="{{ sp.x1 }}" y1="{{ sp.y1 }}" x2="{{ sp.x2 }}" y2="{{ sp.y2 }}" stroke="#f4f4f5" stroke-width="1"></line>
+            </sc-for>
+            <polygon points="{{ radarShape }}" fill="rgba(107,70,193,.14)" stroke="#6B46C1" stroke-width="2.2" stroke-linejoin="round"></polygon>
+            <sc-for list="{{ radarDots }}" as="dt" hint-placeholder-count="9">
+              <circle cx="{{ dt.x }}" cy="{{ dt.y }}" r="3.2" fill="#6B46C1"></circle>
+            </sc-for>
+          </svg>
+          <sc-for list="{{ radarLabels }}" as="lb" hint-placeholder-count="9">
+            <div style="{{ lb.style }}">{{ lb.t }}</div>
+          </sc-for>
+        </div>
+      </div>
+      <div class="ad-3col" style="display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:14px;padding-top:16px;border-top:1px solid #f4f4f5">
+        <div>
+          <div class="ad-lbl" style="color:#15803d;margin-bottom:9px">Strongest</div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <sc-for list="{{ strongest }}" as="sg" hint-placeholder-count="3">
+              <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px"><span style="color:#3f3f46">{{ sg.k }}</span><span class="ad-mono" style="font-weight:700;color:#15803d">{{ sg.v }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div class="ad-lbl" style="color:#b45309;margin-bottom:9px">Least evidenced</div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <sc-for list="{{ weakest }}" as="wk" hint-placeholder-count="3">
+              <div style="display:flex;justify-content:space-between;gap:10px;font-size:13px"><span style="color:#3f3f46">{{ wk.k }}</span><span class="ad-mono" style="font-weight:700;color:{{ wk.tone }}">{{ wk.v }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VALUES GRAPH -->
+    <div class="ad-card" style="padding:24px 28px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px">
+        <div>
+          <div class="ad-lbl">Values graph</div>
+          <div style="font-size:13px;color:#a1a1aa;margin-top:4px">Signal strength across ten working principles</div>
+        </div>
+        <span style="{{ valuesPctChip }}">{{ valuesPct }}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:13px">
+        <sc-for list="{{ values }}" as="v" hint-placeholder-count="10">
+          <div>
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:5px">
+              <span style="font-size:13.5px;font-weight:700;color:#1A202C">{{ v.k }}</span>
+              <span style="font-size:12px;font-weight:700;color:{{ v.tone }}">{{ v.band }}</span>
+            </div>
+            <div style="height:7px;background:#f1f0f5;border-radius:99px;overflow:hidden"><div style="height:100%;width:{{ v.bar }};background:{{ v.barTone }};border-radius:99px"></div></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARCHETYPE -->
+  <div class="ad-card" style="padding:24px 28px;margin-top:18px">
+    <div class="ad-lbl" style="margin-bottom:14px">Advisor archetype</div>
+    <div class="ad-2col" style="display:grid;grid-template-columns:.85fr 1.6fr;gap:26px;align-items:start">
+      <div>
+        <div style="background:linear-gradient(135deg,#7c3aed,#6B46C1);border-radius:14px;padding:20px 22px;color:#fff">
+          <div class="ad-lbl" style="color:rgba(255,255,255,.7);font-size:10px">Primary archetype</div>
+          <div style="font-size:24px;font-weight:800;letter-spacing:-.02em;margin-top:7px">{{ archetype }}</div>
+          <div style="font-size:13px;color:rgba(255,255,255,.85);line-height:1.55;margin-top:8px">{{ archetypeDesc }}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:11px">
+          <div style="border:1px solid #ececf1;border-radius:11px;padding:12px 14px">
+            <div class="ad-lbl" style="font-size:10px">Secondary</div>
+            <div style="font-size:14px;font-weight:700;color:#6d28d9;margin-top:4px">{{ archetypeSecondary }}</div>
+          </div>
+          <div style="border:1px solid #ececf1;border-radius:11px;padding:12px 14px">
+            <div class="ad-lbl" style="font-size:10px">Blend</div>
+            <div class="ad-mono" style="font-size:16px;font-weight:700;margin-top:3px">{{ archetypeBlend }}</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="ad-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+          <div>
+            <div class="ad-lbl" style="color:#15803d;margin-bottom:10px">Strengths</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ archStrengths }}" as="s" hint-placeholder-count="3">
+                <div style="display:flex;gap:9px;font-size:13px;color:#3f3f46;line-height:1.5"><span style="flex:none;color:#15803d;font-weight:700">+</span>{{ s }}</div>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <div class="ad-lbl" style="color:#b45309;margin-bottom:10px">Likely blind spots</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ archBlind }}" as="b" hint-placeholder-count="3">
+                <div style="display:flex;gap:9px;font-size:13px;color:#3f3f46;line-height:1.5"><span style="flex:none;color:#b45309;font-weight:700">!</span>{{ b }}</div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:18px;padding-top:16px;border-top:1px solid #f4f4f5">
+          <div class="ad-lbl" style="margin-bottom:10px">Best-fit founder archetypes</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <sc-for list="{{ archComplements }}" as="c" hint-placeholder-count="3">
+              <span style="font-size:12.5px;font-weight:700;color:#6d28d9;background:#f4f1fe;border:1px solid #e6e0fb;border-radius:8px;padding:6px 13px">{{ c }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROGRESS + IMPLICATIONS -->
+  <div class="ad-2col" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-top:18px">
+    <div class="ad-card" style="padding:24px 28px">
+      <div class="ad-lbl">Assessment progress</div>
+      <div style="font-size:13px;color:#a1a1aa;margin-top:4px;margin-bottom:16px">{{ assessNote }}</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <sc-for list="{{ progressCats }}" as="p" hint-placeholder-count="5">
+          <div>
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:5px">
+              <span style="font-size:13.5px;font-weight:700;color:#1A202C">{{ p.k }}</span>
+              <span style="font-size:12.5px;font-weight:700;color:{{ p.tone }}">{{ p.label }}</span>
+            </div>
+            <div style="height:7px;background:#f1f0f5;border-radius:99px;overflow:hidden"><div style="height:100%;width:{{ p.bar }};background:{{ p.barTone }};border-radius:99px"></div></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="ad-card" style="padding:24px 28px">
+      <div class="ad-lbl" style="margin-bottom:16px">What this profile implies</div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <sc-for list="{{ implications }}" as="im" hint-placeholder-count="4">
+          <div>
+            <div class="ad-lbl" style="font-size:10.5px;margin-bottom:5px">{{ im.k }}</div>
+            <div style="font-size:13px;color:#3f3f46;line-height:1.6">{{ im.v }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ APPROVED · one-page operating profile ============ -->
+  <sc-if value="{{ isApproved }}">
+
+  <!-- KPI strip -->
+  <div class="ad-3col" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px">
+    <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
+      <div class="ad-card" style="padding:15px 18px">
+        <div class="ad-mono" style="font-size:20px;font-weight:700;letter-spacing:-.02em;color:{{ k.tone }}">{{ k.v }}</div>
+        <div class="ad-lbl" style="font-size:10px;margin-top:3px">{{ k.k }}</div>
+        <div style="font-size:11px;color:#a1a1aa;margin-top:3px">{{ k.note }}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div class="ad-2col" style="display:grid;grid-template-columns:1.45fr 1fr;gap:18px;align-items:start">
+    <div style="display:flex;flex-direction:column;gap:18px">
+
+      <!-- COHORT MATCHES -->
+      <div class="ad-card" style="overflow:hidden">
+        <div style="padding:16px 22px;border-bottom:1px solid #f4f4f5;display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div>
+            <div class="ad-lbl">Cohort matches · admin-governed</div>
+            <div style="font-size:12px;color:#71717a;margin-top:4px">Ranked on your assessment against founder Profiling gaps. Proposed by the fund team, not browsed.</div>
+          </div>
+          <span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:10.5px;font-weight:700;background:#dcfce7;color:#166534;border:1px solid #bbf7d0">Matching enabled</span>
+        </div>
+        <sc-for list="{{ matches }}" as="mt" hint-placeholder-count="3">
+          <div style="padding:18px 22px;border-bottom:1px solid #f4f4f5">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <div style="{{ mt.avStyle }}">{{ mt.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                  <span style="font-size:14px;font-weight:800">{{ mt.company }}</span>
+                  <span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:10px;font-weight:700;background:#f4f1fe;color:#6d28d9;border:1px solid #e6e0fb">{{ mt.stage }}</span>
+                </div>
+                <div style="font-size:11.5px;color:#71717a;margin-top:2px">{{ mt.meta }}</div>
+              </div>
+              <div style="text-align:right;flex:none">
+                <div class="ad-mono" style="font-size:20px;font-weight:800;color:{{ mt.scoreTone }}">{{ mt.score }}</div>
+                <div class="ad-lbl" style="font-size:9.5px">Fit score</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin:11px 0">
+              <sc-for list="{{ mt.dims }}" as="dm" hint-placeholder-count="4">
+                <span style="font-size:11px;font-weight:600;color:#3f3f46;background:#faf9fc;border:1px solid #ececf1;border-radius:99px;padding:4px 11px">{{ dm.k }} <strong class="ad-mono" style="color:{{ dm.tone }}">{{ dm.v }}</strong></span>
+              </sc-for>
+            </div>
+            <div style="font-size:12.5px;color:#71717a;line-height:1.6">{{ mt.why }}</div>
+            <div style="display:flex;align-items:center;gap:9px;margin-top:12px;flex-wrap:wrap">
+              <button class="ad-btn" onClick="{{ mt.accept }}" style="padding:7px 15px;border-radius:9px;border:none;background:#6B46C1;color:#fff;font-size:12px;font-weight:700">Accept · set terms</button>
+              <button class="ad-btn" style="padding:7px 15px;border-radius:9px;border:1px solid #ececf1;background:#fff;color:#71717a;font-size:12px;font-weight:600">Pass</button>
+              <span style="font-size:11.5px;color:#a1a1aa;flex:1;min-width:180px">{{ mt.next }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- ACTIVE ENGAGEMENTS -->
+      <div class="ad-card" style="overflow:hidden">
+        <div style="padding:16px 22px;border-bottom:1px solid #f4f4f5">
+          <div class="ad-lbl">Active engagements</div>
+          <div style="font-size:12px;color:#71717a;margin-top:4px">Founders you support · engagement health and current blocker.</div>
+        </div>
+        <sc-for list="{{ founders }}" as="fo" hint-placeholder-count="3">
+          <div class="ad-row" style="padding:16px 22px;border-bottom:1px solid #f4f4f5;opacity:{{ fo.opacity }}">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <div style="{{ fo.avStyle }}">{{ fo.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:13.5px;font-weight:800">{{ fo.company }}</span>
+                  <span style="{{ fo.healthChip }}">{{ fo.health }}</span>
+                </div>
+                <div style="font-size:11.5px;color:#71717a;margin-top:2px">{{ fo.meta }}</div>
+              </div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;flex:none">
+                <sc-for list="{{ fo.stats }}" as="st" hint-placeholder-count="3">
+                  <div style="text-align:right"><div class="ad-mono" style="font-size:13.5px;font-weight:700">{{ st.v }}</div><div class="ad-lbl" style="font-size:9.5px">{{ st.k }}</div></div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:11px;padding:10px 14px;background:{{ fo.blockBg }};border-radius:10px;flex-wrap:wrap">
+              <span class="ad-lbl" style="font-size:10px;color:{{ fo.blockTone }};flex:none">{{ fo.blockLabel }}</span>
+              <span style="font-size:12px;color:#3f3f46;flex:1;min-width:200px;line-height:1.5">{{ fo.blocker }}</span>
+              <button class="ad-btn" style="flex:none;padding:6px 13px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#3f3f46;font-size:11.5px;font-weight:600">{{ fo.cta }}</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- ADVISORY WORK -->
+      <div class="ad-card" style="overflow:hidden">
+        <div style="padding:16px 22px;border-bottom:1px solid #f4f4f5;display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+          <div>
+            <div class="ad-lbl">Advisory work</div>
+            <div style="font-size:12px;color:#71717a;margin-top:4px">Action plans, sessions, and the decision log.</div>
+          </div>
+          <button class="ad-btn" style="flex:none;padding:6px 13px;border-radius:8px;border:1px solid #e6e0fb;background:#f4f1fe;color:#6d28d9;font-size:11.5px;font-weight:700">+ New plan</button>
+        </div>
+        <sc-for list="{{ plans }}" as="pl" hint-placeholder-count="3">
+          <div style="padding:15px 22px;border-bottom:1px solid #f4f4f5">
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <span style="font-size:13px;font-weight:700">{{ pl.t }}</span>
+              <span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:10px;font-weight:700;background:#f4f1fe;color:#6d28d9;border:1px solid #e6e0fb">{{ pl.who }}</span>
+              <span class="ad-mono" style="margin-left:auto;font-size:11px;font-weight:600;color:{{ pl.dueTone }}">{{ pl.due }}</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+              <sc-for list="{{ pl.items }}" as="it" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:9px;font-size:12px;color:{{ it.ink }}"><span style="{{ it.box }}">{{ it.glyph }}</span>{{ it.t }}</div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- FORMATION & CAPITAL SUPPORT -->
+      <div class="ad-card" style="overflow:hidden">
+        <div style="padding:16px 22px;border-bottom:1px solid #f4f4f5">
+          <div class="ad-lbl">Formation &amp; capital support</div>
+          <div style="font-size:12px;color:#71717a;margin-top:4px">Advisor reviews requested over the real Week-4 workflows.</div>
+        </div>
+        <sc-for list="{{ formation }}" as="fm" hint-placeholder-count="4">
+          <div class="ad-row" style="display:flex;align-items:center;gap:12px;padding:13px 22px;border-bottom:1px solid #f4f4f5;flex-wrap:wrap">
+            <div style="min-width:0;flex:1">
+              <div style="font-size:12.5px;font-weight:700">{{ fm.t }}</div>
+              <div style="font-size:11px;color:#a1a1aa;margin-top:1px">{{ fm.sub }} · {{ fm.who }}</div>
+            </div>
+            <span style="{{ fm.chip }}">{{ fm.status }}</span>
+            <span class="ad-mono" style="font-size:11.5px;font-weight:600;color:{{ fm.dlTone }};flex:none;width:82px;text-align:right">{{ fm.deadline }}</span>
+            <button class="ad-btn" style="flex:none;padding:6px 13px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#3f3f46;font-size:11.5px;font-weight:600">{{ fm.cta }}</button>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- RIGHT RAIL -->
+    <div style="display:flex;flex-direction:column;gap:18px">
+
+      <!-- ADVISORY ECONOMICS -->
+      <div class="ad-card" style="padding:22px 24px;border-color:#e6e0fb">
+        <div class="ad-lbl" style="color:#6B46C1;margin-bottom:5px">Advisory economics</div>
+        <div style="font-size:12.5px;color:#71717a;line-height:1.6;margin-bottom:16px">Agreed terms become a structured grant object. On signature it propagates automatically — no manual re-entry.</div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <sc-for list="{{ grants }}" as="g" hint-placeholder-count="2">
+            <div style="border:1px solid {{ g.border }};border-radius:12px;padding:14px 16px;background:{{ g.bg }}">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:700">{{ g.company }}</span>
+                <span style="{{ g.chip }}">{{ g.status }}</span>
+                <span class="ad-mono" style="margin-left:auto;font-size:14px;font-weight:800;color:#6d28d9">{{ g.equity }}</span>
+              </div>
+              <div style="font-size:11.5px;color:#71717a;margin-top:5px;line-height:1.5">{{ g.terms }}</div>
+              <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #ececf1">
+                <sc-for list="{{ g.propagation }}" as="pg" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:11.5px">
+                    <span style="{{ pg.box }}">{{ pg.glyph }}</span>
+                    <span style="color:#3f3f46;font-weight:600">{{ pg.target }}</span>
+                    <span class="ad-mono" style="margin-left:auto;color:{{ pg.tone }};font-size:10.5px;font-weight:600">{{ pg.state }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ g.action }}">
+                <button class="ad-btn" onClick="{{ g.go }}" style="width:100%;margin-top:11px;padding:8px 14px;border-radius:9px;border:none;background:#6B46C1;color:#fff;font-size:12px;font-weight:700">{{ g.action }}</button>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid #f4f4f5;font-size:12px">
+          <span style="color:#71717a">Total advisory equity</span>
+          <span class="ad-mono" style="font-weight:700">{{ totalEquity }}</span>
+        </div>
+      </div>
+
+      <!-- UPCOMING SESSIONS -->
+      <div class="ad-card" style="padding:20px 24px">
+        <div class="ad-lbl" style="margin-bottom:13px">Upcoming sessions</div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <sc-for list="{{ sessions }}" as="s" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:11px">
+              <div class="ad-mono" style="flex:none;width:56px;font-size:11px;font-weight:700;color:{{ s.tone }}">{{ s.when }}</div>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:12.5px;font-weight:700">{{ s.who }}</div>
+                <div style="font-size:10.5px;color:#a1a1aa">{{ s.topic }}</div>
+              </div>
+              <span style="{{ s.chip }}">{{ s.state }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- CONTRIBUTION -->
+      <div class="ad-card" style="padding:20px 24px;background:#faf9fc">
+        <div class="ad-lbl" style="margin-bottom:13px">Your contribution · Cohort 4</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px 18px">
+          <sc-for list="{{ contrib }}" as="c" hint-placeholder-count="4">
+            <div><div class="ad-mono" style="font-size:16px;font-weight:700">{{ c.v }}</div><div style="font-size:11px;color:#71717a;margin-top:1px">{{ c.k }}</div></div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- CONTRACTS -->
+      <div class="ad-card" style="padding:20px 24px">
+        <div class="ad-lbl" style="margin-bottom:13px">Contracts</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ contracts }}" as="ct" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:9px;padding-bottom:9px;border-bottom:1px solid #f4f4f5">
+              <div style="min-width:0;flex:1">
+                <div style="font-size:12.5px;font-weight:700">{{ ct.t }}</div>
+                <div style="font-size:10.5px;color:#a1a1aa;margin-top:1px">{{ ct.sub }}</div>
+              </div>
+              <span style="{{ ct.chip }}">{{ ct.status }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- RESOURCES -->
+      <div class="ad-card" style="padding:20px 24px">
+        <div class="ad-lbl" style="margin-bottom:13px">Playbooks by week</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ resources }}" as="rs" hint-placeholder-count="4">
+            <div class="ad-row" style="display:flex;align-items:center;gap:9px;cursor:pointer">
+              <span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:9.5px;font-weight:700;background:#f4f4f5;color:#71717a;flex:none">{{ rs.week }}</span>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:12.5px;font-weight:600;color:#3f3f46">{{ rs.t }}</div>
+              </div>
+              <span style="color:#c4c2cf;font-size:12px">→</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ ADMIN ============ -->
+  <sc-if value="{{ isAdmin }}">
+  <div class="ad-2col" style="display:grid;grid-template-columns:1fr 1.4fr;gap:18px;align-items:start">
+    <div class="ad-card" style="overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid #f4f4f5">
+        <div class="ad-lbl">Review queue</div>
+        <div style="font-size:12px;color:#71717a;margin-top:4px">Access decisioning · every grant is logged.</div>
+      </div>
+      <sc-for list="{{ queue }}" as="q" hint-placeholder-count="4">
+        <div class="ad-row" onClick="{{ q.go }}" style="display:flex;align-items:center;gap:12px;padding:13px 20px;border-bottom:1px solid #f4f4f5;cursor:pointer;background:{{ q.bg }}">
+          <div style="{{ q.avStyle }}">{{ q.initials }}</div>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:12.5px;font-weight:700">{{ q.name }}</div>
+            <div style="font-size:11px;color:#71717a;margin-top:1px">{{ q.meta }}</div>
+          </div>
+          <span style="{{ q.statusStyle }}">{{ q.status }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div class="ad-card" style="padding:22px 26px">
+      <div style="display:flex;align-items:center;gap:13px;margin-bottom:16px;flex-wrap:wrap">
+        <div style="{{ sel.avStyle }}">{{ sel.initials }}</div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:15px;font-weight:800">{{ sel.name }}</div>
+          <div style="font-size:11.5px;color:#71717a">{{ sel.meta }}</div>
+        </div>
+        <span style="{{ sel.statusStyle }}">{{ sel.status }}</span>
+      </div>
+      <div class="ad-3col" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin-bottom:16px">
+        <sc-for list="{{ sel.fields }}" as="fd" hint-placeholder-count="6">
+          <div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:6px 0;border-bottom:1px solid #f4f4f5"><span style="color:#a1a1aa">{{ fd.k }}</span><span style="color:#3f3f46;font-weight:600;text-align:right">{{ fd.v }}</span></div>
+        </sc-for>
+      </div>
+      <div style="padding:13px 16px;background:#faf9fc;border-radius:11px;margin-bottom:14px">
+        <div class="ad-lbl" style="color:#6B46C1;font-size:10px;margin-bottom:5px">Value-add statement</div>
+        <div style="font-size:12.5px;color:#3f3f46;line-height:1.65">{{ sel.thesis }}</div>
+      </div>
+      <div class="ad-3col" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+        <sc-for list="{{ sel.scores }}" as="sc" hint-placeholder-count="4">
+          <div style="background:#faf9fc;border-radius:10px;padding:10px 13px">
+            <div class="ad-lbl" style="font-size:9.5px">{{ sc.k }}</div>
+            <div class="ad-mono" style="font-size:15px;font-weight:700;color:{{ sc.tone }};margin-top:2px">{{ sc.v }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        <button class="ad-btn" onClick="{{ actApprove }}" style="padding:9px 16px;border-radius:9px;border:none;background:#15803d;color:#fff;font-size:12px;font-weight:700">Approve · unlock matching</button>
+        <button class="ad-btn" onClick="{{ actInfo }}" style="padding:9px 16px;border-radius:9px;border:1px solid #fde68a;background:#fffbeb;color:#b45309;font-size:12px;font-weight:700">Request more info</button>
+        <button class="ad-btn" onClick="{{ actReject }}" style="padding:9px 16px;border-radius:9px;border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700">Decline</button>
+      </div>
+      <div class="ad-lbl" style="font-size:10px;margin-bottom:8px">Activity log</div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <sc-for list="{{ sel.log }}" as="lg" hint-placeholder-count="3">
+          <div style="display:flex;gap:10px;font-size:11.5px;color:#71717a;line-height:1.5"><span class="ad-mono" style="flex:none;color:#a1a1aa;width:38px">{{ lg.t }}</span><span>{{ lg.e }}</span></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1500}}">
+class Component extends DCLogic {
+  state = { stage:'approved', sel:'voss', form:{}, roles:{operator:true}, skills:{gtm:true,product:true},
+            uni:false, queueSt:{}, signed:false, termsSet:false };
+  set(k,v){ this.setState({ [k]:v }); }
+  setF(k){ return (e) => this.setState(s => ({ form: Object.assign({}, s.form, { [k]: e.target.value }) })); }
+
+  renderVals() {
+    const st = this.state, stage = st.stage;
+    const P = '#6B46C1', TEAL = '#0d9488';
+    const tag = (bg,fg,bd) => 'display:inline-block;padding:3px 10px;border-radius:99px;font-size:10.5px;font-weight:700;background:'+bg+';color:'+fg+';border:1px solid '+bd+';white-space:nowrap';
+    const green = tag('#dcfce7','#166534','#bbf7d0');
+    const amber = tag('#fffbeb','#b45309','#fde68a');
+    const red = tag('#fef2f2','#b91c1c','#fecaca');
+    const purple = tag('#f4f1fe','#6d28d9','#e6e0fb');
+    const grey = tag('#f4f4f5','#71717a','#ececf1');
+    const av = (bg,sz) => 'width:'+(sz||36)+'px;height:'+(sz||36)+'px;border-radius:10px;background:'+bg+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none';
+    const inputStyle = 'padding:11px 14px;border-radius:10px;border:1px solid #ececf1;background:#fff;color:#1A202C;font-size:12.5px;outline:none';
+
+    // ---- lifecycle stages, in order ----
+    const STAGES = [
+      { k:'apply', label:'Not applied' }, { k:'review', label:'Under review' },
+      { k:'assessment', label:'Assessment' }, { k:'agreement', label:'Agreement' },
+      { k:'approved', label:'Approved' }, { k:'admin', label:'Admin' },
+    ];
+    const order = ['apply','review','assessment','agreement','approved'];
+    const idx = order.indexOf(stage);
+    const personas = STAGES.map(s => ({ label:s.label, go: () => this.set('stage', s.k),
+      style:'padding:5px 12px;border-radius:8px;font-size:11px;font-weight:600;border:1px solid '
+        + (stage===s.k ? P : '#ececf1') + ';background:' + (stage===s.k ? '#f4f1fe' : '#fff')
+        + ';color:' + (stage===s.k ? '#6d28d9' : '#71717a') }));
+    const stageMap = {
+      apply:{ t:'Application open', s:grey }, review:{ t:'Under review', s:amber },
+      assessment:{ t:'Assessment pending', s:amber }, agreement:{ t:'Agreement pending', s:amber },
+      approved:{ t:'Approved · matching enabled', s:green }, admin:{ t:'Admin', s:red },
+    }[stage];
+
+    // ---- the four gated preconditions ----
+    const met = {
+      applied: idx >= 1, reviewed: idx >= 2, assessed: idx >= 3,
+      agreed: idx >= 4 || (stage==='agreement' && st.signed),
+    };
+    const metCount = ['applied','reviewed','assessed','agreed'].filter(k => met[k]).length;
+    const matchingOn = metCount === 4;
+    const gateTone = matchingOn ? '#15803d' : metCount === 0 ? '#a1a1aa' : P;
+    // The CTA is always a real primary action — never render it in the muted grey
+    // used for a 0-of-4 progress bar (that failed contrast and read as disabled).
+    const ctaTone = matchingOn ? '#15803d' : P;
+    const adminStats = [
+      { k:'In queue', v:'4', tone:'#1A202C' },
+      { k:'Ready to approve', v:'1', tone:'#6d28d9' },
+      { k:'Active advisors', v:'38', tone:'#1A202C' },
+      { k:'Flagged', v:'2', tone:'#b45309' },
+    ];
+    const dot = (state) => state==='done'
+      ? { dotStyle:'width:18px;height:18px;border-radius:50%;background:#15803d;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none', glyph:'✓' }
+      : state==='now'
+      ? { dotStyle:'width:18px;height:18px;border-radius:50%;background:'+P+';color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 0 0 4px rgba(107,70,193,.14)', glyph:'●' }
+      : { dotStyle:'width:18px;height:18px;border-radius:50%;background:#f1f0f5;border:1px solid #ececf1;color:#c4c2cf;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none', glyph:'🔒' };
+    const LC = [
+      { n:'01', t:'Apply to program', sub:'Spin-Out Lab cohort specifically', done:met.applied },
+      { n:'02', t:'Admin review', sub:'Identity, expertise, founder relevance', done:met.reviewed },
+      { n:'03', t:'Assessment cleared', sub:'Skills + values archetype', done:met.assessed },
+      { n:'04', t:'Agreement signed', sub:'Advisor agreement (FAST) + NDA', done:met.agreed },
+      // Step 05 is the CONSEQUENCE of admin activation, not a precondition — gate it on the
+      // same condition as the matching UI (isApproved) so it can never claim "Enabled" while absent.
+      { n:'05', t:'Matching enabled', sub:'Cohort matches proposed by admin', done: stage==='approved', gate:true },
+    ];
+    let firstOpen = LC.findIndex(l => !l.done);
+    const lifecycle = LC.map((l,i) => {
+      const state = l.done ? 'done' : i === firstOpen ? 'now' : 'locked';
+      const d = dot(state);
+      return Object.assign({ n:l.n, t:l.t, sub:l.sub }, d, {
+        ink: state==='locked' ? '#a1a1aa' : '#1A202C',
+        cardStyle:'border:1px solid '+(state==='now'?'#e6e0fb':'#f4f4f5')+';border-radius:12px;padding:14px 15px;background:'
+          +(state==='done'?'#f6fdf8':state==='now'?'#faf9fc':'#fff')+';opacity:'+(state==='locked'?'.62':'1'),
+        chip: state==='done' ? green : state==='now' ? purple : grey,
+        status: state==='done' ? (l.gate ? 'Enabled' : 'Complete') : state==='now' ? 'In progress' : 'Locked',
+      });
+    });
+    const NEXT = {
+      apply:{ h:'Application not yet submitted', s:'Advisors apply to this cohort specifically — not to a general network. Matching stays locked until admin approval, assessment clearance, and a signed agreement are all in place.', step:'Complete and submit the Spin-Out Lab advisor application.', cta:'Start application', go:()=>this.set('stage','apply') },
+      review:{ h:'Under admin review', s:'The fund team is scoring expertise and founder relevance. No founder data is accessible while review is open.', step:'Awaiting admin decision — typically 5 business days from submission.', cta:'View clearance', go:()=>this.set('stage','review') },
+      assessment:{ h:'Assessment required', s:'Approved in principle. Complete the Personal Advisor assessment so your skills and values archetype can be scored against founder Profiling gaps.', step:'Complete the skills and values-archetype assessment.', cta:'Open assessment', go:()=>this.set('stage','assessment') },
+      agreement:{ h: st.signed ? 'Agreement signed · awaiting activation' : 'Agreement signature required', s:'Assessment cleared. The advisor agreement defines scope, cadence, and the default equity band before any founder engagement begins.', step: st.signed ? 'All preconditions met — admin will enable matching.' : 'Review and sign the advisor agreement (FAST) and NDA.', cta: st.signed ? 'Continue' : 'Sign agreement', go: () => st.signed ? this.set('stage','approved') : this.set('signed', true) },
+      approved:{ h:'Matching enabled', s:'All four preconditions are satisfied. Cohort matches are proposed by the fund team based on your assessment against founder needs.', step:'Review proposed matches and agree advisory terms with each founder.', cta:'Review matches', go:()=>{} },
+      admin:{ h:'Admin · access decisioning', s:'Approve, decline, or request more information. Approval unlocks matching only when assessment and agreement are also complete.', step:'Work the review queue below.', cta:'Open queue', go:()=>{} },
+    }[stage];
+
+    // ---- application ----
+    const ROLES = [ {k:'operator',l:'Operator'},{k:'investor',l:'Investor'},{k:'sme',l:'Subject-matter expert'} ];
+    const pill = (on) => 'padding:7px 15px;border-radius:99px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid '
+      + (on ? P : '#ececf1') + ';background:' + (on ? '#f4f1fe' : '#fff') + ';color:' + (on ? '#6d28d9' : '#71717a');
+    const rolePills = ROLES.map(r => ({ label:r.l, style:pill(st.roles[r.k]),
+      go: () => this.setState({ roles: { [r.k]: true } }) }));
+    const SKILLS = [ {k:'gtm',l:'GTM & sales'},{k:'product',l:'Product'},{k:'fundraising',l:'Fundraising'},{k:'pricing',l:'Pricing'},{k:'hiring',l:'Hiring'},{k:'legal',l:'Legal & ops'},{k:'tech',l:'Technical architecture'},{k:'research',l:'Research commercialization'} ];
+    const skillPills = SKILLS.map(sk => ({ label:sk.l, style:pill(st.skills[sk.k]),
+      go: () => this.setState(s => ({ skills: Object.assign({}, s.skills, { [sk.k]: !s.skills[sk.k] }) })) }));
+    const programStats = [
+      { k:'Active advisors in the lab', v:'38' }, { k:'Founders per advisor', v:'2–4' },
+      { k:'Typical advisory equity', v:'0.25–1%' }, { k:'Review time', v:'5 days' },
+    ];
+    const involves = [
+      'Two to four founders per 28-day cohort, matched to your assessed skills and values archetype.',
+      'Recurring 30-minute sessions with agendas tied to that week\u2019s program deliverables.',
+      'Reviews over real workflows — discovery evidence, pricing, incorporation, cap table, capital readiness.',
+      'Advisory equity agreed per engagement, then propagated to the company cap table and deck automatically.',
+    ];
+
+    // ---- clearance (review / assessment / agreement) ----
+    const cRow = (t, sub, state, detail, cta, go) => {
+      const d = dot(state);
+      return Object.assign({ t, sub, detail:detail||'', cta:cta||'', go: go||(()=>{}) }, d, {
+        border: state==='now' ? '#e6e0fb' : '#f4f4f5',
+        bg: state==='done' ? '#f6fdf8' : state==='now' ? '#faf9fc' : '#fff',
+        chip: state==='done' ? green : state==='now' ? purple : grey,
+        status: state==='done' ? 'Complete' : state==='now' ? 'Action required' : 'Locked',
+        ctaBorder: state==='now' ? P : '#ececf1', ctaBg: state==='now' ? P : '#fff',
+        ctaInk: state==='now' ? '#fff' : '#71717a',
+      });
+    };
+    const sState = (done, isNow) => done ? 'done' : isNow ? 'now' : 'locked';
+    const clearance = [
+      cRow('Application submitted', 'Spin-Out Lab Advisor program · Cohort 4', sState(met.applied, false),
+        'Submitted Aug 3, 2026 · fractional CPO, GTM & pricing'),
+      cRow('Admin review', 'Identity verification, expertise scoring, founder-relevance check',
+        sState(met.reviewed, stage==='review'),
+        stage==='review' ? 'In progress · day 2 of 5. No founder data is accessible during review.' : 'Approved in principle Aug 4 by H. Kaur.'),
+      cRow('Skills & values assessment', 'Personal Advisor assessment — scores your archetype against founder Profiling gaps',
+        sState(met.assessed, stage==='assessment'), '',
+        stage==='assessment' ? 'Start assessment' : '', () => this.set('stage','agreement')),
+      cRow('Advisor agreement', 'FAST agreement + NDA · scope, cadence, default equity band',
+        sState(met.agreed, stage==='agreement'),
+        stage==='agreement' && !st.signed ? 'Defines the 0.25–1% advisory band before any engagement begins.' : '',
+        stage==='agreement' && !st.signed ? 'Review & sign' : '', () => this.set('signed', true)),
+    ];
+    const assessLocked = !met.assessed;
+    const assessNote = assessLocked
+      ? 'Complete the assessment in Studio to populate these graphs. Matching cannot be enabled without it.'
+      : 'Which graphs are reliable vs still low-confidence, by category.';
+
+    // ---- skills radar · nine advisor dimensions (mirrors the Founders Profiling report) ----
+    const SK = [
+      { k:'Pricing', v:91 }, { k:'GTM', v:86 }, { k:'Product', v:78 },
+      { k:'Commercial', v:74 }, { k:'Hiring', v:66 }, { k:'Operations', v:71 },
+      { k:'Technical', v:52 }, { k:'Finance / legal', v:58 }, { k:'Fundraising', v:62 },
+    ];
+    const CX = 200, CY = 158, R = 108, N = SK.length;
+    const ang = (i) => (Math.PI * 2 * i / N) - Math.PI / 2;
+    const pt = (i, frac) => ({ x: +(CX + Math.cos(ang(i)) * R * frac).toFixed(1),
+                               y: +(CY + Math.sin(ang(i)) * R * frac).toFixed(1) });
+    const ringPts = (frac) => SK.map((_, i) => { const p = pt(i, frac); return p.x + ',' + p.y; }).join(' ');
+    const radarRings = [1, .75, .5, .25].map(fr => ({ pts: ringPts(fr) }));
+    const radarSpokes = SK.map((_, i) => { const o = pt(i, 1); return { x1:CX, y1:CY, x2:o.x, y2:o.y }; });
+    const shapeFrac = (i) => assessLocked ? 0 : SK[i].v / 100;
+    const radarShape = SK.map((_, i) => { const p = pt(i, shapeFrac(i)); return p.x + ',' + p.y; }).join(' ');
+    const radarDots = assessLocked ? [] : SK.map((_, i) => pt(i, shapeFrac(i)));
+    // Labels are HTML overlaid on the SVG, so positions convert from the viewBox
+    // ("-30 0 460 316") into percentages of the wrapper.
+    const VB = { x:-30, y:0, w:460, h:316 };
+    const radarLabels = SK.map((s, i) => {
+      const p = pt(i, 1.2), cos = Math.cos(ang(i));
+      const left = ((p.x - VB.x) / VB.w * 100).toFixed(2);
+      const top = ((p.y - VB.y) / VB.h * 100).toFixed(2);
+      // Shift horizontally so the label reads outward from its spoke, mirroring
+      // the SVG text-anchor it replaces.
+      const shift = cos > .25 ? '0' : cos < -.25 ? '-100%' : '-50%';
+      return { t:s.k,
+        style:'position:absolute;left:' + left + '%;top:' + top + '%;'
+          + 'transform:translate(' + shift + ',-50%);white-space:nowrap;'
+          + 'font-size:11px;font-weight:500;color:#71717a;pointer-events:none' };
+    });
+    const sorted = SK.slice().sort((a,b) => b.v - a.v);
+    const strongest = (assessLocked ? [] : sorted.slice(0,3)).map(s => ({ k:s.k, v:String(s.v) }));
+    const weakest = (assessLocked ? [] : sorted.slice(-3).reverse()).map(s => ({
+      k:s.k, v:String(s.v), tone: s.v < 55 ? '#b91c1c' : '#b45309' }));
+
+    // ---- values graph · ten working principles ----
+    const VAL = [
+      { k:'Ownership', v:92 }, { k:'Customer orientation', v:89 }, { k:'Transparency', v:84 },
+      { k:'Integrity', v:88 }, { k:'Long-term thinking', v:81 }, { k:'Collaboration', v:72 },
+      { k:'Ambition', v:68 }, { k:'Resilience', v:64 }, { k:'Speed', v:47 }, { k:'Independence', v:42 },
+    ];
+    // Label and bar colours are separate: the light purple used for a Low BAR fails
+    // contrast as text (2.72:1), so Low labels take grey — as in the reference report.
+    const band = (v) => v >= 80 ? { t:'High', ink:'#15803d', bar:'#15803d' }
+                      : v >= 60 ? { t:'Medium', ink:'#c2610c', bar:'#c2610c' }
+                      :           { t:'Low', ink:'#71717a', bar:'#a78bfa' };
+    const values = VAL.map(v => {
+      const b = band(v.v);
+      return { k:v.k, band: assessLocked ? '—' : b.t,
+               bar: assessLocked ? '0%' : v.v + '%',
+               tone: assessLocked ? '#a1a1aa' : b.ink,
+               barTone: assessLocked ? '#e4e4e7' : b.bar };
+    });
+
+    const pctChip = (pct) => 'display:inline-block;padding:4px 11px;border-radius:8px;font-size:12.5px;font-weight:700;background:'
+      + (assessLocked ? '#f4f4f5' : '#fffbeb') + ';color:' + (assessLocked ? '#a1a1aa' : '#b45309');
+    const skillsPct = assessLocked ? 'Not assessed' : '79% assessed';
+    const valuesPct = assessLocked ? 'Not assessed' : '68% assessed';
+
+    // ---- archetype ----
+    const archetype = assessLocked ? 'Not yet assessed' : 'The Operator';
+    const archetypeDesc = assessLocked
+      ? 'Your archetype is determined by the assessment in Studio.'
+      : 'Commercially led; turns a founder\u2019s product instinct into a priced, repeatable motion.';
+    const archetypeSecondary = assessLocked ? '—' : 'Dealmaker';
+    const archetypeBlend = assessLocked ? '—' : '64 / 36';
+    const archStrengths = assessLocked ? [] : [
+      'Converts discovery evidence into a priced offer',
+      'Builds repeatable early sales motions',
+      'Direct on uncomfortable pricing decisions',
+    ];
+    const archBlind = assessLocked ? [] : [
+      'Under-weights technical feasibility risk',
+      'May push commercialization before validation lands',
+      'Lower depth on research and IP-licensing paths',
+    ];
+    const archComplements = assessLocked ? [] : ['Builder', 'Scientist', 'Domain Expert'];
+
+    // ---- assessment progress by category ----
+    const CATS = [ { k:'Skills', v:79 }, { k:'Values', v:68 }, { k:'Archetype', v:64 },
+                   { k:'Leadership style', v:52 }, { k:'Working style', v:45 } ];
+    const conf = (v) => v >= 70 ? { t:'High confidence', ink:'#15803d', bar:'#15803d' }
+                      : v >= 60 ? { t:'Medium confidence', ink:'#c2610c', bar:'#c2610c' }
+                      :           { t:'Low confidence', ink:'#71717a', bar:'#a78bfa' };
+    const progressCats = CATS.map(c => {
+      const cf = conf(c.v);
+      return { k:c.k,
+        label: assessLocked ? 'Not started' : c.v + '% · ' + cf.t,
+        bar: assessLocked ? '0%' : c.v + '%',
+        tone: assessLocked ? '#a1a1aa' : cf.ink,
+        barTone: assessLocked ? '#e4e4e7' : cf.bar };
+    });
+    const implications = assessLocked ? [
+      { k:'Pending', v:'Complete the assessment to see which founder archetypes you complement, which cohort gaps you close, and how your profile feeds match ranking.' },
+    ] : [
+      { k:'Founder complement', v:'Best paired with Builder or Scientist founders who own product and technology but lack a commercial lead.' },
+      { k:'Cohort gap you close', v:'Pricing and GTM — the two lowest-scoring dimensions across the Cohort 4 founder bench.' },
+      { k:'Engagement risk', v:'Lowest evidence on technical and finance/legal dimensions; avoid sole-advisor roles on deeptech formation work.' },
+      { k:'Downstream', v:'Feeds match ranking, Scoring Engine (Team), and the advisory equity band on each engagement.' },
+    ];
+    const reviewLog = [
+      { t:'Aug 3', e:'Application submitted to the Cohort 4 advisor program' },
+      { t:'Aug 3', e:'Identity verified · LinkedIn and reference cross-check clean' },
+      { t:'Aug 4', e:'Expertise scored 8.6 by H. Kaur — "strong GTM complement for a technical cohort"' },
+      { t:'Aug 4', e: met.assessed ? 'Assessment cleared · The Operator (Dealmaker secondary) recorded' : 'Assessment invitation sent' },
+    ];
+
+    // ---- approved workspace ----
+    const kpis = [
+      { k:'Matched founders', v:'3', note:'of 4 capacity', tone:'#1A202C' },
+      { k:'Open actions', v:'3', note:'1 overdue', tone:'#b45309' },
+      { k:'Sessions this week', v:'2', note:'1 brief missing', tone:'#1A202C' },
+      { k:'Advisory equity', v:'0.85%', note:'across 2 grants', tone:'#6d28d9' },
+      { k:'Founder rating', v:'4.8', note:'11 sessions', tone:'#15803d' },
+    ];
+    const matches = [
+      { company:'Halyard Security', initials:'HS', bg:'#334155', stage:'Week 2', meta:'Cybersecurity · solo founder · James W.', score:'87', scoreTone:'#15803d',
+        dims:[ {k:'Skill gap',v:'93',tone:'#15803d'},{k:'Values',v:'86',tone:'#15803d'},{k:'Archetype',v:'81',tone:'#6d28d9'},{k:'Stage',v:'88',tone:'#15803d'} ],
+        why:'Technical founder with no commercial lead — your GTM and pricing scores cover his two lowest Profiling dimensions. Both long-horizon and mission-weighted.',
+        next:'Accepting opens the terms sheet for advisory equity.' },
+      { company:'Verity Health', initials:'VH', bg:'#0d9488', stage:'Week 3', meta:'Clinical operations · 2 founders', score:'78', scoreTone:'#6d28d9',
+        dims:[ {k:'Skill gap',v:'82',tone:'#15803d'},{k:'Values',v:'79',tone:'#6d28d9'},{k:'Archetype',v:'74',tone:'#6d28d9'},{k:'Stage',v:'77',tone:'#6d28d9'} ],
+        why:'Strong team, thin willingness-to-pay evidence. Your pricing pressure-test is the direct fix; regulated-market pace matches your work style.',
+        next:'Review their 14 interviews before committing.' },
+      { company:'Solvent Climate', initials:'SC', bg:'#15803d', stage:'Week 2', meta:'Climate tech · research spin-out', score:'71', scoreTone:'#b45309',
+        dims:[ {k:'Skill gap',v:'74',tone:'#6d28d9'},{k:'Values',v:'88',tone:'#15803d'},{k:'Archetype',v:'62',tone:'#b45309'},{k:'Stage',v:'69',tone:'#b45309'} ],
+        why:'High values alignment but partial skill overlap — they need commercialization depth more than GTM. Consider passing to an IP-specialist advisor.',
+        next:'Admin flagged this as a joint-advisor candidate.' },
+    ].map(mt => Object.assign({}, mt, { avStyle:av(mt.bg,38), accept:()=>this.set('termsSet', true) }));
+
+    const founders = [
+      { company:'NovaCraft AI', initials:'NC', bg:'#7c3aed', health:'On track', healthChip:green, opacity:'1',
+        meta:'Guillaume L. · Week 2 · async workflow automation · 4th session Thursday',
+        stats:[ {k:'Readiness',v:'71'},{k:'Interviews',v:'18'},{k:'Revenue',v:'$12.8K'} ],
+        blockLabel:'Open item', blockTone:'#b45309', blockBg:'#fffbeb',
+        blocker:'Pricing tiers drafted from your last session — needs your review before the landing page publishes.', cta:'Review tiers' },
+      { company:'LoopSense', initials:'LS', bg:'#b45309', health:'Needs attention', healthChip:amber, opacity:'1',
+        meta:'Priya M. · Week 3 · sensor analytics · 2 paying pilots',
+        stats:[ {k:'Readiness',v:'62'},{k:'Interviews',v:'14'},{k:'Revenue',v:'$6.1K'} ],
+        blockLabel:'Blocker', blockTone:'#b45309', blockBg:'#fffbeb',
+        blocker:'62% of revenue from one customer — needs 2 discovery calls outside the pilot segment.', cta:'Route intros' },
+      { company:'Kelp Bio', initials:'KB', bg:'#15803d', health:'At risk', healthChip:red, opacity:'1',
+        meta:'Diana K. · Week 4 · materials science · university spin-out',
+        stats:[ {k:'Readiness',v:'49'},{k:'Interviews',v:'9'},{k:'Revenue',v:'—'} ],
+        blockLabel:'At risk', blockTone:'#b91c1c', blockBg:'#fef2f2',
+        blocker:'University IP assignment unresolved — blocks a clean cap table and the whole Week 4 path. Session overdue 6 days.', cta:'Schedule now' },
+    ].map(fo => Object.assign({}, fo, { avStyle:av(fo.bg,38) }));
+
+    const box = (done) => done
+      ? { box:'width:16px;height:16px;border-radius:5px;background:#15803d;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none', glyph:'✓', ink:'#a1a1aa' }
+      : { box:'width:16px;height:16px;border-radius:5px;border:1.5px solid #d4d4d8;flex:none', glyph:'', ink:'#3f3f46' };
+    const plans = [
+      { t:'Pricing & packaging v1', who:'NovaCraft AI', due:'Due Thu', dueTone:'#b45309',
+        items:[ Object.assign({t:'Pressure-test 3 tiers against 5 logged interviews'},box(true)), Object.assign({t:'Anchor against the $200/mo sensitivity from discovery'},box(true)), Object.assign({t:'Sign-off call before landing page publish'},box(false)) ] },
+      { t:'De-risk customer concentration', who:'LoopSense', due:'Due Aug 12', dueTone:'#71717a',
+        items:[ Object.assign({t:'Map 3 warm paths to industrial IoT buyers'},box(true)), Object.assign({t:'2 discovery calls booked from intro routing'},box(false)) ] },
+      { t:'IP assignment escalation', who:'Kelp Bio', due:'Overdue', dueTone:'#b91c1c',
+        items:[ Object.assign({t:'Review university license term sheet'},box(false)), Object.assign({t:'Session with tech-transfer office'},box(false)) ] },
+    ];
+    const formation = [
+      { t:'University IP assignment', sub:'License terms review', who:'Kelp Bio', status:'Blocked', chip:red, deadline:'Overdue', dlTone:'#b91c1c', cta:'Review' },
+      { t:'Incorporation readiness', sub:'Delaware C-Corp confirmed', who:'NovaCraft AI', status:'Ready to file', chip:green, deadline:'Aug 14', dlTone:'#71717a', cta:'Sign off' },
+      { t:'Co-founder agreement', sub:'Equity split & vesting read', who:'LoopSense', status:'In review', chip:amber, deadline:'Aug 9', dlTone:'#71717a', cta:'Open' },
+      { t:'Use of funds check', sub:'$500K pre-seed allocation', who:'LoopSense', status:'Requested', chip:purple, deadline:'Aug 11', dlTone:'#71717a', cta:'Review' },
+    ];
+
+    // ---- advisory economics: terms → cap table + deck ----
+    const prop = (target, done, state) => ({ target, state,
+      box: done
+        ? 'width:15px;height:15px;border-radius:4px;background:#15803d;color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none'
+        : 'width:15px;height:15px;border-radius:4px;border:1.5px solid #d4d4d8;flex:none;font-size:9px;display:flex;align-items:center;justify-content:center;color:transparent',
+      glyph: done ? '✓' : '', tone: done ? '#15803d' : '#a1a1aa' });
+    const grants = [
+      { company:'NovaCraft AI', equity:'0.50%', status:'Executed', chip:green, border:'#bbf7d0', bg:'#f6fdf8',
+        terms:'2-year vest · 6-month cliff · FAST standard · executed Jun 14, 2026',
+        propagation:[ prop('Cap Table', true, 'Synced Jun 14'), prop('Pitch Deck · Team', true, 'Synced Jun 14') ] },
+      { company:'LoopSense', equity:'0.35%', status:'Executed', chip:green, border:'#bbf7d0', bg:'#f6fdf8',
+        terms:'2-year vest · 6-month cliff · FAST standard · executed Jul 2, 2026',
+        propagation:[ prop('Cap Table', true, 'Synced Jul 2'), prop('Pitch Deck · Team', true, 'Synced Jul 2') ] },
+      st.termsSet
+        ? { company:'Halyard Security', equity:'0.50%', status:'Pending signature', chip:amber, border:'#fde68a', bg:'#fffbeb',
+            terms:'Proposed: 2-year vest · 6-month cliff · within the 0.25–1% band',
+            propagation:[ prop('Cap Table', false, 'On signature'), prop('Pitch Deck · Team', false, 'On signature') ],
+            action:'Send for signature', go:()=>{} }
+        : { company:'Halyard Security', equity:'—', status:'Terms not set', chip:grey, border:'#ececf1', bg:'#fff',
+            terms:'Accept the match to open the terms sheet. Equity is agreed per engagement.',
+            propagation:[ prop('Cap Table', false, 'Awaiting terms'), prop('Pitch Deck · Team', false, 'Awaiting terms') ],
+            action:'Set terms', go:()=>this.set('termsSet', true) },
+    ];
+    const totalEquity = st.termsSet ? '1.35% (0.85% executed)' : '0.85%';
+
+    const sessions = [
+      { when:'Thu 14:00', who:'NovaCraft AI · Guillaume', topic:'Pricing tiers review', state:'Brief ready', chip:green, tone:'#6d28d9' },
+      { when:'Fri 10:30', who:'LoopSense · Priya', topic:'Pilot → repeatable motion', state:'Questions missing', chip:amber, tone:'#6d28d9' },
+      { when:'Overdue', who:'Kelp Bio · Diana', topic:'IP license terms', state:'6 days late', chip:red, tone:'#b91c1c' },
+    ];
+    const contrib = [
+      { k:'Sessions completed', v:'11' }, { k:'Intros made', v:'6' },
+      { k:'Deliverables reviewed', v:'9' }, { k:'Avg founder rating', v:'4.8 / 5' },
+    ];
+    const contracts = [
+      { t:'Advisor agreement · FAST', sub:'Scope: GTM & pricing · 2–4 founders', status:'Active', chip:green },
+      { t:'NDA · Spin-Out Lab', sub:'Covers all founder and fund data', status:'Signed', chip:green },
+      { t:'Assessment clearance', sub:'Operator / Dealmaker archetype', status:'Passed', chip:green },
+    ];
+    const resources = [
+      { week:'Wk 1', t:'Discovery quality rubric' }, { week:'Wk 2', t:'Pricing pressure-test playbook' },
+      { week:'Wk 3', t:'Advisor session agendas' }, { week:'Wk 4', t:'Formation review checklist' },
+      { week:'Wk 4', t:'University IP field guide' },
+    ];
+
+    // ---- admin queue ----
+    const QUEUE = [
+      { k:'voss', name:'Elena Voss', initials:'EV', bg:'#7c3aed', meta:'Fractional CPO · GTM & pricing · assessment cleared', status:'Ready to approve',
+        thesis:'I run founders through a pricing and ICP pressure-test in the first two sessions — they leave with a priced offer and a target list, not notes. 9 pre-seed companies advised, 2 university spin-outs.',
+        fields:[ {k:'Role',v:'Operator'},{k:'Sectors',v:'B2B SaaS · workflow'},{k:'Assessment',v:'Cleared · 8.6'},{k:'Archetype',v:'Operator / Dealmaker'},{k:'Agreement',v:'Signed'},{k:'Availability',v:'4–6 hrs / month'} ],
+        scores:[ {k:'Expertise',v:'8.6',tone:'#15803d'},{k:'Relevance',v:'8.9',tone:'#15803d'},{k:'Commercial.',v:'7.4',tone:'#6d28d9'},{k:'Risk',v:'Low',tone:'#15803d'} ],
+        log:[ {t:'Aug 3',e:'Application submitted'},{t:'Aug 3',e:'Identity verified'},{t:'Aug 4',e:'Assessment cleared · archetype recorded'},{t:'Aug 4',e:'Advisor agreement countersigned'} ] },
+      { k:'okafor', name:'Tom Okafor', initials:'TO', bg:'#0d9488', meta:'2× founder · marketplace ops · assessment pending', status:'Assessment pending',
+        thesis:'Marketplace supply-side playbooks; helped 4 founders reach repeatable acquisition loops.',
+        fields:[ {k:'Role',v:'Operator'},{k:'Sectors',v:'Marketplaces'},{k:'Assessment',v:'Not started'},{k:'Archetype',v:'—'},{k:'Agreement',v:'Not sent'},{k:'Availability',v:'2–3 hrs / month'} ],
+        scores:[ {k:'Expertise',v:'7.8',tone:'#6d28d9'},{k:'Relevance',v:'6.9',tone:'#6d28d9'},{k:'Commercial.',v:'5.2',tone:'#b45309'},{k:'Risk',v:'Low',tone:'#15803d'} ],
+        log:[ {t:'Aug 4',e:'Application submitted'},{t:'Aug 4',e:'Assessment invitation sent'} ] },
+      { k:'zhang', name:'Lin Zhang', initials:'LZ', bg:'#b45309', meta:'IP counsel · tech transfer · deeptech', status:'More info',
+        thesis:'University IP assignment and licensing structures for research spin-outs; 30+ tech-transfer negotiations.',
+        fields:[ {k:'Role',v:'Subject-matter expert'},{k:'Sectors',v:'Deeptech · biotech'},{k:'Assessment',v:'Cleared · 9.2'},{k:'Archetype',v:'Domain Expert'},{k:'Agreement',v:'Not sent'},{k:'Availability',v:'2–3 hrs / month'} ],
+        scores:[ {k:'Expertise',v:'9.2',tone:'#15803d'},{k:'Relevance',v:'7.1',tone:'#6d28d9'},{k:'Commercial.',v:'9.0',tone:'#15803d'},{k:'Risk',v:'Check refs',tone:'#b45309'} ],
+        log:[ {t:'Jul 30',e:'Application submitted'},{t:'Aug 1',e:'More information requested — conflict-of-interest disclosure for a current university retainer'} ] },
+      { k:'reyes', name:'David Reyes', initials:'DR', bg:'#334155', meta:'Angel · fintech infra · 40 checks', status:'Declined',
+        thesis:'Investor-readiness reviews and warm paths into fintech seed funds.',
+        fields:[ {k:'Role',v:'Investor'},{k:'Sectors',v:'Fintech'},{k:'Assessment',v:'Not started'},{k:'Archetype',v:'—'},{k:'Agreement',v:'Not sent'},{k:'Availability',v:'2–3 hrs / month'} ],
+        scores:[ {k:'Expertise',v:'8.1',tone:'#15803d'},{k:'Relevance',v:'6.4',tone:'#b45309'},{k:'Commercial.',v:'4.8',tone:'#b45309'},{k:'Risk',v:'Low',tone:'#15803d'} ],
+        log:[ {t:'Jul 22',e:'Application submitted'},{t:'Jul 26',e:'Declined — sector fit outside the active cohort'} ] },
+    ];
+    const stChip = (s) => s==='Ready to approve' ? purple : s==='Approved' ? green
+      : s==='Assessment pending' || s==='More info' ? amber : s==='Declined' ? red : grey;
+    const queue = QUEUE.map(q => {
+      const status = st.queueSt[q.k] || q.status;
+      return { name:q.name, initials:q.initials, meta:q.meta, status, statusStyle:stChip(status),
+        avStyle:av(q.bg,32), bg: st.sel===q.k ? '#faf9fc' : '#fff', go: () => this.set('sel', q.k) };
+    });
+    const selRaw = QUEUE.find(q => q.k===st.sel) || QUEUE[0];
+    const selStatus = st.queueSt[selRaw.k] || selRaw.status;
+    const sel = Object.assign({}, selRaw, { status:selStatus, statusStyle:stChip(selStatus), avStyle:av(selRaw.bg,40) });
+    const setQ = (v) => this.setState(s => ({ queueSt: Object.assign({}, s.queueSt, { [s.sel]: v }) }));
+
+    return {
+      personas, stageChip:stageMap.t, stageChipStyle:stageMap.s,
+      isApply: stage==='apply', isProgress: stage==='review' || stage==='assessment' || stage==='agreement',
+      isApproved: stage==='approved', isAdmin: stage==='admin',
+      isAdvisorSide: stage !== 'admin', adminStats, ctaTone,
+      // The assessment report is a durable artifact (like Founders Profiling), not a
+      // one-time gate step — it renders for every advisor-side stage, including approved.
+      showAssessment: stage !== 'admin' && stage !== 'apply',
+      lifecycle, gatePct: metCount + ' of 4', gateBar: (metCount/4*100) + '%', gateTone,
+      gateHeadline: NEXT.h, gateSub: NEXT.s, nextStep: NEXT.step, nextCta: NEXT.cta, nextGo: NEXT.go,
+      nextBg: matchingOn ? '#f6fdf8' : '#faf9fc', nextBorder: matchingOn ? '#bbf7d0' : '#ececf1',
+      f: st.form, inputStyle, rolePills, skillPills, programStats, involves,
+      setName:this.setF('name'), setEmail:this.setF('email'), setLinkedin:this.setF('linkedin'), setLocation:this.setF('location'),
+      setSectors:this.setF('sectors'), setStages:this.setF('stages'), setThesis:this.setF('thesis'),
+      setHours:this.setF('hours'), setComp:this.setF('comp'),
+      toggleUni: () => this.set('uni', !st.uni), uniGlyph: st.uni ? '✓' : '',
+      uniBoxStyle:'width:18px;height:18px;border-radius:6px;flex:none;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;cursor:pointer;'
+        + (st.uni ? 'background:'+P+';color:#fff;border:none' : 'background:#fff;border:1.5px solid #d4d4d8;color:transparent'),
+      submitApp: () => this.set('stage','review'),
+      clearance, assessNote, reviewLog,
+      radarRings, radarSpokes, radarShape, radarDots, radarLabels, strongest, weakest,
+      values, skillsPct, valuesPct, skillsPctChip:pctChip(), valuesPctChip:pctChip(),
+      archetype, archetypeDesc, archetypeSecondary, archetypeBlend,
+      archStrengths, archBlind, archComplements, progressCats, implications,
+      kpis, matches, founders, plans, formation, grants, totalEquity, sessions, contrib, contracts, resources,
+      queue, sel, actApprove:()=>setQ('Approved'), actInfo:()=>setQ('More info'), actReject:()=>setQ('Declined'),
+    };
+  }
+}
+</script>
+</body>
+</html>
