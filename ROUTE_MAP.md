@@ -118,3 +118,142 @@ HTMLs, 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
 | Pages · Investor Portfolio | investor-LP | `/portfolio/positions`, `/portfolio/updates` (existing) | `PortfolioWorkspace` tabs (Health / Updates / Cap Table / Performance / Growth) | `positions.ts` (marks, distributions, analytics, kpi-compliance), `portfolio_updates.ts`, `portfolio.ts` | UPGRADE | **Positions** adds cost basis vs current mark sorted by what needs attention rather than alphabetically. **Updates** adds **parse review** — extracted KPIs presented as editable proposals — plus a chase queue and extraction rules; today `PortfolioUpdatesPage` is manual KPI entry only, no parsing and no chase. **Value-add desk** (`/portfolio/value-add`) is entirely new: intros, hours and board prep logged as work, with promised-vs-delivered made auditable. Also note `PortfolioGrowthPage.jsx` is **mock** (`frontend/src/data/portfolioAnalytics.js`). |
 | Pages · Investor Research | investor-LP | `/advisor/research/{ai,market,funds,documents}` (existing) + `/market-intel` | `AdvisorResearchWorkspace` (mock) and `MarketIntelPage` (live, ~32 API calls) | Live but unused by that workspace: `market_intel.ts`, `assistant.ts`, `dd.ts`, `files.ts`, `news.ts`, `crunchbase.ts` | RESKIN | Same mock-shell problem as founder Research. Investor-specific new zones: **Diligence pulls** (pull builder, the deal each pull attaches to, and a seam indicator showing what the founder staged *and what they withheld*), **Benchmarking** (builder, saved benchmarks, exportable charts, with an explicit small-n caveat), **Markets** reframed around theses and what each thesis actually sourced, and a **Library** with per-source Q&A history. |
 | Pages · Partner Pipeline | partner | `/needs` (existing; `/partner/operations/engagements` for the retainer half) | `/needs` → `NeedsBoardPage` (Browse / My needs / My quotes / Engagements — live-wired); `/partner/operations/*` → mock | `needs.ts` (needs, RFP, quotes, accept/reject/withdraw, engagements start/deliver/cancel/invoice, reviews, `/analytics`), `services.ts`, `matches.ts`, `partner_portal.ts` | UPGRADE | Five zones. **Leads** adds source provenance and need-to-capability scoring with the receipt behind each score, editable capability weights, and a recorded pass reason. **Proposals** adds the full lifecycle (drafts/sent/opened/decided) with win-and-loss reasons and open-count as a first-class signal. **Negotiations** is a new board where every card carries its one named blocker. **Retainers** adds renewal dates and **utilization against scope** (34% = churn risk, 118% = unbilled work). **Analytics** adds win rate, cycle time, forecast and loss patterns broken out by shape. Namespace warning: the canvas puts these at `/pipeline/{leads,proposals,…}`, which collides with the live investor deal pipeline at `/pipeline/{screening,commit,transactions}`. |
+
+## Partner / admin / shared / Lab — part 4 (28 canvases)
+
+| Canvas | Persona | Proposed route | Live route today | Backend it wires to | STATUS | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| Partner Operator Canvas | partner | `/partner/operations/*` | `/partner/operations/*`, `/partner/growth/*`, `/partner/insights`, `/partner-portal` | `partner_portal.ts`, `partners.ts`, `partnernet.ts`, `needs.ts`, `services.ts`, `comarketing.ts`, `market_intel.ts` | DEFERRED | Persona hub; no diff run. Its 7 artboards map onto the existing 5-tab workspace + GrowthWorkspace. |
+| PartnerRail | chrome | — (component, not a route) | — | `assistant.ts`, `monitoring.ts` | NEW | Eighth sibling of the AI rail family. No component, no `api.js` method. |
+| Perks & Products | shared (founder + partner) | `/perks` (new) | — | — (none) for perks/credits; adjacent `products.ts`, `catalog.ts`, `admin_promos.ts`, `billing.ts` | NEW | Credit-priced partner perk marketplace: claim modal with credit debit + redemption code, My Perks + credit ledger, partner submit with live preview + review queue, listing analytics. Distinct from `/marketplace` (services) and `/plans-and-pricing` (Stripe storefront). No perk or credit-ledger table exists. |
+| Pitch Deck Builder | founder | `/spinout-lab/pitch-deck` | `/spinout-lab/pitch-deck` | `decks.ts`, `deck_share_actions.ts`, `spinout_lab.ts` | OUT OF SCOPE | Lab tool; `components/PitchDeckModals.jsx:3` cites this canvas as its design reference. |
+| Portfolio | investor-LP | `/portfolio/health\|updates\|positions\|performance\|growth` | all five via `PortfolioWorkspace` | `portfolio.ts`, `positions.ts`, `portfolio_updates.ts` | UPGRADE | Adds 4 zones with no shipped equivalent: position detail (cash-flow ledger, mark history, KPI small multiples, reserve rail), KPI collection (requested set + compliance strip), alerts, LP export. **`POST /positions/:uid/marks`, `POST /positions/:uid/distributions` and `GET /positions/kpi-compliance` are live and called by no page.** |
+| Pricing | public | `/pricing` | `/pricing` | — (none; tiers static in `data/pricing.js`) | UPGRADE | A repositioning, not a restyle: **"There is no price list. There is an application."** Three by-application offerings, zero dollar figures, a platform-surface comparison matrix with scoped chips, an always-open FAQ stating instrument/equity/cap. Conflicts with the live paywall and `data/pricing.js`. Does not touch `/plans-and-pricing` (the Stripe storefront). |
+| Profiling | founder | `/spinout-lab/profiling` | `/spinout-lab/profiling` | `profiling.ts`, `assessment.ts`, `values.ts`, `skills.ts` | OUT OF SCOPE | Lab tool, Wk 1. |
+| Quarterly Report | investor-LP | `/lp-reports` | `/lp-reports`; LP side `/lp-portal` | `lp_reports.ts`, `funds.ts`, `positions.ts` | UPGRADE | Live is a CRUD list of report rows. Canvas is the rendered **4-page LP document**: cover + GP letter + per-LP capital account, portfolio review, cohort telemetry, since-inception Called/NAV/TVPI/DPI/RVPI/Net-IRR table, fees & expenses, valuation-basis notes, per-page confidentiality footer. **`api.fundsLpReport()` exists and is called by no page.** |
+| Refer & Earn | shared | `/referrals` | `/referrals` (`/refer` redirects in) | `refer_earn.ts` | UPGRADE | Live has link + legacy code, per-platform share, paste-CSV import, categories, pipeline, FAQ, detail drawer. Canvas adds a QR code with Download PNG, file-upload CSV with a parsed preview and per-contact personalised invite links + status, an Import-from-LinkedIn path, a reward-logic matrix, and the invite-only Referral Partner Program CTA (`POST /refer-earn/strategic-access` exists; no UI). |
+| Revenue | founder | `/spinout-lab/revenue` | `/spinout-lab/revenue` | `spinout_lab.ts`, `financials.ts`, `metrics.ts` | OUT OF SCOPE | Lab tool, Wk 3. |
+| Round Manager | founder | `/raise/capital/pipeline` | `/raise/capital/pipeline` | `contacts.ts` (`/raise-prospects`, `/raise-round`, `/raise-closes`, `/raise-pro-rata`, `/raise-updates`) | UPGRADE | Tab-for-tab match with the live page — `RaisePipelinePage.jsx:116` says `// Round Manager (#129) — ladder \| closes \| prorata`, and `RoundClosesPanel`/`ProRataPanel` ship. New: per-column weighted subtotals, per-investor certainty/signal/pass-reason, an engagement-detail panel (deck opens, data-room time-per-section, docs viewed), a paper trail (send → sign → wire) with "Mark done & advance", a "Needs a nudge" rail. **Treating this as NEW would be a rebuild.** |
+| Scoring Engine v2 | investor-LP / partner / admin | `/scoring` | `/scoring` (`ScoringPage.jsx`, guarded admin/partner/investor) | `scoring.ts`, `ic.ts`, `votes.ts` | UPGRADE | **Does not supersede v1 — different persona, different surface.** Adds six tabs: Configuration (stage presets, editable weights totalling 100%, saved scorecards), Scoring (integrity flags, sub-score × weight contribution), Panel (4 partners score blind, per-criterion spread, divergence + resolve notes), Benchmark (percentile vs a cohort matched on stage/sector/quarter), History (runs pinned to rubric version), IC memo. None of the rubric/panel/benchmark/history concepts exist in `scoring.ts`. |
+| Scoring Engine | founder | `/spinout-lab/scoring` | `/spinout-lab/scoring` | `scoring.ts`, `spinout_lab.ts` | OUT OF SCOPE | Lab readiness tool, already built from this exact file (`SpinoutLabScoringPage.jsx:1-4`); ported components in `components/scoring/`. |
+| Send for Signature | shared | `/legal/send` (new) | — (only the signer view `/esign/:token` exists) | `esign.ts` (`POST /legal/esign/send`, list, detail, document, forward), `legal.ts` | NEW | 3-step sender wizard → envelope status (per-signer state, remind, copy link, void, audit trail, download executed PDF). **Backend is complete and `api.js` already exposes `esignSend`/`esignList`/`esignDetail`/`esignDocumentUrl` — no page calls any of them.** This is task #119. |
+| Signals | founder (+ advisor mode) | `/signals` | `/signals` | `signals.ts`, `market_intel.ts` | UPGRADE | Reframes signals as **opportunity clusters ranked by evidence weight, not recency**: a four-independent-source minimum with a real "we would rather show nothing" empty state, per-cluster coverage/weight/recency, "Inferred — not directly observed" marking; in the drawer the literal source **query** per evidence line, **counter-evidence**, interpretation fenced off from evidence, interview questions, hand-offs, a source-taxonomy/licensing modal. No cluster, coverage, counter-evidence or query fields exist in `signals.ts`. |
+| Spin-Out Lab Workspace | founder | `/spinout-lab` | `/spinout-lab` | `spinout_lab.ts`, `progress.ts` | OUT OF SCOPE | The 232 KB master canvas: workspace shell + all 22 tool pages inline. |
+| Spin-Out Lab-print-1vkgcux | public | `/spinout-lab` | `/spinout-lab` (logged-out) | `spinout_lab.ts`, `public.ts` | OUT OF SCOPE | **Byte-for-byte duplicate of `Spin-Out Lab.dc.html`** plus a print harness (identical 45,145-char body, difflib ratio 1.0). Redundant. |
+| Spin-Out Lab-print | public | `/spinout-lab/brief` | `/spinout-lab/brief` | `spinout_lab.ts` | OUT OF SCOPE | **Not** a duplicate of the above. A truncated 4,547 B fragment of the printable Program Brief that stops mid-element and carries no `x-dc` data block, so every binding is unresolvable. |
+| Spin-Out Lab | public | `/spinout-lab` | `/spinout-lab` | `spinout_lab.ts`, `spinout_moderation.ts`, `public.ts` | OUT OF SCOPE | Public Lab landing + cohort tracker + apply flow. |
+| Studio Ops | founder | — (see note) | — (deleted from main 2026-08-25) | — (none) | **SEE DECISION D1** | Lab tool by subject — Week-2 unlocked tool and Week-2 deliverable in the master workspace canvas — but there is **no live Studio Ops surface**: the route, both pages, the worker route, the service and 16 `api.js` methods were deleted, and `frontend/test/studio_ops_removed.test.mjs` now asserts they stay gone. OUT OF SCOPE reads "already built, skip"; that does not apply here. The canvas also lists Studio Ops as a **top-level Products nav item**, suggesting a platform surface rather than only a Lab tool. Needs an explicit call. |
+| Support Security · Super | super-admin | Support → `/tickets`; Security → `/admin/security` (new) | `/tickets` (partial), `/monitoring`, `/admin` | `tickets.ts`, `monitoring.ts`, `monitoring_analytics.ts`, `trust.ts`, `admin.ts` | NEW | Two artboards, two answers. HQ Support = three queues (escalations, HQ-held users, subsidiary admins raising tickets about the admin product), tenant × queue analytics, GitHub `ticket_sync_events` health, inherited SLA bands. Security = a new destination: a `security_events` ledger (the canvas calls it "the one real backend build"), session revoke/force-re-auth, AI-safety counters, GDPR DSR clocks per territory, backup/DR **drill** status, with `admin_audit_log` demoted to one zone of eight. Gated on the absent tenancy model. |
+| Support · Subsidiary | admin | `/tickets` | `/tickets` | `tickets.ts` | UPGRADE | Turns a flat list into a territory-scoped help desk: SLA-chipped inbox with lanes, live chat routed by tenant, escalate-to-HQ writing an engineering ticket under the operator's name, canned replies with usage counts, CSAT, a Forge triage proposal. Its second artboard deliberately **refuses** a tenant-tier security console. Gated on the absent tenancy model. |
+| System Sheet | chrome | — (design-system reference) | — | — (none) | NEW | S1 Tokens + in-use component inventory; S2 the four states the other canvases omit (empty, loading, error, confirmation) plus a voice do/don't. **This is the file the baseline palette was transcribed from.** Partially exists as code (`index.css` `@theme`, `EmptyState.jsx`, `ErrorState.jsx`, `Skeleton.jsx`, `useToast.js`) but there is no published sheet. |
+| Team · Authority | admin / super-admin | `/admin/team` (absorbs) + `/ic` | `/admin/team` (public team-page CRUD only), `/ic`, `/ic/:uid` | `admin_team.ts`, `team_public.ts`, `ic.ts`, `votes.ts`, `users.ts`, `projects.ts` | NEW | 8 artboards enforcing one rule: **title, authority and economics are three independent axes.** Subsidiary Team hub (org chart, IC panel, people directory, external-engagement ledger where access always expires, public team page as a *projection*), Super read-only cross-tenant oversight, member profile with a locked-not-hidden economics section, a roles × surfaces × deal-power matrix edited with a typed reason + audit, an IC console where an open FLAG blocks entry to voting while only VOTE decides, a Partner-gated carry ledger, onboard/offboard flows. Live `/admin/team` only edits the marketing page. |
+| Team | founder | `/build/team` | `/build/team` | `projects.ts`, `captable.ts`, `legal.ts`, `advisors.ts`, `jobs.ts`, `cofounder.ts`, `partner_office_hours.ts` | UPGRADE | Live tabs = Advisor / Co-Founder / Jobs. Canvas = Roster / Advisors / Hiring / **Coverage**. New: the roster itself (equity %, shares, vesting progress, per-person paperwork status, person drawer with employment + documents + offboard, invite drawer issuing type-appropriate paperwork), an option-pool panel, advisor grants + vesting + cadence, and a whole Coverage tab (inbound from Brand & Pages, co-founder decision state, function-by-function coverage with fixes, quarterly headcount plan, people-cost roll-up feeding Use of Funds). |
+| Trust Center v2 | shared | `/trust` | `/trust` | `trust.ts`, `kyc.ts`, `esign.ts`, `settings.ts` | UPGRADE | **Supersedes v1.** Identity/Entity/Accreditation become read-only status reports pointing at Account Settings; adds a multi-company selector (each with its own KYB state); obligations gain provenance + expiry + a real empty state; agreements are grouped with inline expand; sanctions screening gains optional name/DOB/nationality overrides and filter chips. **Independently the right call: the endpoints v1's editable cards POST to do not exist on the worker.** |
+| Trust Center | shared | `/trust` | `/trust` | `trust.ts`, `kyc.ts`, `esign.ts` | CURRENT | Shipped page is a faithful build of this canvas. Superseded by v2 — archive; do not build from this file. |
+| Use of Funds | founder | `/spinout-lab/use-of-funds` | `/spinout-lab/use-of-funds` | `spinout_lab.ts`, `financials.ts`, `decks.ts` | OUT OF SCOPE | Lab tool, Wk 4. |
+
+---
+
+## Status tally
+
+| Status | Count |
+| --- | ---: |
+| UPGRADE | 42 |
+| OUT OF SCOPE | 26 |
+| NEW | 23 |
+| RESKIN | 7 |
+| CURRENT | 4 |
+| DEFERRED | 4 |
+| Needs a decision (Studio Ops, D1) | 1 |
+| **Total** | **107** |
+
+`UPGRADE` being the largest bucket is the headline: this is mostly a re-integration
+pass over surfaces that already exist, not a greenfield build. The 23 `NEW`
+entries cluster into four programmes — the AI rail family (8 canvases), the
+multi-tenant/licensing tier (5), the detail-layer IA specs (3), and genuinely new
+products (Data Room, Messages, Perks, Send for Signature, Team · Authority).
+
+## Corrections to the original brief
+
+1. **`Advisor Studio` is OUT OF SCOPE, not DEFERRED.** Its content is the
+   Spin-Out Lab advisor-program application plus the admin access-decisioning
+   gate ("Cohort 4 · Week 2"), not a `/studio` persona hub. Only three true
+   persona hubs remain deferred, across four files.
+2. **`Brand & Landing Page copy.dc.html` is a stale duplicate**, missing three
+   `.bl-root.bl-embedded` CSS rules the newer sibling has. Not a distinct surface.
+3. **`Spin-Out Lab-print-1vkgcux.dc.html` is a byte-for-byte duplicate** of
+   `Spin-Out Lab.dc.html` (identical 45,145-char body) plus a print harness.
+   `Spin-Out Lab-print.dc.html` is unrelated to it — a truncated 4,547 B fragment
+   of the Program Brief with no data block.
+4. **After 2 and 3, the real corpus is 105 distinct surfaces**, not 89 and not 107.
+5. **`Compliance` and `Capital` are Lab canvases** even though the brief's
+   OUT-OF-SCOPE enumeration does not name them, and both collide by name with a
+   different platform-wide surface (`/compliance` the compliance calendar,
+   `/capital` the investor page). Do not collapse either pair.
+6. **`Office Hours` is the Lab's Week-3 tool**, not the advisor-side
+   `/office-hours` availability manager. Two surfaces, one name.
+
+## Live defects found during the audit
+
+These are pre-existing and were not introduced here. Each is a page calling a
+path with no worker handler, already recorded in `scripts/api-drift-baseline.json`
+(58 `missing_route` entries), which is why CI stays green.
+
+| Surface | Broken calls | Effect |
+| --- | --- | --- |
+| Network workspace (`/advisor/network/*`) | `/api/network-introductions/*`, `/api/organizations*` | The Network surface every role's sidebar links to. A second, working Network lives at `/network`. |
+| Trust Center (`/trust`) | 9 routes: `/trust/kyb/status`, `/kyb/submit`, `/accreditation/*` (5), `/nda/status`, `/nda/:p/preview`, `/nda/sign` | The editable KYB / Accreditation / NDA cards. Trust Center v2 converts exactly these to read-only, so v2 is the fix, not merely a redesign. |
+| Marketplace (`/marketplace`) | all 11 `api.marketplace*` calls | The whole page. Implemented only in the dev-only FastAPI. |
+| Legal (`/legal`) | `POST /legal/documents/generate` | Document generation. The worker has `POST /templates/:key/generate` and `POST /documents` under different paths. |
+
+Separately, **two code comments block a feature on a premise that is no longer
+true**: `SpinoutLabCofounderAgreementPage.jsx:35` and
+`components/cofounder/ExecutionConsole.jsx:9` both disable "Send for signature"
+because *"api.js has no method to sign a documents row"*. `api.js:1384` has
+`esignSend` and `legal.ts:912` has `PUT /documents/:id/sign`.
+
+## Backends that are live with no consumer
+
+Cheap wins — the work is a UI slice, not a build:
+
+- **Send for Signature** — `esign.ts` is complete (envelopes, tokenised signing,
+  forward, reject, audit) and `api.js` exposes `esignSend`/`esignList`/
+  `esignDetail`/`esignDocumentUrl`. No page calls any of them. (Task #119.)
+- **409A safe harbour** — `GET/POST /captable/409a/:projectId` + `/events`, four
+  `api.js` methods, zero UI on the cap-table page.
+- **Company members** — `POST/DELETE /company/:uid/members` and
+  `/company/memberships`, no members UI in Company Settings. Company *creation*
+  is the same story: `POST /company/create` works end to end and the switcher's
+  button is hardcoded `disabled`.
+- **Portfolio marks / KPI compliance** — `POST /positions/:uid/marks`,
+  `POST /positions/:uid/distributions`, `GET /positions/kpi-compliance`.
+- **Per-LP fund report** — `GET /funds/:id/lp-report/:lpId`, the Quarterly
+  Report canvas's exact data source.
+- **AI spend** — `aiRouter.ts` already meters per-user daily/monthly and per-org
+  caps and per-task cost, surfaced only to admins. This is the data the eight
+  rail canvases want user-facing.
+
+## Route-namespace collisions to resolve before mounting anything
+
+| Canvas proposes | Collides with | 
+| --- | --- |
+| `/deals/pipeline`, `/deals/screening`, `/deals/commit`, `/deals/closing` | live `/deals/:dealId` — the param route swallows all four |
+| `/pipeline/{leads,proposals,…}` (partner) | live `/pipeline/{screening,commit,transactions}` (investor) |
+| `/grow/*` | live `/founder/growth/*` |
+| `/research/*` | live `/advisor/research/*` |
+| `/fund/*` | live `/funds/*` |
+| `/practice/*` | live `/advisor/advisory/*` |
+
+## The shell the canvases assume
+
+Every `Pages · *` canvas renders a fixed 9-row sidebar that does not match
+`sidebarConfig.js` for any role:
+
+- founder — Home · Validate · Build · Raise · Grow · Network · Research · Trust · Company Settings
+- investor — Home · Deals · Portfolio · Axal VC Fund · Fund (locked) · Network · Research · Trust · Firm Settings
+- partner — Home · Pipeline · Delivery · Offers · Network · Research · Firm Settings
+- advisor — Home · Practice · Cohorts · Expertise · Network · Research · Practice Settings
+
+Adopting the detail-layer pages implies an IA change, not just new routes. Note
+the canvases still model Growth and Research as "Preview", which live has already
+shipped — as mock shells.
