@@ -1,0 +1,39 @@
+/**
+ * frontend/src/ui — the shared component layer for the Axal design system.
+ *
+ * One import surface: `import { Card, Pill, Stat } from '../ui'`.
+ *
+ * Two kinds of thing live behind this barrel.
+ *
+ * 1. Primitives authored here, from the pattern census in design/
+ *    (design/pattern-census.md). Each was counted across the 107 design
+ *    canvases before it was written — the counts are in each file's header,
+ *    and they are the argument for the component existing at all.
+ *
+ * 2. Four components that already existed and were already good:
+ *    EmptyState, ErrorState, Skeleton and InfoStrip. They are re-exported
+ *    from components/, NOT moved. The census found their problem is adoption
+ *    (3-4 importers each) rather than design, and relocating files would mean
+ *    rewriting import sites across the app to fix nothing. Re-exporting gives
+ *    new code one place to import from while leaving every existing caller
+ *    untouched. If they are ever physically moved, this barrel keeps the
+ *    public path stable through the move.
+ *
+ * Tokens come from the @theme block in src/index.css, derived from
+ * design/tokens/tokens.json. Use the utilities (bg-axal-violet,
+ * rounded-axal-lg, tracking-axal-label) — Tailwind v4 tree-shakes any theme
+ * token no utility references, so a raw var() in an inline style will
+ * silently resolve to nothing.
+ */
+
+// Primitives — authored for the design system.
+export { default as SectionLabel } from './SectionLabel';
+export { default as Card } from './Card';
+export { default as Pill, PILL_TONES } from './Pill';
+export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
+
+// Pre-existing, re-exported so `ui/` is the one import surface.
+export { default as EmptyState } from '../components/EmptyState';
+export { default as ErrorState } from '../components/ErrorState';
+export { default as Skeleton } from '../components/Skeleton';
+export { default as InfoStrip } from '../components/InfoStrip';

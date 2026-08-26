@@ -176,13 +176,22 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- Load the display font WITHOUT blocking first paint. `media="print"` lets
-       the browser fetch it at low priority; the onload swap flips it to `all`
+  <!-- Load every webfont WITHOUT blocking first paint. `media="print"` lets
+       the browser fetch at low priority; the onload swap flips it to `all`
        once ready. `display=swap` shows the system fallback until then, so the
-       hero text paints immediately (helps mobile FCP/LCP). -->
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" /></noscript>
+       hero text paints immediately (helps mobile FCP/LCP).
+
+       All three families ride one request: Inter is the body/UI face, Roboto
+       Mono carries every number and label (`font-mono`), Space Grotesk is the
+       display face. Inter was previously declared on `body` in index.css but
+       never actually loaded, so the whole app silently rendered in system-ui;
+       Roboto Mono was loaded by a render-blocking `@import` at the top of
+       index.css — the exact thing this block exists to avoid — and shipped
+       without weight 400. Weights here are the union the design canvases use;
+       adding one means adding it here, not a second request. -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" /></noscript>
   <!-- Turnstile is loaded on-demand (frontend/src/lib/turnstile.js) only by the
        few forms that render a widget, instead of globally on every page. -->
 
@@ -197,12 +206,12 @@
       }
     })();
   </script>
-  <script type="module" crossorigin src="/assets/index-BeM2RMkV.js"></script>
-  <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-aKtaBQYM.js">
-  <link rel="modulepreload" crossorigin href="/assets/react-vendor-CAeKOGhI.js">
-  <link rel="modulepreload" crossorigin href="/assets/api-BYYKuiXj.js">
-  <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-BJf4O3uw.js">
-  <link rel="stylesheet" crossorigin href="/assets/index-Bn1TRZAP.css">
+  <script type="module" crossorigin src="/assets/index-DxTj8Emv.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-Dd_uD5pT.js">
+  <link rel="modulepreload" crossorigin href="/assets/react-vendor-D5i28JsH.js">
+  <link rel="modulepreload" crossorigin href="/assets/api-C8bilRed.js">
+  <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-DqDXbR12.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-CFb6AExf.css">
 </head>
 <body class="bg-white text-gray-900">
   <div id="root">
