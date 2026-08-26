@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .lc-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .lc-page{background:#f8f8fa;color:#18181b}
+    .lc-surface{background:#ffffff}
+    .lc-sunken{background:#faf9fc}
+    .lc-border{border-color:#e8e6ee}
+    .lc-bd-b{border-bottom-color:#e8e6ee}
+    .lc-bd-t{border-top-color:#e8e6ee}
+    .lc-bd-r{border-right-color:#e8e6ee}
+    .lc-text{color:#18181b}
+    .lc-muted{color:#6b6577}
+    .lc-strong{color:#3f3f46}
+    .lc-field{background:#faf9fc;border-color:#e8e6ee;color:#18181b}
+
+    .lc-page.lc-dark{background:#0b0a0f;color:#ececf1}
+    .lc-dark .lc-surface{background:#17161d}
+    .lc-dark .lc-sunken{background:#1d1b25}
+    .lc-dark .lc-border{border-color:#2a2833}
+    .lc-dark .lc-bd-b{border-bottom-color:#2a2833}
+    .lc-dark .lc-bd-t{border-top-color:#2a2833}
+    .lc-dark .lc-bd-r{border-right-color:#2a2833}
+    .lc-dark .lc-text{color:#ececf1}
+    .lc-dark .lc-muted{color:#a5a0b2}
+    .lc-dark .lc-strong{color:#dcd9e4}
+    .lc-dark .lc-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+
+    .lc-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .lc-btn:hover{filter:brightness(1.05)}
+    .lc-tab{cursor:pointer;transition:color .13s,border-color .13s}
+    .lc-seg{cursor:pointer;transition:background .13s,color .13s}
+    .lc-row{transition:background .12s}
+    .lc-row:hover{background:#faf9fc}
+    .lc-dark .lc-row:hover{background:#1d1b25}
+    .lc-pick{cursor:pointer;transition:border-color .13s,box-shadow .13s,transform .13s}
+    .lc-pick:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(11,10,15,.07)}
+    .lc-th{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .lc-fade{animation:lcFade .2s ease}
+    @keyframes lcFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    input,select{font-family:inherit;outline:none}
+    input:focus,select:focus{border-color:#7c3aed}
+    ::placeholder{color:#8b8798}
+    @media (max-width:1080px){.lc-2{grid-template-columns:1fr!important}.lc-3{grid-template-columns:1fr!important}.lc-4{grid-template-columns:1fr 1fr!important}.lc-wide{overflow-x:auto}}
+  </style>
+</helmet>
+
+<div class="lc-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="lc-surface lc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:30">
+    <div style="max-width:1340px;margin:0 auto;padding:14px 26px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0">
+          <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ scaleIcon }}"></span>
+          </div>
+          <div style="min-width:0">
+            <div class="lc-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Legal &amp; Capital Engine</div>
+            <div class="lc-muted" style="font-size:11.5px;margin-top:1px">{{ fundLine }}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          <div class="lc-muted lc-num" style="font-size:11.5px;padding-right:4px">{{ asOf }}</div>
+          <div class="lc-btn lc-border lc-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+            {{ themeLabel }}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:24px;margin-top:14px;overflow-x:auto">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+          <div class="lc-tab" onClick="{{ t.go }}" style="{{ t.style }}">
+            <span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            <span>{{ t.label }}</span>
+            <sc-if value="{{ t.count }}"><span style="{{ t.countStyle }}">{{ t.count }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1340px;margin:0 auto;padding:24px 26px 90px">
+
+    <!-- ================= DOCUMENTS ================= -->
+    <sc-if value="{{ tabDocs }}">
+    <div class="lc-fade">
+
+      <sc-if value="{{ docListMode }}">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+          <div style="min-width:0">
+            <div class="lc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Deal &amp; legal documents</div>
+            <div class="lc-muted" style="font-size:13px;margin-top:5px;max-width:560px;line-height:1.6">Generate from counsel-reviewed templates. Terms are captured once and carried into the document, the cap table, and the signature envelope.</div>
+          </div>
+        </div>
+
+        <!-- template picker -->
+        <div class="lc-muted lc-th" style="margin-bottom:10px">Templates</div>
+        <div class="lc-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          <sc-for list="{{ templates }}" as="tp" hint-placeholder-count="7">
+            <div class="lc-pick lc-surface lc-border" data-tpl="{{ tp.k }}" onClick="{{ pickTemplate }}" style="border-width:1px;border-style:solid;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                <div style="{{ tp.iconWrap }}">
+                  <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ tp.icon }}"></span>
+                </div>
+                <span style="{{ tp.catChip }}">{{ tp.cat }}</span>
+              </div>
+              <div class="lc-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.012em;margin-top:12px">{{ tp.name }}</div>
+              <div class="lc-muted" style="font-size:11.5px;line-height:1.55;margin-top:5px;flex:1">{{ tp.when }}</div>
+              <div class="lc-bd-t" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;padding-top:10px;border-top-width:1px;border-top-style:solid">
+                <div class="lc-muted lc-num" style="font-size:10.5px">{{ tp.meta }}</div>
+                <div style="font-size:11.5px;font-weight:700;color:#6d28d9">Generate →</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- generated documents -->
+        <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:22px;overflow:hidden">
+          <div class="lc-sunken lc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div class="lc-muted lc-th">Generated documents</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <sc-for list="{{ docFilters }}" as="df" hint-placeholder-count="4">
+                <div class="lc-seg" onClick="{{ df.go }}" style="{{ df.style }}">{{ df.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="lc-wide">
+            <div class="lc-sunken lc-bd-b" style="display:grid;grid-template-columns:2.1fr 1.05fr 1.3fr .85fr 1.05fr auto;border-bottom-width:1px;border-bottom-style:solid;min-width:940px">
+              <div class="lc-muted lc-th" style="padding:9px 20px">Document</div>
+              <div class="lc-muted lc-th" style="padding:9px 12px">Type</div>
+              <div class="lc-muted lc-th" style="padding:9px 12px">Counterparty</div>
+              <div class="lc-muted lc-th" style="padding:9px 12px;text-align:right">Amount</div>
+              <div class="lc-muted lc-th" style="padding:9px 12px">Status</div>
+              <div class="lc-muted lc-th" style="padding:9px 20px 9px 12px;text-align:right">Actions</div>
+            </div>
+            <sc-for list="{{ documents }}" as="d" hint-placeholder-count="7">
+              <div class="lc-row lc-bd-b" style="display:grid;grid-template-columns:2.1fr 1.05fr 1.3fr .85fr 1.05fr auto;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:940px">
+                <div style="padding:13px 20px;min-width:0;display:flex;align-items:center;gap:10px">
+                  <span style="width:15px;height:15px;display:flex;flex:none;color:{{ d.tone }}" dangerouslySetInnerHTML="{{ d.icon }}"></span>
+                  <div style="min-width:0">
+                    <div class="lc-strong" style="font-size:12.5px;font-weight:600;line-height:1.5">{{ d.name }}</div>
+                    <div class="lc-muted lc-num" style="font-size:10.5px;margin-top:2px">{{ d.ref }} · {{ d.created }}</div>
+                  </div>
+                </div>
+                <div class="lc-muted" style="padding:13px 12px;font-size:11.5px">{{ d.type }}</div>
+                <div style="padding:13px 12px;min-width:0">
+                  <div class="lc-strong" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.party }}</div>
+                  <div class="lc-muted" style="font-size:10.5px;margin-top:1px">{{ d.partyMeta }}</div>
+                </div>
+                <div class="lc-num lc-text" style="padding:13px 12px;font-size:12.5px;font-weight:700;text-align:right">{{ d.amount }}</div>
+                <div style="padding:13px 12px"><span style="{{ d.chip }}">{{ d.status }}</span></div>
+                <div style="padding:13px 20px 13px 12px;display:flex;gap:6px;justify-content:flex-end">
+                  <div class="lc-btn lc-border lc-strong" style="padding:6px 11px;border-radius:8px;border-width:1px;border-style:solid;font-size:11px;font-weight:600;background:transparent;white-space:nowrap">View</div>
+                  <sc-if value="{{ d.canSend }}">
+                    <div class="lc-btn" data-doc="{{ d.k }}" onClick="{{ openEsign }}" style="padding:6px 11px;border-radius:8px;background:rgba(124,58,237,.1);color:#6d28d9;font-size:11px;font-weight:700;white-space:nowrap">Send for signature</div>
+                  </sc-if>
+                  <sc-if value="{{ d.blocked }}">
+                    <span style="{{ blockedChip }}" title="Blocked by diligence">
+                      <span style="width:10px;height:10px;display:flex" dangerouslySetInnerHTML="{{ shieldIcon }}"></span>
+                      Blocked
+                    </span>
+                    <div class="lc-muted lc-num" style="font-size:10px;padding:6px 0 6px 2px;white-space:nowrap">{{ d.blockNote }}</div>
+                  </sc-if>
+                  <sc-if value="{{ d.inFlight }}">
+                    <div class="lc-muted" style="font-size:11px;font-weight:600;padding:6px 4px;white-space:nowrap">{{ d.flightNote }}</div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- generate flow -->
+      <sc-if value="{{ docGenMode }}">
+        <div class="lc-fade">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+            <div style="min-width:0">
+              <div class="lc-muted lc-th" style="margin-bottom:7px">Generate document</div>
+              <div class="lc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">{{ gen.name }}</div>
+              <div class="lc-muted" style="font-size:13px;margin-top:5px;max-width:560px;line-height:1.6">{{ gen.blurb }}</div>
+            </div>
+            <div class="lc-btn lc-border lc-muted" onClick="{{ backToDocs }}" style="padding:8px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent;flex:none">Cancel</div>
+          </div>
+
+          <div class="lc-2" style="display:grid;grid-template-columns:1fr 1.15fr;gap:18px;align-items:start">
+            <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+              <div class="lc-muted lc-th">Key terms</div>
+              <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+                <sc-for list="{{ genFields }}" as="f" hint-placeholder-count="5">
+                  <div>
+                    <div class="lc-strong" style="font-size:11.5px;font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                      {{ f.label }}
+                      <sc-if value="{{ f.prefilled }}"><span style="{{ srcChip }}">from {{ f.source }}</span></sc-if>
+                    </div>
+                    <sc-if value="{{ f.isSelect }}">
+                      <select class="lc-field" onChange="{{ f.set }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+                        <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="3">
+                          <option selected="{{ o.selected }}">{{ o.label }}</option>
+                        </sc-for>
+                      </select>
+                    </sc-if>
+                    <sc-if value="{{ f.isText }}">
+                      <input class="lc-field {{ f.monoClass }}" value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+                    </sc-if>
+                    <sc-if value="{{ f.hint }}">
+                      <div class="lc-muted" style="font-size:10.5px;margin-top:5px;line-height:1.5">{{ f.hint }}</div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <div class="lc-btn" onClick="{{ generateDoc }}" style="{{ genBtnStyle }}">Generate document</div>
+              <div class="lc-muted" style="font-size:10.5px;line-height:1.55;margin-top:10px">Saves as a draft. Nothing is sent until you send it for signature.</div>
+            </div>
+
+            <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+              <div class="lc-sunken lc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <div class="lc-muted lc-th">Preview</div>
+                <div class="lc-muted lc-num" style="font-size:10.5px">{{ gen.formBasis }}</div>
+              </div>
+              <div style="padding:26px 28px">
+                <div class="lc-text" style="font-size:13px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;text-align:center">{{ gen.legalTitle }}</div>
+                <div class="lc-muted" style="font-size:10.5px;text-align:center;margin-top:5px">{{ gen.legalSub }}</div>
+                <div class="lc-bd-t" style="margin-top:20px;padding-top:18px;border-top-width:1px;border-top-style:solid;display:flex;flex-direction:column;gap:14px">
+                  <sc-for list="{{ gen.clauses }}" as="c" hint-placeholder-count="4">
+                    <div>
+                      <div class="lc-strong" style="font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase">{{ c.h }}</div>
+                      <div class="lc-strong" style="font-size:12.5px;line-height:1.78;margin-top:5px">
+                        <sc-for list="{{ c.parts }}" as="p" hint-placeholder-count="3">
+                          <sc-if value="{{ p.plain }}"><span>{{ p.text }}</span></sc-if>
+                          <sc-if value="{{ p.token }}"><span style="{{ tokStyle }}">{{ p.text }}</span></sc-if>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <!-- ================= CAPITAL CALLS ================= -->
+    <sc-if value="{{ tabCalls }}">
+    <div class="lc-fade">
+
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="lc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Capital calls</div>
+          <div class="lc-muted" style="font-size:13px;margin-top:5px;max-width:560px;line-height:1.6">{{ callsSub }}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+          <sc-if value="{{ callListMode }}">
+            <div class="lc-btn" onClick="{{ openNewCall }}" style="padding:9px 17px;border-radius:9px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px">
+              <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ plusIcon }}"></span>
+              New capital call
+            </div>
+          </sc-if>
+          <sc-if value="{{ callNewMode }}">
+            <div class="lc-btn lc-border lc-muted" onClick="{{ backToCalls }}" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent">Cancel</div>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- summary strip -->
+      <div class="lc-border" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#e8e6ee;border-width:1px;border-style:solid;border-radius:14px;overflow:hidden">
+        <sc-for list="{{ callSummary }}" as="s" hint-placeholder-count="4">
+          <div class="lc-surface" style="padding:16px 20px">
+            <div class="lc-muted lc-th">{{ s.k }}</div>
+            <div class="lc-num" style="font-size:22px;font-weight:700;letter-spacing:-.028em;margin-top:7px;color:{{ s.tone }}">{{ s.v }}</div>
+            <div class="lc-muted" style="font-size:11px;margin-top:3px">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- new call form -->
+      <sc-if value="{{ callNewMode }}">
+        <div class="lc-2 lc-fade" style="display:grid;grid-template-columns:1fr 1.2fr;gap:18px;align-items:start;margin-top:18px">
+          <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 24px">
+            <div class="lc-muted lc-th">Call details</div>
+            <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+              <sc-for list="{{ callFields }}" as="f" hint-placeholder-count="4">
+                <div>
+                  <div class="lc-strong" style="font-size:11.5px;font-weight:600;margin-bottom:5px">{{ f.label }}</div>
+                  <sc-if value="{{ f.isSelect }}">
+                    <select class="lc-field" onChange="{{ f.set }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+                      <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="2">
+                        <option selected="{{ o.selected }}">{{ o.label }}</option>
+                      </sc-for>
+                    </select>
+                  </sc-if>
+                  <sc-if value="{{ f.isText }}">
+                    <input class="lc-field {{ f.monoClass }}" value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:13px">
+                  </sc-if>
+                  <sc-if value="{{ f.hint }}">
+                    <div class="lc-muted" style="font-size:10.5px;margin-top:5px;line-height:1.5">{{ f.hint }}</div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <div class="lc-btn" onClick="{{ sendCall }}" style="{{ callBtnStyle }}">Send call to {{ lpCount }} LPs</div>
+            <div class="lc-muted" style="font-size:10.5px;line-height:1.55;margin-top:10px">Each LP receives a notice with their pro-rata amount, wire instructions, and the due date.</div>
+          </div>
+
+          <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+            <div class="lc-sunken lc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <div class="lc-muted lc-th">Pro-rata breakdown</div>
+              <div class="lc-muted lc-num" style="font-size:10.5px">{{ proRataPct }} of commitments</div>
+            </div>
+            <div class="lc-sunken lc-bd-b" style="display:grid;grid-template-columns:1.7fr .9fr .8fr .9fr;border-bottom-width:1px;border-bottom-style:solid">
+              <div class="lc-muted lc-th" style="padding:8px 20px">Limited partner</div>
+              <div class="lc-muted lc-th" style="padding:8px 12px;text-align:right">Commitment</div>
+              <div class="lc-muted lc-th" style="padding:8px 12px;text-align:right">Share</div>
+              <div class="lc-muted lc-th" style="padding:8px 20px 8px 12px;text-align:right">This call</div>
+            </div>
+            <sc-for list="{{ proRata }}" as="p" hint-placeholder-count="5">
+              <div class="lc-row lc-bd-b" style="display:grid;grid-template-columns:1.7fr .9fr .8fr .9fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid">
+                <div style="padding:11px 20px;display:flex;align-items:center;gap:10px;min-width:0">
+                  <div style="{{ p.avStyle }}">{{ p.initials }}</div>
+                  <div class="lc-strong" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</div>
+                </div>
+                <div class="lc-num lc-muted" style="padding:11px 12px;font-size:12px;text-align:right">{{ p.commit }}</div>
+                <div class="lc-num lc-muted" style="padding:11px 12px;font-size:12px;text-align:right">{{ p.share }}</div>
+                <div class="lc-num lc-text" style="padding:11px 20px 11px 12px;font-size:12.5px;font-weight:700;text-align:right">{{ p.amount }}</div>
+              </div>
+            </sc-for>
+            <div class="lc-sunken" style="display:grid;grid-template-columns:1.7fr .9fr .8fr .9fr;align-items:center">
+              <div class="lc-text" style="padding:12px 20px;font-size:12px;font-weight:800">Total</div>
+              <div class="lc-num lc-strong" style="padding:12px 12px;font-size:12px;font-weight:700;text-align:right">{{ totalCommit }}</div>
+              <div class="lc-num lc-muted" style="padding:12px 12px;font-size:12px;text-align:right">100.0%</div>
+              <div class="lc-num lc-text" style="padding:12px 20px 12px 12px;font-size:13.5px;font-weight:800;text-align:right">{{ callAmountFmt }}</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- call list + responses -->
+      <sc-if value="{{ callListMode }}">
+        <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:18px;overflow:hidden">
+          <div class="lc-sunken lc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div class="lc-muted lc-th">Call history</div>
+            <div class="lc-muted" style="font-size:11px">Select a call to see LP responses</div>
+          </div>
+          <sc-for list="{{ callList }}" as="c" hint-placeholder-count="3">
+            <div class="lc-row lc-bd-b" data-call="{{ c.k }}" onClick="{{ selectCall }}" style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom-width:1px;border-bottom-style:solid;cursor:pointer;background:{{ c.selBg }}">
+              <div style="min-width:0;flex:1">
+                <div class="lc-strong" style="font-size:13px;font-weight:700">{{ c.name }}</div>
+                <div class="lc-muted lc-num" style="font-size:10.5px;margin-top:2px">{{ c.ref }} · issued {{ c.issued }} · due {{ c.due }}</div>
+              </div>
+              <div style="text-align:right;flex:none;min-width:96px">
+                <div class="lc-num lc-text" style="font-size:13px;font-weight:700">{{ c.amount }}</div>
+                <div class="lc-muted lc-th" style="margin-top:2px">Called</div>
+              </div>
+              <div style="text-align:right;flex:none;min-width:96px">
+                <div class="lc-num" style="font-size:13px;font-weight:700;color:{{ c.collectedTone }}">{{ c.collected }}</div>
+                <div class="lc-muted lc-th" style="margin-top:2px">Collected</div>
+              </div>
+              <div style="flex:none;width:120px">
+                <div class="lc-sunken" style="height:5px;border-radius:99px;overflow:hidden">
+                  <div style="{{ c.barStyle }}"></div>
+                </div>
+                <div class="lc-muted lc-num" style="font-size:10px;margin-top:4px;text-align:right">{{ c.pct }}</div>
+              </div>
+              <span style="{{ c.chip }}">{{ c.status }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:18px;overflow:hidden">
+          <div class="lc-sunken lc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div style="min-width:0">
+              <div class="lc-muted lc-th">LP responses</div>
+              <div class="lc-strong" style="font-size:12.5px;font-weight:700;margin-top:3px">{{ selCall.name }} · {{ selCall.ref }}</div>
+            </div>
+            <div class="lc-muted lc-num" style="font-size:11px">{{ selCall.respNote }}</div>
+          </div>
+          <div class="lc-wide">
+            <div class="lc-sunken lc-bd-b" style="display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr 1.05fr auto;border-bottom-width:1px;border-bottom-style:solid;min-width:900px">
+              <div class="lc-muted lc-th" style="padding:9px 20px">Limited partner</div>
+              <div class="lc-muted lc-th" style="padding:9px 12px;text-align:right">Committed</div>
+              <div class="lc-muted lc-th" style="padding:9px 12px;text-align:right">Called</div>
+              <div class="lc-muted lc-th" style="padding:9px 12px;text-align:right">Received</div>
+              <div class="lc-muted lc-th" style="padding:9px 12px">Status</div>
+              <div class="lc-muted lc-th" style="padding:9px 20px 9px 12px;text-align:right">Action</div>
+            </div>
+            <sc-for list="{{ responses }}" as="r" hint-placeholder-count="5">
+              <div class="lc-row lc-bd-b" style="display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr 1.05fr auto;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:900px">
+                <div style="padding:13px 20px;display:flex;align-items:center;gap:11px;min-width:0">
+                  <div style="{{ r.avStyle }}">{{ r.initials }}</div>
+                  <div style="min-width:0">
+                    <div class="lc-strong" style="font-size:12.5px;font-weight:600">{{ r.name }}</div>
+                    <div class="lc-muted" style="font-size:10.5px;margin-top:1px">{{ r.type }} · {{ r.geo }}</div>
+                  </div>
+                </div>
+                <div class="lc-num lc-muted" style="padding:13px 12px;font-size:12px;text-align:right">{{ r.committed }}</div>
+                <div class="lc-num lc-strong" style="padding:13px 12px;font-size:12.5px;font-weight:600;text-align:right">{{ r.called }}</div>
+                <div class="lc-num" style="padding:13px 12px;font-size:12.5px;font-weight:700;text-align:right;color:{{ r.recvTone }}">{{ r.received }}</div>
+                <div style="padding:13px 12px">
+                  <span style="{{ r.chip }}">{{ r.status }}</span>
+                  <sc-if value="{{ r.sub }}"><div class="lc-muted lc-num" style="font-size:10px;margin-top:3px">{{ r.sub }}</div></sc-if>
+                </div>
+                <div style="padding:13px 20px 13px 12px;text-align:right">
+                  <sc-if value="{{ r.canNudge }}">
+                    <div class="lc-btn" data-nudge="{{ r.k }}" onClick="{{ nudgeLp }}" style="{{ r.nudgeStyle }}">{{ r.nudgeLabel }}</div>
+                  </sc-if>
+                  <sc-if value="{{ r.paidNote }}">
+                    <div class="lc-muted lc-num" style="font-size:10.5px">{{ r.paidNote }}</div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+            <div class="lc-sunken" style="display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr 1.05fr auto;align-items:center;min-width:900px">
+              <div class="lc-text" style="padding:13px 20px;font-size:12px;font-weight:800">Total</div>
+              <div class="lc-num lc-strong" style="padding:13px 12px;font-size:12px;font-weight:700;text-align:right">{{ totalCommit }}</div>
+              <div class="lc-num lc-text" style="padding:13px 12px;font-size:13px;font-weight:800;text-align:right">{{ selCall.amount }}</div>
+              <div class="lc-num" style="padding:13px 12px;font-size:13px;font-weight:800;text-align:right;color:{{ selCall.collectedTone }}">{{ selCall.collected }}</div>
+              <div class="lc-muted" style="padding:13px 12px;font-size:11px">{{ selCall.pct }} collected</div>
+              <div style="padding:13px 20px 13px 12px"></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <!-- ================= DILIGENCE ================= -->
+    <sc-if value="{{ tabDD }}">
+    <div class="lc-fade">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="lc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Diligence</div>
+          <div class="lc-muted" style="font-size:13px;margin-top:5px;max-width:560px;line-height:1.6">Cases linked to documents or calls in this console. Full workpapers, evidence, and scoring live in the Diligence workspace.</div>
+        </div>
+        <div class="lc-btn lc-border lc-strong" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent;flex:none;display:flex;align-items:center;gap:7px">
+          Open Diligence workspace
+          <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ outIcon }}"></span>
+        </div>
+      </div>
+
+      <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="lc-wide">
+          <div class="lc-sunken lc-bd-b" style="display:grid;grid-template-columns:1.9fr 1.3fr 1.1fr 1.1fr 1.2fr auto;border-bottom-width:1px;border-bottom-style:solid;min-width:900px">
+            <div class="lc-muted lc-th" style="padding:9px 20px">Case</div>
+            <div class="lc-muted lc-th" style="padding:9px 12px">Company</div>
+            <div class="lc-muted lc-th" style="padding:9px 12px">Stage</div>
+            <div class="lc-muted lc-th" style="padding:9px 12px">Verdict</div>
+            <div class="lc-muted lc-th" style="padding:9px 12px">Linked from</div>
+            <div class="lc-muted lc-th" style="padding:9px 20px 9px 12px;text-align:right">Open</div>
+          </div>
+          <sc-for list="{{ ddCases }}" as="c" hint-placeholder-count="5">
+            <div class="lc-row lc-bd-b" style="display:grid;grid-template-columns:1.9fr 1.3fr 1.1fr 1.1fr 1.2fr auto;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:900px">
+              <div style="padding:13px 20px;min-width:0">
+                <div class="lc-strong" style="font-size:12.5px;font-weight:600;line-height:1.5">{{ c.name }}</div>
+                <div class="lc-muted lc-num" style="font-size:10.5px;margin-top:2px">{{ c.ref }} · opened {{ c.opened }} · {{ c.owner }}</div>
+              </div>
+              <div style="padding:13px 12px;display:flex;align-items:center;gap:9px;min-width:0">
+                <div style="{{ c.avStyle }}">{{ c.initials }}</div>
+                <div class="lc-strong" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.company }}</div>
+              </div>
+              <div class="lc-muted" style="padding:13px 12px;font-size:11.5px">{{ c.stage }}</div>
+              <div style="padding:13px 12px"><span style="{{ c.chip }}">{{ c.verdict }}</span></div>
+              <div class="lc-muted" style="padding:13px 12px;font-size:11px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.linked }}</div>
+              <div style="padding:13px 20px 13px 12px;text-align:right">
+                <div class="lc-btn lc-border lc-strong" style="display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:8px;border-width:1px;border-style:solid;font-size:11px;font-weight:600;background:transparent">
+                  Open
+                  <span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ outIcon }}"></span>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="lc-sunken lc-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:16px 20px;margin-top:16px;display:flex;gap:12px;align-items:flex-start">
+        <span class="lc-muted" style="width:15px;height:15px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ infoIcon }}"></span>
+        <div class="lc-muted" style="font-size:12px;line-height:1.6">This is a crosswalk. Verdicts shown here are the workspace's current position — they are not editable from this console, and a case must clear diligence before its documents can be sent for signature.</div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ================= LP PORTAL ================= -->
+    <sc-if value="{{ tabLP }}">
+    <div class="lc-fade">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="min-width:0">
+          <div class="lc-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">LP portal</div>
+          <div class="lc-muted" style="font-size:13px;margin-top:5px;max-width:580px;line-height:1.6">What each limited partner sees when they sign in. Read-only mirror of their statement — commitments, call history, distributions, and published reports.</div>
+        </div>
+        <span style="{{ mirrorChip }}">Viewing as LP · read-only</span>
+      </div>
+
+      <div class="lc-2" style="display:grid;grid-template-columns:296px 1fr;gap:18px;align-items:start">
+
+        <!-- LP list -->
+        <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="lc-sunken lc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <div class="lc-muted lc-th">Limited partners</div>
+            <div class="lc-muted lc-num" style="font-size:10.5px">{{ lpCount }}</div>
+          </div>
+          <sc-for list="{{ lpList }}" as="l" hint-placeholder-count="5">
+            <div class="lc-row lc-bd-b" data-lp="{{ l.k }}" onClick="{{ selectLp }}" style="display:flex;align-items:center;gap:11px;padding:13px 18px;border-bottom-width:1px;border-bottom-style:solid;cursor:pointer;background:{{ l.selBg }}">
+              <div style="{{ l.avStyle }}">{{ l.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="lc-strong" style="font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ l.name }}</div>
+                <div class="lc-muted lc-num" style="font-size:10.5px;margin-top:1px">{{ l.commit }} · {{ l.pctOfFund }}</div>
+              </div>
+              <sc-if value="{{ l.flag }}"><span style="{{ l.flagChip }}">{{ l.flag }}</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- statement -->
+        <div style="display:flex;flex-direction:column;gap:16px">
+
+          <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 26px">
+            <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+              <div style="{{ lp.avStyleLg }}">{{ lp.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="lc-text" style="font-size:17px;font-weight:800;letter-spacing:-.02em">{{ lp.name }}</div>
+                <div class="lc-muted" style="font-size:12px;margin-top:3px">{{ lp.meta }}</div>
+              </div>
+              <div class="lc-btn lc-border lc-strong" style="padding:8px 14px;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600;background:transparent;flex:none;display:flex;align-items:center;gap:7px">
+                <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ downloadIcon }}"></span>
+                Statement PDF
+              </div>
+            </div>
+            <div class="lc-4 lc-bd-t" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:20px;padding-top:18px;border-top-width:1px;border-top-style:solid">
+              <sc-for list="{{ lp.stats }}" as="s" hint-placeholder-count="4">
+                <div>
+                  <div class="lc-muted lc-th">{{ s.k }}</div>
+                  <div class="lc-num" style="font-size:19px;font-weight:700;letter-spacing:-.024em;margin-top:6px;color:{{ s.tone }}">{{ s.v }}</div>
+                  <div class="lc-muted" style="font-size:10.5px;margin-top:2px">{{ s.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div class="lc-bd-t" style="margin-top:18px;padding-top:16px;border-top-width:1px;border-top-style:solid">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <div class="lc-muted lc-th">Commitment drawn</div>
+                <div class="lc-muted lc-num" style="font-size:11px">{{ lp.drawnPct }} called · {{ lp.unfunded }} unfunded</div>
+              </div>
+              <div class="lc-sunken" style="height:7px;border-radius:99px;overflow:hidden;margin-top:8px">
+                <div style="{{ lp.drawnBar }}"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- call history -->
+          <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+            <div class="lc-sunken lc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px">
+              <div class="lc-muted lc-th">Capital call history</div>
+            </div>
+            <div class="lc-wide">
+              <div class="lc-sunken lc-bd-b" style="display:grid;grid-template-columns:1.5fr .9fr .9fr .9fr 1fr;border-bottom-width:1px;border-bottom-style:solid;min-width:660px">
+                <div class="lc-muted lc-th" style="padding:8px 20px">Call</div>
+                <div class="lc-muted lc-th" style="padding:8px 12px">Due</div>
+                <div class="lc-muted lc-th" style="padding:8px 12px;text-align:right">Amount</div>
+                <div class="lc-muted lc-th" style="padding:8px 12px;text-align:right">Paid</div>
+                <div class="lc-muted lc-th" style="padding:8px 20px 8px 12px">Status</div>
+              </div>
+              <sc-for list="{{ lp.calls }}" as="c" hint-placeholder-count="3">
+                <div class="lc-row lc-bd-b" style="display:grid;grid-template-columns:1.5fr .9fr .9fr .9fr 1fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:660px">
+                  <div style="padding:12px 20px;min-width:0">
+                    <div class="lc-strong" style="font-size:12px;font-weight:600">{{ c.name }}</div>
+                    <div class="lc-muted lc-num" style="font-size:10.5px;margin-top:1px">{{ c.ref }}</div>
+                  </div>
+                  <div class="lc-num lc-muted" style="padding:12px 12px;font-size:11.5px">{{ c.due }}</div>
+                  <div class="lc-num lc-strong" style="padding:12px 12px;font-size:12px;font-weight:600;text-align:right">{{ c.amount }}</div>
+                  <div class="lc-num" style="padding:12px 12px;font-size:12px;font-weight:700;text-align:right;color:{{ c.paidTone }}">{{ c.paid }}</div>
+                  <div style="padding:12px 20px 12px 12px"><span style="{{ c.chip }}">{{ c.status }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="lc-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <!-- distributions -->
+            <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+              <div class="lc-sunken lc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <div class="lc-muted lc-th">Distributions received</div>
+                <div class="lc-muted lc-num" style="font-size:10.5px">{{ lp.distTotal }}</div>
+              </div>
+              <sc-if value="{{ lp.hasDist }}">
+                <sc-for list="{{ lp.dists }}" as="d" hint-placeholder-count="2">
+                  <div class="lc-row lc-bd-b" style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom-width:1px;border-bottom-style:solid">
+                    <div style="min-width:0;flex:1">
+                      <div class="lc-strong" style="font-size:12px;font-weight:600">{{ d.name }}</div>
+                      <div class="lc-muted lc-num" style="font-size:10.5px;margin-top:1px">{{ d.date }} · {{ d.kind }}</div>
+                    </div>
+                    <div class="lc-num" style="font-size:12.5px;font-weight:700;flex:none;color:#15803d">{{ d.amount }}</div>
+                  </div>
+                </sc-for>
+              </sc-if>
+              <sc-if value="{{ lp.noDist }}">
+                <div style="padding:30px 20px;text-align:center">
+                  <div class="lc-strong" style="font-size:12.5px;font-weight:700">No distributions yet</div>
+                  <div class="lc-muted" style="font-size:11.5px;line-height:1.55;margin-top:5px">The fund is in its investment period. Distributions begin on the first realisation.</div>
+                </div>
+              </sc-if>
+            </div>
+
+            <!-- reports -->
+            <div class="lc-surface lc-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+              <div class="lc-sunken lc-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <div class="lc-muted lc-th">Published reports</div>
+                <div class="lc-muted lc-num" style="font-size:10.5px">{{ reportCount }}</div>
+              </div>
+              <sc-for list="{{ lp.reports }}" as="r" hint-placeholder-count="4">
+                <div class="lc-row lc-bd-b" style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom-width:1px;border-bottom-style:solid">
+                  <span style="width:14px;height:14px;display:flex;flex:none;color:{{ r.tone }}" dangerouslySetInnerHTML="{{ r.icon }}"></span>
+                  <div style="min-width:0;flex:1">
+                    <div class="lc-strong" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</div>
+                    <div class="lc-muted lc-num" style="font-size:10.5px;margin-top:1px">{{ r.published }}{{ r.seen }}</div>
+                  </div>
+                  <span class="lc-muted" style="width:13px;height:13px;display:flex;flex:none" dangerouslySetInnerHTML="{{ downloadIcon }}"></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+  </div>
+
+  <!-- E-SIGN HANDOFF -->
+  <sc-if value="{{ esignOpen }}">
+    <div onClick="{{ closeEsign }}" style="position:fixed;inset:0;z-index:900;background:rgba(11,10,15,.5);display:flex;align-items:center;justify-content:center;padding:24px">
+      <div class="lc-surface" onClick="{{ stop }}" style="width:100%;max-width:450px;border-radius:18px;padding:28px 30px;box-shadow:0 24px 70px rgba(11,10,15,.34)">
+        <div style="width:38px;height:38px;border-radius:12px;background:rgba(124,58,237,.11);color:#6d28d9;display:flex;align-items:center;justify-content:center">
+          <span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ penIcon }}"></span>
+        </div>
+        <div class="lc-text" style="font-size:17px;font-weight:800;letter-spacing:-.022em;margin-top:14px">Send to e-sign</div>
+        <div class="lc-muted" style="font-size:12.5px;line-height:1.62;margin-top:7px">{{ esign.name }} will be handed to the signature engine. Signers, order, and the audit trail are handled there.</div>
+        <div class="lc-sunken lc-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:14px 16px;margin-top:16px">
+          <sc-for list="{{ esign.rows }}" as="r" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0">
+              <div class="lc-muted" style="font-size:11.5px">{{ r.k }}</div>
+              <div class="lc-strong {{ r.monoClass }}" style="font-size:11.5px;font-weight:600;text-align:right">{{ r.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="lc-btn" onClick="{{ confirmEsign }}" style="margin-top:16px;padding:12px 0;border-radius:11px;background:#7c3aed;color:#fff;font-size:13.5px;font-weight:700;text-align:center;display:flex;align-items:center;justify-content:center;gap:9px">
+          Continue to e-sign
+          <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ outIcon }}"></span>
+        </div>
+        <div class="lc-btn lc-muted" onClick="{{ closeEsign }}" style="margin-top:8px;padding:9px 0;font-size:12px;font-weight:600;text-align:center">Cancel</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1340}}">
+class Component extends DCLogic {
+  state = { theme:'light', tab:'docs', docMode:'list', tpl:'safe', docFilter:'All',
+    callMode:'list', selCall:'cc3', nudged:{}, selLp:'meridian',
+    edits:{}, esign:null, sentDocs:{} };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+  setV(k){ return (e) => this.setState(s => ({ edits: Object.assign({}, s.edits, { [k]: e.target.value }) })); }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+    const GRN = dark ? '#6ee7b7' : '#116632';
+    const AMB = dark ? '#fcd34d' : '#92400e';
+    const RED = dark ? '#fca5a5' : '#b91c1c';
+    const INK = dark ? '#ececf1' : '#18181b';
+
+    const I = {
+      scale:    this.ic('<path d="M12 3v18M5 7h14"/><path d="m5 7-2.5 6h5zM19 7l-2.5 6h5z"/>'),
+      doc:      this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      coin:     this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.8 9.4A2.8 2.8 0 0 0 12 8.2c-1.6 0-2.8.9-2.8 2.1s1.2 1.9 2.8 1.9 2.8.7 2.8 1.9-1.2 2.1-2.8 2.1a2.8 2.8 0 0 1-2.8-1.2"/>'),
+      shield:   this.ic('<path d="M12 3 4 6v6c0 4.5 3.2 8.5 8 9.6 4.8-1.1 8-5.1 8-9.6V6z"/><path d="m9 12 2 2 4-4"/>'),
+      users:    this.ic('<path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.4"/><path d="M22 20v-2a4 4 0 0 0-3-3.8"/>'),
+      pen:      this.ic('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+      out:      this.ic('<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'),
+      plus:     this.ic('<path d="M12 5v14M5 12h14"/>'),
+      download: this.ic('<path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/>'),
+      info:     this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
+      stamp:    this.ic('<path d="M6 20h12"/><path d="M8 16h8v-2a4 4 0 0 0-1.5-3.1A3 3 0 0 1 13.5 8V6a1.5 1.5 0 0 0-3 0v2a3 3 0 0 1-1 2.9A4 4 0 0 0 8 14z"/>'),
+      brief:    this.ic('<rect x="2" y="7" width="20" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+      bldg:     this.ic('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8h2M13 8h2M9 12h2M13 12h2M9 16h6"/>'),
+      pie:      this.ic('<path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M12 3v9h9A9 9 0 0 0 12 3z"/>'),
+      sheet:    this.ic('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>'),
+      report:   this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M9 13h6M9 17h4"/>'),
+      sun:      this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon:     this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const cGreen = chip('rgba(21,128,61,.1)', GRN);
+    const cAmber = chip('rgba(180,83,9,.1)', AMB);
+    const cRed = chip('rgba(185,28,28,.09)', RED);
+    const cViolet = chip('rgba(124,58,237,.1)', dark ? '#c4b5fd' : V7);
+    const cGrey = chip(dark ? '#2a2833' : '#f1f0f5', dark ? '#a5a0b2' : '#6b6577');
+    const cBlue = chip('rgba(29,78,216,.1)', dark ? '#93b4fc' : '#1e40af');
+    const srcChip = chip('rgba(124,58,237,.09)', dark ? '#c4b5fd' : V7);
+    const tokStyle = 'padding:1px 5px;border-radius:4px;background:rgba(124,58,237,.11);color:'+(dark ? '#c4b5fd' : V7)+';font-weight:600';
+
+    const av = (bg, sz) => 'width:'+(sz||28)+'px;height:'+(sz||28)+'px;border-radius:9px;background:'+bg+';color:#fff;font-size:'+(sz>=44?'15px':sz===34?'12px':'10.5px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const iconWrap = (c) => 'width:32px;height:32px;border-radius:10px;background:'+c+'1c;color:'+c+';display:flex;align-items:center;justify-content:center;flex:none';
+    const segSm = (on) => 'padding:5px 11px;border-radius:7px;font-size:11px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? 'rgba(124,58,237,.1)' : 'transparent')
+      +';color:'+(on ? (dark ? '#c4b5fd' : V7) : (dark ? '#a5a0b2' : '#6b6577'));
+
+    const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const usdM = (n) => '$' + (n/1e6).toFixed(2) + 'M';
+    const val = (k, d) => (st.edits[k] !== undefined ? st.edits[k] : d);
+
+    // ============ ONE FUND SCENARIO ============
+    const FUND = { name:'Axal VC Ventures Fund II, L.P.', vintage:'2025', target:42e6, closed:38.5e6 };
+
+    const LPS = [
+      { k:'meridian', name:'Meridian Endowment Trust', initials:'ME', bg:'#1d4ed8', commit:12e6, type:'Endowment', geo:'Boston, MA' },
+      { k:'stellar',  name:'Stellar Point Ventures SCSp', initials:'SP', bg:'#7c3aed', commit:9.5e6, type:'Fund of funds', geo:'Luxembourg' },
+      { k:'kestrel',  name:'Kestrel Family Office', initials:'KF', bg:'#0f766e', commit:8e6, type:'Family office', geo:'Zurich' },
+      { k:'harbour',  name:'Harbour Rock Pension', initials:'HR', bg:'#b45309', commit:6e6, type:'Pension', geo:'Toronto' },
+      { k:'aubry',    name:'Aubry Capital Partners', initials:'AC', bg:'#be185d', commit:3e6, type:'Angel syndicate', geo:'Geneva' },
+    ];
+    const totalCommitN = LPS.reduce((a,l) => a + l.commit, 0);
+
+    const COMPANIES = [
+      { k:'nova', name:'NovaCraft AI', initials:'NC', bg:'#7c3aed' },
+      { k:'arc',  name:'Arcline', initials:'AR', bg:'#1d4ed8' },
+      { k:'loop', name:'LoopSense', initials:'LS', bg:'#b45309' },
+      { k:'kelp', name:'Kelp Bio', initials:'KB', bg:'#0f766e' },
+      { k:'hal',  name:'Halyard Security', initials:'HS', bg:'#334155' },
+    ];
+    const co = (k) => COMPANIES.find(c => c.k === k);
+
+    // calls: fraction of total commitments
+    const CALLS = [
+      { k:'cc1', name:'Call 1 · Initial close', ref:'CC-2025-001', issued:'Nov 14, 2025', due:'Dec 1, 2025', frac:0.10, collectedFrac:1.00, status:'Closed' },
+      { k:'cc2', name:'Call 2 · Q2 deployment', ref:'CC-2026-002', issued:'Apr 10, 2026', due:'Apr 30, 2026', frac:0.08, collectedFrac:1.00, status:'Closed' },
+      { k:'cc3', name:'Call 3 · Q3 deployment', ref:'CC-2026-003', issued:'Jul 29, 2026', due:'Aug 18, 2026', frac:0.07, status:'Open' },
+    ];
+    // per-LP paid state for the open call — the single source of truth for what has landed
+    const OPEN_PAID = { meridian:'paid', stellar:'paid', kestrel:'pending', harbour:'overdue', aubry:'paid' };
+    // derive the open call's collected fraction from OPEN_PAID so rows, footer and summary strip agree
+    CALLS[2].collectedFrac = LPS.filter(l => OPEN_PAID[l.k] === 'paid').reduce((a,l) => a + l.commit, 0) / totalCommitN;
+
+    const callAmt = (c) => totalCommitN * c.frac;
+    const lpCallAmt = (c, lp) => callAmt(c) * (lp.commit / totalCommitN);
+
+    const openCall = CALLS[2];
+    const unpaidCount = LPS.filter(l => OPEN_PAID[l.k] !== 'paid').length;
+    const paidCount = LPS.length - unpaidCount;
+    const totalCalledN = CALLS.reduce((a,c) => a + callAmt(c), 0);
+    const collectedN = CALLS.reduce((a,c) => a + callAmt(c) * c.collectedFrac, 0);
+    const outstandingN = totalCalledN - collectedN;
+
+    // ============ DILIGENCE (declared early — it gates the documents table) ============
+    const DD = [
+      { name:'Series A diligence — Arcline', company:'arc', ref:'DD-2026-041', opened:'Jul 30, 2026', owner:'H. Kaur',
+        stage:'Confirmatory', verdict:'Proceed', linked:'Term Sheet DOC-2026-0139' },
+      { name:'IP chain of title — Kelp Bio', company:'kelp', ref:'DD-2026-038', opened:'Jul 22, 2026', owner:'L. Zhang',
+        stage:'Legal review', verdict:'Conditions', linked:'IP License DOC-2026-0131' },
+      { name:'Pre-investment review — NovaCraft AI', company:'nova', ref:'DD-2026-044', opened:'Aug 8, 2026', owner:'G. Lauzier',
+        stage:'Commercial', verdict:'In progress', linked:'SAFE Note DOC-2026-0142' },
+      { name:'Security posture — Halyard', company:'hal', ref:'DD-2026-029', opened:'Jul 2, 2026', owner:'H. Kaur',
+        stage:'Complete', verdict:'Proceed', linked:'83(b) DOC-2026-0124' },
+      { name:'Revenue quality — LoopSense', company:'loop', ref:'DD-2026-033', opened:'Jul 11, 2026', owner:'H. Kaur',
+        stage:'Complete', verdict:'Conditions', linked:'Equity Allocation DOC-2026-0128' },
+    ];
+    // A case clears the gate on Proceed or Conditions; not on In progress or Declined.
+    // Map each gated document ref to its case so the send action can honour it.
+    const DOC_GATE = {};
+    DD.forEach(c => { const m = c.linked.match(/DOC-\d{4}-\d{4}/); if (m) DOC_GATE[m[0]] = { ref:c.ref, verdict:c.verdict, cleared:(c.verdict === 'Proceed' || c.verdict === 'Conditions') }; });
+
+    // ============ DOCUMENTS ============
+    const TPLS = [
+      { k:'safe', name:'SAFE Note', cat:'Financing', color:'#7c3aed', icon:I.coin, meta:'YC post-money',
+        when:'Invest without pricing a round — cap and discount only.' },
+      { k:'ts', name:'Term Sheet', cat:'Financing', color:'#1d4ed8', icon:I.doc, meta:'Non-binding',
+        when:'Set headline terms of a priced round before definitive docs.' },
+      { k:'spa', name:'Stock Purchase Agreement', cat:'Financing', color:'#1d4ed8', icon:I.brief, meta:'Definitive',
+        when:'Execute a priced round once the term sheet is agreed.' },
+      { k:'ip', name:'IP License', cat:'Formation', color:'#0f766e', icon:I.shield, meta:'University form',
+        when:'License institutional IP into a newly formed entity.' },
+      { k:'eq', name:'Equity Allocation', cat:'Formation', color:'#0f766e', icon:I.pie, meta:'Board consent',
+        when:'Allocate founder or advisor equity against the approved pool.' },
+      { k:'by', name:'Bylaws', cat:'Governance', color:'#b45309', icon:I.bldg, meta:'Delaware',
+        when:'Adopt governing bylaws at incorporation or on amendment.' },
+      { k:'83b', name:'83(b) Election', cat:'Tax', color:'#be185d', icon:I.stamp, meta:'30-day window',
+        when:'File within 30 days of a restricted stock grant.' },
+    ];
+    const catChipOf = (c) => c === 'Financing' ? cViolet : c === 'Formation' ? cGreen : c === 'Tax' ? cRed : cAmber;
+    const templates = TPLS.map(t => Object.assign({}, t, {
+      iconWrap: iconWrap(t.color), catChip: catChipOf(t.cat),
+    }));
+
+    const DOCS = [
+      { k:'d1', name:'SAFE Note — NovaCraft AI', type:'SAFE Note', ref:'DOC-2026-0142', created:'Aug 11, 2026',
+        party:'NovaCraft AI, Inc.', partyMeta:'Guillaume Lauzier · CEO', amount:'$1,500,000', status:'Draft', tpl:'safe' },
+      { k:'d2', name:'Term Sheet — Arcline Series A', type:'Term Sheet', ref:'DOC-2026-0139', created:'Aug 6, 2026',
+        party:'Arcline, Inc.', partyMeta:'Lead: Axal VC Ventures II', amount:'$4,000,000', status:'Sent for signature', tpl:'ts', sentNote:'Sent Aug 6 · 1 of 2 signed' },
+      { k:'d3', name:'Stock Purchase Agreement — Arcline', type:'SPA', ref:'DOC-2026-0138', created:'Aug 6, 2026',
+        party:'Arcline, Inc.', partyMeta:'Definitive documents', amount:'$4,000,000', status:'Draft', tpl:'spa' },
+      { k:'d4', name:'IP License — Kelp Bio / TU Delft', type:'IP License', ref:'DOC-2026-0131', created:'Jul 24, 2026',
+        party:'Kelp Bio B.V.', partyMeta:'TU Delft tech transfer', amount:'—', status:'Sent for signature', tpl:'ip', sentNote:'Sent Jul 26 · awaiting TTO' },
+      { k:'d5', name:'Equity Allocation — LoopSense advisors', type:'Equity Allocation', ref:'DOC-2026-0128', created:'Jul 18, 2026',
+        party:'LoopSense Ltd', partyMeta:'2 advisors · 0.75% total', amount:'—', status:'Signed', tpl:'eq', signedNote:'Executed Jul 22' },
+      { k:'d6', name:'83(b) Election — Halyard Security', type:'83(b) Election', ref:'DOC-2026-0124', created:'Jul 9, 2026',
+        party:'James Whitfield', partyMeta:'Founder · 4,000,000 shares', amount:'—', status:'Signed', tpl:'83b', signedNote:'Filed Jul 14' },
+      { k:'d7', name:'Bylaws — NovaCraft AI', type:'Bylaws', ref:'DOC-2026-0119', created:'Jun 28, 2026',
+        party:'NovaCraft AI, Inc.', partyMeta:'Delaware · adopted', amount:'—', status:'Signed', tpl:'by', signedNote:'Adopted Jul 2' },
+    ];
+    const statusChipOf = (s) => s === 'Signed' ? cGreen : s === 'Sent for signature' ? cBlue : cGrey;
+    const DF = ['All','Draft','Sent for signature','Signed'];
+    const docFilters = DF.map(f => ({ label:f, style: segSm(st.docFilter === f), go: () => this.setState({ docFilter:f }) }));
+
+    const documents = DOCS.map(d => {
+      const eff = st.sentDocs[d.k] ? 'Sent for signature' : d.status;
+      const gate = DOC_GATE[d.ref];
+      const blocked = eff === 'Draft' && gate && !gate.cleared;
+      return Object.assign({}, d, {
+        status:eff, chip: statusChipOf(eff),
+        icon: (TPLS.find(t => t.k === d.tpl) || TPLS[0]).icon,
+        tone: (TPLS.find(t => t.k === d.tpl) || TPLS[0]).color,
+        canSend: eff === 'Draft' && !blocked,
+        blocked,
+        blockNote: blocked ? gate.ref + ' · ' + gate.verdict : '',
+        inFlight: eff !== 'Draft',
+        flightNote: eff === 'Signed' ? d.signedNote : (st.sentDocs[d.k] ? 'Sent just now' : d.sentNote),
+      });
+    }).filter(d => st.docFilter === 'All' || d.status === st.docFilter);
+
+    // generate flow
+    const GEN = {
+      safe: (() => {
+        const c = val('company', 'NovaCraft AI, Inc.');
+        const amt = val('amount', '1,500,000');
+        const cap = val('cap', '18,000,000');
+        const disc = val('disc', '20%');
+        return { name:'SAFE Note', formBasis:'YC post-money · v1.3',
+          blurb:'Post-money SAFE on the Y Combinator form. Terms captured here flow into the document, the cap table, and the signature envelope.',
+          legalTitle:'Simple Agreement for Future Equity', legalSub:'Post-money valuation cap · Delaware',
+          fields:[
+            { k:'company', label:'Company', value:c, ph:'Legal entity name', prefilled:true, source:'pipeline' },
+            { k:'amount', label:'Investment amount (USD)', value:amt, ph:'1,500,000', mono:true, prefilled:true, source:'deal record' },
+            { k:'cap', label:'Post-money valuation cap (USD)', value:cap, ph:'18,000,000', mono:true,
+              hint:'Converts at the lower of this cap and the discounted round price.' },
+            { k:'disc', label:'Discount rate', kind:'select', value:disc, options:['0% — no discount','10%','15%','20%','25%'] },
+            { k:'prorata', label:'Pro rata rights', kind:'select', value:val('prorata','Included'), options:['Included','Excluded','Side letter'] },
+          ],
+          clauses:[
+            { h:'1 · Investment', parts:[ {plain:1,text:'In exchange for the payment of '},{token:1,text:'$'+amt},{plain:1,text:' by Axal VC Ventures Fund II, L.P. (the "Investor"), '},{token:1,text:c},{plain:1,text:' (the "Company") issues the right to certain shares of capital stock, subject to the terms below.'} ] },
+            { h:'2 · Valuation cap', parts:[ {plain:1,text:'"Post-Money Valuation Cap" means '},{token:1,text:'$'+cap},{plain:1,text:'. Shares issued on conversion equal the Purchase Amount divided by the Conversion Price.'} ] },
+            { h:'3 · Discount', parts:[ {plain:1,text:'"Discount Rate" means '},{token:1,text:disc},{plain:1,text:' of the price per share of Standard Preferred Stock sold in the Equity Financing.'} ] },
+            { h:'4 · Governing law', parts:[ {plain:1,text:'Governed by the laws of the State of Delaware, without regard to conflicts of law provisions.'} ] },
+          ] };
+      })(),
+      ts: (() => {
+        const c = val('company', 'Arcline, Inc.');
+        const amt = val('amount', '4,000,000');
+        const pre = val('pre', '22,000,000');
+        return { name:'Term Sheet', formBasis:'NVCA-style · non-binding',
+          blurb:'Headline terms for a priced round. Non-binding except confidentiality and exclusivity.',
+          legalTitle:'Series A Preferred Stock Term Sheet', legalSub:'Non-binding · Delaware',
+          fields:[
+            { k:'company', label:'Company', value:c, ph:'Legal entity name', prefilled:true, source:'pipeline' },
+            { k:'amount', label:'Round size (USD)', value:amt, ph:'4,000,000', mono:true, prefilled:true, source:'deal record' },
+            { k:'pre', label:'Pre-money valuation (USD)', value:pre, ph:'22,000,000', mono:true },
+            { k:'pool', label:'Option pool (post-money)', kind:'select', value:val('pool','12.5%'), options:['10.0%','12.5%','15.0%'] },
+            { k:'excl', label:'Exclusivity', kind:'select', value:val('excl','30 days'), options:['21 days','30 days','45 days'] },
+          ],
+          clauses:[
+            { h:'1 · Financing', parts:[ {plain:1,text:'Axal VC Ventures Fund II, L.P. proposes to lead an investment of '},{token:1,text:'$'+amt},{plain:1,text:' in '},{token:1,text:c},{plain:1,text:' in Series A Preferred Stock.'} ] },
+            { h:'2 · Valuation', parts:[ {plain:1,text:'Pre-money valuation of '},{token:1,text:'$'+pre},{plain:1,text:', inclusive of an option pool of '},{token:1,text:val('pool','12.5%')},{plain:1,text:' on a post-money fully diluted basis.'} ] },
+            { h:'3 · Exclusivity', parts:[ {plain:1,text:'The Company agrees to negotiate exclusively with the Investor for '},{token:1,text:val('excl','30 days')},{plain:1,text:' from signature. This provision is binding.'} ] },
+          ] };
+      })(),
+    };
+    GEN.spa = GEN.ts; GEN.ip = GEN.safe; GEN.eq = GEN.safe; GEN.by = GEN.ts; GEN['83b'] = GEN.safe;
+    const gen = GEN[st.tpl] || GEN.safe;
+    const mkField = (f) => {
+      const kind = f.kind || 'text';
+      return Object.assign({}, f, {
+        isText: kind === 'text', isSelect: kind === 'select',
+        monoClass: f.mono ? 'lc-num' : '', prefilled: !!f.prefilled, source: f.source || '',
+        hint: f.hint || '', ph: f.ph || '', set: this.setV(f.k),
+        options: (f.options || []).map(o => ({ label:o, selected: o === f.value })),
+      });
+    };
+    const genFields = gen.fields.map(mkField);
+    const genOk = gen.fields.every(f => String(f.value || '').trim());
+
+    // ============ CAPITAL CALLS ============
+    const callSummary = [
+      { k:'Total commitments', v: usdM(totalCommitN), note: LPS.length + ' limited partners', tone:INK },
+      { k:'Total called', v: usdM(totalCalledN), note: Math.round(totalCalledN/totalCommitN*100) + '% of commitments', tone:INK },
+      { k:'Total collected', v: usd(collectedN), note:'Across 3 calls', tone:GRN },
+      { k:'Outstanding', v: usd(outstandingN), note: unpaidCount + ' LPs on the open call', tone: outstandingN > 0 ? AMB : GRN },
+    ];
+
+    const callList = CALLS.slice().reverse().map(c => {
+      const amt = callAmt(c), coll = amt * c.collectedFrac;
+      const pct = Math.round(c.collectedFrac * 100);
+      return {
+        k:c.k, name:c.name, ref:c.ref, issued:c.issued, due:c.due,
+        amount: usd(amt), collected: usd(coll), pct: pct + '%',
+        collectedTone: c.collectedFrac >= 1 ? GRN : AMB,
+        barStyle:'height:100%;width:'+pct+'%;border-radius:99px;background:'+(c.collectedFrac >= 1 ? '#15803d' : V),
+        chip: c.status === 'Closed' ? cGreen : cAmber,
+        status: c.status,
+        selBg: st.selCall === c.k ? (dark ? '#241f38' : '#f6f3fe') : 'transparent',
+      };
+    });
+
+    const selCallRaw = CALLS.find(c => c.k === st.selCall) || openCall;
+    const isOpenCall = selCallRaw.k === 'cc3';
+    const selAmt = callAmt(selCallRaw), selColl = selAmt * selCallRaw.collectedFrac;
+
+    const responses = LPS.map(lp => {
+      const called = lpCallAmt(selCallRaw, lp);
+      const state = isOpenCall ? OPEN_PAID[lp.k] : 'paid';
+      const nudged = !!st.nudged[lp.k];
+      const paid = state === 'paid';
+      return {
+        k:lp.k, name:lp.name, initials:lp.initials, avStyle: av(lp.bg), type:lp.type, geo:lp.geo,
+        committed: usd(lp.commit), called: usd(called),
+        received: paid ? usd(called) : usd(0),
+        recvTone: paid ? GRN : (dark ? '#a5a0b2' : '#6b6577'),
+        status: paid ? 'Paid' : state === 'overdue' ? 'Overdue' : 'Pending',
+        chip: paid ? cGreen : state === 'overdue' ? cRed : cAmber,
+        sub: paid ? '' : state === 'overdue' ? '9 days past due' : 'due Aug 18',
+        canNudge: !paid,
+        paidNote: paid ? (isOpenCall ? 'Wire cleared' : 'Settled') : '',
+        nudgeLabel: nudged ? 'Nudged' : 'Send nudge',
+        nudgeStyle: nudged
+          ? 'display:inline-block;padding:6px 11px;border-radius:8px;font-size:11px;font-weight:600;background:transparent;color:'+(dark ? '#a5a0b2' : '#6b6577')
+          : 'display:inline-block;padding:6px 11px;border-radius:8px;font-size:11px;font-weight:700;background:'+(state === 'overdue' ? 'rgba(185,28,28,.09)' : 'rgba(124,58,237,.1)')+';color:'+(state === 'overdue' ? RED : V7),
+      };
+    });
+
+    const selCall = {
+      name:selCallRaw.name, ref:selCallRaw.ref,
+      amount: usd(selAmt), collected: usd(selColl),
+      collectedTone: selCallRaw.collectedFrac >= 1 ? GRN : AMB,
+      pct: Math.round(selCallRaw.collectedFrac * 1000) / 10 + '%',
+      respNote: isOpenCall ? paidCount + ' of ' + LPS.length + ' paid · due Aug 18, 2026' : 'All ' + LPS.length + ' settled',
+    };
+
+    // new call form
+    const ncAmount = val('ncAmount', '2,660,000');
+    const ncAmountN = parseFloat(ncAmount.replace(/,/g,'')) || 0;
+    const callFields = [
+      { k:'ncFund', label:'Fund', kind:'select', value:val('ncFund', FUND.name), options:[FUND.name,'Axal VC Ventures Fund I, L.P.'] },
+      { k:'ncAmount', label:'Call amount (USD)', value:ncAmount, ph:'2,660,000', mono:true,
+        hint:'Allocated pro-rata across commitments. Currently ' + (ncAmountN/totalCommitN*100).toFixed(1) + '% of the fund.' },
+      { k:'ncDue', label:'Due date', value:val('ncDue','Sep 15, 2026'), ph:'Sep 15, 2026' },
+      { k:'ncPurpose', label:'Purpose', kind:'select', value:val('ncPurpose','Q4 deployment'), options:['Q4 deployment','Management fee','Follow-on reserve','Fund expenses'] },
+    ].map(mkField);
+    const ncOk = ncAmountN > 0 && String(val('ncDue','Sep 15, 2026')).trim();
+
+    const proRata = LPS.map(lp => ({
+      name:lp.name, initials:lp.initials, avStyle: av(lp.bg, 26),
+      commit: usd(lp.commit),
+      share: (lp.commit/totalCommitN*100).toFixed(1) + '%',
+      amount: usd(ncAmountN * (lp.commit/totalCommitN)),
+    }));
+
+    // ============ DILIGENCE ROWS ============
+    const verdictChip = (v) => v === 'Proceed' ? cGreen : v === 'Conditions' ? cAmber : v === 'Declined' ? cRed : cViolet;
+    const ddCases = DD.map(c => {
+      const cc = co(c.company);
+      return Object.assign({}, c, { company:cc.name, initials:cc.initials, avStyle: av(cc.bg, 26), chip: verdictChip(c.verdict) });
+    });
+
+    // ============ LP PORTAL ============
+    const REPORTS = [
+      { name:'Q2 2026 quarterly report', published:'Published Aug 12, 2026', icon:I.report, tone:V7 },
+      { name:'2025 audited financial statements', published:'Published Mar 28, 2026', icon:I.sheet, tone:'#15803d' },
+      { name:'Q1 2026 quarterly report', published:'Published May 9, 2026', icon:I.report, tone:V7 },
+      { name:'Capital account statement — Q2 2026', published:'Published Aug 12, 2026', icon:I.doc, tone:'#1e40af' },
+    ];
+    const DISTS = { meridian:[{ name:'Distribution 1 · Ceduna Labs secondary', date:'Jun 30, 2026', kind:'Return of capital', frac:0.0089 }] };
+
+    const lpRaw = LPS.find(l => l.k === st.selLp) || LPS[0];
+    const lpCalledTotal = CALLS.reduce((a,c) => a + lpCallAmt(c, lpRaw), 0);
+    const lpPaidTotal = CALLS.reduce((a,c) => {
+      const state = c.k === 'cc3' ? OPEN_PAID[lpRaw.k] : 'paid';
+      return a + (state === 'paid' ? lpCallAmt(c, lpRaw) : 0);
+    }, 0);
+    const lpDists = (DISTS[lpRaw.k] || []).map(d => ({ name:d.name, date:d.date, kind:d.kind, amount: usd(lpRaw.commit * d.frac) }));
+    const lpDistTotal = (DISTS[lpRaw.k] || []).reduce((a,d) => a + lpRaw.commit * d.frac, 0);
+    const drawnPctN = lpCalledTotal / lpRaw.commit * 100;
+
+    const lpList = LPS.map(l => {
+      const openState = OPEN_PAID[l.k];
+      return {
+        k:l.k, name:l.name, initials:l.initials, avStyle: av(l.bg),
+        commit: usdM(l.commit), pctOfFund: (l.commit/totalCommitN*100).toFixed(1) + '%',
+        flag: openState === 'overdue' ? 'Overdue' : openState === 'pending' ? 'Pending' : '',
+        flagChip: openState === 'overdue' ? cRed : cAmber,
+        selBg: st.selLp === l.k ? (dark ? '#241f38' : '#f6f3fe') : 'transparent',
+      };
+    });
+
+    const lp = {
+      name:lpRaw.name, initials:lpRaw.initials, avStyleLg: av(lpRaw.bg, 44),
+      meta: lpRaw.type + ' · ' + lpRaw.geo + ' · ' + (lpRaw.commit/totalCommitN*100).toFixed(1) + '% of fund · admitted Nov 2025',
+      stats:[
+        { k:'Commitment', v: usdM(lpRaw.commit), note:'Signed Nov 14, 2025', tone:INK },
+        { k:'Capital called', v: usd(lpCalledTotal), note: drawnPctN.toFixed(1) + '% of commitment', tone:INK },
+        { k:'Paid to date', v: usd(lpPaidTotal), note: lpPaidTotal < lpCalledTotal ? usd(lpCalledTotal - lpPaidTotal) + ' outstanding' : 'All calls settled', tone: lpPaidTotal < lpCalledTotal ? AMB : GRN },
+        { k:'Distributions', v: lpDistTotal > 0 ? usd(lpDistTotal) : '$0', note: lpDistTotal > 0 ? lpDists.length + (lpDists.length === 1 ? ' distribution · DPI ' : ' distributions · DPI ') + (lpDistTotal / lpPaidTotal).toFixed(2) + '×' : 'None to date', tone: lpDistTotal > 0 ? GRN : (dark ? '#a5a0b2' : '#6b6577') },
+      ],
+      drawnPct: drawnPctN.toFixed(1) + '%',
+      unfunded: usd(lpRaw.commit - lpCalledTotal),
+      drawnBar:'height:100%;width:'+drawnPctN.toFixed(1)+'%;border-radius:99px;background:'+V,
+      calls: CALLS.slice().reverse().map(c => {
+        const amt = lpCallAmt(c, lpRaw);
+        const state = c.k === 'cc3' ? OPEN_PAID[lpRaw.k] : 'paid';
+        const paid = state === 'paid';
+        return {
+          name:c.name, ref:c.ref, due:c.due, amount: usd(amt),
+          paid: paid ? usd(amt) : usd(0),
+          paidTone: paid ? GRN : (dark ? '#a5a0b2' : '#6b6577'),
+          status: paid ? 'Paid' : state === 'overdue' ? 'Overdue' : 'Pending',
+          chip: paid ? cGreen : state === 'overdue' ? cRed : cAmber,
+        };
+      }),
+      dists: lpDists, hasDist: lpDists.length > 0, noDist: lpDists.length === 0,
+      distTotal: lpDistTotal > 0 ? usd(lpDistTotal) : '$0',
+      reports: REPORTS.map((r,i) => Object.assign({}, r, { seen: i === 0 ? ' · not yet opened' : ' · opened' })),
+    };
+
+    // ============ TABS ============
+    const TABS = [
+      { k:'docs', l:'Documents', i:I.doc, n: DOCS.filter(d => d.status === 'Draft').length },
+      { k:'calls', l:'Capital calls', i:I.coin, n: 2 },
+      { k:'dd', l:'Diligence', i:I.shield, n: DD.filter(c => c.stage !== 'Complete').length },
+      { k:'lp', l:'LP portal', i:I.users, n: 0 },
+    ];
+    const tabs = TABS.map(t => ({
+      label:t.l, icon:t.i, count: t.n ? String(t.n) : '',
+      go: () => this.setState({ tab:t.k }),
+      countStyle:'display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 5px;border-radius:99px;font-size:9.5px;font-weight:800;background:'
+        + (st.tab === t.k ? V : (dark ? '#2a2833' : '#f1f0f5')) + ';color:' + (st.tab === t.k ? '#fff' : (dark ? '#a5a0b2' : '#6b6577')),
+      style:'display:flex;align-items:center;gap:8px;padding:0 0 11px;font-size:13px;font-weight:'+(st.tab === t.k ? '700' : '600')
+        + ';color:' + (st.tab === t.k ? (dark ? '#c4b5fd' : V7) : (dark ? '#a5a0b2' : '#6b6577'))
+        + ';border-bottom:2px solid ' + (st.tab === t.k ? V : 'transparent') + ';white-space:nowrap;flex:none',
+    }));
+
+    const esignRaw = st.esign ? DOCS.find(d => d.k === st.esign) : null;
+    const esign = esignRaw ? {
+      name: esignRaw.name,
+      rows:[
+        { k:'Document', v:esignRaw.type }, { k:'Reference', v:esignRaw.ref, mono:1 },
+        { k:'Counterparty', v:esignRaw.party }, { k:'Signers', v:'2 · sequential' },
+      ].map(r => Object.assign({}, r, { monoClass: r.mono ? 'lc-num' : '' })),
+    } : { name:'', rows:[] };
+
+    return {
+      themeClass: dark ? 'lc-dark' : '',
+      themeIcon: dark ? I.sun : I.moon, themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      scaleIcon:I.scale, plusIcon:I.plus, outIcon:I.out, infoIcon:I.info, shieldIcon:I.shield,
+      downloadIcon:I.download, penIcon:I.pen,
+      fundLine: FUND.name + ' · vintage ' + FUND.vintage + ' · ' + usdM(totalCommitN) + ' closed',
+      asOf:'As of Aug 13, 2026',
+      tabs, tabDocs: st.tab === 'docs', tabCalls: st.tab === 'calls', tabDD: st.tab === 'dd', tabLP: st.tab === 'lp',
+      srcChip, tokStyle,
+      mirrorChip: chip('rgba(29,78,216,.1)', dark ? '#93b4fc' : '#1e40af'),
+
+      // documents
+      docListMode: st.docMode === 'list', docGenMode: st.docMode === 'gen',
+      templates, docFilters, documents,
+      pickTemplate: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-tpl]');
+        const k = n && n.getAttribute('data-tpl');
+        if (k) this.setState({ tpl:k, docMode:'gen', edits:{} });
+      },
+      backToDocs: () => this.setState({ docMode:'list' }),
+      gen, genFields,
+      genBtnStyle:'margin-top:18px;padding:12px 0;border-radius:11px;text-align:center;font-size:13.5px;font-weight:700;'
+        + (genOk ? 'background:'+V+';color:#fff' : 'background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+(dark?'#6b6577':'#8b8798')+';cursor:not-allowed'),
+      generateDoc: () => { if (genOk) this.setState({ docMode:'list' }); },
+      openEsign: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-doc]');
+        const k = n && n.getAttribute('data-doc');
+        if (!k) return;
+        const d = DOCS.find(x => x.k === k);
+        const gate = d && DOC_GATE[d.ref];
+        if (gate && !gate.cleared) return;   // gate is enforced, not merely asserted
+        this.setState({ esign:k });
+      },
+      blockedChip: chip('rgba(185,28,28,.09)', RED),
+      esignOpen: !!esignRaw, esign,
+      closeEsign: () => this.setState({ esign:null }),
+      confirmEsign: () => this.setState(s => ({ sentDocs: Object.assign({}, s.sentDocs, { [s.esign]:1 }), esign:null })),
+
+      // calls
+      callsSub: st.callMode === 'new'
+        ? 'Amount is allocated pro-rata across commitments. Review the breakdown before sending.'
+        : 'Three calls issued against ' + usdM(totalCommitN) + ' in commitments. Two LPs are outstanding on the open call.',
+      callSummary, callListMode: st.callMode === 'list', callNewMode: st.callMode === 'new',
+      openNewCall: () => this.setState({ callMode:'new' }),
+      backToCalls: () => this.setState({ callMode:'list' }),
+      callList, selCall, responses,
+      selectCall: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-call]');
+        const k = n && n.getAttribute('data-call');
+        if (k) this.setState({ selCall:k });
+      },
+      nudgeLp: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-nudge]');
+        const k = n && n.getAttribute('data-nudge');
+        if (k) this.setState(s => ({ nudged: Object.assign({}, s.nudged, { [k]:1 }) }));
+      },
+      callFields, proRata,
+      proRataPct: (ncAmountN/totalCommitN*100).toFixed(1) + '%',
+      callAmountFmt: usd(ncAmountN),
+      totalCommit: usd(totalCommitN),
+      lpCount: String(LPS.length),
+      callBtnStyle:'margin-top:18px;padding:12px 0;border-radius:11px;text-align:center;font-size:13.5px;font-weight:700;'
+        + (ncOk ? 'background:'+V+';color:#fff' : 'background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+(dark?'#6b6577':'#8b8798')+';cursor:not-allowed'),
+      sendCall: () => { if (ncOk) this.setState({ callMode:'list' }); },
+
+      // dd
+      ddCases,
+
+      // lp
+      lpList, lp, reportCount: String(REPORTS.length),
+      selectLp: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-lp]');
+        const k = n && n.getAttribute('data-lp');
+        if (k) this.setState({ selLp:k });
+      },
+
+      stop: (e) => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>

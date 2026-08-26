@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .pk-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .pk-page{background:#f6f5f8;color:#18181b}
+    .pk-surface{background:#ffffff}
+    .pk-sunken{background:#faf9fc}
+    .pk-border{border-color:#e5e3ec}
+    .pk-bd-b{border-bottom-color:#e5e3ec}
+    .pk-bd-t{border-top-color:#e5e3ec}
+    .pk-bd-l{border-left-color:#e5e3ec}
+    .pk-text{color:#18181b}
+    .pk-muted{color:#6b6577}
+    .pk-strong{color:#3f3f46}
+    .pk-field{background:#faf9fc;border-color:#e5e3ec;color:#18181b}
+    .pk-track{background:#e9e7ef}
+
+    .pk-page.pk-dark{background:#0a090e;color:#ececf1}
+    .pk-dark .pk-surface{background:#17161d}
+    .pk-dark .pk-sunken{background:#1d1b25}
+    .pk-dark .pk-border{border-color:#2a2833}
+    .pk-dark .pk-bd-b{border-bottom-color:#2a2833}
+    .pk-dark .pk-bd-t{border-top-color:#2a2833}
+    .pk-dark .pk-bd-l{border-left-color:#2a2833}
+    .pk-dark .pk-text{color:#ececf1}
+    .pk-dark .pk-muted{color:#a5a0b2}
+    .pk-dark .pk-strong{color:#dcd9e4}
+    .pk-dark .pk-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+    .pk-dark .pk-track{background:#26232f}
+
+    .pk-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .pk-btn:hover{filter:brightness(1.05)}
+    /* Tab ink is set inline from the theme flag, like every other themed element here.
+       CSS classes were tried and did not resolve on these nodes; inline is the channel
+       that demonstrably carries fresh theme values on toggle. */
+    .pk-tab{cursor:pointer;transition:color .13s,border-color .13s}
+    .pk-seg{cursor:pointer;transition:background .13s,color .13s}
+    .pk-row{transition:background .12s}
+    .pk-row:hover{background:#faf9fc}
+    .pk-dark .pk-row:hover{background:#1d1b25}
+    .pk-card{transition:box-shadow .14s,transform .14s,border-color .14s}
+    .pk-card.pk-live{cursor:pointer}
+    .pk-card.pk-live:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(10,9,14,.09)}
+    .pk-th{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .pk-fade{animation:pkFade .2s ease}
+    @keyframes pkFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    input,select,textarea{font-family:inherit;outline:none}
+    input:focus,select:focus,textarea:focus{border-color:#7c3aed}
+    ::placeholder{color:#8b8798}
+    @media (max-width:1140px){.pk-3{grid-template-columns:1fr 1fr!important}.pk-2{grid-template-columns:1fr!important}.pk-4{grid-template-columns:1fr 1fr!important}.pk-wide{overflow-x:auto}}
+    @media (max-width:760px){.pk-3{grid-template-columns:1fr!important}.pk-4{grid-template-columns:1fr!important}}
+  </style>
+</helmet>
+
+<div class="pk-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="pk-surface pk-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:30">
+    <div style="max-width:1360px;margin:0 auto;padding:14px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0">
+          <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ bagIcon }}"></span>
+          </div>
+          <div style="min-width:0">
+            <div class="pk-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Perks &amp; Products</div>
+            <div class="pk-muted" style="font-size:11.5px;margin-top:1px">{{ chromeSub }}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          <sc-if value="{{ isFounder }}">
+            <div class="pk-sunken pk-border" style="display:flex;align-items:center;gap:9px;padding:6px 12px;border-radius:10px;border-width:1px;border-style:solid">
+              <span style="width:13px;height:13px;display:flex;flex:none;color:{{ violet }}" dangerouslySetInnerHTML="{{ coinIcon }}"></span>
+              <div class="pk-num pk-text" style="font-size:13px;font-weight:700">{{ creditLabel }}</div>
+              <div class="pk-muted" style="font-size:10.5px">credits</div>
+            </div>
+            <span style="{{ tierChip }}">{{ tierLabel }}</span>
+          </sc-if>
+          <div class="pk-sunken pk-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid">
+            <sc-for list="{{ sideTabs }}" as="s" hint-placeholder-count="2">
+              <div class="pk-seg" onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</div>
+            </sc-for>
+          </div>
+          <div class="pk-btn pk-border pk-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+            {{ themeLabel }}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:20px;margin-top:14px;overflow-x:auto">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+          <div class="pk-tab {{ t.inkClass }}" onClick="{{ t.go }}" style="{{ t.style }}">
+            <span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            <span>{{ t.label }}</span>
+            <sc-if value="{{ t.flag }}"><span style="{{ t.flagStyle }}">{{ t.flag }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1360px;margin:0 auto;padding:22px 24px 90px">
+
+  <!-- ============ 1 · MARKETPLACE ============ -->
+  <sc-if value="{{ tabMarket }}">
+  <div class="pk-fade">
+
+    <!-- featured -->
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="min-width:0">
+        <div class="pk-text" style="font-size:15px;font-weight:800;letter-spacing:-.016em">Featured this month</div>
+        <div class="pk-muted" style="font-size:12px;margin-top:4px;max-width:600px;line-height:1.6">{{ featuredNote }}</div>
+      </div>
+      <div class="pk-muted pk-num" style="font-size:11px;flex:none">{{ curationLine }}</div>
+    </div>
+    <div class="pk-2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:26px">
+      <sc-for list="{{ featured }}" as="f" hint-placeholder-count="2">
+        <div class="pk-card pk-surface {{ f.liveClass }}" data-perk="{{ f.k }}" onClick="{{ openPerk }}" style="{{ f.cardStyle }}">
+          <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+            <div style="{{ f.logoStyle }}">{{ f.logo }}</div>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div class="pk-text" style="font-size:14px;font-weight:800;letter-spacing:-.012em">{{ f.partner }}</div>
+                <span style="{{ f.catChip }}">{{ f.cat }}</span>
+                <sc-if value="{{ f.rating }}">
+                  <div style="display:flex;align-items:center;gap:4px">
+                    <span style="width:11px;height:11px;display:flex;flex:none;color:{{ amber }}" dangerouslySetInnerHTML="{{ starIcon }}"></span>
+                    <div class="pk-num pk-muted" style="font-size:10.5px">{{ f.rating }}</div>
+                  </div>
+                </sc-if>
+              </div>
+              <div class="pk-text" style="font-size:19px;font-weight:800;letter-spacing:-.024em;margin-top:9px">{{ f.offer }}</div>
+              <div class="pk-muted" style="font-size:12.5px;line-height:1.6;margin-top:6px">{{ f.blurb }}</div>
+            </div>
+          </div>
+          <div class="pk-bd-t" style="display:flex;align-items:center;gap:12px;margin-top:15px;padding-top:13px;border-top-width:1px;border-top-style:solid;flex-wrap:wrap">
+            <div style="min-width:0;flex:1">
+              <div class="pk-muted pk-th" style="font-size:8.5px">Cost</div>
+              <div style="display:flex;align-items:center;gap:7px;margin-top:3px">
+                <div class="pk-num" style="font-size:13.5px;font-weight:700;color:{{ f.costTone }}">{{ f.cost }}</div>
+                <sc-if value="{{ f.costNote }}"><div class="pk-muted" style="font-size:10.5px">{{ f.costNote }}</div></sc-if>
+              </div>
+            </div>
+            <div style="{{ f.ctaStyle }}">{{ f.cta }}</div>
+          </div>
+          <sc-if value="{{ f.editorial }}">
+            <div style="{{ f.editWrap }}">
+              <span style="width:12px;height:12px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ quoteIcon }}"></span>
+              <div style="min-width:0">{{ f.editorial }}</div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- filters -->
+    <div class="pk-bd-t" style="padding-top:22px;border-top-width:1px;border-top-style:solid">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="min-width:0">
+          <div class="pk-text" style="font-size:15px;font-weight:800;letter-spacing:-.016em">All perks &amp; products</div>
+          <div class="pk-muted" style="font-size:12px;margin-top:4px">{{ resultLine }}</div>
+        </div>
+        <div class="pk-sunken pk-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex:none">
+          <sc-for list="{{ affordTabs }}" as="a" hint-placeholder-count="3">
+            <div class="pk-seg" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+        <sc-for list="{{ catFilters }}" as="c" hint-placeholder-count="7">
+          <div class="pk-seg" onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}<sc-if value="{{ c.n }}"><span style="{{ c.nStyle }}">{{ c.n }}</span></sc-if></div>
+        </sc-for>
+      </div>
+
+      <div class="pk-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+        <sc-for list="{{ perks }}" as="p" hint-placeholder-count="9">
+          <div class="pk-card pk-surface {{ p.liveClass }}" data-perk="{{ p.k }}" onClick="{{ openPerk }}" style="{{ p.cardStyle }}">
+            <div style="display:flex;align-items:flex-start;gap:11px">
+              <div style="{{ p.logoStyle }}">{{ p.logo }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="pk-text" style="font-size:13px;font-weight:700;letter-spacing:-.008em">{{ p.partner }}</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:3px;flex-wrap:wrap">
+                  <span style="{{ p.catChip }}">{{ p.cat }}</span>
+                  <sc-if value="{{ p.rating }}">
+                    <div style="display:flex;align-items:center;gap:3px">
+                      <span style="width:10px;height:10px;display:flex;flex:none;color:{{ amber }}" dangerouslySetInnerHTML="{{ starIcon }}"></span>
+                      <div class="pk-num pk-muted" style="font-size:10px">{{ p.rating }}</div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ p.noRating }}">
+                    <div class="pk-muted" style="font-size:10px">Not yet rated</div>
+                  </sc-if>
+                </div>
+              </div>
+            </div>
+            <div class="pk-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.018em;margin-top:12px;line-height:1.3">{{ p.offer }}</div>
+            <div class="pk-muted" style="font-size:11.5px;line-height:1.55;margin-top:6px">{{ p.blurb }}</div>
+            <div class="pk-bd-t" style="display:flex;align-items:center;gap:10px;margin-top:13px;padding-top:11px;border-top-width:1px;border-top-style:solid;flex-wrap:wrap">
+              <div style="min-width:0;flex:1">
+                <div class="pk-num" style="font-size:12.5px;font-weight:700;color:{{ p.costTone }}">{{ p.cost }}</div>
+                <sc-if value="{{ p.costNote }}"><div class="pk-muted" style="font-size:10px;margin-top:1px">{{ p.costNote }}</div></sc-if>
+              </div>
+              <div style="{{ p.ctaStyle }}">{{ p.cta }}</div>
+            </div>
+            <sc-if value="{{ p.gateNote }}">
+              <div style="{{ p.gateWrap }}">{{ p.gateNote }}</div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ noResults }}">
+        <div class="pk-border" style="border-width:1px;border-style:dashed;border-radius:14px;padding:34px 20px;text-align:center">
+          <div class="pk-strong" style="font-size:13px;font-weight:700">Nothing matches that filter</div>
+          <div class="pk-muted" style="font-size:12px;line-height:1.55;margin-top:5px;max-width:400px;margin-left:auto;margin-right:auto">{{ noResultsNote }}</div>
+          <div class="pk-btn pk-sunken pk-border pk-strong" onClick="{{ clearFilters }}" style="display:inline-block;margin-top:14px;padding:8px 16px;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600">Clear filters</div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 2 · MY PERKS ============ -->
+  <sc-if value="{{ tabMine }}">
+  <div class="pk-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="min-width:0">
+        <div class="pk-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">My perks</div>
+        <div class="pk-muted" style="font-size:13px;margin-top:5px;max-width:580px;line-height:1.6">{{ mineSub }}</div>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;flex:none">
+        <sc-for list="{{ mineStats }}" as="s" hint-placeholder-count="3">
+          <div style="text-align:right">
+            <div class="pk-num" style="font-size:18px;font-weight:700;letter-spacing:-.022em;color:{{ s.tone }}">{{ s.v }}</div>
+            <div class="pk-muted pk-th" style="margin-top:3px">{{ s.k }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <sc-for list="{{ claimed }}" as="c" hint-placeholder-count="4">
+        <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:18px 22px;{{ c.wrapExtra }}">
+          <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+            <div style="{{ c.logoStyle }}">{{ c.logo }}</div>
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <div class="pk-text" style="font-size:14px;font-weight:800;letter-spacing:-.012em">{{ c.offer }}</div>
+                <span style="{{ c.stateChip }}">{{ c.state }}</span>
+              </div>
+              <div class="pk-muted" style="font-size:11.5px;margin-top:3px">{{ c.partner }} · claimed {{ c.claimedOn }} · {{ c.paidWith }}</div>
+              <sc-if value="{{ c.next }}">
+                <div class="pk-muted" style="font-size:11.5px;line-height:1.55;margin-top:8px;max-width:560px">{{ c.next }}</div>
+              </sc-if>
+            </div>
+            <div style="flex:none;text-align:right;min-width:132px">
+              <div class="pk-muted pk-th" style="font-size:8.5px">{{ c.expiryLabel }}</div>
+              <div class="pk-num" style="font-size:12.5px;font-weight:700;margin-top:3px;color:{{ c.expiryTone }}">{{ c.expiry }}</div>
+              <sc-if value="{{ c.expiryNote }}">
+                <div class="pk-muted" style="font-size:10px;margin-top:2px">{{ c.expiryNote }}</div>
+              </sc-if>
+            </div>
+          </div>
+          <sc-if value="{{ c.hasCode }}">
+            <div class="pk-sunken pk-border" style="display:flex;align-items:center;gap:12px;margin-top:14px;padding:11px 14px;border-radius:11px;border-width:1px;border-style:solid;flex-wrap:wrap">
+              <div style="min-width:0;flex:1">
+                <div class="pk-muted pk-th" style="font-size:8.5px">{{ c.codeLabel }}</div>
+                <div class="pk-num pk-text" style="font-size:13px;font-weight:700;margin-top:3px;letter-spacing:.02em">{{ c.code }}</div>
+              </div>
+              <div class="pk-btn pk-border pk-strong" style="flex:none;display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent">
+                <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ copyIcon }}"></span>
+                Copy
+              </div>
+              <sc-if value="{{ c.hasLink }}">
+                <div class="pk-btn" style="flex:none;display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:9px;background:#7c3aed;color:#fff;font-size:11.5px;font-weight:700">
+                  {{ c.linkLabel }}
+                  <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ outIcon }}"></span>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:16px;margin-top:16px;overflow:hidden">
+      <div class="pk-sunken pk-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div class="pk-muted pk-th">Credit ledger</div>
+        <div class="pk-muted pk-num" style="font-size:10.5px">balance {{ creditLabel }}</div>
+      </div>
+      <sc-for list="{{ ledger }}" as="l" hint-placeholder-count="5">
+        <div class="pk-row pk-bd-b" style="display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom-width:1px;border-bottom-style:solid">
+          <div class="pk-num pk-muted" style="font-size:11px;flex:none;width:58px">{{ l.when }}</div>
+          <div style="min-width:0;flex:1">
+            <div class="pk-strong" style="font-size:12px;font-weight:600">{{ l.what }}</div>
+            <div class="pk-muted" style="font-size:10.5px;margin-top:1px">{{ l.why }}</div>
+          </div>
+          <div class="pk-num" style="font-size:12.5px;font-weight:700;flex:none;color:{{ l.tone }}">{{ l.amount }}</div>
+          <div class="pk-num pk-muted" style="font-size:11px;flex:none;width:52px;text-align:right">{{ l.balance }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 3 · PARTNER SUBMIT ============ -->
+  <sc-if value="{{ tabSubmit }}">
+  <div class="pk-fade">
+    <div style="margin-bottom:16px">
+      <div class="pk-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Submit a perk</div>
+      <div class="pk-muted" style="font-size:13px;margin-top:5px;max-width:620px;line-height:1.6">{{ submitSub }}</div>
+    </div>
+
+    <div class="pk-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+      <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px">
+        <div class="pk-muted pk-th">Offer</div>
+        <div style="display:flex;flex-direction:column;gap:13px;margin-top:14px">
+          <sc-for list="{{ subFields }}" as="f" hint-placeholder-count="6">
+            <div>
+              <div class="pk-strong" style="font-size:11.5px;font-weight:600;margin-bottom:5px">{{ f.label }}</div>
+              <sc-if value="{{ f.isSelect }}">
+                <select class="pk-field" onChange="{{ f.set }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px">
+                  <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="3">
+                    <option selected="{{ o.selected }}">{{ o.label }}</option>
+                  </sc-for>
+                </select>
+              </sc-if>
+              <sc-if value="{{ f.isText }}">
+                <input class="pk-field {{ f.monoClass }}" value="{{ f.value }}" onChange="{{ f.set }}" placeholder="{{ f.ph }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px">
+              </sc-if>
+              <sc-if value="{{ f.isArea }}">
+                <textarea class="pk-field" value="{{ f.value }}" onChange="{{ f.set }}" rows="3" placeholder="{{ f.ph }}" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;resize:vertical;line-height:1.6"></textarea>
+              </sc-if>
+              <sc-if value="{{ f.hint }}">
+                <div class="pk-muted" style="font-size:10.5px;margin-top:5px;line-height:1.5">{{ f.hint }}</div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <div class="pk-btn" onClick="{{ submitPerk }}" style="{{ subBtnStyle }}">{{ subBtnLabel }}</div>
+        <div class="pk-muted" style="font-size:10.5px;line-height:1.55;margin-top:10px">{{ subFoot }}</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <!-- live preview -->
+        <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="pk-sunken pk-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div class="pk-muted pk-th">How founders will see it</div>
+            <div class="pk-muted" style="font-size:10.5px">live preview</div>
+          </div>
+          <div style="padding:18px 20px">
+            <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:16px 18px">
+              <div style="display:flex;align-items:flex-start;gap:11px">
+                <div style="{{ prevLogoStyle }}">{{ prevLogo }}</div>
+                <div style="min-width:0;flex:1">
+                  <div class="pk-text" style="font-size:13px;font-weight:700">{{ prev.partner }}</div>
+                  <div style="display:flex;align-items:center;gap:7px;margin-top:3px">
+                    <span style="{{ prevCatChip }}">{{ prev.cat }}</span>
+                    <div class="pk-muted" style="font-size:10px">{{ prev.ratingNote }}</div>
+                  </div>
+                </div>
+              </div>
+              <div class="pk-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.018em;margin-top:12px;line-height:1.3">{{ prev.offer }}</div>
+              <div class="pk-muted" style="font-size:11.5px;line-height:1.55;margin-top:6px">{{ prev.blurb }}</div>
+              <div class="pk-bd-t" style="display:flex;align-items:center;gap:10px;margin-top:13px;padding-top:11px;border-top-width:1px;border-top-style:solid">
+                <div class="pk-num" style="font-size:12.5px;font-weight:700;color:{{ prev.costTone }};min-width:0;flex:1">{{ prev.cost }}</div>
+                <div style="{{ prevCtaStyle }}">Claim</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- review criteria -->
+        <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="pk-muted pk-th">What review looks at</div>
+          <div style="display:flex;flex-direction:column;gap:0;margin-top:12px">
+            <sc-for list="{{ criteria }}" as="c" hint-placeholder-count="4">
+              <div class="pk-bd-t" style="display:flex;align-items:flex-start;gap:11px;padding:10px 0;border-top-width:1px;border-top-style:solid">
+                <span style="width:13px;height:13px;display:flex;flex:none;margin-top:2px;color:{{ c.tone }}" dangerouslySetInnerHTML="{{ c.icon }}"></span>
+                <div style="min-width:0">
+                  <div class="pk-strong" style="font-size:12px;font-weight:600">{{ c.k }}</div>
+                  <div class="pk-muted" style="font-size:10.5px;line-height:1.5;margin-top:2px">{{ c.d }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- queue -->
+        <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="pk-sunken pk-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px">
+            <div class="pk-muted pk-th">Your submissions</div>
+          </div>
+          <sc-for list="{{ submissions }}" as="s" hint-placeholder-count="3">
+            <div class="pk-row pk-bd-b" style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom-width:1px;border-bottom-style:solid">
+              <div style="min-width:0;flex:1">
+                <div class="pk-strong" style="font-size:12px;font-weight:600">{{ s.offer }}</div>
+                <div class="pk-muted" style="font-size:10.5px;margin-top:1px">{{ s.meta }}</div>
+              </div>
+              <span style="{{ s.chip }}">{{ s.state }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 4 · PARTNER ANALYTICS ============ -->
+  <sc-if value="{{ tabAnalytics }}">
+  <div class="pk-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="min-width:0">
+        <div class="pk-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Listing performance</div>
+        <div class="pk-muted" style="font-size:13px;margin-top:5px;max-width:600px;line-height:1.6">{{ anSub }}</div>
+      </div>
+      <div class="pk-btn pk-border pk-strong" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent;flex:none;display:flex;align-items:center;gap:7px">
+        Open BD console
+        <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ outIcon }}"></span>
+      </div>
+    </div>
+
+    <div class="pk-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+      <sc-for list="{{ anStats }}" as="s" hint-placeholder-count="4">
+        <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:15px 18px">
+          <div class="pk-muted pk-th">{{ s.k }}</div>
+          <div class="pk-num" style="font-size:21px;font-weight:700;letter-spacing:-.026em;margin-top:6px;color:{{ s.tone }}">{{ s.v }}</div>
+          <div class="pk-muted" style="font-size:10.5px;margin-top:3px;line-height:1.45">{{ s.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div class="pk-2" style="display:grid;grid-template-columns:1.35fr 1fr;gap:16px;align-items:start">
+      <!-- funnel -->
+      <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="pk-sunken pk-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div class="pk-muted pk-th">{{ funnelTitle }}</div>
+          <div class="pk-muted pk-num" style="font-size:10.5px">since {{ anSince }}</div>
+        </div>
+        <sc-for list="{{ funnel }}" as="f" hint-placeholder-count="4">
+          <div class="pk-bd-b" style="padding:14px 22px;border-bottom-width:1px;border-bottom-style:solid">
+            <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+              <div class="pk-strong" style="font-size:12.5px;font-weight:600;min-width:0;flex:1">{{ f.k }}</div>
+              <div class="pk-num pk-text" style="font-size:13px;font-weight:700">{{ f.n }}</div>
+              <sc-if value="{{ f.conv }}"><span style="{{ f.convChip }}">{{ f.conv }}</span></sc-if>
+            </div>
+            <div class="pk-track" style="height:9px;border-radius:5px;overflow:hidden;margin-top:8px">
+              <div style="{{ f.barStyle }}"></div>
+            </div>
+            <div class="pk-muted" style="font-size:10.5px;line-height:1.5;margin-top:6px">{{ f.note }}</div>
+          </div>
+        </sc-for>
+        <div class="pk-sunken" style="padding:13px 22px">
+          <div class="pk-muted" style="font-size:11.5px;line-height:1.6">{{ funnelInsight }}</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <!-- cap -->
+        <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+            <div class="pk-muted pk-th">Claim cap</div>
+            <div class="pk-muted pk-num" style="font-size:11px">{{ capLine }}</div>
+          </div>
+          <div class="pk-track" style="height:10px;border-radius:99px;overflow:hidden;margin-top:11px">
+            <div style="{{ capBar }}"></div>
+          </div>
+          <div class="pk-muted" style="font-size:11px;line-height:1.6;margin-top:10px">{{ capNote }}</div>
+          <div class="pk-btn pk-sunken pk-border pk-strong" style="margin-top:12px;padding:9px 0;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600;text-align:center">Raise the cap</div>
+        </div>
+
+        <!-- who claimed -->
+        <div class="pk-surface pk-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="pk-sunken pk-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:11px 20px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div class="pk-muted pk-th">Founders reached</div>
+            <div class="pk-muted pk-num" style="font-size:10.5px">{{ reachedCount }}</div>
+          </div>
+          <sc-for list="{{ reached }}" as="r" hint-placeholder-count="5">
+            <div class="pk-row pk-bd-b" style="display:flex;align-items:center;gap:11px;padding:11px 20px;border-bottom-width:1px;border-bottom-style:solid">
+              <div style="{{ r.avStyle }}">{{ r.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="pk-strong" style="font-size:12px;font-weight:600">{{ r.co }}</div>
+                <div class="pk-muted" style="font-size:10px;margin-top:1px">{{ r.meta }}</div>
+              </div>
+              <span style="{{ r.chip }}">{{ r.state }}</span>
+            </div>
+          </sc-for>
+          <div class="pk-sunken" style="padding:12px 20px">
+            <div class="pk-muted" style="font-size:11px;line-height:1.55">{{ reachedNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  </div>
+
+  <!-- ============ CLAIM MODAL ============ -->
+  <sc-if value="{{ claimOpen }}">
+    <div onClick="{{ closeClaim }}" style="position:fixed;inset:0;z-index:900;background:rgba(10,9,14,.52);display:flex;align-items:center;justify-content:center;padding:24px">
+      <div class="pk-surface" onClick="{{ stop }}" style="width:100%;max-width:470px;border-radius:18px;padding:26px 28px;box-shadow:0 24px 70px rgba(10,9,14,.36);max-height:88vh;overflow-y:auto">
+
+        <!-- step 1 · review -->
+        <sc-if value="{{ claimReview }}">
+          <div style="display:flex;align-items:flex-start;gap:13px">
+            <div style="{{ sel.logoStyleLg }}">{{ sel.logo }}</div>
+            <div style="min-width:0;flex:1">
+              <div class="pk-text" style="font-size:16.5px;font-weight:800;letter-spacing:-.02em;line-height:1.3">{{ sel.offer }}</div>
+              <div class="pk-muted" style="font-size:12px;margin-top:3px">{{ sel.partner }} · {{ sel.cat }}</div>
+            </div>
+            <div class="pk-btn pk-border pk-muted" onClick="{{ closeClaim }}" style="width:28px;height:28px;border-radius:8px;border-width:1px;border-style:solid;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none">×</div>
+          </div>
+          <div class="pk-muted" style="font-size:12.5px;line-height:1.65;margin-top:12px">{{ sel.detail }}</div>
+
+          <div class="pk-sunken pk-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:14px 16px;margin-top:16px">
+            <div class="pk-muted pk-th" style="margin-bottom:10px">{{ sel.costHeader }}</div>
+            <sc-if value="{{ sel.usesCredits }}">
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <div>
+                  <div class="pk-muted" style="font-size:10.5px">Balance now</div>
+                  <div class="pk-num pk-strong" style="font-size:16px;font-weight:700;margin-top:2px">{{ sel.beforeLabel }}</div>
+                </div>
+                <span class="pk-muted" style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ arrowIcon }}"></span>
+                <div>
+                  <div class="pk-muted" style="font-size:10.5px">After claiming</div>
+                  <div class="pk-num" style="font-size:16px;font-weight:700;margin-top:2px;color:{{ sel.afterTone }}">{{ sel.afterLabel }}</div>
+                </div>
+                <div style="margin-left:auto;text-align:right">
+                  <div class="pk-muted" style="font-size:10.5px">Cost</div>
+                  <div class="pk-num" style="font-size:16px;font-weight:700;margin-top:2px;color:{{ violet }}">−{{ sel.creditCost }}</div>
+                </div>
+              </div>
+              <sc-if value="{{ sel.short }}">
+                <div style="{{ shortWrap }}">{{ sel.shortNote }}</div>
+              </sc-if>
+            </sc-if>
+            <sc-if value="{{ sel.usesTier }}">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <span style="{{ tierChip }}">{{ tierLabel }}</span>
+                <div class="pk-strong" style="font-size:12.5px;font-weight:600;min-width:0;flex:1">{{ sel.tierNote }}</div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ sel.usesMoney }}">
+              <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+                <div class="pk-num pk-text" style="font-size:19px;font-weight:700;letter-spacing:-.022em">{{ sel.money }}</div>
+                <div class="pk-muted" style="font-size:11.5px;min-width:0;flex:1">{{ sel.moneyNote }}</div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="margin-top:16px">
+            <div class="pk-muted pk-th" style="margin-bottom:9px">What happens next</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ sel.steps }}" as="s" hint-placeholder-count="3">
+                <div style="display:flex;gap:11px;align-items:flex-start">
+                  <span class="pk-num" style="flex:none;font-size:10.5px;font-weight:700;color:{{ violet }};margin-top:2px">{{ s.n }}</span>
+                  <div class="pk-strong" style="font-size:12px;line-height:1.55">{{ s.t }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="pk-btn" onClick="{{ confirmClaim }}" style="{{ claimBtnStyle }}">{{ claimBtnLabel }}</div>
+          <div class="pk-muted" style="font-size:10.5px;line-height:1.55;margin-top:10px;text-align:center">{{ sel.fine }}</div>
+        </sc-if>
+
+        <!-- step 2 · confirmed -->
+        <sc-if value="{{ claimDone }}">
+          <div style="text-align:center;padding:6px 0">
+            <div style="width:44px;height:44px;border-radius:14px;background:rgba(17,102,50,.12);color:{{ green }};display:flex;align-items:center;justify-content:center;margin:0 auto">
+              <span style="width:21px;height:21px;display:flex" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+            </div>
+            <div class="pk-text" style="font-size:17px;font-weight:800;letter-spacing:-.022em;margin-top:14px">{{ sel.doneTitle }}</div>
+            <div class="pk-muted" style="font-size:12.5px;line-height:1.65;margin-top:7px">{{ sel.doneBody }}</div>
+          </div>
+
+          <sc-if value="{{ sel.usesCredits }}">
+            <div class="pk-sunken pk-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:13px 16px;margin-top:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <div style="min-width:0;flex:1">
+                <div class="pk-muted" style="font-size:10.5px">Credits deducted</div>
+                <div class="pk-num pk-text" style="font-size:14px;font-weight:700;margin-top:2px">{{ sel.beforeLabel }} → {{ sel.afterLabel }}</div>
+              </div>
+              <div class="pk-num" style="font-size:14px;font-weight:700;flex:none;color:{{ violet }}">−{{ sel.creditCost }}</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ sel.doneCode }}">
+            <div class="pk-sunken pk-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:14px 16px;margin-top:12px">
+              <div class="pk-muted pk-th" style="font-size:8.5px">{{ sel.codeLabel }}</div>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap">
+                <div class="pk-num pk-text" style="font-size:15px;font-weight:700;letter-spacing:.03em;min-width:0;flex:1">{{ sel.doneCode }}</div>
+                <div class="pk-btn pk-border pk-strong" style="flex:none;display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent">
+                  <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ copyIcon }}"></span>
+                  Copy
+                </div>
+              </div>
+              <div class="pk-muted" style="font-size:10.5px;line-height:1.5;margin-top:9px">{{ sel.codeNote }}</div>
+            </div>
+          </sc-if>
+
+          <div style="margin-top:16px">
+            <div class="pk-muted pk-th" style="margin-bottom:9px">Next</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ sel.doneSteps }}" as="s" hint-placeholder-count="3">
+                <div style="display:flex;gap:11px;align-items:flex-start">
+                  <span style="width:13px;height:13px;display:flex;flex:none;margin-top:2px;color:{{ s.tone }}" dangerouslySetInnerHTML="{{ s.icon }}"></span>
+                  <div class="pk-strong" style="font-size:12px;line-height:1.55">{{ s.t }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="pk-btn" onClick="{{ goMine }}" style="margin-top:18px;padding:12px 0;border-radius:11px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;text-align:center">View in My perks</div>
+          <div class="pk-btn pk-muted" onClick="{{ closeClaim }}" style="margin-top:8px;padding:9px 0;font-size:12px;font-weight:600;text-align:center">Back to marketplace</div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1360}}">
+class Component extends DCLogic {
+  state = { theme:'light', side:'founder', tab:'market', cat:'All', afford:'all',
+    claim:null, claimStep:'review', claimed:{},
+    sub:{ partner:'Sablefin', offer:'', value:'', cat:'Banking', method:'Code', cap:'100', dur:'12 months', blurb:'' } };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+  setS(k){ return (e) => this.setState(s => ({ sub: Object.assign({}, s.sub, { [k]: e.target.value }) })); }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+    // Text-safe violet: V7 measures ~2.5:1 on dark surfaces, so violet AS TEXT reads VIO.
+    const VIO = dark ? '#c4b5fd' : V7;
+    const GRN = dark ? '#6ee7b7' : '#116632';
+    const AMB = dark ? '#fcd34d' : '#92400e';
+    const RED = dark ? '#fca5a5' : '#b91c1c';
+    const BLU = dark ? '#93b4fc' : '#1e40af';
+    const INK = dark ? '#ececf1' : '#18181b';
+    const MUT = dark ? '#a5a0b2' : '#6b6577';
+
+    const I = {
+      bag: this.ic('<path d="M6 7h12l1.5 13H4.5z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/>'),
+      grid: this.ic('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+      ticket: this.ic('<path d="M3 9a2 2 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a2 2 0 0 1 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z"/><path d="M13 8v8"/>'),
+      upload: this.ic('<path d="M12 17V5"/><path d="m7 10 5-5 5 5"/><path d="M4 21h16"/>'),
+      chart: this.ic('<path d="M3 3v18h18"/><path d="m6 15 4-5 4 3 5-7"/>'),
+      coin: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.8 9.4A2.8 2.8 0 0 0 12 8.2c-1.6 0-2.8.9-2.8 2.1s1.2 1.9 2.8 1.9 2.8.7 2.8 1.9-1.2 2.1-2.8 2.1a2.8 2.8 0 0 1-2.8-1.2"/>'),
+      star: this.ic('<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z" fill="currentColor" stroke="none"/>'),
+      check: this.ic('<path d="M20 6 9 17l-5-5"/>', 2.5),
+      copy: this.ic('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
+      out: this.ic('<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'),
+      arrow: this.ic('<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>'),
+      mail: this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="m2 7 10 6 10-6"/>'),
+      clock: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
+      quote: this.ic('<path d="M8 7H5a2 2 0 0 0-2 2v3h5V7zM19 7h-3a2 2 0 0 0-2 2v3h5V7z"/><path d="M3 12c0 3 1.5 5 5 5M14 12c0 3 1.5 5 5 5"/>'),
+      lock: this.ic('<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+      alert: this.ic('<path d="M12 3 2 20h20L12 3z"/><path d="M12 9v5M12 17h.01"/>'),
+      sun: this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon: this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:9.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const cGreen = chip('rgba(17,102,50,.1)', GRN);
+    const cAmber = chip('rgba(180,83,9,.1)', AMB);
+    const cRed = chip('rgba(185,28,28,.09)', RED);
+    const cViolet = chip('rgba(124,58,237,.1)', VIO);
+    const cBlue = chip('rgba(29,78,216,.1)', BLU);
+    const cGrey = chip(dark ? '#2a2833' : '#f1f0f5', MUT);
+    const seg = (on) => 'padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? VIO : MUT)
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none')+';white-space:nowrap;display:inline-flex;align-items:center;gap:6px';
+    const av = (bg, sz) => 'width:'+(sz||26)+'px;height:'+(sz||26)+'px;border-radius:8px;background:'+bg+';color:#fff;font-size:'+(sz>=44?'14px':sz>=36?'12px':'9.5px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const n0 = (x) => Math.round(x).toLocaleString('en-US');
+
+    // ============ FOUNDER ACCOUNT ============
+    const BALANCE_START = 2400;
+    const TIER = 'Growth';
+    const TIER_RANK = { Explorer:0, Studio:1, Growth:2 };
+    const myTier = TIER_RANK[TIER];
+
+    // ============ CATEGORIES ============
+    const CAT = {
+      Cloud:      { color:'#1d4ed8' },
+      Legal:      { color:'#7c3aed' },
+      Banking:    { color:'#116632' },
+      Recruiting: { color:'#b45309' },
+      GTM:        { color:'#be185d' },
+      Tools:      { color:'#0f766e' },
+    };
+    const CAT_INK = {
+      '#1d4ed8': { light:'#1e40af', dark:'#93b4fc' },
+      '#7c3aed': { light:'#6d28d9', dark:'#c4b5fd' },
+      '#116632': { light:'#116632', dark:'#6ee7b7' },
+      '#b45309': { light:'#92400e', dark:'#fcd34d' },
+      '#be185d': { light:'#9d174d', dark:'#f9a8d4' },
+      '#0f766e': { light:'#115e59', dark:'#5eead4' },
+    };
+    const catChipOf = (c) => {
+      const col = (CAT[c] || { color:'#6b6577' }).color;
+      const ink = CAT_INK[col] || { light:col, dark:col };
+      return chip(col + (dark ? '2e' : '16'), dark ? ink.dark : ink.light);
+    };
+
+    // ============ CATALOG ============
+    // kind: 'credits' | 'tier' | 'money'
+    const CATALOG = [
+      { k:'northlake', partner:'Northlake Cloud', logo:'NC', bg:'#1d4ed8', cat:'Cloud',
+        offer:'$5,000 in cloud credits', kind:'credits', credits:400, rating:'4.7', featured:true,
+        blurb:'Applies to compute, storage and managed Postgres. Stacks on top of any startup-programme credits you already hold.',
+        detail:'Northlake issues a single promotional code redeemable against your first invoice. Credits expire 12 months from activation and do not roll over. Cannot be combined with their own startup programme if you are already enrolled.',
+        editorial:'The only cloud perk on the marketplace with no spend commitment attached — we turned down two larger offers that required a signed annual contract.',
+        steps:[{n:'01',t:'400 credits come off your balance immediately.'},{n:'02',t:'You get a redemption code on the next screen.'},{n:'03',t:'Enter it in Northlake billing settings — credits apply within an hour.'}],
+        codeLabel:'Redemption code', code:'NLC-AXAL-7K2M-QR84',
+        codeNote:'Enter under Billing → Promotions in the Northlake console. One use, tied to your account.',
+        doneTitle:'Credits claimed', doneBody:'Your code is below and saved in My perks. Northlake credits activate within an hour of redemption.',
+        doneSteps:[{t:'Redeem in the Northlake console — takes about two minutes.',icon:I.check,tone:GRN},{t:'Credits expire 12 months from redemption, not from today.',icon:I.clock,tone:AMB}],
+        fine:'Credits are non-transferable and cannot be refunded to your balance once redeemed.',
+        expiryLabel:'Expires', expiryDays:365, method:'Code' },
+
+      { k:'harlow', partner:'Harlow & Finch', logo:'HF', bg:'#7c3aed', cat:'Legal',
+        offer:'Formation package at 40% off', kind:'tier', tier:'Growth', rating:'4.9', featured:true,
+        blurb:'Delaware C-Corp formation, bylaws, founder agreements and 83(b) filings. Normally $3,400, $2,040 on Growth.',
+        detail:'A fixed-fee formation package rather than hourly work. Includes one round of founder-agreement revisions and the 83(b) mailing. Does not cover IP assignment from a prior employer, which they quote separately.',
+        editorial:'Fixed fee, not an hourly discount — the distinction matters when a formation runs long. Two of our cohorts used them and neither went over the quote.',
+        tierNote:'Included with your Growth plan at no credit cost.',
+        steps:[{n:'01',t:'No credits are used — this is included in Growth.'},{n:'02',t:'Harlow & Finch receive your company details.'},{n:'03',t:'A partner emails you within two business days to open the file.'}],
+        doneTitle:'Introduction sent', doneBody:'Harlow & Finch have your company details. A partner will contact you within two business days.',
+        doneSteps:[{t:'Watch for an email from a named partner, not a general inbox.',icon:I.mail,tone:BLU},{t:'Have your founder split and vesting terms decided before the call.',icon:I.alert,tone:AMB}],
+        fine:'Sharing your company name, entity type and founder count with Harlow & Finch.',
+        expiryLabel:'Claim by', expiryDays:90, method:'Introduction' },
+
+      { k:'sablefin', partner:'Sablefin', logo:'SB', bg:'#116632', cat:'Banking',
+        offer:'3 months free business banking', kind:'credits', credits:150, rating:'4.4',
+        blurb:'Waived monthly fee and free wires for three months. No minimum balance.',
+        detail:'Applies to their Business plan. International wires are free during the promotional period, then revert to $12 each. Account opening is subject to their own KYB.',
+        steps:[{n:'01',t:'150 credits come off your balance.'},{n:'02',t:'You get an activation link on the next screen.'},{n:'03',t:'Apply through the link — approval is usually same-day.'}],
+        codeLabel:'Activation link', code:'sablefin.com/axal/act-4RJ9', hasLink:true, linkLabel:'Open Sablefin',
+        codeNote:'The link carries the promotion. Applying directly on their site will not attach it.',
+        doneTitle:'Perk claimed', doneBody:'Your activation link is below. Sablefin approval is subject to their own KYB checks.',
+        doneSteps:[{t:'Apply within 30 days or the link expires.',icon:I.clock,tone:AMB},{t:'Approval is theirs, not ours — we cannot expedite it.',icon:I.alert,tone:MUT}],
+        fine:'Claiming does not guarantee account approval. Credits are not refunded if Sablefin decline.',
+        expiryLabel:'Apply by', expiryDays:30, method:'Link' },
+
+      { k:'oakbridge', partner:'Oakbridge Talent', logo:'OT', bg:'#b45309', cat:'Recruiting',
+        offer:'First engineering placement at 12%', kind:'credits', credits:600, rating:'4.2',
+        blurb:'Down from their standard 22% of first-year salary. Applies to one placement.',
+        detail:'Contingency search — you pay nothing until a hire starts. The reduced rate applies to your first placement only; subsequent roles revert to 18% for platform members.',
+        steps:[{n:'01',t:'600 credits come off your balance.'},{n:'02',t:'Oakbridge receive your open role.'},{n:'03',t:'A recruiter calls you within three business days to scope it.'}],
+        doneTitle:'Introduction sent', doneBody:'Oakbridge have your role details. A recruiter will call within three business days.',
+        doneSteps:[{t:'Have a written scorecard ready — they will ask for one.',icon:I.check,tone:GRN},{t:'The 12% rate is held for 60 days from today.',icon:I.clock,tone:AMB}],
+        fine:'Sharing your open role and headcount plan with Oakbridge Talent.',
+        expiryLabel:'Rate held', expiryDays:60, method:'Introduction' },
+
+      { k:'meridian', partner:'Meridian Analytics', logo:'MA', bg:'#0f766e', cat:'Tools',
+        offer:'Growth plan free for 6 months', kind:'tier', tier:'Studio', rating:'4.6',
+        blurb:'Product analytics with unlimited events. Worth $2,940 over the period.',
+        detail:'Full Growth plan, not a limited trial. After six months it converts to their standard rate unless you cancel. No card required to start.',
+        tierNote:'Included with Studio and above.',
+        steps:[{n:'01',t:'No credits are used — this is included in your plan.'},{n:'02',t:'You get an activation link on the next screen.'},{n:'03',t:'Sign up through the link to attach the six months.'}],
+        codeLabel:'Activation link', code:'meridian.io/axal/growth-6mo', hasLink:true, linkLabel:'Open Meridian',
+        codeNote:'Signing up outside this link starts a 14-day trial instead.',
+        doneTitle:'Perk claimed', doneBody:'Your activation link is below and saved in My perks.',
+        doneSteps:[{t:'Set a calendar reminder for month five — it auto-converts.',icon:I.clock,tone:AMB},{t:'No card is required to activate.',icon:I.check,tone:GRN}],
+        fine:'Converts to the standard rate after six months unless cancelled.',
+        expiryLabel:'Activate by', expiryDays:45, method:'Link' },
+
+      { k:'linfield', partner:'Linfield Studio', logo:'LS', bg:'#be185d', cat:'GTM',
+        offer:'Positioning sprint at $4,500', kind:'money', money:'$4,500', rating:'4.8',
+        blurb:'Two-week engagement: ICP definition, messaging hierarchy and a rewritten homepage. Normally $7,000.',
+        detail:'Delivered as a fixed-scope engagement through the platform, so it is invoiced and paid here with the usual dispute protection. Two revision rounds included.',
+        moneyNote:'invoiced through the platform · net 14',
+        steps:[{n:'01',t:'No credits are used — this is a paid engagement.'},{n:'02',t:'Linfield send a scope confirmation within one business day.'},{n:'03',t:'You are invoiced on acceptance, net 14.'}],
+        doneTitle:'Request sent', doneBody:'Linfield Studio have your request. They will send a scope confirmation within one business day.',
+        doneSteps:[{t:'Nothing is charged until you accept the scope.',icon:I.check,tone:GRN},{t:'Paid engagements carry the platform dispute process.',icon:I.lock,tone:BLU}],
+        fine:'No charge is made until you accept the scope in writing.',
+        expiryLabel:'Quote valid', expiryDays:30, method:'Engagement' },
+
+      { k:'castellan', partner:'Castellan Legal', logo:'CL', bg:'#7c3aed', cat:'Legal',
+        offer:'2 hours of IP counsel', kind:'credits', credits:250, rating:'4.5',
+        blurb:'Trademark clearance, IP assignment review, or open-source licence questions.',
+        detail:'Two hours with a named IP attorney, used in one or two sittings within 60 days. Does not include filing fees.',
+        steps:[{n:'01',t:'250 credits come off your balance.'},{n:'02',t:'Castellan receive your question in advance.'},{n:'03',t:'Their scheduler emails you within two business days.'}],
+        doneTitle:'Introduction sent', doneBody:'Castellan have your brief. Their scheduler will email you within two business days.',
+        doneSteps:[{t:'Send the specific question ahead — the clock starts on the call.',icon:I.alert,tone:AMB},{t:'Two hours, usable across two sittings within 60 days.',icon:I.clock,tone:MUT}],
+        fine:'Sharing your question summary with Castellan Legal.',
+        expiryLabel:'Use by', expiryDays:60, method:'Introduction' },
+
+      { k:'ravello', partner:'Ravello Cloud', logo:'RV', bg:'#1d4ed8', cat:'Cloud',
+        offer:'$2,000 credits + solutions review', kind:'credits', credits:200, rating:'',
+        blurb:'Credits plus a two-hour architecture review with a solutions engineer.',
+        detail:'Newer partner — no platform rating yet. Credits apply to compute only, not managed services. The architecture review is genuinely technical, not a sales call.',
+        steps:[{n:'01',t:'200 credits come off your balance.'},{n:'02',t:'You get a code and a scheduling link.'},{n:'03',t:'Book the review whenever suits — no expiry on that half.'}],
+        codeLabel:'Redemption code', code:'RAV-AX-3382-BQ',
+        codeNote:'Compute credits only. Managed services are excluded.',
+        doneTitle:'Credits claimed', doneBody:'Your code is below, and a scheduling link has been emailed for the architecture review.',
+        doneSteps:[{t:'Credits expire 6 months from redemption.',icon:I.clock,tone:AMB},{t:'This partner has no rating yet — you would be among the first.',icon:I.alert,tone:MUT}],
+        fine:'Ravello joined the marketplace this month and has no founder ratings yet.',
+        expiryLabel:'Expires', expiryDays:180, method:'Code' },
+
+      { k:'tessellate', partner:'Tessellate', logo:'TS', bg:'#0f766e', cat:'Tools',
+        offer:'12 months of design tooling', kind:'credits', credits:3200, rating:'4.3',
+        blurb:'Team plan for up to 10 seats. Worth $4,800 at list.',
+        detail:'Full team plan including their handoff and version-history features. Twelve months from activation, then standard rate.',
+        steps:[{n:'01',t:'3,200 credits come off your balance.'},{n:'02',t:'You get an activation code.'},{n:'03',t:'Apply it in Tessellate billing.'}],
+        codeLabel:'Activation code', code:'TSL-AXAL-9920-KD',
+        codeNote:'Applies to new Tessellate accounts only.',
+        doneTitle:'Perk claimed', doneBody:'Your activation code is below and saved in My perks.',
+        doneSteps:[{t:'New accounts only — existing subscribers cannot apply it.',icon:I.alert,tone:AMB}],
+        fine:'Credits are non-refundable once the code is issued.',
+        expiryLabel:'Activate by', expiryDays:60, method:'Code' },
+
+      { k:'brayton', partner:'Brayton Payroll', logo:'BP', bg:'#116632', cat:'Banking',
+        offer:'Payroll setup + 4 months free', kind:'tier', tier:'Growth', rating:'4.1',
+        blurb:'Multi-state payroll, contractor payments and year-end filings.',
+        detail:'Includes migration from an existing provider. Four months free applies to the platform fee, not to per-employee charges.',
+        tierNote:'Included with your Growth plan.',
+        steps:[{n:'01',t:'No credits are used.'},{n:'02',t:'Brayton receive your headcount and states.'},{n:'03',t:'Onboarding specialist calls within two business days.'}],
+        doneTitle:'Introduction sent', doneBody:'Brayton have your details. An onboarding specialist will call within two business days.',
+        doneSteps:[{t:'Free months cover the platform fee, not per-employee charges.',icon:I.alert,tone:AMB},{t:'Migration from an existing provider is included.',icon:I.check,tone:GRN}],
+        fine:'Sharing your headcount and operating states with Brayton Payroll.',
+        expiryLabel:'Claim by', expiryDays:90, method:'Introduction' },
+
+      { k:'axal-dd', partner:'Axal VC', logo:'AX', bg:'#7c3aed', cat:'Tools',
+        offer:'Data room, 12 months', kind:'money', money:'$1,200', rating:'',
+        blurb:'Platform product. Investor-facing data room with per-audience access scoping and an access log.',
+        detail:'A platform product rather than a partner perk — billed by Axal VC, on your existing invoice. Included free on Growth; this price applies to Explorer and Studio.',
+        moneyNote:'billed by Axal VC · added to your invoice',
+        platform:true,
+        steps:[{n:'01',t:'Added to your existing Axal VC invoice.'},{n:'02',t:'Available immediately — no activation step.'},{n:'03',t:'Charged on your next billing date.'}],
+        doneTitle:'Added to your plan', doneBody:'The data room is available now. It appears on your next Axal VC invoice.',
+        doneSteps:[{t:'No activation needed — it is already in your sidebar.',icon:I.check,tone:GRN}],
+        fine:'Charged on your next billing date. Cancel any time before then.',
+        expiryLabel:'Term', expiryDays:365, method:'Instant' },
+    ];
+
+    // ============ CLAIMED STATE (seeded + session) ============
+    const SEED_CLAIMS = {
+      meridian: { on:'Jul 28, 2026', spent:0 },
+      castellan: { on:'Aug 2, 2026', spent:250 },
+    };
+    const allClaims = Object.assign({}, SEED_CLAIMS, st.claimed);
+    const spentTotal = Object.keys(allClaims).reduce((a,k) => a + (allClaims[k].spent || 0), 0);
+    const balance = BALANCE_START - spentTotal;
+
+    const perkOf = (k) => CATALOG.find(p => p.k === k);
+    const costOf = (p) => p.kind === 'credits' ? p.credits : 0;
+    const affordable = (p) => p.kind !== 'credits' ? true : p.credits <= balance;
+    const tierOk = (p) => p.kind !== 'tier' ? true : myTier >= TIER_RANK[p.tier];
+    const claimedAlready = (k) => !!allClaims[k];
+
+    const costLabelOf = (p) => p.kind === 'credits' ? n0(p.credits) + ' credits'
+      : p.kind === 'tier' ? 'Included in ' + p.tier
+      : p.money;
+    const costToneOf = (p) => p.kind === 'credits' ? (affordable(p) ? INK : MUT)
+      : p.kind === 'tier' ? (tierOk(p) ? GRN : MUT) : INK;
+    const costNoteOf = (p) => p.kind === 'credits' ? (affordable(p) ? '' : n0(p.credits - balance) + ' short')
+      : p.kind === 'tier' ? (tierOk(p) ? 'your plan' : 'needs ' + p.tier)
+      : (p.platform ? 'platform product' : 'paid engagement');
+
+    const ctaOf = (p) => {
+      if (claimedAlready(p.k)) return { label:'Claimed', live:false, style:'flex:none;padding:7px 14px;border-radius:9px;font-size:11.5px;font-weight:700;background:'+(dark?'rgba(17,102,50,.16)':'rgba(17,102,50,.1)')+';color:'+GRN };
+      if (p.kind === 'credits' && !affordable(p)) return { label:'Not enough credits', live:false, style:'flex:none;padding:7px 14px;border-radius:9px;font-size:11.5px;font-weight:600;background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+MUT };
+      if (p.kind === 'tier' && !tierOk(p)) return { label:'Upgrade to claim', live:true, style:'flex:none;padding:7px 14px;border-radius:9px;font-size:11.5px;font-weight:700;border:1px solid '+(dark?'rgba(124,58,237,.4)':'rgba(124,58,237,.3)')+';color:'+VIO };
+      return { label: p.kind === 'money' ? 'Buy' : 'Claim', live:true, style:'flex:none;padding:7px 15px;border-radius:9px;font-size:11.5px;font-weight:700;background:'+V+';color:#fff' };
+    };
+
+    const decorate = (p) => {
+      const cta = ctaOf(p);
+      return { k:p.k, partner:p.partner, logo:p.logo, cat:p.cat, offer:p.offer, blurb:p.blurb,
+        logoStyle: av(p.bg, 36), catChip: catChipOf(p.cat),
+        rating: p.rating || '', noRating: !p.rating,
+        cost: costLabelOf(p), costTone: costToneOf(p), costNote: costNoteOf(p),
+        cta: cta.label, ctaStyle: cta.style,
+        liveClass: cta.live ? 'pk-live' : '',
+        cardStyle:'border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;border:1px solid '
+          + (claimedAlready(p.k) ? (dark ? 'rgba(17,102,50,.3)' : 'rgba(17,102,50,.22)') : (dark ? '#2a2833' : '#e5e3ec'))
+          + (cta.live ? '' : ';opacity:.88'),
+        gateNote: (p.kind === 'tier' && !tierOk(p)) ? 'Available on ' + p.tier + ' and above' : '',
+        gateWrap:'margin-top:11px;padding:8px 11px;border-radius:9px;font-size:10.5px;line-height:1.5;background:'
+          + (dark ? 'rgba(124,58,237,.1)' : 'rgba(124,58,237,.05)') + ';color:' + VIO,
+        editorial: p.editorial || '',
+        editWrap:'display:flex;gap:9px;align-items:flex-start;margin-top:13px;padding:10px 13px;border-radius:10px;font-size:11px;line-height:1.6;background:'
+          + (dark ? 'rgba(124,58,237,.09)' : 'rgba(124,58,237,.045)') + ';color:' + VIO };
+    };
+
+    // ============ FILTERS ============
+    const CATS = ['All'].concat(Object.keys(CAT));
+    const catCount = (c) => CATALOG.filter(p => c === 'All' || p.cat === c).length;
+    const catFilters = CATS.map(c => ({ label:c, n: c === 'All' ? '' : String(catCount(c)),
+      style: seg(st.cat === c),
+      nStyle:'font-size:9.5px;font-weight:700;opacity:.7',
+      go: () => this.setState({ cat:c }) }));
+
+    const AFFORD = [
+      { k:'all', l:'Everything' },
+      { k:'afford', l:'What I can claim' },
+      { k:'free', l:'No credits needed' },
+    ];
+    const affordTabs = AFFORD.map(a => ({ label:a.l, style: seg(st.afford === a.k), go: () => this.setState({ afford:a.k }) }));
+
+    const passAfford = (p) => st.afford === 'all' ? true
+      : st.afford === 'free' ? (p.kind === 'tier' && tierOk(p))
+      : (affordable(p) && tierOk(p));
+
+    const featuredRaw = CATALOG.filter(p => p.featured);
+    const featured = featuredRaw.map(decorate);
+
+    const shownRaw = CATALOG.filter(p => !p.featured)
+      .filter(p => st.cat === 'All' || p.cat === st.cat)
+      .filter(passAfford);
+    const perks = shownRaw.map(decorate);
+
+    // ============ MY PERKS ============
+    const dayOf = (iso) => new Date(iso + 'T00:00:00Z');
+    const AS_OF = dayOf('2026-08-16');
+    const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
+    const fmtDate = (d) => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + d.getUTCFullYear();
+    const CLAIM_ISO = { meridian:'2026-07-28', castellan:'2026-08-02' };
+
+    const claimed = Object.keys(allClaims).map(k => {
+      const p = perkOf(k), c = allClaims[k];
+      const iso = CLAIM_ISO[k] || '2026-08-16';
+      const exp = addDays(dayOf(iso), p.expiryDays);
+      const daysLeft = Math.round((exp - AS_OF) / 86400000);
+      const soon = daysLeft <= 30;
+      const isNew = !!st.claimed[k];
+      return { offer:p.offer, partner:p.partner, logo:p.logo, logoStyle: av(p.bg, 36),
+        claimedOn: c.on,
+        paidWith: c.spent ? n0(c.spent) + ' credits' : (p.kind === 'tier' ? 'included in ' + p.tier : 'no credits'),
+        state: isNew ? 'Just claimed' : (p.method === 'Introduction' ? 'Awaiting partner' : 'Active'),
+        stateChip: isNew ? cViolet : (p.method === 'Introduction' ? cAmber : cGreen),
+        next: p.method === 'Introduction' ? p.doneBody : '',
+        hasCode: !!p.code, code: p.code || '', codeLabel: p.codeLabel || '',
+        hasLink: !!p.hasLink, linkLabel: p.linkLabel || '',
+        expiryLabel: p.expiryLabel, expiry: fmtDate(exp),
+        expiryNote: daysLeft > 0 ? daysLeft + ' days left' : 'expired',
+        expiryTone: soon ? AMB : INK,
+        wrapExtra: isNew ? 'border-color:' + (dark ? 'rgba(124,58,237,.4)' : 'rgba(124,58,237,.28)') : '' };
+    });
+
+    const mineStats = [
+      { k:'Claimed', v:String(claimed.length), tone:INK },
+      { k:'Credits spent', v:n0(spentTotal), tone:VIO },
+      { k:'Expiring in 30d', v:String(claimed.filter(c => /days left/.test(c.expiryNote) && parseInt(c.expiryNote,10) <= 30).length), tone: AMB },
+    ];
+
+    const LEDGER_BASE = [
+      { when:'Aug 2', what:'Castellan Legal · 2 hours IP counsel', why:'perk claimed', amount:'−250', tone:VIO, bal:2150 },
+      { when:'Jul 22', what:'Referral credit · Priya Menon joined', why:'founder referral, 250 credits each', amount:'+250', tone:GRN, bal:2400 },
+      { when:'Jul 8', what:'Growth plan monthly allowance', why:'1,000 credits, resets on the 8th', amount:'+1,000', tone:GRN, bal:2150 },
+      { when:'Jun 30', what:'Annual plan bonus', why:'paid annually, 1,150 credits', amount:'+1,150', tone:GRN, bal:1150 },
+    ];
+    // Running balance per row, accumulated in claim order, then reversed so the newest
+    // claim sits on top — matching LEDGER_BASE's reverse-chronological convention.
+    // A single scalar `balance` here would stamp every session row with the final figure.
+    let runningBal = BALANCE_START - (SEED_CLAIMS.castellan.spent || 0);
+    const sessionLedger = Object.keys(st.claimed).filter(k => st.claimed[k].spent).map(k => {
+      runningBal -= st.claimed[k].spent;
+      return { when:'Today', what: perkOf(k).partner + ' · ' + perkOf(k).offer, why:'perk claimed',
+        amount:'−' + n0(st.claimed[k].spent), tone:VIO, bal: runningBal };
+    }).reverse();
+    const ledger = sessionLedger.concat(LEDGER_BASE).map(l => Object.assign({}, l, { balance: n0(l.bal) }));
+
+    // ============ CLAIM MODAL ============
+    const selRaw = st.claim ? perkOf(st.claim) : null;
+    const selCost = selRaw ? costOf(selRaw) : 0;
+    const landed = !!(st.claim && st.claimed[st.claim]);
+    const after = balance - selCost;
+    const short = selRaw && selRaw.kind === 'credits' && selCost > balance;
+    const tierBlocked = selRaw && selRaw.kind === 'tier' && !tierOk(selRaw);
+    const canClaim = !!selRaw && !short && !tierBlocked;
+
+    const sel = selRaw ? {
+      partner:selRaw.partner, logo:selRaw.logo, logoStyleLg: av(selRaw.bg, 44),
+      cat:selRaw.cat, offer:selRaw.offer, detail:selRaw.detail,
+      usesCredits: selRaw.kind === 'credits', usesTier: selRaw.kind === 'tier', usesMoney: selRaw.kind === 'money',
+      costHeader: selRaw.kind === 'credits' ? 'Credit balance' : selRaw.kind === 'tier' ? 'Plan entitlement' : 'Price',
+      // Once the claim lands, `balance` already reflects the deduction — so the
+      // before/after pair must read (balance + cost) → balance, not balance → balance − cost.
+      creditCost: n0(selCost),
+      beforeLabel: n0(landed ? balance + selCost : balance),
+      afterLabel: n0(landed ? balance : Math.max(0, after)),
+      afterTone: (landed ? balance : after) < 0 ? RED : (landed ? balance : after) < 200 ? AMB : INK,
+      short, shortNote: short ? 'You are ' + n0(selCost - balance) + ' credits short. Credits refresh on the 8th, or claim something smaller.' : '',
+      tierNote: tierBlocked ? 'Needs ' + selRaw.tier + '. You are on ' + TIER + '.' : (selRaw.tierNote || ''),
+      money: selRaw.money || '', moneyNote: selRaw.moneyNote || '',
+      steps: selRaw.steps, fine: selRaw.fine,
+      doneTitle: selRaw.doneTitle, doneBody: selRaw.doneBody,
+      doneCode: selRaw.code || '', codeLabel: selRaw.codeLabel || '', codeNote: selRaw.codeNote || '',
+      doneSteps: selRaw.doneSteps,
+    } : {};
+
+    const claimBtnLabel = !selRaw ? '' : short ? 'Not enough credits'
+      : tierBlocked ? 'Upgrade to ' + selRaw.tier
+      : selRaw.kind === 'money' ? 'Request · ' + selRaw.money
+      : selRaw.kind === 'tier' ? 'Claim · included in ' + selRaw.tier
+      : 'Claim · ' + n0(selCost) + ' credits';
+
+    // ============ PARTNER SUBMIT ============
+    const sb = st.sub;
+    const METHODS = ['Code','Link','Introduction','Instant'];
+    const subFields = [
+      { k:'offer', label:'The offer, as a founder would read it', value:sb.offer, ph:'e.g. 3 months free business banking',
+        hint:'Lead with what they get, not your product name.' },
+      { k:'value', label:'Cash value', value:sb.value, ph:'e.g. $1,650', mono:true,
+        hint:'Used to order the marketplace and shown on the card.' },
+      { k:'cat', label:'Category', kind:'select', value:sb.cat, options: Object.keys(CAT) },
+      { k:'method', label:'How founders redeem it', kind:'select', value:sb.method, options: METHODS,
+        hint:'Introduction means you contact them. Code and Link are self-serve.' },
+      { k:'cap', label:'Claim cap', value:sb.cap, ph:'100', mono:true,
+        hint:'The listing pauses at the cap rather than overcommitting you.' },
+      { k:'dur', label:'Listing duration', kind:'select', value:sb.dur, options:['3 months','6 months','12 months','Ongoing'] },
+      { k:'blurb', label:'The detail', kind:'area', value:sb.blurb, ph:'What it covers, what it excludes, and any conditions.',
+        hint:'Exclusions stated here reduce support load later. Review favours listings that name them.' },
+    ].map(f => {
+      const kind = f.kind || 'text';
+      return Object.assign({}, f, {
+        isText: kind === 'text', isSelect: kind === 'select', isArea: kind === 'area',
+        monoClass: f.mono ? 'pk-num' : '', hint: f.hint || '', ph: f.ph || '',
+        set: this.setS(f.k),
+        options: (f.options || []).map(o => ({ label:o, selected: o === f.value })) });
+    });
+    const subOk = sb.offer.trim().length > 6 && sb.value.trim() && sb.blurb.trim().length > 20;
+
+    const prev = { partner:sb.partner, cat:sb.cat,
+      offer: sb.offer.trim() || 'Your offer appears here',
+      blurb: sb.blurb.trim() || 'The detail you write appears here — founders read this before claiming.',
+      cost: sb.value.trim() ? sb.value.trim() + ' value' : 'Value',
+      costTone: sb.value.trim() ? INK : MUT,
+      ratingNote:'Not yet rated' };
+
+    const criteria = [
+      { k:'Is the offer real', d:'A discount off an inflated list price reads as a discount. We check the standard price.', icon:I.check, tone:GRN },
+      { k:'Are exclusions stated', d:'Listings that hide conditions generate support tickets and get pulled.', icon:I.check, tone:GRN },
+      { k:'Can a seed-stage founder use it', d:'Perks requiring annual contracts or minimum spend rarely clear review.', icon:I.check, tone:GRN },
+      { k:'Does it duplicate something live', d:'We hold one or two perks per category so the marketplace stays legible.', icon:I.alert, tone:AMB },
+    ];
+
+    // One source for the partner's own listings. The analytics panel derives its subject
+    // from the Live row, so the header, the insight copy and the "live since" date cannot
+    // disagree with the submissions list one tab away.
+    const SUBS = [
+      { offer:'3 months free business banking', cat:'Banking', submitted:'Jun 12', live:'Jun 20', cap:100, state:'Live',
+        cost:1650, kindNote:'a banking perk' },
+      { offer:'Waived wire fees, 12 months', cat:'Banking', submitted:'Jul 19', cap:250, state:'Declined' },
+      { offer:'Treasury account, 50bps bonus', cat:'Banking', submitted:'Aug 14', cap:60, state:'In review' },
+    ];
+    const subChipOf = (s) => s === 'Live' ? cGreen : s === 'Declined' ? cRed : cAmber;
+    const SUBMISSIONS = SUBS.map(s => ({ offer:s.offer,
+      meta: s.cat + ' · submitted ' + s.submitted + ' · cap ' + s.cap,
+      state:s.state, chip: subChipOf(s.state) }));
+    const liveSub = SUBS.find(s => s.state === 'Live') || SUBS[0];
+
+    // ============ PARTNER ANALYTICS ============
+    const CAP = liveSub.cap;
+    const FUNNEL = [
+      { k:'Card views', n:1840, note:'Founders who saw the listing in the marketplace.' },
+      { k:'Opened the detail', n:412, note:'Clicked through to read what it covers.' },
+      { k:'Claimed', n:68, note:'Spent credits or claimed on tier.' },
+      { k:'Redeemed with you', n:51, note:'Reached your side and activated. This is the number that matters.' },
+    ];
+    const maxF = FUNNEL[0].n;
+    const funnel = FUNNEL.map((f,i) => {
+      const prevN = i > 0 ? FUNNEL[i-1].n : null;
+      const conv = prevN ? (f.n / prevN * 100) : null;
+      return { k:f.k, n:n0(f.n), note:f.note,
+        conv: conv === null ? '' : conv.toFixed(0) + '% of prior step',
+        convChip: conv === null ? cGrey : conv >= 60 ? cGreen : conv >= 20 ? cAmber : cGrey,
+        barStyle:'height:100%;width:'+(f.n / maxF * 100).toFixed(1)+'%;border-radius:5px;background:'+V+';opacity:'+(1 - i*0.14) };
+    });
+    const claimsN = 68, redeemedN = 51;
+    const anStats = [
+      { k:'Claims', v:n0(claimsN), note:'of a ' + CAP + ' cap', tone:INK },
+      { k:'Redemption rate', v:(redeemedN / claimsN * 100).toFixed(0) + '%', note:n0(redeemedN) + ' of ' + n0(claimsN) + ' reached activation', tone:GRN },
+      { k:'Founders reached', v:n0(claimsN), note:'distinct companies, not impressions', tone:VIO },
+      { k:'Cost per founder', v:'$' + n0(liveSub.cost * redeemedN / claimsN),
+        note:'$' + n0(liveSub.cost) + ' waived × ' + redeemedN + ' redeemed ÷ ' + claimsN + ' reached', tone:INK },
+    ];
+    const funnelInsight = 'The drop from ' + n0(FUNNEL[0].n) + ' views to ' + n0(FUNNEL[1].n) + ' opens is normal for '
+      + liveSub.kindNote + ' — founders open what they are shopping for. The number worth watching is '
+      + redeemedN + ' of ' + claimsN + ' activating: a ' + (redeemedN / claimsN * 100).toFixed(0)
+      + '% redemption rate means the offer survived contact with your own onboarding, which is where most perks quietly fail.';
+    const capPct = claimsN / CAP * 100;
+    const capBar = 'height:100%;width:'+capPct.toFixed(1)+'%;border-radius:99px;background:'+(capPct > 85 ? (dark ? '#fcd34d' : '#b45309') : V);
+    const REACHED = [
+      { co:'Northwind Data', initials:'ND', bg:'#1d4ed8', meta:'Seed · claimed Aug 12', state:'Activated', chip:cGreen },
+      { co:'Orrick Labs', initials:'OL', bg:'#0f766e', meta:'Pre-seed · claimed Aug 11', state:'Activated', chip:cGreen },
+      { co:'Halyard Security', initials:'HS', bg:'#334155', meta:'Pre-seed · claimed Aug 9', state:'Claimed', chip:cAmber },
+      { co:'Verity Health', initials:'VH', bg:'#be185d', meta:'Seed · claimed Aug 7', state:'Activated', chip:cGreen },
+      { co:'Lumenpath', initials:'LP', bg:'#b45309', meta:'Series A · claimed Aug 5', state:'Activated', chip:cGreen },
+    ].map(r => Object.assign({}, r, { avStyle: av(r.bg, 26) }));
+
+    // ============ TABS ============
+    const FOUNDER_TABS = [
+      { k:'market', l:'Marketplace', i:I.grid },
+      { k:'mine', l:'My perks', i:I.ticket, flag: String(claimed.length) },
+    ];
+    const PARTNER_TABS = [
+      { k:'submit', l:'Submit a perk', i:I.upload, flag:'1' },
+      { k:'analytics', l:'Performance', i:I.chart },
+    ];
+    const isFounder = st.side === 'founder';
+    const TABS = isFounder ? FOUNDER_TABS : PARTNER_TABS;
+    const activeTab = TABS.some(t => t.k === st.tab) ? st.tab : TABS[0].k;
+    const tabs = TABS.map(t => ({
+      label:t.l, icon:t.i, flag: t.flag || '',
+      go: () => this.setState({ tab:t.k }),
+      flagStyle:'display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:800;background:'
+        + (activeTab === t.k ? V : (dark ? '#2a2833' : '#f1f0f5')) + ';color:' + (activeTab === t.k ? '#fff' : MUT),
+      inkClass:'',
+      style:'display:flex;align-items:center;gap:7px;padding:0 0 11px;font-size:13px;font-weight:'+(activeTab === t.k ? '700' : '600')
+        + ';color:' + (activeTab === t.k ? VIO : MUT)
+        + ';border-bottom:2px solid ' + (activeTab === t.k ? V : 'transparent') + ';white-space:nowrap;flex:none',
+    }));
+    const sideTabs = [{ k:'founder', l:'Founder' }, { k:'partner', l:'Partner' }].map(s => ({
+      label:s.l, style: seg(st.side === s.k),
+      go: () => this.setState({ side:s.k, tab: s.k === 'founder' ? 'market' : 'submit' }) }));
+
+    return {
+      themeClass: dark ? 'pk-dark' : '',
+      themeIcon: dark ? I.sun : I.moon, themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      bagIcon:I.bag, coinIcon:I.coin, starIcon:I.star, checkIcon:I.check,
+      copyIcon:I.copy, outIcon:I.out, arrowIcon:I.arrow, quoteIcon:I.quote,
+      violet:VIO, green:GRN, amber:AMB,
+      chromeSub: isFounder
+        ? 'Northwind Data · ' + TIER + ' plan · ' + CATALOG.length + ' listings live'
+        : 'Sablefin · partner account · 1 listing live',
+      creditLabel: n0(balance), tierLabel: TIER + ' plan', tierChip: cViolet,
+      isFounder, sideTabs, tabs,
+      tabMarket: isFounder && activeTab === 'market',
+      tabMine: isFounder && activeTab === 'mine',
+      tabSubmit: !isFounder && activeTab === 'submit',
+      tabAnalytics: !isFounder && activeTab === 'analytics',
+
+      // marketplace
+      featured, featuredNote:'Two picks a month, chosen because a cohort actually used them and said so — not because a partner paid for placement.',
+      curationLine: CATALOG.length + ' listings · ' + Object.keys(CAT).length + ' categories',
+      catFilters, affordTabs, perks,
+      resultLine: perks.length + ' of ' + CATALOG.filter(p => !p.featured).length
+        + (st.cat === 'All' ? '' : ' in ' + st.cat)
+        + (st.afford === 'all' ? '' : st.afford === 'free' ? ' · included in your plan' : ' · within your balance'),
+      noResults: perks.length === 0,
+      noResultsNote: st.afford === 'afford'
+        ? 'Nothing in ' + (st.cat === 'All' ? 'the marketplace' : st.cat) + ' is within your ' + n0(balance) + '-credit balance. Credits refresh on the 8th.'
+        : 'Try another category, or widen the filter.',
+      clearFilters: () => this.setState({ cat:'All', afford:'all' }),
+      openPerk: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-perk]');
+        const k = n && n.getAttribute('data-perk');
+        if (!k) return;
+        const p = perkOf(k);
+        if (claimedAlready(k)) { this.setState({ tab:'mine' }); return; }
+        if (p.kind === 'credits' && !affordable(p)) return;
+        this.setState({ claim:k, claimStep:'review' });
+      },
+
+      // my perks
+      mineSub:'Everything you have claimed, with its code or next step and when it lapses. Nothing here expires silently — you get a reminder two weeks out.',
+      mineStats, claimed, ledger,
+
+      // claim modal
+      claimOpen: !!selRaw, sel,
+      claimReview: !!selRaw && st.claimStep === 'review',
+      claimDone: !!selRaw && st.claimStep === 'done',
+      closeClaim: () => this.setState({ claim:null, claimStep:'review' }),
+      shortWrap:'margin-top:11px;padding:9px 12px;border-radius:9px;font-size:11px;line-height:1.55;background:'
+        + (dark ? 'rgba(180,83,9,.12)' : 'rgba(180,83,9,.07)') + ';color:' + AMB,
+      claimBtnLabel,
+      claimBtnStyle:'margin-top:18px;padding:12px 0;border-radius:11px;text-align:center;font-size:13px;font-weight:700;'
+        + (canClaim ? 'background:'+V+';color:#fff'
+          : tierBlocked ? 'border:1px solid '+(dark?'rgba(124,58,237,.4)':'rgba(124,58,237,.3)')+';color:'+VIO
+          : 'background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+MUT+';cursor:not-allowed'),
+      confirmClaim: () => { if (canClaim) this.setState(s => ({
+        claimStep:'done',
+        claimed: Object.assign({}, s.claimed, { [s.claim]:{ on:'Aug 16, 2026', spent: selCost } }) })); },
+      goMine: () => this.setState({ claim:null, claimStep:'review', tab:'mine' }),
+
+      // partner submit
+      submitSub:'The marketplace is curated, so review is a real step — roughly one in three submissions goes live. Stating exclusions up front helps more than a bigger headline number.',
+      subFields, prev,
+      prevLogo:'SB', prevLogoStyle: av('#116632', 36), prevCatChip: catChipOf(sb.cat),
+      prevCtaStyle:'flex:none;padding:7px 15px;border-radius:9px;font-size:11.5px;font-weight:700;background:'+V+';color:#fff',
+      subBtnLabel: subOk ? 'Submit for review' : 'Fill the offer, value and detail',
+      subBtnStyle:'margin-top:18px;padding:12px 0;border-radius:11px;text-align:center;font-size:13px;font-weight:700;'
+        + (subOk ? 'background:'+V+';color:#fff' : 'background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+MUT+';cursor:not-allowed'),
+      submitPerk: () => { if (subOk) this.setState({ tab:'analytics' }); },
+      subFoot:'Review takes about five business days. You keep control of the cap and can pause the listing at any time.',
+      criteria, submissions: SUBMISSIONS,
+
+      // analytics
+      anSub:'Your ' + liveSub.offer.charAt(0).toLowerCase() + liveSub.offer.slice(1) + ' listing, live since '
+        + liveSub.live + '. Redemption rate is the number to watch — claims are cheap, activations are the distribution.',
+      anStats, anSince: liveSub.live + ', 2026', funnelTitle:'Claim funnel · ' + liveSub.offer,
+      funnel, funnelInsight,
+      capLine: n0(claimsN) + ' of ' + CAP + ' claimed', capBar,
+      capNote: 'At ' + capPct.toFixed(0) + '% the listing stays live. It pauses automatically at ' + CAP + ' rather than letting claims run past what you agreed to honour.',
+      reached: REACHED, reachedCount: n0(claimsN) + ' companies',
+      reachedNote:'Showing the five most recent. The full list, with each company\u2019s stage and claim date, syncs into your BD console as a lead source.',
+
+      stop: (e) => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>

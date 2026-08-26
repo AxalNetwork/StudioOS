@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .pf-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .pf-page{background:#f6f5f8;color:#18181b}
+    .pf-surface{background:#ffffff}
+    .pf-sunken{background:#faf9fc}
+    .pf-border{border-color:#e5e3ec}
+    .pf-bd-b{border-bottom-color:#e5e3ec}
+    .pf-bd-t{border-top-color:#e5e3ec}
+    .pf-bd-l{border-left-color:#e5e3ec}
+    .pf-text{color:#18181b}
+    .pf-muted{color:#6b6577}
+    .pf-strong{color:#3f3f46}
+    .pf-track{background:#e5e3ec}
+    .pf-tip{background:#18181b;color:#f4f3f7}
+
+    .pf-page.pf-dark{background:#0a090e;color:#ececf1}
+    .pf-dark .pf-surface{background:#17161d}
+    .pf-dark .pf-sunken{background:#1d1b25}
+    .pf-dark .pf-border{border-color:#2a2833}
+    .pf-dark .pf-bd-b{border-bottom-color:#2a2833}
+    .pf-dark .pf-bd-t{border-top-color:#2a2833}
+    .pf-dark .pf-bd-l{border-left-color:#2a2833}
+    .pf-dark .pf-text{color:#ececf1}
+    .pf-dark .pf-muted{color:#a5a0b2}
+    .pf-dark .pf-strong{color:#dcd9e4}
+    .pf-dark .pf-track{background:#26232f}
+    .pf-dark .pf-tip{background:#2f2c3a;color:#ececf1}
+
+    .pf-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .pf-btn:hover{filter:brightness(1.05)}
+    .pf-tab{cursor:pointer;transition:color .13s,border-color .13s}
+    .pf-seg{cursor:pointer;transition:background .13s,color .13s}
+    .pf-row{transition:background .12s}
+    .pf-row:hover{background:#faf9fc}
+    .pf-dark .pf-row:hover{background:#1d1b25}
+    .pf-th{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .pf-sort{cursor:pointer;transition:color .12s}
+    .pf-fade{animation:pfFade .2s ease}
+    @keyframes pfFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    /* methodology tooltip — hover only, no JS state */
+    .pf-hasTip{position:relative}
+    .pf-hasTip .pf-tipBox{opacity:0;visibility:hidden;transform:translateY(3px);transition:opacity .13s,transform .13s,visibility .13s}
+    .pf-hasTip:hover .pf-tipBox{opacity:1;visibility:visible;transform:none}
+    @media (max-width:1080px){.pf-2{grid-template-columns:1fr!important}.pf-3{grid-template-columns:1fr!important}.pf-4{grid-template-columns:1fr 1fr!important}.pf-wide{overflow-x:auto}}
+  </style>
+</helmet>
+
+<div class="pf-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="pf-surface pf-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:40">
+    <div style="max-width:1480px;margin:0 auto;padding:14px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0">
+          <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ gridIcon }}"></span>
+          </div>
+          <div style="min-width:0">
+            <div class="pf-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Portfolio</div>
+            <div class="pf-muted" style="font-size:11.5px;margin-top:1px">{{ chromeSub }}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="{{ asOfChip }}">{{ asOfLabel }}</span>
+          <div class="pf-btn pf-border pf-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+            {{ themeLabel }}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:20px;margin-top:14px;overflow-x:auto">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+          <div class="pf-tab" onClick="{{ t.go }}" style="{{ t.style }}">
+            <span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            <span>{{ t.label }}</span>
+            <sc-if value="{{ t.flag }}"><span style="{{ t.flagStyle }}">{{ t.flag }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1480px;margin:0 auto;padding:22px 24px 90px">
+
+  <!-- ============ 1 · OVERVIEW ============ -->
+  <sc-if value="{{ tabOverview }}">
+  <div class="pf-fade">
+
+    <!-- headline metrics -->
+    <div class="pf-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
+      <sc-for list="{{ metrics }}" as="m" hint-placeholder-count="4">
+        <div class="pf-surface pf-border pf-hasTip" style="border-width:1px;border-style:solid;border-radius:16px;padding:18px 20px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="pf-muted pf-th">{{ m.k }}</div>
+            <span class="pf-muted" style="width:12px;height:12px;display:flex;flex:none;opacity:.7" dangerouslySetInnerHTML="{{ infoIcon }}"></span>
+          </div>
+          <div class="pf-num pf-text" style="font-size:29px;font-weight:700;letter-spacing:-.035em;margin-top:8px">{{ m.v }}</div>
+          <div class="pf-muted" style="font-size:11px;margin-top:3px">{{ m.sub }}</div>
+          <div class="pf-tipBox pf-tip" style="position:absolute;top:calc(100% + 7px);left:14px;right:14px;z-index:30;border-radius:11px;padding:12px 14px;box-shadow:0 10px 30px rgba(10,9,14,.24)">
+            <div style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;opacity:.72">Methodology</div>
+            <div style="font-size:11.5px;line-height:1.6;margin-top:6px">{{ m.method }}</div>
+            <div class="pf-num" style="font-size:10.5px;opacity:.7;margin-top:8px">{{ m.asOf }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- capital bar -->
+    <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px;margin-top:16px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div class="pf-muted pf-th">Fund capital</div>
+        <div class="pf-muted pf-num" style="font-size:11px">{{ capitalLine }}</div>
+      </div>
+      <div class="pf-track" style="height:13px;border-radius:5px;overflow:hidden;display:flex;margin-top:13px">
+        <sc-for list="{{ capitalSegs }}" as="s" hint-placeholder-count="4">
+          <div style="{{ s.style }}" title="{{ s.label }}"></div>
+        </sc-for>
+      </div>
+      <div class="pf-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:15px">
+        <sc-for list="{{ capitalLegend }}" as="l" hint-placeholder-count="4">
+          <div>
+            <div style="display:flex;align-items:center;gap:7px">
+              <span style="width:9px;height:9px;border-radius:3px;background:{{ l.color }};border:1px solid {{ l.color }};flex:none"></span>
+              <div class="pf-muted pf-th" style="font-size:9px">{{ l.k }}</div>
+            </div>
+            <div class="pf-num pf-text" style="font-size:17px;font-weight:700;letter-spacing:-.02em;margin-top:5px">{{ l.v }}</div>
+            <div class="pf-muted" style="font-size:10.5px;margin-top:1px">{{ l.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- value creation -->
+    <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 24px;margin-top:16px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div>
+          <div class="pf-muted pf-th">Value creation</div>
+          <div class="pf-muted" style="font-size:11.5px;margin-top:4px">Cost basis against carrying value, by quarter</div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <sc-for list="{{ vcLegend }}" as="l" hint-placeholder-count="2">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="width:9px;height:9px;border-radius:3px;background:{{ l.color }};flex:none"></span>
+              <div class="pf-muted" style="font-size:10.5px">{{ l.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:flex-end;gap:10px;margin-top:18px;height:150px">
+        <sc-for list="{{ vcBars }}" as="b" hint-placeholder-count="7">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+            <div style="display:flex;align-items:flex-end;gap:3px;height:100%">
+              <div class="pf-hasTip" style="flex:1;display:flex;align-items:flex-end;height:100%">
+                <div style="{{ b.costStyle }}"></div>
+              </div>
+              <div class="pf-hasTip" style="flex:1;display:flex;align-items:flex-end;height:100%">
+                <div style="{{ b.fmvStyle }}"></div>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <sc-for list="{{ vcBars }}" as="b" hint-placeholder-count="7">
+          <div style="flex:1;min-width:0;text-align:center">
+            <div class="pf-num" style="font-size:10px;font-weight:700;color:{{ b.tone }}">{{ b.mult }}</div>
+            <div class="pf-muted pf-num" style="font-size:9.5px;margin-top:2px">{{ b.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="pf-bd-t" style="margin-top:14px;padding-top:13px;border-top-width:1px;border-top-style:solid">
+        <div class="pf-muted" style="font-size:11.5px;line-height:1.6">{{ vcNote }}</div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 2 · COMPANIES ============ -->
+  <sc-if value="{{ tabCompanies }}">
+  <div class="pf-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="min-width:0">
+        <div class="pf-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em">Positions</div>
+        <div class="pf-muted" style="font-size:12.5px;margin-top:4px">{{ tableSub }}</div>
+      </div>
+      <div class="pf-sunken pf-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;flex:none">
+        <sc-for list="{{ sortTabs }}" as="s" hint-placeholder-count="4">
+          <div class="pf-seg" onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+      <div class="pf-wide">
+        <div class="pf-sunken pf-bd-b" style="display:grid;grid-template-columns:2fr .85fr 1fr 1fr .8fr .75fr 1fr .8fr;border-bottom-width:1px;border-bottom-style:solid;min-width:1020px">
+          <div class="pf-muted pf-th" style="padding:9px 20px">Company</div>
+          <div class="pf-muted pf-th" style="padding:9px 10px">Stage</div>
+          <div class="pf-muted pf-th" style="padding:9px 10px;text-align:right">Invested</div>
+          <div class="pf-muted pf-th" style="padding:9px 10px;text-align:right">FMV</div>
+          <div class="pf-muted pf-th" style="padding:9px 10px;text-align:right">Multiple</div>
+          <div class="pf-muted pf-th" style="padding:9px 10px;text-align:center">Health</div>
+          <div class="pf-muted pf-th" style="padding:9px 10px">Last update</div>
+          <div class="pf-muted pf-th" style="padding:9px 20px 9px 10px;text-align:right">Runway</div>
+        </div>
+        <sc-for list="{{ positions }}" as="p" hint-placeholder-count="12">
+          <div class="pf-row pf-bd-b" data-co="{{ p.k }}" onClick="{{ openCo }}" style="display:grid;grid-template-columns:2fr .85fr 1fr 1fr .8fr .75fr 1fr .8fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:1020px;cursor:pointer;background:{{ p.rowBg }}">
+            <div style="padding:12px 20px;display:flex;align-items:center;gap:11px;min-width:0">
+              <div style="{{ p.avStyle }}">{{ p.initials }}</div>
+              <div style="min-width:0">
+                <div class="pf-strong" style="font-size:12.5px;font-weight:700">{{ p.name }}</div>
+                <div class="pf-muted" style="font-size:10.5px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.sector }}</div>
+              </div>
+            </div>
+            <div class="pf-muted" style="padding:12px 10px;font-size:11px">{{ p.stage }}</div>
+            <div style="padding:12px 10px;text-align:right">
+              <div class="pf-num pf-strong" style="font-size:12px;font-weight:600">{{ p.invested }}</div>
+              <div class="pf-muted pf-num" style="font-size:9.5px;margin-top:1px">{{ p.investedSplit }}</div>
+            </div>
+            <div class="pf-num pf-text" style="padding:12px 10px;font-size:12.5px;font-weight:700;text-align:right">{{ p.fmv }}</div>
+            <div class="pf-num" style="padding:12px 10px;font-size:12.5px;font-weight:700;text-align:right;color:{{ p.multTone }}">{{ p.mult }}</div>
+            <div style="padding:12px 10px;text-align:center">
+              <span style="{{ p.healthDot }}" title="{{ p.healthLabel }}"></span>
+            </div>
+            <div style="padding:12px 10px">
+              <div class="pf-num" style="font-size:11px;font-weight:600;color:{{ p.updTone }}">{{ p.lastUpdate }}</div>
+              <div class="pf-muted pf-num" style="font-size:9.5px;margin-top:1px">{{ p.updAge }}</div>
+            </div>
+            <div class="pf-num" style="padding:12px 20px 12px 10px;font-size:12px;font-weight:700;text-align:right;color:{{ p.runwayTone }}">{{ p.runway }}</div>
+          </div>
+        </sc-for>
+        <div class="pf-sunken" style="display:grid;grid-template-columns:2fr .85fr 1fr 1fr .8fr .75fr 1fr .8fr;align-items:center;min-width:1020px">
+          <div class="pf-text" style="padding:13px 20px;font-size:11.5px;font-weight:800">{{ posCount }} positions</div>
+          <div style="padding:13px 10px"></div>
+          <div class="pf-num pf-text" style="padding:13px 10px;font-size:12.5px;font-weight:800;text-align:right">{{ totalInvested }}</div>
+          <div class="pf-num pf-text" style="padding:13px 10px;font-size:12.5px;font-weight:800;text-align:right">{{ totalFmv }}</div>
+          <div class="pf-num pf-text" style="padding:13px 10px;font-size:12.5px;font-weight:800;text-align:right">{{ totalMult }}</div>
+          <div style="padding:13px 10px;text-align:center">
+            <div class="pf-muted pf-num" style="font-size:9.5px">{{ healthMix }}</div>
+          </div>
+          <div class="pf-muted" style="padding:13px 10px;font-size:10px">{{ updMix }}</div>
+          <div class="pf-muted pf-num" style="padding:13px 20px 13px 10px;font-size:10px;text-align:right">{{ runwayMix }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 3 · POSITION DETAIL ============ -->
+  <sc-if value="{{ tabPosition }}">
+  <div class="pf-fade">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <div class="pf-btn pf-border pf-muted" onClick="{{ backToTable }}" style="display:flex;align-items:center;gap:7px;padding:7px 13px;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600;background:transparent">
+        <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ backIcon }}"></span>
+        Positions
+      </div>
+      <div class="pf-sunken pf-border" style="display:flex;gap:4px;padding:3px;border-radius:9px;border-width:1px;border-style:solid;flex-wrap:wrap">
+        <sc-for list="{{ coPicker }}" as="c" hint-placeholder-count="4">
+          <div class="pf-seg" onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- position header -->
+    <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 26px">
+      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+        <div style="{{ co.avStyleLg }}">{{ co.initials }}</div>
+        <div style="min-width:0;flex:1">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="pf-text" style="font-size:20px;font-weight:800;letter-spacing:-.024em">{{ co.name }}</div>
+            <span style="{{ co.healthChip }}">{{ co.healthLabel }}</span>
+          </div>
+          <div class="pf-muted" style="font-size:12.5px;margin-top:5px;max-width:560px;line-height:1.6">{{ co.blurb }}</div>
+        </div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;flex:none">
+          <sc-for list="{{ co.stats }}" as="s" hint-placeholder-count="4">
+            <div style="text-align:right">
+              <div class="pf-muted pf-th" style="font-size:9px">{{ s.k }}</div>
+              <div class="pf-num" style="font-size:18px;font-weight:700;letter-spacing:-.022em;margin-top:4px;color:{{ s.tone }}">{{ s.v }}</div>
+              <div class="pf-muted pf-num" style="font-size:9.5px;margin-top:1px">{{ s.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div class="pf-2" style="display:grid;grid-template-columns:1fr 356px;gap:16px;align-items:start;margin-top:16px">
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <!-- cash-flow ledger -->
+        <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="pf-sunken pf-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div class="pf-muted pf-th">Cash-flow ledger</div>
+            <div class="pf-muted pf-num" style="font-size:11px">{{ co.ledgerLine }}</div>
+          </div>
+          <div class="pf-wide">
+            <div class="pf-sunken pf-bd-b" style="display:grid;grid-template-columns:.9fr 1.5fr 1.2fr 1fr;border-bottom-width:1px;border-bottom-style:solid;min-width:580px">
+              <div class="pf-muted pf-th" style="padding:8px 22px">Date</div>
+              <div class="pf-muted pf-th" style="padding:8px 10px">Event</div>
+              <div class="pf-muted pf-th" style="padding:8px 10px">Instrument</div>
+              <div class="pf-muted pf-th" style="padding:8px 22px 8px 10px;text-align:right">Amount</div>
+            </div>
+            <sc-for list="{{ co.ledger }}" as="l" hint-placeholder-count="4">
+              <div class="pf-row pf-bd-b" style="display:grid;grid-template-columns:.9fr 1.5fr 1.2fr 1fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:580px">
+                <div class="pf-num pf-muted" style="padding:11px 22px;font-size:11px">{{ l.date }}</div>
+                <div style="padding:11px 10px;min-width:0">
+                  <div class="pf-strong" style="font-size:12px;font-weight:600">{{ l.event }}</div>
+                  <sc-if value="{{ l.note }}"><div class="pf-muted" style="font-size:10px;margin-top:1px">{{ l.note }}</div></sc-if>
+                </div>
+                <div class="pf-muted" style="padding:11px 10px;font-size:11px">{{ l.instrument }}</div>
+                <div class="pf-num" style="padding:11px 22px 11px 10px;font-size:12.5px;font-weight:700;text-align:right;color:{{ l.tone }}">{{ l.amount }}</div>
+              </div>
+            </sc-for>
+            <div class="pf-sunken" style="display:grid;grid-template-columns:.9fr 1.5fr 1.2fr 1fr;align-items:center;min-width:580px">
+              <div style="padding:12px 22px"></div>
+              <div class="pf-text" style="padding:12px 10px;font-size:11.5px;font-weight:800">Net invested</div>
+              <div style="padding:12px 10px"></div>
+              <div class="pf-num pf-text" style="padding:12px 22px 12px 10px;font-size:13px;font-weight:800;text-align:right">{{ co.netInvested }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- mark history -->
+        <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="pf-sunken pf-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px">
+            <div class="pf-muted pf-th">Valuation mark history</div>
+          </div>
+          <div class="pf-wide">
+            <div class="pf-sunken pf-bd-b" style="display:grid;grid-template-columns:.9fr 1.4fr 1fr 1fr 1.3fr;border-bottom-width:1px;border-bottom-style:solid;min-width:640px">
+              <div class="pf-muted pf-th" style="padding:8px 22px">Date</div>
+              <div class="pf-muted pf-th" style="padding:8px 10px">Event</div>
+              <div class="pf-muted pf-th" style="padding:8px 10px;text-align:right">Post-money</div>
+              <div class="pf-muted pf-th" style="padding:8px 10px;text-align:right">Our FMV</div>
+              <div class="pf-muted pf-th" style="padding:8px 22px 8px 10px">Source</div>
+            </div>
+            <sc-for list="{{ co.marks }}" as="m" hint-placeholder-count="4">
+              <div class="pf-row pf-bd-b" style="display:grid;grid-template-columns:.9fr 1.4fr 1fr 1fr 1.3fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:640px">
+                <div class="pf-num pf-muted" style="padding:11px 22px;font-size:11px">{{ m.date }}</div>
+                <div class="pf-strong" style="padding:11px 10px;font-size:12px;font-weight:600">{{ m.event }}</div>
+                <div class="pf-num pf-muted" style="padding:11px 10px;font-size:11.5px;text-align:right">{{ m.post }}</div>
+                <div style="padding:11px 10px;text-align:right">
+                  <div class="pf-num pf-text" style="font-size:12.5px;font-weight:700">{{ m.fmv }}</div>
+                  <sc-if value="{{ m.delta }}"><div class="pf-num" style="font-size:9.5px;margin-top:1px;color:{{ m.deltaTone }}">{{ m.delta }}</div></sc-if>
+                </div>
+                <div style="padding:11px 22px 11px 10px"><span style="{{ m.srcChip }}">{{ m.source }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- KPI small multiples -->
+        <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div class="pf-muted pf-th">KPI trends · from founder updates</div>
+            <div class="pf-muted pf-num" style="font-size:11px">{{ co.kpiLine }}</div>
+          </div>
+          <div class="pf-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:16px">
+            <sc-for list="{{ co.kpis }}" as="k" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+                  <div class="pf-muted pf-th" style="font-size:9px">{{ k.name }}</div>
+                  <div class="pf-num" style="font-size:10px;font-weight:700;color:{{ k.trendTone }}">{{ k.trend }}</div>
+                </div>
+                <div class="pf-num pf-text" style="font-size:19px;font-weight:700;letter-spacing:-.022em;margin-top:5px">{{ k.latest }}</div>
+                <div style="display:flex;align-items:flex-end;gap:2px;height:38px;margin-top:9px">
+                  <sc-for list="{{ k.bars }}" as="b" hint-placeholder-count="6">
+                    <div style="{{ b.style }}" title="{{ b.label }}"></div>
+                  </sc-for>
+                </div>
+                <div class="pf-muted pf-num" style="font-size:9.5px;margin-top:5px">{{ k.range }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <!-- reserve rail -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="pf-muted pf-th">Reserve line</div>
+          <div class="pf-num pf-text" style="font-size:26px;font-weight:700;letter-spacing:-.03em;margin-top:8px">{{ co.reserve }}</div>
+          <div class="pf-muted" style="font-size:11.5px;line-height:1.6;margin-top:5px">{{ co.reserveNote }}</div>
+          <div style="display:flex;flex-direction:column;gap:0;margin-top:14px">
+            <sc-for list="{{ co.reserveRows }}" as="r" hint-placeholder-count="4">
+              <div class="pf-bd-t" style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top-width:1px;border-top-style:solid">
+                <div class="pf-muted" style="font-size:11.5px">{{ r.k }}</div>
+                <div class="pf-num pf-strong" style="font-size:11.5px;font-weight:700">{{ r.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="pf-btn pf-sunken pf-border pf-strong" style="margin-top:14px;padding:9px 0;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600;text-align:center;display:flex;align-items:center;justify-content:center;gap:7px">
+            Open reserve simulator
+            <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ outIcon }}"></span>
+          </div>
+        </div>
+
+        <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="pf-muted pf-th">Latest founder update</div>
+          <div class="pf-num pf-muted" style="font-size:11px;margin-top:6px">{{ co.updateWhen }}</div>
+          <div class="pf-strong" style="font-size:12.5px;line-height:1.65;margin-top:9px">{{ co.updateQuote }}</div>
+          <div class="pf-bd-t" style="margin-top:13px;padding-top:12px;border-top-width:1px;border-top-style:solid;display:flex;align-items:center;gap:9px">
+            <div style="{{ co.founderAv }}">{{ co.founderInitials }}</div>
+            <div style="min-width:0;flex:1">
+              <div class="pf-strong" style="font-size:11.5px;font-weight:700">{{ co.founder }}</div>
+              <div class="pf-muted" style="font-size:10px;margin-top:1px">{{ co.founderRole }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 4 · KPI COLLECTION ============ -->
+  <sc-if value="{{ tabKpi }}">
+  <div class="pf-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="min-width:0">
+        <div class="pf-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em">KPI collection</div>
+        <div class="pf-muted" style="font-size:12.5px;margin-top:4px;max-width:600px;line-height:1.6">{{ kpiSub }}</div>
+      </div>
+      <div style="flex:none;text-align:right">
+        <div class="pf-muted pf-th">Reported this period</div>
+        <div class="pf-num pf-text" style="font-size:22px;font-weight:700;letter-spacing:-.026em;margin-top:5px">{{ complianceLabel }}</div>
+        <div class="pf-muted" style="font-size:10.5px;margin-top:2px">{{ complianceNote }}</div>
+      </div>
+    </div>
+
+    <div class="pf-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+      <!-- requested set -->
+      <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="pf-sunken pf-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div class="pf-muted pf-th">Requested KPI set</div>
+          <div class="pf-sunken pf-border" style="display:flex;gap:2px;padding:2px;border-radius:8px;border-width:1px;border-style:solid">
+            <sc-for list="{{ cadenceTabs }}" as="c" hint-placeholder-count="2">
+              <div class="pf-seg" onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+        <sc-for list="{{ kpiSet }}" as="k" hint-placeholder-count="6">
+          <div class="pf-bd-b" style="display:flex;align-items:center;gap:13px;padding:13px 22px;border-bottom-width:1px;border-bottom-style:solid">
+            <div style="min-width:0;flex:1">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div class="pf-strong" style="font-size:12.5px;font-weight:700">{{ k.name }}</div>
+                <sc-if value="{{ k.required }}"><span style="{{ reqChip }}">Required</span></sc-if>
+              </div>
+              <div class="pf-muted" style="font-size:11px;margin-top:3px;line-height:1.5">{{ k.def }}</div>
+            </div>
+            <div class="pf-muted pf-num" style="font-size:10.5px;flex:none">{{ k.unit }}</div>
+            <div class="pf-muted" style="font-size:10.5px;flex:none;width:76px;text-align:right">{{ k.appliesTo }}</div>
+          </div>
+        </sc-for>
+        <div class="pf-sunken" style="padding:13px 22px">
+          <div class="pf-muted" style="font-size:11.5px;line-height:1.6">{{ kpiSetNote }}</div>
+        </div>
+      </div>
+
+      <!-- compliance strip -->
+      <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="pf-sunken pf-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div class="pf-muted pf-th">{{ periodLabel }}</div>
+          <sc-if value="{{ hasOverdue }}">
+            <div class="pf-btn" onClick="{{ nudgeAll }}" style="padding:6px 12px;border-radius:8px;background:rgba(124,58,237,.1);color:#6d28d9;font-size:11px;font-weight:700">{{ nudgeAllLabel }}</div>
+          </sc-if>
+        </div>
+        <sc-for list="{{ compliance }}" as="c" hint-placeholder-count="12">
+          <div class="pf-row pf-bd-b" style="display:flex;align-items:center;gap:11px;padding:11px 22px;border-bottom-width:1px;border-bottom-style:solid">
+            <span style="{{ c.dotStyle }}">
+              <sc-if value="{{ c.glyph }}"><span style="width:9px;height:9px;display:flex" dangerouslySetInnerHTML="{{ c.icon }}"></span></sc-if>
+            </span>
+            <div style="min-width:0;flex:1">
+              <div class="pf-strong" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.name }}</div>
+              <div class="pf-muted pf-num" style="font-size:10px;margin-top:1px">{{ c.detail }}</div>
+            </div>
+            <sc-if value="{{ c.canNudge }}">
+              <div class="pf-btn" data-nudge="{{ c.k }}" onClick="{{ nudgeOne }}" style="{{ c.nudgeStyle }}">{{ c.nudgeLabel }}</div>
+            </sc-if>
+            <sc-if value="{{ c.noNudge }}">
+              <span style="{{ c.chip }}">{{ c.state }}</span>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 5 · ALERTS ============ -->
+  <sc-if value="{{ tabAlerts }}">
+  <div class="pf-fade">
+    <div style="margin-bottom:16px">
+      <div class="pf-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em">Alerts</div>
+      <div class="pf-muted" style="font-size:12.5px;margin-top:4px;max-width:600px;line-height:1.6">Four rules, evaluated against the positions above. Every alert names the rule that fired and links to the position rather than restating it.</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <sc-for list="{{ alertRules }}" as="r" hint-placeholder-count="4">
+        <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="pf-sunken pf-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:13px 22px;display:flex;align-items:center;gap:13px;flex-wrap:wrap">
+            <span style="{{ r.iconWrap }}">
+              <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ r.icon }}"></span>
+            </span>
+            <div style="min-width:0;flex:1">
+              <div class="pf-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.012em">{{ r.name }}</div>
+              <div class="pf-muted pf-num" style="font-size:10.5px;margin-top:2px">{{ r.rule }}</div>
+            </div>
+            <span style="{{ r.countChip }}">{{ r.countLabel }}</span>
+          </div>
+          <sc-if value="{{ r.hasHits }}">
+            <sc-for list="{{ r.hits }}" as="h" hint-placeholder-count="2">
+              <div class="pf-row pf-bd-b" data-co="{{ h.k }}" onClick="{{ openCo }}" style="display:flex;align-items:center;gap:12px;padding:12px 22px;border-bottom-width:1px;border-bottom-style:solid;cursor:pointer">
+                <div style="{{ h.avStyle }}">{{ h.initials }}</div>
+                <div style="min-width:0;flex:1">
+                  <div class="pf-strong" style="font-size:12.5px;font-weight:600">{{ h.name }}</div>
+                  <div class="pf-muted" style="font-size:10.5px;margin-top:1px">{{ h.why }}</div>
+                </div>
+                <div class="pf-num" style="font-size:12px;font-weight:700;color:{{ h.tone }};flex:none">{{ h.value }}</div>
+                <span class="pf-muted" style="width:13px;height:13px;display:flex;flex:none" dangerouslySetInnerHTML="{{ chevIcon }}"></span>
+              </div>
+            </sc-for>
+          </sc-if>
+          <sc-if value="{{ r.noHits }}">
+            <div style="padding:16px 22px">
+              <div class="pf-muted" style="font-size:11.5px">{{ r.clearNote }}</div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ 6 · LP EXPORT ============ -->
+  <sc-if value="{{ tabExport }}">
+  <div class="pf-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="min-width:0">
+        <div class="pf-text" style="font-size:19px;font-weight:800;letter-spacing:-.022em">Quarterly LP report</div>
+        <div class="pf-muted" style="font-size:12.5px;margin-top:4px;max-width:600px;line-height:1.6">Preview exactly what LPs receive, then hand off to the reporting flow. Nothing here is retyped — every figure traces to a position or a mark.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+        <div class="pf-sunken pf-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid">
+          <sc-for list="{{ periodTabs }}" as="p" hint-placeholder-count="3">
+            <div class="pf-seg" onClick="{{ p.go }}" style="{{ p.style }}">{{ p.label }}</div>
+          </sc-for>
+        </div>
+        <div class="pf-btn" style="padding:9px 17px;border-radius:9px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px">
+          <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ outIcon }}"></span>
+          Hand off to LP reporting
+        </div>
+      </div>
+    </div>
+
+    <div class="pf-surface pf-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+      <div class="pf-sunken pf-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:20px 28px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div>
+          <div class="pf-muted pf-th">Preview · {{ exportPeriod }}</div>
+          <div class="pf-text" style="font-size:17px;font-weight:800;letter-spacing:-.02em;margin-top:5px">Axal VC Ventures Fund II, L.P.</div>
+          <div class="pf-muted" style="font-size:11.5px;margin-top:3px">{{ exportSub }}</div>
+        </div>
+        <div class="pf-muted pf-num" style="font-size:11px;text-align:right;flex:none">{{ exportRef }}</div>
+      </div>
+
+      <div style="padding:22px 28px">
+        <div class="pf-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px">
+          <sc-for list="{{ exportMetrics }}" as="m" hint-placeholder-count="4">
+            <div>
+              <div class="pf-muted pf-th">{{ m.k }}</div>
+              <div class="pf-num pf-text" style="font-size:20px;font-weight:700;letter-spacing:-.026em;margin-top:6px">{{ m.v }}</div>
+              <div class="pf-muted" style="font-size:10px;margin-top:2px">{{ m.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="pf-bd-t" style="margin-top:20px;padding-top:18px;border-top-width:1px;border-top-style:solid">
+          <div class="pf-muted pf-th" style="margin-bottom:12px">Per-position summary</div>
+          <div class="pf-wide">
+            <div class="pf-bd-b" style="display:grid;grid-template-columns:1.7fr .8fr 1fr 1fr .8fr 1.3fr;border-bottom-width:1px;border-bottom-style:solid">
+              <div class="pf-muted pf-th" style="padding:0 0 8px">Company</div>
+              <div class="pf-muted pf-th" style="padding:0 8px 8px">Stage</div>
+              <div class="pf-muted pf-th" style="padding:0 8px 8px;text-align:right">Invested</div>
+              <div class="pf-muted pf-th" style="padding:0 8px 8px;text-align:right">FMV</div>
+              <div class="pf-muted pf-th" style="padding:0 8px 8px;text-align:right">Multiple</div>
+              <div class="pf-muted pf-th" style="padding:0 0 8px 8px">Mark basis</div>
+            </div>
+            <sc-for list="{{ exportRows }}" as="r" hint-placeholder-count="12">
+              <div class="pf-bd-b" style="display:grid;grid-template-columns:1.7fr .8fr 1fr 1fr .8fr 1.3fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid">
+                <div class="pf-strong" style="padding:9px 0;font-size:11.5px;font-weight:600">{{ r.name }}</div>
+                <div class="pf-muted" style="padding:9px 8px;font-size:10.5px">{{ r.stage }}</div>
+                <div class="pf-num pf-strong" style="padding:9px 8px;font-size:11.5px;font-weight:600;text-align:right">{{ r.invested }}</div>
+                <div class="pf-num pf-text" style="padding:9px 8px;font-size:11.5px;font-weight:700;text-align:right">{{ r.fmv }}</div>
+                <div class="pf-num" style="padding:9px 8px;font-size:11.5px;font-weight:700;text-align:right;color:{{ r.tone }}">{{ r.mult }}</div>
+                <div class="pf-muted" style="padding:9px 0 9px 8px;font-size:10px">{{ r.basis }}</div>
+              </div>
+            </sc-for>
+            <div style="display:grid;grid-template-columns:1.7fr .8fr 1fr 1fr .8fr 1.3fr;align-items:center">
+              <div class="pf-text" style="padding:11px 0;font-size:11.5px;font-weight:800">Total</div>
+              <div style="padding:11px 8px"></div>
+              <div class="pf-num pf-text" style="padding:11px 8px;font-size:12px;font-weight:800;text-align:right">{{ totalInvested }}</div>
+              <div class="pf-num pf-text" style="padding:11px 8px;font-size:12px;font-weight:800;text-align:right">{{ totalFmv }}</div>
+              <div class="pf-num pf-text" style="padding:11px 8px;font-size:12px;font-weight:800;text-align:right">{{ totalMult }}</div>
+              <div style="padding:11px 0 11px 8px"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pf-sunken pf-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:15px 18px;margin-top:20px">
+          <div class="pf-strong" style="font-size:11.5px;font-weight:700">Valuation policy</div>
+          <div class="pf-muted" style="font-size:11.5px;line-height:1.65;margin-top:6px">{{ exportPolicy }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1480}}">
+class Component extends DCLogic {
+  state = { theme:'light', tab:'overview', sort:'attention', co:'lumenpath',
+    cadence:'monthly', period:'q2', nudged:{} };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+    // Semantic colours reserved for health only.
+    const H_GRN = dark ? '#6ee7b7' : '#116632';
+    const H_AMB = dark ? '#fcd34d' : '#92400e';
+    const H_RED = dark ? '#fca5a5' : '#b91c1c';
+    const INK = dark ? '#ececf1' : '#18181b';
+    const MUT = dark ? '#a5a0b2' : '#6b6577';
+    const VIO = dark ? '#c4b5fd' : V7;
+
+    const I = {
+      grid: this.ic('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+      chart: this.ic('<path d="M3 3v18h18"/><path d="m6 15 4-5 4 3 5-7"/>'),
+      table: this.ic('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/>'),
+      file: this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      pulse: this.ic('<path d="M3 12h4l2-6 3 12 2-6h7"/>'),
+      bell: this.ic('<path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6"/><path d="M10.5 20a2 2 0 0 0 3 0"/>'),
+      send: this.ic('<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/>'),
+      info: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'),
+      check: this.ic('<path d="M20 6 9 17l-5-5"/>', 2.6),
+      clock: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
+      alert: this.ic('<path d="M12 3 2 20h20L12 3z"/><path d="M12 9v5M12 17h.01"/>'),
+      down: this.ic('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
+      fuel: this.ic('<path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M14 9h2.5a2 2 0 0 1 2 2v6a1.5 1.5 0 0 0 3 0V9l-2.5-3"/>'),
+      back: this.ic('<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>'),
+      out: this.ic('<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'),
+      chev: this.ic('<path d="m9 6 6 6-6 6"/>', 2.2),
+      sun: this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon: this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:99px;font-size:9.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const cGreen = chip('rgba(17,102,50,.1)', H_GRN);
+    const cAmber = chip('rgba(180,83,9,.1)', H_AMB);
+    const cRed = chip('rgba(185,28,28,.09)', H_RED);
+    const cViolet = chip('rgba(124,58,237,.1)', VIO);
+    const cGrey = chip(dark ? '#2a2833' : '#f1f0f5', MUT);
+    const av = (bg, sz) => 'width:'+(sz||28)+'px;height:'+(sz||28)+'px;border-radius:8px;background:'+bg+';color:#fff;font-size:'+(sz>=44?'15px':sz<=24?'9px':'10px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const iconWrap = (c) => 'width:28px;height:28px;border-radius:8px;background:'+c+'1c;color:'+c+';display:flex;align-items:center;justify-content:center;flex:none';
+    const seg = (on) => 'padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? VIO : MUT)
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none')+';white-space:nowrap';
+    const segSm = (on) => 'padding:4px 10px;border-radius:6px;font-size:10.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? 'rgba(124,58,237,.1)' : 'transparent')+';color:'+(on ? VIO : MUT)+';white-space:nowrap';
+
+    const usd = (n) => n >= 1e6 ? '$' + (n/1e6).toFixed(n % 1e6 === 0 ? 1 : 2) + 'M' : '$' + Math.round(n/1e3) + 'k';
+    const usdEx = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const AS_OF = 'Jun 30, 2026';
+
+    // ============ PORTFOLIO · 12 positions ============
+    // health already computed upstream · runway/update from founder reporting
+    const CO = [
+      { k:'lumenpath', name:'Lumenpath', initials:'LP', bg:'#7c3aed', sector:'Revenue intelligence', stage:'Seed',
+        initial:600000, follow:400000, fmv:3400000, health:'green', updated:'Aug 5', age:9, runway:19,
+        founder:'Ada Ferreira', fRole:'Co-founder & CEO' },
+      { k:'arclight', name:'Arclight Data', initials:'AD', bg:'#1d4ed8', sector:'Data infrastructure', stage:'Seed',
+        initial:750000, follow:500000, fmv:4100000, health:'green', updated:'Aug 1', age:13, runway:24 },
+      { k:'thornfield', name:'Thornfield Bio', initials:'TB', bg:'#0f766e', sector:'Lab automation', stage:'Pre-seed',
+        initial:400000, follow:0, fmv:1150000, health:'green', updated:'Aug 8', age:6, runway:22 },
+      { k:'kelsey', name:'Kelsey Rail', initials:'KR', bg:'#4338ca', sector:'Logistics ops', stage:'Seed',
+        initial:650000, follow:250000, fmv:1620000, health:'amber', updated:'Jun 14', age:61, staleUpdate:true, runway:11 },
+      { k:'norwich', name:'Norwich Labs', initials:'NL', bg:'#b45309', sector:'Materials science', stage:'Pre-seed',
+        initial:350000, follow:0, fmv:490000, health:'amber', updated:'Jun 2', age:73, runway:8 },
+      { k:'pellman', name:'Pellman Health', initials:'PH', bg:'#be185d', sector:'Clinical ops', stage:'Seed',
+        initial:700000, follow:300000, fmv:2250000, health:'green', updated:'Jul 21', age:24, runway:17 },
+      { k:'sablefin', name:'Sablefin', initials:'SF', bg:'#334155', sector:'Payments infra', stage:'Seed',
+        initial:800000, follow:600000, fmv:6900000, health:'green', updated:'Aug 6', age:8, runway:28 },
+      { k:'vantry', name:'Vantry', initials:'VY', bg:'#0f766e', sector:'Dev tooling', stage:'Pre-seed',
+        initial:300000, follow:150000, fmv:820000, health:'amber', updated:'May 28', age:78, runway:9 },
+      { k:'whitlock', name:'Whitlock Grid', initials:'WG', bg:'#116632', sector:'Grid software', stage:'Seed',
+        initial:550000, follow:0, fmv:1210000, health:'green', updated:'Jul 30', age:15, runway:21 },
+      { k:'orrick', name:'Orrick Systems', initials:'OS', bg:'#6b6577', sector:'Industrial IoT', stage:'Seed',
+        initial:600000, follow:200000, fmv:340000, health:'red', updated:'Apr 19', age:117, runway:4,
+        markedDown:true },
+      { k:'brayton', name:'Brayton Optics', initials:'BO', bg:'#6b6577', sector:'Photonics', stage:'Pre-seed',
+        initial:250000, follow:0, fmv:95000, health:'red', updated:'May 6', age:100, runway:3,
+        markedDown:true },
+      { k:'quillon', name:'Quillon', initials:'QN', bg:'#4338ca', sector:'Vertical SaaS', stage:'Seed',
+        initial:500000, follow:0, fmv:1050000, health:'green', updated:'Aug 7', age:7, runway:16 },
+    ];
+
+    const HEALTH = {
+      green:{ label:'Healthy', tone:H_GRN, chip:cGreen, bg:'rgba(17,102,50,.14)' },
+      amber:{ label:'Watch', tone:H_AMB, chip:cAmber, bg:'rgba(180,83,9,.16)' },
+      red:{ label:'At risk', tone:H_RED, chip:cRed, bg:'rgba(185,28,28,.14)' },
+    };
+
+    // ---- fund maths, all derived ----
+    const FUND_SIZE = 20000000;
+    const DISTRIBUTED = 1350000;
+    const invested = (c) => c.initial + c.follow;
+    const totalInvestedN = CO.reduce((a,c) => a + invested(c), 0);
+    const totalFmvN = CO.reduce((a,c) => a + c.fmv, 0);
+    const reservedN = 4200000;
+    const uncalledN = FUND_SIZE - totalInvestedN - reservedN;
+    const tvpi = (totalFmvN + DISTRIBUTED) / totalInvestedN;
+    const dpi = DISTRIBUTED / totalInvestedN;
+    const moic = totalFmvN / totalInvestedN;
+
+    const metrics = [
+      { k:'TVPI', v: tvpi.toFixed(2) + '×', sub:'net of fees and carry',
+        method:'Total value (' + usd(totalFmvN) + ' carrying value + ' + usd(DISTRIBUTED) + ' distributed) over paid-in capital of ' + usd(totalInvestedN) + '. Net of management fees and accrued carry. Excludes uncalled commitments.',
+        asOf:'As of ' + AS_OF + ' · 12 positions' },
+      { k:'Net IRR', v:'31.4%', sub:'since first close, Nov 2024',
+        method:'Money-weighted return on dated cash flows — capital calls out, distributions in, terminal value at carrying value. Annualised from first close. 19 months of history; treat with the caution any sub-three-year IRR deserves.',
+        asOf:'As of ' + AS_OF + ' · 19 months' },
+      { k:'Gross MOIC', v: moic.toFixed(2) + '×', sub:'unrealised, before fees',
+        method:'Carrying value over invested cost, before fees, carry, and expenses. Realisations excluded — see DPI. This is the raw portfolio mark, and the number most likely to move.',
+        asOf:'As of ' + AS_OF + ' · unrealised only' },
+      { k:'DPI', v: dpi.toFixed(2) + '×', sub: usd(DISTRIBUTED) + ' returned',
+        method:'Cash actually distributed to LPs over paid-in capital. One realisation to date — the Ceduna Labs secondary in Q1 2026. Nothing accrued or expected is included.',
+        asOf:'As of ' + AS_OF + ' · 1 realisation' },
+    ];
+
+    // The bar partitions the COMMITMENT. Distributed cash is a return out of capital already
+    // deployed, not a fifth draw on the fund — including it double-counts and mis-scales the bar.
+    // It is reported alongside instead, where DPI already carries it.
+    const capitalSegs = [
+      { label:'Deployed ' + usd(totalInvestedN), n:totalInvestedN, color:V },
+      { label:'Reserved ' + usd(reservedN), n:reservedN, color: dark ? '#5b4494' : '#c4b5fd' },
+      { label:'Uncalled ' + usd(uncalledN), n:uncalledN, color: dark ? '#26232f' : '#e5e3ec' },
+    ].map(s => ({ label:s.label, style:'flex:none;width:'+(s.n / FUND_SIZE * 100).toFixed(2)+'%;height:100%;background:'+s.color }));
+    const capitalLegend = [
+      { k:'Deployed', v: usd(totalInvestedN), note:'12 positions · ' + (totalInvestedN / FUND_SIZE * 100).toFixed(0) + '% of fund', color:V },
+      { k:'Reserved', v: usd(reservedN), note:'follow-on, allocated', color: dark ? '#5b4494' : '#c4b5fd' },
+      { k:'Uncalled', v: usd(uncalledN), note:'unallocated commitments', color: dark ? '#3a3648' : '#d4d0dc' },
+      { k:'Distributed', v: usd(DISTRIBUTED), note:'returned out of deployed · not a draw', color:'transparent' },
+    ];
+
+    const VC = [
+      { q:'Q4 24', cost:2100000, fmv:2100000 },
+      { q:'Q1 25', cost:3400000, fmv:3610000 },
+      { q:'Q2 25', cost:5200000, fmv:6040000 },
+      { q:'Q3 25', cost:6700000, fmv:8380000 },
+      { q:'Q4 25', cost:7600000, fmv:11340000 },
+      // Q1 must not exceed the derived Q2 figure — cost basis only rises.
+      { q:'Q1 26', cost: Math.min(8100000, totalInvestedN), fmv:14680000 },
+      { q:'Q2 26', cost:totalInvestedN, fmv:totalFmvN },
+    ].map((v,i,arr) => Object.assign({}, v, { cost: Math.min(v.cost, totalInvestedN) }));
+    const vcMax = Math.max.apply(null, VC.map(v => v.fmv));
+    const vcBars = VC.map(v => ({ label:v.q,
+      mult: (v.fmv / v.cost).toFixed(2) + '×',
+      tone: v.fmv / v.cost >= 1.5 ? VIO : MUT,
+      costStyle:'width:100%;height:'+(v.cost / vcMax * 100).toFixed(1)+'%;border-radius:3px 3px 0 0;background:'+(dark ? '#3a3648' : '#c9c4d6'),
+      fmvStyle:'width:100%;height:'+(v.fmv / vcMax * 100).toFixed(1)+'%;border-radius:3px 3px 0 0;background:'+V }));
+    const vcLegend = [
+      { label:'Cost basis', color: dark ? '#3a3648' : '#c9c4d6' },
+      { label:'Carrying value', color:V },
+    ];
+
+    // ============ TABLE ============
+    // ONE overdue threshold, tied to the selected cadence. The alert rule label, the alert
+    // filter, and the KPI compliance strip all read this — they cannot disagree.
+    const OVERDUE_DAYS = st.cadence === 'quarterly' ? 90 : 30;
+    const isOverdue = (c) => c.age >= OVERDUE_DAYS;
+
+    const attentionScore = (c) => {
+      const h = c.health === 'red' ? 3 : c.health === 'amber' ? 2 : 0;
+      const r = c.runway <= 6 ? 3 : c.runway <= 12 ? 1 : 0;
+      const u = c.age >= OVERDUE_DAYS * 2 ? 2 : isOverdue(c) ? 1 : 0;
+      return h * 10 + r * 4 + u;
+    };
+    const SORTS = [
+      { k:'attention', l:'Needs attention', fn:(a,b) => attentionScore(b) - attentionScore(a) },
+      { k:'fmv', l:'FMV', fn:(a,b) => b.fmv - a.fmv },
+      { k:'mult', l:'Multiple', fn:(a,b) => (b.fmv / invested(b)) - (a.fmv / invested(a)) },
+      { k:'runway', l:'Runway', fn:(a,b) => a.runway - b.runway },
+    ];
+    const sortTabs = SORTS.map(s => ({ label:s.l, style: seg(st.sort === s.k), go: () => this.setState({ sort:s.k }) }));
+    const sorted = CO.slice().sort((SORTS.find(s => s.k === st.sort) || SORTS[0]).fn);
+
+    const positions = sorted.map(c => {
+      const h = HEALTH[c.health], m = c.fmv / invested(c);
+      const needsAttn = attentionScore(c) >= 10;
+      return { k:c.k, name:c.name, initials:c.initials, sector:c.sector, stage:c.stage,
+        avStyle: av(c.bg), invested: usdEx(invested(c)),
+        investedSplit: c.follow ? usd(c.initial) + ' + ' + usd(c.follow) : 'initial only',
+        fmv: usdEx(c.fmv), mult: m.toFixed(2) + '×',
+        multTone: m >= 1 ? INK : H_RED,
+        healthDot:'display:inline-block;width:9px;height:9px;border-radius:50%;background:'+h.tone,
+        healthLabel: h.label,
+        lastUpdate: c.updated, updAge: c.age + 'd ago',
+        updTone: isOverdue(c) ? H_AMB : MUT,
+        runway: c.runway + 'mo',
+        runwayTone: c.runway <= 6 ? H_RED : c.runway <= 12 ? H_AMB : INK,
+        rowBg: needsAttn && st.sort === 'attention' ? (dark ? 'rgba(185,28,28,.045)' : 'rgba(185,28,28,.022)') : 'transparent' };
+    });
+
+    const hCount = { green:0, amber:0, red:0 };
+    CO.forEach(c => { hCount[c.health] += 1; });
+    const overdueN = CO.filter(isOverdue).length;
+    const lowRunwayN = CO.filter(c => c.runway <= 6).length;
+
+    // ============ POSITION DETAIL ============
+    const DETAIL = {
+      lumenpath: {
+        blurb:'Revenue intelligence for mid-market sales teams. Led the seed in Mar 2025, followed on at the Series A in Feb 2026 to hold ownership.',
+        ledger:[
+          { date:'Mar 14, 25', event:'Initial check', note:'Seed round · led', instrument:'Series Seed Preferred', amount:-600000 },
+          { date:'Feb 20, 26', event:'Follow-on', note:'Series A · pro-rata exercised', instrument:'Series A Preferred', amount:-400000 },
+        ],
+        marks:[
+          { date:'Mar 14, 25', event:'Initial investment', post:'$8.0M', fmv:600000, source:'Transaction price', src:'txn' },
+          { date:'Dec 31, 25', event:'Year-end mark', post:'$8.0M', fmv:600000, source:'Held at cost', src:'cost' },
+          { date:'Feb 20, 26', event:'Series A', post:'$26.0M', fmv:2950000, source:'Priced round', src:'txn' },
+          { date:'Jun 30, 26', event:'Quarter-end mark', post:'$26.0M', fmv:3400000, source:'409A · Kestrel Valuation', src:'409a' },
+        ],
+        kpis:[
+          { name:'MRR', unit:'$k', vals:[86,94,103,118,127,141], fmt:(v) => '$' + v + 'k' },
+          { name:'Net burn', unit:'$k/mo', vals:[142,138,151,146,139,133], fmt:(v) => '$' + v + 'k', invert:true },
+          { name:'Runway', unit:'months', vals:[14,15,16,17,18,19], fmt:(v) => v + 'mo' },
+        ],
+        reserve:900000,
+        reserveNote:'Planned for the Series B, expected H1 2027. Sized to hold pro-rata at a $60M pre.',
+        reserveRows:[
+          { k:'Allocated', v: usdEx(900000) },
+          { k:'Of fund reserve', v:'21.4%' },
+          { k:'Target round', v:'Series B · H1 2027' },
+          { k:'Holds ownership at', v:'4.1%' },
+        ],
+        updateWhen:'Received Jul 8, 2026 · monthly',
+        updateQuote:'"Crossed $140k MRR in June, first month above plan since January. Two enterprise pilots converted; the third slipped to Q3 on procurement. Hiring the second AE in August."',
+      },
+    };
+    const DEFAULT_DETAIL = {
+      blurb:'Position detail. Cash flows, marks and KPI history are drawn from the ledger and founder updates.',
+      ledger:[], marks:[], kpis:[], reserve:0, reserveNote:'No reserve allocated for this position.',
+      reserveRows:[], updateWhen:'', updateQuote:'',
+    };
+    const coRaw = CO.find(c => c.k === st.co) || CO[0];
+    const dRaw = DETAIL[coRaw.k] || Object.assign({}, DEFAULT_DETAIL, {
+      ledger:[{ date:'—', event:'Initial check', note:coRaw.stage + ' round', instrument:'Preferred', amount:-coRaw.initial }]
+        .concat(coRaw.follow ? [{ date:'—', event:'Follow-on', note:'pro-rata exercised', instrument:'Preferred', amount:-coRaw.follow }] : []),
+      marks:[{ date:'Jun 30, 26', event:'Quarter-end mark', post:'—', fmv:coRaw.fmv,
+        source: coRaw.markedDown ? 'Impairment review' : 'Held at cost', src: coRaw.markedDown ? 'impair' : 'cost' }],
+      updateWhen:'Received ' + coRaw.updated + ', 2026',
+      updateQuote:'Latest founder update on file.',
+    });
+
+    const SRC_CHIP = {
+      txn:{ label:'Priced round', chip: cViolet },
+      '409a':{ label:'409A', chip: cGrey },
+      cost:{ label:'Held at cost', chip: cGrey },
+      impair:{ label:'Impairment', chip: cRed },
+    };
+    const hMeta = HEALTH[coRaw.health];
+    const coMult = coRaw.fmv / invested(coRaw);
+    const kpiOf = (k) => {
+      const max = Math.max.apply(null, k.vals);
+      const first = k.vals[0], last = k.vals[k.vals.length - 1];
+      const pctChg = (last - first) / first * 100;
+      const good = k.invert ? pctChg < 0 : pctChg > 0;
+      return { name:k.name, latest:k.fmt(last),
+        trend: (pctChg >= 0 ? '+' : '') + pctChg.toFixed(0) + '%',
+        trendTone: good ? VIO : MUT,
+        range: k.fmt(first) + ' → ' + k.fmt(last) + ' · 6mo',
+        bars: k.vals.map((v,i) => ({ label: k.fmt(v),
+          style:'flex:1;height:'+(v / max * 100).toFixed(0)+'%;min-height:3px;border-radius:2px;background:'
+            + (i === k.vals.length - 1 ? V : (dark ? '#3a3648' : '#c9c4d6')) })) };
+    };
+
+    const co = {
+      name:coRaw.name, initials:coRaw.initials, avStyleLg: av(coRaw.bg, 44),
+      healthLabel: hMeta.label, healthChip: hMeta.chip, blurb: dRaw.blurb,
+      stats:[
+        { k:'Invested', v: usdEx(invested(coRaw)), sub: coRaw.follow ? '2 checks' : '1 check', tone:INK },
+        { k:'Carrying value', v: usdEx(coRaw.fmv), sub:'as of ' + AS_OF, tone:INK },
+        { k:'Multiple', v: coMult.toFixed(2) + '×', sub:'unrealised', tone: coMult >= 1 ? INK : H_RED },
+        { k:'Runway', v: coRaw.runway + 'mo', sub:'self-reported', tone: coRaw.runway <= 6 ? H_RED : coRaw.runway <= 12 ? H_AMB : INK },
+      ],
+      ledgerLine: dRaw.ledger.length + ' cash flows · no distributions to date',
+      ledger: dRaw.ledger.map(l => ({ date:l.date, event:l.event, note:l.note, instrument:l.instrument,
+        amount: (l.amount < 0 ? '(' + usdEx(Math.abs(l.amount)) + ')' : usdEx(l.amount)),
+        tone: l.amount < 0 ? INK : H_GRN })),
+      netInvested: usdEx(invested(coRaw)),
+      marks: dRaw.marks.map((m,i,arr) => {
+        const prev = i > 0 ? arr[i-1].fmv : null;
+        const d = prev === null || prev === m.fmv ? null : m.fmv - prev;
+        const s = SRC_CHIP[m.src];
+        return { date:m.date, event:m.event, post:m.post, fmv: usdEx(m.fmv),
+          delta: d === null ? '' : (d > 0 ? '+' : '−') + usd(Math.abs(d)),
+          deltaTone: d > 0 ? VIO : H_RED,
+          source:m.source, srcChip: s.chip };
+      }),
+      kpiLine: dRaw.kpis.length ? 'last 6 months · monthly cadence' : 'no structured KPIs on file',
+      kpis: dRaw.kpis.map(kpiOf),
+      reserve: dRaw.reserve ? usdEx(dRaw.reserve) : '—',
+      reserveNote: dRaw.reserveNote, reserveRows: dRaw.reserveRows,
+      updateWhen: dRaw.updateWhen, updateQuote: dRaw.updateQuote,
+      founder: coRaw.founder || 'Founder', founderRole: coRaw.fRole || 'CEO',
+      founderInitials: (coRaw.founder || 'F C').split(' ').map(x => x[0]).join(''),
+      founderAv: av(coRaw.bg, 26),
+    };
+    const coPicker = ['lumenpath','sablefin','kelsey','orrick'].map(k => CO.find(c => c.k === k))
+      .map(c => ({ label:c.name, style: seg(st.co === c.k), go: () => this.setState({ co:c.k }) }));
+
+    // ============ KPI COLLECTION ============
+    const KPI_SET = [
+      { name:'MRR', def:'Recognised monthly recurring revenue, excluding one-off and services revenue.', unit:'USD', appliesTo:'All 12', required:true },
+      { name:'Net burn', def:'Cash out less cash in, monthly. Not gross spend.', unit:'USD/mo', appliesTo:'All 12', required:true },
+      { name:'Runway', def:'Months of cash at current net burn, without assuming a raise.', unit:'Months', appliesTo:'All 12', required:true },
+      { name:'Headcount', def:'Full-time equivalents at month end, contractors counted separately.', unit:'FTE', appliesTo:'All 12', required:true },
+      { name:'Net revenue retention', def:'Trailing 12-month NRR on the cohort a year prior.', unit:'%', appliesTo:'8 with revenue', required:false },
+      { name:'Gross margin', def:'Revenue less direct cost of delivery, including hosting and support.', unit:'%', appliesTo:'8 with revenue', required:false },
+    ];
+    const CADENCE = [{ k:'monthly', l:'Monthly' }, { k:'quarterly', l:'Quarterly' }];
+    const cadenceTabs = CADENCE.map(c => ({ label:c.l, style: segSm(st.cadence === c.k), go: () => this.setState({ cadence:c.k }) }));
+
+    const reported = CO.filter(c => !isOverdue(c));
+    const overdue = CO.filter(isOverdue);
+    const compliance = reported.map(c => ({
+      k:c.k, name:c.name, detail:'Reported ' + c.updated + ' · all required fields',
+      dotStyle:'width:20px;height:20px;border-radius:50%;background:rgba(17,102,50,.14);color:'+H_GRN+';display:flex;align-items:center;justify-content:center;flex:none',
+      glyph:true, icon:I.check, canNudge:false, noNudge:true, state:'Complete', chip:cGreen,
+    })).concat(overdue.map(c => {
+      const nudged = !!st.nudged[c.k];
+      const severe = c.age >= 90;
+      return { k:c.k, name:c.name,
+        detail: nudged ? 'Nudged today · last reported ' + c.updated : 'Last reported ' + c.updated + ' · ' + c.age + ' days',
+        dotStyle:'width:20px;height:20px;border-radius:50%;background:'+(severe ? 'rgba(185,28,28,.14)' : 'rgba(180,83,9,.16)')+';color:'+(severe ? H_RED : H_AMB)+';display:flex;align-items:center;justify-content:center;flex:none',
+        glyph:true, icon: severe ? I.alert : I.clock,
+        canNudge: !nudged, noNudge: nudged,
+        state:'Nudged', chip:cViolet,
+        nudgeLabel:'Nudge',
+        nudgeStyle:'padding:5px 11px;border-radius:8px;background:rgba(124,58,237,.1);color:'+VIO+';font-size:10.5px;font-weight:700;flex:none' };
+    }));
+    const nudgedCount = overdue.filter(c => st.nudged[c.k]).length;
+
+    // ============ ALERTS ============
+    const RULES = [
+      { k:'runway', name:'Runway below 6 months', rule:'runway <= 6 · self-reported, from the latest update',
+        color:'#b91c1c', icon:I.fuel,
+        hits: CO.filter(c => c.runway <= 6).map(c => ({ c, value: c.runway + 'mo', why:'Reported ' + c.updated + ' · burn unchanged', tone:H_RED })),
+        clear:'Every position reports more than six months of runway.' },
+      { k:'overdue', name:'Update overdue ' + OVERDUE_DAYS + ' days',
+        rule:'days since last update >= ' + OVERDUE_DAYS + ' · ' + st.cadence + ' cadence',
+        color:'#b45309', icon:I.clock,
+        hits: CO.filter(isOverdue).map(c => ({ c, value: c.age + 'd', why:'Last reported ' + c.updated, tone:H_AMB })),
+        clear:'All 12 positions have reported inside the ' + OVERDUE_DAYS + '-day window.' },
+      { k:'health', name:'Health flipped to red', rule:'health signal transitioned amber → red this quarter',
+        color:'#b91c1c', icon:I.alert,
+        hits: CO.filter(c => c.health === 'red').map(c => ({ c, value:'At risk', why:'Flipped in Q2 · runway and update both lapsed', tone:H_RED })),
+        clear:'No position has flipped to red this quarter.' },
+      { k:'markdown', name:'Valuation marked down', rule:'carrying value below invested cost at quarter end',
+        color:'#6b6577', icon:I.down,
+        hits: CO.filter(c => c.fmv < invested(c)).map(c => ({ c, value: (c.fmv / invested(c)).toFixed(2) + '×',
+          why:'Marked ' + usd(c.fmv) + ' against ' + usd(invested(c)) + ' invested', tone:H_RED })),
+        clear:'Every position is held at or above cost.' },
+    ];
+    const alertRules = RULES.map(r => ({
+      name:r.name, rule:r.rule, icon:r.icon, iconWrap: iconWrap(r.color),
+      countLabel: r.hits.length ? r.hits.length + (r.hits.length === 1 ? ' position' : ' positions') : 'Clear',
+      countChip: r.hits.length === 0 ? cGreen : r.k === 'markdown' ? cGrey : (r.color === '#b91c1c' ? cRed : cAmber),
+      hasHits: r.hits.length > 0, noHits: r.hits.length === 0, clearNote:r.clear,
+      hits: r.hits.map(h => ({ k:h.c.k, name:h.c.name, initials:h.c.initials, avStyle: av(h.c.bg, 24),
+        why:h.why, value:h.value, tone:h.tone })) }));
+    const alertTotal = RULES.reduce((a,r) => a + r.hits.length, 0);
+
+    // ============ EXPORT ============
+    const PERIODS = [{ k:'q2', l:'Q2 2026' }, { k:'q1', l:'Q1 2026' }, { k:'q4', l:'Q4 2025' }];
+    const periodTabs = PERIODS.map(p => ({ label:p.l, style: seg(st.period === p.k), go: () => this.setState({ period:p.k }) }));
+    const periodLabelFull = (PERIODS.find(p => p.k === st.period) || PERIODS[0]).l;
+    const exportRows = CO.slice().sort((a,b) => b.fmv - a.fmv).map(c => {
+      const m = c.fmv / invested(c);
+      return { name:c.name, stage:c.stage, invested: usdEx(invested(c)), fmv: usdEx(c.fmv),
+        mult: m.toFixed(2) + '×', tone: m >= 1 ? INK : H_RED,
+        basis: c.markedDown ? 'Impairment review' : (c.k === 'lumenpath' || c.k === 'sablefin' ? '409A · third party' : 'Held at cost') };
+    });
+
+    // ============ TABS ============
+    const TABS = [
+      { k:'overview', l:'Overview', i:I.chart },
+      { k:'companies', l:'Positions', i:I.table },
+      { k:'position', l:'Position detail', i:I.file },
+      { k:'kpi', l:'KPI collection', i:I.pulse, flag: overdue.length - nudgedCount > 0 ? String(overdue.length - nudgedCount) : '' },
+      { k:'alerts', l:'Alerts', i:I.bell, flag: alertTotal ? String(alertTotal) : '' },
+      { k:'export', l:'LP export', i:I.send },
+    ];
+    const tabs = TABS.map(t => ({
+      label:t.l, icon:t.i, flag: t.flag || '',
+      go: () => this.setState({ tab:t.k }),
+      flagStyle:'display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:800;background:'
+        + (st.tab === t.k ? V : 'rgba(180,83,9,.15)') + ';color:' + (st.tab === t.k ? '#fff' : H_AMB),
+      style:'display:flex;align-items:center;gap:7px;padding:0 0 11px;font-size:13px;font-weight:'+(st.tab === t.k ? '700' : '600')
+        + ';color:' + (st.tab === t.k ? VIO : MUT)
+        + ';border-bottom:2px solid ' + (st.tab === t.k ? V : 'transparent') + ';white-space:nowrap;flex:none',
+    }));
+
+    return {
+      themeClass: dark ? 'pf-dark' : '',
+      themeIcon: dark ? I.sun : I.moon, themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      gridIcon:I.grid, infoIcon:I.info, backIcon:I.back, outIcon:I.out, chevIcon:I.chev,
+      chromeSub:'Axal VC Ventures Fund II, L.P. · ' + CO.length + ' positions · ' + usd(FUND_SIZE) + ' fund',
+      asOfChip: cGrey, asOfLabel:'Marks as of ' + AS_OF,
+      tabs,
+      tabOverview: st.tab === 'overview', tabCompanies: st.tab === 'companies',
+      tabPosition: st.tab === 'position', tabKpi: st.tab === 'kpi',
+      tabAlerts: st.tab === 'alerts', tabExport: st.tab === 'export',
+
+      // overview
+      metrics, capitalSegs, capitalLegend,
+      capitalLine: usd(FUND_SIZE) + ' committed · ' + ((totalInvestedN + reservedN) / FUND_SIZE * 100).toFixed(0) + '% deployed or reserved · ' + usd(DISTRIBUTED) + ' returned',
+      vcBars, vcLegend,
+      vcNote:'Cost basis rises only when we write a cheque; carrying value moves on priced rounds, 409A events, and impairment reviews. The gap between the two bars is unrealised — ' + usd(totalFmvN - totalInvestedN) + ' of it, none of it cash.',
+
+      // table
+      tableSub:'Default sort weights health, then runway, then reporting lapse — the three things that make a position need a call.',
+      sortTabs, positions, posCount: String(CO.length),
+      totalInvested: usdEx(totalInvestedN), totalFmv: usdEx(totalFmvN),
+      totalMult: moic.toFixed(2) + '×',
+      healthMix: hCount.green + '/' + hCount.amber + '/' + hCount.red,
+      updMix: overdueN + ' overdue', runwayMix: lowRunwayN + ' under 6mo',
+      openCo: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-co]');
+        const k = n && n.getAttribute('data-co');
+        if (k) this.setState({ co:k, tab:'position' });
+      },
+      backToTable: () => this.setState({ tab:'companies' }),
+
+      // position
+      co, coPicker,
+
+      // kpi
+      kpiSub:'The structured half of founder reporting. Definitions are fixed so the numbers compare across the portfolio rather than reflecting each founder\u2019s own accounting.',
+      complianceLabel: reported.length + ' of ' + CO.length,
+      complianceNote: overdue.length + ' outstanding · ' + periodLabelFull,
+      kpiSet: KPI_SET, cadenceTabs, reqChip: cViolet,
+      kpiSetNote:'Required fields gate the update — a founder cannot submit a partial report. Optional fields apply only to the eight positions with revenue.',
+      periodLabel: periodLabelFull + ' compliance',
+      compliance, hasOverdue: overdue.length - nudgedCount > 0,
+      nudgeAllLabel:'Nudge all ' + (overdue.length - nudgedCount),
+      nudgeOne: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-nudge]');
+        const k = n && n.getAttribute('data-nudge');
+        if (k) this.setState(s => ({ nudged: Object.assign({}, s.nudged, { [k]:1 }) }));
+      },
+      nudgeAll: () => this.setState(s => {
+        const nx = Object.assign({}, s.nudged);
+        overdue.forEach(c => { nx[c.k] = 1; });
+        return { nudged:nx };
+      }),
+
+      // alerts
+      alertRules,
+
+      // export
+      periodTabs, exportPeriod: periodLabelFull,
+      exportSub:'Quarterly report · ' + CO.length + ' positions · marks as of ' + AS_OF,
+      exportRef:'RPT-2026-Q2 · draft',
+      exportMetrics:[
+        { k:'TVPI', v: tvpi.toFixed(2) + '×', note:'net of fees and carry' },
+        { k:'DPI', v: dpi.toFixed(2) + '×', note: usd(DISTRIBUTED) + ' distributed' },
+        { k:'Gross MOIC', v: moic.toFixed(2) + '×', note:'unrealised' },
+        { k:'Net IRR', v:'31.4%', note:'19 months since first close' },
+      ],
+      exportRows,
+      exportPolicy:'Positions are held at cost until a priced round, a third-party 409A, or an impairment review re-marks them. Two positions are carried below cost following impairment review this quarter. No position is marked up on internal judgement alone, and no expected or accrued value is included in any figure above.',
+    };
+  }
+}
+</script>
+</body>
+</html>

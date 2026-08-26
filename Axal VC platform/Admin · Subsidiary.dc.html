@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eef0f2;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#334155;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f8f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:184px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .main{flex:1;min-width:0;padding:0 0 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .terr{background:#334155;color:#fff;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+    .inner{padding:18px 22px 0}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .c{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .zt{font-size:14.5px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px}
+    .th{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 7px}
+    .td{font-size:12px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .tag{font-size:10px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px}
+    .vm{font-size:11.5px;font-weight:700;color:#334155;cursor:pointer}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e}
+    .prop{background:#f6f8fa;border:1px solid #cbd5e1;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#334155;background:#e6ebf0;border:1px solid #cbd5e1;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #334155;background:#334155;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    .lock{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#615c6e;background:#f4f4f6;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px}
+  </style>
+</helmet>
+
+<!-- ══════════ S0 · TENANCY ══════════ -->
+<section class="ab" id="s0">
+  <div class="ab-hd"><a class="ab-id" href="#s0">S0</a><span class="ab-nm">Subsidiary Admin — the tenancy wall, stated once</span><span class="ab-sub">steel · 8 rows</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 18px">Every screen in this product carries the territory badge, and every list, count and chart below it is filtered by that territory before it renders. This is not a permission check bolted onto a global view — there is no global view underneath to leak. The badge is a statement of what the page is <em>made of</em>.</div>
+
+  <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div class="lbl">The badge, and what it governs</div>
+      <div class="terr" style="border-radius:9px;margin-top:12px">
+        <div style="display:flex;align-items:center;gap:11px">
+          <span style="width:17px;height:17px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span>
+          <div>
+            <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">Axal VC France</div>
+            <div class="num" style="font-size:10.5px;opacity:.75;margin-top:2px">FR · BE · LU</div>
+          </div>
+        </div>
+        <span style="font-size:10px;font-weight:700;letter-spacing:.05em;background:rgba(255,255,255,.16);border-radius:4px;padding:3px 8px">SUBSIDIARY</span>
+      </div>
+      <div style="display:grid;gap:9px;margin-top:14px">
+        <sc-for list="{{ wall }}" as="w" hint-placeholder-count="4">
+          <div style="border-left:2px solid #475569;padding-left:11px">
+            <div style="font-size:12.5px;font-weight:700">{{ w.rule }}</div>
+            <div style="font-size:11.5px;color:#3f3a49;margin-top:4px;line-height:1.55">{{ w.why }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div class="lbl">Accent — distinct from all four licences</div>
+      <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:10px;margin-top:12px">
+        <span class="th">Product</span><span class="th">Text</span><span class="th">Fill</span>
+      </div>
+      <sc-for list="{{ accents }}" as="a" hint-placeholder-count="6">
+        <div style="display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:10px;align-items:center">
+          <span class="td" style="font-weight:{{ a.weight }}">{{ a.name }}</span>
+          <span class="td num" style="display:flex;align-items:center;gap:7px;font-family:ui-monospace,Menlo,monospace;font-size:11px"><span style="{{ a.tSw }}"></span>{{ a.text }}</span>
+          <span class="td num" style="display:flex;align-items:center;gap:7px;font-family:ui-monospace,Menlo,monospace;font-size:11px"><span style="{{ a.fSw }}"></span>{{ a.fill }}</span>
+        </div>
+      </sc-for>
+      <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.6">Steel reads as back-office on purpose: an admin console that looks as inviting as the products it administers invites the wrong kind of confidence. Oxblood is reserved for HQ, and sits far enough from the destructive red <span class="num" style="font-family:ui-monospace,Menlo,monospace;font-size:11px">#b91c1c</span> that a delete button inside a Super Admin page still reads as a warning rather than as chrome.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ S1 · HOME ══════════ -->
+<section class="ab" id="s1">
+  <div class="ab-hd"><a class="ab-id" href="#s1">S1</a><span class="ab-nm">Home — the territory's operating digest</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navHome }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span>
+          <span style="font-size:12.5px;font-weight:700">Axal VC France</span>
+          <span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span>
+        </div>
+        <span class="num" style="font-size:11px;opacity:.7">Tue 26 Aug · 09:12 CET</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Good morning, Camille</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ homeSub }}</div>
+
+        <div class="prop" style="margin-top:15px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Proposal · digest</span><span class="num" style="font-size:10.5px;color:#334155;margin-left:auto">{{ homeCost }}</span></div>
+          <div style="font-size:12.5px;color:#1e293b;line-height:1.7">{{ homeDigest }}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Accept as today's brief</span><span class="gho">Edit</span><span class="dis">Discard</span></div>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div class="zh"><span class="zt">Queue pressure</span><span class="zs">Worst first · oldest item age, not count</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px">
+            <sc-for list="{{ queues }}" as="q" hint-placeholder-count="4">
+              <div style="{{ q.cardStyle }}">
+                <div class="lbl" style="font-size:9px">{{ q.name }}</div>
+                <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:5px;line-height:1;color:{{ q.ink }}">{{ q.n }}</div>
+                <div class="num" style="font-size:10.5px;color:{{ q.ink }};margin-top:5px;font-weight:600">{{ q.oldest }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7">
+            <span style="font-size:11.5px;color:#615c6e;line-height:1.55">{{ queueNote }}</span>
+            <span class="vm">View more · Approvals →</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Today's deadlines</span><span class="zs">Programme clock</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ deadlines }}" as="d" hint-placeholder-count="3">
+                <div style="{{ d.rowStyle }}">
+                  <div style="min-width:0"><div style="font-size:12.5px;font-weight:700">{{ d.what }}</div><div style="font-size:11px;color:#615c6e;margin-top:3px">{{ d.who }}</div></div>
+                  <span style="{{ d.pill }}">{{ d.when }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:11px"><span class="vm">View more · Programs →</span></div>
+          </div>
+
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Revenue share MTD</span><span class="zs">Your cut, this territory</span></div>
+            <div style="display:flex;align-items:baseline;gap:11px">
+              <span class="num" style="font-size:27px;font-weight:800;letter-spacing:-.025em">{{ mtd }}</span>
+              <span class="num" style="font-size:12px;font-weight:700;color:#047857">{{ mtdDelta }}</span>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:3px;height:44px;margin-top:13px">
+              <sc-for list="{{ spark }}" as="s" hint-placeholder-count="12"><div style="{{ s.style }}"></div></sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:10px;line-height:1.55">{{ mtdNote }}</div>
+            <div style="margin-top:9px"><span class="vm">View more · Insights →</span></div>
+          </div>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px;border-color:#fde68a;background:#fffdf5">
+          <div class="zh"><span class="zt">Flagged by the rail</span><span class="zs">Anomalies, within your territory</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ anomalies }}" as="a" hint-placeholder-count="2">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;background:#fff;border:1px solid #fde68a;border-radius:10px;padding:12px 13px">
+                <div style="min-width:0">
+                  <div style="font-size:12.5px;font-weight:700;color:#92400e">{{ a.what }}</div>
+                  <div style="font-size:11.5px;color:#3f3a49;margin-top:5px;line-height:1.55">{{ a.body }}</div>
+                </div>
+                <span class="vm" style="flex:none;color:#92400e">{{ a.action }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S2 · ACCOUNTS ══════════ -->
+<section class="ab" id="s2">
+  <div class="ab-hd"><a class="ab-id" href="#s2">S2</a><span class="ab-nm">Accounts — every licence type in the territory</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navAcc }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div>
+        <span class="num" style="font-size:11px;opacity:.7">{{ accTotal }} accounts</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Accounts</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Seats licensed against seats used, and the people holding them.</div>
+
+        <div style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:9px 13px;margin-top:14px;display:flex;align-items:center;gap:10px">
+          <span style="width:15px;height:15px;display:block;flex:none;color:#615c6e" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+          <span style="font-size:13px;color:#615c6e;flex:1">Searching Axal VC France accounts</span>
+          <span class="lock">Territory-scoped</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+          <sc-for list="{{ seats }}" as="s" hint-placeholder-count="4">
+            <div class="c" style="padding:14px 16px">
+              <div style="display:flex;align-items:center;gap:7px"><span style="width:9px;height:9px;border-radius:3px;background:{{ s.dot }};flex:none"></span><span class="lbl" style="font-size:9px">{{ s.type }}</span></div>
+              <div class="num" style="font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1">{{ s.used }}</div>
+              <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:{{ s.pct }}%;background:{{ s.ink }};border-radius:999px"></div></div>
+              <div class="num" style="font-size:10.5px;color:{{ s.ink }};margin-top:6px;font-weight:600">{{ s.of }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:11px;line-height:1.6">{{ seatNote }}</div>
+
+        <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Members</span><span class="zs">COLLECTION · 5 of {{ accTotal }}</span></div>
+            <div style="display:grid;grid-template-columns:1.2fr .8fr .7fr .8fr;gap:11px"><span class="th">Member</span><span class="th">Licence</span><span class="th">Seat</span><span class="th">State</span></div>
+            <sc-for list="{{ members }}" as="m" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:1.2fr .8fr .7fr .8fr;gap:11px;align-items:center">
+                <span class="td" style="font-weight:600">{{ m.who }}</span>
+                <span class="td"><span style="{{ m.licStyle }}">{{ m.lic }}</span></span>
+                <span class="td num">{{ m.seat }}</span>
+                <span class="td"><span style="{{ m.pill }}">{{ m.state }}</span></span>
+              </div>
+            </sc-for>
+            <div style="margin-top:12px"><span class="vm">View more · full member table →</span></div>
+          </div>
+
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Exploring</span><span class="zs">WORK BOARD · pre-signup</span></div>
+            <div style="display:grid;gap:9px">
+              <sc-for list="{{ exploring }}" as="e" hint-placeholder-count="3">
+                <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px;padding:11px 12px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:9px"><span style="font-size:12.5px;font-weight:700">{{ e.stage }}</span><span class="num" style="font-size:13px;font-weight:800">{{ e.n }}</span></div>
+                  <div style="font-size:10.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ e.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Accounts" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S3 · APPROVALS ══════════ -->
+<section class="ab" id="s3">
+  <div class="ab-hd"><a class="ab-id" href="#s3">S3</a><span class="ab-nm">Approvals — the daily job, one board</span><span class="ab-sub">WORK BOARD · absorbs five formerly separate queues</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">Five queues that were five pages become five lanes, because an admin's actual question is never "what is in the LP queue" — it is "what is oldest and who is waiting." Sorting by SLA age across all of them is only possible once they share a surface.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navApp }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div>
+        <span class="num" style="font-size:11px;opacity:.7">{{ apOpen }} open · {{ apBreached }} past SLA</span>
+      </div>
+      <div class="inner">
+        <div class="crumb"><span style="color:#334155;font-weight:700">Approvals</span><span>‹</span><span style="font-weight:700;color:#18181b">All queues</span></div>
+        <h1 style="margin:7px 0 0;font-size:23px;font-weight:800;letter-spacing:-.025em">Approvals</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ apSub }}</div>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px">
+          <sc-for list="{{ apViews }}" as="v" hint-placeholder-count="4"><span style="{{ v.style }}">{{ v.label }}</span></sc-for>
+          <span class="zs" style="margin-left:4px">·</span><span class="vm">Bulk: assign to reviewer</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:11px;margin-top:15px">
+          <sc-for list="{{ lanes }}" as="ln" hint-placeholder-count="5">
+            <div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:9px">
+                <span style="font-size:11.5px;font-weight:800">{{ ln.name }}</span>
+                <span class="num" style="font-size:11px;font-weight:700;color:{{ ln.ink }}">{{ ln.n }}</span>
+              </div>
+              <div style="display:grid;gap:9px">
+                <sc-for list="{{ ln.cards }}" as="c" hint-placeholder-count="2">
+                  <div style="{{ c.cardStyle }}">
+                    <div style="font-size:12px;font-weight:700;line-height:1.4">{{ c.who }}</div>
+                    <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.5">{{ c.what }}</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;padding-top:8px;border-top:1px solid #f4f3f7">
+                      <span style="{{ c.slaPill }}">{{ c.age }}</span>
+                      <sc-if value="{{ c.outbound }}"><span class="lock" style="font-size:8.5px">To HQ</span></sc-if>
+                    </div>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ ln.empty }}"><div style="border:1px dashed #e2e1e8;border-radius:9px;padding:13px;text-align:center;font-size:10.5px;color:#615c6e">Clear</div></sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:15px">
+          <div class="zh"><span class="zt">Detail drawer · Aurélie Chen</span><span class="zs">LP application · 61h old</span></div>
+          <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:16px">
+            <div>
+              <div class="lbl">History</div>
+              <div style="display:grid;gap:8px;margin-top:10px">
+                <sc-for list="{{ drawerHistory }}" as="h" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:flex-start;gap:11px">
+                    <span style="width:7px;height:7px;border-radius:50%;background:{{ h.dot }};flex:none;margin-top:5px"></span>
+                    <div style="min-width:0"><div style="font-size:12px;font-weight:700">{{ h.what }}</div><div class="num" style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ h.when }}</div></div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div class="prop">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px"><span class="propb">Proposal · decision note</span><span class="num" style="font-size:10.5px;color:#334155;margin-left:auto">{{ apCost }}</span></div>
+              <div style="font-size:12px;color:#1e293b;line-height:1.65">{{ apDraft }}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="acc">Approve with this note</span><span class="gho">Edit</span><span class="dis">Decline instead</span></div>
+              <div style="font-size:10.5px;color:#615c6e;margin-top:9px;line-height:1.5">The rail drafts the note. It never records the decision — that is your click, and it is logged as yours.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Approvals" hint-size="100%,760px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S4 · PROGRAMS + COMMUNITY ══════════ -->
+<section class="ab" id="s4">
+  <div class="ab-hd"><a class="ab-id" href="#s4">S4</a><span class="ab-nm">Programs and Community</span><span class="ab-sub">two hubs · authoring stays at HQ</span></div>
+  <div class="row" style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+    <div class="frame" style="width:1440px">
+      <div class="side"><sc-for list="{{ navProg }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+      <div class="main">
+        <div class="terr">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div>
+          <span class="num" style="font-size:11px;opacity:.7">Cohort 4 · Week 2</span>
+        </div>
+        <div class="inner">
+          <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Programs</h1>
+          <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Cohort timing and roster are yours. Module content and assessment authoring are HQ's — you run the programme, you do not write it.</div>
+
+          <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-top:15px">
+            <div class="c" style="padding:16px 18px">
+              <div class="zh"><span class="zt">Cohort calendar</span><span class="zs">Timing controls · yours to move</span></div>
+              <div style="display:grid;gap:9px">
+                <sc-for list="{{ cohortCal }}" as="c" hint-placeholder-count="3">
+                  <div style="{{ c.rowStyle }}">
+                    <div style="min-width:0;flex:1">
+                      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12.5px;font-weight:700">{{ c.name }}</span><span class="tag">{{ c.state }}</span></div>
+                      <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:4px">{{ c.dates }}</div>
+                    </div>
+                    <span class="vm" style="flex:none">{{ c.action }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="margin-top:11px"><span class="vm">View more · cohort roster →</span></div>
+            </div>
+
+            <div class="c" style="padding:16px 18px">
+              <div class="zh"><span class="zt">Assessment runs</span><span class="zs">Results yours · authoring HQ's</span></div>
+              <div style="display:grid;gap:8px">
+                <sc-for list="{{ assessments }}" as="a" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                    <div style="min-width:0"><div style="font-size:12px;font-weight:700">{{ a.name }}</div><div class="num" style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ a.meta }}</div></div>
+                    <span style="{{ a.pill }}">{{ a.state }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7">
+                <span class="lock">Authored at HQ</span>
+                <span style="font-size:11px;color:#615c6e;line-height:1.5">You run and read them. Changing a question is a Content submission.</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:14px">
+            <sc-for list="{{ community }}" as="c" hint-placeholder-count="4">
+              <div class="c" style="padding:15px 17px">
+                <div class="zt" style="font-size:13.5px">{{ c.zone }}</div>
+                <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:7px;line-height:1;color:{{ c.ink }}">{{ c.value }}</div>
+                <div style="font-size:11px;color:#615c6e;margin-top:6px;line-height:1.55">{{ c.note }}</div>
+                <div style="margin-top:10px"><span class="vm">View more →</span></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.6">Community is the one hub that is entirely local: an event in Lyon, a job posted by a Paris founder, a circle that exists nowhere else. Nothing here needs HQ approval — which is exactly why the content zone next to it does.</div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,700px"></dc-import></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ S5 · CONTRACTS ══════════ -->
+<section class="ab" id="s5">
+  <div class="ab-hd"><a class="ab-id" href="#s5">S5</a><span class="ab-nm">Contracts — instantiate, never author</span><span class="ab-sub">LEDGER · master templates pull from HQ</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navCon }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div>
+        <span class="num" style="font-size:11px;opacity:.7">{{ conActive }} active · {{ conExpiring }} expiring ≤60d</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Contracts</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Your agreements, executed under the Axal VC brand, on templates HQ owns.</div>
+
+        <div class="c" style="padding:16px 18px;margin-top:15px">
+          <div class="zh"><span class="zt">Active contracts</span><span class="zs">Template version travels with the row</span></div>
+          <div style="display:grid;grid-template-columns:1.15fr 1.1fr .75fr .8fr .9fr;gap:11px">
+            <span class="th">Counterparty</span><span class="th">Template</span><span class="th">Value</span><span class="th">Renews</span><span class="th">State</span>
+          </div>
+          <sc-for list="{{ contracts }}" as="c" hint-placeholder-count="5">
+            <div style="{{ c.rowStyle }}">
+              <span class="td" style="font-weight:600;border-top:none;padding:9px 0">{{ c.who }}</span>
+              <span class="td" style="border-top:none;padding:9px 0"><span class="num" style="font-size:11px;font-family:ui-monospace,Menlo,monospace;color:#334155">{{ c.tpl }}</span></span>
+              <span class="td num" style="border-top:none;padding:9px 0">{{ c.value }}</span>
+              <span class="td num" style="border-top:none;padding:9px 0;color:{{ c.renewInk }}">{{ c.renews }}</span>
+              <span class="td" style="border-top:none;padding:9px 0"><span style="{{ c.pill }}">{{ c.state }}</span></span>
+            </div>
+          </sc-for>
+          <div style="margin-top:12px"><span class="vm">View more · contract record →</span></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Template picker</span><span class="zs">HQ master library · read-only</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ templates }}" as="t" hint-placeholder-count="4">
+                <div style="{{ t.rowStyle }}">
+                  <div style="min-width:0;flex:1">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12.5px;font-weight:700">{{ t.name }}</span><span class="num" style="font-size:10px;font-weight:700;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:2px 6px;font-family:ui-monospace,Menlo,monospace">{{ t.ver }}</span></div>
+                    <div style="font-size:10.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ t.note }}</div>
+                  </div>
+                  <span style="{{ t.action }}">{{ t.actionLabel }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7">
+              <span class="lock" style="flex:none;margin-top:1px">Axal VC master</span>
+              <span style="font-size:11px;color:#615c6e;line-height:1.55">{{ tplNote }}</span>
+            </div>
+          </div>
+
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Pending signature</span><span class="zs">Sent, not returned</span></div>
+            <div style="display:grid;gap:8px">
+              <sc-for list="{{ pending }}" as="p" hint-placeholder-count="3">
+                <div style="{{ p.rowStyle }}">
+                  <div style="min-width:0"><div style="font-size:12px;font-weight:700">{{ p.who }}</div><div class="num" style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ p.meta }}</div></div>
+                  <span style="{{ p.pill }}">{{ p.age }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Home" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ S6 · INSIGHTS + SETTINGS ══════════ -->
+<section class="ab" id="s6">
+  <div class="ab-hd"><a class="ab-id" href="#s6">S6</a><span class="ab-nm">Insights and Settings</span><span class="ab-sub">ANALYTICS · benchmarks anonymised by construction</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navIns }}" as="n" hint-placeholder-count="8"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="terr">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span><span style="font-size:12.5px;font-weight:700">Axal VC France</span><span class="num" style="font-size:11px;opacity:.7">FR · BE · LU</span></div>
+        <span class="num" style="font-size:11px;opacity:.7">Q3 2026</span>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Insights</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">Your territory, measured against a platform median that names nobody.</div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:14px">
+          <sc-for list="{{ insStats }}" as="s" hint-placeholder-count="4">
+            <div class="c" style="padding:14px 16px">
+              <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+              <div class="num" style="font-size:20px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ s.ink }}">{{ s.value }}</div>
+              <div class="num" style="font-size:10.5px;color:{{ s.deltaInk }};margin-top:5px;font-weight:600">{{ s.delta }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Against the platform median</span><span class="zs">Anonymised · no subsidiary is named</span></div>
+            <div style="display:grid;gap:12px;margin-top:4px">
+              <sc-for list="{{ bench }}" as="b" hint-placeholder-count="4">
+                <div>
+                  <div style="display:flex;justify-content:space-between;gap:10px">
+                    <span style="font-size:12px;font-weight:600">{{ b.metric }}</span>
+                    <span class="num" style="font-size:12px;font-weight:700;color:{{ b.ink }}">{{ b.you }} · median {{ b.med }}</span>
+                  </div>
+                  <div style="position:relative;height:7px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:6px">
+                    <div style="position:absolute;inset:0;width:{{ b.youPct }}%;background:{{ b.ink }};border-radius:999px"></div>
+                    <div style="position:absolute;top:-2px;bottom:-2px;left:{{ b.medPct }}%;width:2px;background:#18181b"></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.6">{{ benchNote }}</div>
+          </div>
+
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Settings</span><span class="zs">What HQ holds, shown as held</span></div>
+            <div style="display:grid;gap:9px">
+              <sc-for list="{{ settings }}" as="s" hint-placeholder-count="5">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                  <div style="min-width:0">
+                    <div style="font-size:12px;font-weight:700">{{ s.field }}</div>
+                    <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ s.value }}</div>
+                  </div>
+                  <span style="{{ s.chip }}">{{ s.who }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.6">{{ setNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdminRail" tier="subsidiary" page="Insights" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const I = {
+      home:  this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      acc:   this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/><path d="M18 14.5c1.7.6 3 2.2 3 4.5"/>'),
+      app:   this.ic('<path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4"/>'),
+      prog:  this.ic('<path d="M3 7h18M6 12h12M9 17h6"/>'),
+      comm:  this.ic('<path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2Z"/>'),
+      con:   this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5M9 15h6"/>'),
+      ins:   this.ic('<path d="M4 20V10M10 20V5M16 20v-7M22 20H2"/>'),
+      cog:   this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>'),
+      globe: this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3 2.6 15 0 18-2.6-3-2.6-15 0-18"/>'),
+      srch:  this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>')
+    };
+    const ST = '#334155', STF = '#475569', STT = '#f6f8fa', STE = '#cbd5e1';
+    const ROWS = [['Home',I.home],['Accounts',I.acc],['Approvals',I.app],['Programs',I.prog],
+                  ['Community',I.comm],['Contracts',I.con],['Insights',I.ins],['Settings',I.cog]];
+    const nav = (active) => ROWS.map(([label, icon]) => ({ label, icon,
+      style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
+        + (label === active ? 'font-weight:700;color:' + ST + ';background:' + STT + ';box-shadow:inset 2px 0 0 ' + ST
+                            : 'font-weight:600;color:#4a4553') }));
+
+    const c4 = (n) => '$' + n.toFixed(4);
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    const usd = (n) => '$' + n.toLocaleString('en-US');
+    const eur = (n) => '€' + n.toLocaleString('en-US');
+    const seg = (on) => 'font-size:11.5px;font-weight:' + (on ? '700' : '600')
+      + ';padding:6px 12px;border-radius:8px;cursor:pointer;'
+      + (on ? 'background:' + STT + ';color:' + ST + ';border:1px solid ' + STE : 'background:#fff;color:#4a4553;border:1px solid #ececf1');
+    const pill = (t) => {
+      const M = { 'Active':['#ecfdf5','#047857','#a7f3d0'], 'Signed':['#ecfdf5','#047857','#a7f3d0'],
+                  'Complete':['#ecfdf5','#047857','#a7f3d0'], 'Running':['#f6f8fa','#334155','#cbd5e1'],
+                  'Scheduled':['#f4f4f6','#615c6e','#e4e4e8'], 'Draft':['#f4f4f6','#615c6e','#e4e4e8'],
+                  'Expiring':['#fffbeb','#92400e','#fde68a'], 'Awaiting HQ':['#fffbeb','#92400e','#fde68a'],
+                  'Suspended':['#fef2f2','#b91c1c','#fecaca'], 'Overdue':['#fef2f2','#b91c1c','#fecaca'] };
+      const c = M[t] || M.Scheduled;
+      return 'font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap;flex:none';
+    };
+    // SLA bands: green under 24h, amber under 72h, red beyond — one function, every card.
+    const sla = (h) => h < 24 ? ['#ecfdf5','#047857','#a7f3d0'] : (h < 72 ? ['#fffbeb','#92400e','#fde68a'] : ['#fef2f2','#b91c1c','#fecaca']);
+    const slaPill = (h) => { const c = sla(h);
+      return 'font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap'; };
+
+    // ══ ONE approvals record. Lane counts, the header, the digest and queue pressure all
+    // derive from it — an item cannot be in a lane the counts do not know about. ══
+    const QUEUES = [
+      { lane:'LP applications', who:'Aurélie Chen', what:'Family office, €250k soft-circled', hrs:61 },
+      { lane:'LP applications', who:'Bertrand Mas', what:'Angel, first application', hrs:14 },
+      { lane:'Referrals', who:'Studio Vireo → 3 founders', what:'State 7 of 11 · awaiting qualification', hrs:38 },
+      { lane:'Cohort applications', who:'Lucie Bertrand', what:'Cohort 5 · deep tech, Toulouse', hrs:91 },
+      { lane:'Cohort applications', who:'Hugo Peeters', what:'Cohort 5 · fintech, Brussels', hrs:19 },
+      { lane:'Spinout moderation', who:'Kelso Freight FR', what:'Profile claims an exit that is not on record', hrs:7 },
+      { lane:'Content to HQ', who:'"Lever une pré-seed en France"', what:'Localised article awaiting brand approval', hrs:52, outbound:true }
+    ];
+    const LANES = ['LP applications','Referrals','Cohort applications','Spinout moderation','Content to HQ'];
+    const apOpen = QUEUES.length;
+    const breached = QUEUES.filter(q => q.hrs >= 72);
+    const oldest = QUEUES.slice().sort((a, b) => b.hrs - a.hrs)[0];
+
+    // Queue pressure on Home reads the same array — worst first, by age not by count.
+    const pressure = LANES.map(l => {
+      const items = QUEUES.filter(q => q.lane === l);
+      const old = items.length ? Math.max.apply(null, items.map(i => i.hrs)) : 0;
+      return { name:l, n:items.length, old };
+    }).sort((a, b) => b.old - a.old).slice(0, 4);
+
+    const SEATS = [
+      { type:'Founder', used:184, lic:200, dot:'#7c3aed' },
+      { type:'Investor / LP', used:47, lic:60, dot:'#4f46e5' },
+      { type:'Advisor', used:31, lic:40, dot:'#059669' },
+      { type:'Service Partner', used:22, lic:25, dot:'#d97706' }
+    ];
+    const accTotal = SEATS.reduce((a, s) => a + s.used, 0);
+    const tight = SEATS.filter(s => s.used / s.lic >= 0.88);
+
+    const CONTRACTS = [
+      { who:'Studio Vireo', tpl:'Partner MSA v4.2', value:eur(48000), renews:'Nov 12', state:'Active', days:78 },
+      { who:'Cabinet Lefèvre', tpl:'Advisory agreement v2.1', value:eur(9600), renews:'Sep 30', state:'Expiring', days:35 },
+      { who:'Meriwether SAS', tpl:'Service agreement v3.0', value:eur(21500), renews:'Oct 4', state:'Expiring', days:39 },
+      { who:'Halcyon Works', tpl:'Partner MSA v4.2', value:eur(33000), renews:'Feb 2027', state:'Active', days:160 },
+      { who:'Brackish BE', tpl:'Service agreement v3.0', value:eur(12000), renews:'Jan 2027', state:'Signed', days:128 }
+    ];
+    const conActive = CONTRACTS.length;
+    const conExpiring = CONTRACTS.filter(c => c.days <= 60).length;
+
+    return {
+      globeIcon:I.globe, searchIcon:I.srch,
+      navHome:nav('Home'), navAcc:nav('Accounts'), navApp:nav('Approvals'),
+      navProg:nav('Programs'), navCon:nav('Contracts'), navIns:nav('Insights'),
+
+      // ── S0 ──
+      wall: [
+        { rule:'Every count is already filtered', why:'The seat tiles, the queue lanes, the revenue figure — each is a territory query, not a global query with a where-clause bolted on afterwards.' },
+        { rule:'Search says what it searches', why:'The box reads "Searching Axal VC France accounts" rather than leaving the scope to be inferred from the results that come back.' },
+        { rule:'The rail declines and says why', why:'Asked about Germany it does not answer vaguely — it states that there is no cross-tenant read behind it, which is a different sentence from a refusal.' },
+        { rule:'Licensing appears nowhere', why:'Except as a read-only summary in Settings. A subsidiary cannot see the instrument that governs it being edited, because it is not theirs to edit.' }
+      ],
+      accents: [
+        { name:'Founder', text:'#6d28d9', fill:'#7c3aed', weight:'500' },
+        { name:'Investor / LP', text:'#4338ca', fill:'#4f46e5', weight:'500' },
+        { name:'Advisor', text:'#047857', fill:'#059669', weight:'500' },
+        { name:'Service Partner', text:'#b45309', fill:'#d97706', weight:'500' },
+        { name:'Subsidiary Admin', text:'#334155', fill:'#475569', weight:'800' },
+        { name:'Super Admin', text:'#881337', fill:'#9f1239', weight:'800' }
+      ].map(a => ({ name:a.name, text:a.text, fill:a.fill, weight:a.weight,
+        tSw:'width:11px;height:11px;border-radius:3px;flex:none;background:' + a.text + ';border:1px solid rgba(24,24,27,.14)',
+        fSw:'width:11px;height:11px;border-radius:3px;flex:none;background:' + a.fill + ';border:1px solid rgba(24,24,27,.14)' })),
+
+      // ── S1 ──
+      homeSub: apOpen + ' items waiting, ' + breached.length + ' past SLA. The oldest has been open ' + oldest.hrs + ' hours.',
+      homeCost: '≈ ' + c4(run(16800, 1240, 0.293, 2.253)),
+      homeDigest: 'The queue that needs you is cohort applications — Lucie Bertrand has waited ' + oldest.hrs
+        + ' hours against a 72-hour SLA, and Cohort 5 closes Friday. ' + breached.length + ' of ' + apOpen
+        + ' items are past SLA and two of those three are in the same lane, which is a staffing signal rather than a backlog. '
+        + 'Revenue share is tracking ahead of last month. One anomaly: token consumption from your Founder accounts is up sharply, concentrated in four of them.',
+      queues: pressure.map(p => {
+        const c = sla(p.old);
+        return { name:p.name, n:String(p.n), oldest:'oldest ' + p.old + 'h', ink:c[1],
+          cardStyle:'border:1px solid ' + c[2] + ';background:' + c[0] + ';border-radius:10px;padding:12px 13px' };
+      }),
+      queueNote: 'Ordered by the age of the oldest item, not by how many are in each lane — a queue of one at ' + oldest.hrs + ' hours outranks a queue of four at fourteen.',
+      deadlines: [
+        { what:'Cohort 5 applications close', who:'Friday 18:00 CET · 12 submitted', when:'3 days', tone:'ok' },
+        { what:'Week 2 module · Cohort 4', who:'Wed 09:00 · 3 founders', when:'Tomorrow', tone:'due' },
+        { what:'Demo Day venue confirmation', who:'Station F · deposit due', when:'Today', tone:'bad' }
+      ].map(d => {
+        const M = { ok:['#f4f4f6','#615c6e','#e4e4e8'], due:['#fffbeb','#92400e','#fde68a'], bad:['#fef2f2','#b91c1c','#fecaca'] };
+        const c = M[d.tone];
+        return { what:d.what, who:d.who, when:d.when,
+          pill:'font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';flex:none',
+          rowStyle:'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid '
+            + (d.tone === 'bad' ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:9px' };
+      }),
+      mtd: eur(18400), mtdDelta: '+21% vs Aug',
+      spark: [42, 48, 45, 52, 61, 58, 66, 71, 68, 74, 82, 88].map((v, i, arr) => ({
+        style:'flex:1;min-width:0;border-radius:2px 2px 0 0;height:' + v + '%;background:' + (i === arr.length - 1 ? STF : '#cbd5e1') })),
+      mtdNote: 'Your share of platform revenue generated in FR, BE and LU. Twelve months, this territory only.',
+      anomalies: [
+        { what:'Token consumption up 4× in four Founder accounts', body:'All four are in Cohort 4 and all four started using the Pitch Deck builder this week. Likely legitimate, but it is 38% of your monthly allocation in six days.', action:'Open Insights →' },
+        { what:'Two cohort applications past SLA in the same lane', body:'Both assigned to the same reviewer, who is on leave until Thursday. Reassignment is a bulk action on Approvals.', action:'Reassign →' }
+      ],
+
+      // ── S2 ──
+      accTotal: String(accTotal),
+      seats: SEATS.map(s => {
+        const p = Math.round(s.used / s.lic * 100);
+        return { type:s.type, used:String(s.used), of:s.used + ' of ' + s.lic + ' seats · ' + p + '%',
+          pct:String(p), dot:s.dot, ink: p >= 88 ? '#b45309' : '#334155' };
+      }),
+      seatNote: tight.length + ' of the four licence types ' + (tight.length === 1 ? 'is' : 'are') + ' at 88% or above — '
+        + tight.map(s => s.type + ' at ' + Math.round(s.used / s.lic * 100) + '%')
+        + '. Seats are set by HQ, so this is a request to make, not a number to change.',
+      members: [
+        { who:'Guillaume Lauzier', lic:'Founder', seat:'F-041', state:'Active' },
+        { who:'Aurélie Chen', lic:'Investor', seat:'—', state:'Awaiting HQ' },
+        { who:'Priyanka Raghunathan', lic:'Advisor', seat:'A-012', state:'Active' },
+        { who:'Studio Vireo', lic:'Partner', seat:'P-006', state:'Active' },
+        { who:'Marc Delacroix', lic:'Founder', seat:'F-018', state:'Suspended' }
+      ].map(m => {
+        const L = { Founder:['#f5f2ff','#6d28d9','#e6dcff'], Investor:['#f5f5ff','#3730a3','#c7d2fe'],
+                    Advisor:['#f2fdf7','#047857','#a7f3d0'], Partner:['#fffbf2','#b45309','#fde68a'] };
+        const c = L[m.lic];
+        return { who:m.who, lic:m.lic, seat:m.seat, state:m.state, pill:pill(m.state),
+          licStyle:'font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2] };
+      }),
+      exploring: [
+        { stage:'Signed up, no licence', n:'34', note:'Browsing the public surface. No seat consumed.' },
+        { stage:'Applied, in Approvals', n:'6', note:'Same items as the LP and cohort lanes — one record, two views.' },
+        { stage:'Invited, not accepted', n:'11', note:'Seat is reserved and counting against your allocation.' }
+      ],
+
+      // ── S3 ──
+      apOpen:String(apOpen), apBreached:String(breached.length),
+      apSub: apOpen + ' items across ' + LANES.length + ' queues. Sorted by age, because that is the question — not by which queue they came from.',
+      apViews: ['All queues','Past SLA','Assigned to me','Outbound to HQ'].map((l, i) => ({ label:l, style:seg(i === 0) })),
+      lanes: LANES.map(l => {
+        const cards = QUEUES.filter(q => q.lane === l).sort((a, b) => b.hrs - a.hrs);
+        const worst = cards.length ? Math.max.apply(null, cards.map(c => c.hrs)) : 0;
+        return { name:l, n:String(cards.length), empty:cards.length === 0,
+          ink: worst >= 72 ? '#b91c1c' : (worst >= 24 ? '#b45309' : '#615c6e'),
+          cards:cards.map(c => ({ who:c.who, what:c.what, age:c.hrs + 'h', outbound:!!c.outbound,
+            slaPill:slaPill(c.hrs),
+            cardStyle:'border:1px solid ' + (c.hrs >= 72 ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px;padding:11px 12px' })) };
+      }),
+      drawerHistory: [
+        { what:'Application submitted', when:'Sat 23 Aug · 22:40', dot:'#cbd5e1' },
+        { what:'KYC returned clear', when:'Sun 24 Aug · 08:15', dot:'#10b981' },
+        { what:'Assigned to T. Roussel', when:'Sun 24 Aug · 09:02', dot:'#cbd5e1' },
+        { what:'No action since — reviewer on leave', when:'61h and counting', dot:'#ef4444' }
+      ],
+      apCost: '≈ ' + c4(run(3200, 520, 0.017, 0.112)),
+      apDraft: 'Approve. Family office, €250k soft-circled, KYC clear since Sunday morning, and the accreditation basis is income-verified rather than self-attested. The only reason this is 61 hours old is that its reviewer went on leave an hour after it was assigned — nothing in the application caused the delay, and the note should say so rather than apologise vaguely.',
+
+      // ── S4 ──
+      cohortCal: [
+        { name:'Cohort 4', state:'Running', dates:'Week 2 of 4 · ends Sep 19', action:'Adjust dates' },
+        { name:'Cohort 5', state:'Scheduled', dates:'Applications close Fri · starts Oct 6', action:'Adjust dates' },
+        { name:'Cohort 3', state:'Complete', dates:'Graduated Jun 27 · 6 of 6', action:'View outcomes' }
+      ].map(c => Object.assign({}, c, {
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:12px 13px;border:1px solid '
+          + (c.state === 'Running' ? '#cbd5e1;background:#f6f8fa' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px' })),
+      assessments: [
+        { name:'Founder profiling', meta:'31 runs this cohort · avg completion 68%', state:'Running' },
+        { name:'Venture readiness', meta:'Opens Week 3 · 0 runs', state:'Scheduled' },
+        { name:'Values &amp; archetype', meta:'Completed Week 1 · 6 of 6', state:'Complete' }
+      ].map(a => Object.assign({}, a, { pill:pill(a.state) })),
+      community: [
+        { zone:'Events', value:'4 live', note:'Two in Paris, one Lyon, one Brussels. Yours to create and cancel.', ink:'#18181b' },
+        { zone:'Job board', value:'7 pending', note:'Moderation queue for postings by territory companies.', ink:'#b45309' },
+        { zone:'Circles', value:'3 active', note:'Local communities. 148 members between them.', ink:'#18181b' },
+        { zone:'Network profiles', value:'12 curated', note:'Territory directory entries you have vouched for.', ink:'#18181b' }
+      ],
+
+      // ── S5 ──
+      conActive:String(conActive), conExpiring:String(conExpiring),
+      contracts: CONTRACTS.map(c => ({ who:c.who, tpl:c.tpl, value:c.value, renews:c.renews + ' · ' + c.days + 'd',
+        state:c.state, pill:pill(c.state),
+        renewInk: c.days <= 60 ? '#b45309' : '#615c6e',
+        rowStyle:'display:grid;grid-template-columns:1.15fr 1.1fr .75fr .8fr .9fr;gap:11px;align-items:center;border-bottom:1px solid #f6f5f9;'
+          + (c.days <= 60 ? 'background:#fffdf5;' : '') })),
+      templates: [
+        { name:'Partner MSA', ver:'v4.2', note:'Current. Two of your contracts use it.', locked:true },
+        { name:'Advisory agreement', ver:'v2.1', note:'Current. Superseded v2.0 on Jul 14.', locked:true },
+        { name:'Service agreement', ver:'v3.0', note:'Current.', locked:true },
+        { name:'Service agreement', ver:'v2.4', note:'Superseded. Existing contracts keep it; no new ones.', locked:true, dead:true }
+      ].map(t => ({ name:t.name, ver:t.ver, note:t.note,
+        actionLabel: t.dead ? 'Archived' : 'Use template',
+        action: t.dead
+          ? 'font-size:11px;font-weight:600;color:#a8a4b4;flex:none;cursor:not-allowed'
+          : 'font-size:11px;font-weight:700;color:' + ST + ';flex:none;cursor:pointer',
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid '
+          + (t.dead ? '#f0eff4;background:#fbfbfc;opacity:.62' : '#f0eff4;background:#fbfbfc') + ';border-radius:9px' })),
+      tplNote: 'You instantiate these; you cannot edit them. When HQ publishes a new version every subsidiary using the old one is notified — which is why the version travels with the contract row rather than being looked up later.',
+      pending: [
+        { who:'Cabinet Lefèvre', meta:'Advisory agreement v2.1 · sent Aug 21', age:'5d', tone:'ok' },
+        { who:'Nord Ventures', meta:'Partner MSA v4.2 · sent Aug 12', age:'14d', tone:'due' },
+        { who:'Aurélie Chen', meta:'Blocked — LP application still in Approvals', age:'—', tone:'bad' }
+      ].map(p => {
+        const M = { ok:['#ecfdf5','#047857','#a7f3d0'], due:['#fffbeb','#92400e','#fde68a'], bad:['#fef2f2','#b91c1c','#fecaca'] };
+        const c = M[p.tone];
+        return { who:p.who, meta:p.meta, age:p.age,
+          pill:'font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';flex:none',
+          rowStyle:'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid '
+            + (p.tone === 'bad' ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:9px' };
+      }),
+
+      // ── S6 ──
+      insStats: [
+        { label:'Accounts', value:String(accTotal), delta:'+31 this quarter', ink:'#18181b', deltaInk:'#047857' },
+        { label:'Activation', value:'62%', delta:'+4 pts', ink:'#18181b', deltaInk:'#047857' },
+        { label:'Programme throughput', value:'6 of 6', delta:'Cohort 3 graduated', ink:'#047857', deltaInk:'#615c6e' },
+        { label:'Revenue share Q3', value:eur(51200), delta:'+18% vs Q2', ink:'#18181b', deltaInk:'#047857' }
+      ],
+      bench: [
+        { metric:'Activation rate', you:'62%', med:'54%', youPct:'62', medPct:'54', ink:'#047857' },
+        { metric:'Seat utilisation', you:'88%', med:'71%', youPct:'88', medPct:'71', ink:'#047857' },
+        { metric:'Median approval age', you:'34h', med:'19h', youPct:'71', medPct:'40', ink:'#b45309' },
+        { metric:'Token spend per account', you:'€1.90', med:'€2.60', youPct:'46', medPct:'63', ink:'#047857' }
+      ],
+      benchNote: 'The median is computed across every subsidiary and rendered as a tick, never as a ranked list — there is no view here that would let you work out who is above you. Approval age is the one line where you are behind it, and Home already told you why.',
+      settings: [
+        { field:'Subsidiary name', value:'Axal VC France SAS', who:'Yours', edit:true },
+        { field:'Territory', value:'FR · BE · LU', who:'HQ', edit:false },
+        { field:'Staff &amp; roles', value:'6 admins, 2 reviewers', who:'Yours', edit:true },
+        { field:'Brand kit', value:'Axal VC master · v9 · download only', who:'HQ', edit:false },
+        { field:'Licence summary', value:'325 seats · renews 14 Mar 2027', who:'HQ', edit:false }
+      ].map(s => ({ field:s.field, value:s.value, who:s.who,
+        chip: s.edit
+          ? 'font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#334155;background:#f6f8fa;border:1px solid #cbd5e1;border-radius:4px;padding:2px 7px;flex:none'
+          : 'font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#615c6e;background:#f4f4f6;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;flex:none' })),
+      setNote: 'Three of the five rows are HQ-held and rendered as such rather than as disabled inputs — a greyed-out field invites a support ticket asking to enable it, where a chip saying "HQ" answers the question on the page.'
+    };
+  }
+}
+</script>
+</body>
+</html>

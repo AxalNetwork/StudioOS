@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .nw-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .nw-page{background:#f6f5f8;color:#18181b}
+    .nw-surface{background:#ffffff}
+    .nw-sunken{background:#faf9fc}
+    .nw-border{border-color:#e5e3ec}
+    .nw-bd-b{border-bottom-color:#e5e3ec}
+    .nw-bd-t{border-top-color:#e5e3ec}
+    .nw-bd-r{border-right-color:#e5e3ec}
+    .nw-text{color:#18181b}
+    .nw-muted{color:#6b6577}
+    .nw-strong{color:#3f3f46}
+    .nw-field{background:#faf9fc;border-color:#e5e3ec;color:#18181b}
+
+    .nw-page.nw-dark{background:#0a090e;color:#ececf1}
+    .nw-dark .nw-surface{background:#17161d}
+    .nw-dark .nw-sunken{background:#1d1b25}
+    .nw-dark .nw-border{border-color:#2a2833}
+    .nw-dark .nw-bd-b{border-bottom-color:#2a2833}
+    .nw-dark .nw-bd-t{border-top-color:#2a2833}
+    .nw-dark .nw-bd-r{border-right-color:#2a2833}
+    .nw-dark .nw-text{color:#ececf1}
+    .nw-dark .nw-muted{color:#a5a0b2}
+    .nw-dark .nw-strong{color:#dcd9e4}
+    .nw-dark .nw-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+
+    .nw-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .nw-btn:hover{filter:brightness(1.05)}
+    .nw-seg{cursor:pointer;transition:background .13s,color .13s}
+    .nw-row{cursor:pointer;transition:background .12s}
+    .nw-row:hover{background:#faf9fc}
+    .nw-dark .nw-row:hover{background:#1d1b25}
+    .nw-card{cursor:pointer;transition:box-shadow .13s,transform .13s}
+    .nw-card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(10,9,14,.08)}
+    .nw-th{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .nw-fade{animation:nwFade .2s ease}
+    @keyframes nwFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    @keyframes nwSlide{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+    .nw-slide{animation:nwSlide .22s ease}
+    input,select{font-family:inherit;outline:none}
+    input:focus{border-color:#7c3aed}
+    ::placeholder{color:#8b8798}
+    .nw-mobile-bar{display:none}
+    @media (max-width:900px){
+      .nw-side{display:none!important}
+      .nw-mobile-bar{display:flex!important}
+      .nw-2{grid-template-columns:1fr!important}.nw-3{grid-template-columns:1fr!important}
+      .nw-wide{overflow-x:auto}
+      .nw-panel{width:100%!important}
+    }
+    @media (max-width:1180px){.nw-3{grid-template-columns:1fr 1fr}}
+  </style>
+</helmet>
+
+<div class="nw-page {{ themeClass }}" style="min-height:100vh;display:flex">
+
+  <!-- SIDEBAR (shared shell) -->
+  <aside class="nw-side nw-surface nw-bd-r" style="flex:none;width:216px;border-right-width:1px;border-right-style:solid;position:sticky;top:0;height:100vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:10px;padding:18px 18px 16px">
+      <div style="width:27px;height:27px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:none">A</div>
+      <div class="nw-text" style="font-size:14px;font-weight:800;letter-spacing:-.015em">Axal VC</div>
+    </div>
+    <div style="padding:4px 10px">
+      <div class="nw-muted nw-th" style="padding:6px 10px 8px">Network</div>
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="3">
+        <div class="nw-btn" onClick="{{ n.go }}" style="{{ n.style }}">
+          <span style="width:15px;height:15px;display:flex;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span>
+          <span style="min-width:0;flex:1">{{ n.label }}</span>
+          <sc-if value="{{ n.badge }}"><span style="{{ n.badgeStyle }}">{{ n.badge }}</span></sc-if>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top:auto;padding:14px 18px;border-top:1px solid;display:flex;align-items:center;gap:10px" class="nw-bd-t">
+      <div style="width:29px;height:29px;border-radius:9px;background:#0f766e;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none">AF</div>
+      <div style="min-width:0">
+        <div class="nw-text" style="font-size:12px;font-weight:700">Ada Ferreira</div>
+        <div class="nw-muted" style="font-size:10px">Northwind Data</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex:1;min-width:0">
+
+    <!-- MOBILE FALLBACK BAR — the only horizontal switcher -->
+    <div class="nw-mobile-bar nw-surface nw-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:10px 16px;gap:5px;position:sticky;top:0;z-index:30">
+      <sc-for list="{{ mobileNav }}" as="m" hint-placeholder-count="3">
+        <div class="nw-seg" onClick="{{ m.go }}" style="{{ m.style }}">{{ m.label }}</div>
+      </sc-for>
+      <div class="nw-btn nw-border nw-muted" onClick="{{ toggleTheme }}" style="margin-left:auto;padding:6px 10px;border-radius:8px;border-width:1px;border-style:solid;font-size:11px;font-weight:600;background:transparent">{{ themeLabel }}</div>
+    </div>
+
+    <div style="max-width:1120px;margin:0 auto;padding:20px 24px 90px">
+
+    <!-- ================= INTRODUCTIONS ================= -->
+    <sc-if value="{{ pIntros }}">
+    <div class="nw-fade">
+      <!-- compact header -->
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="{{ hdrIconIntro }}"><span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ introIcon }}"></span></div>
+        <div style="min-width:0;flex:1">
+          <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+            <div class="nw-text" style="font-size:17px;font-weight:800;letter-spacing:-.018em">Introductions</div>
+            <div class="nw-sunken nw-border" style="display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border-radius:99px;border-width:1px;border-style:solid">
+              <span style="width:11px;height:11px;display:flex;flex:none;color:{{ violet }}" dangerouslySetInnerHTML="{{ coinIcon }}"></span>
+              <span class="nw-num nw-text" style="font-size:12px;font-weight:700">{{ creditLabel }}</span>
+              <span class="nw-muted" style="font-size:10px">credits</span>
+              <span class="nw-btn" onClick="{{ getCredits }}" style="font-size:10px;font-weight:700;color:{{ violet }}">Get more</span>
+            </div>
+          </div>
+          <div class="nw-muted" style="font-size:12px;margin-top:2px">Warm paths into people you should know, proposed from your graph.</div>
+        </div>
+        <div class="nw-btn nw-border nw-muted" onClick="{{ toggleTheme }}" style="flex:none;padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent">{{ themeLabel }}</div>
+        <div class="nw-btn" onClick="{{ goDiscover }}" style="flex:none;padding:9px 16px;border-radius:9px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700">Find someone</div>
+      </div>
+
+      <!-- ONE control row: segmented -->
+      <div class="nw-sunken nw-border" style="display:inline-flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid;margin-bottom:16px">
+        <sc-for list="{{ introTabs }}" as="t" hint-placeholder-count="2">
+          <div class="nw-seg" onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}<sc-if value="{{ t.n }}"><span style="{{ t.nStyle }}">{{ t.n }}</span></sc-if></div>
+        </sc-for>
+      </div>
+
+      <!-- DISCOVER -->
+      <sc-if value="{{ introDiscover }}">
+        <sc-if value="{{ hasCandidates }}">
+          <div class="nw-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <sc-for list="{{ candidates }}" as="c" hint-placeholder-count="4">
+              <div class="nw-surface nw-border nw-fade" style="border-width:1px;border-style:solid;border-radius:16px;padding:17px 20px">
+                <div style="display:flex;align-items:flex-start;gap:12px">
+                  <div style="{{ c.avStyle }}">{{ c.initials }}</div>
+                  <div style="min-width:0;flex:1">
+                    <div class="nw-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.01em">{{ c.name }}</div>
+                    <div class="nw-muted" style="font-size:11.5px;margin-top:2px">{{ c.role }}</div>
+                  </div>
+                  <span style="{{ c.typeChip }}">{{ c.type }}</span>
+                </div>
+                <div style="{{ whyWrap }}">
+                  <span style="width:12px;height:12px;display:flex;flex:none;margin-top:1px" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+                  <div style="min-width:0">{{ c.why }}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-top:11px">
+                  <div style="display:flex;flex:none">
+                    <sc-for list="{{ c.mutuals }}" as="m" hint-placeholder-count="2">
+                      <div style="{{ m.style }}" title="{{ m.name }}">{{ m.initials }}</div>
+                    </sc-for>
+                  </div>
+                  <div class="nw-muted" style="font-size:10.5px;min-width:0;flex:1">{{ c.mutualNote }}</div>
+                </div>
+                <div class="nw-bd-t" style="display:flex;align-items:center;gap:9px;margin-top:13px;padding-top:12px;border-top-width:1px;border-top-style:solid">
+                  <div class="nw-btn nw-muted" data-cand="{{ c.k }}" onClick="{{ passCand }}" style="flex:none;padding:8px 13px;border-radius:9px;font-size:11.5px;font-weight:600">Pass</div>
+                  <div style="flex:1"></div>
+                  <div class="nw-btn" data-cand="{{ c.k }}" onClick="{{ acceptCand }}" style="{{ c.acceptStyle }}">{{ c.acceptLabel }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noCandidates }}">
+          <div class="nw-border" style="border-width:1px;border-style:dashed;border-radius:16px;padding:40px 24px;text-align:center">
+            <div class="nw-sunken nw-muted" style="width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;margin:0 auto">
+              <span style="width:19px;height:19px;display:flex" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+            </div>
+            <div class="nw-text" style="font-size:14px;font-weight:800;margin-top:14px">No candidates right now</div>
+            <div class="nw-muted" style="font-size:12.5px;line-height:1.6;margin-top:6px;max-width:420px;margin-left:auto;margin-right:auto">Matches are proposed as your graph grows — adding relationships and tagging what you're looking for improves them. New candidates land roughly weekly.</div>
+          </div>
+        </sc-if>
+      </sc-if>
+
+      <!-- MY INTRODUCTIONS -->
+      <sc-if value="{{ introMine }}">
+        <sc-if value="{{ hasLedger }}">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ ledger }}" as="l" hint-placeholder-count="4">
+              <div class="nw-surface nw-border nw-fade" style="border-width:1px;border-style:solid;border-radius:14px;padding:15px 20px">
+                <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+                  <div style="{{ l.avStyle }}">{{ l.initials }}</div>
+                  <div style="min-width:0;flex:1">
+                    <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                      <div class="nw-text" style="font-size:13px;font-weight:700">{{ l.name }}</div>
+                      <span style="{{ l.chip }}">{{ l.state }}</span>
+                    </div>
+                    <div class="nw-muted" style="font-size:11.5px;margin-top:2px">{{ l.meta }}</div>
+                    <div class="nw-muted" style="font-size:11.5px;line-height:1.55;margin-top:7px"><strong class="nw-strong" style="font-weight:700">Next:</strong> {{ l.next }}</div>
+                  </div>
+                  <div class="nw-num nw-muted" style="font-size:10.5px;flex:none">{{ l.when }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ noLedger }}">
+          <div class="nw-border" style="border-width:1px;border-style:dashed;border-radius:16px;padding:40px 24px;text-align:center">
+            <div class="nw-text" style="font-size:14px;font-weight:800">No introductions yet</div>
+            <div class="nw-muted" style="font-size:12.5px;line-height:1.6;margin-top:6px;max-width:400px;margin-left:auto;margin-right:auto">Accept a candidate in Discover, or request an intro from a relationship or organization profile — everything you start is tracked here.</div>
+            <div class="nw-btn" onClick="{{ goDiscover }}" style="display:inline-block;margin-top:14px;padding:9px 17px;border-radius:9px;background:#7c3aed;color:#fff;font-size:12px;font-weight:700">Browse candidates</div>
+          </div>
+        </sc-if>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <!-- ================= RELATIONSHIPS ================= -->
+    <sc-if value="{{ pRels }}">
+    <div class="nw-fade">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="{{ hdrIconRel }}"><span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ relIcon }}"></span></div>
+        <div style="min-width:0;flex:1">
+          <div class="nw-text" style="font-size:17px;font-weight:800;letter-spacing:-.018em">Relationships</div>
+          <div class="nw-muted" style="font-size:12px;margin-top:2px">Everyone you're connected to, with how warm the thread still is.</div>
+        </div>
+        <div class="nw-btn nw-border nw-muted" onClick="{{ toggleTheme }}" style="flex:none;padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent">{{ themeLabel }}</div>
+        <div class="nw-btn" style="flex:none;padding:9px 16px;border-radius:9px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700">Add contact</div>
+      </div>
+
+      <!-- ONE control row: search + chips -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <input class="nw-field" value="{{ relQuery }}" onChange="{{ setRelQuery }}" placeholder="Search people or companies" style="flex:1;min-width:180px;max-width:280px;padding:8px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12px">
+        <sc-for list="{{ relChips }}" as="c" hint-placeholder-count="5">
+          <div class="nw-seg" onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</div>
+        </sc-for>
+      </div>
+
+      <div class="nw-surface nw-border nw-wide" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="nw-sunken nw-bd-b" style="display:grid;grid-template-columns:1.8fr 1.3fr 1fr 1.3fr;border-bottom-width:1px;border-bottom-style:solid;min-width:640px">
+          <div class="nw-muted nw-th" style="padding:9px 20px">Name</div>
+          <div class="nw-muted nw-th" style="padding:9px 12px">Company</div>
+          <div class="nw-muted nw-th" style="padding:9px 12px">Last touch</div>
+          <div class="nw-muted nw-th" style="padding:9px 20px 9px 12px">Tags</div>
+        </div>
+        <sc-for list="{{ rels }}" as="r" hint-placeholder-count="7">
+          <div class="nw-row nw-bd-b" data-rel="{{ r.k }}" onClick="{{ openRel }}" style="display:grid;grid-template-columns:1.8fr 1.3fr 1fr 1.3fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:640px">
+            <div style="padding:12px 20px;display:flex;align-items:center;gap:10px;min-width:0">
+              <div style="{{ r.avStyle }}">{{ r.initials }}</div>
+              <div style="min-width:0">
+                <div class="nw-strong" style="font-size:12.5px;font-weight:700">{{ r.name }}</div>
+                <div class="nw-muted" style="font-size:10.5px;margin-top:1px">{{ r.role }}</div>
+              </div>
+            </div>
+            <div class="nw-muted" style="padding:12px 12px;font-size:12px">{{ r.company }}</div>
+            <div style="padding:12px 12px;display:flex;align-items:center;gap:7px">
+              <span style="{{ r.dot }}"></span>
+              <div class="nw-num" style="font-size:11.5px;color:{{ r.touchTone }}">{{ r.touch }}</div>
+            </div>
+            <div style="padding:12px 20px 12px 12px;display:flex;gap:5px;flex-wrap:wrap">
+              <sc-for list="{{ r.tags }}" as="t" hint-placeholder-count="2">
+                <span style="{{ t.chip }}">{{ t.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+        <sc-if value="{{ noRels }}">
+          <div style="padding:34px 20px;text-align:center">
+            <div class="nw-strong" style="font-size:13px;font-weight:700">Nothing matches</div>
+            <div class="nw-muted" style="font-size:12px;margin-top:5px">Try a different search or clear the filters.</div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ================= ORGANIZATIONS ================= -->
+    <sc-if value="{{ pOrgs }}">
+    <div class="nw-fade">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <div style="{{ hdrIconOrg }}"><span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ orgIcon }}"></span></div>
+        <div style="min-width:0;flex:1">
+          <div class="nw-text" style="font-size:17px;font-weight:800;letter-spacing:-.018em">Organizations</div>
+          <div class="nw-muted" style="font-size:12px;margin-top:2px">Companies, funds and firms on the platform, and who you can reach inside them.</div>
+        </div>
+        <div class="nw-btn nw-border nw-muted" onClick="{{ toggleTheme }}" style="flex:none;padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent">{{ themeLabel }}</div>
+        <div class="nw-btn" style="flex:none;padding:9px 16px;border-radius:9px;background:#7c3aed;color:#fff;font-size:12.5px;font-weight:700">Suggest an org</div>
+      </div>
+
+      <!-- ONE control row -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <input class="nw-field" value="{{ orgQuery }}" onChange="{{ setOrgQuery }}" placeholder="Search organizations" style="flex:1;min-width:180px;max-width:280px;padding:8px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12px">
+        <sc-for list="{{ orgChips }}" as="c" hint-placeholder-count="4">
+          <div class="nw-seg" onClick="{{ c.go }}" style="{{ c.style }}">{{ c.label }}</div>
+        </sc-for>
+      </div>
+
+      <div class="nw-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <sc-for list="{{ orgs }}" as="o" hint-placeholder-count="6">
+          <div class="nw-card nw-surface nw-border" data-org="{{ o.k }}" onClick="{{ openOrg }}" style="border-width:1px;border-style:solid;border-radius:16px;padding:17px 19px">
+            <div style="display:flex;align-items:flex-start;gap:11px">
+              <div style="{{ o.avStyle }}">{{ o.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="nw-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.01em">{{ o.name }}</div>
+                <div class="nw-muted" style="font-size:11px;margin-top:2px">{{ o.meta }}</div>
+              </div>
+              <span style="{{ o.catChip }}">{{ o.cat }}</span>
+            </div>
+            <div class="nw-muted" style="font-size:11.5px;line-height:1.55;margin-top:10px">{{ o.about }}</div>
+            <div class="nw-bd-t" style="display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:11px;border-top-width:1px;border-top-style:solid">
+              <div style="display:flex;flex:none">
+                <sc-for list="{{ o.people }}" as="p" hint-placeholder-count="3">
+                  <div style="{{ p.style }}" title="{{ p.name }}">{{ p.initials }}</div>
+                </sc-for>
+              </div>
+              <div class="nw-muted" style="font-size:10.5px;min-width:0;flex:1">{{ o.peopleNote }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ noOrgs }}">
+        <div class="nw-border" style="border-width:1px;border-style:dashed;border-radius:16px;padding:34px 20px;text-align:center">
+          <div class="nw-strong" style="font-size:13px;font-weight:700">No organizations match</div>
+          <div class="nw-muted" style="font-size:12px;margin-top:5px">Try a different search or category.</div>
+        </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    </div>
+  </div>
+
+  <!-- SLIDE-OVER: RELATIONSHIP PROFILE -->
+  <sc-if value="{{ relOpen }}">
+    <div onClick="{{ closeRel }}" style="position:fixed;inset:0;z-index:900;background:rgba(10,9,14,.42)">
+      <div class="nw-panel nw-surface nw-slide" onClick="{{ stop }}" style="position:absolute;top:0;right:0;bottom:0;width:420px;box-shadow:-8px 0 30px rgba(10,9,14,.16);overflow-y:auto;padding:24px 26px">
+        <div style="display:flex;align-items:flex-start;gap:13px">
+          <div style="{{ relSel.avStyleLg }}">{{ relSel.initials }}</div>
+          <div style="min-width:0;flex:1">
+            <div class="nw-text" style="font-size:16px;font-weight:800;letter-spacing:-.018em">{{ relSel.name }}</div>
+            <div class="nw-muted" style="font-size:12px;margin-top:2px">{{ relSel.role }} · {{ relSel.company }}</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">
+              <sc-for list="{{ relSel.tags }}" as="t" hint-placeholder-count="2">
+                <span style="{{ t.chip }}">{{ t.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div class="nw-btn nw-border nw-muted" onClick="{{ closeRel }}" style="width:28px;height:28px;border-radius:8px;border-width:1px;border-style:solid;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none">×</div>
+        </div>
+
+        <div class="nw-sunken nw-border" style="border-width:1px;border-style:solid;border-radius:12px;padding:12px 15px;margin-top:16px;display:flex;align-items:center;gap:10px">
+          <span style="{{ relSel.dot }}"></span>
+          <div class="nw-strong" style="font-size:12px;font-weight:600;min-width:0;flex:1">{{ relSel.strengthNote }}</div>
+        </div>
+
+        <div class="nw-muted nw-th" style="margin:18px 0 10px">Interaction history</div>
+        <div style="display:flex;flex-direction:column;gap:0">
+          <sc-for list="{{ relSel.history }}" as="h" hint-placeholder-count="4">
+            <div style="display:flex;gap:11px">
+              <div style="display:flex;flex-direction:column;align-items:center;flex:none">
+                <span style="width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none;background:{{ h.bg }};color:{{ h.tone }}"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ h.icon }}"></span></span>
+                <sc-if value="{{ h.line }}"><div class="nw-border" style="width:1.5px;flex:1;min-height:16px;border-left-width:1.5px;border-left-style:solid"></div></sc-if>
+              </div>
+              <div style="padding-bottom:14px;min-width:0">
+                <div class="nw-strong" style="font-size:12px;font-weight:600;line-height:1.5">{{ h.what }}</div>
+                <div class="nw-muted nw-num" style="font-size:10.5px;margin-top:2px">{{ h.when }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="nw-muted nw-th" style="margin:14px 0 10px">Request intro via {{ relSel.first }}</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <sc-for list="{{ relSel.vias }}" as="v" hint-placeholder-count="2">
+            <div class="nw-btn nw-border" data-via="{{ v.k }}" onClick="{{ requestVia }}" style="display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:11px;border-width:1px;border-style:solid">
+              <div style="{{ v.avStyle }}">{{ v.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="nw-strong" style="font-size:12px;font-weight:700">{{ v.name }}</div>
+                <div class="nw-muted" style="font-size:10.5px;margin-top:1px">{{ v.why }}</div>
+              </div>
+              <span style="font-size:11px;font-weight:700;color:{{ violet }};flex:none">{{ v.cta }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div class="nw-muted" style="font-size:10.5px;line-height:1.55;margin-top:10px">Requesting costs 1 credit when accepted, and the intro lands in your Introductions ledger.</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- SLIDE-OVER: ORG PROFILE -->
+  <sc-if value="{{ orgOpen }}">
+    <div onClick="{{ closeOrg }}" style="position:fixed;inset:0;z-index:900;background:rgba(10,9,14,.42)">
+      <div class="nw-panel nw-surface nw-slide" onClick="{{ stop }}" style="position:absolute;top:0;right:0;bottom:0;width:440px;box-shadow:-8px 0 30px rgba(10,9,14,.16);overflow-y:auto;padding:24px 26px">
+        <div style="display:flex;align-items:flex-start;gap:13px">
+          <div style="{{ orgSel.avStyleLg }}">{{ orgSel.initials }}</div>
+          <div style="min-width:0;flex:1">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div class="nw-text" style="font-size:16px;font-weight:800;letter-spacing:-.018em">{{ orgSel.name }}</div>
+              <span style="{{ orgSel.catChip }}">{{ orgSel.cat }}</span>
+            </div>
+            <div class="nw-muted" style="font-size:12px;margin-top:2px">{{ orgSel.meta }}</div>
+          </div>
+          <div class="nw-btn nw-border nw-muted" onClick="{{ closeOrg }}" style="width:28px;height:28px;border-radius:8px;border-width:1px;border-style:solid;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none">×</div>
+        </div>
+
+        <div class="nw-muted" style="font-size:12.5px;line-height:1.65;margin-top:14px">{{ orgSel.aboutLong }}</div>
+
+        <div class="nw-muted nw-th" style="margin:18px 0 10px">People on the platform</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <sc-for list="{{ orgSel.members }}" as="m" hint-placeholder-count="3">
+            <div class="nw-border" style="display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:11px;border-width:1px;border-style:solid">
+              <div style="{{ m.avStyle }}">{{ m.initials }}</div>
+              <div style="min-width:0;flex:1">
+                <div class="nw-strong" style="font-size:12px;font-weight:700">{{ m.name }}</div>
+                <div class="nw-muted" style="font-size:10.5px;margin-top:1px">{{ m.role }}</div>
+              </div>
+              <sc-if value="{{ m.known }}"><span style="{{ m.knownChip }}">In your graph</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="nw-muted nw-th" style="margin:16px 0 10px">Recent activity</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ orgSel.activity }}" as="a" hint-placeholder-count="3">
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <span class="nw-muted" style="width:12px;height:12px;display:flex;flex:none;margin-top:2px" dangerouslySetInnerHTML="{{ a.icon }}"></span>
+              <div style="min-width:0">
+                <div class="nw-strong" style="font-size:11.5px;line-height:1.55">{{ a.what }}</div>
+                <div class="nw-muted nw-num" style="font-size:10px;margin-top:1px">{{ a.when }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="nw-btn" data-org-intro="{{ orgSel.k }}" onClick="{{ requestOrgIntro }}" style="margin-top:18px;padding:12px 0;border-radius:11px;background:#7c3aed;color:#fff;font-size:13px;font-weight:700;text-align:center">Request an intro · via {{ orgSel.bestVia }}</div>
+        <div class="nw-muted" style="font-size:10.5px;line-height:1.55;margin-top:9px;text-align:center">Feeds the Introductions flow — 1 credit on acceptance.</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240}}">
+class Component extends DCLogic {
+  state = { theme:'light', page:'intros', introTab:'discover',
+    credits:5, accepted:{}, passed:{}, requested:[],
+    relQuery:'', relRole:'All', relRecency:'Any', relSel:null,
+    orgQuery:'', orgCat:'All', orgSel:null };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+    // Text-safe violet — bare V7 measures ~2.5:1 on dark surfaces.
+    const VIO = dark ? '#c4b5fd' : V7;
+    const GRN = dark ? '#6ee7b7' : '#116632';
+    const AMB = dark ? '#fcd34d' : '#92400e';
+    const BLU = dark ? '#93b4fc' : '#1e40af';
+    const INK = dark ? '#ececf1' : '#18181b';
+    const MUT = dark ? '#a5a0b2' : '#6b6577';
+
+    const I = {
+      intro: this.ic('<path d="M4 12h11"/><path d="m11 7 5 5-5 5"/><circle cx="20" cy="12" r="2"/>'),
+      link: this.ic('<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>'),
+      bldg: this.ic('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 8h2M13 8h2M9 12h2M13 12h2M9 16h6"/>'),
+      coin: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.8 9.4A2.8 2.8 0 0 0 12 8.2c-1.6 0-2.8.9-2.8 2.1s1.2 1.9 2.8 1.9 2.8.7 2.8 1.9-1.2 2.1-2.8 2.1a2.8 2.8 0 0 1-2.8-1.2"/>'),
+      spark: this.ic('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'),
+      mail: this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="m2 7 10 6 10-6"/>'),
+      cal: this.ic('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/>'),
+      phone: this.ic('<path d="M5 3h4l2 5-3 2a12 12 0 0 0 6 6l2-3 5 2v4a1 1 0 0 1-1 1A18 18 0 0 1 4 4a1 1 0 0 1 1-1z"/>'),
+      note: this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      mega: this.ic('<path d="M3 11v2a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M17 9a4 4 0 0 1 0 6"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:9.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const cGreen = chip('rgba(17,102,50,.1)', GRN);
+    const cAmber = chip('rgba(180,83,9,.1)', AMB);
+    const cViolet = chip('rgba(124,58,237,.1)', VIO);
+    const cBlue = chip('rgba(29,78,216,.1)', BLU);
+    const cGrey = chip(dark ? '#2a2833' : '#f1f0f5', MUT);
+    const seg = (on) => 'padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? VIO : MUT)
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none')+';white-space:nowrap;display:inline-flex;align-items:center;gap:5px';
+    const av = (bg, sz) => 'width:'+(sz||30)+'px;height:'+(sz||30)+'px;border-radius:9px;background:'+bg+';color:#fff;font-size:'+(sz>=44?'14px':sz>=36?'12px':'10px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const stackAv = (bg, i) => 'width:22px;height:22px;border-radius:7px;background:'+bg+';color:#fff;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;border:2px solid '+(dark?'#17161d':'#fff')+(i?';margin-left:-7px':'');
+    const iconBox = (c) => 'width:34px;height:34px;border-radius:11px;background:'+c+'1c;color:'+VIO+';display:flex;align-items:center;justify-content:center;flex:none';
+
+    // ============ NAV SHELL ============
+    const PAGES = [
+      { k:'intros', l:'Introductions', icon:I.intro, badge:'' },
+      { k:'rels', l:'Relationships', icon:I.link, badge:'' },
+      { k:'orgs', l:'Organizations', icon:I.bldg, badge:'' },
+    ];
+    const nav = PAGES.map(p => ({ label:p.l, icon:p.icon, badge:p.badge,
+      badgeStyle:'display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 5px;border-radius:99px;font-size:9.5px;font-weight:800;background:'+V+';color:#fff',
+      go: () => this.setState({ page:p.k }),
+      style:'display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;font-size:12.5px;font-weight:'+(st.page===p.k?'700':'600')
+        + ';color:'+(st.page===p.k ? VIO : MUT)
+        + ';background:'+(st.page===p.k ? (dark?'#241f38':'#f4f0fe') : 'transparent') }));
+    const mobileNav = PAGES.map(p => ({ label:p.l, style: seg(st.page===p.k), go: () => this.setState({ page:p.k }) }));
+
+    // ============ INTRODUCTIONS ============
+    const CANDS = [
+      { k:'voss', name:'Elena Voss', initials:'EV', bg:'#7c3aed', type:'Advisor', role:'Fractional CPO · GTM & pricing · Berlin',
+        why:'Your last three relationship notes mention pricing uncertainty — Elena has run pricing resets at four seed-stage B2B companies.',
+        mutuals:[{n:'Hana Kaur',i:'HK',bg:'#0f766e'},{n:'Marcus Oyelaran',i:'MO',bg:'#b45309'}], mutualNote:'Hana and Marcus both worked with her' },
+      { k:'reyes', name:'David Reyes', initials:'DR', bg:'#1d4ed8', type:'Investor', role:'Angel · fintech & data infra · 40 checks · New York',
+        why:'He led two data-infrastructure seed rounds this year, and Northwind sits squarely in his stated thesis.',
+        mutuals:[{n:'Kestrel Capital',i:'KC',bg:'#0f766e'}], mutualNote:'Kestrel co-invested with him twice' },
+      { k:'menon', name:'Priya Menon', initials:'PM', bg:'#be185d', type:'Founder', role:'Founder · LoopSense · industrial IoT · Bengaluru',
+        why:'She solved the sensor-data ingestion problem you flagged in your April notes — different market, same architecture.',
+        mutuals:[{n:'Lin Zhang',i:'LZ',bg:'#b45309'},{n:'Anneke Kern',i:'AK',bg:'#116632'}], mutualNote:'2 mutual connections' },
+      { k:'whit', name:'Dana Whitfield', initials:'DW', bg:'#0f766e', type:'Customer', role:'Head of Compliance · Ferrostack · Austin',
+        why:'Attended your SOC 2 webinar, matches your ICP tag "compliance-led buyer", and Ferrostack runs on a stack you integrate with.',
+        mutuals:[{n:'James Whitfield',i:'JW',bg:'#334155'}], mutualNote:'James can make the intro' },
+    ];
+    const visibleCands = CANDS.filter(c => !st.accepted[c.k] && !st.passed[c.k]);
+    const credits = st.credits;
+    const candidates = visibleCands.map(c => {
+      const afford = credits >= 1;
+      return { k:c.k, name:c.name, initials:c.initials, role:c.role, why:c.why,
+        avStyle: av(c.bg, 38),
+        typeChip: c.type==='Investor' ? cBlue : c.type==='Advisor' ? cViolet : c.type==='Customer' ? cGreen : cAmber,
+        type:c.type,
+        mutuals: c.mutuals.map((m,i) => ({ name:m.n, initials:m.i, style: stackAv(m.bg, i>0) })),
+        mutualNote: c.mutualNote,
+        acceptLabel: afford ? 'Accept · 1 credit' : 'Needs 1 credit',
+        acceptStyle: afford
+          ? 'flex:none;padding:8px 15px;border-radius:9px;font-size:11.5px;font-weight:700;background:'+V+';color:#fff;cursor:pointer'
+          : 'flex:none;padding:8px 15px;border-radius:9px;font-size:11.5px;font-weight:600;background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+MUT+';cursor:not-allowed' };
+    });
+
+    const LEDGER_SEED = [
+      { name:'Sofia Marchetti', initials:'SM', bg:'#b45309', state:'Completed', chip:cGreen,
+        meta:'Family office · via Kestrel Capital · requested Jul 12', when:'Jul 30',
+        next:'Follow-up call happened Aug 4 — she asked for the Q3 update when it ships.' },
+      { name:'Tom Okafor', initials:'TO', bg:'#15803d', state:'Accepted', chip:cBlue,
+        meta:'Marketplace operator · via Anneke Kern · requested Aug 2', when:'Aug 9',
+        next:'Anneke sent the double-opt-in; Tom said yes. Suggest two times this week.' },
+      { name:'Kestrel Capital', initials:'KC', bg:'#0f766e', state:'Requested', chip:cAmber,
+        meta:'Seed fund · via David Reyes · requested Aug 12', when:'Aug 12',
+        next:'Waiting on David to forward — nudge available after 5 business days.' },
+    ];
+    const acceptedLedger = Object.keys(st.accepted).map(k => {
+      const c = CANDS.find(x => x.k === k);
+      return { name:c.name, initials:c.initials, bg:c.bg, state:'Requested', chip:cAmber,
+        meta:c.type + ' · via ' + c.mutuals[0].n + ' · requested Aug 14', when:'Today',
+        next: c.mutuals[0].n.split(' ')[0] + ' has been asked to make the double-opt-in intro. You\u2019ll hear back within a few days.' };
+    });
+    const reqLedger = st.requested.map(r => ({ name:r.name, initials:r.initials, bg:r.bg, state:'Requested', chip:cAmber,
+      meta:r.meta, when:'Today', next:r.next }));
+    const ledgerAll = acceptedLedger.concat(reqLedger).concat(LEDGER_SEED);
+    const ledger = ledgerAll.map(l => Object.assign({}, l, { avStyle: av(l.bg, 34) }));
+
+    const introTabs = [
+      { k:'discover', l:'Discover', n: String(visibleCands.length) },
+      { k:'mine', l:'My introductions', n: String(ledgerAll.length) },
+    ].map(t => ({ label:t.l, n:t.n, nStyle:'font-size:9.5px;font-weight:700;opacity:.65',
+      style: seg(st.introTab === t.k), go: () => this.setState({ introTab:t.k }) }));
+
+    // ============ RELATIONSHIPS ============
+    const RELS = [
+      { k:'kaur', name:'Hana Kaur', initials:'HK', bg:'#0f766e', role:'Partner · Platform', company:'Axal VC', days:2, tags:['Investor','Champion'],
+        history:[ {what:'Intro to Elena Voss completed', icon:I.intro, when:'Aug 12'}, {what:'Coffee at the LP briefing', icon:I.cal, when:'Jul 28'}, {what:'Shared your pricing memo with the platform team', icon:I.note, when:'Jul 14'} ],
+        vias:[ {k:'gl', name:'Guillaume Lauzier', initials:'GL', bg:'#7c3aed', why:'Her GP — strongest path for fund matters', cta:'Request'} ] },
+      { k:'oyelaran', name:'Marcus Oyelaran', initials:'MO', bg:'#b45309', role:'CTO', company:'Lumenpath', days:9, tags:['Customer','Technical'],
+        history:[ {what:'Booked a meeting from your SOC 2 webinar', icon:I.cal, when:'Aug 5'}, {what:'Replied to the follow-up thread', icon:I.mail, when:'Aug 7'} ],
+        vias:[ {k:'hk', name:'Hana Kaur', initials:'HK', bg:'#0f766e', why:'Introduced you originally', cta:'Request'} ] },
+      { k:'kern', name:'Anneke Kern', initials:'AK', bg:'#116632', role:'Founder', company:'Studio Kern', days:16, tags:['Partner'],
+        history:[ {what:'Wrapped the website engagement · 5-star review', icon:I.note, when:'Jul 29'}, {what:'Invoice paid, net 14', icon:I.note, when:'Jul 18'} ],
+        vias:[ {k:'to', name:'Tom Okafor', initials:'TO', bg:'#15803d', why:'She referred him to you last week', cta:'Request'} ] },
+      { k:'whitfield', name:'James Whitfield', initials:'JW', bg:'#334155', role:'Founder', company:'Halyard Security', days:34, tags:['Founder'],
+        history:[ {what:'Panel together at the cohort demo day', icon:I.mega, when:'Jul 11'}, {what:'Traded notes on machine-identity sprawl', icon:I.mail, when:'Jun 30'} ],
+        vias:[ {k:'dw', name:'Dana Whitfield', initials:'DW', bg:'#0f766e', why:'His sister — Head of Compliance at Ferrostack', cta:'Request'} ] },
+      { k:'marchetti', name:'Sofia Marchetti', initials:'SM', bg:'#b45309', role:'Principal', company:'Marchetti Family Office', days:10, tags:['Investor'],
+        history:[ {what:'Intro completed via Kestrel', icon:I.intro, when:'Jul 30'}, {what:'First call — asked for Q3 numbers', icon:I.phone, when:'Aug 4'} ],
+        vias:[ {k:'kc', name:'Kestrel Capital', initials:'KC', bg:'#0f766e', why:'Co-invests with her regularly', cta:'Request'} ] },
+      { k:'zhang', name:'Lin Zhang', initials:'LZ', bg:'#b45309', role:'IP Counsel', company:'Independent', days:58, tags:['Advisor','Legal'],
+        history:[ {what:'Reviewed the IP assignment gap', icon:I.note, when:'Jun 17'} ],
+        vias:[ {k:'hk2', name:'Hana Kaur', initials:'HK', bg:'#0f766e', why:'Works with her on diligence cases', cta:'Request'} ] },
+      { k:'menon2', name:'Priya Menon', initials:'PM', bg:'#be185d', role:'Founder', company:'LoopSense', days:92, tags:['Founder','Technical'],
+        history:[ {what:'Met at the sensor-analytics meetup', icon:I.cal, when:'May 14'} ],
+        vias:[ {k:'ak', name:'Anneke Kern', initials:'AK', bg:'#116632', why:'Designed LoopSense\u2019s brand — close to Priya', cta:'Request'} ] },
+    ];
+    const touchOf = (d) => d <= 7 ? { label:d + 'd ago', tone:GRN, dot:'#116632' }
+      : d <= 30 ? { label:d + 'd ago', tone:INK, dot:'#b45309' }
+      : { label:Math.round(d/30) + 'mo ago', tone:MUT, dot: dark?'#3a3648':'#c9c4d6' };
+
+    const ROLE_CHIPS = ['All','Investor','Founder','Customer','Advisor'];
+    const REC_CHIPS = ['Any','Last 30d'];
+    const q = st.relQuery.toLowerCase();
+    const relsShown = RELS
+      .filter(r => !q || (r.name + ' ' + r.company).toLowerCase().indexOf(q) > -1)
+      .filter(r => st.relRole === 'All' || r.tags.indexOf(st.relRole) > -1 || (st.relRole==='Advisor' && r.tags.indexOf('Partner')>-1))
+      .filter(r => st.relRecency === 'Any' || r.days <= 30);
+    const tagChipOf = (t) => t==='Investor' ? cBlue : t==='Champion' ? cGreen : t==='Customer' ? cGreen : t==='Founder' ? cAmber : t==='Partner'||t==='Advisor' ? cViolet : cGrey;
+    const rels = relsShown.map(r => {
+      const t = touchOf(r.days);
+      return { k:r.k, name:r.name, initials:r.initials, role:r.role, company:r.company,
+        avStyle: av(r.bg), touch:t.label, touchTone:t.tone,
+        dot:'width:8px;height:8px;border-radius:50%;flex:none;background:'+t.dot,
+        tags: r.tags.map(x => ({ label:x, chip: tagChipOf(x) })) };
+    });
+    const relChips = ROLE_CHIPS.map(c => ({ label:c, style: seg(st.relRole === c), go: () => this.setState({ relRole:c }) }))
+      .concat(REC_CHIPS.map(c => ({ label:c, style: seg(st.relRecency === c), go: () => this.setState({ relRecency:c }) })));
+
+    const relSelRaw = st.relSel ? RELS.find(r => r.k === st.relSel) : null;
+    const relSel = relSelRaw ? {
+      name:relSelRaw.name, initials:relSelRaw.initials, role:relSelRaw.role, company:relSelRaw.company,
+      first: relSelRaw.name.split(' ')[0],
+      avStyleLg: av(relSelRaw.bg, 46),
+      tags: relSelRaw.tags.map(x => ({ label:x, chip: tagChipOf(x) })),
+      dot:'width:9px;height:9px;border-radius:50%;flex:none;background:'+touchOf(relSelRaw.days).dot,
+      strengthNote: relSelRaw.days <= 7 ? 'Warm — last touch ' + relSelRaw.days + ' days ago'
+        : relSelRaw.days <= 30 ? 'Cooling — last touch ' + relSelRaw.days + ' days ago; a light check-in keeps it alive'
+        : 'Cold — ' + Math.round(relSelRaw.days/30) + ' months since last touch',
+      history: relSelRaw.history.map((h,i) => ({ what:h.what, when:h.when, icon:h.icon,
+        bg:'rgba(124,58,237,.1)', tone:VIO, line: i < relSelRaw.history.length - 1 })),
+      vias: relSelRaw.vias.map(v => ({ k:relSelRaw.k + ':' + v.k, name:v.name, initials:v.initials,
+        avStyle: av(v.bg, 30), why:v.why, cta:v.cta })),
+    } : {};
+
+    // ============ ORGANIZATIONS ============
+    const ORGS = [
+      { k:'kestrel', name:'Kestrel Capital', initials:'KC', bg:'#0f766e', cat:'Fund', meta:'Seed fund · Zurich · est. 2019',
+        about:'Seed specialist in data infrastructure and fintech. Co-invests, rarely leads.',
+        aboutLong:'Kestrel writes $400k–$1M seed cheques into data infrastructure and fintech, almost always alongside a lead. Known for fast decisions and strong follow-on discipline — they took pro-rata in 80% of their portfolio\u2019s A rounds.',
+        people:[ {n:'Sofia Marchetti',i:'SM',bg:'#b45309'},{n:'David Reyes',i:'DR',bg:'#1d4ed8'} ], peopleNote:'2 people you can reach',
+        members:[ {name:'Thomas Herz', initials:'TH', bg:'#be185d', role:'Partner', known:false},
+                  {name:'Sofia Marchetti', initials:'SM', bg:'#b45309', role:'Venture partner', known:true} ],
+        activity:[ {what:'Committed $600k to Northwind Data\u2019s round', icon:I.coin, when:'Aug 6'},
+                   {what:'Co-hosted the LP quarterly briefing', icon:I.cal, when:'Jul 28'} ],
+        bestVia:'Sofia Marchetti' },
+      { k:'ferrostack', name:'Ferrostack', initials:'FE', bg:'#1d4ed8', cat:'Company', meta:'Series B · Austin · 140 people',
+        about:'Metals-industry ERP. Compliance-led buyer — matches your ICP tag.',
+        aboutLong:'Ferrostack builds ERP for metals processing. Their compliance team drove the last two tooling purchases, which is exactly the buying motion your ICP notes describe. Dana Whitfield attended your SOC 2 webinar in June.',
+        people:[ {n:'Dana Whitfield',i:'DW',bg:'#0f766e'} ], peopleNote:'1 person you can reach',
+        members:[ {name:'Dana Whitfield', initials:'DW', bg:'#0f766e', role:'Head of Compliance', known:true} ],
+        activity:[ {what:'Dana attended your SOC 2 webinar', icon:I.mega, when:'Jun 9'},
+                   {what:'Posted a data-engineering role', icon:I.note, when:'Aug 1'} ],
+        bestVia:'Dana Whitfield' },
+      { k:'studiokern', name:'Studio Kern', initials:'SK', bg:'#116632', cat:'Firm', meta:'Design & engineering studio · Berlin',
+        about:'Brand and product studio. Delivered your website engagement in July.',
+        aboutLong:'Eight-person design and engineering studio. They delivered your marketing site in July on time and on quote, and work with four other companies in your cohort. Anneke leads client work personally.',
+        people:[ {n:'Anneke Kern',i:'AK',bg:'#116632'} ], peopleNote:'1 person you can reach',
+        members:[ {name:'Anneke Kern', initials:'AK', bg:'#116632', role:'Founder', known:true} ],
+        activity:[ {what:'Completed your website engagement · 5 stars', icon:I.note, when:'Jul 29'},
+                   {what:'Listed a new positioning-sprint offer', icon:I.mega, when:'Aug 10'} ],
+        bestVia:'Anneke Kern' },
+      { k:'lumenpath', name:'Lumenpath', initials:'LU', bg:'#b45309', cat:'Company', meta:'Series A · Toronto · 60 people',
+        about:'Clinical-trial logistics. Marcus is evaluating your pilot now.',
+        aboutLong:'Lumenpath runs logistics for decentralized clinical trials. Marcus Oyelaran booked a meeting from your webinar and is mid-evaluation on a pilot — the warmest open opportunity in your graph.',
+        people:[ {n:'Marcus Oyelaran',i:'MO',bg:'#b45309'} ], peopleNote:'1 person you can reach',
+        members:[ {name:'Marcus Oyelaran', initials:'MO', bg:'#b45309', role:'CTO', known:true} ],
+        activity:[ {what:'Marcus replied to your pilot follow-up', icon:I.mail, when:'Aug 7'} ],
+        bestVia:'Marcus Oyelaran' },
+      { k:'halyard', name:'Halyard Security', initials:'HS', bg:'#334155', cat:'Company', meta:'Pre-seed · London · 4 people',
+        about:'Machine-identity posture. James speaks at the same events you do.',
+        aboutLong:'Solo-founded security company working on machine-identity sprawl. Not a customer or investor fit, but James\u2019s content reaches the same compliance-led audience as yours — a natural co-marketing partner.',
+        people:[ {n:'James Whitfield',i:'JW',bg:'#334155'} ], peopleNote:'1 person you can reach',
+        members:[ {name:'James Whitfield', initials:'JW', bg:'#334155', role:'Founder', known:true} ],
+        activity:[ {what:'Published \u201cMachine identities outnumber employees 40:1\u201d', icon:I.note, when:'May 15'} ],
+        bestVia:'James Whitfield' },
+      { k:'marchettifo', name:'Marchetti Family Office', initials:'MF', bg:'#be185d', cat:'Fund', meta:'Family office · Milan',
+        about:'Pre-seed to seed. Sofia asked for your Q3 update.',
+        aboutLong:'Single-family office investing €200k–€500k at pre-seed and seed, usually following a fund they trust. Sofia took your intro in July and explicitly asked to see Q3 numbers — a live thread, not a cold one.',
+        people:[ {n:'Sofia Marchetti',i:'SM',bg:'#b45309'} ], peopleNote:'1 person you can reach',
+        members:[ {name:'Sofia Marchetti', initials:'SM', bg:'#b45309', role:'Principal', known:true} ],
+        activity:[ {what:'Completed intro · asked for Q3 update', icon:I.intro, when:'Jul 30'} ],
+        bestVia:'Sofia Marchetti' },
+    ];
+    const OCATS = ['All','Company','Fund','Firm'];
+    const oq = st.orgQuery.toLowerCase();
+    const orgsShown = ORGS
+      .filter(o => !oq || o.name.toLowerCase().indexOf(oq) > -1)
+      .filter(o => st.orgCat === 'All' || o.cat === st.orgCat);
+    const orgCatChip = (c) => c==='Fund' ? cBlue : c==='Firm' ? cViolet : cGreen;
+    const orgs = orgsShown.map(o => ({ k:o.k, name:o.name, initials:o.initials, meta:o.meta, about:o.about,
+      avStyle: av(o.bg, 36), cat:o.cat, catChip: orgCatChip(o.cat),
+      people: o.people.map((p,i) => ({ name:p.n, initials:p.i, style: stackAv(p.bg, i>0) })),
+      peopleNote: o.peopleNote }));
+    const orgChips = OCATS.map(c => ({ label:c, style: seg(st.orgCat === c), go: () => this.setState({ orgCat:c }) }));
+
+    const orgSelRaw = st.orgSel ? ORGS.find(o => o.k === st.orgSel) : null;
+    const orgSel = orgSelRaw ? {
+      k:orgSelRaw.k, name:orgSelRaw.name, initials:orgSelRaw.initials, meta:orgSelRaw.meta,
+      avStyleLg: av(orgSelRaw.bg, 46), cat:orgSelRaw.cat, catChip: orgCatChip(orgSelRaw.cat),
+      aboutLong: orgSelRaw.aboutLong, bestVia: orgSelRaw.bestVia,
+      members: orgSelRaw.members.map(m => ({ name:m.name, initials:m.initials, role:m.role,
+        avStyle: av(m.bg, 30), known:m.known, knownChip:cGreen })),
+      activity: orgSelRaw.activity.map(a => ({ what:a.what, when:a.when, icon:a.icon })),
+    } : {};
+
+    return {
+      themeClass: dark ? 'nw-dark' : '',
+      themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      violet:VIO,
+      introIcon:I.intro, relIcon:I.link, orgIcon:I.bldg, coinIcon:I.coin, sparkIcon:I.spark,
+      hdrIconIntro: iconBox('#7c3aed'), hdrIconRel: iconBox('#7c3aed'), hdrIconOrg: iconBox('#7c3aed'),
+
+      nav, mobileNav,
+      pIntros: st.page === 'intros', pRels: st.page === 'rels', pOrgs: st.page === 'orgs',
+
+      // introductions
+      creditLabel: String(credits),
+      getCredits: () => this.setState(s => ({ credits: s.credits + 5 })),
+      introTabs,
+      introDiscover: st.introTab === 'discover', introMine: st.introTab === 'mine',
+      goDiscover: () => this.setState({ page:'intros', introTab:'discover' }),
+      candidates, hasCandidates: candidates.length > 0, noCandidates: candidates.length === 0,
+      whyWrap:'display:flex;gap:8px;align-items:flex-start;margin-top:11px;padding:9px 12px;border-radius:10px;font-size:11.5px;line-height:1.55;background:'
+        + (dark ? 'rgba(124,58,237,.09)' : 'rgba(124,58,237,.045)') + ';color:' + VIO,
+      acceptCand: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-cand]');
+        const k = n && n.getAttribute('data-cand');
+        if (k && this.state.credits >= 1) this.setState(s => ({
+          credits: s.credits - 1,
+          accepted: Object.assign({}, s.accepted, { [k]:1 }),
+          introTab:'mine' }));
+      },
+      passCand: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-cand]');
+        const k = n && n.getAttribute('data-cand');
+        if (k) this.setState(s => ({ passed: Object.assign({}, s.passed, { [k]:1 }) }));
+      },
+      ledger, hasLedger: ledger.length > 0, noLedger: ledger.length === 0,
+
+      // relationships
+      relQuery: st.relQuery,
+      setRelQuery: (e) => this.setState({ relQuery:e.target.value }),
+      relChips, rels, noRels: rels.length === 0,
+      openRel: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-rel]');
+        const k = n && n.getAttribute('data-rel');
+        if (k) this.setState({ relSel:k });
+      },
+      relOpen: !!relSelRaw, relSel,
+      closeRel: () => this.setState({ relSel:null }),
+      requestVia: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-via]');
+        if (!n || !relSelRaw) return;
+        const via = relSelRaw.vias[0];
+        this.setState(s => ({ relSel:null, page:'intros', introTab:'mine',
+          requested: s.requested.concat([{ name:relSelRaw.name, initials:relSelRaw.initials, bg:relSelRaw.bg,
+            meta: relSelRaw.role + ' · via ' + via.name + ' · requested Aug 14',
+            next: via.name.split(' ')[0] + ' has been asked to make the double-opt-in intro.' }]) }));
+      },
+
+      // organizations
+      orgQuery: st.orgQuery,
+      setOrgQuery: (e) => this.setState({ orgQuery:e.target.value }),
+      orgChips, orgs, noOrgs: orgs.length === 0,
+      openOrg: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-org]');
+        const k = n && n.getAttribute('data-org');
+        if (k) this.setState({ orgSel:k });
+      },
+      orgOpen: !!orgSelRaw, orgSel,
+      closeOrg: () => this.setState({ orgSel:null }),
+      requestOrgIntro: () => {
+        if (!orgSelRaw) return;
+        this.setState(s => ({ orgSel:null, page:'intros', introTab:'mine',
+          requested: s.requested.concat([{ name:orgSelRaw.name, initials:orgSelRaw.initials, bg:orgSelRaw.bg,
+            meta: orgSelRaw.cat + ' · via ' + orgSelRaw.bestVia + ' · requested Aug 14',
+            next: orgSelRaw.bestVia.split(' ')[0] + ' has been asked to open the door. 1 credit is held until they accept.' }]) }));
+      },
+
+      stop: (e) => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>

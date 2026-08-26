@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#4f46e5;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#4338ca;background:#f5f5ff;border-color:#c7d2fe;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#f5f5ff;border-color:#c7d2fe;color:#4338ca;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#f5f5ff;border:1px solid #c7d2fe;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4338ca;background:#e8e8ff;border:1px solid #c7d2fe;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #4338ca;background:#4338ca;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .lock{font-size:9px;font-weight:800;letter-spacing:.05em;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:3px;padding:2px 5px}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="5">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /research</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#4338ca;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span><sc-if value="{{ n.locked }}"><span class="lock">Inst.</span></sc-if></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Research</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="5">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="5"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5">
+                <span class="td">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#4338ca;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="indigo" page="Research" hint-size="100%,600px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const N = { ink:'#4f46e5', deep:'#4338ca', tint:'#f5f5ff' };
+    // CANONICAL Investor shell — 9 rows, matching Detail Layer Canvas I_ROWS.
+    const ROWS = ['Home','Deals','Portfolio','Axal VC Fund','Fund','Network','Research','Trust','Firm Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Research' ? 'nav on' : 'nav',
+      locked: label === 'Fund',
+      style: label === 'Research' ? 'color:'+N.deep+';background:'+N.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+N.ink
+        : (label === 'Fund' ? 'color:#615c6e' : '') }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Ask','Diligence','Benchmarking','Markets','Library'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Diligence' }));
+
+    const pill = (t) => {
+      const M = { 'Current':['#ecfdf5','#047857','#a7f3d0'], 'Indexed':['#ecfdf5','#047857','#a7f3d0'],
+        'Granted':['#ecfdf5','#047857','#a7f3d0'], 'Active':['#ecfdf5','#047857','#a7f3d0'],
+        'Saved':['#f5f5ff','#3730a3','#c7d2fe'], 'Attached':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Parked':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Requested':['#fffbeb','#92400e','#fde68a'], '1 source':['#fffbeb','#92400e','#fde68a'],
+        'Stale':['#fffbeb','#92400e','#fde68a'], 'Unverified':['#fffbeb','#92400e','#fde68a'],
+        'Discarded':['#fef2f2','#b91c1c','#fecaca'], 'Retired':['#fef2f2','#b91c1c','#fecaca'],
+        'Archived':['#f4f4f6','#615c6e','#e4e4e8'], 'Not staged':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Archived'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => Object.assign({ text, pill:null, pillStyle:'', seam:null },
+      opt || {}, opt && opt.pill ? { pillStyle: pill(opt.pill) } : {});
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven','eight'][n] || String(n);
+    const Cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+    // ══ Research curation rate — DeepSeek V4 Flash with cached input, as the rail declares.
+    // Every cost on these five pages computes from it. ══
+    const c4 = (n) => '$' + n.toFixed(4);
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    const TIN = 58000, TOUT = 1300;
+    const FIRST = run(TIN, TOUT, 0.440, 1.320);
+    const CACHED = run(TIN, TOUT, 0.014, 1.320);
+    const ratio = Math.round(FIRST / CACHED);
+    const fifty = FIRST + 49 * CACHED;
+
+    // ══ ONE library. Counts on Ask and Library both derive from it. ══
+    const DOCS = [
+      { name:'Halverton data room · 14 files', kind:'Diligence', yr:2026, q:19, state:'Indexed' },
+      { name:'Aperture data room · 9 files', kind:'Diligence', yr:2026, q:11, state:'Indexed' },
+      { name:'Kelp Bio IP chain of title', kind:'Legal', yr:2026, q:7, state:'Indexed' },
+      { name:'Cambridge Associates benchmarks 2026', kind:'Benchmark', yr:2026, q:5, state:'Indexed' },
+      { name:'Our own pass memos · 4 deals', kind:'Primary', yr:2026, q:8, state:'Indexed' },
+      { name:'PitchBook seed report 2023', kind:'Benchmark', yr:2023, q:0, state:'Stale' }
+    ];
+    const QS = DOCS.reduce((a, d) => a + d.q, 0);
+    const INDEXED = DOCS.filter(d => d.state === 'Indexed').length;
+    const PRIMARY = DOCS.filter(d => d.kind === 'Primary').length;
+    const docRows = DOCS.map(d => ({ cells:[ cell(d.name), cell(d.kind), cell(String(d.yr)),
+      cell(String(d.q)), cell('', { pill:d.state }) ]}));
+
+    // ══ ONE session log. Ask's counts derive from it. ══
+    const SESS = [
+      { q:'Does Halverton\u2019s NRR claim survive their own cohort data?', src:'Halverton room', first:true, out:'Saved. Became the IC memo\u2019s traction section.', kept:true },
+      { q:'What is Aperture\u2019s real gross margin, net of infra?', src:'Aperture room', first:false, out:'Saved. Changed the valuation we offered.', kept:true },
+      { q:'Who actually owns the Kelp Bio patents?', src:'IP chain of title', first:false, out:'Saved. Became the IC condition.', kept:true },
+      { q:'What do seed marks look like at 18 months in our sector?', src:'Cambridge 2026', first:false, out:'Saved. Used in the Q2 LP pack.', kept:true },
+      { q:'Have we passed on anything for the wrong reason?', src:'Our pass memos', first:false, out:'Saved. Two deals re-opened.', kept:true },
+      { q:'Is seed pricing still where it was?', src:'PitchBook 2023', first:false, out:'Discarded. Three years old.', kept:false }
+    ];
+    const KEPT = SESS.filter(s => s.kept).length;
+    const DROPPED = SESS.length - KEPT;
+    const sessRows = SESS.map(s => ({ cells:[ cell(s.q), cell(s.src),
+      cell(c4(s.first ? FIRST : CACHED)), cell(s.out) ]}));
+
+    // ══ ONE diligence pull set, seam-marked to the founder-staged rooms. ══
+    const PULLS = [
+      { co:'Halverton', scope:'14 of 14 files', state:'Granted', deal:'Diligence', act:'Founder staged 2 more · 1d ago' },
+      { co:'Aperture', scope:'9 of 9 files', state:'Granted', deal:'IC', act:'No change since Aug 19' },
+      { co:'Kelp Bio', scope:'6 of 11 files', state:'Requested', deal:'Diligence', act:'IP folder withheld · asked twice' },
+      { co:'Novacraft Labs', scope:'6 of 9 files', state:'Granted', deal:'Term sheet', act:'Financial model still not staged' },
+      { co:'Thornfield', scope:'—', state:'Not staged', deal:'First meeting', act:'No room yet. Too early to ask.' },
+      { co:'Lumen Works', scope:'—', state:'Not staged', deal:'Sourced', act:'Never requested.' }
+    ];
+    const granted = PULLS.filter(p => p.state === 'Granted').length;
+    const partial = PULLS.filter(p => p.state === 'Requested').length;
+    const notStaged = PULLS.filter(p => p.state === 'Not staged').length;
+    const pullRows = PULLS.map(p => ({ cells:[ cell(p.co), cell(p.scope), cell('', { pill:p.state }),
+      cell(p.deal), cell(p.act, { seam: p.state !== 'Not staged' ? 'From ' + p.co : null }) ]}));
+
+    const BENCH = [
+      { metric:'Seed → A graduation', ours:'1 of 6', peer:'22% at 18 mo', read:'One of six in 14 months. Small n, do not over-read.' },
+      { metric:'Median entry valuation', ours:'$7.4M', peer:'$9.1M', read:'Below peer. Discipline or adverse selection — the pass memos argue discipline.' },
+      { metric:'Write-down rate', ours:'1 of 6', peer:'18% at 24 mo', read:'In line. Kelp Bio at 17% of cost.' },
+      { metric:'TVPI at 8 months', ours:'1.42×', peer:'1.18×', read:'Ahead, but on a single re-mark. Not a trend.' },
+      { metric:'Reserve ratio', ours:'0%', peer:'35–40%', read:'The real gap. Nothing reserved for follow-ons yet.' }
+    ];
+    const benchRows = BENCH.map(b => ({ cells:[ cell(b.metric), cell(b.ours), cell(b.peer), cell(b.read) ]}));
+
+    const THESES = [
+      { th:'Developer tooling', state:'Active', sourced:'3 of 6', read:'Novacraft, Aperture, Halverton. The thesis that works.' },
+      { th:'Workflow infrastructure', state:'Active', sourced:'1 of 6', read:'Thornfield. Adjacent to dev tooling, may not be separate.' },
+      { th:'Climate operations', state:'Parked', sourced:'1 of 6', read:'Lumen Works, sourced cold. No conviction behind it.' },
+      { th:'Consumer marketplaces', state:'Retired', sourced:'0 of 6', read:'Passed on Stagerail, then retired the thesis. Correct order.' }
+    ];
+    const active = THESES.filter(t => t.state === 'Active').length;
+    const sourcedFromActive = 4;
+    const thesisRows = THESES.map(t => ({ cells:[ cell(t.th), cell('', { pill:t.state }), cell(t.sourced), cell(t.read) ]}));
+
+    const PAGES = [
+      { id:'ir1', badge:'IR1', route:'/research/ask', zone:'Ask', arch:'FEED',
+        title:'Research · Ask', h1:'Ask',
+        blurb:'Compressed is a question box. The full feed adds every session and the sources each answer drew on — so a claim that reaches an IC memo can be traced to the file it came from, or retired.',
+        sub:'Session history, saved briefs and sources.',
+        cmpTitle:'Ask anything', cmpBody:QS + ' questions across ' + DOCS.length + ' sources. ' + Cap(nWord(KEPT)) + ' answers kept.',
+        viewMore:'View more · ' + SESS.length + ' sessions, ' + KEPT + ' saved →',
+        filters: fil(['All sessions','Saved','Cited in a memo','Discarded'], 0), ops:['New brief','Export session','Clear history'],
+        adds:[ { label:'Questions asked', value:String(QS), note:'across ' + DOCS.length + ' sources' },
+          { label:'Answers kept', value:KEPT + ' of ' + SESS.length, note:Cap(nWord(DROPPED)) + ' failed on source age' },
+          { label:'First-pass cost', value:c4(FIRST), note:'reads the room' },
+          { label:'Follow-up cost', value:c4(CACHED), note:ratio + '× cheaper, cached' } ],
+        instTitle:'Session history', instMeta:'Newest first · sources kept with the answer',
+        cols:'2fr 1.1fr .8fr 1.5fr', head:['Question','Drew on','Cost','What came of it'],
+        rows: sessRows,
+        instNote:'Two of these changed a decision rather than informing one: the Aperture margin question moved the valuation we offered, and the pass-memo review re-opened two deals. '
+          + Cap(nWord(DROPPED)) + ' answer was discarded on source age rather than content — a 2023 pricing report should not become a claim in a 2026 IC memo.',
+        aiLabel:'Proposal · sourced answer', aiCost:'≈ ' + c4(FIRST) + ' first pass',
+        aiBody:'Every answer arrives with its sources and as-of date. Where a founder\u2019s own numbers disagree with their cohort file, both are shown rather than reconciled — that gap is the diligence finding, not an inconvenience to smooth over.',
+        aiAccept:'Save brief', aiFoot:'Sources travel with the brief.' },
+
+      { id:'ir2', badge:'IR2', route:'/research/diligence', zone:'Diligence', arch:'COLLECTION',
+        title:'Research · Diligence', h1:'Diligence pulls',
+        blurb:'Compressed shows which rooms you can read. The full collection adds the pull builder, the deal each pull attaches to, and the seam indicator showing what the founder staged — and what they withheld.',
+        sub:'Pull builder, deal attachments and request lists.',
+        cmpTitle:'Diligence · ' + granted + ' rooms granted',
+        cmpBody:Cap(nWord(partial)) + ' partial. Kelp Bio has withheld the IP folder twice.',
+        viewMore:'View more · ' + PULLS.length + ' companies, grant scope →',
+        filters: fil(['All','Granted','Requested','Not staged'], 0), ops:['New request','Attach to deal','Export'],
+        adds:[ { label:'Rooms granted', value:String(granted), note:'full access' },
+          { label:'Partial', value:String(partial), note:'a folder withheld' },
+          { label:'Not staged', value:String(notStaged), note:'too early to ask' },
+          { label:'Attached to deals', value:String(PULLS.length - notStaged), note:'each pull has a deal' } ],
+        instTitle:'Room access', instMeta:'Seam-marked · scope is what they staged, not what you asked',
+        cols:'1.1fr 1.1fr 1.1fr .9fr 1.8fr', head:['Company','Scope','State','Deal stage','Founder activity'],
+        rows: pullRows,
+        instNote:'Scope reports what the founder actually staged rather than what was requested, which is why Kelp Bio reads 6 of 11 — the IP folder has survived two asks, and that became the IC condition on the deal. Novacraft\u2019s missing financial model is the same signal at a milder grade: what is absent from a room is diligence information too.',
+        aiLabel:'Proposal · gap list per room', aiCost:'≈ ' + c4(CACHED),
+        aiBody:'What a room at each stage normally contains, against what is staged. Named from the rooms already read rather than a generic checklist — the model has seen fourteen of these, so it knows what a complete seed room looks like.',
+        aiAccept:'Attach to the deals', aiFoot:'Cached — the rooms are already read.' },
+
+      { id:'ir3', badge:'IR3', route:'/research/benchmarking', zone:'Benchmarking', arch:'ANALYTICS',
+        title:'Research · Benchmarking', h1:'Fund & manager benchmarking',
+        blurb:'Compressed shows the headline comparison. The full page adds the builder, saved benchmarks and exportable charts — with the honest caveat that six positions at eight months is an n too small for most of this.',
+        sub:'Fund and manager comparisons, saved benchmarks.',
+        cmpTitle:'vs. 2026 seed vintage', cmpBody:'Ahead on TVPI, behind on reserves. Small n throughout.',
+        viewMore:'View more · ' + BENCH.length + ' metrics, peer set and caveats →',
+        filters: fil(['Peer set','Metrics','Saved','Export'], 0), ops:['New benchmark','Change peer set','Export chart'],
+        adds:[ { label:'Metrics', value:String(BENCH.length), note:'vs. 2026 seed vintage' },
+          { label:'Our TVPI', value:'1.42×', note:'peer median 1.18×' },
+          { label:'Reserve ratio', value:'0%', note:'peer 35–40% — the gap' },
+          { label:'Confidence', value:'Low', note:'6 positions, 8 months' } ],
+        instTitle:'Against the peer set', instMeta:'Peer data: Cambridge Associates 2026',
+        cols:'1.3fr .9fr 1fr 2.2fr', head:['Metric','Ours','Peer','Read'],
+        rows: benchRows,
+        instNote:'The TVPI advantage rests on a single re-mark and should not reach an LP as a trend — the reserve ratio is the finding that matters, because a fund holding nothing back cannot defend its winners. Every row carries its own read rather than leaving the comparison to speak for itself, since a number beside a peer median invites the wrong conclusion.',
+        aiLabel:'Proposal · narrate the comparison', aiCost:'≈ ' + c4(FIRST),
+        aiBody:'Written for the LP pack with the caveats first: what six positions at eight months can and cannot support, which single event drives the TVPI figure, and why the reserve gap is the honest headline rather than the multiple.',
+        aiAccept:'Accept narrative', aiFoot:'Sources and as-of dates cited.' },
+
+      { id:'ir4', badge:'IR4', route:'/research/markets', zone:'Markets', arch:'ANALYTICS',
+        title:'Research · Markets', h1:'Market deep-dives',
+        blurb:'Compressed shows the active thesis. The full page adds every thesis with what it has actually sourced — the record that lets a thesis be retired deliberately rather than quietly abandoned.',
+        sub:'Deep-dive builder and saved analyses.',
+        cmpTitle:THESES.length + ' theses tracked',
+        cmpBody:Cap(nWord(active)) + ' active, sourcing ' + sourcedFromActive + ' of 6 positions. One retired.',
+        viewMore:'View more · ' + THESES.length + ' theses, method and run dates →',
+        filters: fil(['Active','Parked','Retired','Builder'], 0), ops:['New deep-dive','Export','Cite in a memo'],
+        adds:[ { label:'Theses', value:String(THESES.length), note:active + ' active, 1 parked, 1 retired' },
+          { label:'Sourced from active', value:sourcedFromActive + ' of 6', note:'the portfolio, by thesis' },
+          { label:'Excluded input', value:'2023', note:'too old to cite' },
+          { label:'Last refreshed', value:'Aug 20', note:'5 days ago' } ],
+        instTitle:'Theses and what they produced', instMeta:'A thesis that sources nothing is a retired thesis',
+        cols:'1.3fr .9fr .9fr 2.2fr', head:['Thesis','State','Sourced','Read'],
+        rows: thesisRows,
+        instNote:'Consumer marketplaces was retired after the Stagerail pass rather than before it, which is the correct order — you learn a thesis is wrong by testing it, not by deciding in advance. Climate is parked rather than retired because one cold-sourced position is not evidence either way, and saying so is more useful than pretending to conviction.',
+        aiLabel:'Proposal · thesis review', aiCost:'≈ ' + c4(CACHED),
+        aiBody:'Reads each thesis against what it sourced and what those positions did. The finding is that workflow infrastructure may not be a separate thesis from developer tooling — one position, adjacent framing, and no pass memo that distinguishes them.',
+        aiAccept:'Save review', aiFoot:'Cites the pass memos and positions book.' },
+
+      { id:'ir5', badge:'IR5', route:'/research/library', zone:'Library', arch:'COLLECTION',
+        title:'Research · Library', h1:'Document library',
+        blurb:'Compressed shows the document count. The full collection adds every source, its Q&A history, and the cache economics that make interrogating a data room properly cheaper than skimming two.',
+        sub:'All documents, Q&A history and collections.',
+        cmpTitle:'Library · ' + DOCS.length + ' sources',
+        cmpBody:INDEXED + ' indexed, ' + PRIMARY + ' primary. ' + QS + ' questions asked.',
+        viewMore:'View more · ' + DOCS.length + ' sources, ' + QS + ' questions →',
+        filters: fil(['All','Diligence','Benchmarks','Primary','Stale'], 0), ops:['Upload','New collection','Export'],
+        adds:[ { label:'Sources', value:String(DOCS.length), note:INDEXED + ' indexed for Q&A' },
+          { label:'Primary', value:String(PRIMARY), note:'our own pass memos' },
+          { label:'Questions asked', value:String(QS), note:'across the library' },
+          { label:'50 questions cost', value:'$' + fifty.toFixed(2), note:'first at full price' } ],
+        instTitle:'Sources', instMeta:'Question count per source · state governs citability',
+        cols:'1.9fr .9fr .7fr .8fr 1fr', head:['Source','Kind','Year','Questions','State'],
+        rows: docRows,
+        instNote:'The Halverton room carries the most questions of anything here, which is the right shape for a fund mid-diligence. Our own pass memos are the only primary source and the most under-used — eight questions against four deals we declined is the cheapest institutional memory available. The 2023 report stays indexed but marked stale, so it can be read without being cited.',
+        aiLabel:'Proposal · the cache argument, concretely', aiCost:'first ' + c4(FIRST) + ' · then ' + c4(CACHED),
+        aiBody:'Reading a data room properly means fifty questions, not five. The first pays to read it; the next forty-nine hit cached input at ' + ratio
+          + '× less, so the whole set costs $' + fifty.toFixed(2) + ' — which is why depth is affordable here in a way it was not before.',
+        aiAccept:'Ask fifty', aiFoot:'Cost estimated before the batch runs.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({}, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

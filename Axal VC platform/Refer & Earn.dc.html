@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}
+    .rf-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .rf-lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#8b8798}
+    .rf-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}.rf-btn:hover{filter:brightness(.97)}
+    .rf-row{cursor:pointer;transition:background .12s}.rf-row:hover{background:#faf9fc}
+    .rf-seg{cursor:pointer;transition:background .13s,color .13s,border-color .13s}
+    .rf-faq{cursor:pointer}
+    input,textarea,select{font-family:Inter,system-ui,sans-serif}
+    ::placeholder{color:#a8a4b4}
+    @media (max-width:1180px){.rf-cat{grid-template-columns:1fr 1fr!important}.rf-stat{grid-template-columns:repeat(3,1fr)!important}.rf-drawer{width:100%!important}.rf-share{grid-template-columns:1fr!important}}
+    @media (max-width:760px){.rf-cat{grid-template-columns:1fr!important}.rf-stat{grid-template-columns:1fr 1fr!important}.rf-hide-sm{display:none!important}}
+  </style>
+</helmet>
+
+<div style="min-height:100vh">
+
+  <!-- PAGE HEADER (compact, in-product) -->
+  <div style="border-bottom:1px solid #ececf1;background:#fff">
+    <div style="max-width:1240px;margin:0 auto;padding:22px 28px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div style="font-size:20px;font-weight:800;letter-spacing:-.02em">Refer &amp; Earn</div>
+            <span style="{{ programChip }}">Selective · Open</span>
+          </div>
+          <div style="font-size:13px;color:#4a4553;margin-top:5px;max-width:560px">Submit and track referrals into the Axal VC network — founders, advisors, service partners, and strategic introductions. Reviewed individually against a real quality bar.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+          <div class="rf-btn" onClick="{{ togglePersona }}" style="padding:9px 14px;border-radius:9px;border:1px solid #ececf1;font-size:12px;font-weight:600;color:#71717a" title="Toggle demo state">{{ personaLabel }}</div>
+          <div class="rf-btn" onClick="{{ goPolicy }}" style="padding:9px 16px;border-radius:9px;border:1px solid #ececf1;font-size:13px;font-weight:600;color:#3f3f46">View policy</div>
+          <div class="rf-btn" onClick="{{ openShare }}" style="padding:9px 14px;border-radius:9px;border:1px solid #ececf1;font-size:12px;font-weight:600;color:#71717a">Share</div>
+          <div class="rf-btn" onClick="{{ openSubmit }}" style="padding:9px 18px;border-radius:9px;background:#6d28d9;color:#fff;font-size:13px;font-weight:700">Submit referral</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1240px;margin:0 auto;padding:22px 28px 90px">
+
+    <!-- SUMMARY STRIP -->
+    <div class="rf-stat" style="display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:#ececf1;border:1px solid #ececf1;border-radius:14px;overflow:hidden">
+      <sc-for list="{{ summary }}" as="s" hint-placeholder-count="6">
+        <div style="background:#fff;padding:16px 18px">
+          <div class="rf-mono" style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ s.tone }}">{{ s.v }}</div>
+          <div class="rf-lbl" style="margin-top:4px;font-size:9.5px">{{ s.k }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- CATEGORIES -->
+    <div style="margin-top:30px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <div class="rf-lbl">Referral categories</div>
+        <div style="font-size:11.5px;color:#8b8798">Not every category carries equal weight or the same reward model</div>
+      </div>
+      <div class="rf-cat" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <sc-for list="{{ categories }}" as="c" hint-placeholder-count="6">
+          <div style="border:1px solid #ececf1;border-radius:13px;padding:16px 18px;background:#fff">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div style="font-size:13.5px;font-weight:800;letter-spacing:-.01em">{{ c.name }}</div>
+              <span style="{{ c.accessChip }}">{{ c.access }}</span>
+            </div>
+            <div style="margin-top:8px"><span style="{{ c.priorityChip }}">{{ c.priority }}</span></div>
+            <div style="font-size:12px;color:#4a4553;line-height:1.58;margin-top:9px">{{ c.qualifies }}</div>
+            <div style="font-size:11px;color:#8b8798;margin-top:9px;padding-top:9px;border-top:1px solid #f4f3f7">Reward: {{ c.reward }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- SHARE RAIL -->
+    <div class="rf-share" style="display:grid;grid-template-columns:1.7fr 1fr;gap:14px;margin-top:30px;align-items:start">
+
+      <!-- referral link + code -->
+      <div style="border:1px solid #ececf1;border-radius:14px;padding:22px 26px;background:#fff">
+        <div style="font-size:14px;font-weight:800;letter-spacing:-.015em">Your referral link</div>
+
+        <div style="display:flex;align-items:center;gap:10px;background:#faf9fc;border:1px solid #ececf1;border-radius:11px;padding:9px 10px 9px 14px;margin-top:12px;flex-wrap:wrap">
+          <div class="rf-mono" style="font-size:12.5px;color:#6d28d9;min-width:0;flex:1;overflow-wrap:anywhere">{{ refLink }}</div>
+          <div class="rf-btn" onClick="{{ copyLink }}" style="{{ copyStyle }}">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ copyIcon }}"></span>
+            {{ copyLabel }}
+          </div>
+        </div>
+
+        <div class="rf-lbl" style="font-size:9.5px;margin:16px 0 7px">Referral code</div>
+        <div style="border:1px solid #e6e0f7;border-radius:11px;padding:18px 16px;text-align:center;background:linear-gradient(180deg,#f8f6fe,#f4f2fb)">
+          <div class="rf-mono" style="font-size:26px;font-weight:700;letter-spacing:.06em;color:#6d28d9">{{ refCode }}</div>
+          <div style="font-size:11.5px;color:#8b8798;margin-top:7px">Previous code also works: <span class="rf-mono">{{ refCodeOld }}</span></div>
+        </div>
+
+        <div style="font-size:11.5px;color:#8b8798;line-height:1.6;margin-top:18px;padding-top:16px;border-top:1px solid #f4f3f7">Anyone who registers with your code is attributed to you. Rewards accrue when they reach a qualified milestone — acceptance, onboarding, or close — never on signup alone.</div>
+        <sc-if value="{{ shareToast }}">
+          <div style="margin-top:11px;padding:9px 13px;border-radius:9px;background:rgba(21,128,61,.07);color:#15803d;font-size:11.5px;font-weight:600">{{ shareToast }}</div>
+        </sc-if>
+      </div>
+
+      <!-- QR -->
+      <div style="border:1px solid #ececf1;border-radius:14px;padding:22px 20px;background:#fff;text-align:center">
+        <div style="font-size:14px;font-weight:800;letter-spacing:-.015em">QR code</div>
+        <div style="display:flex;justify-content:center;margin-top:16px">
+          <div style="{{ qrGridStyle }}">
+            <sc-for list="{{ qrCells }}" as="q" hint-placeholder-count="120">
+              <div style="{{ q.style }}"></div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="font-size:11.5px;color:#8b8798;line-height:1.55;margin-top:14px">Scan to open registration with <span class="rf-mono" style="color:#6d28d9">{{ refCode }}</span> pre-filled.</div>
+        <div class="rf-btn" onClick="{{ downloadQr }}" style="margin-top:13px;padding:8px 0;border-radius:9px;border:1px solid #ececf1;font-size:11.5px;font-weight:700;color:#3f3f46">Download PNG</div>
+      </div>
+    </div>
+
+    <!-- IMPORT CONTACTS -->
+    <div style="border:1px solid #ececf1;border-radius:14px;background:#fff;margin-top:14px;overflow:hidden">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:20px 26px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:14px;font-weight:800;letter-spacing:-.015em">Import contacts</div>
+          <div style="font-size:12.5px;color:#4a4553;line-height:1.55;margin-top:4px">Upload a CSV with <span class="rf-mono" style="background:#f4f3f7;border-radius:5px;padding:1px 5px;font-size:11.5px">name,email</span> columns to generate a personalised invite link per contact.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+          <div class="rf-btn" onClick="{{ importLinkedin }}" style="display:flex;align-items:center;gap:7px;padding:9px 15px;border-radius:9px;background:#0a66c2;color:#fff;font-size:12.5px;font-weight:700">
+            <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ liIcon }}"></span>
+            Import from LinkedIn
+          </div>
+          <div class="rf-btn" onClick="{{ uploadCsv }}" style="display:flex;align-items:center;gap:7px;padding:9px 15px;border-radius:9px;background:#6d28d9;color:#fff;font-size:12.5px;font-weight:700">
+            <span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ upIcon }}"></span>
+            Upload CSV
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ noContacts }}">
+        <div style="border-top:1px solid #f4f3f7;padding:30px 26px;text-align:center">
+          <div style="font-size:12.5px;color:#8b8798;line-height:1.6">No contacts imported yet. Your CSV needs a header row with at least <span class="rf-mono" style="background:#f4f3f7;border-radius:5px;padding:1px 5px;font-size:11.5px">email</span> — <span class="rf-mono" style="background:#f4f3f7;border-radius:5px;padding:1px 5px;font-size:11.5px">name</span> is optional but personalises the invite.</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ hasContacts }}">
+        <div style="border-top:1px solid #f4f3f7">
+          <div class="rf-hide-sm" style="display:grid;grid-template-columns:1.3fr 1.6fr .9fr 1.5fr auto;background:#faf9fc;border-bottom:1px solid #f4f3f7">
+            <div style="padding:9px 26px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#8b8798">Name</div>
+            <div style="padding:9px 12px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#8b8798">Email</div>
+            <div style="padding:9px 12px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#8b8798">Status</div>
+            <div style="padding:9px 12px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#8b8798">Invite link</div>
+            <div style="padding:9px 26px 9px 12px"></div>
+          </div>
+          <sc-for list="{{ contacts }}" as="ct" hint-placeholder-count="4">
+            <div class="rf-row" style="display:grid;grid-template-columns:1.3fr 1.6fr .9fr 1.5fr auto;align-items:center;border-bottom:1px solid #f4f3f7">
+              <div style="padding:12px 26px;font-size:12.5px;font-weight:700;min-width:0">{{ ct.name }}</div>
+              <div style="padding:12px 12px;font-size:12px;color:#4a4553;min-width:0;overflow-wrap:anywhere">{{ ct.email }}</div>
+              <div style="padding:12px 12px"><span style="{{ ct.chip }}">{{ ct.status }}</span></div>
+              <div class="rf-mono" style="padding:12px 12px;font-size:11px;color:#8b8798;min-width:0;overflow-wrap:anywhere">{{ ct.link }}</div>
+              <div style="padding:12px 26px 12px 12px"><div class="rf-btn" data-invite="{{ ct.k }}" onClick="{{ sendInvite }}" style="{{ ct.ctaStyle }}">{{ ct.cta }}</div></div>
+            </div>
+          </sc-for>
+          <div style="padding:12px 26px;font-size:11.5px;color:#8b8798">{{ contactsNote }}</div>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- PIPELINE -->
+    <div style="margin-top:34px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <div class="rf-lbl">Your referrals</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <sc-for list="{{ statusFilters }}" as="sf" hint-placeholder-count="4">
+            <div class="rf-seg" onClick="{{ sf.go }}" style="{{ sf.style }}">{{ sf.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+
+      <sc-if value="{{ hasReferrals }}">
+        <div style="border:1px solid #ececf1;border-radius:14px;overflow:hidden;background:#fff">
+          <div style="display:grid;grid-template-columns:1.6fr 1fr .9fr 1fr .9fr 1fr;background:#faf9fc;border-bottom:1px solid #ececf1" class="rf-hide-sm">
+            <div style="padding:10px 16px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#8b8798">Referred</div>
+            <div style="padding:10px 12px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#8b8798">Type</div>
+            <div style="padding:10px 12px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#8b8798">Submitted</div>
+            <div style="padding:10px 12px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#8b8798">Status</div>
+            <div style="padding:10px 12px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#8b8798">Reward</div>
+            <div style="padding:10px 16px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#8b8798">Next step</div>
+          </div>
+          <sc-for list="{{ referrals }}" as="r" hint-placeholder-count="5">
+            <div class="rf-row" onClick="{{ r.go }}" style="display:grid;grid-template-columns:1.6fr 1fr .9fr 1fr .9fr 1fr;border-bottom:1px solid #f4f3f7;align-items:center">
+              <div style="padding:13px 16px;min-width:0">
+                <div style="font-size:13px;font-weight:700">{{ r.name }}</div>
+                <div style="font-size:11px;color:#8b8798;margin-top:1px">{{ r.org }}</div>
+              </div>
+              <div style="padding:13px 12px;font-size:12px;color:#4a4553">{{ r.type }}</div>
+              <div class="rf-mono" style="padding:13px 12px;font-size:11.5px;color:#8b8798">{{ r.date }}</div>
+              <div style="padding:13px 12px"><span style="{{ r.statusChip }}">{{ r.status }}</span></div>
+              <div style="padding:13px 12px;font-size:12px;color:{{ r.rewardTone }}">{{ r.rewardLabel }}</div>
+              <div style="padding:13px 16px;font-size:11.5px;color:#71717a">{{ r.nextStep }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ !hasReferrals }}">
+        <div style="border:1px dashed #d4d0dc;border-radius:14px;padding:44px 24px;text-align:center;background:#fff">
+          <div style="font-size:14px;font-weight:700;color:#3f3b47">No referrals yet</div>
+          <div style="font-size:12.5px;color:#8b8798;margin-top:6px;max-width:380px;margin-left:auto;margin-right:auto;line-height:1.6">Submit your first referral to start tracking it here — review status, fit notes, and reward eligibility all live on this page.</div>
+          <div class="rf-btn" onClick="{{ openSubmit }}" style="display:inline-block;margin-top:16px;padding:10px 18px;border-radius:9px;background:#6d28d9;color:#fff;font-size:12.5px;font-weight:700">Submit your first referral</div>
+        </div>
+      </sc-if>
+    </div>
+
+    <!-- REWARD LOGIC -->
+    <div style="margin-top:34px;border:1px solid #ececf1;border-radius:14px;padding:22px 26px;background:#fff">
+      <div class="rf-lbl" style="margin-bottom:8px">Reward logic</div>
+      <div style="font-size:13px;color:#4a4553;line-height:1.65;max-width:680px">Rewards vary by category and are never issued on submission alone — a qualified outcome (acceptance, close, or onboarding) is required. Some categories run on invite-only terms set case by case.</div>
+      <div style="display:flex;flex-direction:column;gap:0;margin-top:16px">
+        <sc-for list="{{ rewardMatrix }}" as="rw" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:14px;padding:12px 0;border-top:1px solid #f4f3f7;flex-wrap:wrap">
+            <div style="font-size:12.5px;font-weight:700;flex:none;min-width:180px">{{ rw.cat }}</div>
+            <span style="{{ rw.modelChip }}">{{ rw.model }}</span>
+            <div style="font-size:11.5px;color:#8b8798;flex:1;min-width:200px">{{ rw.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- PARTNER PROGRAM -->
+    <div style="margin-top:34px;border:1px solid #ececf1;border-radius:14px;padding:24px 28px;background:#faf9fc;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <div style="min-width:0;flex:1">
+        <div class="rf-lbl" style="margin-bottom:8px">Referral partner program</div>
+        <div style="font-size:14px;font-weight:800;letter-spacing:-.01em">Refer often, with more structure and better terms.</div>
+        <div style="font-size:12.5px;color:#4a4553;line-height:1.6;margin-top:6px;max-width:520px">For recurring referrers — invite-only. Custom reward terms, priority review, and a direct line for strategic and capital introductions.</div>
+      </div>
+      <div class="rf-btn" onClick="{{ openPartner }}" style="flex:none;padding:11px 20px;border-radius:10px;border:1px solid #d4c9f0;background:#fff;color:#6d28d9;font-size:13px;font-weight:700">Become a referral partner</div>
+    </div>
+
+    <!-- FAQ -->
+    <div id="policy" style="margin-top:34px">
+      <div class="rf-lbl" style="margin-bottom:14px">Policy &amp; FAQ</div>
+      <div style="border:1px solid #ececf1;border-radius:14px;overflow:hidden;background:#fff">
+        <sc-for list="{{ faqs }}" as="q" hint-placeholder-count="6">
+          <div class="rf-faq" onClick="{{ q.go }}" style="padding:15px 20px;border-bottom:1px solid #f4f3f7">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <div style="font-size:13px;font-weight:700">{{ q.q }}</div>
+              <span style="font-size:14px;color:#a8a4b4;flex:none">{{ q.glyph }}</span>
+            </div>
+            <sc-if value="{{ q.open }}">
+              <div style="font-size:12.5px;color:#4a4553;line-height:1.65;margin-top:8px;max-width:640px">{{ q.a }}</div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SUBMIT DRAWER -->
+  <sc-if value="{{ submitOpen }}">
+    <div onClick="{{ closeSubmit }}" style="position:fixed;inset:0;z-index:900;background:rgba(20,17,24,.42)">
+      <div class="rf-drawer" onClick="{{ stop }}" style="position:absolute;top:0;right:0;height:100%;width:440px;background:#fff;box-shadow:-8px 0 30px rgba(20,17,24,.14);overflow-y:auto;padding:26px 28px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.02em">Submit a referral</div>
+            <div style="font-size:12px;color:#8b8798;margin-top:4px">Reviewed individually, typically within 5 business days.</div>
+          </div>
+          <div class="rf-btn" onClick="{{ closeSubmit }}" style="width:28px;height:28px;border-radius:8px;border:1px solid #ececf1;display:flex;align-items:center;justify-content:center;font-size:14px;color:#71717a">×</div>
+        </div>
+
+        <sc-if value="{{ !submitted }}">
+          <div style="margin-top:18px;padding:14px 16px;border:1px dashed #d4d0dc;border-radius:11px;background:#faf9fc">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+              <div>
+                <div style="font-size:12.5px;font-weight:700">Import a contact list (CSV)</div>
+                <div style="font-size:11px;color:#8b8798;margin-top:2px">Columns: name, organization, context</div>
+              </div>
+              <label class="rf-btn" style="padding:7px 13px;border-radius:8px;border:1px solid #ececf1;background:#fff;font-size:11.5px;font-weight:700;color:#3f3f46">
+                Choose file
+                <input type="file" accept=".csv,text/csv" onChange="{{ onImportFile }}" style="display:none"></input>
+              </label>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:10px;flex-wrap:wrap">
+              <span style="font-size:10.5px;color:#8b8798;flex:none">Importing as:</span>
+              <sc-for list="{{ importCategoryTabs }}" as="ic" hint-placeholder-count="6">
+                <div class="rf-seg" onClick="{{ ic.go }}" style="{{ ic.style }}">{{ ic.label }}</div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ importError }}"><div style="font-size:11.5px;color:#b91c1c;margin-top:8px">{{ importError }}</div></sc-if>
+            <sc-if value="{{ hasImportRows }}">
+              <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
+                <sc-for list="{{ importRows }}" as="ir" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:6px 8px;background:#fff;border:1px solid #ececf1;border-radius:8px">
+                    <span style="flex:1;min-width:0"><strong>{{ ir.name }}</strong> {{ ir.org }}</span>
+                    <span style="color:#a8a4b4;flex:none">{{ ir.context }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font-size:11px;color:#8b8798;margin-top:8px">All {{ importRowCount }} contacts will be submitted under <strong>{{ importCatName }}</strong> — {{ importCatNote }}</div>
+              <div class="rf-btn" onClick="{{ submitImport }}" style="margin-top:8px;padding:9px 0;border-radius:9px;background:#6d28d9;color:#fff;font-size:12px;font-weight:700;text-align:center">Submit all as {{ importCatName }}</div>
+            </sc-if>
+            <sc-if value="{{ importDone }}">
+              <div style="font-size:11.5px;color:#15803d;font-weight:600;margin-top:8px">{{ importedCount }} contacts submitted for review.</div>
+            </sc-if>
+          </div>
+
+          <div style="margin-top:18px">
+            <div class="rf-lbl" style="font-size:9.5px;margin-bottom:8px">Referral category</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <sc-for list="{{ formCategoryTabs }}" as="fc" hint-placeholder-count="6">
+                <div class="rf-seg" onClick="{{ fc.go }}" style="{{ fc.style }}">{{ fc.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
+            <input value="{{ f.yourRole }}" onChange="{{ setYourRole }}" placeholder="Your relationship to Axal VC" style="{{ inputStyle }}">
+            <input value="{{ f.referName }}" onChange="{{ setReferName }}" placeholder="Who you're referring — name" style="{{ inputStyle }}">
+            <input value="{{ f.referOrg }}" onChange="{{ setReferOrg }}" placeholder="Company or affiliation" style="{{ inputStyle }}">
+            <input value="{{ f.contact }}" onChange="{{ setContact }}" placeholder="Contact details for follow-up" style="{{ inputStyle }}">
+            <textarea value="{{ f.context }}" onChange="{{ setContext }}" rows="3" placeholder="Why is this a fit? Context on the introduction." style="{{ inputStyle }};resize:vertical"></textarea>
+          </div>
+          <div style="margin-top:14px">
+            <div class="rf-lbl" style="font-size:9.5px;margin-bottom:8px">Intro status</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <sc-for list="{{ warmOptions }}" as="wo" hint-placeholder-count="3">
+                <div class="rf-seg" onClick="{{ wo.go }}" style="{{ wo.style }}">{{ wo.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+          <div class="rf-btn" onClick="{{ submitForm }}" style="{{ submitBtnStyle }}">Submit referral</div>
+          <div style="font-size:11.5px;color:#8b8798;margin-top:12px;line-height:1.6">Most submissions are not accepted — this is by design, and why the ones that are get real attention.</div>
+        </sc-if>
+        <sc-if value="{{ submitted }}">
+          <div style="text-align:center;padding:36px 4px">
+            <div style="width:40px;height:40px;border-radius:12px;background:rgba(21,128,61,.1);color:#15803d;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+              <span style="width:18px;height:18px;display:flex" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+            </div>
+            <div style="font-size:15.5px;font-weight:800">Referral received</div>
+            <div style="font-size:12.5px;color:#4a4553;line-height:1.62;margin-top:8px">It now appears in your pipeline as Submitted. We'll update the status here as review progresses.</div>
+            <div class="rf-btn" onClick="{{ closeSubmit }}" style="display:inline-block;margin-top:16px;padding:10px 18px;border-radius:9px;background:#6d28d9;color:#fff;font-size:12.5px;font-weight:700">Done</div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- DETAIL DRAWER -->
+  <sc-if value="{{ detailOpen }}">
+    <div onClick="{{ closeDetail }}" style="position:fixed;inset:0;z-index:900;background:rgba(20,17,24,.42)">
+      <div class="rf-drawer" onClick="{{ stop }}" style="position:absolute;top:0;right:0;height:100%;width:460px;background:#fff;box-shadow:-8px 0 30px rgba(20,17,24,.14);overflow-y:auto;padding:26px 28px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div>
+            <div style="font-size:17px;font-weight:800;letter-spacing:-.02em">{{ detail.name }}</div>
+            <div style="font-size:12px;color:#8b8798;margin-top:3px">{{ detail.org }} · {{ detail.type }}</div>
+          </div>
+          <div class="rf-btn" onClick="{{ closeDetail }}" style="width:28px;height:28px;border-radius:8px;border:1px solid #ececf1;display:flex;align-items:center;justify-content:center;font-size:14px;color:#71717a;flex:none">×</div>
+        </div>
+        <div style="margin-top:14px"><span style="{{ detail.statusChip }}">{{ detail.status }}</span></div>
+
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f4f3f7">
+          <div class="rf-lbl" style="font-size:9.5px;margin-bottom:8px">Fit notes</div>
+          <div style="font-size:12.5px;color:#3f3f46;line-height:1.65">{{ detail.fitNotes }}</div>
+        </div>
+
+        <div style="margin-top:18px;padding-top:16px;border-top:1px solid #f4f3f7">
+          <div class="rf-lbl" style="font-size:9.5px;margin-bottom:10px">Status history</div>
+          <div style="display:flex;flex-direction:column;gap:0">
+            <sc-for list="{{ detail.history }}" as="h" hint-placeholder-count="3">
+              <div style="display:flex;gap:11px">
+                <div style="display:flex;flex-direction:column;align-items:center;flex:none">
+                  <div style="width:8px;height:8px;border-radius:50%;background:#6d28d9;margin-top:3px"></div>
+                  <sc-if value="{{ h.line }}"><div style="width:1.5px;flex:1;min-height:18px;background:#f0eff3"></div></sc-if>
+                </div>
+                <div style="padding-bottom:14px;min-width:0">
+                  <div style="font-size:12px;font-weight:700">{{ h.label }}</div>
+                  <div class="rf-mono" style="font-size:10.5px;color:#a8a4b4;margin-top:1px">{{ h.when }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="margin-top:18px;padding-top:16px;border-top:1px solid #f4f3f7">
+          <div class="rf-lbl" style="font-size:9.5px;margin-bottom:8px">Reward eligibility</div>
+          <div style="font-size:12.5px;color:{{ detail.rewardTone }};font-weight:600">{{ detail.rewardLabel }}</div>
+        </div>
+
+        <div style="margin-top:18px;padding-top:16px;border-top:1px solid #f4f3f7">
+          <div class="rf-lbl" style="font-size:9.5px;margin-bottom:8px">Next step</div>
+          <div style="font-size:12.5px;color:#3f3f46">{{ detail.nextStep }}</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- SHARE MODAL -->
+  <sc-if value="{{ shareOpen }}">
+    <div onClick="{{ closeShare }}" style="position:fixed;inset:0;z-index:900;background:rgba(20,17,24,.42);display:flex;align-items:center;justify-content:center;padding:24px">
+      <div onClick="{{ stop }}" style="width:100%;max-width:440px;background:#fff;border-radius:16px;padding:26px 28px;box-shadow:0 20px 60px rgba(20,17,24,.25)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+          <div>
+            <div style="font-size:16px;font-weight:800;letter-spacing:-.02em">Share Refer &amp; Earn</div>
+            <div style="font-size:12px;color:#8b8798;margin-top:4px">Each platform gets its own message — tuned to how people actually read it there.</div>
+          </div>
+          <div class="rf-btn" onClick="{{ closeShare }}" style="width:26px;height:26px;border-radius:8px;border:1px solid #ececf1;display:flex;align-items:center;justify-content:center;font-size:13px;color:#71717a;flex:none">×</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:18px">
+          <sc-for list="{{ sharePlatforms }}" as="sp" hint-placeholder-count="4">
+            <div class="rf-btn" onClick="{{ sp.go }}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid #ececf1;border-radius:11px">
+              <div style="width:30px;height:30px;border-radius:9px;background:{{ sp.iconBg }};color:#fff;display:flex;align-items:center;justify-content:center;flex:none;padding:6px;box-sizing:border-box" dangerouslySetInnerHTML="{{ sp.icon }}"></div>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:13px;font-weight:700">{{ sp.label }}</div>
+                <div style="font-size:11px;color:#8b8798;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sp.preview }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid #f4f3f7">
+          <input value="{{ shareUrl }}" readOnly="{{ true }}" style="flex:1;padding:9px 11px;border-radius:9px;border:1px solid #ececf1;background:#faf9fc;font-size:12px;color:#4a4553"></input>
+          <div class="rf-btn" onClick="{{ copyShareLink }}" style="padding:9px 14px;border-radius:9px;border:1px solid #ececf1;font-size:12px;font-weight:700;color:#3f3f46;flex:none">{{ copyLabel }}</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- PARTNER MODAL -->
+  <sc-if value="{{ partnerOpen }}">
+    <div onClick="{{ closePartner }}" style="position:fixed;inset:0;z-index:900;background:rgba(20,17,24,.42);display:flex;align-items:center;justify-content:center;padding:24px">
+      <div onClick="{{ stop }}" style="width:100%;max-width:460px;background:#fff;border-radius:16px;padding:28px 30px;box-shadow:0 20px 60px rgba(20,17,24,.25)">
+        <div style="font-size:16px;font-weight:800;letter-spacing:-.02em">Apply for the referral partner program</div>
+        <div style="font-size:12.5px;color:#4a4553;line-height:1.62;margin-top:8px">Invite-only. We review recurring referrers individually and follow up directly with terms if there's a fit.</div>
+        <input value="{{ partnerNote }}" onChange="{{ setPartnerNote }}" placeholder="What kinds of introductions do you expect to make?" style="{{ inputStyle }};width:100%;box-sizing:border-box;margin-top:16px"></input>
+        <div class="rf-btn" onClick="{{ submitPartner }}" style="margin-top:14px;padding:11px 0;border-radius:9px;background:#6d28d9;color:#fff;font-size:13px;font-weight:700;text-align:center">Request review</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240}}">
+class Component extends DCLogic {
+  state = { persona:'active', statusFilter:'All', submitOpen:false, submitted:false, formCat:'startup', warm:'',
+    detailKey:null, partnerOpen:false, partnerNote:'', faqOpen:0,
+    copied:false, toast:'', invited:{}, shareOpen:false, shareCopied:false,
+    importCat:'startup', importRows:[], importError:'', importedCount:0,
+    f:{ yourRole:'', referName:'', referOrg:'', contact:'', context:'' } };
+
+  parseCsv(text) {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (!lines.length) return [];
+    const splitLine = (l) => l.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+    let rows = lines.map(splitLine);
+    const header = rows[0].map(h => h.toLowerCase());
+    if (header.indexOf('name') > -1) rows = rows.slice(1);
+    return rows.filter(r => r[0]).map(r => ({ name:r[0] || '', org:r[1] || '', context:r[2] || '' }));
+  }
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.9)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+  setF(k){ return (e) => this.setState(s => ({ f: Object.assign({}, s.f, { [k]: e.target.value }) })); }
+
+  renderVals() {
+    const st = this.state;
+    const P = '#6d28d9';
+    const chip = (bg,fg) => 'display:inline-block;padding:3px 10px;border-radius:99px;font-size:10.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap';
+    const GREEN = chip('rgba(21,128,61,.09)','#15803d'), AMBER = chip('rgba(180,83,9,.09)','#b45309'), GREY = chip('#f4f3f7','#6b6577'), PURPLE = chip('rgba(109,40,217,.08)', P);
+
+    const CATS = {
+      startup:  { name:'Startup / founder referrals', priority:'Highest priority', priorityTone:GREEN, access:'Open', accessTone:GREY,
+        qualifies:'A founder actively building, with a specific problem and early evidence — a fit for the Spin-Out Lab.', reward:'Milestone-based, on acceptance and formation.' },
+      customer: { name:'Platform user referrals', priority:'Standard', priorityTone:GREY, access:'Open', accessTone:GREY,
+        qualifies:'Advisors, service partners, or teams evaluating platform tools — anyone with a namable role and a clear next step.', reward:'Platform credit, issued once matched and onboarded with a founder.' },
+      strategic:{ name:'Strategic &amp; capital introductions', priority:'Selective', priorityTone:AMBER, access:'Invite-only', accessTone:PURPLE,
+        qualifies:'A named decision-maker who could shift platform reach or distribution, or an investor/LP with genuine thesis overlap introduced through a warm relationship.', reward:'Invite-only economics, negotiated case by case.' },
+    };
+    const catKeys = Object.keys(CATS);
+    const categories = catKeys.map(k => Object.assign({ key:k }, CATS[k], {
+      priorityChip: CATS[k].priorityTone, accessChip: CATS[k].accessTone,
+    }));
+
+    const strongFit = [
+      'A warm introduction where both sides already know context',
+      'Specific evidence — traction, expertise, or relevance — not a cold contact',
+      'Complete context: why now, why this person, why Axal VC',
+    ];
+    const needsInfo = [
+      'Referral submitted without contact details or context',
+      'Relationship to Axal VC or to the referred party unclear',
+      'Category selected doesn\u2019t match what\u2019s actually being referred',
+    ];
+    const notAccepted = [
+      'Self-referrals or referrals made without the person\u2019s knowledge',
+      'Mass contact lists with no individual context',
+      'An idea with no founder attached yet',
+    ];
+
+    // ---- referral pipeline (seeded data; toggled empty via persona) ----
+    const STATUS_STYLE = {
+      'Draft':GREY, 'Submitted':GREY, 'Under review':AMBER, 'More info needed':AMBER,
+      'Qualified':PURPLE, 'In conversation':PURPLE, 'Converted':GREEN, 'Reward eligible':GREEN,
+      'Reward issued':GREEN, 'Rejected':chip('rgba(185,28,28,.08)','#b91c1c'), 'Closed':GREY,
+    };
+    const ALL_REFERRALS = [
+      { k:'r1', name:'Elena Voss', org:'Fractional CPO, independent', type:'Advisor', date:'Aug 2', status:'Reward issued',
+        rewardLabel:'$400 credit issued', rewardTone:'#15803d', nextStep:'Closed',
+        fitNotes:'Strong GTM/pricing complement for the current cohort\u2019s technical-founder skew. Matched and onboarded within a week.',
+        history:[ {label:'Submitted', when:'Jul 20, 09:10'}, {label:'Under review', when:'Jul 21, 14:20'}, {label:'Qualified', when:'Jul 24, 11:00'}, {label:'Onboarded — reward issued', when:'Aug 2, 16:45'} ] },
+      { k:'r2', name:'Halyard Security', org:'James W., solo founder', type:'Startup', date:'Aug 5', status:'In conversation',
+        rewardLabel:'Eligible on acceptance', rewardTone:'#b45309', nextStep:'Cohort interview scheduled Aug 14',
+        fitNotes:'Cybersecurity, solo founder with strong technical depth and no commercial lead — matches Lab profile closely.',
+        history:[ {label:'Submitted', when:'Jul 30, 22:05'}, {label:'Under review', when:'Aug 1, 10:15'}, {label:'In conversation', when:'Aug 5, 13:00'} ] },
+      { k:'r3', name:'Arcline Capital', org:'Seed-stage fund', type:'Capital', date:'Aug 6', status:'More info needed',
+        rewardLabel:'Not yet applicable', rewardTone:'#8b8798', nextStep:'Awaiting thesis overlap details from you',
+        fitNotes:'Relationship context and thesis fit unclear from the initial submission — flagged for follow-up before review continues.',
+        history:[ {label:'Submitted', when:'Aug 6, 08:40'}, {label:'More info needed', when:'Aug 6, 17:10'} ] },
+      { k:'r4', name:'Kelp Bio', org:'Diana K., research spin-out', type:'Startup', date:'Jul 28', status:'Rejected',
+        rewardLabel:'Not eligible', rewardTone:'#b91c1c', nextStep:'Closed — no further action',
+        fitNotes:'Strong science, but no operating founder attached at time of review — Lab requires an active founder, not a licensable idea alone.',
+        history:[ {label:'Submitted', when:'Jul 24, 12:00'}, {label:'Under review', when:'Jul 25, 09:30'}, {label:'Rejected', when:'Jul 28, 15:20'} ] },
+      { k:'r5', name:'Marcus Reyes', org:'Independent consultant', type:'Service partner', date:'Aug 8', status:'Submitted',
+        rewardLabel:'Eligible on onboarding', rewardTone:'#b45309', nextStep:'Awaiting initial review',
+        fitNotes:'Legal formation specialist, referred with full context on prior founder work — pending first review pass.',
+        history:[ {label:'Submitted', when:'Aug 8, 10:05'} ] },
+    ];
+    const referrals = ALL_REFERRALS
+      .filter(r => st.statusFilter === 'All' || r.status === st.statusFilter)
+      .map(r => Object.assign({}, r, {
+        statusChip: STATUS_STYLE[r.status] || GREY,
+        go: () => { this.setState({ detailKey:r.k }); },
+      }));
+    const hasReferrals = st.persona === 'active' && referrals.length > 0;
+
+    const FILTERS = ['All','Under review','In conversation','Reward issued','Rejected'];
+    const statusFilters = FILTERS.map(f => ({ label:f, go: () => this.setState({ statusFilter:f }),
+      style:'padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:600;border:1px solid '+(st.statusFilter===f?P:'#ececf1')+';background:'+(st.statusFilter===f?'rgba(109,40,217,.06)':'#fff')+';color:'+(st.statusFilter===f?P:'#71717a') }));
+
+    const summaryReal = [
+      { k:'Referrals submitted', v: st.persona==='active' ? String(ALL_REFERRALS.length) : '0', tone:'#18181b' },
+      { k:'Qualified', v: st.persona==='active' ? String(ALL_REFERRALS.filter(r=>['Qualified','In conversation','Converted','Reward eligible','Reward issued'].indexOf(r.status)>-1).length) : '0', tone:P },
+      { k:'Under review', v: st.persona==='active' ? String(ALL_REFERRALS.filter(r=>r.status==='Under review'||r.status==='More info needed').length) : '0', tone:'#b45309' },
+      { k:'Rewards earned', v: st.persona==='active' ? '$400' : '$0', tone:'#15803d' },
+      { k:'Avg. review time', v:'5 days', tone:'#18181b' },
+      { k:'Top category', v:'Startup', tone:'#18181b' },
+    ];
+
+    const rewardMatrix = [
+      { cat:'Startup / founder', model:'Milestone-based', modelChip:GREEN, note:'Paid on cohort acceptance and completed formation.' },
+      { cat:'Platform user', model:'Platform credit', modelChip:GREY, note:'Issued once matched and onboarded with a founder.' },
+      { cat:'Strategic & capital', model:'Invite-only / custom', modelChip:AMBER, note:'Terms negotiated directly, not published — case by case.' },
+    ];
+
+    const formCategoryTabs = catKeys.map(k => ({ label:CATS[k].name, go: () => this.setState({ formCat:k }),
+      style:'padding:6px 11px;border-radius:99px;font-size:11.5px;font-weight:600;border:1px solid '+(st.formCat===k?P:'#ececf1')+';background:'+(st.formCat===k?'rgba(109,40,217,.06)':'#fff')+';color:'+(st.formCat===k?P:'#4a4553') }));
+    const warmOptions = ['Yes — they know I\u2019m referring them','No — cold introduction','Not sure yet'].map(w => ({ label:w, go: () => this.setState({ warm:w }),
+      style:'padding:6px 11px;border-radius:99px;font-size:11px;font-weight:600;border:1px solid '+(st.warm===w?P:'#ececf1')+';background:'+(st.warm===w?'rgba(109,40,217,.06)':'#fff')+';color:'+(st.warm===w?P:'#4a4553') }));
+
+    const inputStyle = 'padding:11px 13px;border-radius:9px;border:1px solid #ececf1;background:#faf9fc;font-size:13px;color:#18181b;outline:none';
+    const canSubmit = st.f.referName.trim() && st.f.context.trim();
+
+    const detailRaw = ALL_REFERRALS.find(r => r.k === st.detailKey);
+    const detail = detailRaw ? Object.assign({}, detailRaw, {
+      statusChip: STATUS_STYLE[detailRaw.status] || GREY,
+      history: detailRaw.history.map((h,i) => Object.assign({}, h, { line: i < detailRaw.history.length - 1 })),
+    }) : null;
+
+    const FAQS = [
+      { q:'Who is eligible to submit a referral?', a:'Anyone already connected to Axal VC — founders in a cohort or graduated, advisors, investors, operators, and service partners.' },
+      { q:'When are rewards actually paid?', a:'Only after a qualifying outcome — acceptance and formation for startup referrals, onboarding for advisors and partners, a paying customer for platform users. Never on submission alone.' },
+      { q:'Can I refer myself or my own company?', a:'No. Self-referrals aren\u2019t eligible under this program — apply directly instead.' },
+      { q:'Is every referral accepted?', a:'No — most are not, and that\u2019s intentional. Review is against a real quality bar, not a quota.' },
+      { q:'Is this program open to everyone, or invite-only?', a:'Startup, advisor, platform user, and service partner referrals are open. Strategic and capital introductions run on invite-only terms.' },
+      { q:'What if my referral needs more information?', a:'It moves to "More info needed" in your pipeline with a note on what\u2019s missing — you can update it from the detail view.' },
+    ];
+    const faqs = FAQS.map((q,i) => ({ q:q.q, a:q.a, open: st.faqOpen===i, glyph: st.faqOpen===i ? '\u2212' : '+',
+      go: () => this.setState({ faqOpen: st.faqOpen===i ? -1 : i }) }));
+
+    // Copy written per-platform: LinkedIn earns trust from a professional feed (specific, credible, a
+    // real reason to click); X needs to be short enough to quote-tweet; WhatsApp/Telegram read as a
+    // direct personal nudge to one person, not a broadcast.
+    const shareUrl = 'https://axal.vc/refer-and-earn';
+    const msgLinkedin = 'Referring the right person is worth more than a hundred cold applications.\n\nAxal VC\u2019s Refer & Earn program rewards founders, advisors, and operators who bring high-quality people into the network \u2014 real rewards for a real fit, every submission reviewed individually.\n\nIf you know a founder who should be building inside a structured 28-day formation program, an advisor with real operating depth, or a strategic introduction worth making \u2014 this is where it goes: ' + shareUrl;
+    const msgX = 'Know a founder who should be building inside Axal VC\u2019s Spin-Out Lab? Refer them. Reviewed individually, rewarded on real outcomes \u2014 not a referral-spam program. ' + shareUrl;
+    const msgWhatsapp = 'Hey \u2014 Axal VC has a referral program where you get rewarded for introducing strong founders, advisors, or partners into their network. Thought of you for this: ' + shareUrl;
+    const msgTelegram = 'Axal VC\u2019s Refer & Earn: refer founders, advisors, or strategic intros into their network and earn when there\u2019s a real fit. Reviewed individually, not a numbers game. ' + shareUrl;
+
+    // ---- referral link, code, QR ----
+    const REF_CODE = 'WD4RP4';
+    const REF_LINK = 'https://axal.vc/register?ref=' + REF_CODE;
+    // Deterministic pseudo-QR: seeded from the code so the pattern is stable, with
+    // the three finder squares placed correctly. Representational, not scannable.
+    const QN = 21;
+    let seed = 0; for (let i = 0; i < REF_CODE.length; i++) seed = (seed * 31 + REF_CODE.charCodeAt(i)) >>> 0;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    const inFinder = (r, c) => {
+      const zones = [[0,0],[0,QN-7],[QN-7,0]];
+      for (let z = 0; z < zones.length; z++) {
+        const dr = r - zones[z][0], dc = c - zones[z][1];
+        if (dr >= 0 && dr < 7 && dc >= 0 && dc < 7) {
+          const ring = Math.max(Math.abs(dr - 3), Math.abs(dc - 3));
+          return ring === 3 || ring <= 1 ? 'on' : 'off';
+        }
+      }
+      return null;
+    };
+    const qrCells = [];
+    for (let r = 0; r < QN; r++) for (let c = 0; c < QN; c++) {
+      const fin = inFinder(r, c);
+      const on = fin ? fin === 'on' : rnd() > 0.52;
+      qrCells.push({ style:'width:100%;aspect-ratio:1;background:' + (on ? '#18181b' : 'transparent') });
+    }
+
+    // ---- imported contacts ----
+    const CONTACTS = [
+      { k:'c1', name:'Aisha Bello', email:'aisha@northwind.build', status:'Invited', sent:true },
+      { k:'c2', name:'Rafael Duarte', email:'r.duarte@sablefin.io', status:'Registered', sent:true, done:true },
+      { k:'c3', name:'Mira Halvorsen', email:'mira.h@lumenpath.dev', status:'Not sent', sent:false },
+      { k:'c4', name:'—', email:'ops@ferrostack.com', status:'Not sent', sent:false },
+    ];
+    const sentSet = st.invited || {};
+    const contacts = CONTACTS.map(c => {
+      const sent = c.sent || !!sentSet[c.k];
+      const status = c.done ? 'Registered' : sent ? 'Invited' : 'Not sent';
+      return { k:c.k, name:c.name, email:c.email, status,
+        chip: c.done ? GREEN : sent ? PURPLE : GREY,
+        link: 'axal.vc/r/' + REF_CODE.toLowerCase() + '/' + c.k,
+        cta: c.done ? 'View' : sent ? 'Resend' : 'Send invite',
+        ctaStyle:'padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:600;white-space:nowrap;'
+          + (c.done || sent ? 'border:1px solid #ececf1;color:#3f3f46;background:#fff' : 'background:#6d28d9;color:#fff'),
+      };
+    });
+    const sentCount = contacts.filter(c => c.status !== 'Not sent').length;
+
+    const scrollToPolicy = () => {
+      if (typeof document === 'undefined') return;
+      const el = document.getElementById('policy');
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior:'smooth', block:'start' });
+    };
+
+    return {
+      programChip: chip('rgba(21,128,61,.09)','#15803d'),
+      personaLabel: st.persona==='active' ? 'View as: new user' : 'View as: active referrer',
+      togglePersona: () => this.setState(s => ({ persona: s.persona==='active' ? 'new' : 'active' })),
+      goPolicy: scrollToPolicy,
+
+      summary: summaryReal, categories, strongFit, needsInfo, notAccepted,
+
+      statusFilters, referrals, hasReferrals,
+
+      rewardMatrix,
+
+      openSubmit: () => this.setState({ submitOpen:true, submitted:false }),
+      closeSubmit: () => this.setState({ submitOpen:false }),
+      submitOpen: st.submitOpen, submitted: st.submitted,
+      formCategoryTabs, warmOptions, f:st.f, inputStyle,
+      setYourRole:this.setF('yourRole'), setReferName:this.setF('referName'), setReferOrg:this.setF('referOrg'),
+      setContact:this.setF('contact'), setContext:this.setF('context'),
+      submitBtnStyle: 'margin-top:16px;padding:12px 0;border-radius:10px;text-align:center;font-size:13px;font-weight:800;'
+        + (canSubmit ? 'background:'+P+';color:#fff' : 'background:#f1f0f5;color:#a8a4b4;cursor:not-allowed'),
+      submitForm: () => { if (canSubmit) this.setState({ submitted:true }); },
+      checkIcon: this.ic('<path d="M20 6 9 17l-5-5"/>', 2.6),
+
+      detailOpen: !!detail, detail: detail || {}, closeDetail: () => this.setState({ detailKey:null }),
+
+      partnerOpen: st.partnerOpen, openPartner: () => this.setState({ partnerOpen:true }),
+      closePartner: () => this.setState({ partnerOpen:false }),
+      partnerNote: st.partnerNote, setPartnerNote: (e) => this.setState({ partnerNote:e.target.value }),
+      submitPartner: () => this.setState({ partnerOpen:false, partnerNote:'' }),
+
+      // ---- share (platform-tuned copy — each written for how that platform actually gets read) ----
+      shareOpen: st.shareOpen, openShare: () => this.setState({ shareOpen:true, shareCopied:false }),
+      closeShare: () => this.setState({ shareOpen:false }),
+      shareUrl, shareCopied: st.shareCopied, copyLabel: st.shareCopied ? 'Copied' : 'Copy link',
+      copyShareLink: () => {
+        if (typeof navigator !== 'undefined' && navigator.clipboard) navigator.clipboard.writeText(shareUrl).catch(() => {});
+        this.setState({ shareCopied:true });
+      },
+      sharePlatforms: [
+        { k:'linkedin', label:'LinkedIn', preview: msgLinkedin, iconBg:'#0A66C2',
+          icon: this.ic('<path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM2 21h6V9H2v12zM11 21h6v-6.5c0-1.6.6-2.6 2-2.6s2 1 2 2.6V21h6v-7.4c0-3.9-2.1-5.7-4.9-5.7-2.2 0-3.4 1.2-4.1 2.2V9h-7v12z"/>'),
+          go: () => { if (typeof window !== 'undefined') window.open('https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl), '_blank'); } },
+        { k:'x', label:'X / Twitter', preview: msgX, iconBg:'#000000',
+          icon: this.ic('<path d="M18.9 2H22l-6.8 7.8L22.8 22h-6.4l-4.4-6-5 6H2l7.2-8.2L1.6 2h6.5l4 5.6L18.9 2z"/>'),
+          go: () => { if (typeof window !== 'undefined') window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(msgX), '_blank'); } },
+        { k:'whatsapp', label:'WhatsApp', preview: msgWhatsapp, iconBg:'#25D366',
+          icon: this.ic('<path d="M12 2a10 10 0 0 0-8.6 15L2 22l5.2-1.4A10 10 0 1 0 12 2zm5.8 14.2c-.25.7-1.4 1.3-2 1.4-.5.1-1.1.2-3.6-.8-3-1.2-4.9-4.2-5-4.4-.15-.2-1.2-1.6-1.2-3s.75-2.15 1-2.4c.25-.3.55-.35.75-.35h.5c.2 0 .45 0 .65.5.25.6.85 2.1.9 2.25.05.15.1.3 0 .5-.35.7-.7.9-1 1.3-.15.15-.3.35-.15.65.2.35.85 1.4 1.85 2.25 1.3 1.15 2.35 1.5 2.7 1.65.3.15.5.1.7-.1.2-.25.85-1 1.1-1.3.25-.3.45-.25.75-.15.3.1 1.85.9 2.15 1.05.3.15.5.25.6.35.1.2.1.85-.15 1.55z"/>'),
+          go: () => { if (typeof window !== 'undefined') window.open('https://wa.me/?text=' + encodeURIComponent(msgWhatsapp), '_blank'); } },
+        { k:'telegram', label:'Telegram', preview: msgTelegram, iconBg:'#26A5E4',
+          icon: this.ic('<path d="M21.9 4.3 18.8 19a1.1 1.1 0 0 1-1.7.7l-4.5-3.3-2.2 2.1a.9.9 0 0 1-.7.3l.3-4.3 8.2-7.4c.3-.3-.1-.5-.5-.2L7.3 13.4 3 12c-.9-.3-.9-.9.2-1.3l17.2-6.6c.8-.3 1.6.2 1.5 1.2z"/>'),
+          go: () => { if (typeof window !== 'undefined') window.open('https://t.me/share/url?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(msgTelegram), '_blank'); } },
+      ],
+
+      // ---- CSV import (per referral category, so bulk-imported contacts route through the same fit review as a manual submission) ----
+      importCategoryTabs: catKeys.map(k => ({ label:CATS[k].name.replace(' referrals','').replace(' introductions',''), go: () => this.setState({ importCat:k }),
+        style:'padding:5px 10px;border-radius:99px;font-size:11px;font-weight:600;border:1px solid '+(st.importCat===k?P:'#ececf1')+';background:'+(st.importCat===k?'rgba(109,40,217,.06)':'#fff')+';color:'+(st.importCat===k?P:'#4a4553') })),
+      importCatName: CATS[st.importCat].name, importCatNote: CATS[st.importCat].reward,
+      importRows: st.importRows, importRowCount: String(st.importRows.length), importError: st.importError, hasImportRows: st.importRows.length > 0,
+      importedCount: st.importedCount, importDone: st.importedCount > 0 && st.importRows.length === 0,
+      onImportFile: (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file || typeof FileReader === 'undefined') return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const rows = this.parseCsv(String(reader.result || ''));
+          if (!rows.length) this.setState({ importError:'No rows found. Expect columns: name, organization, context.', importRows:[] });
+          else this.setState({ importRows:rows, importError:'' });
+        };
+        reader.readAsText(file);
+      },
+      removeImportRow: (i) => () => this.setState(s => ({ importRows: s.importRows.filter((_, j) => j !== i) })),
+      submitImport: () => this.setState(s => ({ importedCount: s.importRows.length, importRows:[] })),
+      resetImport: () => this.setState({ importRows:[], importError:'', importedCount:0 }),
+
+      // referral link + code
+      refLink: REF_LINK, refCode: REF_CODE, refCodeOld: 'AXAL-55PVAE',
+      copyLabel: st.copied ? 'Copied' : 'Copy',
+      copyIcon: st.copied
+        ? this.ic('<path d="M20 6 9 17l-5-5"/>', 2.4)
+        : this.ic('<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
+      copyStyle:'display:flex;align-items:center;gap:6px;flex:none;padding:8px 14px;border-radius:9px;font-size:12px;font-weight:700;'
+        + (st.copied ? 'background:rgba(21,128,61,.1);color:#15803d' : 'background:#6d28d9;color:#fff'),
+      copyLink: () => { this.setState({ copied:true }); setTimeout(() => this.setState({ copied:false }), 1600); },
+      shareToast: st.toast || '',
+
+      // QR
+      qrCells,
+      qrGridStyle:'display:grid;grid-template-columns:repeat(' + QN + ',1fr);gap:0;width:172px;padding:10px;background:#fff;border:1px solid #ececf1;border-radius:11px',
+      downloadQr: () => { this.setState({ toast:'QR downloaded as referral-' + REF_CODE + '.png' });
+        setTimeout(() => this.setState({ toast:'' }), 2400); },
+
+      // import contacts
+      contacts, hasContacts: contacts.length > 0, noContacts: contacts.length === 0,
+      contactsNote: sentCount + ' of ' + contacts.length + ' contacts invited. Each link is unique, so registrations attribute to the exact contact — not just to your code.',
+      uploadCsv: () => { this.setState({ toast:'Select a CSV with a header row containing email.' });
+        setTimeout(() => this.setState({ toast:'' }), 2400); },
+      importLinkedin: () => { this.setState({ toast:'Opening LinkedIn to authorise contact access…' });
+        setTimeout(() => this.setState({ toast:'' }), 2400); },
+      sendInvite: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-invite]');
+        const k = n && n.getAttribute('data-invite');
+        if (k) this.setState(s => ({ invited: Object.assign({}, s.invited || {}, { [k]: true }) }));
+      },
+      liIcon: this.ic('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7.5 10.5v6M7.5 7.5v.01M11.5 16.5v-6M11.5 13a2.5 2.5 0 0 1 5 0v3.5"/>'),
+      upIcon: this.ic('<path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>'),
+
+      faqs, stop: (e) => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>

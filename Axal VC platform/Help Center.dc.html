@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeedf2;color:#241f38;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:40px 44px 32px;border-bottom:1px solid rgba(36,31,56,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',monospace;padding:4px 8px;background:#241f38;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,sans-serif;color:rgba(36,31,56,.58)}
+    .fr{width:1080px;min-width:1080px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden}
+    .mono{font-family:'Roboto Mono',monospace;font-variant-numeric:tabular-nums}
+    .lbl{font-family:'Roboto Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.11em;color:#6b6577}
+    .c{background:#fff;border:1px solid #e8e6ee;border-radius:14px}
+    .art:hover{color:#6d28d9}
+    .btn{display:inline-block;text-align:center;font-size:13px;font-weight:700;padding:10px 20px;border-radius:9px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;cursor:pointer;white-space:nowrap}
+    .btn:hover{background:#6d28d9;border-color:#6d28d9}
+    .btn2{display:inline-block;text-align:center;font-size:12.5px;font-weight:600;padding:8px 15px;border-radius:9px;background:#fff;color:#4a4459;border:1px solid #e8e6ee;cursor:pointer;white-space:nowrap}
+    .shot{background:#fbfaff;border:1px dashed #ddd9e6;border-radius:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+    .cap{font-size:11.5px;color:rgba(36,31,56,.55);line-height:1.55;margin-top:11px;max-width:1080px}
+    .p{font-size:14.5px;line-height:1.72;color:#332e45;margin:0}
+  </style>
+</helmet>
+
+<!-- ══════════ H1 · HELP CENTER ══════════ -->
+<section class="ab" id="h1">
+  <div class="ab-hd"><a class="ab-id" href="#h1">H1</a><span class="ab-nm">Help Center</span><span class="ab-sub">platform-wide · grouped by what you are doing, not by who owns the code</span></div>
+  <div class="fr">
+    <div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #e8e6ee">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">A</span>
+        <span style="font-size:13.5px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+        <span class="lbl" style="margin-left:4px">Help</span>
+      </div>
+      <span class="mono" style="font-size:11px;color:#6b6577">{{ personaNote }}</span>
+    </div>
+
+    <div style="background:#f4f0fe;border-bottom:1px solid #ddd0fb;padding:38px 30px 32px;text-align:center">
+      <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.025em;line-height:1.15">How can we help?</h1>
+      <div style="font-size:13.5px;color:#4a4459;margin-top:8px;line-height:1.55">{{ heroLede }}</div>
+      <div style="max-width:540px;margin:20px auto 0">
+        <div style="display:flex;align-items:center;gap:11px;background:#fff;border:1px solid #ddd0fb;border-radius:12px;padding:13px 16px;box-shadow:0 2px 10px rgba(124,58,237,.08)">
+          <span style="width:18px;height:18px;display:block;flex:none;color:#6d28d9" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+          <span style="font-size:14.5px;color:#a49ead;flex:1;text-align:left">Search guides…</span>
+          <span class="mono" style="font-size:10px;color:#6b6577;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:5px;padding:2px 6px;flex:none">/</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:13px;flex-wrap:wrap">
+          <span class="lbl" style="color:#6d28d9">Try</span>
+          <sc-for list="{{ suggested }}" as="s" hint-placeholder-count="3"><span style="{{ s.style }}">{{ s.label }}</span></sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:26px 30px 32px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <span class="lbl">Browse by what you are doing</span>
+        <span class="mono" style="font-size:11px;color:#6b6577">{{ catMeta }}</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+        <sc-for list="{{ cats }}" as="c" hint-placeholder-count="7">
+          <div class="c" style="padding:18px 20px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+              <div style="display:flex;align-items:center;gap:11px;min-width:0">
+                <span style="{{ c.iconWrap }}" dangerouslySetInnerHTML="{{ c.icon }}"></span>
+                <div style="min-width:0">
+                  <div style="font-size:14.5px;font-weight:800;letter-spacing:-.01em">{{ c.name }}</div>
+                  <div class="mono" style="font-size:10px;color:#6b6577;margin-top:4px">{{ c.meta }}</div>
+                </div>
+              </div>
+              <sc-if value="{{ c.persona }}"><span style="{{ c.personaStyle }}">{{ c.persona }}</span></sc-if>
+            </div>
+            <div style="display:grid;gap:9px;margin-top:14px;padding-top:13px;border-top:1px solid #f0eef5">
+              <sc-for list="{{ c.articles }}" as="a" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+                  <span style="width:4px;height:4px;border-radius:50%;background:#7c3aed;flex:none;margin-top:7px"></span>
+                  <div style="min-width:0;flex:1">
+                    <span class="art" style="font-size:12.5px;font-weight:600;line-height:1.45">{{ a.title }}</span>
+                    <span class="mono" style="font-size:10px;color:#6b6577;margin-left:7px">{{ a.surface }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:12px;font-weight:700;color:#6d28d9;margin-top:13px;cursor:pointer">{{ c.more }} →</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="margin-top:22px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+          <span class="lbl">Popular this week</span>
+          <span class="mono" style="font-size:11px;color:#6b6577">{{ popMeta }}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:12px">
+          <sc-for list="{{ popular }}" as="p" hint-placeholder-count="4">
+            <div class="c" style="padding:15px 16px;cursor:pointer">
+              <span style="{{ p.rankStyle }}">{{ p.rank }}</span>
+              <div style="font-size:13px;font-weight:700;letter-spacing:-.01em;margin-top:10px;line-height:1.4">{{ p.title }}</div>
+              <div class="mono" style="font-size:10px;color:#6b6577;margin-top:7px">{{ p.meta }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="c" style="padding:20px 22px;margin-top:20px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+          <div style="min-width:0">
+            <div style="font-size:15px;font-weight:800;letter-spacing:-.015em">Still stuck?</div>
+            <div style="font-size:12.5px;color:#4a4459;margin-top:6px;line-height:1.55;max-width:440px">{{ contactLede }}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;flex:none">
+            <sc-for list="{{ contacts }}" as="c" hint-placeholder-count="3"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;margin-top:15px;padding-top:14px;border-top:1px solid #f0eef5;flex-wrap:wrap">
+          <span style="width:7px;height:7px;border-radius:50%;background:#10b981;flex:none"></span>
+          <span class="mono" style="font-size:11px;color:#4a4459">{{ statusLine }}</span>
+          <span style="font-size:12px;font-weight:700;color:#6d28d9;cursor:pointer">Status page →</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">{{ h1Cap }}</div>
+</section>
+
+<!-- ══════════ H2 · ARTICLE ══════════ -->
+<section class="ab" id="h2">
+  <div class="ab-hd"><a class="ab-id" href="#h2">H2</a><span class="ab-nm">Help · Article</span><span class="ab-sub">65ch column · on-this-page rail · worked example in mono</span></div>
+  <div class="fr">
+    <div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #e8e6ee">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0">
+        <span style="width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none">A</span>
+        <span class="lbl">Help</span>
+        <span style="font-size:11px;color:#d3cfdc">/</span>
+        <span class="lbl">Capital calls &amp; distributions</span>
+        <span style="font-size:11px;color:#d3cfdc">/</span>
+        <span class="lbl" style="color:#241f38">How capital calls work</span>
+      </div>
+      <span class="mono" style="font-size:11px;color:#6b6577;flex:none">{{ artMeta }}</span>
+    </div>
+
+    <div style="display:flex">
+      <div style="flex:1;min-width:0;padding:32px 34px 40px">
+        <span style="{{ artTagStyle }}">{{ artTag }}</span>
+        <h1 style="margin:13px 0 0;font-size:30px;font-weight:800;letter-spacing:-.025em;line-height:1.14;max-width:620px">How capital calls work</h1>
+        <div style="font-size:15px;color:#6b6577;margin-top:10px;line-height:1.6;max-width:620px">{{ artLede }}</div>
+
+        <div style="max-width:620px">
+          <div style="display:grid;gap:16px;margin-top:26px">
+            <p class="p">{{ p1 }}</p>
+
+            <div style="background:#f4f0fe;border:1px solid #ddd0fb;border-radius:12px;padding:15px 17px;display:flex;align-items:flex-start;gap:11px">
+              <span style="width:17px;height:17px;display:block;flex:none;color:#6d28d9;margin-top:2px" dangerouslySetInnerHTML="{{ infoIcon }}"></span>
+              <div>
+                <div class="lbl" style="color:#6d28d9">Where this lives</div>
+                <div style="font-size:13px;color:#332e45;margin-top:6px;line-height:1.6">{{ infoBody }}</div>
+              </div>
+            </div>
+
+            <h2 id="s1" style="margin:12px 0 0;font-size:19px;font-weight:800;letter-spacing:-.02em">What triggers a call</h2>
+            <p class="p">{{ p2 }}</p>
+
+            <div class="shot" style="height:168px;margin-top:4px">
+              <span style="width:22px;height:22px;display:block;color:#a49ead" dangerouslySetInnerHTML="{{ shotIcon }}"></span>
+              <span class="mono" style="font-size:10.5px;color:#6b6577">{{ shot1 }}</span>
+            </div>
+
+            <h2 id="s2" style="margin:12px 0 0;font-size:19px;font-weight:800;letter-spacing:-.02em">How your share is calculated</h2>
+            <p class="p">{{ p3 }}</p>
+
+            <div class="c" style="padding:18px 20px;background:#fbfaff">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+                <span class="lbl">Worked example</span>
+                <span class="mono" style="font-size:10px;color:#6b6577">{{ exMeta }}</span>
+              </div>
+              <div style="display:grid;gap:0;margin-top:12px">
+                <sc-for list="{{ example }}" as="e" hint-placeholder-count="6">
+                  <div style="{{ e.rowStyle }}">
+                    <span style="font-size:12.5px;font-weight:{{ e.weight }};color:{{ e.ink }}">{{ e.k }}</span>
+                    <span class="mono" style="font-size:13px;font-weight:{{ e.weight }};color:{{ e.ink }}">{{ e.v }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:12px;line-height:1.6">{{ exFoot }}</div>
+            </div>
+
+            <div style="background:#fffdf5;border:1px solid #fcd34d;border-radius:12px;padding:15px 17px;display:flex;align-items:flex-start;gap:11px">
+              <span style="width:17px;height:17px;display:block;flex:none;color:#92400e;margin-top:2px" dangerouslySetInnerHTML="{{ warnIcon }}"></span>
+              <div>
+                <div class="lbl" style="color:#92400e">Read this before wiring</div>
+                <div style="font-size:13px;color:#78350f;margin-top:6px;line-height:1.6">{{ warnBody }}</div>
+              </div>
+            </div>
+
+            <h2 id="s3" style="margin:12px 0 0;font-size:19px;font-weight:800;letter-spacing:-.02em">Paying, and what the platform records</h2>
+            <p class="p">{{ p4 }}</p>
+
+            <div class="shot" style="height:150px;margin-top:4px">
+              <span style="width:22px;height:22px;display:block;color:#a49ead" dangerouslySetInnerHTML="{{ shotIcon }}"></span>
+              <span class="mono" style="font-size:10.5px;color:#6b6577">{{ shot2 }}</span>
+            </div>
+
+            <h2 id="s4" style="margin:12px 0 0;font-size:19px;font-weight:800;letter-spacing:-.02em">If you cannot fund a call</h2>
+            <p class="p">{{ p5 }}</p>
+          </div>
+
+          <div class="c" style="padding:20px 22px;margin-top:26px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+              <div>
+                <div style="font-size:14px;font-weight:800;letter-spacing:-.01em">Did this answer it?</div>
+                <div style="font-size:12px;color:#6b6577;margin-top:5px;line-height:1.5">{{ feedbackNote }}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex:none">
+                <span class="btn2">Yes</span><span class="btn2">No</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:22px">
+            <span class="lbl">Related</span>
+            <div style="display:grid;gap:9px;margin-top:11px">
+              <sc-for list="{{ related }}" as="r" hint-placeholder-count="3">
+                <div class="c" style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer">
+                  <div style="min-width:0">
+                    <div style="font-size:13px;font-weight:700;line-height:1.4">{{ r.title }}</div>
+                    <div class="mono" style="font-size:10px;color:#6b6577;margin-top:5px">{{ r.surface }}</div>
+                  </div>
+                  <span style="font-size:15px;color:#6b6577;flex:none">›</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:250px;flex:none;padding:32px 26px;border-left:1px solid #e8e6ee;background:#fff">
+        <div class="lbl">On this page</div>
+        <div style="display:grid;gap:2px;margin-top:13px">
+          <sc-for list="{{ outline }}" as="o" hint-placeholder-count="4">
+            <a href="{{ o.href }}" style="{{ o.style }}">{{ o.label }}</a>
+          </sc-for>
+        </div>
+
+        <div style="margin-top:24px;padding-top:18px;border-top:1px solid #f0eef5">
+          <div class="lbl">Applies to</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+            <sc-for list="{{ appliesTo }}" as="a" hint-placeholder-count="2"><span style="{{ a.style }}">{{ a.label }}</span></sc-for>
+          </div>
+          <div class="mono" style="font-size:10px;color:#6b6577;margin-top:11px;line-height:1.6">{{ appliesNote }}</div>
+        </div>
+
+        <div style="margin-top:22px;padding-top:18px;border-top:1px solid #f0eef5">
+          <div class="lbl">Open the surface</div>
+          <div style="display:grid;gap:8px;margin-top:11px">
+            <sc-for list="{{ jumps }}" as="j" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #e8e6ee;border-radius:9px;cursor:pointer">
+                <span style="font-size:12px;font-weight:600">{{ j.label }}</span>
+                <span style="font-size:13px;color:#6d28d9">→</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">{{ h2Cap }}</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const V = '#7c3aed', VD = '#6d28d9', VT = '#f4f0fe', HAIR = '#e8e6ee', MUT = '#6b6577';
+    const I = {
+      search: this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      flag:   this.ic('<path d="M5 21V4h14l-3 4.5 3 4.5H5"/>'),
+      scale:  this.ic('<path d="M12 3v18M7 7h10M5 11l2-4 2 4a2 2 0 0 1-4 0ZM15 11l2-4 2 4a2 2 0 0 1-4 0Z"/>'),
+      chart:  this.ic('<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>'),
+      coin:   this.ic('<path d="M12 2v20M6 7h9a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h10"/>'),
+      folder: this.ic('<path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>'),
+      user:   this.ic('<circle cx="12" cy="8" r="4"/><path d="M5 21c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/>'),
+      card:   this.ic('<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 11h20"/>'),
+      info:   this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 16v-4.5M12 8.5h.01"/>'),
+      warn:   this.ic('<path d="M10.3 4 2.6 17.5A1.7 1.7 0 0 0 4 20h16a1.7 1.7 0 0 0 1.5-2.5L13.7 4a1.7 1.7 0 0 0-3 0Z"/><path d="M12 10v3.5M12 17h.01"/>'),
+      shot:   this.ic('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10.5" r="1.6"/><path d="m5 17 4.5-4 3 2.5L16 12l3 3"/>')
+    };
+
+    const iconWrap = (tint, ink) => 'width:34px;height:34px;border-radius:10px;background:'+tint+';color:'+ink
+      + ';display:flex;align-items:center;justify-content:center;padding:8px;box-sizing:border-box;flex:none';
+    const persona = (label, tint, ink, edge) => 'font-family:\'Roboto Mono\',monospace;font-size:9px;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:99px;background:'
+      + tint + ';color:' + ink + ';border:1px solid ' + edge + ';white-space:nowrap;flex:none';
+
+    // ══ ONE category record. The counts, the meta line and the popular row derive from it. ══
+    const CATS = [
+      { name:'Getting started', tint:VT, ink:VD, icon:I.flag,
+        arts:[['Choosing your role at first sign-in','Onboarding'],['What each licence includes','Account'],
+              ['Inviting your team','Team'],['Reading your dashboard','Home']] },
+      { name:'Incorporation & legal', tint:'#eefbf5', ink:'#047857', icon:I.scale, tag:['FOUNDER','#eefbf5','#047857','#a7f3d0'],
+        arts:[['Sending a SAFE for signature','Send for Signature'],['Filing your 83(b) election','Incorporate'],
+              ['University IP: what the TTO needs','Incorporate'],['Signature links and 7-day expiry','Send for Signature']] },
+      { name:'Raising & cap table', tint:'#eef0ff', ink:'#4338ca', icon:I.chart, tag:['FOUNDER','#eefbf5','#047857','#a7f3d0'],
+        arts:[['Modelling a SAFE conversion','Cap Table'],['Running a rolling close','Round Manager'],
+              ['Sharing your deck and tracking views','Pitch'],['Pro-rata rights, explained','Cap Table']] },
+      { name:'Capital calls & distributions', tint:'#fff6e9', ink:'#92400e', icon:I.coin, tag:['LP','#eef0ff','#4338ca','#c7d2fe'],
+        arts:[['How capital calls work in Fund Administration','Fund Administration'],['Reading your capital account','Axal VC Fund'],
+              ['Distribution waterfalls, step by step','Fund Administration'],['Where wire details come from','Axal VC Fund']] },
+      { name:'Data rooms & due diligence', tint:'#f4f3f7', ink:'#4a4459', icon:I.folder,
+        arts:[['Preparing your Data Room for diligence','Data Room'],['Granting per-investor access','Data Room'],
+              ['Responding to a DD request list','Due Diligence'],['NDA gating and what it hides','Data Room']] },
+      { name:'Advisors & office hours', tint:'#eefbf5', ink:'#047857', icon:I.user,
+        arts:[['Booking office hours','Office Hours'],['What a good session brief looks like','Office Hours'],
+              ['Advisor equity and vesting','Cap Table'],['Recording consent, and why we ask','Office Hours']] },
+      { name:'Billing & account', tint:'#f4f3f7', ink:'#4a4459', icon:I.card,
+        arts:[['Managing your licence and seats','Account'],['Notification preferences and digests','Account'],
+              ['Two-factor and session security','Trust Center'],['Closing or transferring an account','Account']] }
+    ];
+    const total = CATS.reduce((a, c) => a + c.arts.length, 0);
+
+    const POP = [
+      { title:'How capital calls work in Fund Administration', views:'1,240', cat:'Capital calls' },
+      { title:'Sending a SAFE for signature', views:'980', cat:'Incorporation' },
+      { title:'Preparing your Data Room for diligence', views:'870', cat:'Data rooms' },
+      { title:'Booking office hours', views:'640', cat:'Advisors' }
+    ];
+
+    // ══ Worked example: one commitment, one call rate. Every figure below derives. ══
+    const COMMIT = 2000000, CALLED_PCT = 0.18, PRIOR_PCT = 0.42;
+    const eur = (n) => '\u20AC' + n.toLocaleString('en-US');
+    const thisCall = COMMIT * CALLED_PCT;
+    const priorCalls = COMMIT * PRIOR_PCT;
+    const afterPct = PRIOR_PCT + CALLED_PCT;
+    const EX = [
+      { k:'Your commitment to Fund II', v:eur(COMMIT) },
+      { k:'Called before this notice', v:eur(priorCalls) + ' · ' + Math.round(PRIOR_PCT * 100) + '%' },
+      { k:'This call', v:Math.round(CALLED_PCT * 100) + '% of commitment' },
+      { k:'Amount due', v:eur(thisCall), strong:true },
+      { k:'Called after this notice', v:eur(priorCalls + thisCall) + ' · ' + Math.round(afterPct * 100) + '%' },
+      { k:'Remaining unfunded', v:eur(COMMIT - priorCalls - thisCall) + ' · ' + Math.round((1 - afterPct) * 100) + '%' }
+    ];
+
+    const OUTLINE = [
+      { label:'What triggers a call', href:'#s1', on:true },
+      { label:'How your share is calculated', href:'#s2' },
+      { label:'Paying, and what we record', href:'#s3' },
+      { label:'If you cannot fund a call', href:'#s4' }
+    ];
+
+    return {
+      searchIcon: I.search, infoIcon: I.info, warnIcon: I.warn, shotIcon: I.shot,
+      personaNote:'Investor / LP view · articles filter by licence',
+      heroLede: total + ' guides across ' + CATS.length + ' areas. Written per task, not per team.',
+      suggested: ['capital call','83(b)','data room access'].map(s => ({ label:s,
+        style:'font-size:12px;font-weight:600;padding:6px 12px;border-radius:99px;background:#fff;color:'+VD+';border:1px solid #ddd0fb;cursor:pointer' })),
+
+      catMeta: CATS.length + ' areas · ' + total + ' guides',
+      cats: CATS.map(c => ({
+        name:c.name, icon:c.icon, iconWrap: iconWrap(c.tint, c.ink),
+        meta: c.arts.length + ' guides',
+        persona: c.tag ? c.tag[0] : null,
+        personaStyle: c.tag ? persona(c.tag[0], c.tag[1], c.tag[2], c.tag[3]) : '',
+        more:'All ' + c.arts.length,
+        articles: c.arts.map(a => ({ title:a[0], surface:a[1] }))
+      })),
+
+      popMeta:'By views, last 7 days',
+      popular: POP.map((p, i) => ({
+        title:p.title, meta:p.views + ' views · ' + p.cat, rank:'0' + (i + 1),
+        rankStyle:'font-family:\'Roboto Mono\',monospace;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;background:'
+          + (i === 0 ? VT + ';color:' + VD + ';border:1px solid #ddd0fb' : '#f4f3f7;color:' + MUT + ';border:1px solid ' + HAIR)
+      })),
+
+      contactLede:'Search first — most answers are here and instant. If not, support replies inside a working day, and a walkthrough gets you a person on a call.',
+      contacts: [
+        { label:'Message support', primary:true },
+        { label:'Book a walkthrough', primary:false },
+        { label:'What we can see', primary:false }
+      ].map(c => ({ label:c.label,
+        style: c.primary
+          ? 'font-size:12.5px;font-weight:700;padding:9px 17px;border-radius:9px;background:'+V+';color:#fff;border:1px solid '+V+';cursor:pointer;white-space:nowrap'
+          : 'font-size:12.5px;font-weight:600;padding:9px 15px;border-radius:9px;background:#fff;color:#4a4459;border:1px solid '+HAIR+';cursor:pointer;white-space:nowrap' })),
+      statusLine:'All systems operational · e-sign, payments and sync last checked 3 min ago',
+      h1Cap:'Categories are named after what you are trying to do, so "How capital calls work" sits under Capital calls rather than under whichever team owns Fund Administration. Two areas carry a licence badge because their guides genuinely do not apply to everyone; the rest are unbadged, which is the more honest default. Counts derive from the article record.',
+
+      artMeta:'Updated 14 Aug 2026 · 4 min read',
+      artTag:'CAPITAL CALLS & DISTRIBUTIONS',
+      artTagStyle:'font-family:\'Roboto Mono\',monospace;font-size:9.5px;font-weight:700;letter-spacing:.08em;padding:4px 10px;border-radius:99px;background:'+VT+';color:'+VD+';border:1px solid #ddd0fb',
+      artLede:'A capital call is the fund asking for part of what you already committed. It is not a new investment decision, and it is not optional.',
+
+      p1:'When you commit to a fund you do not send the money at signing. The commitment is a promise; the fund draws against it over several years as it makes investments and pays expenses. Each draw is a capital call, and each one is a fraction of the total you agreed to.',
+      infoBody:'Calls appear in Axal VC Fund under your commitment, and in Notifications the moment they are issued. Capital notifications cannot be muted — they carry a payment deadline.',
+
+      p2:'The GP issues a call when there is something to fund: a new investment, a follow-on, or the annual management fee. You will see the purpose stated on the notice. What you will not see is a request for more than your remaining unfunded commitment — that ceiling is fixed at signing and the platform enforces it.',
+      shot1:'Fund Administration → Capital calls → notice detail',
+
+      p3:'Your share is pro-rata: your commitment divided by total fund commitments, applied to the amount being called. If you hold four percent of the fund, you pay four percent of every call. The notice shows the percentage and the euro figure, and both derive from the same commitment on file.',
+      exMeta:'Fund II · call №3',
+      example: EX.map((e, i) => ({
+        k:e.k, v:e.v,
+        weight: e.strong ? '800' : '500',
+        ink: e.strong ? '#241f38' : '#4a4459',
+        rowStyle:'display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding:9px 0;'
+          + (e.strong ? 'border-top:1px solid '+HAIR+';border-bottom:1px solid '+HAIR+';background:#fff;margin:2px -8px;padding-left:8px;padding-right:8px'
+                      : (i < EX.length - 1 ? 'border-bottom:1px solid #f0eef5' : ''))
+      })),
+      // Reworded so no indefinite article precedes the derived rate — correct at any value.
+      exFoot:'Percentages are of your commitment, not of the fund. Calling ' + Math.round(CALLED_PCT * 100) + '% of a ' + eur(COMMIT) + ' commitment is ' + eur(thisCall) + ' regardless of fund size.',
+
+      warnBody:'The platform records that you paid; it never moves money. Wire from the account you were verified under, using the reference on the notice — a payment from an unverified account will be returned and the call stays open.',
+
+      p4:'Once you have wired, the fund administrator marks the call paid against your capital account, usually within two business days of the funds landing. Until then the call shows as outstanding, which is a record of the bank, not a judgement about you. Your capital account statement updates the same day the mark is made.',
+      shot2:'Axal VC Fund → your commitment → capital account',
+
+      p5:'Tell the GP before the due date, not after. Most funds have remedies short of default — a short extension, or another LP taking the shortfall — and all of them require a conversation. Defaulting has consequences set out in the LPA, including forfeiture of a portion of your account, so this is the one deadline worth calling about early.',
+
+      feedbackNote:'A no opens one field asking what was missing. It goes to whoever wrote the guide.',
+      outline: OUTLINE.map(o => ({ label:o.label, href:o.href,
+        style:'font-size:12.5px;font-weight:' + (o.on ? '700' : '500') + ';line-height:1.45;padding:7px 0 7px 11px;text-decoration:none;border-left:2px solid '
+          + (o.on ? V : HAIR) + ';color:' + (o.on ? VD : '#4a4459') })),
+
+      // One semantics: the licences this article applies to. A greyed non-applicable chip
+      // would ask the reader to work out why it is listed at all.
+      appliesTo: [['Investor / LP', true]].map(a => ({ label:a[0],
+        style:'font-family:\'Roboto Mono\',monospace;font-size:9.5px;font-weight:700;letter-spacing:.05em;padding:3px 9px;border-radius:99px;'
+          + (a[1] ? 'background:'+VT+';color:'+VD+';border:1px solid #ddd0fb' : 'background:#f4f3f7;color:'+MUT+';border:1px solid '+HAIR) })),
+      appliesNote:'LP only. Founders, advisors and partners never receive capital calls, so this article is hidden from those licences — if you hold two, it appears under the LP one.',
+
+      jumps: [{ label:'Axal VC Fund' }, { label:'Notification settings' }],
+
+      related: [
+        { title:'Reading your capital account', surface:'Axal VC Fund' },
+        { title:'Distribution waterfalls, step by step', surface:'Fund Administration' },
+        { title:'Where wire details come from', surface:'Axal VC Fund' }
+      ],
+      h2Cap:'Every figure in the worked example derives from one commitment and one call rate, so the euro amounts, the percentages and the footnote cannot disagree. The two callouts carry the load the prose cannot: the lavender one says where the surface is, and the amber one says the platform records payment but never moves money — which is the sentence that prevents a wire from the wrong account.'
+    };
+  }
+}
+</script>
+</body>
+</html>

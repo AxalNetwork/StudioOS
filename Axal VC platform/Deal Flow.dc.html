@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>(function(){var t=new URLSearchParams(location.search).get('t');document.write('<script src="./support.js'+(t?'?t='+encodeURIComponent(t):'')+'"><\/script>');})();</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+    .df-num{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+    .df-page{background:#f5f4f7;color:#18181b}
+    .df-surface{background:#ffffff}
+    .df-sunken{background:#faf9fc}
+    .df-col{background:#efedf3}
+    .df-border{border-color:#e5e3ec}
+    .df-bd-b{border-bottom-color:#e5e3ec}
+    .df-bd-t{border-top-color:#e5e3ec}
+    .df-bd-l{border-left-color:#e5e3ec}
+    .df-text{color:#18181b}
+    .df-muted{color:#6b6577}
+    .df-strong{color:#3f3f46}
+    .df-field{background:#faf9fc;border-color:#e5e3ec;color:#18181b}
+    .df-track{background:#e5e3ec}
+
+    .df-page.df-dark{background:#0a090e;color:#ececf1}
+    .df-dark .df-surface{background:#17161d}
+    .df-dark .df-sunken{background:#1d1b25}
+    .df-dark .df-col{background:#131219}
+    .df-dark .df-border{border-color:#2a2833}
+    .df-dark .df-bd-b{border-bottom-color:#2a2833}
+    .df-dark .df-bd-t{border-top-color:#2a2833}
+    .df-dark .df-bd-l{border-left-color:#2a2833}
+    .df-dark .df-text{color:#ececf1}
+    .df-dark .df-muted{color:#a5a0b2}
+    .df-dark .df-strong{color:#dcd9e4}
+    .df-dark .df-field{background:#1d1b25;border-color:#2a2833;color:#ececf1}
+    .df-dark .df-track{background:#26232f}
+
+    .df-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}
+    .df-btn:hover{filter:brightness(1.05)}
+    .df-tab{cursor:pointer;transition:color .13s,border-color .13s}
+    .df-seg{cursor:pointer;transition:background .13s,color .13s}
+    .df-row{transition:background .12s}
+    .df-row:hover{background:#faf9fc}
+    .df-dark .df-row:hover{background:#1d1b25}
+    .df-card{cursor:pointer;transition:box-shadow .13s,transform .13s,border-color .13s}
+    .df-card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(10,9,14,.09)}
+    .df-th{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+    .df-fade{animation:dfFade .2s ease}
+    @keyframes dfFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+    .df-board{overflow-x:auto;scrollbar-width:thin}
+    .df-board::-webkit-scrollbar{height:7px}
+    .df-board::-webkit-scrollbar-thumb{background:#d4d0dc;border-radius:99px}
+    .df-dark .df-board::-webkit-scrollbar-thumb{background:#2f2c3a}
+    input,select,textarea{font-family:inherit;outline:none}
+    input:focus,select:focus,textarea:focus{border-color:#7c3aed}
+    ::placeholder{color:#8b8798}
+    @media (max-width:1080px){.df-2{grid-template-columns:1fr!important}.df-3{grid-template-columns:1fr!important}.df-4{grid-template-columns:1fr 1fr!important}.df-wide{overflow-x:auto}}
+  </style>
+</helmet>
+
+<div class="df-page {{ themeClass }}" style="min-height:100vh">
+
+  <!-- CHROME -->
+  <div class="df-surface df-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;position:sticky;top:0;z-index:30">
+    <div style="max-width:1560px;margin:0 auto;padding:14px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0">
+          <div style="width:29px;height:29px;border-radius:9px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+            <span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ flowIcon }}"></span>
+          </div>
+          <div style="min-width:0">
+            <div class="df-text" style="font-size:15.5px;font-weight:800;letter-spacing:-.015em">Deal Flow</div>
+            <div class="df-muted" style="font-size:11.5px;margin-top:1px">{{ chromeSub }}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          <div class="df-sunken df-border" style="display:flex;gap:2px;padding:3px;border-radius:10px;border-width:1px;border-style:solid">
+            <sc-for list="{{ owners }}" as="o" hint-placeholder-count="5">
+              <div class="df-seg" onClick="{{ o.go }}" style="{{ o.style }}">{{ o.label }}</div>
+            </sc-for>
+          </div>
+          <div class="df-btn df-border df-muted" onClick="{{ toggleTheme }}" style="padding:7px 11px;border-radius:9px;border-width:1px;border-style:solid;font-size:11.5px;font-weight:600;background:transparent;display:flex;align-items:center;gap:6px">
+            <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ themeIcon }}"></span>
+            {{ themeLabel }}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:22px;margin-top:14px;overflow-x:auto">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+          <div class="df-tab" onClick="{{ t.go }}" style="{{ t.style }}">
+            <span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ t.icon }}"></span>
+            <span>{{ t.label }}</span>
+            <sc-if value="{{ t.flag }}"><span style="{{ t.flagStyle }}">{{ t.flag }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1560px;margin:0 auto;padding:20px 24px 80px">
+
+  <!-- ============ BOARD ============ -->
+  <sc-if value="{{ tabBoard }}">
+  <div class="df-fade">
+
+    <!-- hygiene strip -->
+    <div class="df-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+      <sc-for list="{{ hygiene }}" as="h" hint-placeholder-count="4">
+        <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:14px 18px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:13px;height:13px;display:flex;flex:none;color:{{ h.tone }}" dangerouslySetInnerHTML="{{ h.icon }}"></span>
+            <div class="df-muted df-th">{{ h.k }}</div>
+          </div>
+          <div class="df-num" style="font-size:20px;font-weight:700;letter-spacing:-.024em;margin-top:6px;color:{{ h.tone }}">{{ h.v }}</div>
+          <div class="df-muted" style="font-size:10.5px;margin-top:2px">{{ h.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- unassigned attention row -->
+    <sc-if value="{{ hasUnassigned }}">
+      <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="width:32px;height:32px;border-radius:10px;background:rgba(180,83,9,.11);color:{{ ambTone }};display:flex;align-items:center;justify-content:center;flex:none">
+          <span style="width:16px;height:16px;display:flex" dangerouslySetInnerHTML="{{ alertIcon }}"></span>
+        </div>
+        <div style="min-width:0;flex:1">
+          <div class="df-text" style="font-size:13.5px;font-weight:800;letter-spacing:-.014em">{{ unassignedCount }} unassigned</div>
+          <div class="df-muted" style="font-size:11.5px;margin-top:2px">No owner means no next step. Oldest has been sitting {{ unassignedOldest }}.</div>
+        </div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;flex:none">
+          <sc-for list="{{ unassigned }}" as="u" hint-placeholder-count="2">
+            <div class="df-btn df-sunken df-border" data-deal="{{ u.k }}" onClick="{{ openDeal }}" style="display:flex;align-items:center;gap:8px;padding:6px 11px;border-radius:9px;border-width:1px;border-style:solid">
+              <div style="{{ u.avStyle }}">{{ u.initials }}</div>
+              <div class="df-strong" style="font-size:11.5px;font-weight:600">{{ u.name }}</div>
+              <span style="{{ u.staleChip }}">{{ u.days }}d</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- SLA config -->
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div class="df-muted df-th">Stage SLA</div>
+        <div class="df-sunken df-border" style="display:flex;gap:2px;padding:3px;border-radius:9px;border-width:1px;border-style:solid">
+          <sc-for list="{{ slaOptions }}" as="s" hint-placeholder-count="3">
+            <div class="df-seg" onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</div>
+          </sc-for>
+        </div>
+        <div class="df-muted" style="font-size:11px">Amber past {{ sla.amber }}d · red past {{ sla.red }}d in stage</div>
+      </div>
+      <div class="df-muted df-num" style="font-size:11px">{{ boardCountLine }}</div>
+    </div>
+
+    <!-- board -->
+    <div class="df-board" style="display:flex;gap:12px;align-items:flex-start;padding-bottom:8px">
+      <sc-for list="{{ columns }}" as="col" hint-placeholder-count="7">
+        <div class="df-col" style="flex:none;width:262px;border-radius:14px;padding:11px 10px 10px">
+          <div style="display:flex;align-items:center;gap:8px;padding:0 4px 10px">
+            <span style="width:8px;height:8px;border-radius:50%;background:{{ col.dot }};flex:none"></span>
+            <div class="df-text" style="font-size:12px;font-weight:800;letter-spacing:-.008em;min-width:0;flex:1">{{ col.name }}</div>
+            <div class="df-num df-muted" style="font-size:11px;font-weight:700">{{ col.n }}</div>
+          </div>
+          <div class="df-muted df-num" style="font-size:10px;padding:0 4px 10px">{{ col.sub }}</div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ col.deals }}" as="d" hint-placeholder-count="2">
+              <div class="df-card df-surface" data-deal="{{ d.k }}" onClick="{{ openDeal }}" style="{{ d.cardStyle }}">
+                <div style="display:flex;align-items:flex-start;gap:9px">
+                  <div style="{{ d.avStyle }}">{{ d.initials }}</div>
+                  <div style="min-width:0;flex:1">
+                    <div class="df-text" style="font-size:12.5px;font-weight:700;letter-spacing:-.008em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.name }}</div>
+                    <div class="df-muted" style="font-size:10.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.oneLiner }}</div>
+                  </div>
+                  <sc-if value="{{ d.ownerInitials }}">
+                    <div style="{{ d.ownerAv }}" title="{{ d.owner }}">{{ d.ownerInitials }}</div>
+                  </sc-if>
+                  <sc-if value="{{ d.noOwner }}">
+                    <div style="{{ d.noOwnerAv }}">?</div>
+                  </sc-if>
+                </div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:9px">
+                  <span style="{{ d.sectorChip }}">{{ d.sector }}</span>
+                  <span style="{{ chipGrey }}">{{ d.roundLabel }}</span>
+                </div>
+                <div class="df-bd-t" style="display:flex;align-items:center;gap:8px;margin-top:9px;padding-top:8px;border-top-width:1px;border-top-style:solid">
+                  <div style="min-width:0;flex:1">
+                    <div class="df-muted df-th" style="font-size:8.5px">Our ask</div>
+                    <div class="df-num df-strong" style="font-size:11.5px;font-weight:700;margin-top:1px">{{ d.ask }}</div>
+                  </div>
+                  <div style="text-align:right;flex:none">
+                    <div class="df-muted df-th" style="font-size:8.5px">In stage</div>
+                    <div style="display:flex;align-items:center;gap:5px;margin-top:1px;justify-content:flex-end">
+                      <sc-if value="{{ d.stale }}">
+                        <span style="width:10px;height:10px;display:flex;flex:none;color:{{ d.staleTone }}" dangerouslySetInnerHTML="{{ d.staleIcon }}"></span>
+                      </sc-if>
+                      <div class="df-num" style="font-size:11.5px;font-weight:700;color:{{ d.staleTone }}">{{ d.days }}d</div>
+                    </div>
+                  </div>
+                </div>
+                <sc-if value="{{ d.passReason }}">
+                  <div style="{{ d.passWrap }}">{{ d.passReason }}</div>
+                </sc-if>
+              </div>
+            </sc-for>
+            <sc-if value="{{ col.empty }}">
+              <div class="df-border" style="border-width:1px;border-style:dashed;border-radius:11px;padding:18px 12px;text-align:center">
+                <div class="df-muted" style="font-size:11px">{{ col.emptyNote }}</div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ DEAL RECORD ============ -->
+  <sc-if value="{{ tabRecord }}">
+  <div class="df-fade">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="df-btn df-border df-muted" onClick="{{ backToBoard }}" style="display:flex;align-items:center;gap:7px;padding:7px 13px;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600;background:transparent">
+        <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ backIcon }}"></span>
+        Board
+      </div>
+      <div class="df-sunken df-border" style="display:flex;gap:5px;padding:3px;border-radius:9px;border-width:1px;border-style:solid;flex-wrap:wrap">
+        <sc-for list="{{ dealPicker }}" as="p" hint-placeholder-count="4">
+          <div class="df-seg" onClick="{{ p.go }}" style="{{ p.style }}">{{ p.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- header -->
+    <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:22px 26px">
+      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+        <div style="{{ rec.avStyleLg }}">{{ rec.initials }}</div>
+        <div style="min-width:0;flex:1">
+          <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+            <div class="df-text" style="font-size:20px;font-weight:800;letter-spacing:-.024em">{{ rec.name }}</div>
+            <span style="{{ rec.stageChip }}">{{ rec.stage }}</span>
+            <sc-if value="{{ rec.stale }}">
+              <span style="{{ rec.staleChip }}">{{ rec.days }}d in stage</span>
+            </sc-if>
+          </div>
+          <div class="df-muted" style="font-size:12.5px;line-height:1.6;margin-top:6px;max-width:600px">{{ rec.blurb }}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+            <span style="{{ rec.sectorChip }}">{{ rec.sector }}</span>
+            <span style="{{ chipGrey }}">{{ rec.geo }}</span>
+            <span style="{{ chipGrey }}">{{ rec.founded }}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+          <div class="df-btn df-border df-strong" style="padding:9px 15px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;font-weight:600;background:transparent">Advance stage</div>
+          <div class="df-btn" onClick="{{ openPass }}" style="padding:9px 15px;border-radius:9px;border:1px solid rgba(185,28,28,.28);background:rgba(185,28,28,.06);color:{{ redTone }};font-size:12.5px;font-weight:700">Pass</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="df-2" style="display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start;margin-top:16px">
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <!-- round terms -->
+        <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="df-sunken df-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div class="df-muted df-th">Round terms</div>
+            <div class="df-muted" style="font-size:10.5px">Structured fields · sync to Legal Engine</div>
+          </div>
+          <div style="padding:18px 22px">
+            <div class="df-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px 22px">
+              <sc-for list="{{ rec.terms }}" as="t" hint-placeholder-count="8">
+                <div>
+                  <div class="df-muted df-th">{{ t.k }}</div>
+                  <sc-if value="{{ t.isSelect }}">
+                    <select class="df-field" onChange="{{ t.set }}" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border-width:1px;border-style:solid;font-size:12.5px;margin-top:6px">
+                      <sc-for list="{{ t.options }}" as="o" hint-placeholder-count="3">
+                        <option selected="{{ o.selected }}">{{ o.label }}</option>
+                      </sc-for>
+                    </select>
+                  </sc-if>
+                  <sc-if value="{{ t.isText }}">
+                    <input class="df-field {{ t.monoClass }}" value="{{ t.v }}" onChange="{{ t.set }}" style="width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border-width:1px;border-style:solid;font-size:12.5px;margin-top:6px">
+                  </sc-if>
+                  <sc-if value="{{ t.isStatic }}">
+                    <div class="df-strong {{ t.monoClass }}" style="font-size:13.5px;font-weight:700;margin-top:7px">{{ t.v }}</div>
+                    <sc-if value="{{ t.note }}"><div class="df-muted" style="font-size:10.5px;margin-top:2px">{{ t.note }}</div></sc-if>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <div class="df-bd-t" style="display:flex;align-items:center;gap:14px;margin-top:18px;padding-top:16px;border-top-width:1px;border-top-style:solid;flex-wrap:wrap">
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                  <div class="df-muted df-th">Round allocation</div>
+                  <div class="df-muted df-num" style="font-size:11px">{{ rec.allocLine }}</div>
+                </div>
+                <div class="df-track" style="height:8px;border-radius:99px;overflow:hidden;margin-top:8px;display:flex">
+                  <sc-for list="{{ rec.allocBars }}" as="a" hint-placeholder-count="3">
+                    <div style="{{ a.style }}" title="{{ a.label }}"></div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:9px">
+                  <sc-for list="{{ rec.allocLegend }}" as="l" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <span style="width:9px;height:9px;border-radius:3px;background:{{ l.color }};flex:none"></span>
+                      <div class="df-muted" style="font-size:10.5px">{{ l.label }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- syndicate -->
+        <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="df-sunken df-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div class="df-muted df-th">Syndicate</div>
+            <div class="df-muted df-num" style="font-size:11px">{{ rec.syndLine }}</div>
+          </div>
+          <div class="df-wide">
+            <div class="df-sunken df-bd-b" style="display:grid;grid-template-columns:1.9fr 1fr 1fr 1.1fr;border-bottom-width:1px;border-bottom-style:solid;min-width:600px">
+              <div class="df-muted df-th" style="padding:8px 22px">Investor</div>
+              <div class="df-muted df-th" style="padding:8px 12px">Role</div>
+              <div class="df-muted df-th" style="padding:8px 12px;text-align:right">Committed</div>
+              <div class="df-muted df-th" style="padding:8px 22px 8px 12px">Status</div>
+            </div>
+            <sc-for list="{{ rec.syndicate }}" as="s" hint-placeholder-count="5">
+              <div class="df-row df-bd-b" style="display:grid;grid-template-columns:1.9fr 1fr 1fr 1.1fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:600px;background:{{ s.rowBg }}">
+                <div style="padding:12px 22px;display:flex;align-items:center;gap:10px;min-width:0">
+                  <div style="{{ s.avStyle }}">{{ s.initials }}</div>
+                  <div style="min-width:0">
+                    <div class="df-strong" style="font-size:12.5px;font-weight:{{ s.weight }}">{{ s.name }}</div>
+                    <div class="df-muted" style="font-size:10.5px;margin-top:1px">{{ s.meta }}</div>
+                  </div>
+                </div>
+                <div style="padding:12px 12px"><span style="{{ s.roleChip }}">{{ s.role }}</span></div>
+                <div class="df-num" style="padding:12px 12px;font-size:12.5px;font-weight:700;text-align:right;color:{{ s.amtTone }}">{{ s.amount }}</div>
+                <div style="padding:12px 22px 12px 12px">
+                  <span style="{{ s.statusChip }}">{{ s.status }}</span>
+                  <sc-if value="{{ s.sub }}"><div class="df-muted df-num" style="font-size:10px;margin-top:3px">{{ s.sub }}</div></sc-if>
+                </div>
+              </div>
+            </sc-for>
+            <div class="df-sunken" style="display:grid;grid-template-columns:1.9fr 1fr 1fr 1.1fr;align-items:center;min-width:600px">
+              <div class="df-text" style="padding:12px 22px;font-size:12px;font-weight:800">Committed to date</div>
+              <div style="padding:12px 12px"></div>
+              <div class="df-num df-text" style="padding:12px 12px;font-size:13.5px;font-weight:800;text-align:right">{{ rec.syndTotal }}</div>
+              <div class="df-muted" style="padding:12px 22px 12px 12px;font-size:11px">{{ rec.syndPct }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- activity -->
+        <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+          <div class="df-sunken df-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px">
+            <div class="df-muted df-th">Activity trail</div>
+          </div>
+          <sc-for list="{{ rec.activity }}" as="a" hint-placeholder-count="6">
+            <div class="df-bd-b" style="display:flex;gap:0;border-bottom-width:1px;border-bottom-style:solid">
+              <div style="flex:none;width:44px;display:flex;flex-direction:column;align-items:center;padding-top:16px">
+                <span style="{{ a.dotStyle }}">
+                  <span style="width:10px;height:10px;display:flex" dangerouslySetInnerHTML="{{ a.icon }}"></span>
+                </span>
+                <sc-if value="{{ a.line }}"><div class="df-border" style="width:1.5px;flex:1;border-left-width:1.5px;border-left-style:solid"></div></sc-if>
+              </div>
+              <div style="flex:1;min-width:0;padding:14px 22px 15px 0">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                  <div class="df-strong" style="font-size:12.5px;font-weight:600">{{ a.what }}</div>
+                  <sc-if value="{{ a.tag }}"><span style="{{ a.tagChip }}">{{ a.tag }}</span></sc-if>
+                </div>
+                <div class="df-muted df-num" style="font-size:10.5px;margin-top:3px">{{ a.when }} · {{ a.who }}</div>
+                <sc-if value="{{ a.note }}">
+                  <div class="df-muted" style="font-size:11.5px;line-height:1.6;margin-top:6px;max-width:560px">{{ a.note }}</div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- right rail -->
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <!-- next step -->
+        <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <div class="df-muted df-th">Next step</div>
+            <span style="{{ rec.dueChip }}">{{ rec.dueLabel }}</span>
+          </div>
+          <div class="df-strong" style="font-size:13.5px;font-weight:700;line-height:1.5;margin-top:9px">{{ rec.nextStep }}</div>
+          <div class="df-muted df-num" style="font-size:11px;margin-top:5px">Due {{ rec.dueDate }} · {{ rec.owner }}</div>
+          <div class="df-btn df-sunken df-border df-strong" style="margin-top:13px;padding:9px 0;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600;text-align:center">Mark done &amp; set next</div>
+        </div>
+
+        <!-- assignment + source -->
+        <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="df-muted df-th">Owner</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+            <div style="{{ rec.ownerAvLg }}">{{ rec.ownerInitials }}</div>
+            <div style="min-width:0;flex:1">
+              <div class="df-strong" style="font-size:12.5px;font-weight:700">{{ rec.owner }}</div>
+              <div class="df-muted" style="font-size:10.5px;margin-top:1px">{{ rec.ownerRole }}</div>
+            </div>
+            <div class="df-btn df-muted" style="font-size:11px;font-weight:600;flex:none">Reassign</div>
+          </div>
+
+          <div class="df-bd-t" style="margin-top:16px;padding-top:15px;border-top-width:1px;border-top-style:solid">
+            <div class="df-muted df-th">Source</div>
+            <div style="display:flex;align-items:center;gap:9px;margin-top:10px">
+              <span style="{{ rec.srcWrap }}">
+                <span style="width:13px;height:13px;display:flex" dangerouslySetInnerHTML="{{ rec.srcIcon }}"></span>
+              </span>
+              <div style="min-width:0;flex:1">
+                <div class="df-strong" style="font-size:12.5px;font-weight:700">{{ rec.srcLabel }}</div>
+                <div class="df-muted" style="font-size:10.5px;margin-top:1px">{{ rec.srcDetail }}</div>
+              </div>
+            </div>
+            <div class="df-muted" style="font-size:11px;line-height:1.55;margin-top:9px">{{ rec.srcQuality }}</div>
+          </div>
+        </div>
+
+        <!-- scoring crosswalk -->
+        <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:16px;padding:20px 22px">
+          <div class="df-muted df-th">Diligence &amp; scoring</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:9px">
+            <div class="df-num" style="font-size:26px;font-weight:700;letter-spacing:-.03em;color:{{ rec.scoreTone }}">{{ rec.score }}</div>
+            <div class="df-muted df-num" style="font-size:11.5px">/ 100</div>
+            <span style="{{ rec.scoreChip }}">{{ rec.scoreBand }}</span>
+          </div>
+          <div class="df-muted" style="font-size:11px;line-height:1.55;margin-top:7px">{{ rec.scoreNote }}</div>
+          <div class="df-btn df-sunken df-border df-strong" style="margin-top:13px;padding:9px 0;border-radius:9px;border-width:1px;border-style:solid;font-size:12px;font-weight:600;text-align:center;display:flex;align-items:center;justify-content:center;gap:7px">
+            Open scorecard
+            <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ outIcon }}"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ ANALYTICS ============ -->
+  <sc-if value="{{ tabAnalytics }}">
+  <div class="df-fade">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px">
+      <div style="min-width:0">
+        <div class="df-text" style="font-size:21px;font-weight:800;letter-spacing:-.024em">Pipeline analytics</div>
+        <div class="df-muted" style="font-size:13px;margin-top:5px;max-width:560px;line-height:1.6">Q3 2026 to date. Conversion is measured on deals that entered each stage this quarter, not on the current board snapshot.</div>
+      </div>
+      <div class="df-muted df-num" style="font-size:11.5px;flex:none">{{ quarterLine }}</div>
+    </div>
+
+    <!-- funnel -->
+    <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+      <div class="df-sunken df-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 24px">
+        <div class="df-muted df-th">Stage funnel</div>
+      </div>
+      <div class="df-wide">
+        <div class="df-sunken df-bd-b" style="display:grid;grid-template-columns:1.4fr 2.4fr .8fr 1fr 1fr;border-bottom-width:1px;border-bottom-style:solid;min-width:760px">
+          <div class="df-muted df-th" style="padding:9px 24px">Stage</div>
+          <div class="df-muted df-th" style="padding:9px 12px">Volume</div>
+          <div class="df-muted df-th" style="padding:9px 12px;text-align:right">Deals</div>
+          <div class="df-muted df-th" style="padding:9px 12px;text-align:right">To next</div>
+          <div class="df-muted df-th" style="padding:9px 24px 9px 12px;text-align:right">Avg days</div>
+        </div>
+        <sc-for list="{{ funnel }}" as="f" hint-placeholder-count="6">
+          <div class="df-row df-bd-b" style="display:grid;grid-template-columns:1.4fr 2.4fr .8fr 1fr 1fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:760px">
+            <div style="padding:13px 24px;display:flex;align-items:center;gap:9px;min-width:0">
+              <span style="width:8px;height:8px;border-radius:50%;background:{{ f.dot }};flex:none"></span>
+              <div class="df-strong" style="font-size:12.5px;font-weight:600">{{ f.name }}</div>
+            </div>
+            <div style="padding:13px 12px">
+              <div class="df-track" style="height:20px;border-radius:6px;overflow:hidden">
+                <div style="{{ f.barStyle }}"></div>
+              </div>
+            </div>
+            <div class="df-num df-text" style="padding:13px 12px;font-size:13px;font-weight:700;text-align:right">{{ f.n }}</div>
+            <div style="padding:13px 12px;text-align:right">
+              <sc-if value="{{ f.hasConv }}">
+                <div class="df-num" style="font-size:12.5px;font-weight:700;color:{{ f.convTone }}">{{ f.conv }}</div>
+                <div class="df-muted df-num" style="font-size:10px;margin-top:1px">{{ f.convSub }}</div>
+              </sc-if>
+              <sc-if value="{{ f.noConv }}">
+                <div class="df-muted" style="font-size:12px">—</div>
+              </sc-if>
+            </div>
+            <div style="padding:13px 24px 13px 12px;text-align:right">
+              <div class="df-num df-strong" style="font-size:12.5px;font-weight:600">{{ f.avgDays }}</div>
+              <sc-if value="{{ f.slaWarn }}">
+                <div class="df-num" style="font-size:10px;margin-top:1px;color:{{ ambTone }}">over SLA</div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div class="df-2" style="display:grid;grid-template-columns:1.15fr 1fr;gap:16px;margin-top:16px;align-items:start">
+      <!-- source quality -->
+      <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="df-sunken df-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div class="df-muted df-th">Source quality</div>
+          <div class="df-muted" style="font-size:10.5px">Ranked by term sheets, not volume</div>
+        </div>
+        <div class="df-wide">
+          <div class="df-sunken df-bd-b" style="display:grid;grid-template-columns:1.7fr .7fr .7fr .8fr .9fr;border-bottom-width:1px;border-bottom-style:solid;min-width:520px">
+            <div class="df-muted df-th" style="padding:8px 22px">Source</div>
+            <div class="df-muted df-th" style="padding:8px 10px;text-align:right">Seen</div>
+            <div class="df-muted df-th" style="padding:8px 10px;text-align:right">IC</div>
+            <div class="df-muted df-th" style="padding:8px 10px;text-align:right">Sheets</div>
+            <div class="df-muted df-th" style="padding:8px 22px 8px 10px;text-align:right">Yield</div>
+          </div>
+          <sc-for list="{{ sources }}" as="s" hint-placeholder-count="5">
+            <div class="df-row df-bd-b" style="display:grid;grid-template-columns:1.7fr .7fr .7fr .8fr .9fr;align-items:center;border-bottom-width:1px;border-bottom-style:solid;min-width:520px">
+              <div style="padding:12px 22px;display:flex;align-items:center;gap:9px;min-width:0">
+                <span style="{{ s.iconWrap }}">
+                  <span style="width:12px;height:12px;display:flex" dangerouslySetInnerHTML="{{ s.icon }}"></span>
+                </span>
+                <div style="min-width:0">
+                  <div class="df-strong" style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.name }}</div>
+                  <div class="df-muted" style="font-size:10px;margin-top:1px">{{ s.note }}</div>
+                </div>
+              </div>
+              <div class="df-num df-muted" style="padding:12px 10px;font-size:12px;text-align:right">{{ s.seen }}</div>
+              <div class="df-num df-muted" style="padding:12px 10px;font-size:12px;text-align:right">{{ s.ic }}</div>
+              <div class="df-num df-text" style="padding:12px 10px;font-size:12.5px;font-weight:700;text-align:right">{{ s.sheets }}</div>
+              <div style="padding:12px 22px 12px 10px;text-align:right">
+                <span style="{{ s.yieldChip }}">{{ s.yield }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="df-sunken" style="padding:13px 22px">
+          <div class="df-muted" style="font-size:11.5px;line-height:1.6">{{ sourceInsight }}</div>
+        </div>
+      </div>
+
+      <!-- pass reasons -->
+      <div class="df-surface df-border" style="border-width:1px;border-style:solid;border-radius:16px;overflow:hidden">
+        <div class="df-sunken df-bd-b" style="border-bottom-width:1px;border-bottom-style:solid;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div class="df-muted df-th">Why we passed</div>
+          <div class="df-muted df-num" style="font-size:10.5px">{{ passTotalLine }}</div>
+        </div>
+        <sc-for list="{{ passReasons }}" as="p" hint-placeholder-count="5">
+          <div class="df-row df-bd-b" data-reason="{{ p.k }}" onClick="{{ filterPass }}" style="padding:12px 22px;border-bottom-width:1px;border-bottom-style:solid;cursor:pointer;background:{{ p.selBg }}">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="df-strong" style="font-size:12.5px;font-weight:600;min-width:0;flex:1">{{ p.label }}</div>
+              <div class="df-num df-text" style="font-size:12.5px;font-weight:700;flex:none">{{ p.n }}</div>
+              <div class="df-muted df-num" style="font-size:10.5px;flex:none;width:34px;text-align:right">{{ p.pct }}</div>
+            </div>
+            <div class="df-track" style="height:5px;border-radius:99px;overflow:hidden;margin-top:7px">
+              <div style="{{ p.barStyle }}"></div>
+            </div>
+          </div>
+        </sc-for>
+        <div class="df-sunken" style="padding:14px 22px">
+          <sc-if value="{{ passFilterOn }}">
+            <div class="df-strong" style="font-size:11.5px;font-weight:700">{{ passQueryLabel }}</div>
+            <div style="display:flex;flex-direction:column;gap:7px;margin-top:10px">
+              <sc-for list="{{ passMatches }}" as="m" hint-placeholder-count="2">
+                <div class="df-btn df-surface df-border" data-deal="{{ m.k }}" onClick="{{ openDeal }}" style="display:flex;align-items:center;gap:9px;padding:8px 11px;border-radius:9px;border-width:1px;border-style:solid">
+                  <div style="{{ m.avStyle }}">{{ m.initials }}</div>
+                  <div style="min-width:0;flex:1">
+                    <div class="df-strong" style="font-size:12px;font-weight:600">{{ m.name }}</div>
+                    <div class="df-muted" style="font-size:10px;margin-top:1px">{{ m.note }}</div>
+                  </div>
+                  <div class="df-muted df-num" style="font-size:10px;flex:none">{{ m.when }}</div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ passNoMatch }}">
+                <div class="df-muted" style="font-size:11.5px">No deals passed for this reason yet.</div>
+              </sc-if>
+            </div>
+            <div class="df-btn df-muted" onClick="{{ clearPass }}" style="font-size:11px;font-weight:600;margin-top:10px">Clear filter</div>
+          </sc-if>
+          <sc-if value="{{ passFilterOff }}">
+            <div class="df-muted" style="font-size:11.5px;line-height:1.6">Select a reason to query it — pass data is the fund's memory, and revisiting a valuation pass a year later is the point of recording it.</div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  </div>
+
+  <!-- ============ PASS MODAL ============ -->
+  <sc-if value="{{ passOpen }}">
+    <div onClick="{{ closePass }}" style="position:fixed;inset:0;z-index:900;background:rgba(10,9,14,.5);display:flex;align-items:center;justify-content:center;padding:24px">
+      <div class="df-surface" onClick="{{ stop }}" style="width:100%;max-width:470px;border-radius:18px;padding:26px 28px;box-shadow:0 24px 70px rgba(10,9,14,.34);max-height:88vh;overflow-y:auto">
+        <div style="display:flex;align-items:flex-start;gap:13px">
+          <div style="{{ rec.avStyle }}">{{ rec.initials }}</div>
+          <div style="min-width:0;flex:1">
+            <div class="df-text" style="font-size:16.5px;font-weight:800;letter-spacing:-.02em">Pass on {{ rec.name }}</div>
+            <div class="df-muted" style="font-size:12px;margin-top:3px">{{ rec.stage }} · {{ rec.days }} days in stage</div>
+          </div>
+          <div class="df-btn df-border df-muted" onClick="{{ closePass }}" style="width:28px;height:28px;border-radius:8px;border-width:1px;border-style:solid;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none">×</div>
+        </div>
+        <div class="df-muted" style="font-size:12px;line-height:1.6;margin-top:12px">A reason is required. Passes are queryable later — this is how the fund remembers why it said no.</div>
+
+        <div style="margin-top:16px">
+          <div class="df-muted df-th" style="margin-bottom:9px">Reason · required</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <sc-for list="{{ passOptions }}" as="p" hint-placeholder-count="5">
+              <div class="df-btn" onClick="{{ p.go }}" style="{{ p.style }}">
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:12.5px;font-weight:{{ p.weight }}">{{ p.label }}</div>
+                  <div class="df-muted" style="font-size:10.5px;line-height:1.45;margin-top:2px">{{ p.hint }}</div>
+                </div>
+                <sc-if value="{{ p.on }}">
+                  <span style="width:14px;height:14px;display:flex;flex:none;color:#7c3aed;margin-top:2px" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="margin-top:15px">
+          <div class="df-muted df-th" style="margin-bottom:7px">Note · optional</div>
+          <textarea class="df-field" value="{{ passNote }}" onChange="{{ setPassNote }}" rows="3" placeholder="What would have to change for this to be a yes?" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:9px;border-width:1px;border-style:solid;font-size:12.5px;resize:vertical;line-height:1.6"></textarea>
+        </div>
+
+        <sc-if value="{{ passRevisit }}">
+          <div class="df-sunken df-border" style="border-width:1px;border-style:solid;border-radius:11px;padding:12px 14px;margin-top:14px;display:flex;gap:10px;align-items:flex-start">
+            <span style="width:14px;height:14px;display:flex;flex:none;margin-top:1px;color:{{ violet }}" dangerouslySetInnerHTML="{{ clockIcon }}"></span>
+            <div class="df-muted" style="font-size:11.5px;line-height:1.55">{{ passRevisitNote }}</div>
+          </div>
+        </sc-if>
+
+        <div class="df-btn" onClick="{{ confirmPass }}" style="{{ passBtnStyle }}">{{ passBtnLabel }}</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1560}}">
+class Component extends DCLogic {
+  state = { theme:'light', tab:'board', owner:'all', sla:'standard', deal:'northwind',
+    passOpen:false, passReason:null, passNote:'', passFilter:null, edits:{}, passed:{} };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||1.85)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+  setV(k){ return (e) => this.setState(s => ({ edits: Object.assign({}, s.edits, { [k]: e.target.value }) })); }
+
+  renderVals() {
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const V = '#7c3aed', V7 = '#6d28d9';
+    const GRN = dark ? '#6ee7b7' : '#116632';
+    const AMB = dark ? '#fcd34d' : '#92400e';
+    const RED = dark ? '#fca5a5' : '#b91c1c';
+    const INK = dark ? '#ececf1' : '#18181b';
+    const MUT = dark ? '#a5a0b2' : '#6b6577';
+
+    const I = {
+      flow: this.ic('<path d="M4 5h6M4 12h10M4 19h6"/><circle cx="17" cy="5" r="2.4"/><circle cx="19" cy="12" r="2.4"/><circle cx="17" cy="19" r="2.4"/>'),
+      board: this.ic('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/>'),
+      file: this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+      chart: this.ic('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>'),
+      alert: this.ic('<path d="M12 3 2 20h20L12 3z"/><path d="M12 9v5M12 17h.01"/>'),
+      clock: this.ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>'),
+      check: this.ic('<path d="M20 6 9 17l-5-5"/>', 2.4),
+      x: this.ic('<path d="M6 6l12 12M18 6 6 18"/>', 2.2),
+      back: this.ic('<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>'),
+      out: this.ic('<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'),
+      users: this.ic('<path d="M16 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.4"/><path d="M22 20v-2a4 4 0 0 0-3-3.8"/>'),
+      mail: this.ic('<rect x="2" y="5" width="20" height="14" rx="2"/><path d="m2 7 10 6 10-6"/>'),
+      mic: this.ic('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>'),
+      handshake: this.ic('<path d="m11 17 2 2a1.4 1.4 0 0 0 2-2"/><path d="m14 16 2.5 2.5a1.4 1.4 0 0 0 2-2l-5-5"/><path d="M3 10l4-4 4 2 3-1 7 5v4l-3 1"/><path d="M3 10v5l4 3 4-4"/>'),
+      globe: this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/>'),
+      phone: this.ic('<path d="M5 3h4l2 5-3 2a12 12 0 0 0 6 6l2-3 5 2v4a1 1 0 0 1-1 1A18 18 0 0 1 4 4a1 1 0 0 1 1-1z"/>'),
+      note: this.ic('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M9 13h6M9 17h4"/>'),
+      gauge: this.ic('<path d="M12 14a2 2 0 1 0 2-2"/><path d="M3.5 18a10 10 0 1 1 17 0"/>'),
+      sun: this.ic('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M4.9 19.1l1.5-1.5M17.6 6.4l1.5-1.5"/>'),
+      moon: this.ic('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
+    };
+
+    const chip = (bg, fg) => 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:99px;font-size:9.5px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap;flex:none';
+    const cGreen = chip('rgba(17,102,50,.1)', GRN);
+    const cAmber = chip('rgba(180,83,9,.1)', AMB);
+    const cRed = chip('rgba(185,28,28,.09)', RED);
+    const cViolet = chip('rgba(124,58,237,.1)', dark ? '#c4b5fd' : V7);
+    const cGrey = chip(dark ? '#2a2833' : '#f1f0f5', MUT);
+    const cBlue = chip('rgba(29,78,216,.1)', dark ? '#93b4fc' : '#1e40af');
+    const av = (bg, sz) => 'width:'+(sz||26)+'px;height:'+(sz||26)+'px;border-radius:8px;background:'+bg+';color:#fff;font-size:'+(sz>=44?'15px':sz>=34?'12px':sz<=20?'8.5px':'10px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex:none';
+    const iconWrap = (c) => 'width:24px;height:24px;border-radius:7px;background:'+c+'1c;color:'+c+';display:flex;align-items:center;justify-content:center;flex:none';
+    const seg = (on) => 'padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:'+(on?'700':'600')
+      +';background:'+(on ? (dark ? '#2f2a45' : '#ffffff') : 'transparent')
+      +';color:'+(on ? (dark ? '#c4b5fd' : V7) : MUT)
+      +';box-shadow:'+(on ? '0 1px 2px rgba(24,24,27,.08)' : 'none')+';white-space:nowrap';
+    const usd = (n) => n >= 1e6 ? '$' + (n/1e6).toFixed(n % 1e6 === 0 ? 0 : 1) + 'M' : '$' + Math.round(n/1e3) + 'k';
+
+    // ============ TEAM ============
+    const TEAM = [
+      { k:'gl', name:'Guillaume Lauzier', initials:'GL', bg:'#7c3aed', role:'General Partner' },
+      { k:'hk', name:'Hana Kaur', initials:'HK', bg:'#0f766e', role:'Partner · Platform' },
+      { k:'lz', name:'Lin Zhang', initials:'LZ', bg:'#b45309', role:'Partner · Technical' },
+      { k:'dr', name:'David Reyes', initials:'DR', bg:'#1d4ed8', role:'Venture Partner' },
+    ];
+    const person = (k) => TEAM.find(t => t.k === k);
+
+    // ============ SECTOR TINTS ============
+    const SECTOR = {
+      'Data infra':'#1d4ed8', 'Fintech':'#0f766e', 'Climate':'#116632',
+      'Deeptech':'#7c3aed', 'Security':'#334155', 'Health':'#be185d',
+      'Robotics':'#b45309', 'Dev tools':'#4338ca',
+    };
+    // Per-theme ink per hue — a raw mid-tone reads as text on light only; dark needs a light tint.
+    const SECTOR_INK = {
+      '#1d4ed8': { light:'#1e40af', dark:'#93b4fc' },
+      '#0f766e': { light:'#115e59', dark:'#5eead4' },
+      '#116632': { light:'#116632', dark:'#6ee7b7' },
+      '#7c3aed': { light:'#6d28d9', dark:'#c4b5fd' },
+      '#334155': { light:'#334155', dark:'#a8b4c8' },
+      '#be185d': { light:'#9d174d', dark:'#f9a8d4' },
+      '#b45309': { light:'#92400e', dark:'#fcd34d' },
+      '#4338ca': { light:'#3730a3', dark:'#a5b4fc' },
+    };
+    const sectorChipOf = (s) => {
+      const c = SECTOR[s] || '#6b6577';
+      const ink = SECTOR_INK[c] || { light:c, dark:c };
+      return chip(c + (dark ? '2e' : '16'), dark ? ink.dark : ink.light);
+    };
+
+    // ============ STAGES ============
+    const STAGES = [
+      { k:'sourced', name:'Sourced', dot:'#9b96a8' },
+      { k:'meeting', name:'First Meeting', dot:'#1d4ed8' },
+      { k:'diligence', name:'Diligence', dot:'#7c3aed' },
+      { k:'ic', name:'IC', dot:'#b45309' },
+      { k:'sheet', name:'Term Sheet', dot:'#0f766e' },
+      { k:'closed', name:'Closed', dot:'#116632' },
+      { k:'passed', name:'Passed', dot:'#b91c1c' },
+    ];
+
+    // ============ SOURCES ============
+    const SRC = {
+      portfolio: { label:'Portfolio founder referral', icon:I.handshake, color:'#116632' },
+      partner:   { label:'Co-investor referral', icon:I.users, color:'#1d4ed8' },
+      inbound:   { label:'Inbound', icon:I.mail, color:'#6b6577' },
+      event:     { label:'Event', icon:I.mic, color:'#b45309' },
+      outbound:  { label:'Outbound', icon:I.phone, color:'#7c3aed' },
+    };
+
+    // ============ PASS TAXONOMY ============
+    const PASS_TAX = [
+      { k:'early', label:'Too early', hint:'Right company, wrong moment — revisit at a defined trigger.' },
+      { k:'valuation', label:'Valuation', hint:'Thesis holds, entry price does not.' },
+      { k:'thesis', label:'Outside thesis', hint:'Not a sector or stage this fund underwrites.' },
+      { k:'team', label:'Team', hint:'Founder-market fit, completeness, or reference concerns.' },
+      { k:'competitive', label:'Competitive dynamics', hint:'Crowded, or an incumbent owns the wedge.' },
+    ];
+
+    // ============ DEALS ============
+    const DEALS_SEED = [
+      { k:'northwind', name:'Northwind Data', initials:'ND', sector:'Data infra', stage:'diligence', days:11,
+        oneLiner:'Streaming ingest for regulated data', geo:'Sydney, AU', founded:'Founded 2024',
+        round:'Seed', size:2.5e6, ask:1.5e6, owner:'gl', src:'portfolio',
+        srcDetail:'Referred by Anneke Kern · Studio Kern (portfolio, 2024)',
+        blurb:'Ingest pipeline for teams under data-residency constraints. Benchmarked 3.1× the incumbent on a customer\u2019s own workload; residency rules effective Jan 2027 create a dated buying trigger.',
+        nextStep:'Reference call with second design partner', due:'Aug 18, 2026', dueIn:5,
+        score:71.7, instrument:'Priced equity', capLabel:'Pre-money', capValue:'14,000,000',
+        discount:'n/a', prorata:'Yes', available:1.5e6 },
+      { k:'arcline', name:'Arcline', initials:'AR', sector:'Fintech', stage:'sheet', days:6,
+        oneLiner:'Reconciliation for cross-border payouts', geo:'London, UK', founded:'Founded 2023',
+        round:'Series A', size:4e6, ask:2e6, owner:'gl', src:'partner',
+        srcDetail:'Referred by Kestrel Capital (co-investor, 3 prior rounds)',
+        blurb:'Automated reconciliation across payout corridors. $340k ARR growing 14% monthly, net retention 118%.',
+        nextStep:'Countersign term sheet', due:'Aug 15, 2026', dueIn:2,
+        score:78.4, instrument:'Priced equity', capLabel:'Pre-money', capValue:'22,000,000',
+        discount:'n/a', prorata:'Yes', available:2e6 },
+      { k:'solvent', name:'Solvent Climate', initials:'SC', sector:'Climate', stage:'ic', days:9,
+        oneLiner:'Industrial heat recovery, retrofit-first', geo:'Copenhagen, DK', founded:'Founded 2024',
+        round:'Seed', size:3.2e6, ask:1.2e6, owner:'hk', src:'event',
+        srcDetail:'Met at Nordic Climate Summit, Mar 2026',
+        blurb:'Retrofit heat-recovery units for mid-size industrial sites. Two paid pilots, third in contracting.',
+        nextStep:'IC memo circulation', due:'Aug 19, 2026', dueIn:6,
+        score:64.2, instrument:'SAFE', capLabel:'Post-money cap', capValue:'19,000,000',
+        discount:'15%', prorata:'Yes', available:1.2e6 },
+      { k:'kelp', name:'Kelp Bio', initials:'KB', sector:'Deeptech', stage:'diligence', days:34,
+        oneLiner:'Seaweed-derived barrier materials', geo:'Delft, NL', founded:'Founded 2025',
+        round:'Pre-seed', size:1.5e6, ask:750e3, owner:'lz', src:'inbound',
+        srcDetail:'Inbound via website, Jun 2026',
+        blurb:'University spin-out from TU Delft. Lab results strong; IP chain of title still being resolved with the tech-transfer office.',
+        nextStep:'Chase TU Delft on assignment terms', due:'Aug 9, 2026', dueIn:-4,
+        score:52.1, instrument:'Convertible note', capLabel:'Cap', capValue:'9,000,000',
+        discount:'20%', prorata:'No', available:750e3 },
+      { k:'halyard', name:'Halyard Security', initials:'HS', sector:'Security', stage:'meeting', days:4,
+        oneLiner:'Identity posture for machine workloads', geo:'London, UK', founded:'Founded 2025',
+        round:'Pre-seed', size:1.8e6, ask:900e3, owner:'hk', src:'outbound',
+        srcDetail:'Outbound — sourced from GitHub activity signal',
+        blurb:'Solo technical founder, deep prior domain experience. No commercial hire yet.',
+        nextStep:'Second meeting with technical deep-dive', due:'Aug 20, 2026', dueIn:7,
+        score:58.9, instrument:'SAFE', capLabel:'Post-money cap', capValue:'11,000,000',
+        discount:'20%', prorata:'Yes', available:900e3 },
+      { k:'verity', name:'Verity Health', initials:'VH', sector:'Health', stage:'sourced', days:19,
+        oneLiner:'Clinical ops for regulated care settings', geo:'Zurich, CH', founded:'Founded 2024',
+        round:'Seed', size:2.8e6, ask:1e6, owner:null, src:'inbound',
+        srcDetail:'Inbound via website, Jul 2026',
+        blurb:'Two founders with clinical operating background. Willingness-to-pay evidence still thin.',
+        nextStep:'Assign an owner', due:'Aug 14, 2026', dueIn:1,
+        score:0, instrument:'SAFE', capLabel:'Post-money cap', capValue:'15,000,000',
+        discount:'10%', prorata:'Yes', available:1e6 },
+      { k:'cadence', name:'Cadence Robotics', initials:'CR', sector:'Robotics', stage:'sourced', days:31,
+        oneLiner:'Picking arms for cold-chain warehouses', geo:'Toronto, CA', founded:'Founded 2023',
+        round:'Series A', size:9e6, ask:2e6, owner:null, src:'event',
+        srcDetail:'Met at Automate 2026, Jun 2026',
+        blurb:'Hardware-heavy, capital intensive. Round size is above our typical entry.',
+        nextStep:'Assign an owner', due:'Aug 12, 2026', dueIn:-1,
+        score:0, instrument:'Priced equity', capLabel:'Pre-money', capValue:'46,000,000',
+        discount:'n/a', prorata:'No', available:2e6 },
+      { k:'loop', name:'LoopSense', initials:'LS', sector:'Data infra', stage:'closed', days:2,
+        oneLiner:'Sensor analytics for industrial IoT', geo:'Bengaluru, IN', founded:'Founded 2024',
+        round:'Seed', size:2.2e6, ask:800e3, owner:'lz', src:'portfolio',
+        srcDetail:'Referred by Priya Menon · portfolio founder',
+        blurb:'Closed Aug 11. Two paying pilots, concentration risk noted and accepted at entry.',
+        nextStep:'Onboard to portfolio reporting', due:'Aug 22, 2026', dueIn:9,
+        score:69.5, instrument:'SAFE', capLabel:'Post-money cap', capValue:'13,000,000',
+        discount:'20%', prorata:'Yes', available:0 },
+      { k:'foundry', name:'Foundry Legal', initials:'FL', sector:'Dev tools', stage:'passed', days:23,
+        oneLiner:'Contract operations for in-house teams', geo:'Berlin, DE', founded:'Founded 2023',
+        round:'Seed', size:3e6, ask:1e6, owner:'gl', src:'inbound',
+        srcDetail:'Inbound via website, May 2026',
+        blurb:'Strong product, but entry price moved 60% between first meeting and term sheet stage.',
+        nextStep:'—', due:'—', dueIn:99,
+        score:61.0, instrument:'Priced equity', capLabel:'Pre-money', capValue:'26,000,000',
+        discount:'n/a', prorata:'No', available:0,
+        pass:{ reason:'valuation', when:'Jul 24, 2026',
+          note:'Round repriced from $16M to $26M pre after an inbound term sheet. At $26M our ownership target needs a $2.4M check against a $1M allocation.' } },
+      { k:'ceduna', name:'Ceduna Labs', initials:'CL', sector:'Deeptech', stage:'passed', days:41,
+        oneLiner:'Photonic interconnect for datacenters', geo:'Adelaide, AU', founded:'Founded 2025',
+        round:'Pre-seed', size:2e6, ask:600e3, owner:'lz', src:'event',
+        srcDetail:'Met at Photonics West, Jan 2026',
+        blurb:'Genuinely novel work, but the commercial window sits beyond our fund life.',
+        nextStep:'—', due:'—', dueIn:99,
+        score:47.8, instrument:'SAFE', capLabel:'Post-money cap', capValue:'8,000,000',
+        discount:'20%', prorata:'No', available:0,
+        pass:{ reason:'early', when:'Jun 12, 2026',
+          note:'Pre-revenue with a 5-year path to first commercial deployment. Revisit at first paid pilot — Lin holds the relationship.' } },
+    ];
+
+    // Pass overrides layered over the seed array — one source for stage AND pass metadata,
+    // so the board column and the pass query both follow a recorded pass.
+    const DEALS = DEALS_SEED.map(d => {
+      const ov = st.passed[d.k];
+      return ov ? Object.assign({}, d, { stage:'passed', nextStep:'—', due:'—', dueIn:99,
+        pass:{ reason:ov.reason, when:ov.when, note:ov.note } }) : d;
+    });
+
+    // ============ SLA ============
+    const SLA = {
+      tight:    { k:'tight', label:'Tight', amber:7, red:14 },
+      standard: { k:'standard', label:'Standard', amber:14, red:30 },
+      relaxed:  { k:'relaxed', label:'Relaxed', amber:21, red:45 },
+    };
+    const sla = SLA[st.sla];
+    const slaOptions = Object.keys(SLA).map(k => ({ label: SLA[k].label, style: seg(st.sla === k),
+      go: () => this.setState({ sla:k }) }));
+
+    const staleOf = (d) => {
+      if (d.stage === 'closed' || d.stage === 'passed') return { stale:false, tone:MUT, chip:cGrey, icon:I.clock };
+      if (d.days >= sla.red) return { stale:true, tone:RED, chip:cRed, icon:I.alert };
+      if (d.days >= sla.amber) return { stale:true, tone:AMB, chip:cAmber, icon:I.clock };
+      return { stale:false, tone:MUT, chip:cGrey, icon:I.clock };
+    };
+
+    // ============ OWNER FILTER ============
+    const owners = [{ k:'all', label:'All deals' }].concat(TEAM.map(t => ({ k:t.k, label:t.initials })))
+      .map(o => ({ label:o.label, style: seg(st.owner === o.k), go: () => this.setState({ owner:o.k }) }));
+    const visible = DEALS.filter(d => st.owner === 'all' || d.owner === st.owner);
+
+    // ============ BOARD ============
+    const columns = STAGES.map(sg => {
+      const ds = visible.filter(d => d.stage === sg.k);
+      const askTotal = ds.reduce((a,d) => a + d.ask, 0);
+      return {
+        name:sg.name, dot:sg.dot, n: String(ds.length),
+        sub: ds.length ? usd(askTotal) + ' in asks' : 'nothing here',
+        empty: ds.length === 0,
+        emptyNote: st.owner === 'all' ? 'No deals at this stage' : 'None owned by ' + person(st.owner).initials,
+        deals: ds.map(d => {
+          const s = staleOf(d), o = d.owner ? person(d.owner) : null;
+          const pr = d.pass ? PASS_TAX.find(p => p.k === d.pass.reason) : null;
+          return {
+            k:d.k, name:d.name, initials:d.initials, oneLiner:d.oneLiner,
+            avStyle: av(SECTOR[d.sector] || '#6b6577', 26),
+            sector:d.sector, sectorChip: sectorChipOf(d.sector),
+            roundLabel: d.round + ' · ' + usd(d.size),
+            ask: usd(d.ask), days: String(d.days),
+            stale:s.stale, staleTone:s.tone, staleIcon:s.icon,
+            owner: o ? o.name : '', ownerInitials: o ? o.initials : '',
+            ownerAv: o ? av(o.bg, 20) : '', noOwner: !o,
+            noOwnerAv:'width:20px;height:20px;border-radius:7px;border:1px dashed '+(dark ? '#4a4459' : '#c9c4d6')+';color:'+MUT+';font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none',
+            passReason: pr ? pr.label : '',
+            passWrap:'margin-top:8px;padding:6px 9px;border-radius:7px;background:rgba(185,28,28,.06);color:'+RED+';font-size:10px;font-weight:700',
+            cardStyle:'border-radius:12px;padding:12px 13px;border:1px solid '
+              + (s.stale && s.tone === RED ? 'rgba(185,28,28,.3)' : (dark ? '#2a2833' : '#e5e3ec')),
+          };
+        }),
+      };
+    });
+
+    const activeDeals = visible.filter(d => d.stage !== 'closed' && d.stage !== 'passed');
+    const staleDeals = activeDeals.filter(d => staleOf(d).stale);
+    const redDeals = activeDeals.filter(d => d.days >= sla.red);
+    const unassignedRaw = visible.filter(d => !d.owner && d.stage !== 'closed' && d.stage !== 'passed');
+    const overdueSteps = activeDeals.filter(d => d.dueIn < 0);
+
+    const hygiene = [
+      { k:'Active deals', v: String(activeDeals.length), note: usd(activeDeals.reduce((a,d) => a + d.ask, 0)) + ' in asks', tone:INK, icon:I.board },
+      { k:'Past SLA', v: String(staleDeals.length), note: redDeals.length + ' past ' + sla.red + ' days', tone: staleDeals.length ? AMB : GRN, icon:I.clock },
+      { k:'Unassigned', v: String(unassignedRaw.length), note: unassignedRaw.length ? 'no owner, no next step' : 'every deal owned', tone: unassignedRaw.length ? AMB : GRN, icon:I.users },
+      { k:'Overdue next steps', v: String(overdueSteps.length), note: overdueSteps.length ? 'oldest ' + Math.abs(Math.min.apply(null, overdueSteps.map(d => d.dueIn))) + ' days late' : 'all on schedule', tone: overdueSteps.length ? RED : GRN, icon:I.alert },
+    ];
+
+    const unassigned = unassignedRaw.map(d => ({
+      k:d.k, name:d.name, initials:d.initials, days: String(d.days),
+      avStyle: av(SECTOR[d.sector] || '#6b6577', 22),
+      staleChip: staleOf(d).chip,
+    }));
+
+    // ============ DEAL RECORD ============
+    const recRaw = DEALS.find(d => d.k === st.deal) || DEALS[0];
+    const recOwner = recRaw.owner ? person(recRaw.owner) : null;
+    const recStale = staleOf(recRaw);
+    const recStage = STAGES.find(s => s.k === recRaw.stage);
+    const val = (k, d) => (st.edits[k] !== undefined ? st.edits[k] : d);
+
+    const SYND = {
+      northwind:[
+        { name:'Axal VC Ventures Fund II', initials:'AX', bg:'#7c3aed', meta:'Us · lead', role:'Lead', amount:1.5e6, status:'Verbal', sub:'pending IC' },
+        { name:'Kestrel Capital', initials:'KC', bg:'#0f766e', meta:'Zurich · seed specialist', role:'Follow', amount:600e3, status:'Committed', sub:'signed Aug 6' },
+        { name:'Marchetti Family Office', initials:'MF', bg:'#b45309', meta:'Milan · repeat co-investor', role:'Follow', amount:250e3, status:'Committed', sub:'signed Aug 8' },
+        { name:'Stellar Point Ventures', initials:'SP', bg:'#1d4ed8', meta:'Luxembourg', role:'Follow', amount:0, status:'Diligence', sub:'reviewing' },
+      ],
+      arcline:[
+        { name:'Sequoia-adjacent (undisclosed)', initials:'UN', bg:'#334155', meta:'London · lead', role:'Lead', amount:2.5e6, status:'Committed', sub:'signed Jul 30' },
+        { name:'Axal VC Ventures Fund II', initials:'AX', bg:'#7c3aed', meta:'Us · follow', role:'Follow', amount:2e6, status:'Term sheet', sub:'countersigning' },
+      ],
+      solvent:[
+        { name:'Axal VC Ventures Fund II', initials:'AX', bg:'#7c3aed', meta:'Us · prospective lead', role:'Lead', amount:1.2e6, status:'IC pending', sub:'Aug 19' },
+        { name:'Nordic Climate Fund', initials:'NC', bg:'#116632', meta:'Copenhagen', role:'Follow', amount:1.2e6, status:'Committed', sub:'signed Aug 1' },
+        { name:'EIF co-invest facility', initials:'EI', bg:'#1d4ed8', meta:'Luxembourg · matched', role:'Follow', amount:400e3, status:'Conditional', sub:'on our lead' },
+      ],
+      kelp:[
+        { name:'Axal VC Ventures Fund II', initials:'AX', bg:'#7c3aed', meta:'Us · prospective', role:'Follow', amount:750e3, status:'Diligence', sub:'IP blocked' },
+        { name:'TU Delft Ventures', initials:'TD', bg:'#0f766e', meta:'Delft · university fund', role:'Lead', amount:500e3, status:'Committed', sub:'signed Jun 20' },
+      ],
+      halyard:[
+        { name:'Axal VC Ventures Fund II', initials:'AX', bg:'#7c3aed', meta:'Us · prospective lead', role:'Lead', amount:900e3, status:'Early', sub:'meeting 2 pending' },
+      ],
+      verity:[
+        { name:'Axal VC Ventures Fund II', initials:'AX', bg:'#7c3aed', meta:'Us · prospective', role:'TBD', amount:0, status:'Unassigned', sub:'' },
+      ],
+      cadence:[
+        { name:'Axal VC Ventures Fund II', initials:'AX', bg:'#7c3aed', meta:'Us · prospective', role:'TBD', amount:0, status:'Unassigned', sub:'' },
+        { name:'Northgate Growth', initials:'NG', bg:'#334155', meta:'Toronto · lead', role:'Lead', amount:6e6, status:'Committed', sub:'signed Jul 2' },
+      ],
+      loop:[
+        { name:'Axal VC Ventures Fund II', initials:'AX', bg:'#7c3aed', meta:'Us · lead', role:'Lead', amount:800e3, status:'Closed', sub:'wired Aug 11' },
+        { name:'Blume-adjacent (undisclosed)', initials:'UN', bg:'#334155', meta:'Bengaluru', role:'Follow', amount:900e3, status:'Closed', sub:'wired Aug 11' },
+        { name:'Angel syndicate', initials:'AS', bg:'#be185d', meta:'12 angels', role:'Follow', amount:500e3, status:'Closed', sub:'wired Aug 11' },
+      ],
+      foundry:[
+        { name:'Axal VC Ventures Fund II', initials:'AX', bg:'#7c3aed', meta:'Us · passed', role:'Passed', amount:0, status:'Passed', sub:'Jul 24' },
+        { name:'Inbound term sheet (undisclosed)', initials:'UN', bg:'#334155', meta:'Berlin · repriced round', role:'Lead', amount:3e6, status:'Committed', sub:'led at $26M' },
+      ],
+      ceduna:[
+        { name:'Axal VC Ventures Fund II', initials:'AX', bg:'#7c3aed', meta:'Us · passed', role:'Passed', amount:0, status:'Passed', sub:'Jun 12' },
+        { name:'Grant funding (ARENA)', initials:'AR', bg:'#116632', meta:'Non-dilutive', role:'Other', amount:800e3, status:'Awarded', sub:'Mar 2026' },
+      ],
+    };
+    const syndRaw = (SYND[recRaw.k] || []).map(s => {
+      // A recorded pass must also restate our own syndicate posture, or the row
+      // contradicts the header, activity trail, and allocation bar on the same screen.
+      const ov = st.passed[recRaw.k];
+      return (ov && /Us/.test(s.meta))
+        ? Object.assign({}, s, { meta:'Us · passed', role:'Passed', amount:0, status:'Passed', sub:ov.when })
+        : s;
+    });
+    const isCounted = (s) => /Committed|Closed|Term sheet/.test(s);
+    const ourRow = syndRaw.find(s => /Us/.test(s.meta));
+    const othersCommitted = syndRaw.filter(s => !/Us/.test(s.meta) && isCounted(s.status)).reduce((a,s) => a + s.amount, 0);
+    // Our money must appear ONCE: as committed if our row already carries a counted status,
+    // otherwise as an outstanding ask. Never both.
+    const ourCounted = !!(ourRow && isCounted(ourRow.status));
+    const ourAmount = recRaw.stage === 'passed' ? 0 : (ourCounted ? ourRow.amount : recRaw.ask);
+    const syndCommitted = othersCommitted + (ourCounted ? ourRow.amount : 0);
+    const roleChipOf = (r) => r === 'Lead' ? cViolet : r === 'Passed' ? cRed : cGrey;
+    const statusChipOf = (s) => /Committed|Closed|Awarded/.test(s) ? cGreen
+      : /Term sheet/.test(s) ? cBlue
+      : /Passed/.test(s) ? cRed
+      : /Unassigned/.test(s) ? cGrey : cAmber;
+
+    const syndicate = syndRaw.map(s => ({
+      name:s.name, initials:s.initials, meta:s.meta, avStyle: av(s.bg, 28),
+      weight: /Us/.test(s.meta) ? '800' : '600',
+      rowBg: /Us/.test(s.meta) ? (dark ? 'rgba(124,58,237,.07)' : 'rgba(124,58,237,.035)') : 'transparent',
+      role:s.role, roleChip: roleChipOf(s.role),
+      amount: (s.amount && isCounted(s.status)) ? usd(s.amount) : '—',
+      amtTone: (s.amount && isCounted(s.status)) ? INK : MUT,
+      status:s.status, statusChip: statusChipOf(s.status), sub:s.sub,
+    }));
+
+    const allocCommitted = othersCommitted + (ourCounted ? ourRow.amount : 0);
+    const allocOurs = ourCounted ? 0 : ourAmount;
+    const allocTotal = allocCommitted + allocOurs;
+    const oversubscribed = allocTotal > recRaw.size;
+    const allocRemaining = Math.max(0, recRaw.size - allocTotal);
+    // Clamp against the larger of round size and total so segments never exceed the track.
+    const allocBase = Math.max(recRaw.size, allocTotal);
+    const pctOf = (n) => (n / allocBase * 100);
+    const allocBars = [
+      { label:'Committed ' + usd(allocCommitted), color:'#116632', n:allocCommitted },
+      { label:'Our ask ' + usd(allocOurs), color:V, n:allocOurs },
+      { label:'Unallocated ' + usd(allocRemaining), color: dark ? '#2f2c3a' : '#d9d5e2', n:allocRemaining },
+    ].filter(b => b.n > 0).map(b => Object.assign({}, b, {
+      style:'width:'+pctOf(b.n).toFixed(1)+'%;height:100%;background:'+b.color,
+    }));
+    const allocLegend = allocBars.map(b => ({ label:b.label, color:b.color }));
+
+    const TERMS = [
+      { k:'Instrument', kind:'select', v: val('instrument', recRaw.instrument), options:['SAFE','Convertible note','Priced equity'] },
+      { k: recRaw.capLabel, kind:'text', v: '$' + val('cap', recRaw.capValue), mono:true, static:true },
+      { k:'Discount', kind:'static', v: recRaw.discount, note: recRaw.discount === 'n/a' ? 'priced round' : 'on next round price' },
+      { k:'Round size', kind:'static', v: usd(recRaw.size), mono:true, note: recRaw.round },
+      { k:'Amount available', kind:'static', v: allocRemaining ? usd(allocRemaining) : usd(0), mono:true, note: allocRemaining ? 'unallocated' : 'fully allocated' },
+      { k:'Our ask', kind:'static', v: usd(recRaw.ask), mono:true, note: (recRaw.ask / recRaw.size * 100).toFixed(0) + '% of round' },
+      { k:'Pro-rata rights', kind:'select', v: val('prorata', recRaw.prorata), options:['Yes','No','Side letter'] },
+      { k:'Ownership at close', kind:'static', v: recRaw.instrument === 'Priced equity'
+          ? (recRaw.ask / (parseFloat(recRaw.capValue.replace(/,/g,'')) + recRaw.size) * 100).toFixed(1) + '%'
+          : '~' + (recRaw.ask / parseFloat(recRaw.capValue.replace(/,/g,'')) * 100).toFixed(1) + '%',
+        mono:true, note: recRaw.instrument === 'Priced equity' ? 'post-money' : 'at cap' },
+    ];
+    const terms = TERMS.map(t => ({
+      k:t.k, v:t.v, note:t.note || '',
+      isSelect: t.kind === 'select', isText: t.kind === 'text' && !t.static, isStatic: t.kind === 'static' || (t.kind === 'text' && t.static),
+      monoClass: t.mono ? 'df-num' : '',
+      set: this.setV(t.k === 'Instrument' ? 'instrument' : 'prorata'),
+      options: (t.options || []).map(o => ({ label:o, selected: o === t.v })),
+    }));
+
+    const ACT = {
+      northwind:[
+        { what:'Moved to Diligence', when:'Aug 2, 2026', who:'Guillaume Lauzier', tag:'Stage', tagChip:cViolet, icon:I.board, tone:V },
+        { what:'Scoring run · panel of 2', when:'Aug 13, 2026', who:'Panel', tag:'71.7', tagChip:cGreen, icon:I.gauge, tone:V,
+          note:'Composite 71.7 on Seed — B2B default v4. Traction is the weak line; panel splits 41 to 58 on it.' },
+        { what:'Kestrel committed $600k', when:'Aug 6, 2026', who:'Guillaume Lauzier', tag:'Syndicate', tagChip:cGreen, icon:I.handshake, tone:'#116632' },
+        { what:'Technical review completed', when:'Aug 5, 2026', who:'Lin Zhang', icon:I.note, tone:'#b45309',
+          note:'Benchmarked 3.1× the incumbent on the customer\u2019s own workload. Defensibility is operational, not IP-based — no patents filed.' },
+        { what:'First meeting', when:'Jul 22, 2026', who:'Guillaume Lauzier', icon:I.phone, tone:'#1d4ed8' },
+        { what:'Referred by Anneke Kern', when:'Jul 18, 2026', who:'Inbound referral', tag:'Source', tagChip:cGrey, icon:I.mail, tone:MUT,
+          note:'Portfolio founder introduction. Anneke has referred 3 deals; 2 reached IC.' },
+      ],
+    };
+    const actRaw = ACT[recRaw.k] || [
+      { what:'Moved to ' + recStage.name, when:'Recent', who: recOwner ? recOwner.name : 'Unassigned', tag:'Stage', tagChip:cViolet, icon:I.board, tone:V },
+      { what: SRC[recRaw.src].label, when:'On entry', who:'Source', tag:'Source', tagChip:cGrey, icon:I.mail, tone:MUT, note: recRaw.srcDetail },
+    ];
+    if (recRaw.pass) {
+      const pr = PASS_TAX.find(p => p.k === recRaw.pass.reason);
+      actRaw.unshift({ what:'Passed · ' + pr.label, when:recRaw.pass.when, who: recOwner ? recOwner.name : '—',
+        tag:'Pass', tagChip:cRed, icon:I.x, tone:RED, note:recRaw.pass.note });
+    }
+    const activity = actRaw.map((a,i) => Object.assign({}, a, {
+      tag: a.tag || '', note: a.note || '', line: i < actRaw.length - 1,
+      dotStyle:'width:22px;height:22px;border-radius:50%;background:'+a.tone+'1c;color:'+a.tone+';display:flex;align-items:center;justify-content:center;flex:none',
+    }));
+
+    const srcMeta = SRC[recRaw.src];
+    const SRC_QUALITY = {
+      portfolio:'Portfolio referrals are our strongest source — 2 of 9 reached IC, both produced term sheets.',
+      partner:'Co-investor referrals convert well but skew later-stage and more competitive.',
+      inbound:'Highest volume, lowest yield — 1 of 18 inbound deals reached a term sheet this quarter.',
+      event:'Moderate yield. Tends to surface earlier companies than we can act on immediately.',
+      outbound:'Small sample. 3 deals sourced, 1 currently at first meeting.',
+    };
+
+    const bandOf = (s) => s >= 75 ? 'Strong' : s >= 65 ? 'Above bar' : s >= 50 ? 'At bar' : 'Below bar';
+    const toneOf = (s) => s >= 70 ? GRN : s >= 50 ? AMB : RED;
+
+    const rec = {
+      k:recRaw.k, name:recRaw.name, initials:recRaw.initials, blurb:recRaw.blurb,
+      avStyle: av(SECTOR[recRaw.sector], 30), avStyleLg: av(SECTOR[recRaw.sector], 44),
+      stage: recStage.name, stageChip: recRaw.stage === 'passed' ? cRed : recRaw.stage === 'closed' ? cGreen : cViolet,
+      stale: recStale.stale, staleChip: recStale.chip, days: String(recRaw.days),
+      sector:recRaw.sector, sectorChip: sectorChipOf(recRaw.sector), geo:recRaw.geo, founded:recRaw.founded,
+      terms,
+      allocLine: usd(allocCommitted) + ' committed of ' + usd(recRaw.size) + (oversubscribed ? ' · oversubscribed' : ''),
+      allocBars, allocLegend,
+      syndicate, syndTotal: usd(syndCommitted),
+      syndPct: (syndCommitted / recRaw.size * 100).toFixed(0) + '% of round' + (oversubscribed ? ' · over' : ''),
+      syndLine: syndRaw.length + ' investors · ' + (syndRaw.find(s => s.role === 'Lead') ? (syndRaw.find(s => s.role === 'Lead').name.replace(' (undisclosed)','') + ' leading') : 'no lead yet'),
+      activity,
+      nextStep: recRaw.nextStep, dueDate: recRaw.due,
+      dueLabel: recRaw.dueIn === 99 ? 'Closed' : recRaw.dueIn < 0 ? Math.abs(recRaw.dueIn) + 'd overdue' : recRaw.dueIn === 0 ? 'Today' : 'in ' + recRaw.dueIn + 'd',
+      dueChip: recRaw.dueIn === 99 ? cGrey : recRaw.dueIn < 0 ? cRed : recRaw.dueIn <= 2 ? cAmber : cGreen,
+      owner: recOwner ? recOwner.name : 'Unassigned',
+      ownerRole: recOwner ? recOwner.role : 'Needs an owner before it can progress',
+      ownerInitials: recOwner ? recOwner.initials : '?',
+      ownerAvLg: recOwner ? av(recOwner.bg, 34)
+        : 'width:34px;height:34px;border-radius:9px;border:1px dashed '+(dark ? '#4a4459' : '#c9c4d6')+';color:'+MUT+';font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none',
+      srcLabel: srcMeta.label, srcDetail: recRaw.srcDetail, srcIcon: srcMeta.icon,
+      srcWrap: iconWrap(srcMeta.color), srcQuality: SRC_QUALITY[recRaw.src],
+      score: recRaw.score ? recRaw.score.toFixed(1) : '—',
+      scoreTone: recRaw.score ? toneOf(recRaw.score) : MUT,
+      scoreBand: recRaw.score ? bandOf(recRaw.score) : 'Not scored',
+      scoreChip: recRaw.score ? (recRaw.score >= 65 ? cGreen : recRaw.score >= 50 ? cAmber : cRed) : cGrey,
+      scoreNote: recRaw.score
+        ? 'Seed — B2B default v4 · run Aug 13, 2026. Two integrity flags open.'
+        : 'No scoring run yet. Assign an owner and run the seed rubric.',
+    };
+
+    const dealPicker = ['northwind','arcline','solvent','kelp','halyard','loop'].map(k => DEALS.find(d => d.k === k))
+      .map(d => ({ label:d.name, style: seg(st.deal === d.k),
+        go: () => this.setState({ deal:d.k, edits:{} }) }));
+
+    // ============ ANALYTICS ============
+    const FUNNEL = [
+      { k:'sourced', n:47, avg:12 },
+      { k:'meeting', n:22, avg:9 },
+      { k:'diligence', n:11, avg:19 },
+      { k:'ic', n:6, avg:7 },
+      { k:'sheet', n:4, avg:5 },
+      { k:'closed', n:3, avg:11 },
+    ];
+    const maxF = FUNNEL[0].n;
+    const funnel = FUNNEL.map((f,i) => {
+      const sg = STAGES.find(s => s.k === f.k);
+      const next = FUNNEL[i+1];
+      const conv = next ? next.n / f.n * 100 : null;
+      return {
+        name:sg.name, dot:sg.dot, n: String(f.n),
+        barStyle:'height:100%;width:'+(f.n / maxF * 100).toFixed(1)+'%;background:'+sg.dot+(dark?'':'')+';border-radius:6px;opacity:.85',
+        hasConv: conv !== null, noConv: conv === null,
+        conv: conv !== null ? conv.toFixed(0) + '%' : '',
+        convSub: next ? f.n + ' → ' + next.n : '',
+        convTone: conv === null ? MUT : conv >= 50 ? GRN : conv >= 30 ? AMB : RED,
+        avgDays: f.avg + 'd',
+        slaWarn: f.avg > sla.amber,
+      };
+    });
+
+    const SRC_STATS = [
+      { k:'portfolio', seen:9, ic:2, sheets:2 },
+      { k:'partner', seen:6, ic:1, sheets:1 },
+      { k:'event', seen:11, ic:2, sheets:1 },
+      { k:'inbound', seen:18, ic:1, sheets:0 },
+      { k:'outbound', seen:3, ic:0, sheets:0 },
+    ];
+    const sources = SRC_STATS.map(s => {
+      const m = SRC[s.k], y = s.sheets / s.seen * 100;
+      return { name:m.label, icon:m.icon, iconWrap: iconWrap(m.color),
+        note: s.seen + ' seen · ' + s.ic + ' reached IC',
+        seen: String(s.seen), ic: String(s.ic), sheets: String(s.sheets),
+        yield: y > 0 ? y.toFixed(0) + '%' : '0%',
+        yieldChip: y >= 20 ? cGreen : y >= 10 ? cAmber : cGrey };
+    }).sort((a,b) => parseInt(b.sheets,10) - parseInt(a.sheets,10) || parseFloat(b.yield) - parseFloat(a.yield));
+    const sourceInsight = 'Inbound is 18 of 47 deals seen and zero term sheets. Portfolio referrals are 9 deals and 2 sheets — a 22% yield against inbound\u2019s 0%. Volume and quality are not the same measure.';
+
+    const PASS_SEED = { early:7, valuation:6, thesis:5, team:3, competitive:2 };
+    const PASS_STATS = {};
+    Object.keys(PASS_SEED).forEach(k => { PASS_STATS[k] = PASS_SEED[k]; });
+    Object.keys(st.passed).forEach(k => { const r = st.passed[k].reason; PASS_STATS[r] = (PASS_STATS[r] || 0) + 1; });
+    const passTotal = Object.keys(PASS_STATS).reduce((a,k) => a + PASS_STATS[k], 0);
+    const maxPass = Math.max.apply(null, Object.keys(PASS_STATS).map(k => PASS_STATS[k]));
+    const passReasons = PASS_TAX.map(p => ({
+      k:p.k, label:p.label, n: String(PASS_STATS[p.k]),
+      pct: Math.round(PASS_STATS[p.k] / passTotal * 100) + '%',
+      barStyle:'height:100%;width:'+(PASS_STATS[p.k] / maxPass * 100).toFixed(0)+'%;border-radius:99px;background:'+(st.passFilter === p.k ? V : (dark ? '#3a3648' : '#c9c4d6')),
+      selBg: st.passFilter === p.k ? (dark ? '#241f38' : '#f6f3fe') : 'transparent',
+    }));
+    const passMatchesRaw = st.passFilter ? DEALS.filter(d => d.pass && d.pass.reason === st.passFilter) : [];
+    const passMatches = passMatchesRaw.map(d => ({
+      k:d.k, name:d.name, initials:d.initials, avStyle: av(SECTOR[d.sector], 24),
+      note: d.round + ' · ' + d.sector, when: d.pass.when,
+    }));
+
+    // ============ PASS MODAL ============
+    const passOptions = PASS_TAX.map(p => {
+      const on = st.passReason === p.k;
+      return { label:p.label, hint:p.hint, on, weight: on ? '700' : '600',
+        go: () => this.setState({ passReason:p.k }),
+        style:'display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;border-width:1px;border-style:solid;text-align:left;'
+          + 'border-color:'+(on ? V : (dark ? '#2a2833' : '#e5e3ec'))
+          + ';background:'+(on ? 'rgba(124,58,237,.05)' : 'transparent')
+          + ';color:'+(on ? (dark ? '#c4b5fd' : V7) : INK) };
+    });
+    const passOk = !!st.passReason;
+    const REVISIT = {
+      early:'Too-early passes get a revisit trigger. This deal will resurface when the company reports its first paid pilot.',
+      valuation:'Valuation passes are re-queried at the next round. If the price corrects, this comes back to the board.',
+    };
+
+    // ============ TABS ============
+    const TABS = [
+      { k:'board', l:'Pipeline', i:I.board, flag: staleDeals.length ? String(staleDeals.length) : '' },
+      { k:'record', l:'Deal record', i:I.file },
+      { k:'analytics', l:'Analytics', i:I.chart },
+    ];
+    const tabs = TABS.map(t => ({
+      label:t.l, icon:t.i, flag: t.flag || '',
+      go: () => this.setState({ tab:t.k }),
+      flagStyle:'display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;font-size:9px;font-weight:800;background:'
+        + (st.tab === t.k ? V : 'rgba(180,83,9,.15)') + ';color:' + (st.tab === t.k ? '#fff' : AMB),
+      style:'display:flex;align-items:center;gap:7px;padding:0 0 11px;font-size:13px;font-weight:'+(st.tab === t.k ? '700' : '600')
+        + ';color:' + (st.tab === t.k ? (dark ? '#c4b5fd' : V7) : MUT)
+        + ';border-bottom:2px solid ' + (st.tab === t.k ? V : 'transparent') + ';white-space:nowrap;flex:none',
+    }));
+
+    return {
+      themeClass: dark ? 'df-dark' : '',
+      themeIcon: dark ? I.sun : I.moon, themeLabel: dark ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ theme: dark ? 'light' : 'dark' }),
+      flowIcon:I.flow, alertIcon:I.alert, checkIcon:I.check, backIcon:I.back,
+      outIcon:I.out, clockIcon:I.clock,
+      chromeSub:'Axal VC Ventures Fund II · Q3 2026 · ' + activeDeals.length + ' active',
+      tabs, tabBoard: st.tab === 'board', tabRecord: st.tab === 'record', tabAnalytics: st.tab === 'analytics',
+      owners, chipGrey: cGrey, violet:V, ambTone:AMB, redTone:RED,
+
+      // board
+      hygiene, columns, slaOptions, sla,
+      boardCountLine: visible.length + ' deals shown' + (st.owner === 'all' ? '' : ' · owner ' + person(st.owner).initials),
+      hasUnassigned: unassigned.length > 0, unassigned,
+      unassignedCount: unassigned.length + (unassigned.length === 1 ? ' deal' : ' deals'),
+      unassignedOldest: unassignedRaw.length ? Math.max.apply(null, unassignedRaw.map(d => d.days)) + ' days' : '',
+      openDeal: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-deal]');
+        const k = n && n.getAttribute('data-deal');
+        if (k) this.setState({ deal:k, tab:'record', edits:{} });
+      },
+      backToBoard: () => this.setState({ tab:'board' }),
+
+      // record
+      rec, dealPicker,
+
+      // analytics
+      quarterLine:'Jul 1 – Aug 13, 2026 · 47 deals seen',
+      funnel, sources, sourceInsight,
+      passReasons, passTotalLine: passTotal + ' passes, trailing 12 months',
+      passFilterOn: !!st.passFilter, passFilterOff: !st.passFilter,
+      passQueryLabel: st.passFilter ? 'Passed on ' + PASS_TAX.find(p => p.k === st.passFilter).label.toLowerCase() : '',
+      passMatches, passNoMatch: !!st.passFilter && passMatches.length === 0,
+      filterPass: (e) => {
+        const n = (e.currentTarget || e.target).closest('[data-reason]');
+        const k = n && n.getAttribute('data-reason');
+        if (k) this.setState(s => ({ passFilter: s.passFilter === k ? null : k }));
+      },
+      clearPass: () => this.setState({ passFilter:null }),
+
+      // pass modal
+      passOpen: st.passOpen, passOptions, passNote: st.passNote,
+      setPassNote: (e) => this.setState({ passNote:e.target.value }),
+      openPass: () => this.setState({ passOpen:true, passReason:null, passNote:'' }),
+      closePass: () => this.setState({ passOpen:false }),
+      passRevisit: !!(st.passReason && REVISIT[st.passReason]),
+      passRevisitNote: st.passReason ? (REVISIT[st.passReason] || '') : '',
+      passBtnLabel: passOk ? 'Record pass · ' + PASS_TAX.find(p => p.k === st.passReason).label : 'Select a reason to continue',
+      passBtnStyle:'margin-top:16px;padding:12px 0;border-radius:11px;text-align:center;font-size:13px;font-weight:700;'
+        + (passOk ? 'background:'+V+';color:#fff' : 'background:'+(dark?'#2a2833':'#f1f0f5')+';color:'+(dark?'#6b6577':'#8b8798')+';cursor:not-allowed'),
+      confirmPass: () => { if (passOk) this.setState(s => ({
+        passOpen:false, tab:'analytics', passFilter:s.passReason,
+        passed: Object.assign({}, s.passed, { [s.deal]:{ reason:s.passReason, note:s.passNote, when:'Aug 13, 2026' } }),
+      })); },
+
+      stop: (e) => e.stopPropagation(),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8fa;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#6d28d9;background:#faf7ff;border-color:#d8c9ff;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#faf7ff;border-color:#d8c9ff;color:#6d28d9;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#faf7ff;border:1px solid #d8c9ff;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6d28d9;background:#f0e9ff;border:1px solid #d8c9ff;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #6d28d9;background:#6d28d9;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="6">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /raise</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#6d28d9;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Raise</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="6">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="5"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5">
+                <span class="td" style="{{ c.style }}">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="violet" page="Raise" hint-size="100%,560px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const V = { ink:'#7c3aed', deep:'#6d28d9', tint:'#faf7ff' };
+    // CANONICAL Founder shell — 9 rows, matching Detail Layer Canvas F_ROWS.
+    const ROWS = ['Home','Validate','Build','Raise','Grow','Network','Research','Trust','Company Settings'];
+    const nav = ROWS.map(label => ({
+      label, cls: label === 'Raise' ? 'nav on' : 'nav',
+      style: label === 'Raise'
+        ? 'color:' + V.deep + ';background:' + V.tint + ';font-weight:700;box-shadow:inset 2px 0 0 ' + V.ink : ''
+    }));
+
+    const ARCH = {
+      'WORK BOARD': ['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER': ['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION': ['#f0fdf6','#065f46','#a7f3d0'], 'FEED': ['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS': ['#f0fdff','#0e7490','#a5edf5']
+    };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+
+    const ZONES = ['Status','Pitch','Capital','Legal','Data room','Liquidity'];
+    const zoneRow = (active, attn) => ZONES.map(label => ({
+      label, cls: label === active ? 'zb on' : 'zb', attn: (attn || []).indexOf(label) >= 0 }));
+
+    const pill = (t) => {
+      const M = {
+        'Signed':['#ecfdf5','#047857','#a7f3d0'], 'Filed':['#ecfdf5','#047857','#a7f3d0'],
+        'Granted':['#ecfdf5','#047857','#a7f3d0'], 'Committed':['#ecfdf5','#047857','#a7f3d0'],
+        'Current':['#ecfdf5','#047857','#a7f3d0'], 'Cleared':['#ecfdf5','#047857','#a7f3d0'],
+        'Live':['#faf7ff','#6d28d9','#d8c9ff'], 'Soft-circled':['#faf7ff','#6d28d9','#d8c9ff'],
+        'In review':['#faf7ff','#6d28d9','#d8c9ff'], 'v4 current':['#faf7ff','#6d28d9','#d8c9ff'],
+        'Due soon':['#fffbeb','#92400e','#fde68a'], 'Pending':['#fffbeb','#92400e','#fde68a'],
+        'Partial':['#fffbeb','#92400e','#fde68a'], 'Requested':['#fffbeb','#92400e','#fde68a'],
+        'Expiring':['#fffbeb','#92400e','#fde68a'],
+        'Missing':['#fef2f2','#b91c1c','#fecaca'], 'Overdue':['#fef2f2','#b91c1c','#fecaca'],
+        'Blocked':['#fef2f2','#b91c1c','#fecaca'], 'Not filed':['#fef2f2','#b91c1c','#fecaca'],
+        'Passed':['#f4f4f6','#615c6e','#e4e4e8'], 'Not started':['#f4f4f6','#615c6e','#e4e4e8'],
+        'Archived':['#f4f4f6','#615c6e','#e4e4e8'], 'None':['#f4f4f6','#615c6e','#e4e4e8']
+      };
+      const c = M[t] || M['Not started'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => Object.assign({ text, style:'', pill:null, pillStyle:'', seam:null },
+      opt || {}, opt && opt.pill ? { pillStyle: pill(opt.pill) } : {});
+    const fil = (labels, onIdx) => labels.map((label, i) => ({ label, cls: i === onIdx ? 'fil on' : 'fil' }));
+
+    // ══ ONE cap table. Every share count, percentage and waterfall figure on FR3 and FR6
+    // derives from these six numbers — nothing below is typed as a string. ══
+    const SH = { gl:5400000, ao:3600000, pool:1000000, adv:60000 };
+    const FOUNDER_SH = SH.gl + SH.ao;                 // 9,000,000
+    const FD = FOUNDER_SH + SH.pool + SH.adv;         // advisory sits outside the pool → 10,060,000
+    const POOL_GRANTED = 420000;
+    const pc = (n) => (n / FD * 100).toFixed(1) + '%';
+    const nfmt = (n) => n.toLocaleString('en-US');
+    const usd0 = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const mfmt = (n) => (n / 1e6).toFixed(2) + 'M';
+
+    // Post-round residual, as declared in Founder Workspaces Canvas (FOUNDER_FRAC), and the
+    // 2× participating preference on the $435k signed.
+    const FOUNDER_FRAC = 0.661;
+    const SAFE_SIGNED = 435000;
+    const PREF = SAFE_SIGNED * 2;                     // 870,000
+    const prefCost = PREF * FOUNDER_FRAC;             // constant at every exit size
+    const wf = (exitM) => {
+      const exit = exitM * 1e6;
+      const founders = (exit - PREF) * FOUNDER_FRAC;
+      return { exit, founders, pctOfExit: (founders / exit * 100).toFixed(1) + '%',
+        biteOfProceeds: (prefCost / (exit * FOUNDER_FRAC) * 100) };
+    };
+    const W8 = wf(8), W20 = wf(20), W60 = wf(60);
+
+    const PAGES = [
+      { id:'fr1', badge:'FR1', route:'/raise/status', zone:'Status', arch:'ANALYTICS',
+        title:'Raise · Status', h1:'Raise war-room',
+        blurb:'Compressed shows target, committed and days open. The full page is the war-room: every blocker with what it holds up, the investor list by stage, and the timeline that says whether the pace closes the round.',
+        sub:'Blockers, investor list, timeline and the pace that decides the close.',
+        cmpTitle:'Seed · $1.5M target', cmpBody:'$435k signed, $250k soft-circled. Open 22 days.',
+        viewMore:'View more · 4 blockers, 14 investors →',
+        filters: fil(['Overview','Blockers','Investors','Timeline'], 0), ops:['Export brief','Share war-room'],
+        adds:[
+          { label:'Signed', value:'$435k', note:'29% of target' },
+          { label:'Weighted pipeline', value:'$1.18M', note:'probability-adjusted' },
+          { label:'Blockers', value:'4', note:'of 5 tracked · 2 gate first close' },
+          { label:'Projected close', value:'Oct 9', note:'at current pace' }
+        ],
+        instTitle:'Open items, and what each one holds up', instMeta:'Blockers first · the last row blocks nothing yet',
+        cols:'1.5fr .9fr 1fr 1.4fr', head:['Blocker','Owner','State','Holds up'],
+        rows:[
+          { cells:[cell('Amara\u2019s 83(b) election'), cell('Amara'), cell('', { pill:'Not filed' }), cell('First close — every investor asks')] },
+          { cells:[cell('Rin\u2019s IP assignment'), cell('Guillaume'), cell('', { pill:'Missing' }), cell('Diligence on the contractor work')] },
+          { cells:[cell('Data room · financial model'), cell('Guillaume'), cell('', { pill:'Missing' }), cell('Kestrel\u2019s diligence request')] },
+          { cells:[cell('Cap table on Carta'), cell('Guillaume'), cell('', { pill:'Partial' }), cell('SAFE conversion modelling')] },
+          { cells:[cell('Delaware franchise tax'), cell('Guillaume'), cell('', { pill:'Due soon' }), cell('Nothing yet — due Mar 2027')] }
+        ],
+        instNote:'Two of the four block the first close rather than merely annoying someone, and both are paperwork rather than substance. That ordering is the page\u2019s whole job: the compressed zone can count blockers, only this view can rank them by consequence.',
+        aiLabel:'Proposal · war-room brief', aiCost:'≈ $0.0089',
+        aiBody:'A one-page read for your co-founder: where the round stands, which two blockers gate the close, and the honest pace note — at 22 days for $435k, hitting $1.5M by Oct 9 needs two of the four live conversations to convert, not one.',
+        aiAccept:'Accept brief', aiFoot:'Every figure links to its source row.' },
+
+      { id:'fr2', badge:'FR2', route:'/raise/pitch', zone:'Pitch', arch:'COLLECTION',
+        title:'Raise · Pitch', h1:'Pitch',
+        blurb:'Compressed shows the current deck and its share count. The full page adds every version, the narrative variants, exports and per-investor share analytics — including which slide people stop on.',
+        sub:'Versions, narrative variants, exports and share analytics.',
+        cmpTitle:'Deck v4 · 11 slides', cmpBody:'Shared with 6 investors. Last updated Aug 21.',
+        viewMore:'View more · 4 versions, 6 share links →',
+        filters: fil(['Versions','Variants','Shares','Analytics'], 2), ops:['New version','Export PDF','Revoke a link'],
+        adds:[
+          { label:'Versions', value:'4', note:'v4 current' },
+          { label:'Share links', value:'6', note:'1 expiring' },
+          { label:'Total views', value:'31', note:'across 6 investors' },
+          { label:'Drop-off slide', value:'Slide 7', note:'competition' }
+        ],
+        instTitle:'Share analytics, per investor', instMeta:'Seam-fed · updates when they open it',
+        cols:'1.3fr .8fr .8fr .9fr 1.2fr', head:['Investor','Version','Views','Avg time','Last activity'],
+        rows:[
+          { cells:[cell('Kestrel Ventures'), cell('v4'), cell('7'), cell('9m 12s'), cell('', { seam:'Opened 2h ago' })] },
+          { cells:[cell('Latitude Seed'), cell('v4'), cell('5'), cell('11m 40s'), cell('', { seam:'Opened yesterday' })] },
+          { cells:[cell('Thornbury Capital'), cell('v3'), cell('2'), cell('1m 08s'), cell('Aug 12 · stale version')] },
+          { cells:[cell('Verwood Ventures'), cell('v4'), cell('1'), cell('0m 44s'), cell('Aug 22')] },
+          { cells:[cell('Marisol Vega'), cell('v4'), cell('9'), cell('14m 03s'), cell('', { seam:'Opened 4h ago' })] },
+          { cells:[cell('Anonymous forward'), cell('v4'), cell('7'), cell('6m 30s'), cell('', { pill:'Expiring' })] }
+        ],
+        instNote:'Thornbury is still on v3, which the compressed zone cannot know. The anonymous forward is the interesting row: someone passed your deck on, seven views from a link you did not send to a person — worth knowing before it expires.',
+        aiLabel:'Proposal · fix slide 7', aiCost:'≈ $0.0089',
+        aiBody:'Slide 7 is where four of six investors slow down and two stop. Rewritten from your Market Intel competitive data rather than adjectives: three named competitors, what each does not do, and the one wedge your interviews actually support.',
+        aiAccept:'Open the rewrite', aiFoot:'Creates v5 as a draft, does not replace v4.' },
+
+      { id:'fr3', badge:'FR3', route:'/raise/capital', zone:'Capital', arch:'LEDGER',
+        title:'Raise · Capital', h1:'Capital',
+        blurb:'Compressed shows founder ownership and the pool. The full ledger adds every instrument, scenario modelling, the 409A record and the exit waterfall — the arithmetic that decides what a term actually costs.',
+        sub:'Full cap table, instruments, scenarios, 409A and waterfalls.',
+        // Derived from the same constants as the full page — the compressed strip shows
+        // fewer facts, never different numbers.
+        cmpTitle:'Fully diluted · ' + nfmt(FD),
+        cmpBody:'Founders ' + pc(FOUNDER_SH) + ' today, pool ' + pc(SH.pool) + ', both SAFEs unconverted.',
+        viewMore:'View more · 4 holders, 2 instruments, 2 scenarios →',
+        filters: fil(['Ownership','Instruments','Scenarios','409A','Waterfall'], 0), ops:['Model a round','Export to Carta','Add instrument'],
+        adds:[
+          { label:'Fully diluted', value:mfmt(FD), note:'founders + pool + advisory' },
+          { label:'Founders now', value:pc(FOUNDER_SH), note:nfmt(FOUNDER_SH) + ' of ' + nfmt(FD) + ' · pre-conversion' },
+          { label:'Founders post-round', value:(FOUNDER_FRAC * 100).toFixed(1) + '%', note:'after both SAFEs convert' },
+          { label:'Outstanding SAFEs', value:usd0(SAFE_SIGNED), note:'2 instruments, $8M cap' }
+        ],
+        instTitle:'Ownership ledger', instMeta:'Tabular · fully diluted',
+        cols:'1.4fr .9fr .9fr .8fr 1.1fr', head:['Holder','Class','Shares','FD %','State'],
+        rows:[
+          { cells:[cell('Guillaume Lauzier'), cell('Common'), cell(nfmt(SH.gl)), cell(pc(SH.gl)), cell('', { pill:'Filed' })] },
+          { cells:[cell('Amara Osei'), cell('Common'), cell(nfmt(SH.ao)), cell(pc(SH.ao)), cell('', { pill:'Not filed' })] },
+          { cells:[cell('Option pool'), cell('Options'), cell(nfmt(SH.pool)), cell(pc(SH.pool)), cell(nfmt(POOL_GRANTED) + ' granted')] },
+          { cells:[cell('Advisory grants'), cell('Common'), cell(nfmt(SH.adv)), cell(pc(SH.adv)), cell('outside the pool')] },
+          { cells:[cell('Fully diluted'), cell('—'), cell(nfmt(FD)), cell('100.0%'), cell('the four rows above, summed')] },
+          { cells:[cell('Kestrel Ventures'), cell('SAFE'), cell('unconverted'), cell('—'), cell('$300k · $8M cap')] },
+          { cells:[cell('Latitude Seed'), cell('SAFE'), cell('unconverted'), cell('—'), cell('$135k · $8M cap, 20% disc')] }
+        ],
+        instNote:'Founders hold ' + pc(FOUNDER_SH) + ' today and ' + (FOUNDER_FRAC * 100).toFixed(1)
+          + '% once both SAFEs convert at the $8M cap — two different facts, so the page states both rather than one. '
+          + 'Advisory sits outside the pool, which is why fully diluted is ' + nfmt(FD) + ' and not ' + nfmt(FOUNDER_SH + SH.pool)
+          + '; every percentage in this column divides by that. Amara\u2019s unfiled 83(b) belongs in this ledger because it is an ownership fact, not an admin one.',
+        aiLabel:'Proposal · waterfall in plain language', aiCost:'≈ $0.0321',
+        aiBody:'The 2× participating preference on ' + usd0(SAFE_SIGNED) + ' costs you the same ' + usd0(prefCost)
+          + ' at every exit size — ' + W8.biteOfProceeds.toFixed(1) + '% of your proceeds in an $8M exit, '
+          + W60.biteOfProceeds.toFixed(1) + '% in a $60M one. Common only approaches zero below ' + usd0(PREF) + ', not at some mid-range cliff.',
+        aiAccept:'Attach to term sheet', aiFoot:'Reasoning model — shows its math.' },
+
+      { id:'fr4', badge:'FR4', route:'/raise/legal', zone:'Legal', arch:'COLLECTION',
+        title:'Raise · Legal', h1:'Legal engine',
+        blurb:'Compressed shows entity status and open items. The full page adds the agreement library, the compliance calendar and the signature archive — every executed document with who signed and when.',
+        sub:'Entity, agreements, compliance calendar and signature archive.',
+        cmpTitle:'Delaware C-Corp · formed Mar 2026', cmpBody:'2 compliance items open, 1 overdue.',
+        viewMore:'View more · 11 documents, 5 calendar items →',
+        filters: fil(['All documents','Agreements','Compliance','Signatures'], 0), ops:['Send for signature','Add document','Calendar'],
+        adds:[
+          { label:'Documents', value:'11', note:'9 executed' },
+          { label:'Awaiting signature', value:'2', note:'1 sent 9 days ago' },
+          { label:'Compliance open', value:'2', note:'1 overdue' },
+          { label:'Next deadline', value:'Mar 1', note:'DE franchise tax' }
+        ],
+        instTitle:'Document library', instMeta:'Executed copies stored · audit trail per row',
+        cols:'1.6fr 1fr 1fr 1.2fr', head:['Document','Type','State','Signatures'],
+        rows:[
+          { cells:[cell('Certificate of Incorporation'), cell('Formation'), cell('', { pill:'Filed' }), cell('DE Secretary of State · Mar 12')] },
+          { cells:[cell('Bylaws'), cell('Governance'), cell('', { pill:'Signed' }), cell('2 of 2 · Mar 14')] },
+          { cells:[cell('Founder stock purchase · GL'), cell('Equity'), cell('', { pill:'Signed' }), cell('2 of 2 · Mar 14')] },
+          { cells:[cell('83(b) election · Amara'), cell('Tax'), cell('', { pill:'Not filed' }), cell('window closed Apr 13')] },
+          { cells:[cell('IP assignment · Rin Takahashi'), cell('IP'), cell('', { pill:'Missing' }), cell('never sent')] },
+          { cells:[cell('Advisory agreement · Marcus W.'), cell('Equity'), cell('', { pill:'Pending' }), cell('sent Aug 16 · 1 of 2')] }
+        ],
+        instNote:'Two rows are the diligence problem: an 83(b) window that closed in April and a contractor whose work product was never assigned. Both are cheap to fix now and expensive to explain in a data room, which is why they sit above the executed documents rather than below them.',
+        aiLabel:'Proposal · explain the 83(b) exposure', aiCost:'≈ $0.0321',
+        aiBody:'Written for a founder, not a lawyer: what the missed window means for Amara\u2019s tax position, what the two available remedies are, and the honest note that this needs counsel rather than a platform action. Cites the grant date and the IRS 30-day rule.',
+        aiAccept:'Save to legal notes', aiFoot:'Not legal advice — flagged as such on the artifact.' },
+
+      { id:'fr5', badge:'FR5', route:'/raise/data-room', zone:'Data room', arch:'COLLECTION',
+        title:'Raise · Data room', h1:'Data room',
+        blurb:'Compressed shows how many items are staged and who has access. The full page is the permission matrix — artifact by investor, every grant state, view analytics, and the gap analysis that names what your stage is expected to have.',
+        sub:'Permission matrix, per-investor grants, view analytics and gap analysis.',
+        cmpTitle:'Data room · 6 of 9 staged', cmpBody:'4 investors granted. Kestrel viewed 3 items.',
+        viewMore:'View more · permission matrix, 3 gaps →',
+        filters: fil(['Matrix','By artifact','By investor','Gaps'], 0), ops:['Grant access','Revoke','Export log'],
+        adds:[
+          { label:'Staged', value:'6 of 9', note:'3 expected items missing' },
+          { label:'Investors granted', value:'4', note:'1 read-only' },
+          { label:'Items viewed', value:'11', note:'across 4 investors' },
+          { label:'Most viewed', value:'Cap table', note:'7 views' }
+        ],
+        instTitle:'Permission matrix', instMeta:'Artifact × investor · seam-marked',
+        cols:'1.5fr 1fr 1fr 1fr 1.1fr', head:['Artifact','Kestrel','Latitude','Thornbury','Activity'],
+        rows:[
+          { cells:[cell('Pitch deck v4'), cell('', { pill:'Granted' }), cell('', { pill:'Granted' }), cell('', { pill:'Granted' }), cell('', { seam:'Kestrel · 2h ago' })] },
+          { cells:[cell('Cap table'), cell('', { pill:'Granted' }), cell('', { pill:'Granted' }), cell('', { pill:'None' }), cell('', { seam:'Latitude · 1d ago' })] },
+          { cells:[cell('Incorporation docs'), cell('', { pill:'Granted' }), cell('', { pill:'None' }), cell('', { pill:'None' }), cell('Kestrel · Aug 20')] },
+          { cells:[cell('Customer evidence'), cell('', { pill:'Granted' }), cell('', { pill:'Granted' }), cell('', { pill:'None' }), cell('—')] },
+          { cells:[cell('Financial model'), cell('', { pill:'Requested' }), cell('', { pill:'None' }), cell('', { pill:'None' }), cell('Kestrel asked Aug 23')] },
+          { cells:[cell('Team bios'), cell('', { pill:'Granted' }), cell('', { pill:'Granted' }), cell('', { pill:'Granted' }), cell('3 views')] }
+        ],
+        instNote:'Kestrel has requested the financial model twice and it is still not staged — the one row here that is costing you momentum. Grants are per artifact per investor, so Thornbury seeing the deck does not mean Thornbury seeing the cap table.',
+        aiLabel:'Proposal · gap analysis', aiCost:'≈ $0.0321',
+        aiBody:'Investors at seed with a $1.5M ask are expected to have three items you have not staged: a financial model, a 409A or valuation note, and signed customer references. Named because Kestrel and Latitude both asked for at least one of them, not from a generic checklist.',
+        aiAccept:'Create the three placeholders', aiFoot:'Placeholders are private until you grant.' },
+
+      { id:'fr6', badge:'FR6', route:'/raise/liquidity', zone:'Liquidity', arch:'LEDGER',
+        title:'Raise · Liquidity', h1:'Liquidity & exits',
+        blurb:'Compressed says nothing is live, correctly. The full ledger exists so the mechanics are understood before a term is signed: transfer restrictions, ROFR, tender state, and the waterfall at each exit size.',
+        sub:'Secondaries, ROFR, tender state and the exit waterfall.',
+        cmpTitle:'No liquidity event', cmpBody:'Nothing open, and nothing should be at seed.',
+        viewMore:'View more · restrictions and waterfall →',
+        filters: fil(['Restrictions','Waterfall','Tender','History'], 0), ops:['Model an exit','Export'],
+        adds:[
+          { label:'Open events', value:'0', note:'correct for seed' },
+          { label:'Transfer restrictions', value:'3', note:'all active' },
+          { label:'ROFR window', value:'30 days', note:'company, then investors' },
+          { label:'Preference overhang', value:usd0(PREF), note:'2× on ' + usd0(SAFE_SIGNED) }
+        ],
+        instTitle:'Exit waterfall', instMeta:'Derived from the Capital ledger · ' + (FOUNDER_FRAC * 100).toFixed(1) + '% residual',
+        cols:'1.2fr 1fr 1fr 1fr 1.3fr', head:['Exit','To preference','To founders','Founder %','Note'],
+        rows:[
+          { cells:[cell('$8M'), cell(usd0(PREF)), cell(usd0(W8.founders)), cell(W8.pctOfExit),
+                   cell('Preference is ' + W8.biteOfProceeds.toFixed(1) + '% of your proceeds')] },
+          { cells:[cell('$20M'), cell(usd0(PREF)), cell(usd0(W20.founders)), cell(W20.pctOfExit),
+                   cell(usd0(prefCost) + ' cost, unchanged')] },
+          { cells:[cell('$60M'), cell(usd0(PREF)), cell(usd0(W60.founders)), cell(W60.pctOfExit),
+                   cell('Same ' + usd0(prefCost) + ' — now ' + W60.biteOfProceeds.toFixed(1) + '%')] },
+          { cells:[cell(usd0(PREF) + ' or below'), cell('all of it'), cell('$0'), cell('0%'), cell('Common is worthless below the preference')] }
+        ],
+        instNote:'The fixed preference costs the same ' + usd0(prefCost) + ' at every exit size, which is why it hurts most in a modest outcome ('
+          + W8.biteOfProceeds.toFixed(1) + '% of your proceeds at $8M) and barely registers in a large one ('
+          + W60.biteOfProceeds.toFixed(1) + '% at $60M). Common only goes to zero below ' + usd0(PREF)
+          + ' — there is no mid-range cliff, and any claim of one is arithmetic nobody checked.',
+        aiLabel:'Proposal · restriction summary', aiCost:'≈ $0.0321',
+        aiBody:'Three restrictions apply before any share of yours can move: board approval, a 30-day company ROFR then an investor ROFR, and a lockup that runs until the first priced round. Stated in order of who blocks first, with the clause each comes from.',
+        aiAccept:'Save summary', aiFoot:'Sources cited to the Bylaws and SAFE.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({}, p, {
+      archStyle: archStyle(p.arch),
+      zones: zoneRow(p.zone, ['Status','Data room'])
+    })) };
+  }
+}
+</script>
+</body>
+</html>

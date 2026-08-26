@@ -33,7 +33,10 @@ export default function LegalPage() {
   const [entities, setEntities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showGen, setShowGen] = useState(false);
-  const [genForm, setGenForm] = useState({ title: '', doc_type: '', project_id: '' });
+  // No `title`: the worker names the document from the template
+  // (legal.ts inserts `template.title`), so an editable title input here
+  // would be a control that silently does nothing.
+  const [genForm, setGenForm] = useState({ doc_type: '', project_id: '' });
   const [projects, setProjects] = useState([]);
   const [viewDoc, setViewDoc] = useState(null);
   const [activeLayer, setActiveLayer] = useState('all');
@@ -157,12 +160,6 @@ export default function LegalPage() {
                   </optgroup>
                 ))}
               </ModernSelect>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">Title</label>
-              <input type="text" value={genForm.title} onChange={e => setGenForm(f => ({ ...f, title: e.target.value }))}
-                placeholder="Document title (optional)"
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:text-gray-100" />
             </div>
             <div>
               <label className="block text-xs text-gray-600 mb-1 font-medium">Startup</label>

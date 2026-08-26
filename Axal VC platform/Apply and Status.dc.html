@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeedf2;color:#241f38;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:40px 44px 32px;border-bottom:1px solid rgba(36,31,56,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px 'Roboto Mono',monospace;padding:4px 8px;background:#241f38;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,sans-serif;color:rgba(36,31,56,.58)}
+    .fr{width:1080px;min-width:1080px;flex:none;background:#f4f3f7;border:1px solid #e8e6ee;border-radius:14px;box-shadow:0 2px 14px rgba(36,31,56,.07);overflow:hidden}
+    .mono{font-family:'Roboto Mono',monospace;font-variant-numeric:tabular-nums}
+    .lbl{font-family:'Roboto Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.11em;color:#6b6577}
+    .c{background:#fff;border:1px solid #e8e6ee;border-radius:14px}
+    .in{width:100%;box-sizing:border-box;font-family:Inter,sans-serif;font-size:14px;color:#241f38;padding:12px 14px;border:1px solid #e8e6ee;border-radius:10px;background:#fff}
+    .btn{display:inline-block;text-align:center;font-size:14px;font-weight:700;padding:12px 26px;border-radius:10px;background:#7c3aed;color:#fff;border:1px solid #7c3aed;cursor:pointer}
+    .btn:hover{background:#6d28d9;border-color:#6d28d9}
+    .amber{font-size:10px;font-weight:700;font-family:'Roboto Mono',monospace;letter-spacing:.06em;padding:3px 8px;border-radius:99px;background:#fcd34d;color:#92400e;white-space:nowrap}
+    .step{display:flex;gap:11px;align-items:flex-start}
+    .cap{font-size:11.5px;color:rgba(36,31,56,.55);line-height:1.55;margin-top:11px;max-width:1080px}
+  </style>
+</helmet>
+
+<!-- ══════════ P1 · APPLY ══════════ -->
+<section class="ab" id="p1">
+  <div class="ab-hd"><a class="ab-id" href="#p1">P1</a><span class="ab-nm">Apply · Spin-Out Lab</span><span class="ab-sub">5 steps · step 2 shown · Meridian Robotics, TU Delft</span></div>
+  <div class="fr">
+    <div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #e8e6ee">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">A</span>
+        <span style="font-size:13.5px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+        <span class="lbl" style="margin-left:4px">Spin-Out Lab · Cohort 7</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="mono" style="font-size:11px;color:#6b6577">{{ saveNote }}</span>
+        <span style="font-size:12.5px;font-weight:700;color:#6d28d9;cursor:pointer">Save draft</span>
+      </div>
+    </div>
+
+    <div style="display:flex">
+      <div style="width:262px;flex:none;padding:28px 24px;border-right:1px solid #e8e6ee;background:#fff">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:16px">
+          <span class="lbl">Application</span>
+          <span class="mono" style="font-size:10px;color:#6b6577">~{{ mins }} min</span>
+        </div>
+        <div style="display:grid;gap:2px">
+          <sc-for list="{{ rail }}" as="s" hint-placeholder-count="5">
+            <div class="step">
+              <div style="display:flex;flex-direction:column;align-items:center;flex:none">
+                <span style="{{ s.dot }}">{{ s.num }}</span>
+                <sc-if value="{{ s.line }}"><span style="{{ s.lineStyle }}"></span></sc-if>
+              </div>
+              <div style="min-width:0;padding-bottom:{{ s.pad }}px">
+                <div style="font-size:13px;font-weight:{{ s.weight }};color:{{ s.ink }};line-height:1.35">{{ s.name }}</div>
+                <sc-if value="{{ s.note }}"><div style="font-size:11px;color:#6b6577;margin-top:4px;line-height:1.45">{{ s.note }}</div></sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:22px;padding-top:16px;border-top:1px solid #f0eef5">
+          <div style="display:flex;align-items:flex-start;gap:9px">
+            <span style="width:15px;height:15px;display:block;flex:none;color:#6b6577;margin-top:1px" dangerouslySetInnerHTML="{{ lockIcon }}"></span>
+            <div class="mono" style="font-size:10px;color:#6b6577;line-height:1.6">{{ confidential }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex:1;min-width:0;padding:30px 34px 36px">
+        <div class="lbl">Step 2 of 5</div>
+        <h1 style="margin:9px 0 0;font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1.2">Spin-out origin &amp; IP</h1>
+        <div style="font-size:13.5px;color:#6b6577;margin-top:7px;line-height:1.55;max-width:580px">{{ lede }}</div>
+
+        <div style="display:grid;gap:16px;margin-top:24px">
+          <div>
+            <span class="lbl">Origin</span>
+            <div style="display:grid;gap:9px;margin-top:10px">
+              <sc-for list="{{ origin }}" as="o" hint-placeholder-count="3">
+                <div style="{{ o.rowStyle }}">
+                  <span style="{{ o.radio }}"><sc-if value="{{ o.on }}"><span style="width:8px;height:8px;border-radius:50%;background:#7c3aed;display:block"></span></sc-if></span>
+                  <div style="min-width:0">
+                    <div style="font-size:13.5px;font-weight:{{ o.weight }}">{{ o.name }}</div>
+                    <div style="font-size:11.5px;color:#6b6577;margin-top:4px;line-height:1.5">{{ o.note }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:14px">
+            <div>
+              <span class="lbl">Institution</span>
+              <div style="margin-top:8px"><input class="in" value="Delft University of Technology (TU Delft)" /></div>
+            </div>
+            <div>
+              <span class="lbl">Research group</span>
+              <div style="margin-top:8px"><input class="in" value="Cognitive Robotics (CoR)" /></div>
+            </div>
+          </div>
+
+          <div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+              <span class="lbl">Tech-transfer status</span>
+              <span class="mono" style="font-size:10px;color:#6b6577">One answer · changes your Week 1</span>
+            </div>
+            <div style="display:grid;gap:9px;margin-top:10px">
+              <sc-for list="{{ tto }}" as="t" hint-placeholder-count="4">
+                <div style="{{ t.rowStyle }}">
+                  <span style="{{ t.radio }}"><sc-if value="{{ t.on }}"><span style="width:8px;height:8px;border-radius:50%;background:#7c3aed;display:block"></span></sc-if></span>
+                  <div style="min-width:0;flex:1">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                      <span style="font-size:13.5px;font-weight:{{ t.weight }}">{{ t.name }}</span>
+                      <sc-if value="{{ t.badge }}"><span class="amber">{{ t.badge }}</span></sc-if>
+                    </div>
+                    <div style="font-size:11.5px;color:#6b6577;margin-top:4px;line-height:1.5">{{ t.note }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div>
+            <span class="lbl">IP assignment state</span>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+              <sc-for list="{{ ipChips }}" as="c" hint-placeholder-count="5"><span style="{{ c.style }}">{{ c.label }}</span></sc-for>
+            </div>
+          </div>
+
+          <div style="background:#f4f0fe;border:1px solid #ddd0fb;border-radius:13px;padding:16px 17px">
+            <div style="display:flex;align-items:flex-start;gap:12px">
+              <span style="width:38px;height:38px;border-radius:11px;background:#fff;color:#6d28d9;display:flex;align-items:center;justify-content:center;padding:9px;box-sizing:border-box;flex:none" dangerouslySetInnerHTML="{{ shieldIcon }}"></span>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:14px;font-weight:800;letter-spacing:-.01em">What your answer changes</div>
+                <div style="font-size:12.5px;color:#4a4459;margin-top:7px;line-height:1.6">{{ consequence }}</div>
+                <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:11px;line-height:1.55">{{ consequenceFoot }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:26px;padding-top:20px;border-top:1px solid #e8e6ee;flex-wrap:wrap">
+          <span class="mono" style="font-size:10.5px;color:#6b6577;line-height:1.55;max-width:500px">{{ footNote }}</span>
+          <div style="display:flex;align-items:center;gap:10px;flex:none">
+            <span style="font-size:13.5px;font-weight:600;color:#6b6577;cursor:pointer">Back</span>
+            <span class="btn">Continue to Team</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">{{ p1Cap }}</div>
+</section>
+
+<!-- ══════════ P2 · STATUS ══════════ -->
+<section class="ab" id="p2">
+  <div class="ab-hd"><a class="ab-id" href="#p2">P2</a><span class="ab-nm">Application status</span><span class="ab-sub">partner interview scheduled · declined variant at right</span></div>
+  <div class="fr">
+    <div style="padding:18px 28px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border-bottom:1px solid #e8e6ee">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="width:24px;height:24px;border-radius:7px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">A</span>
+        <span style="font-size:13.5px;font-weight:800;letter-spacing:-.02em">Axal VC</span>
+      </div>
+      <span class="mono" style="font-size:11px;color:#6b6577">{{ appRef }}</span>
+    </div>
+
+    <div style="padding:30px 34px 36px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.2">Meridian Robotics</h1>
+          <div style="font-size:13.5px;color:#6b6577;margin-top:6px;line-height:1.55">{{ statusLede }}</div>
+        </div>
+        <span class="mono" style="font-size:11px;color:#6b6577;flex:none">{{ submitted }}</span>
+      </div>
+
+      <div class="c" style="padding:24px 26px 22px;margin-top:20px">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;position:relative">
+          <sc-for list="{{ timeline }}" as="t" hint-placeholder-count="4">
+            <div style="position:relative;padding-right:14px">
+              <div style="display:flex;align-items:center;gap:0">
+                <span style="{{ t.dot }}">{{ t.mark }}</span>
+                <sc-if value="{{ t.bar }}"><span style="{{ t.barStyle }}"></span></sc-if>
+              </div>
+              <div style="font-size:13.5px;font-weight:{{ t.weight }};color:{{ t.ink }};margin-top:11px;line-height:1.3">{{ t.name }}</div>
+              <div class="mono" style="font-size:10.5px;color:{{ t.dateInk }};margin-top:5px">{{ t.date }}</div>
+              <sc-if value="{{ t.note }}"><div style="font-size:11.5px;color:#6b6577;margin-top:6px;line-height:1.5;padding-right:8px">{{ t.note }}</div></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.45fr 1fr;gap:14px;margin-top:14px;align-items:start">
+        <div>
+          <div style="background:#f4f0fe;border:1px solid #ddd0fb;border-radius:14px;padding:20px 22px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+              <div style="display:flex;align-items:flex-start;gap:13px;min-width:0">
+                <span style="width:44px;height:44px;border-radius:12px;background:#fff;color:#6d28d9;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex:none">JV</span>
+                <div style="min-width:0">
+                  <span class="lbl" style="color:#6d28d9">Your interview</span>
+                  <div style="font-size:16px;font-weight:800;letter-spacing:-.015em;margin-top:6px">Joris van Dijk · Partner</div>
+                  <div class="mono" style="font-size:12px;color:#4a4459;margin-top:6px">{{ interviewWhen }}</div>
+                  <div style="font-size:12.5px;color:#4a4459;margin-top:9px;line-height:1.6">{{ interviewNote }}</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+                <span class="btn" style="padding:11px 20px">Add to calendar</span>
+                <span style="font-size:12.5px;font-weight:600;color:#6b6577;text-align:center;cursor:pointer">Reschedule</span>
+              </div>
+            </div>
+            <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:14px;padding-top:12px;border-top:1px solid #ddd0fb;line-height:1.6">{{ interviewFoot }}</div>
+          </div>
+
+          <div style="margin-top:18px">
+            <span class="lbl">While you wait</span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:11px">
+              <sc-for list="{{ waitCards }}" as="w" hint-placeholder-count="2">
+                <div class="c" style="padding:17px 18px">
+                  <span style="{{ w.iconWrap }}" dangerouslySetInnerHTML="{{ w.icon }}"></span>
+                  <div style="font-size:14px;font-weight:800;letter-spacing:-.01em;margin-top:12px">{{ w.title }}</div>
+                  <div style="font-size:12.5px;color:#4a4459;margin-top:6px;line-height:1.55">{{ w.body }}</div>
+                  <div style="font-size:12.5px;font-weight:700;color:#6d28d9;margin-top:11px">{{ w.cta }} →</div>
+                </div>
+              </sc-for>
+            </div>
+            <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:11px;line-height:1.6">{{ waitNote }}</div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #e8e6ee;border-radius:14px;padding:20px 21px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span class="lbl">Variant · declined</span>
+            <span style="font-size:9.5px;font-weight:700;font-family:'Roboto Mono',monospace;letter-spacing:.06em;padding:3px 8px;border-radius:99px;background:#f4f3f7;color:#6b6577;border:1px solid #e8e6ee">NOT SHOWN ABOVE</span>
+          </div>
+
+          <div style="border:1px solid #e8e6ee;border-radius:12px;padding:16px 17px;margin-top:13px">
+            <div style="font-size:15px;font-weight:800;letter-spacing:-.015em;line-height:1.3">{{ declineTitle }}</div>
+            <div style="font-size:12.5px;color:#4a4459;margin-top:9px;line-height:1.65">{{ declineBody }}</div>
+
+            <div style="margin-top:14px;padding-top:13px;border-top:1px solid #f0eef5">
+              <span class="lbl">What we would want to see</span>
+              <div style="display:grid;gap:8px;margin-top:10px">
+                <sc-for list="{{ declineAsks }}" as="d" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:flex-start;gap:9px">
+                    <span style="width:5px;height:5px;border-radius:50%;background:#7c3aed;flex:none;margin-top:7px"></span>
+                    <span style="font-size:12px;color:#4a4459;line-height:1.55">{{ d }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="background:#f4f0fe;border:1px solid #ddd0fb;border-radius:10px;padding:12px 13px;margin-top:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                <span class="lbl" style="color:#6d28d9">Reapply window</span>
+                <span class="mono" style="font-size:11px;font-weight:700;color:#6d28d9">{{ reapplyWhen }}</span>
+              </div>
+              <div style="font-size:11.5px;color:#4a4459;margin-top:8px;line-height:1.6">{{ reapplyBody }}</div>
+            </div>
+
+            <div class="mono" style="font-size:10.5px;color:#6b6577;margin-top:13px;line-height:1.6">{{ declineFoot }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">{{ p2Cap }}</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const V = '#7c3aed', VD = '#6d28d9', VT = '#f4f0fe', HAIR = '#e8e6ee', MUT = '#6b6577';
+    const I = {
+      lock:   this.ic('<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+      shield: this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/><path d="m9 12 2 2 4-4"/>'),
+      compass:this.ic('<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5Z"/>'),
+      users:  this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/><path d="M18 14.5c1.7.6 3 2.2 3 4.5"/>')
+    };
+
+    const radio = (on) => 'width:20px;height:20px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:#fff;border:'
+      + (on ? '1.5px solid ' + V : '1.5px solid ' + HAIR);
+    const opts = (list) => list.map(o => ({
+      name:o[0], note:o[1], on:o[2], badge:o[3] || null, weight:o[2] ? '700' : '600', radio:radio(o[2]),
+      rowStyle:'display:flex;align-items:flex-start;gap:12px;padding:14px 15px;border-radius:12px;cursor:pointer;border:'
+        + (o[2] ? '1.5px solid '+V+';background:'+VT : '1px solid '+HAIR+';background:#fff') }));
+    const chips = (list) => list.map(([label, on]) => ({ label,
+      style:'font-size:13px;font-weight:' + (on ? '700' : '600') + ';padding:9px 15px;border-radius:99px;cursor:pointer;border:'
+        + (on ? '1px solid '+V+';background:'+VT+';color:'+VD : '1px solid '+HAIR+';background:#fff;color:#4a4459') }));
+
+    const STEPS = [
+      ['Venture basics','Meridian Robotics · pre-seed'],
+      ['Spin-out origin & IP', null],
+      ['Team', null],
+      ['Traction','Optional throughout'],
+      ['Why Axal VC', null]
+    ];
+    const CUR = 2;
+    const rail = STEPS.map((s, i) => {
+      const done = i + 1 < CUR, on = i + 1 === CUR, last = i === STEPS.length - 1;
+      return {
+        num: done ? '✓' : String(i + 1), name:s[0], note:s[1],
+        weight: on ? '700' : '600', ink: on ? '#241f38' : (done ? '#4a4459' : MUT),
+        pad: last ? 0 : 16, line: !last,
+        lineStyle:'width:1.5px;flex:1;min-height:'+(s[1] ? 28 : 16)+'px;background:'+(done ? V : HAIR)+';margin:5px 0',
+        dot:'width:24px;height:24px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:\'Roboto Mono\',monospace;font-size:11px;font-weight:700;'
+          + (done ? 'background:'+V+';color:#fff;border:1.5px solid '+V
+              : (on ? 'background:'+VT+';color:'+VD+';border:1.5px solid '+V : 'background:#fff;color:'+MUT+';border:1.5px solid '+HAIR))
+      };
+    });
+
+    // ── P2 timeline: one stage record drives marks, colour and the lede ──
+    const TL = [
+      { name:'Submitted', date:'12 Aug 2026', state:'done' },
+      { name:'Screening', date:'14–19 Aug', state:'done', note:'Reviewed by the Benelux team against the cohort brief.' },
+      { name:'Partner interview', date:'2 Sep 2026 · 14:00 CEST', state:'now', note:'45 minutes, video. One partner, no panel.' },
+      { name:'Cohort decision', date:'by 12 Sep 2026', state:'next', note:'Cohort 7 starts 28 Sep. Eight places.' }
+    ];
+    const cur = TL.filter(t => t.state === 'now')[0];
+    const curIdx = TL.indexOf(cur);
+
+    return {
+      lockIcon: I.lock, shieldIcon: I.shield,
+      mins:'12', saveNote:'Draft saved 2 minutes ago',
+      rail,
+      confidential:'Everything here stays with the review team and is never shared with investors, other applicants, or your institution. Withdraw at any point and we delete the file.',
+
+      lede:'Two questions, and they decide your first fortnight rather than your score. We ask because a university spin-out and an independent build need opposite first steps.',
+      origin: opts([
+        ['University spin-out','IP originates from a research institution and needs assignment or licence.', true],
+        ['Corporate spin-out','Carved out of an employer. Expect an existing agreement to unwind.', false],
+        ['Independent','Built outside an institution. You already own what you have made.', false]
+      ]),
+      tto: opts([
+        ['Not yet disclosed','The institution does not know about the venture yet.', false],
+        ['Disclosed, no discussion','Filed a disclosure; nothing negotiated.', false],
+        ['Licence under negotiation','Terms in discussion with the transfer office.', true, 'YOUR ANSWER'],
+        ['Licence or assignment signed','The company can hold the IP today.', false]
+      ]),
+      ipChips: chips([['Patent filed', true], ['Patent granted', false], ['Inventors identified', true], ['Background IP separated', true], ['Publication pending', false]]),
+
+      consequence:'A licence still in negotiation is the most common reason a spin-out stalls in week three, so we sequence around it: your Week 1 gets the TTO checklist, and the Delaware filing waits on a signed licence rather than being attempted and unwound.',
+      consequenceFoot:'This does not weigh against you. Roughly half of accepted ventures apply mid-negotiation.',
+      footNote:'Nothing on this step is scored. It routes your first week — you can revise it until incorporation is filed.',
+      p1Cap:'Step 2 of 5. The origin and TTO answers are operational rather than evaluative, and the panel says so plainly — an applicant who thinks an unsigned licence counts against them will round their answer upward, and then the schedule is built on a fiction.',
+
+      appRef:'MERIDIAN-C7-0142 · applied 12 Aug 2026',
+      submitted:'Submitted 12 Aug 2026 · 09:41 CEST',
+      statusLede:'Your application is at ' + cur.name.toLowerCase() + '. We contact every applicant with a decision, including a no.',
+      timeline: TL.map((t, i) => {
+        const done = t.state === 'done', now = t.state === 'now';
+        return {
+          name:t.name, date:t.date, note:t.note || null,
+          mark: done ? '✓' : String(i + 1),
+          weight: now ? '800' : '600',
+          ink: now ? '#241f38' : (done ? '#4a4459' : MUT),
+          dateInk: now ? VD : MUT,
+          bar: i < TL.length - 1,
+          barStyle:'flex:1;height:2px;margin-left:9px;background:' + (i < curIdx ? V : HAIR),
+          dot:'width:26px;height:26px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-family:\'Roboto Mono\',monospace;font-size:11px;font-weight:700;'
+            + (done ? 'background:'+V+';color:#fff;border:1.5px solid '+V
+                : (now ? 'background:'+VT+';color:'+VD+';border:2px solid '+V+';box-shadow:0 0 0 3px rgba(124,58,237,.12)'
+                       : 'background:#fff;color:'+MUT+';border:1.5px solid '+HAIR))
+        };
+      }),
+
+      interviewWhen:'Wed 2 Sep 2026 · 14:00–14:45 CEST',
+      interviewNote:'Joris leads the Benelux deep-tech practice and read your application himself. He will ask about the TU Delft licence timeline and who owns the controls stack.',
+      interviewFoot:'No deck required. If the TTO position changes before the 2nd, tell us — it changes the conversation, not your standing.',
+
+      waitCards: [
+        { title:'Explore the Spin-Out Lab', icon:I.compass, tint:VT, ink:VD,
+          body:'The 28-day programme week by week, and what each one produces. Worth reading before the interview.',
+          cta:'Open the walkthrough' },
+        { title:'Customer discovery templates', icon:I.users, tint:'#eefbf5', ink:'#047857',
+          body:'Interview scripts and a synthesis sheet. Yours to use whatever we decide, no account needed.',
+          cta:'Download the pack' }
+      ].map(w => ({ title:w.title, body:w.body, cta:w.cta, icon:w.icon,
+        iconWrap:'width:36px;height:36px;border-radius:10px;background:'+w.tint+';color:'+w.ink+';display:flex;align-items:center;justify-content:center;padding:8px;box-sizing:border-box' })),
+      waitNote:'Neither is scored. Applicants who arrive at the interview having read the walkthrough tend to ask sharper questions, which is the only reason it is here.',
+
+      declineTitle:'Not this cohort — and here is exactly why',
+      declineBody:'The technology is credible and the TU Delft relationship is real. What Cohort 7 could not resolve is the commercial side: no customer conversations yet, and the team is three researchers with no one owning go-to-market. That is a timing problem, not a verdict on the venture.',
+      declineAsks: [
+        'Eight to ten conversations with operations leads at target sites, logged.',
+        'A named commercial co-founder or a first commercial hire under offer.',
+        'The TU Delft licence signed, or a dated commitment from the TTO.'
+      ],
+      reapplyWhen:'Cohort 8 · opens 3 Nov 2026',
+      reapplyBody:'Reapplying is encouraged and your file carries over — you update it rather than starting again. Roughly a third of each cohort applied at least twice.',
+      declineFoot:'Joris will take a 30-minute call in the meantime if it is useful. That offer stands whether or not you reapply.',
+      p2Cap:'Timeline state, dates and the lede all read one stage record, so the violet ring cannot land on a stage the copy does not name. The declined variant is specific on purpose — a warm rejection with no reason is the same as no reason, and the three asks are the actual difference between this file and an accepted one.'
+    };
+  }
+}
+</script>
+</body>
+</html>

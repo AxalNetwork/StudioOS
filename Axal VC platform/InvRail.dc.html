@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="font-family:Inter,system-ui,sans-serif;color:#18181b">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e">Worker AI · {{ page }}</span>
+    <span style="font-size:11px;color:#a8a4b4">›</span>
+  </div>
+
+  <div style="display:grid;gap:6px;margin-top:14px">
+    <div style="border:1px solid #e2e1e8;border-radius:9px;padding:9px 11px">
+      <div style="font-size:12px;font-weight:700">Manual</div>
+      <div style="font-size:10.5px;color:#615c6e;margin-top:3px;line-height:1.45">Tables, boards and models work alone. No tokens.</div>
+    </div>
+    <div style="border:1px solid #4f46e5;background:#f5f5ff;border-radius:9px;padding:9px 11px;box-shadow:0 0 0 2px rgba(79,70,229,.08)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span style="font-size:12px;font-weight:800;color:#3730a3">Advisor fills the blanks</span>
+        <span style="width:24px;height:14px;border-radius:999px;background:#4f46e5;position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#fff"></span></span>
+      </div>
+      <div style="font-size:10.5px;color:#3730a3;margin-top:4px;line-height:1.45">{{ modeNote }}</div>
+    </div>
+  </div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:16px">Model · this page</div>
+  <div style="margin-top:9px">
+    <sc-for list="{{ models }}" as="m" hint-placeholder-count="4">
+      <div style="{{ m.rowStyle }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+          <span style="{{ m.nameStyle }}">{{ m.name }}</span>
+          <sc-if value="{{ m.recommended }}"><span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#3730a3;background:#e8e7ff;border:1px solid #c7d2fe;border-radius:3px;padding:2px 5px;flex:none">RECOMMENDED</span></sc-if>
+          <sc-if value="{{ m.priceInline }}"><span style="font-size:10.5px;color:#615c6e;font-variant-numeric:tabular-nums;flex:none">{{ m.priceInline }}</span></sc-if>
+        </div>
+        <sc-if value="{{ m.recommended }}">
+          <div style="font-size:10.5px;color:#615c6e;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">{{ m.id }}</div>
+        </sc-if>
+        <div style="font-size:10.5px;color:{{ m.whyInk }};margin-top:5px;line-height:1.5">{{ m.why }}</div>
+        <sc-if value="{{ m.recommended }}">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:7px">
+            <sc-for list="{{ m.tags }}" as="t" hint-placeholder-count="2">
+              <span style="font-size:9.5px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:3px;padding:2px 5px">{{ t }}</span>
+            </sc-for>
+          </div>
+          <div style="font-size:10.5px;color:#615c6e;font-variant-numeric:tabular-nums;margin-top:8px;padding-top:7px;border-top:1px solid #f0eff4">{{ m.price }}</div>
+          <sc-if value="{{ m.cached }}"><div style="font-size:10.5px;color:#047857;font-variant-numeric:tabular-nums;margin-top:3px">{{ m.cached }}</div></sc-if>
+          <div style="font-size:11px;font-weight:700;color:#047857;font-variant-numeric:tabular-nums;margin-top:6px">{{ m.est }}</div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+  <div style="font-size:10px;color:#615c6e;margin-top:3px;line-height:1.5">Remembered per page. Switching changes nothing already accepted.</div>
+
+  <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e;margin-top:16px">Usage</div>
+  <div style="border:1px solid #ececf1;border-radius:9px;padding:11px;margin-top:9px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <span style="font-size:17px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums">{{ spend }}</span>
+      <span style="font-size:10.5px;color:#615c6e">of {{ plan }}</span>
+    </div>
+    <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:{{ spendPct }}%;background:#4f46e5;border-radius:999px"></div></div>
+    <div style="font-size:10px;color:#615c6e;font-variant-numeric:tabular-nums;margin-top:9px;line-height:1.5">This page this month · <strong>{{ pageSpend }}</strong></div>
+    <div style="font-size:10px;color:#615c6e;font-variant-numeric:tabular-nums;margin-top:7px;padding-top:7px;border-top:1px solid #f4f3f7;line-height:1.5">{{ receipt }}</div>
+  </div>
+
+  <div style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5">
+    <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:3px;padding:2px 5px;flex:none;margin-top:1px">Screened</span>
+    <div style="font-size:10px;color:#615c6e;line-height:1.5">{{ safetyNote }}</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Home&quot;,&quot;Deals&quot;,&quot;Portfolio&quot;,&quot;AxalFund&quot;,&quot;Fund&quot;,&quot;Network&quot;,&quot;Research&quot;],&quot;default&quot;:&quot;Home&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const page = this.props.page || 'Home';
+
+    // ONE arithmetic for the before-estimate and the after-receipt.
+    const c4 = (n) => '$' + n.toFixed(4);
+    const tok = (n) => n.toLocaleString('en-US');
+    const RUN = {
+      Home:      { tin:18600, tout:1420, pin:0.293, pout:2.253, label:'capital brief across 14 positions', unit:'per daily brief', spend:'$3.12' },
+      Deals:     { tin:34800, tout:2100, pin:0.293, pout:2.253, label:'screening memo from a 22-page deck', unit:'per screening memo', spend:'$9.84' },
+      Portfolio: { tin:9400,  tout:620,  pin:0.017, pout:0.112, label:'KPI extraction from one update', unit:'per update parsed', spend:'$1.06' },
+      Fund:      { tin:12400, tout:1850, pin:1.320, pout:3.960, label:'capital call letter, 11 LPs', unit:'per call letter', spend:'$7.90' },
+      Network:   { tin:2600,  tout:480,  pin:0.351, pout:0.555, label:'double opt-in intro draft', unit:'per intro email', spend:'$0.44' },
+      AxalFund:  { tin:48200, tout:1100, pin:0.440, pout:1.320, cachedIn:0.014, label:'question against Q2 report', unit:'first question', spend:'$2.41' },
+      Research:  { tin:74000, tout:1400, pin:0.440, pout:1.320, cachedIn:0.014, label:'first pass over a 96-page data room', unit:'first question', spend:'$6.23' }
+    };
+    const R = RUN[page] || RUN.Home;
+    const runCost = R.tin / 1e6 * R.pin + R.tout / 1e6 * R.pout;
+    const cachedCost = R.cachedIn ? (R.tin / 1e6 * R.cachedIn + R.tout / 1e6 * R.pout) : null;
+
+    const L33 = { name:'Llama 3.3 70B Fast', id:'@cf/meta/llama-3.3-70b-instruct-fp8-fast', price:'$0.293 / M in · $2.253 / M out', inline:'$0.293 / $2.253' };
+    const GRAN = { name:'Granite 4.0 H Micro', id:'@cf/ibm-granite/granite-4.0-h-micro', price:'$0.017 / M in · $0.112 / M out', inline:'$0.017 / $0.112' };
+    const FLASH = { name:'DeepSeek V4 Flash', id:'@cf/deepseek-ai/deepseek-v4-flash-0731', price:'$0.440 / M in · $1.320 / M out', inline:'$0.440 / $1.320' };
+    const PRO = { name:'DeepSeek V4 Pro', id:'@cf/deepseek-ai/deepseek-v4-pro-0813', price:'$1.320 / M in · $3.960 / M out', inline:'$1.320 / $3.960' };
+    const R1 = { name:'DeepSeek R1 Distill 32B', id:'@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', inline:'$0.497 / $4.881' };
+    const MIST = { name:'Mistral Small 3.1 24B', id:'@cf/mistralai/mistral-small-3.1-24b-instruct', price:'$0.351 / M in · $0.555 / M out', inline:'$0.351 / $0.555' };
+
+    const MENUS = {
+      Home: { mode:'Composes the daily capital brief, triages what arrived across the seam, ranks by relevance.',
+        safety:'Nothing here is outbound. Screening applies only if you forward a brief to a partner or LP.',
+        models:[
+          { ...L33, recommended:true, why:'Synthesis across your whole book at once — 14 positions, every update, in one read.',
+            tags:['Best for: synthesis','Long context'], runEst:true },
+          { ...GRAN, why:'Near-free alert triage. Use it to sort what arrived; escalate the reading to the 70B.' },
+          { name:'BGE-M3', id:'@cf/baai/bge-m3', inline:'$0.012 in', why:'Relevance ranking behind the brief\u2019s ordering.' }
+        ] },
+      Deals: { mode:'Drafts screening memos from decks, explains scores, assembles IC memos, writes pass notes.',
+        safety:'Pass notes and founder correspondence leave your firm — both screened before they send.',
+        models:[
+          { ...L33, recommended:true, why:'Screening memos and IC memos. Reads a full deck and data room, writes prose a partner will actually read.',
+            tags:['Best for: memos','Long context'], runEst:true },
+          { ...R1, why:'Shows its math on valuation and ownership. Slower, auditable.' },
+          { name:'Moondream 3.1 9B', id:'@cf/moondream/moondream3.1-9B-A2B', inline:'$0.300 / $1.000', why:'Reads decks, charts and cap-table screenshots.' },
+          { name:'Whisper Large v3 Turbo', id:'@cf/openai/whisper-large-v3-turbo', inline:'$0.0005 / audio min', why:'Pitch calls become searchable transcripts — a 50-minute call is $0.025.' }
+        ] },
+      Portfolio: { mode:'Extracts KPIs the moment an update lands, narrates mark moves, drafts overdue chases.',
+        safety:'Chase emails and board briefs go to founders — both screened before send.',
+        models:[
+          { ...GRAN, recommended:true, why:'Near-free KPI extraction from every update. At this price you parse all 14 companies monthly for less than a cent.',
+            tags:['Best for: extraction','High volume'], runEst:true },
+          { ...L33, why:'Quarterly narratives and board briefs, where the prose is read by an LP.' },
+          { ...FLASH, why:'Interrogate a company\u2019s whole update history; repeated questions hit cached input at $0.014/M.' }
+        ] },
+      AxalFund: { mode:'Models commitment scenarios, answers questions about your reports, evaluates co-invest offers.',
+        safety:'Your commitment data stays inside your account. Screening applies to anything you send the GP.',
+        models:[
+          { ...FLASH, recommended:true, why:'Ask your fund reports anything, cheaply. The first question pays to read the report; the rest are near-free.',
+            tags:['Best for: report Q&A','Cached input'], cached:'Cached input $0.014 / M — 31× cheaper on follow-ups', runEst:true },
+          { ...L33, why:'Commitment scenario narratives — the prose around the call schedule.' },
+          { name:'QwQ 32B', id:'@cf/qwen/qwq-32b', inline:'$0.660 / $1.000', why:'Reasoned co-invest evaluation against your existing exposure.' }
+        ] },
+      Fund: { mode:'Drafts call letters from the schedule, explains waterfalls step by step, assembles LP packs.',
+        safety:'Every LP letter is outbound and legally consequential — screened, and every number traceable to the schedule.',
+        models:[
+          { ...PRO, recommended:true, why:'The strongest reasoning available for calls, waterfalls and LP letters. This is money leaving a bank account; it gets the best model.',
+            tags:['Best for: calls & waterfalls','Highest quality'], cached:'Cached input $0.044 / M — re-reading the same schedule is 30× cheaper', runEst:true },
+          { ...R1, why:'Step-by-step waterfall and fee math when you need the working shown to an auditor.' },
+          { name:'GPT-OSS 20B', id:'@cf/openai/gpt-oss-20b', inline:'$0.200 / $0.300', why:'Routine LP correspondence at volume.' }
+        ] },
+      Network: { mode:'Drafts double opt-in intros from both sides\u2019 context, flags cold ties, suggests co-investors.',
+        safety:'Intros leave your firm and land in a founder\u2019s or LP\u2019s inbox — always screened first.',
+        models:[
+          { ...MIST, recommended:true, why:'Warm, context-aware intro drafting. An intro spends someone else\u2019s reputation; it should read like you wrote it.',
+            tags:['Best for: intro drafting','Tone'], runEst:true },
+          { name:'Gemma 4 26B', id:'@cf/google/gemma-4-26b-a4b-it', inline:'$0.100 / $0.300', why:'Cheap relationship summaries across a long thread.' },
+          { name:'BGE-M3', id:'@cf/baai/bge-m3', inline:'$0.012 in', why:'Who-should-meet-whom matching, including co-investors for a live deal.' }
+        ] },
+      Research: { mode:'Turns a question into a sourced brief; makes a shared data room queryable.',
+        safety:'Research stays private. Screening applies when a pull is attached to a deal others can see.',
+        models:[
+          { ...FLASH, recommended:true, why:'Built for interrogating long documents cheaply. Ask a data room fifty questions for the price of one careful read.',
+            tags:['Best for: data rooms','Cached input'], cached:'Cached input $0.014 / M — 31× cheaper on follow-ups', runEst:true },
+          { name:'GPT-OSS 120B', id:'@cf/openai/gpt-oss-120b', inline:'$0.350 / $0.750', why:'Broad market and thesis work where breadth beats recall.' },
+          { name:'Moondream 3.1 9B', id:'@cf/moondream/moondream3.1-9B-A2B', inline:'$0.300 / $1.000', why:'Reads charts and figures inside PDFs.' },
+          { name:'Qwen3 Embedding 0.6B', id:'@cf/qwen/qwen3-embedding-0.6b', inline:'$0.012 in', why:'Semantic search across the whole library.' }
+        ] }
+    };
+
+    const M = MENUS[page] || MENUS.Home;
+    const TOTAL = 31.00, PLAN = 80.00;
+    const estText = cachedCost
+      ? '≈ ' + c4(runCost) + ' ' + R.unit + ' · ' + c4(cachedCost) + ' each after'
+      : '≈ ' + c4(runCost) + ' ' + R.unit;
+
+    return {
+      page: page === 'AxalFund' ? 'Axal VC Fund' : page,
+      modeNote: M.mode, safetyNote: M.safety,
+      receipt: 'Last run · ' + R.label + ' · ' + tok(R.tin) + ' in / ' + tok(R.tout) + ' out · ' + c4(runCost),
+      spend: '$' + TOTAL.toFixed(2), plan: '$' + PLAN.toFixed(2),
+      spendPct: String(Math.round(TOTAL / PLAN * 100)),
+      pageSpend: R.spend,
+      models: M.models.map(m => ({
+        name:m.name, id:m.id, why:m.why, price:m.price, cached:m.cached || null,
+        est: m.runEst ? estText : null, tags:m.tags || [], recommended:!!m.recommended,
+        priceInline: m.recommended ? null : (m.inline || null),
+        nameStyle:'font-size:' + (m.recommended ? '12px;font-weight:800' : '11.5px;font-weight:700') + ';letter-spacing:-.01em;min-width:0',
+        whyInk: m.recommended ? '#4a4553' : '#615c6e',
+        rowStyle:'border-radius:9px;padding:10px 11px;margin-bottom:7px;'
+          + (m.recommended ? 'border:1px solid #4f46e5;background:#f5f5ff;box-shadow:0 0 0 2px rgba(79,70,229,.08)'
+                           : 'border:1px solid #ececf1;background:#fff')
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

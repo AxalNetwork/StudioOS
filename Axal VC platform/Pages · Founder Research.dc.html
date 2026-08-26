@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8fa;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px}
+    .zb.on{color:#6d28d9;background:#faf7ff;border-color:#d8c9ff;font-weight:700}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#faf7ff;border-color:#d8c9ff;color:#6d28d9;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#faf7ff;border:1px solid #d8c9ff;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6d28d9;background:#f0e9ff;border:1px solid #d8c9ff;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #6d28d9;background:#6d28d9;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="5">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /research</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#6d28d9;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Research</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="5"><span class="{{ z.cls }}">{{ z.label }}</span></sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="5"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5">
+                <span class="td">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="violet" page="Research" hint-size="100%,580px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const V = { ink:'#7c3aed', deep:'#6d28d9', tint:'#faf7ff' };
+    // CANONICAL Founder shell — 9 rows, matching Detail Layer Canvas F_ROWS.
+    const ROWS = ['Home','Validate','Build','Raise','Grow','Network','Research','Trust','Company Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Research' ? 'nav on' : 'nav',
+      style: label === 'Research' ? 'color:'+V.deep+';background:'+V.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+V.ink : '' }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Ask','Markets','Companies','Funds','Library'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb' }));
+
+    const pill = (t) => {
+      const M = { 'Current':['#ecfdf5','#047857','#a7f3d0'], 'Indexed':['#ecfdf5','#047857','#a7f3d0'],
+        'Right stage':['#ecfdf5','#047857','#a7f3d0'], 'Primary':['#ecfdf5','#047857','#a7f3d0'],
+        'Saved':['#faf7ff','#6d28d9','#d8c9ff'], 'Tracking':['#faf7ff','#6d28d9','#d8c9ff'],
+        'Warm path':['#faf7ff','#6d28d9','#d8c9ff'],
+        'Stale':['#fffbeb','#92400e','#fde68a'], '1 source':['#fffbeb','#92400e','#fde68a'],
+        'Unverified':['#fffbeb','#92400e','#fde68a'], 'Wrong stage':['#fffbeb','#92400e','#fde68a'],
+        'Passed':['#fef2f2','#b91c1c','#fecaca'], 'Discarded':['#fef2f2','#b91c1c','#fecaca'],
+        'Archived':['#f4f4f6','#615c6e','#e4e4e8'], 'Not indexed':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Archived'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => Object.assign({ text, pill:null, pillStyle:'', seam:null },
+      opt || {}, opt && opt.pill ? { pillStyle: pill(opt.pill) } : {});
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+
+    // ══ ONE cost model, matching the rail's Research curation. ══
+    const c4 = (n) => '$' + n.toFixed(4);
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    const TIN = 58000, TOUT = 1300;
+    const FIRST = run(TIN, TOUT, 0.440, 1.320);
+    const CACHED = run(TIN, TOUT, 0.014, 1.320);
+    const ratio = Math.round(FIRST / CACHED);
+    const twenty = FIRST + 19 * CACHED;
+
+    // ══ ONE library. Every count on Ask and Library derives from it. ══
+    const DOCS = [
+      { name:'Gartner · Workflow Automation 2025', kind:'Report', yr:2025, q:9, state:'Indexed' },
+      { name:'CB Insights · SaaS sizing Q1 2026', kind:'Report', yr:2026, q:6, state:'Indexed' },
+      { name:'Your 12 customer interviews', kind:'Primary', yr:2026, q:14, state:'Indexed' },
+      { name:'Kestrel term sheet', kind:'Legal', yr:2026, q:11, state:'Indexed' },
+      { name:'Competitor pricing screenshots', kind:'Primary', yr:2026, q:3, state:'Indexed' },
+      { name:'Forrester · Async work 2023', kind:'Report', yr:2023, q:0, state:'Stale' }
+    ];
+    const QS = DOCS.reduce((a, d) => a + d.q, 0);
+    const INDEXED = DOCS.filter(d => d.state === 'Indexed').length;
+    const PRIMARY = DOCS.filter(d => d.kind === 'Primary').length;
+    const docRows = DOCS.map(d => ({ cells:[ cell(d.name), cell(d.kind), cell(String(d.yr)),
+      cell(String(d.q)), cell('', { pill:d.state }) ]}));
+
+    // ══ ONE session log. Ask's counts derive from it. ══
+    const SESS = [
+      { q:'What is the real TAM for async workflow tooling?', src:'Gartner, CB Insights', first:true, out:'Saved. Cited on the Market slide.', kept:true },
+      { q:'Which pain did most interviews actually name?', src:'12 interviews', first:false, out:'Saved. Became the Problem slide.', kept:true },
+      { q:'Is a 2× participating preference normal at seed?', src:'Kestrel term sheet', first:false, out:'Sent to counsel. Answer was no.', kept:true },
+      { q:'How do the three competitors price entry tiers?', src:'Pricing screenshots', first:false, out:'Used in the pricing test.', kept:true },
+      { q:'What is the churn benchmark for our segment?', src:'CB Insights', first:false, out:'Discarded — one source, weak.', kept:false },
+      { q:'Does async tooling still have tailwinds?', src:'Forrester 2023', first:false, out:'Discarded. Source is three years old.', kept:false }
+    ];
+    const KEPT = SESS.filter(s => s.kept).length;
+    const DROPPED = SESS.length - KEPT;
+    const sessRows = SESS.map(s => ({ cells:[ cell(s.q), cell(s.src),
+      cell(c4(s.first ? FIRST : CACHED)), cell(s.out) ]}));
+
+    const PAGES = [
+      { id:'fs1', badge:'FS1', route:'/research/ask', zone:'Ask', arch:'FEED',
+        title:'Research · Ask', h1:'Ask',
+        blurb:'Compressed is a question box. The full feed adds every session and the sources each answer drew on — so a claim you repeat in a pitch can be traced to where it came from, or retired.',
+        sub:'Session history, saved briefs and sources.',
+        cmpTitle:'Ask anything', cmpBody:QS + ' questions asked across ' + DOCS.length + ' documents. ' + KEPT + ' answers kept.',
+        viewMore:'View more · ' + SESS.length + ' sessions, ' + KEPT + ' saved →',
+        filters: fil(['All sessions','Saved','Cited in deck','Discarded'], 0), ops:['New brief','Export session','Clear history'],
+        adds:[ { label:'Questions asked', value:String(QS), note:'across ' + DOCS.length + ' documents' },
+          { label:'Answers kept', value:KEPT + ' of ' + SESS.length, note:DROPPED + ' failed on source quality' },
+          { label:'First-pass cost', value:c4(FIRST), note:'reads the document' },
+          { label:'Follow-up cost', value:c4(CACHED), note:ratio + '× cheaper, cached' } ],
+        instTitle:'Session history', instMeta:'Newest first · sources kept with the answer',
+        cols:'1.9fr 1fr .8fr 1.4fr', head:['Question','Drew on','Cost','What you did with it'],
+        rows: sessRows,
+        instNote:DROPPED + ' of ' + SESS.length + ' answers were discarded for source quality rather than content, and the history records that — which is the point of keeping it. An answer whose only support is a 2023 report should not quietly become a claim in a pitch two months later.',
+        aiLabel:'Proposal · sourced brief', aiCost:'≈ ' + c4(FIRST) + ' first pass',
+        aiBody:'The answer arrives with its sources listed and its as-of date stated. Where two sources disagree they are both shown rather than averaged — the Gartner and CB Insights sizings differ by roughly 40%, and that gap is information, not noise to be smoothed.',
+        aiAccept:'Save brief', aiFoot:'Sources travel with the brief.' },
+
+      { id:'fs2', badge:'FS2', route:'/research/markets', zone:'Markets', arch:'ANALYTICS',
+        title:'Research · Markets', h1:'Market deep-dives',
+        blurb:'Compressed shows the current sizing. The full page adds the builder and every saved analysis with its run date and method — so a stale number looks stale rather than authoritative.',
+        sub:'Deep-dive builder and saved analyses.',
+        cmpTitle:'TAM $2.4B · SAM $340M', cmpBody:'Medium confidence: 2 sources, 1 primary. One analysis retired.',
+        viewMore:'View more · 5 analyses, 1 retired →',
+        filters: fil(['Saved','Builder','Sources','Retired'], 0), ops:['New deep-dive','Export','Cite in deck'],
+        adds:[ { label:'Saved analyses', value:'5', note:'1 past its useful life' },
+          { label:'Sources', value:String(DOCS.filter(d => d.state === 'Indexed').length), note:PRIMARY + ' primary' },
+          { label:'Confidence', value:'Medium', note:'2 secondary, 1 primary' },
+          { label:'Excluded input', value:'2023', note:'Forrester · too old to cite' } ],
+        instTitle:'Saved analyses', instMeta:'Run date shown · method named',
+        cols:'1.5fr 1fr .9fr .9fr 1.2fr', head:['Analysis','Method','Run','State','Note'],
+        rows:[
+          { cells:[cell('TAM · workflow automation'), cell('Top-down'), cell('Aug 2026'), cell('', { pill:'Current' }), cell('$2.4B. Gartner × addressable base.')] },
+          { cells:[cell('SAM · distributed SaaS'), cell('Segmented'), cell('Aug 2026'), cell('', { pill:'Current' }), cell('$340M. Filtered to 50–500 seats.')] },
+          { cells:[cell('SOM · reachable in 24 mo'), cell('Bottom-up'), cell('Aug 2026'), cell('', { pill:'1 source' }), cell('$34M. Accounts × ACV × win rate.')] },
+          { cells:[cell('Growth · CAGR to 2030'), cell('Secondary'), cell('Jun 2026'), cell('', { pill:'Unverified' }), cell('18%, one source. Do not present alone.')] },
+          { cells:[cell('Async work adoption'), cell('Secondary'), cell('Mar 2026'), cell('', { pill:'Stale' }), cell('Built on a 2023 report. Retired, not deleted.')] }
+        ],
+        instNote:'The SOM is bottom-up and the TAM is top-down, so they are deliberately not reconciled — different methods answering different questions, and forcing agreement would invent precision. The retired row stays visible because knowing an analysis was withdrawn is more useful than it silently vanishing.',
+        aiLabel:'Proposal · rebuild the CAGR estimate', aiCost:'≈ ' + c4(CACHED),
+        aiBody:'The 18% figure rests on one unverified source. A rebuild needs a second, and the honest recommendation is that if none exists you present the sizing without a growth rate rather than with a soft one.',
+        aiAccept:'Run the rebuild', aiFoot:'Cached — the library is already read.' },
+
+      { id:'fs3', badge:'FS3', route:'/research/companies', zone:'Companies', arch:'COLLECTION',
+        title:'Research · Companies', h1:'Company profiles',
+        blurb:'Compressed lists who you track. The full collection adds profiles, comparables and what changed since you last looked — including the competitor who quietly moved into your wedge.',
+        sub:'Profiles, comparables and tracking.',
+        cmpTitle:'6 companies tracked', cmpBody:'3 direct competitors, 3 comparables. 1 changed materially.',
+        viewMore:'View more · 6 profiles, 4 comparables →',
+        filters: fil(['All','Direct','Adjacent','Comparables'], 0), ops:['Add company','Compare','Export'],
+        adds:[ { label:'Tracked', value:'6', note:'3 direct, 3 comparable' },
+          { label:'Changed this month', value:'1', note:'pricing and positioning' },
+          { label:'Comparables', value:'3', note:'for the Market slide' },
+          { label:'Last refreshed', value:'Aug 22', note:'3 days ago' } ],
+        instTitle:'Tracked companies', instMeta:'Change since last look, not a static profile',
+        cols:'1.2fr .9fr 1fr 1.9fr', head:['Company','Relation','State','What changed'],
+        rows:[
+          { cells:[cell('Threadline'), cell('Direct'), cell('', { pill:'Tracking' }), cell('Shipped async handoffs in July. Now overlaps your wedge directly.')] },
+          { cells:[cell('Cadenza'), cell('Direct'), cell('', { pill:'Tracking' }), cell('Raised $12M Series A. Moving upmarket, away from you.')] },
+          { cells:[cell('Loophaus'), cell('Direct'), cell('', { pill:'Tracking' }), cell('No change in six months. Possibly stalled.')] },
+          { cells:[cell('Basecamp'), cell('Adjacent'), cell('', { pill:'Archived' }), cell('Different problem. Kept as a positioning reference only.')] },
+          { cells:[cell('Height'), cell('Comparable'), cell('', { pill:'Current' }), cell('Seed-to-A benchmark: 14 months, $1.4M to $9M.')] },
+          { cells:[cell('Fibery'), cell('Comparable'), cell('', { pill:'Current' }), cell('Comparable ACV and segment. Useful for the model.')] }
+        ],
+        instNote:'Threadline is the row that matters: they shipped the thing your differentiation rests on, which means the competition slide is out of date and the Problem slide may be too. A profile that only stored facts rather than changes would not have surfaced it.',
+        aiLabel:'Proposal · what Threadline\u2019s launch changes', aiCost:'≈ ' + c4(CACHED),
+        aiBody:'Reads their launch notes against your own positioning: two of your three differentiators still hold, one does not. The recommendation is to lead with the interview evidence they cannot claim rather than the feature they now match.',
+        aiAccept:'Save to profile', aiFoot:'Flags the deck slides affected.' },
+
+      { id:'fs4', badge:'FS4', route:'/research/funds', zone:'Funds', arch:'MATCH ENGINE',
+        title:'Research · Funds', h1:'Fund research',
+        blurb:'Compressed shows the shortlist. The full engine adds every fund researched, its fit score with reasons, and what it has actually funded — read before the meeting, not after.',
+        sub:'Investor research and fit scores.',
+        cmpTitle:'14 funds researched', cmpBody:'6 with a warm path, 2 wrong stage, 2 passed.',
+        viewMore:'View more · 14 funds, fit reasons →',
+        filters: fil(['Best fit','Right stage','Warm path','Passed'], 0), ops:['Add fund','Brief me','Export'],
+        adds:[ { label:'Researched', value:'14', note:'6 with a path in' },
+          { label:'Right stage', value:'11', note:'3 write later than seed' },
+          { label:'Cheque overlap', value:'9', note:'your ask fits their range' },
+          { label:'Passed', value:'2', note:'reasons recorded' } ],
+        instTitle:'Fund profiles', instMeta:'Thesis in their own words · what they funded',
+        cols:'1.1fr .9fr 1fr 1.9fr', head:['Fund','Cheque','State','What the research says'],
+        rows:[
+          { cells:[cell('Latitude Seed'), cell('$250k–750k'), cell('', { pill:'Warm path' }), cell('"Tools engineers choose before procurement hears about it." Three dev-tooling seeds this year.')] },
+          { cells:[cell('Kestrel Ventures'), cell('$400k–1.5M'), cell('', { pill:'Right stage' }), cell('Led three workflow rounds in 18 months. Lost one at Series A — which is why they want a board seat.')] },
+          { cells:[cell('Thornbury Capital'), cell('$300k–1M'), cell('', { pill:'Warm path' }), cell('Both recent seed leads had a named design partner in the deck. You have four.')] },
+          { cells:[cell('Verwood Ventures'), cell('$150k–500k'), cell('', { pill:'Right stage' }), cell('Strong thesis fit, no route in. Also a customer — do not confuse the two relationships.')] },
+          { cells:[cell('Marchmont'), cell('$2M–8M'), cell('', { pill:'Wrong stage' }), cell('Series A only. Kept on file so you stop rediscovering them.')] },
+          { cells:[cell('2 passed'), cell('—'), cell('', { pill:'Passed' }), cell('One thesis mismatch, one "too early — return at $30k MRR". Both worth revisiting.')] }
+        ],
+        instNote:'The Kestrel note is the kind of thing this page exists for: their board-seat ask is explicable from their own history rather than mysterious, which changes how you negotiate it. Verwood carries a warning because they appear in your book as a customer too, and treating those as one relationship would be a mistake.',
+        aiLabel:'Proposal · pre-meeting brief', aiCost:'≈ ' + c4(FIRST),
+        aiBody:'Six lines on the fund you are meeting Thursday: what they have funded at your stage, what both recent leads had in common, the partner who will be in the room, and the one question their history suggests they always ask.',
+        aiAccept:'Save brief', aiFoot:'Built from public filings and their own writing.' },
+
+      { id:'fs5', badge:'FS5', route:'/research/library', zone:'Library', arch:'COLLECTION',
+        title:'Research · Library', h1:'Document library',
+        blurb:'Compressed shows the document count. The full collection adds every document, its Q&A history, and the cache economics that make asking twenty questions of one file cheaper than asking two.',
+        sub:'All documents, Q&A history and collections.',
+        cmpTitle:'Library · ' + DOCS.length + ' documents', cmpBody:INDEXED + ' indexed, ' + PRIMARY + ' primary. ' + QS + ' questions asked.',
+        viewMore:'View more · ' + DOCS.length + ' documents, ' + QS + ' questions →',
+        filters: fil(['All','Reports','Primary','Legal','Stale'], 0), ops:['Upload','New collection','Export'],
+        adds:[ { label:'Documents', value:String(DOCS.length), note:INDEXED + ' indexed for Q&A' },
+          { label:'Primary sources', value:String(PRIMARY), note:'your own research' },
+          { label:'Questions asked', value:String(QS), note:'across the library' },
+          { label:'20 questions cost', value:'$' + twenty.toFixed(2), note:'first at full price' } ],
+        instTitle:'Documents', instMeta:'Question count per document · state governs citability',
+        cols:'1.9fr .9fr .7fr .8fr 1fr', head:['Document','Kind','Year','Questions','State'],
+        rows: docRows,
+        instNote:'Your twelve interviews carry the most questions of anything here, which is the right shape for a seed-stage library — primary research you own beats a report anyone can buy. The 2023 report stays indexed but marked stale, so it can be read without being cited.',
+        aiLabel:'Proposal · the cache argument, concretely', aiCost:'first ' + c4(FIRST) + ' · then ' + c4(CACHED),
+        aiBody:'Reading a document properly means twenty questions, not one. The first pays to read it; the next nineteen hit cached input at ' + ratio + '× less, so the whole set costs $' + twenty.toFixed(2) + ' — which is why depth on this page is affordable in a way it was not before.',
+        aiAccept:'Ask twenty', aiFoot:'Cost estimated before the batch runs.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({}, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

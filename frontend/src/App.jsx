@@ -222,7 +222,6 @@ const RoadmapPage = lazy(() => import('./pages/RoadmapPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
-const MarketplacePage = lazy(() => import('./pages/MarketplacePage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
@@ -237,7 +236,6 @@ import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 const EmailChangeConfirmPage = lazy(() => import('./pages/EmailChangeConfirmPage'));
 const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage'));
 // Advisor sections shell — tabbed workspaces (Network, Advisory, Research).
-const AdvisorNetworkWorkspace = lazy(() => import('./pages/advisor/network/AdvisorNetworkWorkspace'));
 const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 const AdvisorResearchWorkspace = lazy(() => import('./pages/advisor/research/AdvisorResearchWorkspace'));
 // Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
@@ -1739,7 +1737,15 @@ function AppInner() {
           by Founder + Advisor modes (mode changes ordering + copy only). */}
       <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SignalsPage user={user} />)} />
       <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <CapTablePage />)} />
-      <Route path="/marketplace" element={guard(['admin', 'founder', 'partner', 'investor'], <MarketplacePage user={user} />)} />
+      {/* DECISIONS.md D11 — /marketplace was a partner-provider directory with
+          inquiry threads and reviews whose backend exists only in the dev-only
+          FastAPI: all 11 api.marketplace* calls hit /marketplace/* and the
+          worker mounts none of it. Discovery is already served by working
+          surfaces — /services (services.ts), /needs (needs.ts) and /partners
+          (partners.ts) — so the redirect lands on one of those rather than a
+          page where nothing loads. Inquiry threads and reviews have no backend
+          anywhere and leave with the page. */}
+      <Route path="/marketplace" element={<Navigate to="/services" replace />} />
       {/* Task #2 — Founder Marketplace merges the Service Catalogue (/services) and
           Needs Board (/needs) into one tabbed page at /build/marketplace. The
           standalone routes below stay registered for the partner/investor/admin
@@ -1931,20 +1937,38 @@ function AppInner() {
           to its own route; the workspace derives the active tab from the URL.
           Bare section paths redirect to their first tab so every workspace is
           reachable by direct URL and by clicking the sidebar. */}
-      <Route path="/advisor/network" element={<Navigate to="/advisor/network/introductions" replace />} />
-      <Route path="/advisor/network/introductions" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorNetworkWorkspace />)} />
-      <Route path="/advisor/network/relationships" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorNetworkWorkspace />)} />
-      <Route path="/advisor/network/organizations" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorNetworkWorkspace />)} />
+      {/* DECISIONS.md D10 — /network is the one network surface. These three
+          tabs were the ones every role's sidebar linked, and none of them
+          worked: Introductions and Organizations called /api/network-introductions
+          and /api/organizations, neither of which the worker mounts, and
+          Relationships rendered from a fixture with no API calls at all.
+          Meanwhile /network's three panels are wired to contacts.ts,
+          introductions.ts and partnernet.ts and have worked throughout.
+          Introductions and Relationships map onto real tabs; Organizations has
+          no counterpart — it never returned data, so nothing is lost by
+          landing on the page's default tab. */}
+      <Route path="/advisor/network" element={<Navigate to="/network" replace />} />
+      <Route path="/advisor/network/introductions" element={<Navigate to="/network?tab=introductions" replace />} />
+      <Route path="/advisor/network/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
+      <Route path="/advisor/network/organizations" element={<Navigate to="/network" replace />} />
       <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/opportunities" replace />} />
       <Route path="/advisor/advisory/opportunities" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/engagements" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
-      <Route path="/advisor/research" element={<Navigate to="/advisor/research/market" replace />} />
-      <Route path="/advisor/research/market" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
+      <Route path="/advisor/research" element={<Navigate to="/advisor/research/companies" replace />} />
+      {/* DECISIONS.md D8 — /market-intel is the one market surface. This route
+          was a mock shell over the same material (zero API calls) while
+          MarketIntelPage is ~3k lines wired to 30 endpoints; rather than build
+          a second implementation, the old URL redirects. */}
+      <Route path="/advisor/research/market" element={<Navigate to="/market-intel" replace />} />
       <Route path="/advisor/research/companies" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/funds" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
+      {/* DECISIONS.md D9 — the Funds research tab is withdrawn, not hidden. It
+          wanted a directory of external funds, managers, fundraises, unicorns,
+          exits and comparables; no backend serves any of it and no data
+          provider is configured, so the only honest options were a blank
+          surface or invented numbers. It returns when a source is licensed. */}
       <Route path="/advisor/research/documents" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
       <Route path="/advisor/research/ai" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
       <Route path="/advisor/research/news" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />

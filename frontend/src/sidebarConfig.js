@@ -122,7 +122,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       // "Integrations" merged into Settings (/settings/integrations); the
       // /integrations route redirects there. Removed from the admin nav.
-      { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
       { to: '/services', icon: Package, label: 'Service Catalogue' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
       { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
@@ -132,9 +131,7 @@ export const SIDEBAR_GROUPS = {
     // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
     // the shared Research workspace (also used by advisors/investors/partners).
     { key: 'research', label: 'Research', items: [
-      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
       { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
-      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
       { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
       { to: '/advisor/research/news', icon: Send, label: 'News' },
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
@@ -209,9 +206,7 @@ export const SIDEBAR_GROUPS = {
     // single "Network" link that lived in Validate; the legacy /network,
     // /relationships and /contacts routes keep the Relationships row active.
     { key: 'network', label: 'Network', items: [
-      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
-      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/contacts'] },
-      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
     ]},
     // Task #7 — Growth section mirrors the advisor/partner profiles: five tabs
     // (Talent, Customers, Partnerships, Capital, Experts) served by the shared
@@ -239,9 +234,8 @@ export const SIDEBAR_GROUPS = {
     // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
     // the shared Research workspace (also used by advisors/investors/partners).
     { key: 'research', label: 'Research', items: [
-      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/market-intel', icon: Radar, label: 'Market' },
       { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
-      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
       { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
       { to: '/advisor/research/news', icon: Send, label: 'News' },
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
@@ -325,7 +319,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/services', icon: Package, label: 'My Services' },
       { to: '/matches', icon: Sparkles, label: 'AI Matches' },
       { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-      { to: '/marketplace', icon: Briefcase, label: 'Marketplace' },
       { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
     ]},
     { key: 'engage', label: 'Engage', items: [
@@ -337,9 +330,7 @@ export const SIDEBAR_GROUPS = {
     // Network workspace (also used by advisors); the standalone "Network" link
     // that used to live in Engage is folded into this group's three tabs.
     { key: 'network', label: 'Network', items: [
-      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
-      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/partners'] },
-      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
     ]},
     // Partner Operations workspace. Each item deep-links to its own tab route;
     // `match` keeps the row active across the tab and its sub-route.
@@ -362,9 +353,8 @@ export const SIDEBAR_GROUPS = {
     // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
     // the shared Research workspace (also used by advisors).
     { key: 'research', label: 'Research', items: [
-      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/market-intel', icon: Radar, label: 'Market' },
       { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
-      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
       { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
       { to: '/advisor/research/news', icon: Send, label: 'News' },
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
@@ -421,9 +411,7 @@ export const SIDEBAR_GROUPS = {
     // /lp-portal, /funds/capital-calls, /portfolio/reserves,
     // /portfolio/waterfall, /liquidity.
     { key: 'network', label: 'Network', items: [
-      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
-      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/contacts'] },
-      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
     ]},
     { key: 'pipeline', label: 'Pipeline', items: [
       { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
@@ -450,9 +438,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/funds/accounting', icon: Scale, label: 'Accounting' },
     ]},
     { key: 'research', label: 'Research', items: [
-      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/market-intel', icon: Radar, label: 'Market' },
       { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
-      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
       { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
       { to: '/advisor/research/news', icon: Send, label: 'News' },
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },
@@ -472,9 +459,7 @@ export const SIDEBAR_GROUPS = {
     // preserved as a sub-entry; `match` keeps the correct row active across the
     // tab, its sub-routes, and legacy aliases.
     { key: 'network', label: 'Network', items: [
-      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
-      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/contacts'] },
-      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
     ]},
     { key: 'advisory', label: 'Advisory', items: [
       { to: '/advisor/advisory/opportunities', icon: Target, label: 'Opportunities' },
@@ -491,9 +476,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/advisor/growth/experts', icon: Brain, label: 'Experts' },
     ]},
     { key: 'research', label: 'Research', items: [
-      { to: '/advisor/research/market', icon: Radar, label: 'Market' },
+      { to: '/market-intel', icon: Radar, label: 'Market' },
       { to: '/advisor/research/companies', icon: Globe, label: 'Companies' },
-      { to: '/advisor/research/funds', icon: Wallet, label: 'Funds' },
       { to: '/advisor/research/ai', icon: Brain, label: 'AI Research' },
       { to: '/advisor/research/news', icon: Send, label: 'News' },
       { to: '/advisor/research/documents', icon: FileText, label: 'Documents' },

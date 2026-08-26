@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#1A202C;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}
+    .uf-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+    .uf-root.uf-embedded .uf-topbar{display:none!important}
+    .uf-embed-header{display:none}
+    .uf-root.uf-embedded .uf-embed-header{display:none}
+    .uf-card{background:#fff;border:1px solid #ececf1;border-radius:16px;box-shadow:0 1px 2px rgba(24,24,27,.04)}
+    .uf-qa{border:1px solid transparent;background:transparent;border-radius:8px;cursor:pointer}
+    .uf-qa:hover{border-color:#ececf1;background:#fff}
+    .uf-sl{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:999px;outline:none;cursor:pointer}
+    .uf-sl::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #7c3aed;box-shadow:0 1px 3px rgba(24,24,27,.2);cursor:grab}
+    .uf-sl::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #7c3aed;cursor:grab}
+    .uf-handle{cursor:grab}.uf-handle:active{cursor:grabbing}
+    @media (max-width:1080px){.uf-split{grid-template-columns:1fr!important}.uf-scen{grid-template-columns:1fr!important}}
+  
+    .uf-root.uf-embedded .uf-topline{display:none!important}
+  </style>
+</helmet>
+
+<div class="uf-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 120px">
+  <div class="uf-topline" style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px"></div>
+
+  <!-- EMBEDDED HEADER -->
+  <div class="uf-embed-header" style="font-size:13px;color:#71717a;margin:0 0 14px">Live capital allocation and runway modeling — feeds the Pitch Deck and Axal VC Spin-Out export.</div>
+
+  <!-- TOP BAR -->
+  <div class="uf-topbar" style="display:flex;align-items:center;justify-content:space-between;padding:18px 0 6px;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:14px;min-width:0">
+      <a href="#" onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#71717a"><span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ icArrow }}"></span>Back to Workspace</a>
+      <span style="width:1px;height:20px;background:#e4e4e7"></span>
+      <span style="width:34px;height:34px;flex:none;border-radius:9px;background:#f5f3ff;color:#7c3aed;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icDollar }}"></span>
+      <div style="min-width:0">
+        <div style="display:flex;align-items:center;gap:9px">
+          <h1 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Use of Funds</h1>
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#166534;background:#dcfce7;padding:3px 9px;border-radius:999px"><span style="width:11px;height:11px;display:flex" dangerouslySetInnerHTML="{{ icCheck }}"></span>Active</span>
+        </div>
+        <div style="font-size:13px;color:#71717a;margin-top:2px">Live capital allocation and runway modeling — feeds the Pitch Deck and Axal VC Spin-Out export.</div>
+      </div>
+    </div>
+    <span style="font-size:11px;font-weight:600;color:#7c3aed;background:#f5f3ff;border:1px solid #e4defb;padding:5px 11px;border-radius:999px">Unlocked · Wk 4</span>
+  </div>
+
+  <!-- QUICK ACTIONS -->
+  <div style="display:flex;gap:4px;padding:10px 0 18px;flex-wrap:wrap;align-items:center;position:relative">
+    <button class="uf-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icShare }}"></span>Share</button>
+    <div style="position:relative">
+      <button onClick="{{ toggleExport }}" class="uf-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icDownload }}"></span>Export<span style="width:12px;height:12px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icChevD }}"></span></button>
+      <sc-if value="{{ exportMenuOpen }}">
+        <div style="position:absolute;top:38px;left:0;z-index:30;width:250px;background:#fff;border:1px solid #ececf1;border-radius:12px;box-shadow:0 12px 32px rgba(24,24,27,.16);padding:6px">
+          <button onClick="{{ exportDeck }}" style="display:flex;width:100%;align-items:center;gap:10px;font-size:12.5px;font-weight:500;color:#3f3f46;background:transparent;border:none;border-radius:8px;padding:10px 11px;cursor:pointer;text-align:left"><span style="width:15px;height:15px;display:flex;color:#7c3aed" dangerouslySetInnerHTML="{{ icDeck }}"></span>Pitch Deck format</button>
+          <button onClick="{{ exportAxal VC }}" style="display:flex;width:100%;align-items:center;gap:10px;font-size:12.5px;font-weight:500;color:#3f3f46;background:transparent;border:none;border-radius:8px;padding:10px 11px;cursor:pointer;text-align:left"><span style="width:15px;height:15px;display:flex;color:#0d9488" dangerouslySetInnerHTML="{{ icAxal VC }}"></span>Axal VC Spin-Out format</button>
+        </div>
+      </sc-if>
+    </div>
+    <button class="uf-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:#52525b;padding:7px 12px"><span style="width:14px;height:14px;display:flex;color:#a1a1aa" dangerouslySetInnerHTML="{{ icCopy }}"></span>Copy link</button>
+    <button onClick="{{ openPreview }}" class="uf-qa" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#7c3aed;padding:7px 12px"><span style="width:14px;height:14px;display:flex" dangerouslySetInnerHTML="{{ icEye }}"></span>Preview as investor</button>
+  </div>
+
+  <!-- BURN ALERT BANNER -->
+  <sc-if value="{{ alertActive }}">
+    <div style="display:flex;align-items:center;gap:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:14px;padding:14px 18px;margin-bottom:18px">
+      <span style="width:20px;height:20px;flex:none;color:#dc2626;display:flex" dangerouslySetInnerHTML="{{ icAlert }}"></span>
+      <div style="font-size:13px;color:#991b1b;line-height:1.4"><b>Runway below {{ alertThreshold }}-month threshold.</b> {{ alertDriver }}</div>
+    </div>
+  </sc-if>
+
+  <!-- SPLIT -->
+  <div class="uf-split" style="display:grid;grid-template-columns:440px 1fr;gap:20px;align-items:start">
+
+    <!-- LEFT: allocation + runway -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <!-- DONUT + SLIDERS -->
+      <div class="uf-card" style="padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Allocation · {{ raiseLabel }} raise</div>
+          <span style="font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px;{{ deckSyncStyle }}">{{ deckSyncLabel }}</span>
+        </div>
+        <div style="display:flex;justify-content:center;padding:6px 0 12px">
+          <svg viewBox="0 0 220 220" style="width:220px;height:220px;display:block;touch-action:none">
+            <sc-for list="{{ segments }}" as="s" hint-placeholder-count="3">
+              <path d="{{ s.path }}" fill="{{ s.color }}"></path>
+            </sc-for>
+            <sc-for list="{{ handles }}" as="h" hint-placeholder-count="2">
+              <circle class="uf-handle" cx="{{ h.x }}" cy="{{ h.y }}" r="9" fill="#fff" stroke="#3f3f46" stroke-width="2" onPointerDown="{{ h.onDown }}"></circle>
+              <circle class="uf-handle" cx="{{ h.x }}" cy="{{ h.y }}" r="3" fill="#3f3f46" onPointerDown="{{ h.onDown }}"></circle>
+            </sc-for>
+            <text x="110" y="103" text-anchor="middle" font-size="13" fill="#a1a1aa" font-family="Inter" font-weight="600">Deploys</text>
+            <text x="110" y="128" text-anchor="middle" font-size="26" fill="#1A202C" font-family="Roboto Mono" font-weight="600">{{ raiseLabel }}</text>
+          </svg>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <sc-for list="{{ allocSliders }}" as="a" hint-placeholder-count="3">
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#3f3f46"><span style="width:10px;height:10px;border-radius:3px;background:{{ a.color }}"></span>{{ a.name }}</span>
+                <span style="display:flex;align-items:baseline;gap:8px"><span class="uf-mono" style="font-size:13px;font-weight:600;color:#1A202C">{{ a.dollars }}</span><span class="uf-mono" style="font-size:12px;color:#a1a1aa;width:38px;text-align:right">{{ a.pctLabel }}</span></span>
+              </div>
+              <input type="range" class="uf-sl" min="0" max="100" value="{{ a.pct }}" onInput="{{ a.onInput }}" style="{{ a.trackStyle }}">
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- RUNWAY SUMMARY -->
+      <div class="uf-card" style="padding:22px;border-color:{{ runwayBorder }}">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:12px">Runway at current burn</div>
+        <div style="display:flex;align-items:flex-end;gap:14px">
+          <div class="uf-mono" style="font-size:58px;font-weight:600;line-height:.9;color:{{ runwayColor }}">{{ runwayLabel }}</div>
+          <div style="padding-bottom:8px"><div style="font-size:14px;font-weight:600;color:#52525b">months</div><div style="font-size:12px;color:#a1a1aa;margin-top:2px">{{ runwayBand }}</div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:16px;padding-top:16px;border-top:1px solid #f4f4f5">
+          <div><div style="font-size:11px;color:#a1a1aa">Monthly burn</div><div class="uf-mono" style="font-size:15px;font-weight:600;margin-top:3px">{{ burnLabel }}</div></div>
+          <div><div style="font-size:11px;color:#a1a1aa">Largest driver</div><div style="font-size:15px;font-weight:600;margin-top:3px;color:#3f3f46">{{ driverName }}</div></div>
+          <div><div style="font-size:11px;color:#a1a1aa">Cash-out</div><div class="uf-mono" style="font-size:15px;font-weight:600;margin-top:3px">{{ cashOutLabel }}</div></div>
+        </div>
+      </div>
+
+      <!-- RUNWAY TIMELINE + THRESHOLDS -->
+      <div class="uf-card" style="padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Runway timeline · alert thresholds</div>
+        </div>
+        <div style="position:relative;height:34px;margin:8px 0 6px">
+          <div style="position:absolute;top:11px;left:0;right:0;height:12px;background:#f0f0f3;border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ runwayBarPct }};background:{{ runwayColor }};border-radius:999px"></div></div>
+          <sc-for list="{{ thresholdFlags }}" as="t" hint-placeholder-count="2">
+            <div style="position:absolute;top:0;left:{{ t.left }};transform:translateX(-50%)"><div style="width:2px;height:34px;background:{{ t.color }};margin:0 auto"></div><div class="uf-mono" style="font-size:9px;color:{{ t.color }};font-weight:600;white-space:nowrap;margin-top:1px">{{ t.label }}</div></div>
+          </sc-for>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#c4c4cc;margin-top:14px"><span>0</span><span>12mo</span><span>24mo</span><span>36mo</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:16px;flex-wrap:wrap">
+          <span style="font-size:11.5px;color:#71717a">Alert when below</span>
+          <sc-for list="{{ thresholdOptions }}" as="o" hint-placeholder-count="3">
+            <button onClick="{{ o.onClick }}" style="font-size:11.5px;font-weight:600;padding:5px 12px;border-radius:999px;cursor:pointer;{{ o.style }}">{{ o.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: milestone mapping + scenarios -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <!-- MILESTONE MAPPING -->
+      <div class="uf-card" style="padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Milestone → capital mapping</div>
+          <span style="font-size:11px;color:#a1a1aa">Cost per milestone · from Roadmap</span>
+        </div>
+        <sc-for list="{{ buckets }}" as="b" hint-placeholder-count="3">
+          <div style="margin-top:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:1px solid #f0f0f3">
+              <span style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#3f3f46"><span style="width:9px;height:9px;border-radius:3px;background:{{ b.color }}"></span>{{ b.name }}</span>
+              <span class="uf-mono" style="font-size:12.5px;font-weight:600;color:#1A202C">{{ b.dollars }}</span>
+            </div>
+            <sc-for list="{{ b.milestones }}" as="m" hint-placeholder-count="2">
+              <div style="display:grid;grid-template-columns:16px 1fr auto auto;gap:11px;align-items:center;padding:10px 0;border-bottom:1px solid #f8f8fa">
+                <span style="width:16px;height:16px;display:flex;color:{{ m.iconColor }}" dangerouslySetInnerHTML="{{ m.icon }}"></span>
+                <div style="min-width:0"><div style="font-size:13px;font-weight:500;color:#1A202C">{{ m.name }}</div><sc-if value="{{ m.flag }}"><div style="font-size:11px;font-weight:600;color:{{ m.flagColor }};margin-top:2px">{{ m.flag }}</div></sc-if></div>
+                <span class="uf-mono" style="font-size:12px;color:#71717a">{{ m.cost }}</span>
+                <span class="uf-mono" style="font-size:11px;color:#a1a1aa;width:64px;text-align:right">{{ m.efficiency }}</span>
+              </div>
+            </sc-for>
+            <sc-if value="{{ b.unmapped }}">
+              <div style="display:flex;align-items:center;gap:8px;padding:9px 0 2px"><span style="width:14px;height:14px;color:#d97706;display:flex" dangerouslySetInnerHTML="{{ icAlert }}"></span><span style="font-size:11.5px;color:#b45309">{{ b.unmapped }}</span></div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- SCENARIO BUILDER -->
+      <div class="uf-card" style="padding:22px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa">Scenario comparison</div>
+          <span style="font-size:11px;color:#a1a1aa">Same {{ splitLabel }} split · live</span>
+        </div>
+        <div style="padding:14px 2px 20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px"><span style="font-size:12px;color:#71717a">Custom raise</span><span class="uf-mono" style="font-size:14px;font-weight:600;color:#7c3aed">{{ raiseLabel }}</span></div>
+          <input type="range" class="uf-sl" min="250000" max="3000000" step="50000" value="{{ raise }}" onInput="{{ setRaise }}" style="background:linear-gradient(90deg,#7c3aed 0%,#7c3aed {{ raiseSliderPct }},#f0f0f3 {{ raiseSliderPct }},#f0f0f3 100%)">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#c4c4cc;margin-top:6px"><span class="uf-mono">$250K</span><span class="uf-mono">$3M</span></div>
+        </div>
+        <div class="uf-scen" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <sc-for list="{{ scenarios }}" as="s" hint-placeholder-count="3">
+            <div onClick="{{ s.onClick }}" style="border:1.5px solid {{ s.border }};background:{{ s.bg }};border-radius:13px;padding:15px 14px;cursor:pointer">
+              <div style="font-size:11.5px;font-weight:600;color:#71717a">{{ s.name }}</div>
+              <div class="uf-mono" style="font-size:20px;font-weight:600;margin-top:3px;color:#1A202C">{{ s.raise }}</div>
+              <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#a1a1aa">Runway</span><span class="uf-mono" style="font-size:12.5px;font-weight:600;color:{{ s.runwayColor }}">{{ s.runway }}</span></div>
+                <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#a1a1aa">Burn/mo</span><span class="uf-mono" style="font-size:12.5px;font-weight:600;color:#52525b">{{ s.burn }}</span></div>
+                <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#a1a1aa">Milestones</span><span class="uf-mono" style="font-size:12.5px;font-weight:600;color:#52525b">{{ s.coverage }}</span></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- SYNC CARD -->
+      <div class="uf-card" style="padding:20px 22px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:14px">Sync targets</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div style="display:flex;align-items:center;gap:11px"><span style="width:32px;height:32px;border-radius:9px;background:#f5f3ff;color:#7c3aed;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icDeck }}"></span><div><div style="font-size:13px;font-weight:600">Pitch Deck · Use of Funds slide</div><div style="font-size:11px;color:#a1a1aa">{{ deckSyncFull }}</div></div></div>
+            <button onClick="{{ syncDeckNow }}" style="font-size:12px;font-weight:600;color:#fff;background:#7c3aed;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;white-space:nowrap">Sync</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div style="display:flex;align-items:center;gap:11px"><span style="width:32px;height:32px;border-radius:9px;background:#ecfdf5;color:#0d9488;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ icAxal VC }}"></span><div><div style="font-size:13px;font-weight:600">Axal VC 30-Day Spin-Out export</div><div style="font-size:11px;color:#a1a1aa">{{ axalSyncFull }}</div></div></div>
+            <button onClick="{{ syncAxalNow }}" style="font-size:12px;font-weight:600;color:#0d9488;background:#ecfdf5;border:1px solid #99f6e4;border-radius:8px;padding:8px 14px;cursor:pointer;white-space:nowrap">Export</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INVESTOR PREVIEW MODAL -->
+<sc-if value="{{ previewOpen }}">
+  <div onClick="{{ closePreview }}" style="position:fixed;inset:0;background:rgba(24,24,27,.45);z-index:70;display:flex;align-items:flex-start;justify-content:center;padding:32px 24px;overflow-y:auto;backdrop-filter:blur(2px)">
+    <div onClick="{{ stop }}" style="width:100%;max-width:900px;background:#fff;border-radius:18px;box-shadow:0 24px 60px rgba(24,24,27,.3);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid #f0f0f3">
+        <div style="display:flex;align-items:center;gap:10px"><span style="width:15px;height:15px;color:#7c3aed;display:flex" dangerouslySetInnerHTML="{{ icEye }}"></span><span style="font-size:14px;font-weight:700">Investor preview · what an investor sees</span></div>
+        <button onClick="{{ closePreview }}" style="width:30px;height:30px;border-radius:8px;border:1px solid #ececf1;background:#fff;color:#71717a;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:7px"><span style="display:flex" dangerouslySetInnerHTML="{{ icX }}"></span></button>
+      </div>
+      <!-- pitch deck use of funds slide render -->
+      <div style="padding:26px 24px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin-bottom:10px">Pitch Deck · Use of Funds slide</div>
+        <div style="background:#0d0d12;border-radius:14px;padding:34px 36px;color:#fff">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:26px"><div style="font-size:22px;font-weight:800;letter-spacing:-.02em">Use of Funds</div><div class="uf-mono" style="font-size:14px;color:#a78bfa">{{ raiseLabel }} · {{ runwayLabel }}mo runway</div></div>
+          <div style="display:grid;grid-template-columns:200px 1fr;gap:34px;align-items:center">
+            <svg viewBox="0 0 220 220" style="width:180px;height:180px">
+              <sc-for list="{{ previewSegments }}" as="s" hint-placeholder-count="3"><path d="{{ s.path }}" fill="{{ s.color }}"></path></sc-for>
+              <text x="110" y="118" text-anchor="middle" font-size="24" fill="#fff" font-family="Roboto Mono" font-weight="600">{{ raiseLabel }}</text>
+            </svg>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <sc-for list="{{ allocSliders }}" as="a" hint-placeholder-count="3">
+                <div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px"><span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600"><span style="width:10px;height:10px;border-radius:3px;background:{{ a.color }}"></span>{{ a.name }}</span><span class="uf-mono" style="font-size:14px;color:#d4d4d8">{{ a.dollars }} · {{ a.pctLabel }}</span></div>
+                  <div style="height:8px;background:rgba(255,255,255,.1);border-radius:999px;overflow:hidden"><div style="height:100%;width:{{ a.pctLabel }};background:{{ a.color }};border-radius:999px"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- milestone efficiency table -->
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin:24px 0 10px">Milestone efficiency</div>
+        <div style="border:1px solid #f0f0f3;border-radius:12px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:1fr auto auto;background:#faf9fc;border-bottom:1px solid #f0f0f3"><div style="font-size:10.5px;font-weight:700;color:#71717a;padding:9px 14px">Milestone</div><div style="font-size:10.5px;font-weight:700;color:#71717a;padding:9px 14px;text-align:right">Capital</div><div style="font-size:10.5px;font-weight:700;color:#71717a;padding:9px 14px;text-align:right">Bucket</div></div>
+          <sc-for list="{{ previewMilestones }}" as="m" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:1fr auto auto;border-top:1px solid #f4f4f5"><div style="font-size:12.5px;color:#3f3f46;padding:10px 14px">{{ m.name }}</div><div class="uf-mono" style="font-size:12px;color:#1A202C;padding:10px 14px;text-align:right">{{ m.cost }}</div><div style="font-size:11.5px;color:#a1a1aa;padding:10px 14px;text-align:right">{{ m.bucket }}</div></div>
+          </sc-for>
+        </div>
+
+        <!-- axal format -->
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#a1a1aa;margin:24px 0 10px">Axal VC 30-Day Spin-Out export</div>
+        <div style="border:1px solid #d7f0ec;background:#f0fdfa;border-radius:12px;padding:20px 22px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><span style="width:26px;height:26px;border-radius:7px;background:#0d9488;color:#fff;display:flex;align-items:center;justify-content:center;padding:6px" dangerouslySetInnerHTML="{{ icAxal VC }}"></span><span style="font-size:14px;font-weight:800;color:#0f766e">Capital Plan · Cohort 3 Demo Day</span></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+            <div><div style="font-size:11px;color:#5b8c85">Raise target</div><div class="uf-mono" style="font-size:19px;font-weight:600;color:#0f766e;margin-top:3px">{{ raiseLabel }}</div></div>
+            <div><div style="font-size:11px;color:#5b8c85">Runway</div><div class="uf-mono" style="font-size:19px;font-weight:600;color:#0f766e;margin-top:3px">{{ runwayLabel }} mo</div></div>
+            <div><div style="font-size:11px;color:#5b8c85">Monthly burn</div><div class="uf-mono" style="font-size:19px;font-weight:600;color:#0f766e;margin-top:3px">{{ burnLabel }}</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;embedded&quot;:{&quot;editor&quot;:null,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { pct:{eng:55,gtm:30,ops:15}, raise:1000000, alertThreshold:6,
+    exportMenuOpen:false, previewOpen:false, deckSync:'2 min ago', axalSync:null };
+
+  ic(p,sw){ return { __html:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw||1.8}" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">${p}</svg>` }; }
+
+  fmt(n){ if(n>=1e6) return '$'+(n/1e6).toFixed(n%1e6===0?0:2).replace(/0$/,'')+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); }
+  fmt1(n){ if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); }
+
+  // donut segment path, fractions clockwise from top
+  arc(f0,f1,rOut,rIn){ const cx=110,cy=110; const P=(r,f)=>[cx+r*Math.sin(2*Math.PI*f),cy-r*Math.cos(2*Math.PI*f)];
+    const [x0,y0]=P(rOut,f0),[x1,y1]=P(rOut,f1),[x2,y2]=P(rIn,f1),[x3,y3]=P(rIn,f0);
+    const laf=(f1-f0)>0.5?1:0;
+    return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${rOut} ${rOut} 0 ${laf} 1 ${x1.toFixed(2)} ${y1.toFixed(2)} L${x2.toFixed(2)} ${y2.toFixed(2)} A${rIn} ${rIn} 0 ${laf} 0 ${x3.toFixed(2)} ${y3.toFixed(2)} Z`; }
+
+  setSlider(cat,val){ val=Math.max(0,Math.min(100,Math.round(val))); const p={...this.state.pct};
+    const others=['eng','gtm','ops'].filter(k=>k!==cat); const rem=100-val; const sum=p[others[0]]+p[others[1]];
+    let a,b; if(sum<=0){a=Math.round(rem/2);b=rem-a;} else {a=Math.round(rem*p[others[0]]/sum);b=rem-a;}
+    p[cat]=val; p[others[0]]=a; p[others[1]]=b;
+    this.setState({pct:p, deckSync:null, axalSync:null}); }
+
+  boundaryDown(idx,e){ e.preventDefault(); const svg=e.target.ownerSVGElement||e.target.closest('svg'); if(!svg) return;
+    const move=(ev)=>{ const r=svg.getBoundingClientRect(); const x=(ev.clientX-r.left)/r.width*220-110; const y=(ev.clientY-r.top)/r.height*220-110;
+      let ang=Math.atan2(x,-y)*180/Math.PI; let f=((ang%360)+360)%360/360;
+      const p={...this.state.pct}; const eng=p.eng/100,gtm=p.gtm/100,ops=p.ops/100; const mn=0.03;
+      if(idx===0){ let b0=Math.max(mn,Math.min(eng+gtm-mn,f)); p.eng=Math.round(b0*100); p.gtm=Math.round((eng+gtm-b0)*100); p.ops=100-p.eng-p.gtm; }
+      else { let b1=Math.max(eng+mn,Math.min(1-mn,f)); p.gtm=Math.round((b1-eng)*100); p.ops=Math.round((1-b1)*100); p.eng=100-p.gtm-p.ops; }
+      this.setState({pct:p,deckSync:null,axalSync:null}); };
+    const up=()=>{ window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',up); };
+    window.addEventListener('pointermove',move); window.addEventListener('pointerup',up); }
+
+  // burn model: intensity $/mo per 1% allocation (independent of raise)
+  burnOf(pct){ return pct.eng*700 + pct.gtm*1200 + pct.ops*450; }
+  runwayOf(raise,pct){ return raise/this.burnOf(pct); }
+  runwayColor(m){ return m>12?'#16a34a':m>=6?'#d97706':'#dc2626'; }
+
+  milestoneDefs(){ return {
+    eng:{name:'Engineering',color:'#4f46e5',items:[{name:'MVP launch',cost:150000},{name:'Beta release',cost:200000}]},
+    gtm:{name:'GTM',color:'#0891b2',items:[{name:'Waitlist to 1,000 users',cost:90000},{name:'First 10 paying pilots',cost:120000}]},
+    ops:{name:'Operations',color:'#7c3aed',items:[{name:'SOC 2 readiness',cost:60000},{name:'Data room + compliance',cost:40000}]},
+  }; }
+
+  renderVals(){
+    const ic=(p,sw)=>this.ic(p,sw); const st=this.state; const p=st.pct; const raise=st.raise;
+    const colors={eng:'#4f46e5',gtm:'#0891b2',ops:'#7c3aed'};
+    const dollars={eng:raise*p.eng/100,gtm:raise*p.gtm/100,ops:raise*p.ops/100};
+
+    // donut segments
+    const order=['eng','gtm','ops']; let acc=0; const segments=[]; const fracs={};
+    order.forEach(k=>{ const f0=acc, f1=acc+p[k]/100; fracs[k]={f0,f1}; segments.push({path:this.arc(f0,Math.min(f1,0.9999),100,58),color:colors[k]}); acc=f1; });
+    // handles at boundaries after eng and after gtm
+    const midR=79; const hp=(f)=>({x:(110+midR*Math.sin(2*Math.PI*f)).toFixed(2),y:(110-midR*Math.cos(2*Math.PI*f)).toFixed(2)});
+    const handles=[ {...hp(p.eng/100),onDown:(e)=>this.boundaryDown(0,e)}, {...hp((p.eng+p.gtm)/100),onDown:(e)=>this.boundaryDown(1,e)} ];
+
+    const allocSliders=order.map(k=>({ name:{eng:'Engineering',gtm:'GTM',ops:'Operations'}[k], color:colors[k], pct:p[k], pctLabel:p[k]+'%',
+      dollars:this.fmt1(dollars[k]),
+      trackStyle:`background:linear-gradient(90deg,${colors[k]} 0%,${colors[k]} ${p[k]}%,#f0f0f3 ${p[k]}%,#f0f0f3 100%)`,
+      onInput:(e)=>this.setSlider(k, parseInt(e.target.value,10)) }));
+
+    // runway
+    const burn=this.burnOf(p); const runway=raise/burn; const rColor=this.runwayColor(runway);
+    const runwayBand = runway>12?'Healthy · above 12 months':runway>=6?'Caution · 6–12 months':'Critical · under 6 months';
+    const driverContrib={eng:p.eng*700,gtm:p.gtm*1200,ops:p.ops*450};
+    const driverKey=Object.keys(driverContrib).sort((a,b)=>driverContrib[b]-driverContrib[a])[0];
+    const driverName={eng:'Engineering',gtm:'GTM',ops:'Operations'}[driverKey];
+    const cashOut=new Date(2026,6,20); cashOut.setMonth(cashOut.getMonth()+Math.round(runway));
+    const cashOutLabel=cashOut.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+
+    // alert
+    const alertActive = runway < st.alertThreshold;
+    const alertDriver = `${driverName} spend is your largest burn driver at ${this.fmt1(driverContrib[driverKey])}/mo — reallocating to lower-intensity buckets extends runway.`;
+
+    // runway timeline (36 mo scale)
+    const runwayBarPct=Math.min(100,runway/36*100).toFixed(1)+'%';
+    const thVals=[6,3]; const thresholdFlags=thVals.map(v=>({left:(v/36*100).toFixed(1)+'%',color:v<=3?'#dc2626':'#d97706',label:v+'mo'}));
+    const thresholdOptions=[6,3].map(v=>({label:v+' months',onClick:()=>this.setState({alertThreshold:v}),
+      style: st.alertThreshold===v?'color:#fff;background:#7c3aed;border:1px solid #7c3aed':'color:#71717a;background:#fff;border:1px solid #ececf1'}));
+    thresholdOptions.push({label:'12 months',onClick:()=>this.setState({alertThreshold:12}),
+      style: st.alertThreshold===12?'color:#fff;background:#7c3aed;border:1px solid #7c3aed':'color:#71717a;background:#fff;border:1px solid #ececf1'});
+
+    // milestone mapping
+    const defs=this.milestoneDefs(); const chk=ic('<polyline points="20 6 9 17 4 12"/>',2.4); const warn=ic('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',2);
+    const buckets=order.map(k=>{ const bd=dollars[k]; let cum=0; const items=defs[k].items;
+      const milestones=items.map(m=>{ cum+=m.cost; const funded=cum<=bd+1;
+        return { name:m.name, cost:this.fmt1(m.cost), icon:funded?chk:warn, iconColor:funded?'#16a34a':'#d97706',
+          efficiency:this.fmt1(m.cost), flag: funded?'':'Underfunded · orphaned deliverable', flagColor:'#d97706' }; });
+      const totalCost=items.reduce((s,m)=>s+m.cost,0); const leftover=bd-totalCost;
+      return { name:defs[k].name, color:defs[k].color, dollars:this.fmt1(bd), milestones,
+        unmapped: leftover>20000?`${this.fmt1(leftover)} unmapped — no milestone assigned (unaccounted spend)`:'' }; });
+
+    // scenarios
+    const presets=[{name:'Pre-seed',v:500000},{name:'Seed',v:1000000},{name:'Growth',v:2000000}];
+    const scenarios=presets.map(s=>{ const r=this.runwayOf(s.v,p); const b=this.burnOf(p);
+      const allCosts=order.reduce((a,k)=>a+defs[k].items.reduce((x,m)=>x+m.cost,0),0);
+      let covered=0,total=0; order.forEach(k=>{ const bd=s.v*p[k]/100; let cum=0; defs[k].items.forEach(m=>{cum+=m.cost;total++; if(cum<=bd+1)covered++;}); });
+      const active=Math.abs(s.v-raise)<25000;
+      return { name:s.name, raise:this.fmt(s.v), runway:r.toFixed(1)+'mo', runwayColor:this.runwayColor(r), burn:this.fmt1(b),
+        coverage:covered+'/'+total, onClick:()=>this.setState({raise:s.v,deckSync:null,axalSync:null}),
+        border: active?'#7c3aed':'#ececf1', bg: active?'#faf7ff':'#fff' }; });
+
+    // preview
+    const previewSegments=order.map(k=>({path:this.arc(fracs[k].f0,Math.min(fracs[k].f1,0.9999),100,60),color:colors[k]}));
+    const previewMilestones=[]; order.forEach(k=>defs[k].items.forEach(m=>previewMilestones.push({name:m.name,cost:this.fmt1(m.cost),bucket:defs[k].name})));
+
+    const syncLabel=(v)=> v?('Synced '+v):'Out of sync — click to update';
+    const deckSyncStyle = st.deckSync?'color:#166534;background:#dcfce7':'color:#b45309;background:#fffbeb';
+
+    return {
+      embeddedClass: this.props.embedded ? 'uf-embedded' : '',
+      raiseLabel:this.fmt(raise), raise, raiseSliderPct:((raise-250000)/(3000000-250000)*100).toFixed(1)+'%',
+      segments, handles, allocSliders,
+      runwayLabel:runway.toFixed(1), runwayColor:rColor, runwayBorder: runway<6?'#fecaca':'#ececf1', runwayBand,
+      burnLabel:this.fmt1(burn), driverName, cashOutLabel, runwayBarPct, thresholdFlags, thresholdOptions,
+      alertActive, alertThreshold:st.alertThreshold, alertDriver,
+      buckets, scenarios, splitLabel:`${p.eng}/${p.gtm}/${p.ops}`,
+      previewSegments, previewMilestones,
+      deckSyncLabel:syncLabel(st.deckSync), deckSyncStyle, deckSyncFull: st.deckSync?('Last synced '+st.deckSync):'Not synced — allocation changed since last push',
+      axalSyncFull: st.axalSync?('Last exported '+st.axalSync):'Not exported yet',
+      exportMenuOpen:st.exportMenuOpen, previewOpen:st.previewOpen,
+      toggleExport:()=>this.setState({exportMenuOpen:!st.exportMenuOpen}),
+      exportDeck:()=>this.setState({exportMenuOpen:false,deckSync:'just now'}),
+      exportAxal VC:()=>this.setState({exportMenuOpen:false,axalSync:'just now'}),
+      syncDeckNow:()=>this.setState({deckSync:'just now'}), syncAxalNow:()=>this.setState({axalSync:'just now'}),
+      openPreview:()=>this.setState({previewOpen:true,exportMenuOpen:false}), closePreview:()=>this.setState({previewOpen:false}),
+      stop:(e)=>e.stopPropagation(), back:(e)=>{e.preventDefault(); try{window.parent&&window.parent.postMessage({type:'uf-back'},'*');}catch(x){}},
+      icArrow:ic('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+      icDollar:ic('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+      icCheck:ic('<polyline points="20 6 9 17 4 12"/>',2.4),
+      icShare:ic('<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/>'),
+      icDownload:ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+      icChevD:ic('<polyline points="6 9 12 15 18 9"/>',2.2),
+      icCopy:ic('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+      icEye:ic('<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/>'),
+      icDeck:ic('<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>'),
+      icAxal VC:ic('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>'),
+      icAlert:ic('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',2),
+      icX:ic('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',2.2),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f0eced;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#881337;text-decoration:none}a:hover{text-decoration:underline}
+    .ab{padding:42px 46px 34px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 14px;flex-wrap:wrap}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:rgba(24,24,27,.6)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f7f7;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:184px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .main{flex:1;min-width:0;padding:0 0 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .hq{background:#881337;color:#fff;padding:9px 22px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+    .inner{padding:18px 22px 0}
+    .num{font-variant-numeric:tabular-nums}
+    .mono{font-family:ui-monospace,Menlo,monospace}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .c{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .zt{font-size:14.5px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px}
+    .th{font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 7px}
+    .td{font-size:12px;padding:8px 0;color:#3f3a49}
+    .vm{font-size:11.5px;font-weight:700;color:#881337;cursor:pointer}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e}
+    .prop{background:#fff5f7;border:1px solid #fbcfe0;border-radius:11px;padding:13px 15px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #881337;background:#881337;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    .danger{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1.5px solid #b91c1c;background:#fff;color:#b91c1c;cursor:pointer}
+    .gov{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 7px}
+    .warn{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:800;letter-spacing:.05em;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px}
+  </style>
+</helmet>
+
+<!-- ══════════ X1 · HUB ══════════ -->
+<section class="ab" id="x1">
+  <div class="ab-hd"><a class="ab-id" href="#x1">X1</a><span class="ab-nm">Super · Contracts hub</span><span class="ab-sub">oxblood · owns the system, not the paperwork</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The subsidiary tier holds contracts; this tier holds the <em>registry</em> that defines what a contract can be, the versioned library it is drawn from, and the policy for who may originate one at all. The cross-tenant ledger is the roll-up — everything above it is the machinery the subsidiaries consume read-only.</div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="7"><div style="{{ n.style }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <div class="hq">
+        <div style="display:flex;align-items:center;gap:11px">
+          <span style="width:15px;height:15px;display:block;flex:none" dangerouslySetInnerHTML="{{ globeIcon }}"></span>
+          <span style="font-size:12.5px;font-weight:700">All subsidiaries ▾</span>
+          <span class="num" style="font-size:11px;opacity:.72">{{ subCount }} tenants</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px">
+          <span class="num" style="font-size:11px;opacity:.72">{{ regCount }} registered types · {{ platContracts }} live contracts</span>
+          <span class="acc" style="background:#fff;color:#881337;border-color:#fff">New doc type ▸</span>
+        </div>
+      </div>
+      <div class="inner">
+        <h1 style="margin:0;font-size:23px;font-weight:800;letter-spacing:-.025em">Contracts</h1>
+        <div style="font-size:12.5px;color:#4a4553;margin-top:5px;line-height:1.5">{{ hubSub }}</div>
+
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:15px">
+          <sc-for list="{{ health }}" as="h" hint-placeholder-count="6">
+            <div style="{{ h.cardStyle }}">
+              <div class="lbl" style="font-size:8.5px;line-height:1.35">{{ h.label }}</div>
+              <div class="num" style="font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1;color:{{ h.ink }}">{{ h.value }}</div>
+              <div class="num" style="font-size:10px;color:#615c6e;margin-top:5px;line-height:1.4">{{ h.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div class="zh"><span class="zt">Doc-type registry</span><span class="zs">COLLECTION · {{ regCount }} types across four governance layers</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+            <sc-for list="{{ layers }}" as="l" hint-placeholder-count="4">
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px">
+                  <span style="{{ l.chip }}">{{ l.code }}</span>
+                  <span class="num" style="font-size:10.5px;font-weight:700;color:#615c6e">{{ l.n }} types</span>
+                </div>
+                <div style="font-size:10.5px;color:#615c6e;margin-bottom:9px;line-height:1.45">{{ l.desc }}</div>
+                <div style="display:grid;gap:8px">
+                  <sc-for list="{{ l.cards }}" as="d" hint-placeholder-count="3">
+                    <div style="{{ d.cardStyle }}">
+                      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:7px">
+                        <span style="font-size:11.5px;font-weight:700;line-height:1.35">{{ d.name }}</span>
+                        <sc-if value="{{ d.warn }}"><span class="warn">OVERLAP</span></sc-if>
+                      </div>
+                      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">
+                        <sc-for list="{{ d.roles }}" as="r" hint-placeholder-count="2"><span style="{{ r.style }}">{{ r.label }}</span></sc-for>
+                      </div>
+                      <div class="num" style="font-size:9.5px;color:#615c6e;margin-top:7px;line-height:1.45">{{ d.usage }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:#fffdf5;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-top:13px">
+            <div style="font-size:12px;font-weight:700;color:#92400e">{{ overlapTitle }}</div>
+            <div style="font-size:11.5px;color:#78350f;margin-top:6px;line-height:1.6">{{ overlapBody }}</div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><span class="gho">Compare the two</span><span class="acc">Merge into one type</span></div>
+          </div>
+        </div>
+
+        <div class="c" style="padding:16px 18px;margin-top:14px">
+          <div class="zh"><span class="zt">Cross-tenant oversight</span><span class="zs">LEDGER · subsidiary column first — the switcher narrows this table</span></div>
+          <div style="display:grid;grid-template-columns:.95fr 1.05fr 1.1fr .58fr .8fr .72fr .8fr;gap:10px">
+            <span class="th">Subsidiary</span><span class="th">Counterparty</span><span class="th">Document</span><span class="th">Layer</span><span class="th">Version</span><span class="th">Channel</span><span class="th">Status</span>
+          </div>
+          <sc-for list="{{ oversight }}" as="o" hint-placeholder-count="6">
+            <div style="{{ o.rowStyle }}">
+              <span class="td" style="font-weight:700">{{ o.sub }}</span>
+              <span class="td">{{ o.who }}</span>
+              <span class="td">{{ o.doc }}</span>
+              <span class="td"><span style="{{ o.layerStyle }}">{{ o.layer }}</span></span>
+              <span class="td mono" style="font-size:11px;color:{{ o.verInk }};font-weight:700">{{ o.ver }}</span>
+              <span class="td"><span style="{{ o.chanStyle }}">{{ o.channel }}</span></span>
+              <span class="td"><span style="{{ o.statusStyle }}">{{ o.status }}</span></span>
+            </div>
+          </sc-for>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7">
+            <span style="font-size:11.5px;color:#615c6e;line-height:1.55">{{ oversightNote }}</span>
+            <span class="vm">View more · contract record →</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.05fr 1fr;gap:14px;margin-top:14px">
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Master template library</span><span class="zs">Adoption, not just versions</span></div>
+            <div style="display:grid;gap:11px">
+              <sc-for list="{{ library }}" as="t" hint-placeholder-count="4">
+                <div style="{{ t.rowStyle }}">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+                    <div style="min-width:0">
+                      <div style="font-size:12.5px;font-weight:700">{{ t.name }}</div>
+                      <div class="mono" style="font-size:10px;color:#615c6e;margin-top:3px">current {{ t.cur }} · {{ t.vers }} versions</div>
+                    </div>
+                    <span style="{{ t.stalePill }}">{{ t.stale }}</span>
+                  </div>
+                  <div style="display:flex;height:7px;border-radius:999px;overflow:hidden;margin-top:9px">
+                    <sc-for list="{{ t.bars }}" as="b" hint-placeholder-count="3"><div style="{{ b.style }}"></div></sc-for>
+                  </div>
+                  <div class="num" style="font-size:10px;color:#615c6e;margin-top:6px;line-height:1.45">{{ t.adoption }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:12px"><span class="vm">View more · version history and diff →</span></div>
+          </div>
+
+          <div class="c" style="padding:16px 18px">
+            <div class="zh"><span class="zt">Compliance monitor</span><span class="zs">The COMPLIANCE layer, per tenant</span></div>
+            <div style="display:grid;grid-template-columns:1.05fr repeat(4,1fr);gap:8px;align-items:center">
+              <span class="th" style="padding:0"></span>
+              <sc-for list="{{ compCols }}" as="c" hint-placeholder-count="4"><span class="th" style="padding:0;font-size:8.5px;text-align:center">{{ c }}</span></sc-for>
+            </div>
+            <sc-for list="{{ compGrid }}" as="r" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:1.05fr repeat(4,1fr);gap:8px;align-items:center;margin-top:7px">
+                <span style="font-size:11px;font-weight:600">{{ r.sub }}</span>
+                <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="4"><div style="{{ c.style }}">{{ c.label }}</div></sc-for>
+              </div>
+            </sc-for>
+            <div style="display:grid;gap:7px;margin-top:13px;padding-top:12px;border-top:1px solid #f4f3f7">
+              <sc-for list="{{ compFeed }}" as="f" hint-placeholder-count="4">
+                <div style="display:grid;grid-template-columns:.55fr 1fr;gap:10px;align-items:baseline">
+                  <span class="num mono" style="font-size:10px;color:#615c6e">{{ f.when }}</span>
+                  <span style="font-size:11px;color:{{ f.ink }};line-height:1.45">{{ f.what }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.6">{{ compNote }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="ForgeRail" tier="super" page="Contracts" hint-size="100%,900px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ X2 · REGISTRY EDITOR ══════════ -->
+<section class="ab" id="x2">
+  <div class="ab-hd"><a class="ab-id" href="#x2">X2</a><span class="ab-nm">Registry editor — adding IP Assignment Agreement</span><span class="ab-sub">the worked example: the type the registry is missing</span></div>
+  <div class="ab-sub" style="max-width:1000px;margin:-6px 0 16px">The registry holds an IP <em>License</em> and no IP <em>Assignment</em> — a licence grants use, an assignment transfers ownership, and a spin-out needs the second one. That gap is why this flow exists as a worked example rather than an empty form.</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1.05fr;gap:16px">
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div class="lbl">Steps 1–3 · Name, layer, roles</div>
+      <div style="display:grid;gap:11px;margin-top:12px">
+        <div>
+          <div class="lbl" style="font-size:8.5px;margin-bottom:5px">Friendly title</div>
+          <div style="border:1.5px solid #881337;border-radius:8px;padding:9px 11px;font-size:13px;font-weight:600;background:#fff5f7">IP Assignment Agreement</div>
+        </div>
+        <div>
+          <div class="lbl" style="font-size:8.5px;margin-bottom:6px">Governance layer</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <sc-for list="{{ layerPick }}" as="l" hint-placeholder-count="4"><div style="{{ l.style }}">{{ l.code }}</div></sc-for>
+          </div>
+          <div style="font-size:10.5px;color:#615c6e;margin-top:7px;line-height:1.5">{{ layerWhy }}</div>
+        </div>
+        <div>
+          <div class="lbl" style="font-size:8.5px;margin-bottom:6px">Party roles</div>
+          <div style="display:grid;gap:6px">
+            <sc-for list="{{ partyRoles }}" as="p" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #ececf1;background:#fbfbfc;border-radius:8px;padding:8px 10px">
+                <div style="min-width:0"><div style="font-size:11.5px;font-weight:700">{{ p.role }}</div><div style="font-size:10px;color:#615c6e;margin-top:3px">{{ p.who }}</div></div>
+                <span style="{{ p.pill }}">{{ p.sign }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:10.5px;color:#615c6e;margin-top:7px;line-height:1.5">{{ roleWhy }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div class="lbl">Step 4 · Required fields</div>
+      <div style="font-size:11.5px;color:#3f3a49;margin-top:9px;line-height:1.6">{{ fieldWhy }}</div>
+      <div style="display:grid;gap:7px;margin-top:12px">
+        <sc-for list="{{ reqFields }}" as="f" hint-placeholder-count="5">
+          <div style="{{ f.rowStyle }}">
+            <div style="min-width:0">
+              <div style="font-size:11.5px;font-weight:700">{{ f.name }}</div>
+              <div class="num" style="font-size:10px;color:#615c6e;margin-top:3px">{{ f.type }}</div>
+            </div>
+            <span style="{{ f.pill }}">{{ f.state }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border:1px solid #fde68a;background:#fffbf2;border-radius:9px;padding:11px 12px;margin-top:12px">
+        <div style="font-size:11px;color:#78350f;line-height:1.6">{{ forgeNote }}</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:18px 20px">
+      <div class="lbl">Step 5 · Availability &amp; blast radius</div>
+      <div style="display:grid;gap:7px;margin-top:12px">
+        <sc-for list="{{ availRows }}" as="a" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid {{ a.edge }};background:{{ a.bg }};border-radius:9px">
+            <div style="min-width:0"><div style="font-size:11.5px;font-weight:700">{{ a.tenant }}</div><div style="font-size:10px;color:#615c6e;margin-top:3px">{{ a.note }}</div></div>
+            <span style="{{ a.pill }}">{{ a.state }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="border:1px solid #f9c8d2;background:#fff5f7;border-radius:9px;padding:12px 13px;margin-top:13px">
+        <div class="lbl" style="font-size:8.5px;color:#881337">Publishing</div>
+        <div style="font-size:11.5px;color:#4c0519;margin-top:7px;line-height:1.6">{{ publishNote }}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;background:#881337;color:#fff">Publish v1.0</span>
+          <span style="font-size:12px;font-weight:600;padding:8px 12px;border-radius:8px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49">Save draft</span>
+        </div>
+        <div class="num" style="font-size:10px;color:#615c6e;margin-top:9px;line-height:1.5">{{ stepUpNote }}</div>
+      </div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const OX = '#881337', OXT = '#fff5f7', OXE = '#f9c8d2';
+    const I = {
+      home:  this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      lic:   this.ic('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>'),
+      fund:  this.ic('<path d="M12 2v20M6 7h9a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h10"/>'),
+      con:   this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>'),
+      team:  this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/>'),
+      sup:   this.ic('<circle cx="12" cy="12" r="9"/><path d="M9.2 9.4a2.9 2.9 0 0 1 5.5 1c0 1.9-2.7 2.4-2.7 4M12 17.5h.01"/>'),
+      sec:   this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/>'),
+      globe: this.ic('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 3 2.6 15 0 18-2.6-3-2.6-15 0-18"/>')
+    };
+    const NAV = [['Home',I.home],['Licences',I.lic],['Funds',I.fund],['Contracts',I.con],['Team',I.team],['Support',I.sup],['Security',I.sec]];
+
+    // ══ ONE registry. Counts, the overlap flag, the library and the compliance grid all
+    // derive from it — a header total cannot disagree with the cards beneath it. ══
+    const LAYERS = [
+      { code:'PLATFORM', desc:'HQ ↔ the world. Signed by Axal VC itself.', tint:'#fff5f7', edge:'#f9c8d2', ink:'#881337',
+        types:[
+          { name:'Subsidiary Licence', roles:['HQ','Licensee'], live:5, ver:'v3.1' },
+          { name:'Platform Terms of Service', roles:['HQ','Any user'], live:1284, ver:'v4.2' },
+          { name:'Data Processing Addendum', roles:['HQ','Licensee'], live:5, ver:'v2.0' }
+        ]},
+      { code:'FUND', desc:'Capital instruments. Bound to a fund, not a tenant.', tint:'#f5f5ff', edge:'#c7d2fe', ink:'#4338ca',
+        types:[
+          { name:'LPA', roles:['GP','LP'], live:9, ver:'v2.2' },
+          { name:'Subscription Agreement', roles:['Fund','LP'], live:112, ver:'v2.2' },
+          { name:'Carried Interest Agreement', roles:['GP entity','Member'], live:23, ver:'v1.4' },
+          { name:'Side Letter', roles:['GP','LP'], live:14, ver:'—' }
+        ]},
+      { code:'VENTURE', desc:'Company formation and equity. The spin-out layer.', tint:'#faf7ff', edge:'#d8c9ff', ink:'#6d28d9',
+        types:[
+          { name:'SAFE', roles:['Company','Investor'], live:61, ver:'v1.3' },
+          { name:'Co-founder Agreement', roles:['Founder','Founder'], live:38, ver:'v2.0' },
+          { name:'IP License', roles:['Licensor','Company'], live:7, ver:'v1.1' },
+          { name:'Advisor Agreement (FAST)', roles:['Company','Advisor'], live:44, ver:'v1.2' }
+        ]},
+      { code:'ENGAGEMENT', desc:'People and services. Time-boxed by definition.', tint:'#f2fdf7', edge:'#a7f3d0', ink:'#047857',
+        types:[
+          { name:'Service Agreement', roles:['Client','Partner'], live:76, ver:'v3.0' },
+          { name:'Mutual NDA', roles:['Party','Party'], live:203, ver:'v1.0' },
+          { name:'Venture Partner Agreement', roles:['Firm','Member'], live:6, ver:'v1.0' }
+        ]}
+    ];
+    const allTypes = LAYERS.reduce((a, l) => a.concat(l.types), []);
+    const regCount = allTypes.length;
+    const platContracts = allTypes.reduce((a, t) => a + t.live, 0);
+    const unversioned = allTypes.filter(t => t.ver === '—');
+
+    const SUBS = ['France','Benelux','DACH','Nordics','Iberia'];
+    const rolePill = (r) => 'font-size:8.5px;font-weight:700;padding:2px 6px;border-radius:3px;background:#f4f4f6;color:#4a4553;border:1px solid #e8e8ec;white-space:nowrap';
+
+    // ONE overlap predicate. The badge, the count and the affected-contract sum all read it,
+    // so retiring a type updates the tile and the cards together.
+    const isOverlap = (t) => /FAST|Venture Partner Agreement/.test(t.name);
+    const overlapTypes = allTypes.filter(isOverlap);
+    const TONE = { plain:['#fff','#ececf1','#18181b'], ok:['#f2fdf7','#a7f3d0','#047857'],
+                   warn:['#fffbf2','#fde68a','#92400e'], bad:[OXT,OXE,OX] };
+
+    const pill = (t) => {
+      const M = { Signed:['#ecfdf5','#047857','#a7f3d0'], Executed:['#ecfdf5','#047857','#a7f3d0'],
+                  Current:['#ecfdf5','#047857','#a7f3d0'], Sent:['#fffbf2','#92400e','#fde68a'],
+                  Behind:['#fffbf2','#92400e','#fde68a'], Draft:['#f4f4f6','#615c6e','#e4e4e8'],
+                  'Counter-sign':[OXT,OX,OXE], Blocked:['#fef2f2','#b91c1c','#fecaca'],
+                  Required:[OXT,OX,OXE], Optional:['#f4f4f6','#615c6e','#e4e4e8'],
+                  Live:['#ecfdf5','#047857','#a7f3d0'], Pending:['#fffbf2','#92400e','#fde68a'] };
+      const c = M[t] || M.Draft;
+      return 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+
+    const OVERSIGHT = [
+      { sub:'France', cp:'Novacraft SAS', doc:'SAFE', layer:'VENTURE', ver:'v1.3', chan:'Native', state:'Executed' },
+      { sub:'Benelux', cp:'Studio Vireo', doc:'Service Agreement', layer:'ENGAGEMENT', ver:'v2.8', chan:'DocuSign', state:'Behind' },
+      { sub:'DACH', cp:'Helvetia Capital', doc:'Subscription Agreement', layer:'FUND', ver:'v2.2', chan:'Native', state:'Sent' },
+      { sub:'France', cp:'HQ · Axal VC', doc:'Subsidiary Licence', layer:'PLATFORM', ver:'v3.1', chan:'Native', state:'Counter-sign' },
+      { sub:'Nordics', cp:'Bråten AB', doc:'Mutual NDA', layer:'ENGAGEMENT', ver:'v1.0', chan:'DocuSign', state:'Signed' },
+      { sub:'Iberia', cp:'—', doc:'—', layer:'—', ver:'—', chan:'—', state:'Blocked' }
+    ];
+    const behind = OVERSIGHT.filter(o => o.state === 'Behind');
+    const counter = OVERSIGHT.filter(o => o.state === 'Counter-sign');
+
+    const LIB = [
+      { name:'Subsidiary Licence', ver:'v3.1', versN:4, on:5, behindN:0, draft:0 },
+      { name:'Service Agreement', ver:'v3.0', versN:6, on:3, behindN:2, draft:0 },
+      { name:'SAFE', ver:'v1.3', versN:3, on:4, behindN:0, draft:1 },
+      { name:'Carried Interest Agreement', ver:'v1.4', versN:2, on:2, behindN:0, draft:3 }
+    ];
+    const staleTemplates = LIB.filter(t => t.behindN > 0);
+    const layerChip = (code) => {
+      const l = LAYERS.filter(x => x.code === code)[0];
+      if (!l) return 'font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 6px;border-radius:3px;background:#f4f4f6;color:#615c6e;border:1px solid #e8e8ec;white-space:nowrap';
+      return 'font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 6px;border-radius:3px;background:'+l.tint+';color:'+l.ink+';border:1px solid '+l.edge+';white-space:nowrap';
+    };
+    const overlapLive = overlapTypes.reduce((a, t) => a + t.live, 0);
+
+    // ══ X2 sources. Both notes read these, so the worked example cannot state two counts
+    // of the same fact. AVAIL carries `tenants` because one row covers two territories. ══
+    const ipLicense = allTypes.filter(t => t.name === 'IP License')[0];
+    const AVAIL = [
+      { tenant:'France', tenants:1, note:'2 spin-outs mid-formation', state:'Live' },
+      { tenant:'Benelux', tenants:1, note:'No formation activity this quarter', state:'Live' },
+      { tenant:'DACH · Nordics', tenants:2, note:'Opt-in — university IP rules differ by jurisdiction', state:'Pending' },
+      { tenant:'Iberia', tenants:1, note:'Suspended — receives nothing until reinstated', state:'Blocked' }
+    ];
+    const tenantsIn = (st) => AVAIL.filter(a => a.state === st).reduce((a, r) => a + r.tenants, 0);
+    const liveTenants = tenantsIn('Live');
+    const pendingTenants = tenantsIn('Pending');
+
+    const GRID = SUBS.map(sub => {
+      const cells = ['Licence','DPA','LPA','Carry'].map(k => {
+        const bad = (sub === 'Iberia');
+        const warn = (sub === 'Benelux' && k === 'DPA') || (sub === 'Nordics' && k === 'Carry');
+        return { label: bad ? '—' : (warn ? '!' : '✓'),
+          style:'text-align:center;font-size:11px;font-weight:800;padding:5px 0;border-radius:6px;'
+            + (bad ? 'background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8'
+                : (warn ? 'background:#fffbf2;color:#92400e;border:1px solid #fde68a'
+                        : 'background:#f2fdf7;color:#047857;border:1px solid #a7f3d0')) };
+      });
+      return { sub, cells };
+    });
+
+    return {
+      nav: NAV.map(([label, icon]) => ({ label, icon,
+        style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
+          + (label === 'Contracts' ? 'font-weight:700;color:' + OX + ';background:' + OXT + ';box-shadow:inset 2px 0 0 ' + OX
+                                   : 'font-weight:600;color:#4a4553') })),
+      globeIcon: I.globe,
+      subCount: String(SUBS.length),
+      regCount: String(regCount),
+      platContracts: platContracts.toLocaleString('en-US'),
+      hubSub: 'The registry that defines what a contract can be, the master templates every tenant instantiates from, and read-only oversight of the ' + platContracts.toLocaleString('en-US') + ' contracts those definitions produced.',
+
+      // Emitted keys match the template's dotted reads exactly: label/value/note/ink/cardStyle.
+      health: [
+        { label:'Registered types', value:String(regCount), note:'four governance layers', tone:'plain' },
+        { label:'Live contracts', value:platContracts.toLocaleString('en-US'), note:'across ' + SUBS.length + ' tenants', tone:'plain' },
+        { label:'Unversioned types', value:String(unversioned.length), note: unversioned.length ? unversioned[0].name : 'all have a master', tone: unversioned.length ? 'warn' : 'ok' },
+        // Counts TEMPLATES, per the label — LIB rows with a behind count, not OVERSIGHT contracts.
+        { label:'Templates behind', value:String(staleTemplates.length),
+          // Note reads LIB too — behindN counts tenants on a superseded master, and OVERSIGHT
+          // is a visible sample, not a total.
+          note: staleTemplates.length
+            ? staleTemplates.reduce((a, t) => a + t.behindN, 0) + ' tenants affected'
+            : 'all tenants current',
+          tone: staleTemplates.length ? 'warn' : 'ok' },
+        { label:'Awaiting counter-sign', value:String(counter.length), note:'HQ is the blocker', tone: counter.length ? 'warn' : 'ok' },
+        { label:'Overlapping types', value:String(overlapTypes.length), note:overlapLive + ' contracts affected', tone:'bad' }
+      ].map(h => {
+        const c = TONE[h.tone];
+        return { label:h.label, value:h.value, note:h.note, ink:c[2],
+          cardStyle:'background:' + c[0] + ';border:1px solid ' + c[1] + ';border-radius:11px;padding:11px 12px' };
+      }),
+
+      layers: LAYERS.map(l => ({
+        code:l.code, desc:l.desc, n:String(l.types.length),
+        chip:'font-size:9px;font-weight:800;letter-spacing:.07em;padding:2px 7px;border-radius:4px;background:'+l.tint+';color:'+l.ink+';border:1px solid '+l.edge,
+        cards:l.types.map(t => ({
+          name:t.name, ver:t.ver, warn: isOverlap(t),
+          usage:t.live.toLocaleString('en-US') + ' live · ' + (t.ver === '—' ? 'no master template' : 'master ' + t.ver),
+          verPill:'font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;white-space:nowrap;'
+            + (t.ver === '—' ? 'background:#fffbf2;color:#92400e;border:1px solid #fde68a'
+                             : 'background:#f4f4f6;color:#615c6e;border:1px solid #e8e8ec'),
+          roles:t.roles.map(r => ({ label:r, style:rolePill(r) })),
+          cardStyle:'border:1px solid ' + (t.ver === '—' ? '#fde68a;background:#fffdf5' : '#ececf1;background:#fbfbfc') + ';border-radius:9px;padding:10px 11px'
+        }))
+      })),
+
+      overlapTitle: 'Advisor Agreement (FAST) and Venture Partner Agreement overlap',
+      overlapBody: 'Both grant equity to a non-employee for advisory work; the only real difference is vesting length and whether the person sources deals. ' + overlapLive + ' live contracts sit across the two, which means every tenant is guessing which to use. Merging them into one type with a vesting variant is the cheaper fix — two near-identical types is how a registry stops being a registry.',
+
+      // who / channel / status + their own style keys, per the template's dotted reads.
+      oversight: OVERSIGHT.map(o => ({
+        sub:o.sub, who:o.cp, doc:o.doc, layer:o.layer, ver:o.ver, channel:o.chan, status:o.state,
+        layerStyle: layerChip(o.layer),
+        verInk: o.state === 'Behind' ? '#92400e' : '#615c6e',
+        chanStyle:'font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;'
+          + (o.chan === 'Native' ? 'background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE
+              : (o.chan === '—' ? 'background:#f4f4f6;color:#615c6e;border:1px solid #e8e8ec'
+                                : 'background:#f4f4f6;color:#4a4553;border:1px solid #e8e8ec')),
+        statusStyle: pill(o.state),
+        rowStyle:'display:grid;grid-template-columns:.8fr 1.1fr 1.15fr .85fr .55fr .7fr .85fr;gap:10px;align-items:center;padding:9px 0;border-top:1px solid #f4f3f7;'
+          + (o.state === 'Blocked' ? 'opacity:.55;' : (o.state === 'Behind' ? 'background:#fffdf5;' : ''))
+      })),
+      oversightNote: 'Read-only: HQ can see that ' + behind.length + ' Benelux contract' + (behind.length === 1 ? ' is' : 's are')
+        + ' on a superseded template and that ' + counter.length + ' licence awaits its own counter-signature, but cannot open the document body. Iberia is suspended, so its row carries no contract at all rather than a redacted one — there is no oversight query that returns a suspended tenant\u2019s paperwork.',
+
+      library: LIB.map(t => {
+        const total = t.on + t.behindN + t.draft;
+        const seg = [[t.on, '#047857'], [t.behindN, '#f59e0b'], [t.draft, '#d4d2dc']];
+        return {
+          name:t.name, cur:t.ver, vers:String(t.versN),
+          stale: t.behindN ? t.behindN + ' behind' : 'Current',
+          stalePill: pill(t.behindN ? 'Behind' : 'Current'),
+          adoption:t.on + ' current · ' + t.behindN + ' behind · ' + t.draft + ' not adopted',
+          bars:seg.map(([n, col]) => ({ style:'width:' + (n / total * 100) + '%;background:' + col })),
+          rowStyle:'border:1px solid ' + (t.behindN ? '#fde68a;background:#fffdf5' : '#ececf1;background:#fbfbfc') + ';border-radius:10px;padding:12px 13px'
+        };
+      }),
+
+      compCols: ['Licence','DPA','LPA','Carry'],
+      compGrid: GRID,
+      compFeed: [
+        { when:'2d ago', what:'DACH adopted Service Agreement v3.0' },
+        { when:'6d ago', what:'Nordics carry agreement drafted, unsigned' },
+        { when:'11d ago', what:'Benelux DPA flagged — v1.4 against master v2.0' },
+        { when:'Aug 3', what:'Iberia suspended; compliance tracking paused' }
+      ],
+      compNote: 'A tick means the tenant holds the current master version. An exclamation means they hold an older one, which is a real exposure on a DPA and a paperwork chore on a carry agreement — the grid does not rank them, because the layer already does.',
+
+      // ══ X2 · registry editor ══
+      layerPick: ['PLATFORM','FUND','VENTURE','ENGAGEMENT'].map(c => ({
+        code:c,
+        style:'text-align:center;font-size:10.5px;font-weight:800;letter-spacing:.06em;padding:8px 0;border-radius:7px;'
+          + (c === 'VENTURE' ? 'background:#faf7ff;color:#6d28d9;border:1.5px solid #d8c9ff'
+                             : 'background:#fff;color:#615c6e;border:1px solid #ececf1')
+      })),
+      layerWhy: 'VENTURE, because an IP assignment is company-formation paperwork — it binds a founder and the entity, not HQ and a tenant. The layer decides who may instantiate it, so this choice is an authority decision, not a filing one.',
+
+      partyRoles: [
+        { role:'Assignor', who:'The individual or institution transferring ownership', sign:'Required' },
+        { role:'Assignee', who:'The newly formed company', sign:'Required' },
+        { role:'Institutional witness', who:'Tech-transfer office, where university IP is involved', sign:'Optional' }
+      ].map(p => ({ role:p.role, who:p.who, sign:p.sign, pill:pill(p.sign) })),
+      roleWhy: 'Two required parties and one conditional. The witness role exists because a university spin-out cannot execute an assignment without its transfer office, and a type that cannot express that would be instantiated wrongly five times before anyone noticed.',
+
+      fieldWhy: 'Fields are what make a type machine-readable rather than a PDF with a name. Each becomes a column the contract record can be queried on — which is how the oversight table above knows a version is behind without opening anything.',
+      reqFields: [
+        { name:'IP description', type:'text · long', state:'Required' },
+        { name:'Assignment effective date', type:'date', state:'Required' },
+        { name:'Consideration', type:'currency', state:'Required' },
+        { name:'Prior inventions excluded', type:'text · list', state:'Optional' },
+        { name:'Institutional approval ref', type:'text · short', state:'Optional' }
+      ].map(f => ({ name:f.name, type:f.type, state:f.state, pill:pill(f.state),
+        rowStyle:'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid '
+          + (f.state === 'Required' ? OXE + ';background:' + OXT : '#ececf1;background:#fbfbfc') + ';border-radius:9px' })),
+      forgeNote: 'Forge drafted these five fields from the ' + ipLicense.live + ' IP License contracts already in the registry and flagged that none of them capture consideration — which is the clause that makes an assignment enforceable. It proposed; it did not add. Publishing is a human action with step-up auth.',
+
+      availRows: AVAIL.map(a => {
+        const C = { Live:['#a7f3d0','#f2fdf7'], Pending:['#fde68a','#fffbf2'], Blocked:['#e4e4e8','#f4f4f6'] }[a.state];
+        return { tenant:a.tenant, note:a.note, state:a.state, edge:C[0], bg:C[1], pill:pill(a.state) };
+      }),
+
+      publishNote: 'Publishing v1.0 makes the type instantiable in ' + liveTenants + ' tenants immediately and offers it to '
+        + pendingTenants + ' more. It does not touch the ' + ipLicense.live
+        + ' existing IP License contracts — a new type never rewrites live paperwork, which is the rule that lets HQ publish without a migration.',
+      stepUpNote: 'Step-up auth · typed reason required · recorded in Security as registry.type.publish'
+    };
+  }
+}
+</script>
+</body>
+</html>

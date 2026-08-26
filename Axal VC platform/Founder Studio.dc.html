@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#F8F8FA;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}
+    .fs-mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+    .fs-lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#a1a1aa}
+    .fs-btn{cursor:pointer;transition:filter .12s,background .12s,border-color .12s}.fs-btn:hover{filter:brightness(.97)}
+    .fs-card{transition:border-color .13s,box-shadow .13s}.fs-card:hover{border-color:#ddd8ec;box-shadow:0 2px 10px rgba(24,24,27,.05)}
+    .fs-root.fs-embedded{padding:0 0 90px!important}
+    .fs-root.fs-embedded .fs-topline{display:none!important}
+    .fs-root.fs-embedded .fs-header{display:none!important}
+    @media (max-width:1080px){.fs-adv{grid-template-columns:1fr!important}}
+    @media (max-width:1080px){.fs-main{grid-template-columns:1fr!important}.fs-strip{grid-template-columns:repeat(3,1fr)!important}.fs-mods{grid-template-columns:1fr 1fr!important}}
+    @media (max-width:760px){.fs-strip{grid-template-columns:1fr 1fr!important}.fs-mods{grid-template-columns:1fr!important}.fs-rail{display:none!important}}
+  </style>
+</helmet>
+
+<div class="fs-root {{ embeddedClass }}" style="max-width:100%;margin:0 auto;padding:0 24px 90px">
+  <div class="fs-topline" style="height:3px;background:#7c3aed;border-radius:0 0 3px 3px"></div>
+
+  <!-- HEADER -->
+  <div class="fs-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:22px 0 18px">
+    <div style="min-width:0">
+      <div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+        <span style="width:30px;height:30px;flex:none;border-radius:9px;background:#f3effe;color:#6d28d9;display:flex;align-items:center;justify-content:center;padding:6px" dangerouslySetInnerHTML="{{ studioIcon }}"></span>
+        <h1 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-.02em">Studio</h1>
+        <span style="font-size:11px;font-weight:700;border-radius:99px;padding:3px 10px;background:#f3effe;color:#6d28d9">{{ phaseBadge }}</span>
+      </div>
+      <div style="font-size:13.5px;color:#71717a;margin-top:6px;max-width:620px"><strong style="color:#3f3f46;font-weight:700">{{ company }}</strong> · {{ founderLine }} — everything you have built across the platform, what it unlocked, and what to do next.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;flex:none">
+      <div class="fs-btn" style="padding:8px 14px;border-radius:9px;border:1px solid #ececf1;background:#fff;font-size:12.5px;font-weight:600;color:#3f3f46">Company profile</div>
+      <div class="fs-btn" onClick="{{ resumeNext }}" style="padding:8px 16px;border-radius:9px;background:#6d28d9;color:#fff;font-size:12.5px;font-weight:700">Continue where you left off</div>
+    </div>
+  </div>
+
+  <!-- ============ PERSONAL ADVISOR + TICKETS ============ -->
+  <div style="border:1px solid #e4defb;border-radius:16px;overflow:hidden;background:#fff;margin-bottom:20px">
+    <!-- advisor header -->
+    <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:linear-gradient(135deg,#f5f3ff,#faf9ff);border-bottom:1px solid #ece7fb">
+      <span style="width:34px;height:34px;flex:none;border-radius:10px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;padding:7px" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:15px;font-weight:800;letter-spacing:-.015em">Personal Advisor</div>
+        <div style="font-size:12px;color:#71717a;margin-top:1px">{{ advisorRole }} · {{ advAnswered }}/{{ advTotal }} answered ({{ advPct }})</div>
+      </div>
+      <div class="fs-btn" onClick="{{ toggleTicket }}" style="{{ ticketBtnStyle }}">
+        <span style="width:14px;height:14px;display:flex;flex:none" dangerouslySetInnerHTML="{{ ticketIcon }}"></span>
+        Open a ticket
+      </div>
+    </div>
+
+    <!-- ticket form -->
+    <sc-if value="{{ ticketOpen }}">
+      <div style="padding:18px 20px;border-bottom:1px solid #ececf1;background:#fdfcff">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:14px;height:14px;display:flex;flex:none;color:#6d28d9" dangerouslySetInnerHTML="{{ ticketIcon }}"></span>
+            <span style="font-size:13.5px;font-weight:700;color:#6d28d9">Open a support ticket</span>
+          </div>
+          <div class="fs-btn" onClick="{{ closeTicket }}" style="width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#a1a1aa">×</div>
+        </div>
+        <sc-if value="{{ !ticketFiled }}">
+          <input value="{{ tf.summary }}" onChange="{{ setTicketSummary }}" placeholder="Brief summary of the issue" style="{{ ticketInputStyle }};width:100%;box-sizing:border-box">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:11px">
+            <span style="font-size:12.5px;font-weight:600;color:#52525b;flex:none">Priority</span>
+            <div style="display:flex;gap:5px">
+              <sc-for list="{{ priorities }}" as="p" hint-placeholder-count="3">
+                <div class="fs-btn" onClick="{{ p.go }}" style="{{ p.style }}">{{ p.label }}</div>
+              </sc-for>
+            </div>
+            <span style="font-size:12.5px;font-weight:600;color:#52525b;flex:none;margin-left:6px">Type</span>
+            <div style="display:flex;gap:5px">
+              <sc-for list="{{ ticketTypes }}" as="t" hint-placeholder-count="3">
+                <div class="fs-btn" onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+          <textarea value="{{ tf.detail }}" onChange="{{ setTicketDetail }}" rows="3" placeholder="Optional — add any details that would help us help you" style="{{ ticketInputStyle }};width:100%;box-sizing:border-box;margin-top:11px;resize:vertical"></textarea>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
+            <div class="fs-btn" onClick="{{ fileTicket }}" style="{{ fileTicketStyle }}">File ticket</div>
+            <div class="fs-btn" onClick="{{ closeTicket }}" style="font-size:12.5px;font-weight:600;color:#71717a">Cancel</div>
+            <span style="margin-left:auto;font-size:11.5px;color:#a1a1aa">{{ openTicketNote }}</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{ ticketFiled }}">
+          <div style="display:flex;align-items:center;gap:11px;padding:13px 15px;border-radius:11px;background:#f0fdf4;border:1px solid #d5f2de">
+            <span style="width:20px;height:20px;flex:none;border-radius:50%;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;padding:4px" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+            <div style="min-width:0">
+              <div style="font-size:13px;font-weight:700;color:#15803d">Ticket {{ ticketId }} filed</div>
+              <div style="font-size:11.5px;color:#4a7a5c;margin-top:2px">{{ tf.priority }} priority · {{ tf.type }} · tracked in your ticket queue</div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <!-- advisor body -->
+    <div class="fs-adv" style="display:grid;grid-template-columns:1fr 330px">
+      <!-- thread -->
+      <div style="border-right:1px solid #ececf1;display:flex;flex-direction:column">
+        <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;min-height:250px">
+          <sc-for list="{{ thread }}" as="m" hint-placeholder-count="5">
+            <div style="{{ m.rowStyle }}">
+              <div style="{{ m.bubbleStyle }}">{{ m.text }}</div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ hasDeepLink }}">
+            <div style="align-self:flex-start;background:#f4f4f5;border-radius:12px;padding:12px 14px;max-width:70%">
+              <div style="font-size:13px;color:#3f3f46">Opening {{ deepLinkName }}.</div>
+              <div class="fs-btn" onClick="{{ openDeepLink }}" style="display:inline-flex;align-items:center;gap:6px;margin-top:9px;padding:7px 13px;border-radius:8px;background:#7c3aed;color:#fff;font-size:12px;font-weight:700">Open {{ deepLinkName }} →</div>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- composer -->
+        <div style="border-top:1px solid #ececf1;padding:12px 20px 16px;margin-top:auto">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:11px">
+            <span style="font-size:12.5px;color:#71717a"><strong style="color:#6d28d9;font-weight:700">Currently:</strong> {{ currentQuestion }}</span>
+            <div class="fs-btn" onClick="{{ explain }}" style="margin-left:auto;font-size:12px;font-weight:600;color:#6d28d9">Explain</div>
+          </div>
+          <sc-if value="{{ explainOpen }}">
+            <div style="font-size:12px;color:#71717a;line-height:1.6;padding:10px 13px;border-radius:10px;background:#faf9fc;border:1px solid #f0eff3;margin-bottom:11px">{{ explainText }}</div>
+          </sc-if>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+            <sc-for list="{{ quickReplies }}" as="qr" hint-placeholder-count="4">
+              <div class="fs-btn" onClick="{{ qr.go }}" style="padding:6px 14px;border-radius:99px;border:1px solid #ddd6f3;background:#fff;font-size:12.5px;font-weight:600;color:#6d28d9">{{ qr.label }}</div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <input value="{{ draft }}" onChange="{{ setDraft }}" placeholder="Type your answer, or name a module to open it" style="flex:1;min-width:0;padding:11px 14px;border-radius:10px;border:1px solid #ececf1;background:#faf9fc;font-size:13px;color:#18181b;outline:none">
+            <div class="fs-btn" onClick="{{ skip }}" title="Skip this question" style="width:34px;height:34px;flex:none;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#a1a1aa;padding:8px" dangerouslySetInnerHTML="{{ skipIcon }}"></div>
+            <div class="fs-btn" onClick="{{ send }}" style="{{ sendBtnStyle }}"><span style="width:15px;height:15px;display:flex" dangerouslySetInnerHTML="{{ sendIcon }}"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- proposed rail -->
+      <div style="padding:16px 18px;background:#fdfdfe;max-height:430px;overflow-y:auto">
+        <div class="fs-lbl" style="font-size:9.5px;margin-bottom:10px">Focus a section</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+          <sc-for list="{{ sections }}" as="sc" hint-placeholder-count="4">
+            <div class="fs-btn" onClick="{{ sc.go }}" style="{{ sc.style }}">{{ sc.label }}</div>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+          <span class="fs-lbl" style="font-size:9.5px">Proposed</span>
+          <span class="fs-mono" style="font-size:11px;font-weight:700;color:#a1a1aa">{{ proposedCount }}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{ proposed }}" as="p" hint-placeholder-count="5">
+            <div class="fs-card" style="border:1px solid #f0eff3;border-radius:11px;padding:11px 13px;background:#fff">
+              <div style="display:flex;align-items:flex-start;gap:8px">
+                <span style="width:14px;height:14px;flex:none;margin-top:2px;color:#7c3aed" dangerouslySetInnerHTML="{{ sparkIcon }}"></span>
+                <span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#27272a;line-height:1.45">{{ p.q }}</span>
+                <span style="{{ p.weightChip }}">{{ p.weight }}</span>
+              </div>
+              <div style="height:4px;border-radius:99px;background:#f1f0f5;overflow:hidden;margin:9px 0 8px"><div style="height:100%;width:{{ p.pct }};background:#c4b5fd;border-radius:99px"></div></div>
+              <div style="display:flex;align-items:center;gap:11px">
+                <div class="fs-btn" onClick="{{ p.learn }}" style="font-size:11px;font-weight:600;color:#a1a1aa">Learn</div>
+                <div class="fs-btn" onClick="{{ p.go }}" style="margin-left:auto;font-size:11px;font-weight:700;color:#6d28d9">{{ p.dest }} →</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATE TOGGLE -->
+  <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:18px">
+    <span class="fs-lbl" style="font-size:9.5px">Preview state</span>
+    <sc-for list="{{ stateTabs }}" as="t" hint-placeholder-count="4">
+      <div class="fs-btn" onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</div>
+    </sc-for>
+  </div>
+
+  <!-- SUMMARY STRIP -->
+  <div class="fs-strip" style="display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:#ececf1;border:1px solid #ececf1;border-radius:14px;overflow:hidden;margin-bottom:22px">
+    <sc-for list="{{ summary }}" as="s" hint-placeholder-count="6">
+      <div style="background:#fff;padding:15px 17px">
+        <div class="fs-mono" style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:{{ s.tone }}">{{ s.v }}</div>
+        <div class="fs-lbl" style="font-size:9.5px;margin-top:4px">{{ s.k }}</div>
+        <sc-if value="{{ s.sub }}"><div style="font-size:10.5px;color:#a1a1aa;margin-top:3px">{{ s.sub }}</div></sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <div class="fs-main" style="display:grid;grid-template-columns:1fr 342px;gap:20px;align-items:start">
+
+    <!-- ============ LEFT COLUMN ============ -->
+    <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+
+      <!-- NEXT BEST ACTIONS -->
+      <div id="fs-next" style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+          <div class="fs-lbl">Do these next</div>
+          <span style="font-size:11.5px;color:#a1a1aa">Ordered by what they unblock, not by due date</span>
+        </div>
+        <sc-if value="{{ hasActions }}">
+          <sc-for list="{{ actions }}" as="a" hint-placeholder-count="4">
+            <div class="fs-card" style="padding:14px 0;border-top:1px solid #f4f4f5">
+              <div style="display:flex;align-items:flex-start;gap:13px">
+                <span class="fs-mono" style="flex:none;width:20px;font-size:12px;font-weight:800;color:#6d28d9;margin-top:2px">{{ a.n }}</span>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:14px;font-weight:700;line-height:1.35">{{ a.title }}</span>
+                    <span style="{{ a.moduleChip }}">{{ a.module }}</span>
+                    <sc-if value="{{ a.urgent }}"><span style="font-size:10px;font-weight:700;border-radius:99px;padding:2px 8px;background:#fee2e2;color:#b91c1c">Blocking</span></sc-if>
+                  </div>
+                  <div style="font-size:12.5px;color:#71717a;line-height:1.6;margin-top:5px">{{ a.why }}</div>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
+                    <span style="font-size:11px;font-weight:600;color:#15803d;background:#f0fdf4;border-radius:7px;padding:3px 9px">Unlocks {{ a.unlocks }}</span>
+                    <span class="fs-mono" style="font-size:11px;color:#a1a1aa">{{ a.effort }}</span>
+                  </div>
+                </div>
+                <div class="fs-btn" style="flex:none;padding:7px 14px;border-radius:9px;border:1px solid #ececf1;font-size:12px;font-weight:600;color:#3f3f46">Open</div>
+              </div>
+            </div>
+          </sc-for>
+        </sc-if>
+        <sc-if value="{{ !hasActions }}">
+          <div style="padding:26px 0 8px;border-top:1px solid #f4f4f5">
+            <div style="font-size:13.5px;font-weight:700;color:#15803d">Nothing is waiting on you right now.</div>
+            <div style="font-size:12.5px;color:#71717a;line-height:1.6;margin-top:6px;max-width:440px">Every open deliverable for this week is either done or with an advisor. The next batch opens at the Week 3 gate.</div>
+          </div>
+        </sc-if>
+      </div>
+
+      <!-- COMPANY PROGRESS -->
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+          <div class="fs-lbl">Company progress</div>
+          <span style="font-size:11.5px;color:#a1a1aa">{{ stageNote }}</span>
+        </div>
+        <!-- lifecycle rail -->
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <sc-for list="{{ lifecycle }}" as="l" hint-placeholder-count="4">
+            <div style="flex:1">
+              <div style="height:6px;border-radius:99px;background:{{ l.barTone }}"></div>
+              <div style="font-size:11px;font-weight:700;color:{{ l.textTone }};margin-top:7px">{{ l.name }}</div>
+              <div style="font-size:10.5px;color:#a1a1aa;margin-top:2px">{{ l.state }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:18px;padding-top:16px;border-top:1px solid #f4f4f5" class="fs-mods">
+          <div>
+            <div class="fs-lbl" style="font-size:9.5px;color:#15803d;margin-bottom:9px">Shipped</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <sc-for list="{{ shipped }}" as="d" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start;gap:9px">
+                  <span style="width:15px;height:15px;flex:none;margin-top:2px;border-radius:50%;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;padding:3px" dangerouslySetInnerHTML="{{ checkIcon }}"></span>
+                  <span style="font-size:12.5px;color:#3f3f46;line-height:1.5">{{ d }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <div class="fs-lbl" style="font-size:9.5px;color:#b45309;margin-bottom:9px">Still open</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <sc-for list="{{ stillOpen }}" as="d" hint-placeholder-count="4">
+                <div style="display:flex;align-items:flex-start;gap:9px">
+                  <span style="width:15px;height:15px;flex:none;margin-top:2px;border-radius:50%;border:1.5px solid #e4e4e7;box-sizing:border-box"></span>
+                  <span style="font-size:12.5px;color:#71717a;line-height:1.5">{{ d }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;margin-top:16px;padding:11px 14px;border-radius:11px;background:#f5f3ff;border:1px solid #e4defb">
+          <span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#6d28d9;flex:none">Gate</span>
+          <span style="font-size:12.5px;color:#3f3f46;line-height:1.55">{{ gateNote }}</span>
+        </div>
+      </div>
+
+      <!-- QUESTIONS -->
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+          <div class="fs-lbl">Advisor questions</div>
+          <span style="font-size:11.5px;color:#a1a1aa">{{ qAnswered }} answered · {{ qPending }} open</span>
+        </div>
+        <div style="font-size:12.5px;color:#71717a;line-height:1.6;margin-bottom:14px;max-width:540px">Each answer raises confidence somewhere specific. These are ordered by how much they move it.</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+            <div class="fs-card" style="border:1px solid #f0eff3;border-radius:12px;padding:14px 16px;background:#faf9fc">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="{{ q.stateChip }}">{{ q.state }}</span>
+                <span style="font-size:11px;font-weight:600;color:#6d28d9;background:#f3effe;border-radius:7px;padding:2px 8px">{{ q.impact }}</span>
+                <span class="fs-mono" style="margin-left:auto;font-size:10.5px;color:#a1a1aa">{{ q.when }}</span>
+              </div>
+              <div style="font-size:13.5px;font-weight:600;color:#27272a;line-height:1.5;margin-top:9px">{{ q.q }}</div>
+              <sc-if value="{{ q.answer }}">
+                <div style="font-size:12px;color:#71717a;line-height:1.6;margin-top:7px;padding-left:11px;border-left:2px solid #e4defb">{{ q.answer }}</div>
+              </sc-if>
+              <sc-if value="{{ q.pending }}">
+                <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+                  <div class="fs-btn" onClick="{{ q.go }}" style="padding:7px 14px;border-radius:9px;background:#6d28d9;color:#fff;font-size:12px;font-weight:700">{{ q.cta }}</div>
+                  <span style="font-size:11.5px;color:#a1a1aa">{{ q.liftLabel }}</span>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- ACTIVITY -->
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+          <div class="fs-lbl">Activity across the platform</div>
+          <span style="font-size:11.5px;color:#a1a1aa">Last 7 days</span>
+        </div>
+        <sc-for list="{{ activity }}" as="a" hint-placeholder-count="6">
+          <div style="display:flex;align-items:flex-start;gap:13px;padding:12px 0;border-top:1px solid #f4f4f5">
+            <span class="fs-mono" style="flex:none;width:62px;white-space:nowrap;font-size:11px;color:#a1a1aa;margin-top:2px">{{ a.when }}</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:600;color:#27272a;line-height:1.4">{{ a.what }}</span>
+                <span style="{{ a.moduleChip }}">{{ a.module }}</span>
+              </div>
+              <div style="font-size:11.5px;color:#71717a;line-height:1.5;margin-top:4px">→ {{ a.feeds }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- MODULE MAP -->
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:22px">
+        <div class="fs-lbl" style="margin-bottom:14px">Module map</div>
+        <div class="fs-mods" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <sc-for list="{{ modules }}" as="m" hint-placeholder-count="9">
+            <div class="fs-card" style="border:1px solid #f0eff3;border-radius:12px;padding:13px 15px;background:{{ m.bg }};opacity:{{ m.opacity }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <span style="font-size:12.5px;font-weight:700;color:{{ m.nameTone }}">{{ m.name }}</span>
+                <span style="{{ m.stateChip }}">{{ m.state }}</span>
+              </div>
+              <div style="height:5px;border-radius:99px;background:#f1f0f5;overflow:hidden;margin-top:10px"><div style="height:100%;width:{{ m.pct }};background:{{ m.barTone }};border-radius:99px"></div></div>
+              <div style="font-size:11px;color:#a1a1aa;margin-top:6px">{{ m.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ RIGHT RAIL ============ -->
+    <div class="fs-rail" style="display:flex;flex-direction:column;gap:18px;position:sticky;top:20px">
+
+      <!-- FOUNDER PROFILE -->
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:20px">
+        <div class="fs-lbl" style="margin-bottom:14px">Your founder profile</div>
+        <div style="display:flex;align-items:center;gap:15px">
+          <div style="position:relative;width:66px;height:66px;flex:none">
+            <svg viewBox="0 0 36 36" style="width:100%;height:100%;transform:rotate(-90deg)">
+              <circle cx="18" cy="18" r="15.5" fill="none" stroke="#f1f0f5" stroke-width="4"></circle>
+              <circle cx="18" cy="18" r="15.5" fill="none" stroke="#7c3aed" stroke-width="4" stroke-linecap="round" stroke-dasharray="{{ profileDash }}"></circle>
+            </svg>
+            <div class="fs-mono" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800">{{ profilePct }}</div>
+          </div>
+          <div style="min-width:0">
+            <div style="font-size:13.5px;font-weight:800">{{ archetype }}</div>
+            <div style="font-size:11.5px;color:#71717a;line-height:1.5;margin-top:3px">{{ archetypeNote }}</div>
+          </div>
+        </div>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid #f4f4f5">
+          <div class="fs-lbl" style="font-size:9.5px;margin-bottom:9px">Confidence by dimension</div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <sc-for list="{{ dimensions }}" as="d" hint-placeholder-count="4">
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                  <span style="font-size:12px;color:#3f3f46">{{ d.name }}</span>
+                  <span class="fs-mono" style="font-size:11px;font-weight:700;color:{{ d.tone }}">{{ d.label }}</span>
+                </div>
+                <div style="height:5px;border-radius:99px;background:#f1f0f5;overflow:hidden;margin-top:5px"><div style="height:100%;width:{{ d.pct }};background:{{ d.tone }};border-radius:99px"></div></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <!-- WHAT'S HOLDING PROGRESS -->
+      <div style="background:#fff;border:1px solid #ececf1;border-radius:16px;padding:20px">
+        <div class="fs-lbl" style="margin-bottom:12px">Holding progress</div>
+        <sc-if value="{{ hasBlockers }}">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <sc-for list="{{ blockers }}" as="b" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                  <span style="font-size:12.5px;font-weight:700;color:#27272a">{{ b.title }}</span>
+                  <span style="{{ b.sevChip }}">{{ b.sev }}</span>
+                </div>
+                <div style="font-size:11.5px;color:#71717a;line-height:1.55;margin-top:4px">{{ b.effect }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ !hasBlockers }}">
+          <div style="font-size:12.5px;color:#15803d;font-weight:600;line-height:1.6">Nothing is blocked. Every open item has an owner and a date.</div>
+        </sc-if>
+      </div>
+
+      <!-- WHAT THE SYSTEM READS -->
+      <div style="background:linear-gradient(135deg,#f5f3ff,#faf9ff);border:1px solid #e4defb;border-radius:16px;padding:20px">
+        <div class="fs-lbl" style="color:#6d28d9;margin-bottom:12px">What this adds up to</div>
+        <div style="display:flex;flex-direction:column;gap:13px">
+          <sc-for list="{{ implications }}" as="i" hint-placeholder-count="4">
+            <div>
+              <div style="font-size:11px;font-weight:700;color:#6b5b95;text-transform:uppercase;letter-spacing:.05em">{{ i.k }}</div>
+              <div style="font-size:12.5px;color:#3f3f46;line-height:1.6;margin-top:4px">{{ i.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;color:#8a7cae;line-height:1.55;margin-top:14px;padding-top:12px;border-top:1px solid #e4defb">Read from your completed work and answers — not a prediction.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1320},&quot;embedded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { mode:'active', answeringQ:'',
+    ticketOpen:false, ticketFiled:false, tf:{ summary:'', detail:'', priority:'Medium', type:'Task' },
+    thread:null, draft:'', explainOpen:false, section:'All', qIndex:0, deepLink:'' };
+
+  ic(p, sw){ return { __html:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="'+(sw||2)+'" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const st = this.state, mode = st.mode, P = '#6d28d9';
+    const chip = (bg,fg) => 'display:inline-block;padding:2px 9px;border-radius:99px;font-size:10px;font-weight:700;background:'+bg+';color:'+fg+';white-space:nowrap';
+    const GREEN = chip('#dcfce7','#15803d'), AMBER = chip('#fef3c7','#b45309'), GREY = chip('#f4f4f5','#71717a'),
+          PURPLE = chip('#f3effe', P), RED = chip('#fee2e2','#b91c1c'), BLUE = chip('#eff6ff','#2563eb');
+
+    const STATES = [
+      { k:'new', label:'New founder' }, { k:'active', label:'Cohort · Week 2' },
+      { k:'blocked', label:'Cohort · blocked' }, { k:'advanced', label:'Cohort · Week 4' },
+      { k:'independent', label:'Not in a cohort' },
+    ];
+    const stateTabs = STATES.map(s => ({ label:s.label, go: () => this.setState({ mode:s.k, thread:null, qIndex:0, draft:'', explainOpen:false, deepLink:'', section:'All' }),
+      style:'padding:5px 12px;border-radius:8px;font-size:11.5px;font-weight:600;border:1px solid '
+        + (mode===s.k ? P : '#ececf1') + ';background:' + (mode===s.k ? 'rgba(109,40,217,.06)' : '#fff')
+        + ';color:' + (mode===s.k ? P : '#71717a') }));
+
+    const isNew = mode==='new', isBlocked = mode==='blocked', isAdv = mode==='advanced', isIndie = mode==='independent';
+    const inCohort = !isIndie;
+
+    // ---- Personal Advisor + tickets ----
+    // Single source of truth for the advisor counters: the header, the summary strip,
+    // and the Advisor questions section all derive from advTotalN / answeredN below.
+    const advTotalN = isNew ? 12 : isIndie ? 12 : isAdv ? 43 : 23;
+    const baseAnswered = isNew ? 0 : isAdv ? 41 : isIndie ? 5 : 18;
+
+    const QUEUE = isIndie ? [
+      { q:'What are you building, in one sentence a customer would recognise?', chips:['Type it out'], why:'Every module reads your one-liner. Without it, matching and scoring have nothing to anchor to.' },
+      { q:'How far along is the product — idea, prototype, or in front of users?', chips:['Idea','Prototype','With users','Revenue'], why:'Stage decides which modules are useful to you now versus noise.' },
+      { q:'What is the single thing most likely to kill this in the next 90 days?', chips:['Distribution','Product','Team','Capital'], why:'This sets what the advisor prioritises for you, and which experts to surface.' },
+    ] : [
+      { q:'Have you ever owned a revenue number end to end?', chips:['Yes, directly','Partly','No'], why:'Fundraising is your lowest-confidence dimension. This answer moves it more than any other question in the queue.' },
+      { q:'What does your co-founder do better than you, specifically?', chips:['Technical depth','Commercial','Operations','Still deciding'], why:'The equity conversation stalls without a stated division of strengths. This unblocks it.' },
+      { q:'How often should the two of you review progress together?', chips:['Daily','Weekly','Fortnightly'], why:'Sets the Studio Ops cadence, which drives every accountability signal downstream.' },
+    ];
+    const qi = Math.min(st.qIndex, QUEUE.length-1);
+    const currentQ = QUEUE[qi];
+
+    const defaultThread = isNew ? [] : isIndie ? [
+      { who:'them', text:'What are you working on right now?' },
+      { who:'you',  text:'Async workflow tooling for distributed teams.' },
+      { who:'them', text:'Who feels that pain hardest today?' },
+      { who:'you',  text:'Ops leads at 50–500 person SaaS companies.' },
+    ] : [
+      { who:'them', text:'What did the last 5 interviews change about your solution?' },
+      { who:'you',  text:'Dropped the freemium tier — sensitivity clustered at $200/mo.' },
+      { who:'them', text:'Which part of the build will you most likely underestimate?' },
+      { who:'you',  text:'Slack integration scope. Timeboxed to a spike in Cycle 2.' },
+    ];
+    const seededAnswers = defaultThread.filter(m => m.who==='you').length;
+    const liveAnswers = st.thread ? st.thread.filter(m => m.who==='you').length : seededAnswers;
+    const answeredN = Math.min(advTotalN, baseAnswered + (liveAnswers - seededAnswers));
+    const advPct = Math.round(answeredN/advTotalN*100)+'%';
+
+    const thread = (st.thread || defaultThread).map(m => ({
+      text:m.text,
+      rowStyle:'display:flex;justify-content:'+(m.who==='you'?'flex-end':'flex-start'),
+      bubbleStyle: m.who==='you'
+        ? 'max-width:74%;background:#7c3aed;color:#fff;border-radius:13px;padding:10px 14px;font-size:13px;line-height:1.5;font-weight:600'
+        : 'max-width:74%;background:#f4f4f5;color:#3f3f46;border-radius:13px;padding:10px 14px;font-size:13px;line-height:1.5',
+    }));
+
+    const DEEP_LINKS = ['Dashboard','Roadmap','Profiling','Customer Discovery','Pitch Deck','Studio Ops','Capital','Signals'];
+    const pushMsg = (text, advance) => {
+      const base = (this.state.thread || defaultThread).slice();
+      base.push({ who:'you', text });
+      const hit = DEEP_LINKS.find(d => text.toLowerCase().indexOf(d.toLowerCase()) > -1);
+      const next = advance ? Math.min(this.state.qIndex+1, QUEUE.length-1) : this.state.qIndex;
+      if (advance && this.state.qIndex < QUEUE.length-1) base.push({ who:'them', text: QUEUE[next].q });
+      this.setState({ thread:base, qIndex:next, draft:'', explainOpen:false, deepLink: hit || '' });
+    };
+
+    const quickReplies = currentQ.chips.map(c => ({ label:c, go: () => pushMsg(c, true) }));
+
+    const SECTIONS = isIndie ? ['All','Product','Customers','Team','Capital'] : ['All','Profile','Venture','Team','Capital'];
+    const sections = SECTIONS.map(s => ({ label:s, go: () => this.setState({ section:s }),
+      style:'padding:5px 11px;border-radius:99px;font-size:11px;font-weight:700;letter-spacing:.02em;border:1px solid '
+        + (st.section===s ? P : '#ececf1') + ';background:' + (st.section===s ? 'rgba(109,40,217,.06)' : '#fff')
+        + ';color:' + (st.section===s ? P : '#71717a') }));
+
+    const mkProp = (q, sec, weight, pct, dest) => ({ q, sec, weight, pct, dest,
+      weightChip: weight==='High' ? chip('#f3effe',P) : GREY,
+      learn: () => {}, go: () => {} });
+    const ALL_PROPOSED = isIndie ? [
+      mkProp('Which customer segment have you actually spoken to?','Customers','High','20%','Open Discovery'),
+      mkProp('What would make someone switch from what they use today?','Customers','High','15%','Open Discovery'),
+      mkProp('Are you building alone, or looking for a co-founder?','Team','High','0%','Open Matching'),
+      mkProp('What does the next 90 days need to prove?','Product','Normal','30%','Open Roadmap'),
+      mkProp('Have you raised anything, or is this self-funded?','Capital','Normal','0%','Open Capital'),
+      mkProp('What have you shipped that people have used?','Product','Normal','45%','Open Roadmap'),
+    ] : [
+      mkProp('Which functional area have you run, not just studied?','Profile','High','40%','Open Profiling'),
+      mkProp('What would make you walk away from this idea?','Profile','High','0%','Open Profiling'),
+      mkProp('Who owns the fundraise conversation on your team?','Capital','High','10%','Open Capital'),
+      mkProp('Which 2–3 metrics do you watch weekly?','Venture','Normal','25%','Open Roadmap'),
+      mkProp('How should equity vest if a founder leaves in year one?','Team','Normal','0%','Open Matching'),
+      mkProp('What conditions should trigger an advisor escalation?','Venture','Normal','60%','Open Studio Ops'),
+      mkProp('Where should operational alerts reach you?','Venture','Normal','80%','Open Settings'),
+    ];
+    const proposed = ALL_PROPOSED.filter(p => st.section==='All' || p.sec===st.section);
+
+    const PRIORITIES = ['Low','Medium','High','Urgent'];
+    const TYPES = ['Task','Bug','Question','Access'];
+    const pillStyle = (on) => 'padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid '
+      + (on ? P : '#ececf1') + ';background:' + (on ? 'rgba(109,40,217,.06)' : '#fff') + ';color:' + (on ? P : '#71717a');
+    const priorities = PRIORITIES.map(p => ({ label:p, go: () => this.setState(s => ({ tf: Object.assign({}, s.tf, { priority:p }) })), style: pillStyle(st.tf.priority===p) }));
+    const ticketTypes = TYPES.map(t => ({ label:t, go: () => this.setState(s => ({ tf: Object.assign({}, s.tf, { type:t }) })), style: pillStyle(st.tf.type===t) }));
+    const canFile = st.tf.summary.trim().length > 0;
+
+    // ---- header context ----
+    const phaseBadge = isNew ? 'Week 1 · Day 1' : isAdv ? 'Week 4 · Day 25' : isIndie ? 'Independent · not in a cohort' : 'Week 2 · Day 11';
+    const company = isNew ? 'Untitled venture' : isIndie ? 'Fieldnote' : 'NovaCraft AI';
+    const founderLine = isNew ? 'Guillaume L. · profile not started' : isIndie ? 'Guillaume L. · Studio access' : 'Guillaume L. · Cohort 4';
+
+    // ---- summary ----
+    const summary = isIndie ? [
+      { k:'Venture progress', v:'22%', tone:'#18181b', sub:'Self-directed' },
+      { k:'Profile complete', v:'41%', tone:'#b45309', sub:'7 gaps' },
+      { k:'Questions answered', v: String(answeredN), tone:'#18181b', sub: (advTotalN - answeredN) + ' waiting' },
+      { k:'Modules active', v:'4', tone:'#18181b', sub:'of 8 available' },
+      { k:'Tasks done', v:'6', tone:'#18181b', sub:'cumulative' },
+      { k:'Readiness', v:'44', tone:'#b45309', sub:'thin evidence' },
+    ] : isNew ? [
+      { k:'Company progress', v:'4%', tone:'#18181b', sub:'Week 1 opened' },
+      { k:'Profile complete', v:'0%', tone:'#b45309', sub:'Not started' },
+      { k:'Questions answered', v: String(answeredN), tone:'#18181b', sub: (advTotalN - answeredN) + ' waiting' },
+      { k:'Modules active', v:'2', tone:'#18181b', sub:'of 12' },
+      { k:'Tasks done', v:'0', tone:'#18181b', sub:'this week' },
+      { k:'Readiness', v:'—', tone:'#a1a1aa', sub:'needs evidence' },
+    ] : isAdv ? [
+      { k:'Company progress', v:'88%', tone:'#15803d', sub:'Week 4 of 4' },
+      { k:'Profile complete', v:'94%', tone:'#15803d', sub:'High confidence' },
+      { k:'Questions answered', v: String(answeredN), tone:'#18181b', sub: (advTotalN - answeredN) + ' waiting' },
+      { k:'Modules active', v:'11', tone:'#18181b', sub:'of 12' },
+      { k:'Tasks done', v:'34', tone:'#18181b', sub:'cumulative' },
+      { k:'Readiness', v:'79', tone:'#15803d', sub:'+8 this week' },
+    ] : [
+      { k:'Company progress', v:'37%', tone:'#18181b', sub:'Week 2 of 4' },
+      { k:'Profile complete', v:'68%', tone:P, sub:'3 gaps' },
+      { k:'Questions answered', v: String(answeredN), tone:'#18181b', sub: (advTotalN - answeredN) + ' waiting' },
+      { k:'Modules active', v:'6', tone:'#18181b', sub:'of 12' },
+      { k:'Tasks done', v:'11', tone:'#18181b', sub:'cumulative' },
+      { k:'Readiness', v:'71', tone: isBlocked ? '#b45309' : P, sub: isBlocked ? 'stalled 4 days' : '+6 this week' },
+    ];
+
+    // ---- actions ----
+    const mkAction = (n, title, module, why, unlocks, effort, urgent) => ({
+      n:'0'+n, title, module, why, unlocks, effort, urgent, moduleChip: PURPLE });
+    const actions = isIndie ? [
+      mkAction(1,'Finish your profiling assessment','Profiling','41% complete. Matching, scoring, and advisor recommendations all read from it.','advisor and expert matching','~15 min',false),
+      mkAction(2,'Log your first 3 customer interviews','Customer Discovery','You have a stated ICP but no evidence behind it yet.','a defensible problem statement','~2 hrs',false),
+      mkAction(3,'Apply to the next cohort','Spin-Out Lab','Cohort 5 opens Sep 1. Your current evidence would make a reviewable application.','the 28-day structured programme','~20 min',false),
+    ] : isNew ? [
+      mkAction(1,'Answer the first profiling block','Profiling','Nothing else can be tailored to you until the system knows your skills and archetype.','co-founder matching and advisor fit','~12 min',false),
+      mkAction(2,'Create your startup record','Startups','Every other module reads the company one-liner, sector, and stage from here.','all Week 1 deliverables','~6 min',false),
+      mkAction(3,'Define your ICP hypothesis','Customer Discovery','You need a stated ICP before interviews can confirm or contradict anything.','interview logging','~15 min',false),
+    ] : isAdv ? [
+      mkAction(1,'File the 83(b) election','83(b) Election','The 30-day IRS window closes in 5 days. Missing it cannot be undone.','clean cap table for diligence','~20 min',true),
+      mkAction(2,'Answer the last 2 profiling questions','Profiling','Both sit on dimensions the Scoring Engine still marks low-confidence.','a defensible readiness score','~5 min',false),
+    ] : isBlocked ? [
+      mkAction(1,'Resolve the co-founder equity split','Co-founder Match','Four days without a decision. Incorporation, cap table, and the agreement all wait on this.','Week 3 gate','advisor session',true),
+      mkAction(2,'Log 2 more customer interviews','Customer Discovery','You are at 3 of the 5 minimum. The Problem slide cannot be evidenced below the bar.','pitch deck problem slide','~2 hrs',true),
+      mkAction(3,'Lock the weekly cadence','Studio Ops','Two of four sessions are still proposed rather than set.','accountability tracking','~3 min',false),
+    ] : [
+      mkAction(1,'Lock MVP scope with your advisor','Roadmap','Wednesday\u2019s build review needs a value-ranked feature list to be useful.','Cycle 2 execution','~40 min',false),
+      mkAction(2,'Answer 3 open profiling questions','Profiling','All three sit on Fundraising and Operations — your two weakest-evidenced dimensions.','sharper advisor and investor matching','~8 min',false),
+      mkAction(3,'Draft the problem slide','Pitch Deck','Your 18 interviews already contain the ranked pain points it needs.','investor-facing narrative','~25 min',false),
+      mkAction(4,'Confirm the co-founder equity split','Co-founder Match','This is the only Week 2 deliverable with no owner and no date.','Week 3 gate','advisor session',true),
+    ];
+    const hasActions = actions.length > 0;
+
+    // ---- lifecycle ----
+    const wk = isNew ? 1 : isAdv ? 4 : 2;
+    const lifecycle = (isIndie ? [
+      { name:'Idea & customer' }, { name:'Solution & roadmap' },
+      { name:'Validate & team' }, { name:'Incorporate & capital' },
+    ] : [
+      { name:'Week 1 · Idea & Customer' }, { name:'Week 2 · Solution & Roadmap' },
+      { name:'Week 3 · Validate & Team' }, { name:'Week 4 · Incorporate & Capital' },
+    ]).map((l,i) => {
+      const n = i+1;
+      if (isIndie) return Object.assign({}, l, {
+        barTone: n===1 ? '#7c3aed' : '#ececf1',
+        textTone: n===1 ? P : '#a1a1aa',
+        state: n===1 ? 'In progress' : 'Not started',
+      });
+      const done = n < wk, current = n === wk;
+      return Object.assign({}, l, {
+        barTone: done ? '#22c55e' : current ? '#7c3aed' : '#ececf1',
+        textTone: done ? '#15803d' : current ? P : '#a1a1aa',
+        state: done ? 'Complete' : current ? 'In progress' : 'Locked',
+      });
+    });
+    const stageNote = isNew ? 'Day 1 of 28' : isAdv ? 'Day 25 of 28' : isIndie ? 'Self-paced — no cohort clock' : 'Day 11 of 28';
+
+    const shipped = isIndie ? [
+      'Startup record created with one-liner and sector','ICP hypothesis stated','Landing page drafted','Profiling assessment started — 41%',
+    ] : isNew ? ['Cohort 4 enrolment confirmed'] : isAdv ? [
+      'Delaware C-Corp incorporated with EIN issued','Founder stock issued on a 4-year vest','Cap table synced and clean','18 customer interviews with ranked pain points','Pitch deck complete through the ask','Use of funds allocated across 3 buckets',
+    ] : [
+      'Startup record created with sector and one-liner','18 customer interviews logged','TAM and SAM sized with two cited sources','Customer waitlist page published — 142 views, 23 signups','90-day OKRs set and locked',
+    ];
+    const stillOpen = isIndie ? [
+      'Customer interviews — none logged','Market sizing','Profiling assessment — 7 questions','Roadmap and 90-day goals',
+    ] : isNew ? [
+      'Profiling assessment','Startup record','ICP definition','First customer interviews','TAM/SAM sizing',
+    ] : isAdv ? ['83(b) election filing','Two profiling questions'] : [
+      'MVP scope definition','Brand v1','Pitch deck v1','Co-founder decision','Studio Ops cadence lock',
+    ];
+    const gateNote = isIndie ? 'No gates outside a cohort — you choose the order. Cohort 5 applications open Sep 1 if you want the structure.'
+      : isNew ? 'Week 2 opens once your startup record and first three interviews are in.'
+      : isAdv ? 'Graduation review opens once the 83(b) filing is confirmed.'
+      : isBlocked ? 'Week 3 is held by the co-founder decision. Nothing else is outstanding.'
+      : 'Week 3 opens when MVP scope, pitch deck v1, and the co-founder decision are complete.';
+
+    // ---- questions ----
+    const answeringQ = st.answeringQ;
+    const mkQ = (state, q, impact, when, answer, lift) => ({
+      state, q, impact, when, answer, lift,
+      go: () => this.setState({ answeringQ: answeringQ === q ? '' : q }),
+      cta: answeringQ === q ? 'Opening in Profiling…' : 'Answer now',
+      liftLabel: answeringQ === q ? 'Your answer is recorded against this dimension.' : lift,
+      pending: state==='Open', stateChip: state==='Open' ? AMBER : GREEN });
+    const questions = isIndie ? [
+      mkQ('Open','What are you building, in one sentence a customer would recognise?','Anchors every module','Waiting','', '+11 to profile completion'),
+      mkQ('Open','How far along is the product — idea, prototype, or in front of users?','Sets module relevance','Waiting','', 'Filters out what is noise for you now'),
+      mkQ('Answered','Who feels this pain hardest today?','Feeds Customer Discovery','Aug 7','Ops leads at 50–500 person SaaS companies.',''),
+      mkQ('Answered','Are you building alone or looking for a co-founder?','Sharpens matching','Aug 5','Open to a commercial co-founder, not a second builder.',''),
+    ] : isNew ? [
+      mkQ('Open','Which functional areas have you actually run before — not studied, run?','Raises Team confidence','Waiting','', '+9 to profile completion'),
+      mkQ('Open','When a decision splits your team, what do you default to?','Sharpens co-founder match','Waiting','', 'Improves match precision'),
+      mkQ('Open','What would make you walk away from this idea?','Feeds Scoring Engine','Waiting','', 'Raises evidence confidence'),
+    ] : isAdv ? [
+      mkQ('Open','What is your minimum acceptable round size, and why that number?','Feeds Capital narrative','Open 2 days','', '+4 to Financials confidence'),
+      mkQ('Answered','Who owns the fundraise conversation once term sheets arrive?','Raises Team confidence','Aug 6','You lead, with the advisor on diligence prep.',''),
+      mkQ('Answered','Which of your Week 1 hypotheses did the interviews kill?','Feeds Scoring Engine','Aug 3','Two of five. The pricing hypothesis held; the segment one did not.',''),
+    ] : [
+      mkQ('Open','Have you ever owned a revenue number end to end?','Raises Fundraising confidence','Open 3 days','', '+7 to Fundraising — your weakest dimension'),
+      mkQ('Open','What does your co-founder do better than you, specifically?','Sharpens co-founder match','Open 3 days','', 'Unblocks the equity conversation'),
+      mkQ('Answered','What did the last 5 interviews change about your solution?','Feeds Customer Discovery','Aug 8','Dropped the freemium tier — pricing sensitivity clustered at $200/mo, not below it.',''),
+      mkQ('Answered','Which part of the build are you most likely to underestimate?','Raises Product confidence','Aug 5','Slack integration scope. Timeboxed to a spike in Cycle 2.',''),
+    ];
+    const qAnswered = String(answeredN);
+    const qPending = String(advTotalN - answeredN);
+
+    // ---- activity ----
+    const mkAct = (when, what, module, feeds) => ({ when, what, module, feeds, moduleChip: GREY });
+    const activity = isIndie ? [
+      mkAct('Today','ICP hypothesis stated','Customer Discovery','Interview screening criteria'),
+      mkAct('2 days','Landing page drafted','Brand & Pages','Waitlist capture'),
+      mkAct('4 days','Profiling skills block started','Profiling','Advisor and expert matching'),
+      mkAct('6 days','Startup record created','Startups','Every downstream module'),
+    ] : isNew ? [
+      mkAct('Today','Enrolled in Cohort 4','Spin-Out Lab','Week 1 deliverables opened'),
+    ] : isAdv ? [
+      mkAct('Today','Cap table synced with vesting schedule','Cap Table','Diligence pack and the ownership slide'),
+      mkAct('Yesterday','Use of funds allocated across 3 buckets','Use of Funds','The pitch deck ask slide'),
+      mkAct('2 days','Warm intro requests sent to 3 investors','Capital','Round tracker pipeline'),
+      mkAct('3 days','Delaware C-Corp confirmed, EIN issued','Incorporate','83(b) filing window opened'),
+      mkAct('4 days','Advisor value-add logged for the quarter','Advisors','Equity review at Week 6'),
+      mkAct('5 days','Financial model completed through year 3','Pitch Deck','Investor diligence pack'),
+    ] : [
+      mkAct('Today','3 customer interviews logged','Customer Discovery','Problem slide ranked pain points'),
+      mkAct('Yesterday','Waitlist page published — 23 signups','Brand & Pages','Traction evidence in Scoring'),
+      mkAct('2 days','90-day OKRs set and locked','Roadmap','Milestone mapping in Use of Funds'),
+      mkAct('3 days','Advisor session completed — pricing','Office Hours','MVP scope decision on Wednesday'),
+      mkAct('4 days','TAM and SAM sized with citations','Market Intel','The market slide'),
+      mkAct('5 days','Profiling skills block answered','Profiling','Advisor and co-founder matching'),
+    ];
+
+    // ---- modules ----
+    const mkMod = (name, state, pct, note) => {
+      const s = state==='Complete' ? GREEN : state==='Active' ? PURPLE : state==='Waiting' ? AMBER : GREY;
+      return { name, state, pct, note, stateChip:s,
+        barTone: state==='Complete' ? '#22c55e' : state==='Active' ? '#7c3aed' : state==='Waiting' ? '#d97706' : '#e4e4e7',
+        bg: state==='Locked' ? '#faf9fb' : '#fff', opacity: state==='Locked' ? '.6' : '1',
+        nameTone: state==='Locked' ? '#a1a1aa' : '#27272a' };
+    };
+    const modules = isIndie ? [
+      mkMod('Profiling','Active','41%','7 questions open'), mkMod('Startups','Complete','100%','Record created'),
+      mkMod('Customer Discovery','Active','15%','ICP stated, 0 interviews'), mkMod('Market Intel','Active','0%','Available, not started'),
+      mkMod('Brand & Pages','Active','35%','Page drafted'), mkMod('Roadmap','Active','0%','Available, not started'),
+      mkMod('Signals','Active','0%','Available, not started'), mkMod('Pitch Deck','Active','0%','Available, not started'),
+      mkMod('Advisors','Locked','0%','Cohort only'), mkMod('Studio Ops','Locked','0%','Cohort only'),
+      mkMod('Incorporate','Locked','0%','Cohort only'), mkMod('Capital','Locked','0%','Cohort only'),
+    ] : isNew ? [
+      mkMod('Profiling','Active','0%','Not started'), mkMod('Startups','Active','0%','Not started'),
+      mkMod('Customer Discovery','Locked','0%','Opens after startup record'), mkMod('Market Intel','Locked','0%','Week 1'),
+      mkMod('Roadmap','Locked','0%','Week 2'), mkMod('Brand & Pages','Locked','0%','Week 2'),
+      mkMod('Pitch Deck','Locked','0%','Week 2'), mkMod('Studio Ops','Locked','0%','Week 2'),
+      mkMod('Advisors','Locked','0%','Week 3'),
+    ] : isAdv ? [
+      mkMod('Profiling','Complete','94%','2 questions open'), mkMod('Customer Discovery','Complete','100%','18 interviews'),
+      mkMod('Market Intel','Complete','100%','Sized and cited'), mkMod('Roadmap','Complete','100%','OKRs locked'),
+      mkMod('Brand & Pages','Complete','100%','2 pages live'), mkMod('Pitch Deck','Complete','100%','Through the ask'),
+      mkMod('Incorporate','Complete','100%','EIN issued'), mkMod('Cap Table','Complete','100%','Synced'),
+      mkMod('83(b) Election','Waiting','40%','5 days left'), mkMod('Capital','Active','60%','3 intros sent'),
+      mkMod('Use of Funds','Complete','100%','Allocated'), mkMod('Compliance','Active','70%','2 items open'),
+    ] : [
+      mkMod('Profiling','Active','68%','3 gaps'), mkMod('Customer Discovery','Complete','100%','18 interviews'),
+      mkMod('Market Intel','Complete','100%','Sized and cited'), mkMod('Roadmap','Active','45%','MVP scope open'),
+      mkMod('Brand & Pages','Active','60%','Brand v1 open'), mkMod('Pitch Deck','Active','20%','1 of 12 slides'),
+      mkMod('Studio Ops','Active','50%','Cadence unlocked'), mkMod('Co-founder Match', isBlocked?'Waiting':'Active', '35%', isBlocked?'Decision overdue':'Decision open'),
+      mkMod('Advisors','Locked','0%','Week 3'), mkMod('Scoring Engine','Locked','0%','Week 3'),
+      mkMod('Incorporate','Locked','0%','Week 4'), mkMod('Capital','Locked','0%','Week 4'),
+    ];
+
+    // ---- profile ----
+    const pPct = isNew ? 0 : isAdv ? 94 : isIndie ? 41 : 68;
+    const profileDash = (pPct/100*97.4).toFixed(1)+' 97.4';
+    const dimTone = (v) => v >= 75 ? '#22c55e' : v >= 50 ? '#7c3aed' : '#d97706';
+    const mkDim = (name, v) => ({ name, pct:v+'%', tone:dimTone(v), label: v>=75?'High':v>=50?'Moderate':'Low' });
+    const dimensions = isIndie ? [
+      mkDim('Product',62), mkDim('Team',38), mkDim('Operations',30), mkDim('Fundraising',18),
+    ] : isNew ? [
+      mkDim('Product',0), mkDim('Operations',0), mkDim('Fundraising',0), mkDim('Team',0),
+    ] : isAdv ? [
+      mkDim('Product',92), mkDim('Team',88), mkDim('Operations',81), mkDim('Fundraising',64),
+    ] : [
+      mkDim('Product',84), mkDim('Team',72), mkDim('Operations',48), mkDim('Fundraising',36),
+    ];
+    const archetype = isNew ? 'Not yet determined' : isIndie ? 'Builder (provisional)' : 'Builder · Domain Expert';
+    const archetypeNote = isNew ? 'Answer the first profiling block to establish a baseline.'
+      : isIndie ? 'Based on 5 answers. Too few to be reliable — 7 questions would settle it.'
+      : isAdv ? 'Stable across 41 answers. High confidence.'
+      : 'Consistent across 18 answers. Commercial dimensions still thin.';
+
+    // ---- blockers ----
+    const blockers = isIndie ? [
+      { title:'No customer evidence yet', sev:'High', sevChip:RED, effect:'The ICP is stated but untested. Nothing downstream can be scored without interviews.' },
+      { title:'Profile too thin to match on', sev:'Medium', sevChip:AMBER, effect:'41% complete. Advisor and co-founder matching need more before they return anything useful.' },
+    ] : isNew ? [] : isAdv ? [
+      { title:'83(b) filing window', sev:'Critical', sevChip:RED, effect:'5 days remain. Blocks graduation review and clean diligence.' },
+    ] : isBlocked ? [
+      { title:'Co-founder equity split', sev:'High', sevChip:RED, effect:'Unresolved 4 days. Holds incorporation, cap table, and the Week 3 gate.' },
+      { title:'Interview count below minimum', sev:'High', sevChip:RED, effect:'3 of 5 logged. The Problem slide cannot be evidenced.' },
+      { title:'Fundraising evidence thin', sev:'Medium', sevChip:AMBER, effect:'Two open questions sit on the lowest-confidence dimension.' },
+    ] : [
+      { title:'Co-founder equity split', sev:'High', sevChip:RED, effect:'The only Week 2 deliverable with no owner or date.' },
+      { title:'Slack integration scope', sev:'Medium', sevChip:AMBER, effect:'Flagged as a scope risk. Spike planned in Cycle 2.' },
+    ];
+    const hasBlockers = blockers.length > 0;
+
+    // ---- implications ----
+    const implications = isIndie ? [
+      { k:'Strongest signal', v:'A clearly stated ICP. Most founders at this stage cannot name one.' },
+      { k:'Weakest evidence', v:'No interviews logged. Every claim about the problem is currently your own.' },
+      { k:'Next priority', v:'Customer Discovery. Three interviews would change what every other module can tell you.' },
+      { k:'Worth considering', v:'Your evidence is close to the bar for a reviewable Cohort 5 application.' },
+    ] : isNew ? [
+      { k:'Strongest signal', v:'None yet — the profile has no answers to read from.' },
+      { k:'Start here', v:'Profiling. Every matching and scoring decision downstream depends on it.' },
+      { k:'Stage readiness', v:'Not assessable until the startup record and first interviews exist.' },
+    ] : isAdv ? [
+      { k:'Strongest signal', v:'Discovery evidence. 18 interviews with ranked pains and a deck-eligible quote per top pain.' },
+      { k:'Weakest evidence', v:'Fundraising remains your lowest dimension at 64% — two open questions would close most of it.' },
+      { k:'Next priority', v:'83(b) filing. It is the only item standing between you and graduation review.' },
+      { k:'Readiness read', v:'79 puts you above the pre-seed threshold. Diligence pack is complete apart from the filing.' },
+    ] : [
+      { k:'Strongest signal', v:'Customer evidence. 18 interviews is well past the bar, and the pains rank cleanly.' },
+      { k:'Weakest evidence', v:'Fundraising at 36% and Operations at 48% — both thin on answered questions, not on work done.' },
+      { k:'Next priority', v:'Roadmap. MVP scope gates Cycle 2, the pitch deck, and the Week 3 review.' },
+      { k:'Advisor direction', v:'Your archetype and gaps point to a commercial operator, not another builder.' },
+    ];
+
+    return {
+      embeddedClass: this.props.embedded ? 'fs-embedded' : '',
+      studioIcon: this.ic('<path d="M3 12h4l3-8 4 16 3-8h4"/>'),
+      checkIcon: this.ic('<path d="M20 6 9 17l-5-5"/>', 3), stateTabs, phaseBadge, company, founderLine, summary,
+
+      sparkIcon: this.ic('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8M17.7 6.3l-2.8 2.8M9.1 14.9l-2.8 2.8"/>', 1.8),
+      ticketIcon: this.ic('<path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 6v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-6z"/><path d="M13 5v14"/>', 1.8),
+      sendIcon: this.ic('<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>', 1.9),
+      skipIcon: this.ic('<path d="M5 4l10 8-10 8zM19 5v14"/>', 1.9),
+      advisorRole: inCohort ? 'Cohort 4 founder' : 'Independent founder',
+      advAnswered: String(answeredN), advTotal: String(advTotalN), advPct,
+      thread, quickReplies, currentQuestion: currentQ.q,
+      explainText: currentQ.why, explainOpen: st.explainOpen,
+      explain: () => this.setState(s => ({ explainOpen: !s.explainOpen })),
+      draft: st.draft, setDraft: (e) => this.setState({ draft:e.target.value }),
+      send: () => { if (st.draft.trim()) pushMsg(st.draft.trim(), true); },
+      sendBtnStyle:'width:34px;height:34px;flex:none;border-radius:9px;display:flex;align-items:center;justify-content:center;'
+        + (st.draft.trim() ? 'background:#7c3aed;color:#fff' : 'background:#ede9fe;color:#b3a2e0'),
+      skip: () => pushMsg('(skipped)', true),
+      hasDeepLink: !!st.deepLink, deepLinkName: st.deepLink, openDeepLink: () => this.setState({ deepLink:'' }),
+      sections, proposed, proposedCount: String(proposed.length),
+
+      ticketOpen: st.ticketOpen, ticketFiled: st.ticketFiled, tf: st.tf, priorities, ticketTypes,
+      ticketInputStyle:'padding:11px 14px;border-radius:10px;border:1px solid #ececf1;background:#fff;font-size:13px;color:#18181b;outline:none;font-family:inherit',
+      ticketBtnStyle:'display:flex;align-items:center;gap:7px;flex:none;padding:7px 14px;border-radius:9px;font-size:12.5px;font-weight:700;'
+        + (st.ticketOpen ? 'background:#7c3aed;color:#fff' : 'border:1px solid #ddd6f3;background:#fff;color:#6d28d9'),
+      toggleTicket: () => this.setState(s => ({ ticketOpen: !s.ticketOpen, ticketFiled:false })),
+      closeTicket: () => this.setState({ ticketOpen:false, ticketFiled:false, tf:{ summary:'', detail:'', priority:'Medium', type:'Task' } }),
+      setTicketSummary: (e) => { const v = e.target.value; this.setState(s => ({ tf: Object.assign({}, s.tf, { summary:v }) })); },
+      setTicketDetail: (e) => { const v = e.target.value; this.setState(s => ({ tf: Object.assign({}, s.tf, { detail:v }) })); },
+      fileTicket: () => { if (canFile) this.setState({ ticketFiled:true }); },
+      fileTicketStyle:'display:flex;align-items:center;gap:7px;padding:9px 16px;border-radius:9px;font-size:12.5px;font-weight:700;'
+        + (canFile ? 'background:#7c3aed;color:#fff' : 'background:#ede9fe;color:#b3a2e0;cursor:not-allowed'),
+      ticketId: isIndie ? 'AX-2291' : 'AX-2284',
+      openTicketNote: inCohort ? '2 open tickets · first reply typically within 1 business day' : '1 open ticket · first reply typically within 1 business day',
+
+      actions, hasActions, resumeNext: () => {
+        if (typeof document === 'undefined') return;
+        const el = document.getElementById('fs-next');
+        if (el && el.scrollIntoView) el.scrollIntoView({ behavior:'smooth', block:'start' });
+      },
+      lifecycle, stageNote, shipped, stillOpen, gateNote,
+      questions, qAnswered, qPending,
+      activity, modules,
+      profilePct: pPct+'%', profileDash, archetype, archetypeNote, dimensions,
+      blockers, hasBlockers, implications,
+    };
+  }
+}
+</script>
+</body>
+</html>

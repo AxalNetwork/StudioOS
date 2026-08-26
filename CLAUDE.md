@@ -9,8 +9,13 @@ operational gotchas previously inline in `replit.md` now live in `GOTCHAS.md`.
 
 1. **The Cloudflare Worker is the production API at `axal.vc`.** Source of
    truth lives in `cloudflare-worker/src/index.ts` and `cloudflare-worker/src/routes/*.ts`.
-   Wrangler config: `wrangler.toml`. Deploys via `npx wrangler deploy`
-   (top-level config — **not** `--env production`, see `PRODUCTION.md`).
+   Wrangler config: `wrangler.toml`. Deploy with **`npm run deploy`**, which is
+   `wrangler deploy --config ../wrangler.toml --env production` — `--env
+   production` IS correct (`PRODUCTION.md`, verified 2026-05-06: the
+   `[env.production]` block redeclares every binding, confirmed against the
+   live worker's bindings API). Do not run `npx wrangler deploy` by hand: it
+   skips the `predeploy` hook that applies D1 migrations, so the worker ships
+   ahead of its schema.
 2. **D1 (`studioos-db`) is the canonical user store.** All 23 production user
    accounts live in D1. The dev FastAPI uses a separate SQLite file
    (`backend/app.db`) and is **not** kept in sync.
