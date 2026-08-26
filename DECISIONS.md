@@ -9,8 +9,8 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-D1, D2, D5, D7, D8 and D9 are resolved. D3, D4 and D6 remain open; none
-blocks the work in flight.
+D1, D2, D5, D7, D8, D9 and D10 are resolved. D3, D4 and D6 remain open;
+none blocks the work in flight.
 
 ### D1. Studio Ops — re-integrate, or honour the deletion?
 
@@ -214,6 +214,47 @@ of the row. Verified per tab:
 | ai | `assistant.ts` (9) | real |
 | documents | `files.ts` (1) | thin |
 | funds | none | no data source → D9 |
+
+### D10. /network is the one network surface
+
+**RESOLVED.** The same two-surface split as D8, inverted: here the **broken**
+one owned the nav and was the more ambitious design.
+
+| | `/advisor/network/*` | `/network` |
+| --- | --- | --- |
+| nav rows | 12 (founder, partner, investor, advisor) | 5 (admin only, pre-change) |
+| size | 1,428 lines | 1,066 lines |
+| Introductions | 841 lines → `/api/network-introductions/*` — **0 mounts** | 592 lines → `introductions.ts` ✓ |
+| Relationships | 257 lines, **0 API calls** — fixture only | 200 lines → `partnernet.ts` ✓ |
+| Organizations | 330 lines → `/api/organizations*` — **0 mounts** | (no counterpart) |
+| Contacts | — | 274 lines → `contacts.ts` ✓ |
+
+Every tab of the surface four roles linked was non-functional; the one that
+worked throughout was reachable only from the admin nav. The three routes now
+redirect (`introductions` and `relationships` onto the matching tabs,
+`organizations` onto the default — it never returned data, so nothing is lost),
+each role's three broken rows collapse to one working row, and the dead stack
+is deleted.
+
+**Why not build the missing backends.** Making the richer UI real is a backend
+project, not wiring: `introductions.ts` already covers credits and
+accept/decline, but `candidates`, `messages`, `sendMessage`, `invite`, `get`
+and `create` have no equivalent and a message thread needs a new D1 table.
+`organizations` has no route file, no service and no table — it is a whole
+domain. That option stays open; this change stops shipping four roles a Network
+section where nothing loads.
+
+**Side effect worth having:** removing `api.networkIntros.*` and the three
+`organizations` methods retired **17** entries from
+`scripts/api-drift-baseline.json`, taking the known-drift ledger from 58 to 41.
+
+**One thing deliberately left behind.** `pages/advisor/network/kit.jsx` stays
+where it is. Despite the path it is not part of the Network stack — it is a
+shared component library imported by 8 unrelated pages (portfolio, pipeline,
+fund accounting, partner operations). Deleting the folder wholesale broke all
+eight; it was restored. It belongs in `frontend/src/ui/` and should move as
+part of that consolidation, where the 8 import rewrites can be done and tested
+as their own change rather than smuggled into a Network PR.
 
 ---
 

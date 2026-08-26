@@ -207,9 +207,7 @@ export const SIDEBAR_GROUPS = {
     // single "Network" link that lived in Validate; the legacy /network,
     // /relationships and /contacts routes keep the Relationships row active.
     { key: 'network', label: 'Network', items: [
-      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
-      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/contacts'] },
-      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
     ]},
     // Task #7 — Growth section mirrors the advisor/partner profiles: five tabs
     // (Talent, Customers, Partnerships, Capital, Experts) served by the shared
@@ -334,9 +332,7 @@ export const SIDEBAR_GROUPS = {
     // Network workspace (also used by advisors); the standalone "Network" link
     // that used to live in Engage is folded into this group's three tabs.
     { key: 'network', label: 'Network', items: [
-      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
-      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/partners'] },
-      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
     ]},
     // Partner Operations workspace. Each item deep-links to its own tab route;
     // `match` keeps the row active across the tab and its sub-route.
@@ -417,9 +413,7 @@ export const SIDEBAR_GROUPS = {
     // /lp-portal, /funds/capital-calls, /portfolio/reserves,
     // /portfolio/waterfall, /liquidity.
     { key: 'network', label: 'Network', items: [
-      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
-      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/contacts'] },
-      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
     ]},
     { key: 'pipeline', label: 'Pipeline', items: [
       { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
@@ -467,9 +461,7 @@ export const SIDEBAR_GROUPS = {
     // preserved as a sub-entry; `match` keeps the correct row active across the
     // tab, its sub-routes, and legacy aliases.
     { key: 'network', label: 'Network', items: [
-      { to: '/advisor/network/introductions', icon: Sparkles, label: 'Introductions' },
-      { to: '/advisor/network/relationships', icon: Users, label: 'Relationships', match: ['/advisor/network/relationships', '/network', '/relationships', '/contacts'] },
-      { to: '/advisor/network/organizations', icon: Globe, label: 'Organizations' },
+      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
     ]},
     { key: 'advisory', label: 'Advisory', items: [
       { to: '/advisor/advisory/opportunities', icon: Target, label: 'Opportunities' },

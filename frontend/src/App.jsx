@@ -237,7 +237,6 @@ import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 const EmailChangeConfirmPage = lazy(() => import('./pages/EmailChangeConfirmPage'));
 const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage'));
 // Advisor sections shell — tabbed workspaces (Network, Advisory, Research).
-const AdvisorNetworkWorkspace = lazy(() => import('./pages/advisor/network/AdvisorNetworkWorkspace'));
 const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 const AdvisorResearchWorkspace = lazy(() => import('./pages/advisor/research/AdvisorResearchWorkspace'));
 // Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
@@ -1931,10 +1930,20 @@ function AppInner() {
           to its own route; the workspace derives the active tab from the URL.
           Bare section paths redirect to their first tab so every workspace is
           reachable by direct URL and by clicking the sidebar. */}
-      <Route path="/advisor/network" element={<Navigate to="/advisor/network/introductions" replace />} />
-      <Route path="/advisor/network/introductions" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorNetworkWorkspace />)} />
-      <Route path="/advisor/network/relationships" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorNetworkWorkspace />)} />
-      <Route path="/advisor/network/organizations" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorNetworkWorkspace />)} />
+      {/* DECISIONS.md D10 — /network is the one network surface. These three
+          tabs were the ones every role's sidebar linked, and none of them
+          worked: Introductions and Organizations called /api/network-introductions
+          and /api/organizations, neither of which the worker mounts, and
+          Relationships rendered from a fixture with no API calls at all.
+          Meanwhile /network's three panels are wired to contacts.ts,
+          introductions.ts and partnernet.ts and have worked throughout.
+          Introductions and Relationships map onto real tabs; Organizations has
+          no counterpart — it never returned data, so nothing is lost by
+          landing on the page's default tab. */}
+      <Route path="/advisor/network" element={<Navigate to="/network" replace />} />
+      <Route path="/advisor/network/introductions" element={<Navigate to="/network?tab=introductions" replace />} />
+      <Route path="/advisor/network/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
+      <Route path="/advisor/network/organizations" element={<Navigate to="/network" replace />} />
       <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/opportunities" replace />} />
       <Route path="/advisor/advisory/opportunities" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
