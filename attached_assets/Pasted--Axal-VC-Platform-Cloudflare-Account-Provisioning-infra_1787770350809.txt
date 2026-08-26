@@ -1,0 +1,85 @@
+# Axal VC Platform — Cloudflare Account Provisioning (infra only)
+
+## Objective
+Provision the net-new Cloudflare account-level resources the integration
+blueprint needs. This is dashboard/CLI infrastructure work — NOT an
+application-code change. Do not touch frontend routes, do not touch
+/studio or /founder, do not touch anything Spin-Out Lab related, and do
+not write any Worker code in this pass. Where a resource genuinely needs
+a matching code change (Workflows — see below), stop and hand off instead
+of half-provisioning it.
+
+## Ground truth
+- You (Replit) hold the Cloudflare API token for this account and have
+  deployed this Worker (`studioos`) to production directly before.
+- wrangler.toml keeps a top-level binding table and an [env.production]
+  table as EXACT mirrors — Wrangler env tables do not inherit bindings.
+  Every binding you add goes in BOTH tables, same values, in the same
+  commit. This is a documented past outage cause (a deploy with bindings
+  in only one table shipped with none active) — do not repeat it.
+- One AI Gateway already exists as a template to copy: `advisor-ongoing`
+  (cache TTL 5m, rate limit 60 rpm/user, 200 rpm/account), created by hand
+  in the dashboard, referenced by slug string in code. An unknown/missing
+  slug fails open (Workers AI just runs un-gatewayed) — so creating the
+  new gateway is safe to do before any code references it.
+- The AI_SPEND KV namespace is already called out as a TODO in
+  wrangler.toml with the exact command to run — it's currently commented
+  out because the namespace doesn't exist yet.
+
+## Provision, in this order
+
+1. AI GATEWAY — create a new gateway named `forge` (Cloudflare dashboard →
+   AI → AI Gateway → Create Gateway). Mirror advisor-ongoing's shape as a
+   starting point (cache TTL, rate limits) unless told otherwise; this is
+   Forge's per-tenant/per-user metered gateway, so lean toward per-user
+   rate limits over per-account ones. Record the exact slug used.
+
+2. CLOUDFLARE ACCESS on /admin* — Zero Trust → Access → Applications →
+   Add an application → Self-hosted. Domain axal.vc, path /admin*.
+   Add a policy scoped to the current admin allowlist (ask before
+   guessing who belongs on it — do not open this to "anyone with an
+   axal.vc email" without confirming that's correct). Add a service token
+   for CI if the pipeline needs to reach any /admin* health check.
+   This sits in FRONT of the Worker at the edge — no code dependency,
+   safe to enable ahead of the in-app RBAC work landing.
+
+3. WAF + EDGE RATE LIMITING — Security → WAF: enable the managed ruleset
+   if not already on; add a custom rate-limiting rule for /api/auth/*
+   (start conservative — flag for review with me before setting a block
+   threshold, since getting this wrong locks out real users). Zone-level,
+   no code dependency.
+
+4. LOGPUSH JOB — Logs → Logpush → Create a job pushing HTTP request logs
+   and firewall events to R2. Destination: a NEW prefix in the existing
+   studioos-logs bucket (the Tail Worker already writes app-level logs
+   there — use a distinct prefix, e.g. `edge/`, so the two streams don't
+   collide) or a new bucket if you'd rather keep them separate — flag
+   which you chose. You are provisioning the JOB only; the queue consumer
+   that reads this into the security_events D1 table is Claude Code's
+   work in Phase 3 — don't write it here.
+
+5. AI_SPEND KV NAMESPACE — run the command already documented in
+   wrangler.toml:
+     npx wrangler kv namespace create AI_SPEND --env production
+   Paste the returned id into BOTH the top-level and [env.production]
+   kv_namespaces tables, uncommenting the existing placeholder block.
+   This IS a real wrangler.toml change — run it through the normal
+   build+test+deploy gate (root `npm run build`, worker+frontend tests,
+   `npm run test:drift`, then `npx wrangler deploy` top-level config),
+   and say so before deploying: this is the one step here that touches
+   the live Worker.
+
+## Explicitly NOT this prompt's job
+- Cloudflare Workflows ([[workflows]] binding) — a Workflow binding
+  needs a matching exported class in the Worker's code, the same way
+  Durable Objects do. Adding the binding without the class fails
+  validation. This is Claude Code's Phase 5 work; don't pre-add it here.
+- Any new R2 bucket for jurisdiction sharding — Phase 3, not now.
+- Anything touching /studio, /founder, sidebarConfig.js, or App.jsx.
+- Anything Spin-Out Lab related.
+
+## Hand back to the integration effort
+For each item above: the exact identifier created (gateway slug, Access
+app id + policy summary, WAF rule id, Logpush job id + destination path,
+KV namespace id) so Claude Code's Phase 3/4 work references the real
+resource instead of a placeholder.
