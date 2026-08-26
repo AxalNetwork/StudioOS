@@ -1971,6 +1971,11 @@ export const api = {
     request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
   fundsSignLpa: (lpId) =>
     request(`/funds/lps/${lpId}/sign-lpa`, { method: 'POST', body: JSON.stringify({}) }),
+  // Fund analytics over real D1 rows only. Metrics the schema cannot support
+  // (NAV, RVPI, TVPI, IRR) come back null with a reason in `unavailable`; the
+  // pages render "Not recorded" rather than an invented figure.
+  fundsAnalytics: () => request('/funds/analytics'),
+  fundAnalytics: (id) => request(`/funds/${id}/analytics`),
   fundsLpPortal: () => request('/funds/lp-portal'),
   // GP-only. Returns ONE limited partner's reporting data in the same shape as
   // fundsLpPortal, so the quarterly-report renderer is a single code path

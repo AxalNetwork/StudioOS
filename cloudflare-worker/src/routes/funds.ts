@@ -18,6 +18,10 @@ import { Distributions } from '../models/distributions';
 import { logActivity } from './partnernet';
 import { clampLimit } from '../util/pagination';
 import { ensureFundGpColumns } from '../services/fundGpSchema';
+import {
+  rollUpFundRow, totalFundRollups, FUND_METRIC_UNAVAILABLE,
+  type FundRollup, type FundRollupRow,
+} from '../services/fundRollup';
 
 const funds = new Hono<{ Bindings: Env }>();
 
@@ -199,6 +203,49 @@ funds.get('/distributions', async (c) => {
   if (!fundId) return c.json({ error: 'fund_id required' }, 400);
   const items = await Distributions.listByFund(c.env, fundId, 200);
   return c.json({ ok: true, items });
+});
+
+// Fund analytics. The arithmetic and the honesty rules live in
+// services/fundRollup.ts, which is pure and tested; this file only does SQL.
+const FUND_ROLLUP_SQL = (where: string) =>
+  `SELECT f.id, f.name, f.vintage_year, f.status, f.deployed_capital,
+          f.total_commitment, f.management_fee, f.carried_interest,
+          COALESCE(f.fund_size_cents, 0) AS fund_size_cents,
+          (SELECT COUNT(*) FROM limited_partners lp WHERE lp.fund_id = f.id) AS lp_rows,
+          (SELECT COALESCE(SUM(lp.invested_amount), 0) FROM limited_partners lp
+            WHERE lp.fund_id = f.id) AS called_dollars,
+          (SELECT COALESCE(SUM(d.amount_cents), 0) FROM fund_distributions d
+            WHERE d.fund_id = f.id AND d.status = 'paid') AS distributed_cents
+     FROM vc_funds f ${where}
+    ORDER BY f.vintage_year DESC, f.id DESC`;
+
+// The two sums are independent, so they are correlated subqueries rather than
+// joins, which would multiply one fund's rows by the other's row count.
+async function rollUpFunds(env: Env, fundId?: number): Promise<FundRollup[]> {
+  const stmt = env.DB.prepare(FUND_ROLLUP_SQL(fundId ? 'WHERE f.id = ?' : ''));
+  const rows = await (fundId ? stmt.bind(fundId) : stmt).all<FundRollupRow>();
+  return (rows.results || []).map(rollUpFundRow);
+}
+
+// Family rollup. Registered before /:id so `analytics` is not read as an id.
+funds.get('/analytics', async (c) => {
+  await requireAuth(c);
+  const items = await rollUpFunds(c.env);
+  return c.json({
+    ok: true,
+    items,
+    totals: totalFundRollups(items),
+    unavailable: FUND_METRIC_UNAVAILABLE,
+  });
+});
+
+funds.get('/:id/analytics', async (c) => {
+  await requireAuth(c);
+  const fundId = parseInt(c.req.param('id'), 10);
+  if (!fundId) return c.json({ error: 'invalid fund id' }, 400);
+  const [fund] = await rollUpFunds(c.env, fundId);
+  if (!fund) return c.json({ error: 'Fund not found' }, 404);
+  return c.json({ ok: true, fund, unavailable: FUND_METRIC_UNAVAILABLE });
 });
 
 // /funds/:id MUST come AFTER all /funds/<word> handlers above.
