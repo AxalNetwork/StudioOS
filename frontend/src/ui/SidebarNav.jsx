@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
-import PaywallModal from '../components/PaywallModal';
+import { Building2, ChevronDown, ChevronLeft, ChevronRight, Lock as LockIcon, Search, X } from 'lucide-react';
+import { openPaywall } from '../components/PaywallModal';
+import { defaultOpenGroups, hasTier, hasInvestorTier } from '../sidebarConfig';
+import { safeReadJSON } from '../lib/storage';
+import CompanySwitcher from './CompanySwitcher';
 
 /**
  * SidebarNav — the left navigation, lifted out of App.jsx unchanged.
@@ -18,9 +21,9 @@ import PaywallModal from '../components/PaywallModal';
  * from getSidebarGroups() in sidebarConfig.js, keyed by the active role.
  *
  * Note the render order, which is the app's universal chrome and is deliberate:
- * CompanySwitcher (in App.jsx, above this) → search filter → role groups →
- * Company Settings. The search here is a client-side filter over already-
- * rendered nav labels; it is NOT the global Vectorize-backed /search.
+ * CompanySwitcher → search filter → role groups → Company Settings. The search
+ * here is a client-side filter over already-rendered nav labels; it is NOT the
+ * global Vectorize-backed /search.
  */
 
 export default function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
@@ -266,4 +269,35 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
     </div>
     </div>
   );
+}
+
+// Highlight matching substring inside a label. Returns a JSX-friendly
+// fragment when there's a match, otherwise the plain label.
+function highlightMatch(label, query) {
+  if (!query) return label;
+  const lower = label.toLowerCase();
+  const idx = lower.indexOf(query.toLowerCase());
+  if (idx === -1) return label;
+  return (
+    <>
+      {label.slice(0, idx)}
+      <mark className="bg-yellow-200 text-gray-900 rounded px-0.5">
+        {label.slice(idx, idx + query.length)}
+      </mark>
+      {label.slice(idx + query.length)}
+    </>
+  );
+}
+
+// Sidebar abbreviations for the collapsed rail. First letter of each word
+// (split on whitespace and hyphens), filtering out filler words, capped at
+// 3 chars. Examples: Dashboard→D, Admin Console→AC, Pipeline Board→PB,
+// Refer & Earn→RE.
+function abbreviateLabel(label) {
+  if (!label) return '';
+  const parts = String(label).split(/[\s\-/&]+/).filter((w) => {
+    if (!w) return false;
+    return !/^(and|the|of|a|to|for|on|in|my)$/i.test(w);
+  });
+  return parts.map((w) => w[0].toUpperCase()).join('').slice(0, 3) || label[0].toUpperCase();
 }
