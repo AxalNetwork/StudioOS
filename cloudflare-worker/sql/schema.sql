@@ -421,12 +421,22 @@ CREATE TABLE IF NOT EXISTS deals (
     description TEXT,
     lead_partner_id INTEGER REFERENCES users(id),
     stage_changed_at TEXT,
+    -- Task #127 — pass taxonomy (see migration 176_deal_pass_taxonomy.sql).
+    -- A CHECKed enum, not free text: pass data only earns its keep if it is
+    -- still queryable a year later. Specifics go in pass_note.
+    pass_reason TEXT CHECK (pass_reason IS NULL OR pass_reason IN (
+        'early', 'valuation', 'thesis', 'team', 'competitive'
+    )),
+    pass_note TEXT,
+    passed_at TEXT,
+    passed_by_user_id INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_deals_project ON deals(project_id);
 CREATE INDEX IF NOT EXISTS idx_deals_sf_opp ON deals(sf_opportunity_id);
+CREATE INDEX IF NOT EXISTS idx_deals_pass_reason ON deals(pass_reason, passed_at DESC);
 
 -- Task #4 — investor capital commitments recorded from the Deal Room.
 CREATE TABLE IF NOT EXISTS commitments (
@@ -459,6 +469,27 @@ CREATE TABLE IF NOT EXISTS deal_invitations (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_deal_invites_pair ON deal_invitations(deal_id, investor_user_id);
 CREATE INDEX IF NOT EXISTS idx_deal_invites_investor ON deal_invitations(investor_user_id, status);
+
+-- Task #127 — append-only stage history (migration 176). `stage_changed_at`
+-- records only the CURRENT stage's entry time, so the funnel could count a
+-- board snapshot but never answer "of the deals that entered screening this
+-- quarter, how many advanced?". Rows are written going forward only; the
+-- analytics endpoint reports when recording began rather than presenting a
+-- partial history as a complete one.
+CREATE TABLE IF NOT EXISTS deal_stage_events (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id       INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+    from_stage    TEXT,
+    to_stage      TEXT NOT NULL,
+    kind          TEXT NOT NULL DEFAULT 'set'
+                  CHECK (kind IN ('advance', 'pass', 'set')),
+    days_in_from  INTEGER,
+    actor_user_id INTEGER REFERENCES users(id),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_deal_stage_events_deal ON deal_stage_events(deal_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_deal_stage_events_to ON deal_stage_events(to_stage, created_at);
 
 CREATE TABLE IF NOT EXISTS lp_investors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

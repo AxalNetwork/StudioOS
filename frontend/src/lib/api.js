@@ -790,6 +790,14 @@ export const api = {
   dealFunnel: () => request('/deals/funnel'),
   draftDeal: (data) => request('/deals/draft', { method: 'POST', body: JSON.stringify(data) }),
   advanceDeal: (id) => request(`/deals/${id}/advance`, { method: 'POST' }),
+  // Task #127 — the only write path to the terminal stage. `reason` must be a
+  // key from lib/dealFlow.js PASS_TAXONOMY; the worker 400s anything else.
+  passDeal: (id, { reason, note } = {}) =>
+    request(`/deals/${id}/pass`, { method: 'POST', body: JSON.stringify({ reason, note }) }),
+  dealPassAnalytics: (reason) =>
+    request(`/deals/pass-analytics${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`),
+  dealStageAnalytics: (days) =>
+    request(`/deals/stage-analytics${days ? `?days=${encodeURIComponent(days)}` : ''}`),
   dealLeadPartners: () => request('/deals/lead-partners'),
   dealInvestorOptions: () => request('/deals/investors'),
   dealDocuments: (id) => request(`/deals/${id}/documents`),
