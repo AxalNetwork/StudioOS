@@ -12,6 +12,7 @@ import { defaultsForTemplate, contentForTemplate, contentFieldsFor } from '../li
 import TemplateContentEditor from '../components/brand/TemplateContentEditor.jsx';
 import TemplateEditorPreview from '../components/brand/TemplateEditorPreview.jsx';
 import { suggestAudienceAndGoal, getRecommendedTemplatesForAudience, generateInitialBrandKit } from '../lib/brand/flow.js';
+import { AssistLayout } from '../ui';
 
 // Task #24 — Brand & landing page generator.
 // Task #2 — Reworked into the audience-first flow:
@@ -431,7 +432,7 @@ export default function BrandBuilderPage() {
     };
   };
 
-  return (
+  const page = (
     <div className="max-w-5xl mx-auto py-8 px-4">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-2 dark:text-gray-100">
@@ -1018,4 +1019,6 @@ export default function BrandBuilderPage() {
       </div>
     </div>
   );
+
+  return <AssistLayout surface="brand">{page}</AssistLayout>;
 }

@@ -479,3 +479,49 @@ test('no page reaches past AssistLayout to mount AssistRail itself', () => {
   }
   assert.deepEqual(offenders, [], 'pages mount AssistLayout, not AssistRail');
 });
+
+test('every surface eadwynConfig defines is mounted on at least one page', () => {
+  // The reverse of the surface-name check. A surface defined and never mounted
+  // is dead config that reads as shipped, which is how the rail sat exported
+  // and rendered nowhere for a whole phase.
+  const surfaces = new Set(
+    [...read('frontend/src/ui/eadwynConfig.js').matchAll(/^  (\w+):\s*\{$/gm)].map((m) => m[1]),
+  );
+  const mounted = new Set();
+  for (const f of walkJs('frontend/src/pages')) {
+    for (const m of scan(read(f)).matchAll(/<AssistLayout\s+surface="([^"]+)"/g)) mounted.add(m[1]);
+  }
+  assert.deepEqual([...surfaces].filter((s) => !mounted.has(s)), [],
+    'these surfaces are configured but no page renders them');
+});
+
+test('each mount wraps its own page, once, inside the exported component', () => {
+  // The mounts were applied by script across six files. A wrap that landed in
+  // a later helper function would still build — Vite transpiles rather than
+  // type-checks — and would render nothing while looking correct in a diff.
+  const PAGES = ['AdvisoryPage', 'SpinoutLabAdvisorsPage', 'BrandBuilderPage',
+    'SpinoutLabBrandPage', 'SpinoutLabMarketPage', 'DeckReviewerPage'];
+  for (const name of PAGES) {
+    const lines = read(`frontend/src/pages/${name}.jsx`).split('\n');
+    const start = lines.findIndex((l) => l.startsWith('export default function'));
+    assert.notEqual(start, -1, `${name} must have a default export`);
+    const end = lines.findIndex((l, i) => i > start && l === '}');
+    const page = lines.reduce((a, l, i) => (l.trim() === 'const page = (' ? [...a, i] : a), []);
+    const mount = lines.reduce((a, l, i) => (l.includes('<AssistLayout surface=') ? [...a, i] : a), []);
+    assert.equal(page.length, 1, `${name}: exactly one page binding`);
+    assert.equal(mount.length, 1, `${name}: exactly one mount`);
+    for (const i of [...page, ...mount]) {
+      assert.ok(i > start && i < end,
+        `${name}: line ${i + 1} is outside the exported component (${start + 1}-${end + 1})`);
+    }
+  }
+});
+
+test('the tabbed advisory page only shows the rail on its AI tab', () => {
+  // AdvisoryPage's other three tabs are a human advisor directory and two
+  // calculators. A spend meter beside any of them describes work the page is
+  // not doing — D15's rule, one level finer than the page.
+  const src = scan(read('frontend/src/pages/AdvisoryPage.jsx'));
+  assert.match(src, /if \(!\(tab === 'advisor'\)\) return page;/,
+    'the non-AI tabs must return the bare page');
+});
