@@ -9,8 +9,9 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-D1, D2, D5 and D7-D11 are resolved. D3 and D4 remain open; D6 is now closed
-by D11, which repaired the last two of the four live defects the audit found.
+D1, D2, D4, D5 and D7-D11 are resolved. Only D3 remains open; D6 is now
+closed by D11, which repaired the last two of the four live defects the audit
+found.
 
 ### D1. Studio Ops — re-integrate, or honour the deletion?
 
@@ -95,20 +96,41 @@ canvas and incompatible with the other seven as drawn.
 sentence as the governing copy, and treat the other seven as the same component
 with different wording.
 
-### D4. `/founder` is now an unclaimed URL
+### D4. Persona-root URLs — the prohibition stands
 
 The brief forbids `/founder`, `/investor`, `/advisor`, `/partner` as persona
 roots, giving as its reason that `/founder` was already occupied by a live,
-admin-only Founder Portal. That is no longer true: `FounderPortal.jsx` (351
+admin-only Founder Portal. That reason has evaporated: `FounderPortal.jsx` (351
 lines), the route element and the sidebar row were all deleted in `f3af4536`, and
 `frontend/test/founder_portal_removed.test.mjs` guards the removal.
 
-The rule may still be right on its own merits — the sidebar's company switcher
-scopes everything beneath it, which argues against persona-root URLs regardless.
-But its stated justification has evaporated.
+Two corrections to how that was first written up:
 
-**Status: OPEN.** No persona-root URL has been proposed in `ROUTE_MAP.md`; the
-prohibition is being honoured pending this call.
+- **`/founder` is not unclaimed.** The *portal* is gone, but `/founder/post-need`
+  is still mounted (`App.jsx`). The bare root is free; the namespace is not.
+- **The bare root was never the question.** `/advisor/*` carries ten-plus live
+  routes. Adopting persona roots would not be claiming free URLs — it would be
+  migrating live ones, with redirects, for every advisor surface.
+
+**RESOLVED — keep the prohibition.** Losing an argument *against* persona roots
+is not an argument *for* them, and three arguments against survive on their own
+merits:
+
+1. **`CompanySwitcher` already scopes everything beneath it.** A persona segment
+   in the URL either duplicates that scoping or goes stale the moment the user
+   switches company — at which point the URL asserts something untrue.
+2. **An account can hold more than one role.** A founder who also angel-invests
+   has one session and sees the union of both navs. A persona root forces a
+   single-persona reading of a multi-role account and makes "which URL am I
+   supposed to be at" a question the product has to answer.
+3. **It is a migration, not a greenfield.** See the correction above.
+
+Persona is expressed where it already is: the sidebar's role-gated rows. URLs
+stay function-first. The four persona shells the canvases assume are a SIDEBAR
+change, not a routing one.
+
+Enforced by `frontend/test/route_namespace_policy.test.mjs` rather than by
+memory — the prohibition outlived its original justification once already.
 
 ### D5. Inter has never rendered in production
 
