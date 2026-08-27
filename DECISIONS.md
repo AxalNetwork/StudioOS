@@ -9,9 +9,9 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All sixteen decisions are now resolved. D6 is closed by D11, which repaired
+All seventeen decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
-per-tab table and closes out the Research row. D13 to D16 are Phase 4's, and
+per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
 
 ### D1. Studio Ops — re-integrate, or honour the deletion?
@@ -473,6 +473,27 @@ prefers `observed` → modelled → **null**, never zero. `runCost()` of zero
 tokens is `0`, and rendering that would price the run at free. "Not recorded"
 is worth more than a number nobody measured — the same rule the fund surfaces
 follow, applied to cost.
+
+### D17. No mode toggle until a page branches on the mode
+
+The canvases draw a per-surface assist toggle labelled "Remembered per page",
+and the rail's own header carried this as unfinished work: a
+`useAssistMode(pageKey)` hook that did not exist yet.
+
+It is not unfinished, it is unwarranted. **No page branches on an assist
+mode.** Turning the switch off would change nothing any of the six surfaces
+does, so shipping it — with or without persistence behind it — puts a control
+on screen that cannot affect the product, and then remembers the user's
+setting of it. That is D13's objection to the model menu, one control over, and
+it applies with more force here because persistence would make the dead control
+look deliberate.
+
+`eadwynConfig` therefore declares every surface `kind: 'fixed'` and the toggle
+does not render. `AssistRail` still supports it: a surface that ever grows real
+manual behaviour — a brand page where "off" means "I write the copy myself" is
+the plausible one — declares `kind: 'choice'` and passes `mode`/`onModeChange`,
+and `pc.manualNote` already exists to say what "off" means. The hook is worth
+building at that point and not before.
 
 ## Part 2 — Decisions taken
 

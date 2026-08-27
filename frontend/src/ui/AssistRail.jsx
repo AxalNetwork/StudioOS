@@ -37,9 +37,14 @@ import { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assis
  *   - `totalSpend` / `planCap` now HAVE a live source (`api.myAiSpend()`, over
  *     the caller's own `ai_usage_logs` rows). A caller that passes them by hand
  *     is quoting itself.
- *   - `mode` has no persistence. "Remembered per page" needs a real
- *     `useAssistMode(pageKey)`; until it exists this component does not pretend
- *     to remember anything.
+ *   - the mode TOGGLE is not rendered, and this is a decision rather than a
+ *     gap. `eadwynConfig` declares every surface `kind: 'fixed'`, because no
+ *     page branches on an assist mode: turning it "off" would change nothing
+ *     it does. Shipping the switch with a `useAssistMode(pageKey)` behind it
+ *     would persist a preference nothing reads — the same objection that
+ *     removed the model menu (D13), one control over. The switch is still
+ *     supported for a surface that ever grows real manual behaviour: declare
+ *     `kind: 'choice'` and pass `mode`/`onModeChange`. See DECISIONS D17.
  *   - the model MENU is gone. aiRouter's ROUTE map picks the model from the
  *     TASK CLASS — llama-guard for safety, bge for embeddings, qwen-coder for
  *     tool calls — so a picker could only offer wrong answers or duplicate the

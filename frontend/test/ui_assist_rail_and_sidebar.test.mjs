@@ -525,3 +525,20 @@ test('the tabbed advisory page only shows the rail on its AI tab', () => {
   assert.match(src, /if \(!\(tab === 'advisor'\)\) return page;/,
     'the non-AI tabs must return the bare page');
 });
+
+test('no surface declares a mode toggle nothing reads', () => {
+  // D17. No page branches on an assist mode, so a toggle would be a control
+  // that cannot affect the product — D13's objection to the model menu, one
+  // control over. Every surface is `fixed` until a page grows real manual
+  // behaviour, at which point `kind: 'choice'` turns the switch back on.
+  const cfg = scan(read('frontend/src/ui/eadwynConfig.js'));
+  assert.match(cfg, /kind: 'fixed'/);
+  assert.doesNotMatch(cfg, /kind: 'choice'/,
+    "a surface declaring 'choice' must also have a page that reads the mode");
+  // The component keeps the capability — this is a config decision, not a
+  // deletion, so the switch is one config change away.
+  const rail = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.match(rail, /const showToggle = config\.mode\.kind === 'choice'/,
+    'AssistRail must still support a real toggle');
+  assert.match(rail, /onModeChange/, 'and the callback that drives it');
+});
