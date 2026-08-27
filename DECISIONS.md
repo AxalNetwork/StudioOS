@@ -9,8 +9,9 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All eleven decisions are now resolved. D6 is closed by D11, which repaired
-the last two of the four live defects the audit found.
+All twelve decisions are now resolved. D6 is closed by D11, which repaired
+the last two of the four live defects the audit found; D12 corrects D9's own
+per-tab table and closes out the Research row.
 
 ### D1. Studio Ops — re-integrate, or honour the deletion?
 
@@ -241,6 +242,12 @@ of the row. Verified per tab:
 | news | `news.ts` (11) | real |
 | ai | `assistant.ts` (9) | real |
 | documents | `files.ts` (1) | thin |
+
+**This table was itself wrong for two rows — see D12.** "news → real" and
+"ai → real" matched the tab's NAME against a router's name. `news.ts` is the
+platform's own article authoring pipeline; `assistant.ts` is conversational
+chat. Neither serves the material its tab rendered. D12 withdrew all four
+remaining tabs on the reasoning D9 had already applied to the funds tab.
 | funds | none | no data source → D9 |
 
 ### D10. /network is the one network surface
@@ -330,6 +337,53 @@ were genuinely dead and did go.
 falls **41 → 23**. Across D10 and D11 the known-drift ledger has gone 58 → 23.
 
 ---
+
+### D12. The Research row is /market-intel and nothing else
+
+**RESOLVED.** Four tabs remained under `/advisor/research/*` after D8 redirected
+market and D9 withdrew funds: **companies, AI research, news, documents**. All
+four are withdrawn, on exactly the reasoning D9 gave for the funds tab.
+
+**This required correcting D9's own table.** D9 recorded `news` and `ai` as
+having real backends. Verified against the material each tab actually rendered,
+they do not:
+
+| Tab | D9 recorded | Verified |
+| --- | --- | --- |
+| news | `news.ts` (11) — "real" | `news.ts` is the platform's **article authoring** pipeline: draft, submit, retract, cover image, slug. The tab rendered a **third-party industry feed** — Barron's, InvestmentNews — with per-item sentiment and company tagging. Same word, different material. |
+| ai | `assistant.ts` (9) — "real" | `assistant.ts` is **conversational chat**: message, conversations, feedback, retention. The tab rendered SWOT analyses, market maps, company reports and comparables. Its own fixtures are named `AI_ANALYST_SAMPLES`, `SWOT_SAMPLES`. |
+| companies | "partial" | Accurate, and worth stating precisely: **one of thirteen** datasets is served, and that one (`competitors.ts`, `crunchbase.ts`) is *per-project competitor analysis*, not a research database. STARTUPS, ENTERPRISE_COMPANIES, CUSTOMERS, PARTNERS, UNICORNS, PUBLIC_COMPANIES, EXITS and FUNDING_ROUNDS have nothing. |
+| documents | "thin" | Understated. `files.ts` has one endpoint, `/dl/:token` — a signed **download** primitive. There is no document store to list. |
+
+Both wrong rows failed the same way: a router was matched against a tab by
+**name**, not by what it serves. That is the same error shape D9 itself caught
+in D7 ("Research is the clearest case" — true of one tab in six), one level
+down. Recorded here because the correction is the useful part: a per-tab table
+is only worth what its per-tab verification was.
+
+**What changed.** Four routes withdrawn; `/advisor/research` now redirects to
+`/market-intel`; twenty nav rows removed across five role navs; admin's Research
+group dropped entirely (it was left empty, and admin already links
+`/market-intel` from its own row); `pages/advisor/research/` (6 files) and
+`data/advisor/research.js` (54KB, 39 exports) deleted.
+
+The four are **removed, not redirected to `/market-intel`**. That page has no
+company, document or news data either — pointing "Companies" at it would trade a
+blank surface for a misleading one. `/advisor/research` itself redirects because
+the *section* still exists; the individual tabs do not.
+
+They return when a PitchBook/Crunchbase-class source is licensed — the same
+condition D9 set. Guarded by
+`frontend/test/research_tabs_withdrawn.test.mjs`.
+
+**Not in scope: the five Advisory Practice tabs.** `/advisor/advisory/*`
+(opportunities, clients, engagements, delivery, contracts) reads a 42KB fixture
+and has the same absence — `advisory.ts` is founder-facing (find an advisor,
+ask, diligence, financial-plan), not advisor practice management. Its real home
+is the Advisory Practice work against `partner_office_hours.ts`, which is task
+**#124** and is blocked while `/office-hours` is on this pass's do-not-touch
+list. Withdrawing it now and rebuilding it there would be churn, so it stays as
+it is, labelled, until #124 unblocks.
 
 ## Part 2 — Decisions taken
 
