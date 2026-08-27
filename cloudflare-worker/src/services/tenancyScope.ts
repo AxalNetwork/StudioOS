@@ -207,6 +207,28 @@ export function lpSelfScope(actor: Actor | null | undefined, alias = 'lp'): Scop
   return lpMembershipScope({ id, email: actor?.email ?? null }, alias);
 }
 
+/**
+ * The caller's own AI usage rows, as `u.*`. A self-view, like `lpSelfScope`.
+ *
+ * `ai_usage_logs` is the audit trail `aiRouter` writes on every model call:
+ * task, model, tokens, `est_cost_usd`, latency, whether a fallback or the
+ * cache was used, and any refusal. The org-wide rollup over the same table
+ * already exists behind `requireAdmin` at `/api/monitoring/ai-usage`, so this
+ * resource exists for one question only — "what have *I* spent?" — and has no
+ * unscoped escape for the same reason `/lp-portal` has none: an admin's own
+ * spend meter must show their own spend, not the organisation's.
+ *
+ * `user_id` is nullable on that table (calls made outside a user session), and
+ * `= ?` never matches NULL, so unattributed rows belong to nobody's meter.
+ * That is correct: a row the platform cannot attribute must not be billed to
+ * whoever happens to be looking.
+ */
+export function aiUsageSelfScope(actor: Actor | null | undefined, alias = 'u'): ScopeClause {
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  return { sql: `(${alias}.user_id = ?)`, binds: [id] };
+}
+
 /** Compose a scope into a query that already has its own WHERE conditions. */
 export function andScope(baseSql: string, baseBinds: Array<string | number>, scope: ScopeClause) {
   return { sql: `${baseSql} AND ${scope.sql}`, binds: [...baseBinds, ...scope.binds] };

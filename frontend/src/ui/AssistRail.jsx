@@ -24,11 +24,27 @@ import { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assis
  *     modelId={modelId} onSelectModel={setModelId}
  *   />
  *
- * DELIBERATELY PRESENTATIONAL. The canvases draw the toggle permanently ON and
- * wire nothing; there is no `eadwyn` AI Gateway yet (Phase 4), so mode and model
- * are controlled props. The "Remembered per page" promise needs a real
- * `useAssistMode(pageKey)` hook with persistence — that lands with the gateway,
- * not before, so this component does not pretend to remember anything.
+ * PRESENTATIONAL, but not for the reason first recorded here. This header used
+ * to say "there is no `eadwyn` AI Gateway yet (Phase 4)". That was false, and
+ * false in the way a name makes easy: nothing in the tree is called `eadwyn`,
+ * so the gateway looked absent. `cloudflare-worker/src/services/aiRouter.ts` is
+ * it — sixteen task classes across Workers AI models, a fallback chain, a
+ * llama-guard safety pass, content-hash caching, per-user $/day and $/month KV
+ * caps, an org kill switch, and a row in `ai_usage_logs` for every call.
+ *
+ * What is actually missing is narrower, and it is what keeps these props as
+ * props:
+ *   - `totalSpend` / `planCap` now HAVE a live source (`api.myAiSpend()`, over
+ *     the caller's own `ai_usage_logs` rows). A caller that passes them by hand
+ *     is quoting itself.
+ *   - `mode` has no persistence. "Remembered per page" needs a real
+ *     `useAssistMode(pageKey)`; until it exists this component does not pretend
+ *     to remember anything.
+ *   - `models` / `onSelectModel` have NOWHERE TO GO. aiRouter's ROUTE map picks
+ *     the model from the TASK CLASS, not from a user preference, so a menu here
+ *     would be a control that changes nothing. Callers should leave
+ *     `config.mode.model` off 'menu' until the router accepts a caller
+ *     preference — see DECISIONS.md.
  *
  * The `guardrail` slot is ForgeRail's alone: it carries the product's hard
  * boundary — Eadwyn never sends, signs or voids; every outbound action is a

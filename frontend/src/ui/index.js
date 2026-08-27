@@ -33,7 +33,10 @@ export { default as Pill, PILL_TONES } from './Pill';
 export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
 
 // The AI control rail — eight canvases, one component. Not navigation: see
-// DECISIONS.md T3. Presentational until the eadwyn gateway lands (Phase 4).
+// DECISIONS.md T3. The gateway it reports on is services/aiRouter.ts and has
+// existed all along; the spend meter now has a live source (api.myAiSpend).
+// Mode persistence and a user-selectable model do not exist yet — AssistRail's
+// header says exactly which of its props are still props and why.
 export { default as AssistRail } from './AssistRail';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 
