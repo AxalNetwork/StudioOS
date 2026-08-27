@@ -63,7 +63,13 @@ npm run deploy                           # = wrangler deploy --env production
 
 ### Frontend
 
-GitHub Action rebuilds `docs/` on push to `main`.
+`docs/` is committed by hand. **No workflow rebuilds or commits it** — `ci.yml`
+builds the frontend to typecheck it and then *validates* that the committed
+`docs/` matches (`scripts/check-docs-fresh.mjs`), but it never writes the
+directory back. That validation is the only thing standing between a source
+change and a stale production bundle, so run the build at the REPO ROOT
+(`npm run build`, which also prerenders the crawlable routes) and commit the
+result in the same PR as the source change.
 
 ### FastAPI (dev only)
 

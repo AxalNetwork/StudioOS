@@ -260,6 +260,68 @@ zone_name  = "axal.vc"
 pattern    = "axal.vc/p/*"
 zone_name  = "axal.vc"
 
+# Phase 0 — prerendered routes that had no apex route.
+#
+# `scripts/build-frontend.mjs` prerenders these into `docs/<route>/index.html`
+# precisely so a crawler hitting the APEX gets real HTML with an OG block. They
+# were reachable anyway, but only because GitHub Pages serves `docs/` directly —
+# so the moment Pages is decommissioned (the stated end state in
+# CLOUDFLARE-CUTOVER.md) `/terms`, `/privacy` and `/risk-disclosures` would 404
+# at the apex. That is the cost of an explicit table with no `axal.vc/*`: a route
+# is served only if it is listed. `frontend/test/apex_route_coverage.test.mjs`
+# now fails if a prerendered route is ever missing from either table again.
+#
+# The Worker can already serve them: the `[assets]` binding is rooted at `./docs`,
+# which is the same directory Pages was serving.
+[[routes]]
+pattern    = "axal.vc/changelog"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/demo"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/pricing"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/privacy"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/risk-disclosures"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/roadmap"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/status"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/terms"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/changelog/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/demo/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/pricing/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/privacy/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/risk-disclosures/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/roadmap/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/status/*"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/terms/*"
+zone_name  = "axal.vc"
+
 # ---------- Static Assets (SPA) ----------
 # Task #36 — Worker Static Assets binding. The worker serves the
 # Vite-built SPA from `frontend/dist`. With `not_found_handling =
@@ -828,6 +890,68 @@ pattern    = "axal.vc/lp/*"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/p/*"
+zone_name  = "axal.vc"
+
+# Phase 0 — prerendered routes that had no apex route.
+#
+# `scripts/build-frontend.mjs` prerenders these into `docs/<route>/index.html`
+# precisely so a crawler hitting the APEX gets real HTML with an OG block. They
+# were reachable anyway, but only because GitHub Pages serves `docs/` directly —
+# so the moment Pages is decommissioned (the stated end state in
+# CLOUDFLARE-CUTOVER.md) `/terms`, `/privacy` and `/risk-disclosures` would 404
+# at the apex. That is the cost of an explicit table with no `axal.vc/*`: a route
+# is served only if it is listed. `frontend/test/apex_route_coverage.test.mjs`
+# now fails if a prerendered route is ever missing from either table again.
+#
+# The Worker can already serve them: the `[assets]` binding is rooted at `./docs`,
+# which is the same directory Pages was serving.
+[[env.production.routes]]
+pattern    = "axal.vc/changelog"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/demo"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/pricing"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/privacy"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/risk-disclosures"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/roadmap"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/status"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/terms"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/changelog/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/demo/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/pricing/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/privacy/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/risk-disclosures/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/roadmap/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/status/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/terms/*"
 zone_name  = "axal.vc"
 
 [env.production.vars]
