@@ -120,9 +120,10 @@ explicit comment that emerald and amber text tokens must be the 700 step because
 fails AA on white. **That rule belongs in the shared token map, once.**
 
 **b) Product noun** — the eyebrow prefix and the mode label are per-persona strings:
-"Worker AI" (7 rails) vs "Forge" (ForgeRail); mode label is
+"Worker AI" (7 rails) vs "Eadwyn" (ForgeRail — D3 resolved this as "Eadwyn"; the
+canvas's own working name was "Forge"); mode label is
 "Advisor fills the blanks" (AIRail, InvRail) / "AI fills the blanks" (AdvRail,
-PartnerRail, EmberRail) / "Personal Advisor" (AdminRail) / "Forge fills the blanks"
+PartnerRail, EmberRail) / "Personal Advisor" (AdminRail) / "Eadwyn fills the blanks"
 (ForgeRail).
 
 **c) Page enum** — each persona ships a different page list, which keys the whole
@@ -196,7 +197,7 @@ interface PageConfig {
 }
 
 interface AssistRailConfig {
-  product:   string;                 // "Worker AI" | "Forge"
+  product:   string;                 // "Worker AI" | "Eadwyn"
   accent:    AccentName | Accent;
   planCap:   number;                 // 40 | 80 | 400
   totalSpend?: number;               // account-wide MTD; omit to sum page spends
@@ -224,7 +225,7 @@ Component signature:
 
 `pages` is intentionally a `Record` rather than an array: every rail keys its whole
 payload off the page/surface name, and ForgeRail's 2-D `surface × tier` lookup is
-expressed by building the record at call time (`forgeConfig(tier)`), not by adding a
+expressed by building the record at call time (`eadwynConfig(tier)`), not by adding a
 second dimension to the component.
 
 ### One persona's config, concretely (InvRail, abbreviated)
@@ -299,8 +300,8 @@ rails, so they belong in a shared `MODELS` registry, not in each persona config.
    an authorization decision, not presentation. → keep the render in config, but the
    `tier === 'super'` gate must be resolved by the caller, never inside `AssistRail`.
 
-3. **ForgeRail's `surface × tier` keying.** Config is 1-D (`pages`). Forge's payload is
-   2-D. Resolve at the call site with a `forgeConfig(tier)` factory that flattens to the
+3. **ForgeRail's `surface × tier` keying.** Config is 1-D (`pages`). Eadwyn's payload is
+   2-D. Resolve at the call site with a `eadwynConfig(tier)` factory that flattens to the
    1-D shape. Do not add a `tier` dimension to `AssistRailConfig` — five rails would
    carry a dead axis.
 

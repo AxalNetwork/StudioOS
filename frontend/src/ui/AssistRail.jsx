@@ -18,21 +18,22 @@ import { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assis
  * trust footer.
  *
  *   <AssistRail
- *     config={forgeConfig(tier)}
+ *     config={eadwynConfig(tier)}
  *     page="deals"
  *     mode={mode} onModeChange={setMode}
  *     modelId={modelId} onSelectModel={setModelId}
  *   />
  *
  * DELIBERATELY PRESENTATIONAL. The canvases draw the toggle permanently ON and
- * wire nothing; there is no `forge` AI Gateway yet (Phase 4), so mode and model
+ * wire nothing; there is no `eadwyn` AI Gateway yet (Phase 4), so mode and model
  * are controlled props. The "Remembered per page" promise needs a real
  * `useAssistMode(pageKey)` hook with persistence — that lands with the gateway,
  * not before, so this component does not pretend to remember anything.
  *
  * The `guardrail` slot is ForgeRail's alone: it carries the product's hard
- * boundary — Forge never sends, signs or voids; every outbound action is a
- * human click. Passing it renders the red card.
+ * boundary — Eadwyn never sends, signs or voids; every outbound action is a
+ * human click. Passing it renders the red card. (D3 resolved the AI's name as
+ * "Eadwyn"; ForgeRail is the source canvas's own filename and is unchanged.)
  */
 
 const ACCENTS = {

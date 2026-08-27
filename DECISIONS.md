@@ -9,9 +9,8 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-D1, D2, D4, D5 and D7-D11 are resolved. Only D3 remains open; D6 is now
-closed by D11, which repaired the last two of the four live defects the audit
-found.
+All eleven decisions are now resolved. D6 is closed by D11, which repaired
+the last two of the four live defects the audit found.
 
 ### D1. Studio Ops — re-integrate, or honour the deletion?
 
@@ -89,12 +88,19 @@ Three mutually exclusive product voices across the eight rail canvases:
   VC margin" disclosure, a scope chip, and a stated hard boundary — *"Forge never
   sends, signs or voids; every outbound action is a human click."*
 
-The brief mandates "Forge" everywhere. That is compatible with the ForgeRail
-canvas and incompatible with the other seven as drawn.
+**Status: RESOLVED — "Eadwyn".** Not the ForgeRail canvas's own name, by
+decision of the product owner. ForgeRail's mechanics carry over unchanged —
+model **recommended** not inherited, the "Axal VC margin" disclosure, the scope
+chip, and the hard boundary — only the word spoken in the product changes. The
+governing copy is now *"Eadwyn never sends, signs or voids; every outbound
+action is a human click."* The other seven rails collapse into the same
+component under this one voice, per the AssistRail consolidation (Phase 1d).
 
-**Status: OPEN** — but low risk. Recommend Forge, with ForgeRail's boundary
-sentence as the governing copy, and treat the other seven as the same component
-with different wording.
+References to "ForgeRail" elsewhere in this repo name the source canvas file
+(`Axal VC platform/ForgeRail.dc.html`) and are left as-is — that file's name
+does not change. Only the AI's spoken name changes, everywhere it appears as
+product copy: `ROUTE_MAP.md`, `design/pattern-census.md`,
+`frontend/src/ui/AssistRail.jsx`.
 
 ### D4. Persona-root URLs — the prohibition stands
 
@@ -354,8 +360,9 @@ archived; do not build from it.
 The brief calls for consolidating them into one `RailNav` and sourcing mobile
 bottom-tabs from the same config. Verified false: all eight contain **zero**
 route links; they are the right-hand AI control rail (mode, model, token spend
-meter, guardrails). The consolidation target is an `AssistRail`/ForgePanel
-component, and it belongs to the Forge workstream, not routing. The left nav is a
+meter, guardrails). The consolidation target is an `AssistRail` component — the
+brief's working name was "ForgePanel", now "Eadwyn" per D3 — and it belongs to
+that workstream, not routing. The left nav is a
 separate element, and the live `SidebarNav` already beats the canvas version on
 collapsed mode, search, tier locks and persistence — it gets lifted into `ui/`,
 not rebuilt.

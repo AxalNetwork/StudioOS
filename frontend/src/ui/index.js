@@ -33,7 +33,7 @@ export { default as Pill, PILL_TONES } from './Pill';
 export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
 
 // The AI control rail — eight canvases, one component. Not navigation: see
-// DECISIONS.md T3. Presentational until the forge gateway lands (Phase 4).
+// DECISIONS.md T3. Presentational until the eadwyn gateway lands (Phase 4).
 export { default as AssistRail } from './AssistRail';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 
