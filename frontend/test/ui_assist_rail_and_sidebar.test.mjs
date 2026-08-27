@@ -122,6 +122,7 @@ const UI_FILES = ['AssistRail.jsx', 'SidebarNav.jsx', 'CompanySwitcher.jsx'];
 const JS_KEYWORDS = new Set([
   'if', 'for', 'while', 'switch', 'catch', 'return', 'function', 'typeof',
   'await', 'super', 'new', 'delete', 'void', 'in', 'of', 'do', 'else', 'yield',
+  'async',
 ]);
 
 function freeNames(raw) {
@@ -146,7 +147,13 @@ function freeNames(raw) {
 
   const used = new Set();
   for (const m of src.matchAll(/<([A-Z][\w$]*)/g)) used.add(m[1]);              // JSX tags
-  for (const m of src.matchAll(/(?<![.\w$'"`])([a-zA-Z_$][\w$]*)\s*\(/g)) used.add(m[1]);  // calls
+  // No space before the paren. JSX TEXT CHILDREN are not quoted, so the string
+  // blanker never reaches them, and prose like `Target Raise ($)` is otherwise
+  // indistinguishable from a call to an undefined `Raise`. This is the same
+  // failure as a comment matching an assertion, one layer down. The cost is
+  // that a genuine `foo (x)` is not resolved; the codebase does not write that,
+  // and a checker with false positives trains you to ignore the real ones.
+  for (const m of src.matchAll(/(?<![.\w$'"`])([a-zA-Z_$][\w$]*)\(/g)) used.add(m[1]);  // calls
 
   return [...used].filter((n) => !JS_KEYWORDS.has(n) && !bound.has(n) && !(n in globalThis));
 }

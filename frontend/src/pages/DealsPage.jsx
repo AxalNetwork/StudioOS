@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
-import { safeReadJSON } from '../lib/storage';
+import { safeReadJSON, safeWriteJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 import {
   Eye, Search, Plus, ArrowRight, X, Loader2, ThumbsUp, ThumbsDown,
-  ChevronUp, ChevronDown, TrendingUp, ArrowUpRight,
+  ChevronUp, ChevronDown, TrendingUp, ArrowUpRight, Ban, Clock,
 } from 'lucide-react';
+import {
+  PASS_TAXONOMY, PASS_REASON_UNRECORDED, passReasonLabel, passReasonRevisit,
+  SLA_PRESETS, DEFAULT_SLA, slaPreset, slaBand, SLA_BAND_CLASS, fmtPct, NOT_RECORDED,
+} from '../lib/dealFlow';
 
 // Task #18 — read role from the live AuthProvider so a stale localStorage
 // user can't keep showing operator controls to a demoted viewer.
@@ -59,6 +63,11 @@ export default function DealsPage() {
   const [scope, setScope] = useState('mine');
   const [draftOpen, setDraftOpen] = useState(false);
   const [invitations, setInvitations] = useState([]);
+  // Task #127 — pass taxonomy + the analytics it makes possible.
+  const [passTarget, setPassTarget] = useState(null);   // deal awaiting a reason
+  const [passStats, setPassStats] = useState(null);
+  const [passReasonQuery, setPassReasonQuery] = useState(null);
+  const [sla, setSla] = useState(() => safeReadJSON('dealFlowSla', DEFAULT_SLA) || DEFAULT_SLA);
 
   useEffect(() => { document.title = 'Deal Flow — axal'; }, []);
 
@@ -75,6 +84,10 @@ export default function DealsPage() {
       setDeals(Array.isArray(d) ? d : []);
       if (isAdmin || canOperate || isInvestor) {
         api.dealFunnel().then(setFunnel).catch(() => setFunnel(null));
+        // Left null on failure rather than defaulted to an empty breakdown:
+        // "no passes recorded" and "we could not read the passes" are
+        // different statements and the panel renders them differently.
+        api.dealPassAnalytics().then(setPassStats).catch(() => setPassStats(null));
       }
       if (isInvestor) {
         api.myDealInvitations().then(r => setInvitations(Array.isArray(r) ? r : [])).catch(() => {});
@@ -137,6 +150,26 @@ export default function DealsPage() {
       load();
     } catch (e) { reportError('DealsPage:advance', e); }
   };
+
+  // Task #127 — the pass. The modal owns the reason; this only commits it, so
+  // there is no path here that reaches the terminal stage without one.
+  const recordPass = async ({ reason, note }) => {
+    if (!passTarget) return;
+    await api.passDeal(passTarget.id, { reason, note });
+    setPassTarget(null);
+    setDrawer(null);
+    load();
+  };
+
+  const queryPassReason = async (reason) => {
+    const next = passReasonQuery === reason ? null : reason;
+    setPassReasonQuery(next);
+    try {
+      setPassStats(await api.dealPassAnalytics(next || undefined));
+    } catch (e) { reportError('DealsPage:passAnalytics', e); }
+  };
+
+  const chooseSla = (key) => { setSla(key); safeWriteJSON('dealFlowSla', key); };
 
   const respond = async (dealId, response) => {
     try {
@@ -293,6 +326,49 @@ export default function DealsPage() {
         )}
       </div>
 
+      {/* Task #127 — Stage SLA. A VIEWER preference: it changes which cards look
+          urgent, never what is true about them, so it is persisted per browser
+          and never sent to the server. One partner running a tight board must
+          not repaint everyone else's. */}
+      {(canOperate || isAdmin) && (
+        <div className="mb-5 flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold uppercase tracking-wide text-gray-500">Stage SLA</span>
+          <div className="flex gap-1" role="group" aria-label="Stage SLA">
+            {SLA_PRESETS.map((p) => (
+              <button key={p.key} onClick={() => chooseSla(p.key)} aria-pressed={sla === p.key}
+                className={`rounded-full border px-2.5 py-1 font-medium ${
+                  sla === p.key
+                    ? 'border-violet-400 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-900/20 dark:text-violet-300'
+                    : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-gray-800/60'}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-gray-500">
+            Amber past {slaPreset(sla).amber}d · red past {slaPreset(sla).red}d in stage
+          </span>
+        </div>
+      )}
+
+      {/* Task #127 — Why we passed. Pass data is the fund's memory; the point of
+          recording a reason is being able to query it a year later, so each row
+          is a filter rather than a chart segment. */}
+      {(canOperate || isAdmin) && passStats && (
+        <PassAnalyticsPanel
+          stats={passStats}
+          active={passReasonQuery}
+          onQuery={queryPassReason}
+        />
+      )}
+
+      {passTarget && (
+        <PassModal
+          deal={passTarget}
+          onClose={() => setPassTarget(null)}
+          onConfirm={recordPass}
+        />
+      )}
+
       {drawer && (
         <DealDrawer
           deal={drawer}
@@ -300,6 +376,8 @@ export default function DealsPage() {
           onOpenRoom={() => navigate(`/deals/${drawer.id}`)}
           canOperate={canOperate}
           onAdvance={() => advance(drawer)}
+          onPass={() => setPassTarget(drawer)}
+          sla={sla}
         />
       )}
 
@@ -322,9 +400,11 @@ function Row({ label, value }) {
   );
 }
 
-function DealDrawer({ deal, onClose, onOpenRoom, canOperate, onAdvance }) {
+function DealDrawer({ deal, onClose, onOpenRoom, canOperate, onAdvance, onPass, sla }) {
   const pct = deal.progress_pct || 0;
   const canAdvance = PIPELINE.includes(deal.status) && PIPELINE.indexOf(deal.status) < PIPELINE.length - 1;
+  const canPass = deal.status !== 'rejected';
+  const band = slaBand(deal.days_in_stage, sla);
   return (
     <>
       <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
@@ -364,8 +444,35 @@ function DealDrawer({ deal, onClose, onOpenRoom, canOperate, onAdvance }) {
             <Row label="Management Fee" value={deal.management_fee_pct != null ? `${deal.management_fee_pct}%` : null} />
             <Row label="Closing Deadline" value={deal.closing_deadline} />
             <Row label="Lead Partner" value={deal.lead_partner_name} />
-            <Row label="Days in Stage" value={`${deal.days_in_stage ?? 0} days`} />
           </div>
+
+          {/* Task #127 — time in stage, banded against the viewer's SLA. An
+              unknown age gets no band: colouring it red would invent urgency
+              the data does not support. */}
+          <div className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${SLA_BAND_CLASS[band]}`}>
+            <span className="flex items-center gap-1.5"><Clock size={14} /> Time in stage</span>
+            <span className="font-medium">
+              {typeof deal.days_in_stage === 'number' ? `${deal.days_in_stage} days` : NOT_RECORDED}
+            </span>
+          </div>
+
+          {deal.status === 'rejected' && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/40">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Passed</div>
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                {passReasonLabel(deal.pass_reason)}
+              </div>
+              {deal.pass_note && (
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{deal.pass_note}</p>
+              )}
+              {!deal.pass_reason && (
+                <p className="mt-1 text-xs text-gray-500">
+                  This deal was passed before a reason was required. It is not backfilled —
+                  a guessed reason would corrupt the record.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2 pt-2">
             <button onClick={onOpenRoom}
@@ -378,10 +485,218 @@ function DealDrawer({ deal, onClose, onOpenRoom, canOperate, onAdvance }) {
                 <ArrowRight size={15} /> Advance
               </button>
             )}
+            {canOperate && canPass && (
+              <button onClick={onPass}
+                className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-sm font-medium flex items-center gap-1 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                <Ban size={15} /> Pass
+              </button>
+            )}
           </div>
         </div>
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Task #127 — Pass modal. A reason is required.
+// ---------------------------------------------------------------------------
+function PassModal({ deal, onClose, onConfirm }) {
+  const [reason, setReason] = useState(null);
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async () => {
+    // Belt and braces: the button is disabled without a reason, but a disabled
+    // button is a suggestion. The worker 400s a missing reason regardless.
+    if (!reason || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onConfirm({ reason, note: note.trim() });
+    } catch (e) {
+      reportError('DealsPage:pass', e);
+      setError(e?.message || 'The pass was not recorded.');
+      setSaving(false);
+    }
+  };
+
+  const revisit = passReasonRevisit(reason);
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-label="Record a pass"
+        className="fixed left-1/2 top-1/2 z-50 w-[min(30rem,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white shadow-xl dark:bg-gray-900">
+        <div className="flex items-start justify-between border-b border-gray-100 p-5 dark:border-gray-800">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              Pass on {deal.project_name || `Deal #${deal.id}`}
+            </h2>
+            <div className="text-sm text-gray-500 capitalize">
+              {deal.status}
+              {typeof deal.days_in_stage === 'number' ? ` · ${deal.days_in_stage} days in stage` : ''}
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700" aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            A reason is required. Passes are queryable later — this is how the fund remembers why it said no.
+          </p>
+
+          <fieldset>
+            <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Reason · required
+            </legend>
+            <div className="space-y-1.5">
+              {PASS_TAXONOMY.map((r) => (
+                <label key={r.key}
+                  className={`flex cursor-pointer gap-3 rounded-lg border p-2.5 text-sm ${
+                    reason === r.key
+                      ? 'border-violet-400 bg-violet-50 dark:border-violet-700 dark:bg-violet-900/20'
+                      : 'border-gray-200 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/60'}`}>
+                  <input type="radio" name="pass-reason" value={r.key} className="mt-0.5"
+                    checked={reason === r.key} onChange={() => setReason(r.key)} />
+                  <span>
+                    <span className="block font-medium text-gray-900 dark:text-gray-100">{r.label}</span>
+                    <span className="block text-xs text-gray-500">{r.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div>
+            <label htmlFor="pass-note" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Note · optional
+            </label>
+            <textarea id="pass-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="The specifics. The reason above is what aggregates; this is what a partner reads back."
+              className="w-full rounded-lg border border-gray-300 p-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+          </div>
+
+          {revisit && (
+            <p className="rounded-lg bg-gray-50 p-2.5 text-xs text-gray-600 dark:bg-gray-800/60 dark:text-gray-400">
+              {revisit}
+            </p>
+          )}
+
+          {error && (
+            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+              {error}
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <button onClick={onClose}
+              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+              Cancel
+            </button>
+            <button onClick={submit} disabled={!reason || saving}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-900">
+              {saving && <Loader2 size={15} className="animate-spin" />}
+              {reason ? `Record pass · ${passReasonLabel(reason)}` : 'Select a reason to continue'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Task #127 — Why we passed.
+// ---------------------------------------------------------------------------
+function PassAnalyticsPanel({ stats, active, onQuery }) {
+  const buckets = Array.isArray(stats?.buckets) ? stats.buckets : [];
+  const total = Number(stats?.total || 0);
+
+  return (
+    <section className="my-6 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Why we passed</h2>
+        <span className="text-xs text-gray-500">
+          {total === 0 ? 'No passes recorded yet' : `${total} pass${total === 1 ? '' : 'es'} recorded`}
+        </span>
+      </div>
+
+      {total === 0 ? (
+        <p className="text-sm text-gray-500">
+          Once the fund records a pass, its reason is queryable here — revisiting a valuation pass
+          a year later is the point of writing it down.
+        </p>
+      ) : (
+        <>
+          <div className="space-y-1">
+            {buckets.map((b) => {
+              const on = active === b.reason;
+              return (
+                <button key={b.reason} onClick={() => onQuery(b.reason)}
+                  aria-pressed={on}
+                  className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm ${
+                    on ? 'bg-violet-50 dark:bg-violet-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/60'}`}>
+                  <span className="flex-1 text-gray-900 dark:text-gray-100">
+                    {b.label}
+                    {b.reason === PASS_REASON_UNRECORDED && (
+                      <span className="ml-1.5 text-xs text-gray-500">· not backfilled</span>
+                    )}
+                  </span>
+                  <span className="w-10 text-right font-medium text-gray-900 tabular-nums dark:text-gray-100">{b.count}</span>
+                  {/* A null share means no passes at all — "0%" would assert a
+                      measurement nobody made. */}
+                  <span className="w-14 text-right text-xs text-gray-500 tabular-nums">{fmtPct(b.pct)}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {stats?.unrecorded_note && (
+            <p className="mt-2 text-xs text-gray-500">{stats.unrecorded_note}</p>
+          )}
+
+          {active && (
+            <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  {passReasonLabel(active)}
+                </span>
+                <button onClick={() => onQuery(active)} className="text-xs text-violet-600 hover:underline">
+                  Clear filter
+                </button>
+              </div>
+              {(stats.deals || []).length === 0 ? (
+                <p className="text-sm text-gray-500">No deals passed for this reason yet.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {stats.deals.map((d) => (
+                    <li key={d.id} className="text-sm">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {d.project_name || `Deal #${d.id}`}
+                      </span>
+                      {d.passed_at && <span className="ml-2 text-xs text-gray-500">{String(d.passed_at).slice(0, 10)}</span>}
+                      {d.passed_by_name && <span className="ml-2 text-xs text-gray-500">· {d.passed_by_name}</span>}
+                      {d.pass_note && <div className="text-xs text-gray-600 dark:text-gray-400">{d.pass_note}</div>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {!active && (
+            <p className="mt-2 text-xs text-gray-500">
+              Select a reason to query it — pass data is the fund&apos;s memory, and revisiting a
+              valuation pass a year later is the point of recording it.
+            </p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

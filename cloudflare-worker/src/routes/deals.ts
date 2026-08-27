@@ -4,11 +4,20 @@ import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, requireAdmin, canAccessFounderResource } from '../auth';
 import { buildZip } from '../util/zip';
+import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
+import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
+import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
 
 const deals = new Hono<{ Bindings: Env }>();
 
 // Task #4 — Deal Flow pipeline stages (excludes the terminal `rejected`).
 const PIPELINE = ['applied', 'scored', 'active', 'funded'];
+
+// Task #127 — every value `deals.status` accepts, mirroring the column's CHECK.
+// PUT validates against this rather than letting an arbitrary string reach D1,
+// where the constraint failure surfaces to the caller as an opaque 400.
+const DEAL_STATUSES = [...PIPELINE, 'rejected'];
+const PASSED_STATUS = 'rejected';
 
 // SQLite datetime('now') yields 'YYYY-MM-DD HH:MM:SS' in UTC — normalise so
 // `new Date` parses it as UTC rather than local.
@@ -122,9 +131,123 @@ deals.get('/funnel', async (c) => {
   return c.json({ stages, total: stages.reduce((n, s) => n + s.count, 0) });
 });
 
+// ---------------------------------------------------------------------------
+// Task #127 — pass + stage analytics. Registered above `/:id` so the literal
+// paths are not swallowed by the id route.
+// ---------------------------------------------------------------------------
+
+/**
+ * Why we passed. Pass data is the fund's memory: revisiting a valuation pass a
+ * year later is the point of recording it, so this endpoint is a query surface
+ * first and a chart second — `?reason=` returns the deals behind a bucket.
+ */
+deals.get('/pass-analytics', async (c) => {
+  const user = await requireAuth(c);
+  if (!isPrivilegedRole(user.role as string)) return c.json({ detail: 'Forbidden' }, 403);
+  await ensureDealPassSchema(c.env);
+  const sql = getSQL(c.env);
+
+  const counts = await sql`
+    SELECT d.pass_reason AS pass_reason, COUNT(*) AS count
+      FROM deals d
+      LEFT JOIN projects p ON p.id = d.project_id
+     WHERE d.status = ${PASSED_STATUS}
+       AND (p.id IS NULL OR p.deleted_at IS NULL)
+     GROUP BY d.pass_reason`;
+  const breakdown = buildPassBreakdown(counts as any[]);
+
+  // A reason the caller did not ask about returns no deals rather than all of
+  // them — an unfiltered dump of every pass is a different, larger disclosure.
+  const reason = c.req.query('reason');
+  let matches: any[] = [];
+  if (reason && isPassReason(reason)) {
+    matches = (await sql`
+      SELECT d.id, d.uid, d.pass_reason, d.pass_note, d.passed_at,
+             p.name AS project_name, p.sector AS project_sector,
+             u.name AS passed_by_name
+        FROM deals d
+        LEFT JOIN projects p ON p.id = d.project_id
+        LEFT JOIN users u ON u.id = d.passed_by_user_id
+       WHERE d.status = ${PASSED_STATUS} AND d.pass_reason = ${reason}
+         AND (p.id IS NULL OR p.deleted_at IS NULL)
+       ORDER BY d.passed_at DESC
+       LIMIT 100`) as any[];
+  } else if (reason === PASS_REASON_UNRECORDED) {
+    matches = (await sql`
+      SELECT d.id, d.uid, d.pass_reason, d.pass_note, d.passed_at,
+             p.name AS project_name, p.sector AS project_sector,
+             u.name AS passed_by_name
+        FROM deals d
+        LEFT JOIN projects p ON p.id = d.project_id
+        LEFT JOIN users u ON u.id = d.passed_by_user_id
+       WHERE d.status = ${PASSED_STATUS} AND d.pass_reason IS NULL
+         AND (p.id IS NULL OR p.deleted_at IS NULL)
+       ORDER BY COALESCE(d.passed_at, d.updated_at) DESC
+       LIMIT 100`) as any[];
+  }
+
+  await sql.end();
+  return c.json({
+    total: breakdown.total,
+    buckets: breakdown.buckets,
+    unrecorded: breakdown.unrecorded,
+    // Named explicitly so the UI can say WHY a bucket has no reason rather
+    // than leaving the operator to assume the data is merely missing.
+    unrecorded_note: breakdown.unrecorded > 0
+      ? 'These deals were passed before a reason was required. They are not backfilled — a guessed reason would corrupt the record.'
+      : null,
+    reason: reason || null,
+    deals: matches,
+  });
+});
+
+/**
+ * Stage funnel over RECORDED transitions.
+ *
+ * `recording_started_at` is not decoration. Stage history begins at migration
+ * 176; a conversion rate presented without it reads as the fund's whole
+ * history when it may be a fortnight of it.
+ */
+deals.get('/stage-analytics', async (c) => {
+  const user = await requireAuth(c);
+  if (!isPrivilegedRole(user.role as string)) return c.json({ detail: 'Forbidden' }, 403);
+  await ensureDealPassSchema(c.env);
+  const sql = getSQL(c.env);
+
+  const raw = c.req.query('days');
+  const parsed = Number.parseInt(String(raw ?? ''), 10);
+  const days = Number.isFinite(parsed) && parsed > 0 && parsed <= 3650 ? parsed : 90;
+
+  const started = await stageRecordingStartedAt(sql);
+  const events = (await sql.unsafe(
+    `SELECT deal_id, from_stage, to_stage, kind, days_in_from, created_at
+       FROM deal_stage_events
+      WHERE created_at >= datetime('now', ?)
+      ORDER BY created_at`,
+    [`-${days} days`],
+  )) as any[];
+
+  await sql.end();
+  const funnel = buildStageFunnel(PIPELINE, events as any);
+  return c.json({
+    window_days: days,
+    recording_started_at: started,
+    // The window can legitimately reach back further than the data does. Say
+    // so, rather than letting an empty early period read as a quiet quarter.
+    covers_full_window: !!started && !!events.length
+      && (Date.now() - new Date(String(started).replace(' ', 'T') + 'Z').getTime()) >= days * 86_400_000,
+    unavailable: started ? null : DEAL_METRIC_UNAVAILABLE.stage_history,
+    stages: funnel,
+    events_counted: events.length,
+    // Stated, not omitted: the design's source-quality table has no backing.
+    source_quality_unavailable: DEAL_METRIC_UNAVAILABLE.source_quality,
+  });
+});
+
 deals.post('/', async (c) => {
   const user = await requireAuth(c);
   const data = await c.req.json();
+  await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const p = await sql`SELECT id, founder_id FROM projects WHERE id = ${data.project_id}`;
   if (p.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
@@ -134,6 +257,17 @@ deals.post('/', async (c) => {
     return c.json({ error: 'Forbidden' }, 403);
   }
   const [deal] = await sql`INSERT INTO deals (project_id, partner_id, status, notes, amount, stage_changed_at) VALUES (${data.project_id}, ${data.partner_id || null}, ${data.status || 'applied'}, ${data.notes || null}, ${data.amount || null}, datetime('now')) RETURNING *`;
+  // Task #127 — the deal's arrival is its first stage entry. Without this the
+  // funnel can measure conversion OUT of the first stage but never has a
+  // cohort that entered it, so the first column reads 0 forever.
+  await recordStageEvent(sql, {
+    dealId: Number((deal as any)?.id),
+    fromStage: null,
+    fromStageChangedAt: null,
+    toStage: String((deal as any)?.status || 'applied'),
+    kind: 'set',
+    actorUserId: (user as any)?.id ?? null,
+  });
   await sql.end();
   return c.json(deal, 201);
 });
@@ -142,12 +276,23 @@ deals.post('/', async (c) => {
 // Task #4 — Admin-only "Draft Deal": create a fully-specified deal.
 // ---------------------------------------------------------------------------
 deals.post('/draft', async (c) => {
-  await requireAdmin(c);
+  const user = await requireAdmin(c);
   const data = await c.req.json();
+  await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
   const p = await sql`SELECT id FROM projects WHERE id = ${data.project_id}`;
   if (p.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
-  const status = [...PIPELINE, 'rejected'].includes(data.status) ? data.status : 'applied';
+  // Task #127 — a deal may not be BORN passed. Drafting straight into the
+  // terminal stage was the third door into 'rejected' with no reason attached;
+  // the pass route is the only one, so draft it and then pass it. The UI never
+  // offered this (its select lists pipeline stages only), so nothing regresses.
+  if (String(data.status) === PASSED_STATUS) {
+    await sql.end();
+    return c.json({
+      detail: 'Draft the deal in a pipeline stage, then record the pass through POST /api/deals/:id/pass — a reason is required.',
+    }, 400);
+  }
+  const status = PIPELINE.includes(data.status) ? data.status : 'applied';
   const [deal] = await sql`
     INSERT INTO deals (
       project_id, partner_id, lead_partner_id, status, notes, description, website,
@@ -161,6 +306,14 @@ deals.post('/draft', async (c) => {
       ${data.instrument || null}, ${data.spv_jurisdiction || null}, ${data.closing_deadline || null},
       0, datetime('now')
     ) RETURNING *`;
+  await recordStageEvent(sql, {
+    dealId: Number((deal as any)?.id),
+    fromStage: null,
+    fromStageChangedAt: null,
+    toStage: String((deal as any)?.status || 'applied'),
+    kind: 'set',
+    actorUserId: (user as any)?.id ?? null,
+  });
   await sql.end();
   return c.json(enrichDeal(deal), 201);
 });
@@ -220,15 +373,49 @@ deals.get('/:id', async (c) => {
 deals.put('/:id', async (c) => {
   // Task #4 — deal mutation is an operator (partner/admin) action; investors
   // are limited to commitments + invitation responses.
-  await requireRole(c, 'partner');
+  const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
   const data = await c.req.json();
+  await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id FROM deals WHERE id = ${id}`;
+  const rows = await sql`SELECT id, status, stage_changed_at FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
 
+  if (data.status !== undefined) {
+    if (!DEAL_STATUSES.includes(String(data.status))) {
+      await sql.end();
+      return c.json({ detail: `Unknown deal status '${data.status}'` }, 400);
+    }
+    // Task #127 — a pass may not be recorded through this route.
+    //
+    // This is the load-bearing half of the taxonomy. Requiring a reason on
+    // POST /:id/pass achieves nothing while a plain status write still reaches
+    // the same terminal state with no reason attached: the reason becomes
+    // optional in practice and the aggregate silently fills with blanks. One
+    // door, and it asks the question.
+    if (String(data.status) === PASSED_STATUS) {
+      await sql.end();
+      return c.json({
+        detail: 'Record a pass through POST /api/deals/:id/pass — a reason is required.',
+      }, 400);
+    }
+  }
+
   // Task #4 — maintain stage_changed_at whenever the pipeline stage moves.
-  if (data.status) await sql`UPDATE deals SET status = ${data.status}, stage_changed_at = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  if (data.status) {
+    const prev = rows[0] as any;
+    // Recorded BEFORE the update: the update overwrites stage_changed_at, so
+    // reading it afterwards measures zero days for every transition.
+    await recordStageEvent(sql, {
+      dealId: id,
+      fromStage: prev.status ?? null,
+      fromStageChangedAt: prev.stage_changed_at ?? null,
+      toStage: String(data.status),
+      kind: 'set',
+      actorUserId: (user as any)?.id ?? null,
+    });
+    await sql`UPDATE deals SET status = ${data.status}, stage_changed_at = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
+  }
   if (data.partner_id !== undefined) await sql`UPDATE deals SET partner_id = ${data.partner_id}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   if (data.notes !== undefined) await sql`UPDATE deals SET notes = ${data.notes}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   if (data.amount !== undefined) await sql`UPDATE deals SET amount = ${data.amount}, updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
@@ -302,10 +489,11 @@ deals.put('/:id', async (c) => {
 // Task #4 — Advance a deal to the next pipeline stage (operator action).
 // ---------------------------------------------------------------------------
 deals.post('/:id/advance', async (c) => {
-  await requireRole(c, 'partner');
+  const user = await requireRole(c, 'partner');
   const id = parseInt(c.req.param('id'));
+  await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT status FROM deals WHERE id = ${id}`;
+  const rows = await sql`SELECT status, stage_changed_at FROM deals WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
   const cur = String((rows[0] as any).status);
   const idx = PIPELINE.indexOf(cur);
@@ -314,6 +502,16 @@ deals.post('/:id/advance', async (c) => {
     return c.json({ detail: 'Deal cannot advance further' }, 400);
   }
   const next = PIPELINE[idx + 1];
+  // Task #127 — recorded BEFORE the update, which overwrites stage_changed_at
+  // and would otherwise report every stage as zero days long.
+  await recordStageEvent(sql, {
+    dealId: id,
+    fromStage: cur,
+    fromStageChangedAt: (rows[0] as any).stage_changed_at ?? null,
+    toStage: next,
+    kind: 'advance',
+    actorUserId: (user as any)?.id ?? null,
+  });
   await sql`UPDATE deals SET status = ${next}, stage_changed_at = datetime('now'), updated_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   const [updated] = await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
 
@@ -338,6 +536,88 @@ deals.post('/:id/advance', async (c) => {
 
   await sql.end();
   return c.json(enrichDeal(updated));
+});
+
+// ---------------------------------------------------------------------------
+// Task #127 — Pass. The only route that writes the terminal stage.
+// ---------------------------------------------------------------------------
+deals.post('/:id/pass', async (c) => {
+  const user = await requireRole(c, 'partner');
+  const id = parseInt(c.req.param('id'));
+  const body = await c.req.json().catch(() => ({} as any));
+  const reason = (body as any)?.reason;
+
+  // Validated before the row is read, and before anything is written. A pass
+  // is not a state the platform should be able to reach while the operator is
+  // still deciding why — that is how the "why" ends up empty.
+  if (!isPassReason(reason)) {
+    return c.json({
+      detail: 'A pass requires a reason from the taxonomy.',
+      allowed: [...PASS_REASON_KEYS],
+    }, 400);
+  }
+  const note = typeof (body as any)?.note === 'string' ? (body as any).note.trim() : '';
+
+  await ensureDealPassSchema(c.env);
+  const sql = getSQL(c.env);
+  const rows = await sql`SELECT status, stage_changed_at FROM deals WHERE id = ${id}`;
+  if (rows.length === 0) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  const cur = String((rows[0] as any).status);
+  if (cur === PASSED_STATUS) {
+    await sql.end();
+    // Not an error worth a 500 and not silently idempotent either: passing a
+    // passed deal a second time would overwrite the first reason, which is the
+    // record this whole route exists to protect.
+    return c.json({ detail: 'This deal has already been passed.' }, 409);
+  }
+
+  // Recorded BEFORE the update — stage_changed_at is about to be overwritten.
+  await recordStageEvent(sql, {
+    dealId: id,
+    fromStage: cur,
+    fromStageChangedAt: (rows[0] as any).stage_changed_at ?? null,
+    toStage: PASSED_STATUS,
+    kind: 'pass',
+    actorUserId: (user as any)?.id ?? null,
+  });
+
+  await sql`
+    UPDATE deals
+       SET status = ${PASSED_STATUS},
+           pass_reason = ${reason},
+           pass_note = ${note || null},
+           passed_at = datetime('now'),
+           passed_by_user_id = ${(user as any)?.id ?? null},
+           stage_changed_at = datetime('now'),
+           updated_at = CURRENT_TIMESTAMP
+     WHERE id = ${id}`;
+
+  const [updated] = await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, lp.name as lead_partner_name FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN users lp ON lp.id = d.lead_partner_id WHERE d.id = ${id}`;
+
+  // The founder is told the outcome, never the internal reason. The taxonomy
+  // is the fund's own shorthand — "Team" delivered as a notification is a
+  // judgement the operator did not choose to send, and the note is written for
+  // an investment committee, not for the company.
+  try {
+    const own = await sql`SELECT f.id AS founder_user_id, p.name AS project_name FROM deals d LEFT JOIN projects p ON p.id = d.project_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.id = ${id}`;
+    const founderUserId = (own[0] as any)?.founder_user_id;
+    if (founderUserId) {
+      const { notify } = await import('../services/notify');
+      await notify(c.env, {
+        userId: founderUserId,
+        type: 'deal_stage_change',
+        title: `${(own[0] as any)?.project_name || 'Your project'}: the fund has passed`,
+        body: 'A partner closed this deal. Your partner contact can talk you through it.',
+        link: `/deals/${id}`,
+        payload: { deal_id: id, status: PASSED_STATUS },
+        channels: ['in_app', 'email'],
+        category: 'deal_stage_change',
+      });
+    }
+  } catch (e) { console.warn('[deals] pass notify failed', e); }
+
+  await sql.end();
+  return c.json({ ...enrichDeal(updated), pass_reason_label: passReasonLabel(reason) });
 });
 
 // ---------------------------------------------------------------------------
