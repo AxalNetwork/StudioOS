@@ -421,3 +421,61 @@ test('every assist surface names a task class the router actually routes', () =>
     assert.ok(routed.has(t), `task "${t}" is not in aiRouter's ROUTE map`);
   }
 });
+
+// ---------- mounting the rail ----------
+
+test('AssistLayout renders nothing extra until it has real figures', () => {
+  // A rail with no numbers is worse than no rail: the empty frame reads as
+  // "nothing spent" rather than "not loaded". So the wrapper returns the page
+  // alone until the spend fetch lands.
+  const src = scan(read('frontend/src/ui/AssistLayout.jsx'));
+  assert.match(src, /const config = \(!loading && spend\) \? eadwynConfig/);
+  assert.match(src, /if \(!config\) return <>\{children\}<\/>/,
+    'no config means the page renders exactly as it did before');
+});
+
+test('the rail is secondary in the layout, and cannot push the page off-screen', () => {
+  const src = scan(read('frontend/src/ui/AssistLayout.jsx'));
+  assert.match(src, /min-w-0 flex-1/,
+    'without min-w-0 a wide table refuses to shrink and shoves the rail out');
+  assert.match(src, /hidden xl:flex/,
+    'below 1280px the rail is omitted, not stacked above the tool');
+});
+
+test('every mounted surface is one eadwynConfig knows', () => {
+  // A typo'd surface renders no rail at all (eadwynConfig returns null), which
+  // is silent. This makes it loud.
+  const surfaces = new Set(
+    [...read('frontend/src/ui/eadwynConfig.js').matchAll(/^  (\w+):\s*\{$/gm)].map((m) => m[1]),
+  );
+  assert.ok(surfaces.size >= 4, 'ASSIST_SURFACES must have been parsed');
+  const bad = [];
+  for (const f of walkJs('frontend/src/pages')) {
+    for (const m of scan(read(f)).matchAll(/<AssistLayout\s+surface="([^"]+)"/g)) {
+      if (!surfaces.has(m[1])) bad.push(`${f}: surface="${m[1]}"`);
+    }
+  }
+  assert.deepEqual(bad, [], 'these mounts name a surface eadwynConfig does not define');
+});
+
+test('an embedded page does not mount a second rail', () => {
+  // DeckReviewerPage renders inside another page when `embedded`. Wrapping it
+  // unconditionally would put two rails on one screen, both showing the same
+  // account-wide figures.
+  const src = scan(read('frontend/src/pages/DeckReviewerPage.jsx'));
+  assert.match(src, /if \(embedded\) return page;/,
+    'the embedded path must return the bare page');
+  assert.equal((src.match(/<AssistLayout/g) || []).length, 1, 'exactly one wrap');
+});
+
+test('no page reaches past AssistLayout to mount AssistRail itself', () => {
+  // The wrapper is the one place that knows how the rail sits beside a page.
+  // A page mounting AssistRail directly would re-derive the layout, the hook
+  // call and the honesty contract, which is how six pages end up looking like
+  // six different products.
+  const offenders = [];
+  for (const f of walkJs('frontend/src/pages')) {
+    if (/<AssistRail\b/.test(scan(read(f)))) offenders.push(f);
+  }
+  assert.deepEqual(offenders, [], 'pages mount AssistLayout, not AssistRail');
+});

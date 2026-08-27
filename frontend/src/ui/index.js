@@ -38,6 +38,9 @@ export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
 // Mode persistence and a user-selectable model do not exist yet — AssistRail's
 // header says exactly which of its props are still props and why.
 export { default as AssistRail } from './AssistRail';
+// The one place that knows how the rail sits beside a page — see D15 for
+// which surfaces get it and why onboarding does not.
+export { default as AssistLayout } from './AssistLayout';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from './eadwynConfig';
 
