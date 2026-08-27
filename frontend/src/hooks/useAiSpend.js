@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import api from '../lib/api';
+import { api } from '../lib/api';
 
 /**
  * The caller's own AI spend, and the router's real price list.

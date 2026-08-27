@@ -1,11 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runCost, batchCost, spendMeter, formatCost } from '../src/ui/assistCost.js';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
+
+// Every .js/.jsx under a directory, repo-relative.
+function walkJs(dir) {
+  const out = [];
+  for (const e of readdirSync(resolve(root, dir), { withFileTypes: true })) {
+    const p = `${dir}/${e.name}`;
+    if (e.isDirectory()) out.push(...walkJs(p));
+    else if (/\.(js|jsx)$/.test(e.name)) out.push(p);
+  }
+  return out;
+}
 
 // Two earlier assertions in this repo passed by matching a string that only
 // existed in a comment, so everything below reads comment-stripped source.
@@ -301,4 +312,49 @@ test('the spend meter has a live source, and api.js names it', () => {
   assert.match(api, /myAiSpend:\s*\(\)\s*=>\s*request\('\/ai\/me\/spend'\)/,
     'the self-view endpoint the meter reads');
   assert.match(api, /monitoringAiUsage:/, 'the admin rollup stays separate');
+});
+
+// ---------- imports of lib/api must name a real export ----------
+
+test('nothing default-imports lib/api, which has no default export', () => {
+  // A code-quality bot caught `api.aiPricing` as "always undefined" in
+  // useAiSpend.js. It was right, and about more than it reported: the file
+  // did `import api from '../lib/api'`, and lib/api has NO default export —
+  // so `api` was undefined and BOTH calls would have thrown, not just the
+  // flagged one.
+  //
+  // The bot's suggested fix was to guard `typeof api.aiPricing === 'function'`
+  // before calling. That would have papered over it: the hook would have
+  // silently fetched nothing forever, and the meter would have sat empty with
+  // no error. The defect was the import.
+  //
+  // Nothing in the toolchain would have caught it — Vite transpiles rather
+  // than type-checks, and there is no eslint in this repo. So the check lives
+  // here.
+  const apiSrc = read('frontend/src/lib/api.js');
+  assert.equal(/^export default/m.test(apiSrc), false,
+    'lib/api exports named bindings only — if that changes, revisit this test');
+  const exported = new Set(
+    [...apiSrc.matchAll(/^export (?:const|function|async function) (\w+)/gm)].map((m) => m[1]),
+  );
+  assert.ok(exported.has('api'), 'the `api` named export must exist');
+
+  const offenders = [];
+  for (const f of walkJs('frontend/src')) {
+    const src = scan(read(f));
+    // `import x from '.../lib/api'` — a default import of a module with none.
+    for (const m of src.matchAll(/import\s+(\w+)\s*,?\s*(?:\{[^}]*\})?\s*from\s*'([^']*lib\/api)'/g)) {
+      offenders.push(`${f}: default-imports as \`${m[1]}\``);
+    }
+    // Named imports must name something the module actually exports.
+    for (const m of src.matchAll(/import\s*\{([^}]+)\}\s*from\s*'([^']*lib\/api)'/g)) {
+      for (const raw of m[1].split(',')) {
+        const name = raw.trim().split(/\s+as\s+/)[0].trim();
+        if (name && !exported.has(name)) offenders.push(`${f}: imports missing export \`${name}\``);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'these files import a binding lib/api does not provide — at runtime the '
+    + 'value is undefined and every call through it throws');
 });
