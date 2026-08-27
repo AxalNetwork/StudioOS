@@ -39,6 +39,7 @@ export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
 // header says exactly which of its props are still props and why.
 export { default as AssistRail } from './AssistRail';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
+export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from './eadwynConfig';
 
 // The left navigation, lifted out of App.jsx unchanged (census: lift, do not
 // rebuild — the live one already beats the canvas rail), and the company

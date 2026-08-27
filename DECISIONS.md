@@ -9,9 +9,9 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All fourteen decisions are now resolved. D6 is closed by D11, which repaired
+All sixteen decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
-per-tab table and closes out the Research row. D13 and D14 are Phase 4's, and
+per-tab table and closes out the Research row. D13 to D16 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
 
 ### D1. Studio Ops — re-integrate, or honour the deletion?
@@ -437,6 +437,42 @@ Still genuinely missing after that: per-page mode persistence
 is now settled as "surfaces that actually reach the router", which is seven
 pages (advisory ×2, brand ×2, onboarding chat, market/competitors, deck
 reviewer).
+
+### D15. The rail goes where a user spends their own budget
+
+Placement was settled as "surfaces that actually reach `aiRouter`", traced from
+`run()` call sites through the route files to the pages. That gave seven. One
+of them is excluded on a second clause: **reaching the router is necessary, not
+sufficient.**
+
+`OnboardingChatPage` reaches it — `/api/profiling` routes `role_detect` — and
+is deliberately left out. It is a signup-funnel step for a user whose role is
+still `pending`, on a centred single-column card; the call there is the
+platform profiling THEM, not them spending anything. A dollar meter on a
+first-touch screen misdescribes whose money is moving and is the worst possible
+place to put one.
+
+The six that remain are `AdvisoryPage`, `SpinoutLabAdvisorsPage`,
+`BrandBuilderPage`, `SpinoutLabBrandPage`, `SpinoutLabMarketPage` and
+`DeckReviewerPage` — surfaces where a user deliberately runs AI work and can be
+shown what it cost.
+
+### D16. The run estimate is measured, not modelled
+
+Every rail canvas carried invented token counts — `tin: 1800, tout: 600` and
+similar — with no source. There is no honest source: nothing knows how many
+tokens a deck review takes before it takes them.
+
+So the estimate is not modelled at all. It is the caller's **own observed
+average** for that task class, from their `ai_usage_logs` rows via
+`/api/ai/me/spend`. That is a real number about real runs, it sharpens as they
+use the surface, and when they have no history it is honestly absent.
+
+`eadwynConfig` therefore sets `tin`/`tout` to zero on purpose, and `AssistRail`
+prefers `observed` → modelled → **null**, never zero. `runCost()` of zero
+tokens is `0`, and rendering that would price the run at free. "Not recorded"
+is worth more than a number nobody measured — the same rule the fund surfaces
+follow, applied to cost.
 
 ## Part 2 — Decisions taken
 

@@ -116,13 +116,28 @@ export default function AssistRail({
     ? { id: run.model, name: run.model, fromRun: true, fallback: !!run.fallback_used }
     : (routed ? { ...routed, fromRun: false, fallback: false } : null);
 
-  // One arithmetic for the estimate and the receipt — see assistCost.js.
-  const estimate = pc.assists?.length ? batchCost(pc.run, pc.assists) : runCost(pc.run);
+  // What a run costs, in order of how much it is worth believing:
+  //   1. `pc.observed` — the caller's own average for this task class, from
+  //      ai_usage_logs. A real number about real runs.
+  //   2. a modelled figure from token counts, for a caller that supplies them.
+  //   3. NOTHING. Not zero.
+  //
+  // The third case is why this is not a plain `runCost(pc.run)`. eadwynConfig
+  // deliberately sets tin/tout to 0 because nothing knows how many tokens a
+  // deck review takes before it takes them, and runCost() of zero tokens is
+  // 0 — which would render "$0.0000" as though the run were free. An
+  // unmeasured cost is unknown, and the rail says so.
+  const modelled = pc.assists?.length ? batchCost(pc.run, pc.assists) : runCost(pc.run);
+  const estimate = pc.observed?.cost ?? (modelled > 0 ? modelled : null);
 
   // Account-wide spend: explicit total, else the sum of every page's spend.
+  // `null` here means the usage table could not be read — NOT that nothing was
+  // spent. Drawing an empty bar from it would assert a fact the platform does
+  // not have, so the meter is replaced by a line saying so.
   const spent = config.totalSpend
     ?? Object.values(config.pages ?? {}).reduce((s, p) => s + (p.spend ?? 0), 0);
-  const meter = spendMeter(spent, config.planCap);
+  const spendKnown = typeof spent === 'number' && Number.isFinite(spent);
+  const meter = spendMeter(spendKnown ? spent : 0, config.planCap);
 
   return (
     <aside
@@ -196,7 +211,9 @@ export default function AssistRail({
         <SectionLabel tone="faint">{pc.assistLabel || 'Estimated cost'}</SectionLabel>
         <div className="flex items-baseline justify-between mt-1">
           <span className="text-xs text-axal-muted dark:text-gray-400">{pc.run.unit}</span>
-          <span className="font-mono tabular-nums text-sm font-extrabold">{formatCost(estimate)}</span>
+          {estimate == null
+            ? <span className="text-xs text-axal-faint dark:text-gray-500">Not recorded</span>
+            : <span className="font-mono tabular-nums text-sm font-extrabold">{formatCost(estimate)}</span>}
         </div>
         {runCostUsd != null && (
           <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-axal-hairline dark:border-gray-700">
@@ -212,16 +229,20 @@ export default function AssistRail({
         <div className="flex items-baseline justify-between">
           <SectionLabel tone="faint">This month</SectionLabel>
           <span className="font-mono tabular-nums text-xs">
-            {formatSpend(spent)} <span className="text-axal-faint">/ {formatSpend(config.planCap)}</span>
+            {spendKnown
+              ? <>{formatSpend(spent)} <span className="text-axal-faint">/ {formatSpend(config.planCap)}</span></>
+              : <span className="text-axal-faint">Not recorded</span>}
           </span>
         </div>
-        <div className="h-[5px] rounded-axal-pill bg-axal-hairline dark:bg-gray-700 mt-2 overflow-hidden">
-          <div
-            className={`h-full ${meter.over ? 'bg-red-500' : accent.fill}`}
-            style={{ width: `${meter.fraction * 100}%` }}
-          />
-        </div>
-        {meter.over && <div className="text-[11px] text-red-700 dark:text-red-400 mt-1">Over plan cap</div>}
+        {spendKnown && (
+          <div className="h-[5px] rounded-axal-pill bg-axal-hairline dark:bg-gray-700 mt-2 overflow-hidden">
+            <div
+              className={`h-full ${meter.over ? 'bg-red-500' : accent.fill}`}
+              style={{ width: `${meter.fraction * 100}%` }}
+            />
+          </div>
+        )}
+        {spendKnown && meter.over && <div className="text-[11px] text-red-700 dark:text-red-400 mt-1">Over plan cap</div>}
         {config.margin && (
           <div className="flex items-baseline justify-between mt-2 text-[11px] text-axal-muted dark:text-gray-400">
             <span>Axal VC margin</span>

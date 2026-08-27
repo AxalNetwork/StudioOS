@@ -358,3 +358,66 @@ test('nothing default-imports lib/api, which has no default export', () => {
     'these files import a binding lib/api does not provide — at runtime the '
     + 'value is undefined and every call through it throws');
 });
+
+// ---------- the rail never quotes a number nobody measured ----------
+
+test('a run with no history reads "Not recorded", not $0.0000', () => {
+  // eadwynConfig sets tin/tout to 0 deliberately: nothing knows how many
+  // tokens a deck review takes before it takes them. runCost() of zero tokens
+  // is 0, and rendering that would price the run at free. The canvases each
+  // carried invented token counts instead; this refuses to invent one.
+  const src = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.match(src, /const estimate = pc\.observed\?\.cost \?\? \(modelled > 0 \? modelled : null\)/,
+    'observed first, modelled second, null third — never zero');
+  assert.match(src, /estimate == null/, 'and the null case is rendered, not formatted');
+  assert.match(src, /Not recorded/);
+});
+
+test('an unreadable spend figure hides the meter instead of drawing an empty bar', () => {
+  // `recorded: false` from the endpoint means the usage table could not be
+  // read. A 0% bar drawn from it asserts a spend the platform cannot vouch for.
+  const src = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.match(src, /const spendKnown = typeof spent === 'number' && Number\.isFinite\(spent\)/);
+  assert.match(src, /\{spendKnown && \(/, 'the bar is conditional on a known figure');
+  assert.match(src, /\{spendKnown && meter\.over/, 'and so is the over-cap warning');
+});
+
+test('the estimate is the caller’s own observed average, not a model', () => {
+  const cfg = scan(read('frontend/src/ui/eadwynConfig.js'));
+  assert.match(cfg, /export function observedRunCost/);
+  assert.match(cfg, /if \(!spend\?\.recorded\) return null/, 'no record, no estimate');
+  assert.match(cfg, /if \(!row \|\| !row\.calls\) return null/, 'no runs of this task, no estimate');
+  assert.match(cfg, /row\.spend_usd \/ row\.calls/);
+  // No invented token counts anywhere in the config.
+  assert.doesNotMatch(cfg, /tin:\s*[1-9]/, 'no modelled input tokens');
+  assert.doesNotMatch(cfg, /tout:\s*[1-9]/, 'no modelled output tokens');
+});
+
+test('onboarding is deliberately not an assist surface', () => {
+  // It reaches aiRouter (role_detect via /api/profiling) but the rail belongs
+  // where a user deliberately runs AI against their OWN budget. Onboarding is
+  // a signup-funnel step for a `pending`-role user, and the call there is the
+  // platform profiling them. "Reaches the router" is necessary, not sufficient.
+  const cfg = scan(read('frontend/src/ui/eadwynConfig.js'));
+  assert.doesNotMatch(cfg, /onboarding|role_detect|profiling/i,
+    'onboarding must not appear as a surface');
+  const raw = read('frontend/src/ui/eadwynConfig.js');
+  assert.match(raw, /OnboardingChatPage/, 'and the exclusion must be recorded, not silent');
+});
+
+test('every assist surface names a task class the router actually routes', () => {
+  // `task` is the join key to aiRouter: it picks the model, the price and the
+  // usage rows every figure on the rail is drawn from. A task the router does
+  // not know misreports all of them.
+  const cfg = read('frontend/src/ui/eadwynConfig.js');
+  const tasks = [...cfg.matchAll(/^\s*task:\s*'([a-z_]+)'/gm)].map((m) => m[1]);
+  assert.ok(tasks.length >= 4, 'the surfaces must declare their task classes');
+  const router = read('cloudflare-worker/src/services/aiRouter.ts');
+  const routed = new Set(
+    [...router.matchAll(/^\s{2}([a-z_]+):\s*\{ provider:/gm)].map((m) => m[1]),
+  );
+  assert.ok(routed.size > 5, 'the ROUTE map must have been parsed');
+  for (const t of tasks) {
+    assert.ok(routed.has(t), `task "${t}" is not in aiRouter's ROUTE map`);
+  }
+});
