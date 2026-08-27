@@ -46,6 +46,18 @@ const ALLOWLIST = new Set([
   "Array.from(CONTRACT_DOC_TYPES).map(() => '?').join(',')",
   // admin_contracts — literal 'uid' | 'envelope_uuid' union.
   'matchKey',
+  // tenancyScope.ts fragments (capital.ts). `scope.sql` is composed inside
+  // services/tenancyScope.ts from string literals plus the `alias` argument;
+  // every VALUE is a bound `?` in `scope.binds`, never interpolated. Two
+  // assertions in cloudflare-worker/test/tenancy_scope.test.mjs hold that up:
+  // the module interpolates nothing but `alias`, and every call site passes
+  // either no alias or a string literal. Neither can be satisfied by request
+  // input, which is what makes this entry safe rather than merely convenient.
+  'scope.sql',
+  // Same provenance as the allow-listed `where` above, one step later: an
+  // array of hardcoded clause strings (`scope.sql`, `'cc.status = ?'`) joined
+  // with AND. Values are bound separately.
+  "where.join(' AND ')",
 ]);
 
 function walk(dir) {

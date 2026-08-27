@@ -27,6 +27,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { lpSelfScope } from '../services/tenancyScope';
+import { claimLpRowsByEmail } from '../services/lpClaim';
 // Catalog moved to a pure module so non-route consumers (advisor
 // state machine) can import it without dragging in Hono / db / auth.
 // The route's original public surface is preserved by re-export.
@@ -839,9 +841,16 @@ spinoutLab.get('/fund-metrics', async (c) => {
     const row = await Funds.bySlug(c.env, 'spinout-fund-i');
     let entitled = ['admin', 'partner', 'investor'].includes(user?.role);
     if (row && !entitled) {
+      // lpSelfScope, not the hand-rolled predicate this line used to carry.
+      // It bound `user.email ?? ''`, and `LOWER(email) = LOWER('')` is true for
+      // every row with an empty email — so a session with no address on it
+      // matched any such row and was entitled to the fund's raise aggregates.
+      // The scope drops the email arm entirely when there is nothing to match.
+      await claimLpRowsByEmail(c.env, Number(user.id), user.email, Number(row.id));
+      const scope = lpSelfScope(user as any);
       const mine = await c.env.DB.prepare(
-        `SELECT 1 FROM limited_partners WHERE fund_id = ? AND (user_id = ? OR LOWER(email) = LOWER(?)) LIMIT 1`,
-      ).bind(row.id, user.id, user.email ?? '').first();
+        `SELECT 1 FROM limited_partners lp WHERE lp.fund_id = ? AND ${scope.sql} LIMIT 1`,
+      ).bind(row.id, ...scope.binds).first();
       entitled = !!mine;
     }
     if (row && entitled) {

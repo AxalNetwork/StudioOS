@@ -3,6 +3,7 @@
  * All money columns are integer cents.
  */
 import type { Env } from '../types';
+import { lpSelfScope, type Actor } from '../services/tenancyScope';
 
 export interface FundDistribution {
   id: number;
@@ -41,14 +42,23 @@ export const Distributions = {
     ).bind(fundId, limit).all();
     return r.results || [];
   },
-  async listByUser(env: Env, userId: number, limit = 100) {
+  /**
+   * Distributions paid to the caller's own LP rows.
+   *
+   * Actor rather than user id, for the same reason as `LPs.listByUser`: the
+   * bare id could only express `lp.user_id = ?`, which silently zeroed the
+   * DPI/TVPI numerator for a legacy LP whose row was never backfilled — the
+   * portal showed a real commitment returning nothing.
+   */
+  async listByUser(env: Env, actor: Actor, limit = 100) {
+    const scope = lpSelfScope(actor);
     const r = await env.DB.prepare(
       `SELECT d.*, f.name AS fund_name
          FROM fund_distributions d
          JOIN limited_partners lp ON lp.id = d.lp_id
          JOIN vc_funds f ON f.id = d.fund_id
-        WHERE lp.user_id = ? ORDER BY d.created_at DESC LIMIT ?`
-    ).bind(userId, limit).all();
+        WHERE ${scope.sql} ORDER BY d.created_at DESC LIMIT ?`
+    ).bind(...scope.binds, limit).all();
     return r.results || [];
   },
   async markPaid(env: Env, id: number) {
