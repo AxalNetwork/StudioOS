@@ -276,3 +276,51 @@ test('the self endpoint requires auth and never takes a user id from the request
   assert.doesNotMatch(routeSrc, /req\.query\(|req\.param\(/,
     'the caller must not be able to name whose spend they read');
 });
+
+// ---------- the pricing endpoint ----------
+
+test('the pricing endpoint serves the router’s own table, not a second copy', () => {
+  // assistCost.js's header already argues that the estimate and the receipt
+  // must come from one calculation, because "two functions drifting apart is
+  // exactly how a user is quoted one price and shown another". The same is
+  // true one level up: the calculation was shared but the PRICES were not.
+  const routeSrc = readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/src/routes/ai.ts'), 'utf8');
+  assert.match(routeSrc, /PRICE_USD_PER_1M_TOKENS/, 'prices come from aiRouter');
+  assert.match(routeSrc, /\bROUTE\b/, 'and so does the task → model map');
+  // No hand-written figures in the route file — that would be the second copy
+  // this endpoint exists to remove.
+  const body = routeSrc.slice(routeSrc.indexOf("ai.get('/pricing'"));
+  assert.doesNotMatch(body, /\bin:\s*0\.\d|\bout:\s*0\.\d/,
+    'the route must not restate any price literal');
+});
+
+test('the pricing endpoint requires auth and exposes no per-user data', () => {
+  const routeSrc = readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/src/routes/ai.ts'), 'utf8');
+  const body = routeSrc.slice(routeSrc.indexOf("ai.get('/pricing'"));
+  assert.match(body, /requireAuth\s*\(/);
+  assert.doesNotMatch(body, /ai_usage_logs|user_id|loadMyAiSpend/,
+    'a static table must not reach into anyone’s usage');
+});
+
+test('every routed task class has a price, or the estimate is unknown not free', () => {
+  // A model in ROUTE with no entry in PRICE_USD_PER_1M_TOKENS makes
+  // priceForTask() return null, and the rail must then decline to quote. This
+  // asserts the frontend helper refuses rather than defaulting to zero.
+  const hookSrc = readFileSync(
+    resolve(process.cwd(), 'frontend/src/hooks/useAiSpend.js'), 'utf8');
+  assert.match(hookSrc, /if \(!model\) return null/);
+  assert.match(hookSrc, /if \(!p \|\| typeof p\.in !== 'number' \|\| typeof p\.out !== 'number'\) return null/,
+    'an unpriced model yields null, never 0');
+});
+
+test('the hook keeps "no record" distinguishable from "$0" at the boundary', () => {
+  const hookSrc = readFileSync(
+    resolve(process.cwd(), 'frontend/src/hooks/useAiSpend.js'), 'utf8');
+  // A failed fetch must leave `spend` null rather than substituting an
+  // empty-looking object, or the component cannot tell the two apart.
+  assert.match(hookSrc, /if \(s && !s\.__err\) setSpend\(s\); else setError/);
+  assert.doesNotMatch(hookSrc, /setSpend\(\{\s*\}\)|setSpend\(\{ *spend_usd: *0/,
+    'a failure must not be turned into a zero reading');
+});
