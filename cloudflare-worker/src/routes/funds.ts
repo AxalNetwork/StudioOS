@@ -10,7 +10,8 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireAuth, requireApprovedKyc } from '../auth';
+import { requireAuth, requireApprovedKyc } from '../auth';
+import { requireFundGp, requireFundCreator } from '../services/fundGpAccess';
 import { Funds, LPs } from '../models/funds';
 import { Jobs } from '../models/jobs';
 import { enqueueJob } from '../services/queue';
@@ -197,10 +198,11 @@ funds.get('/syndication', async (c) => {
 });
 
 funds.get('/distributions', async (c) => {
-  // Admin: all distributions for a given fund.
-  await requireAdmin(c);
+  // The fund's GP, or an admin. fund_id is parsed BEFORE the gate because the
+  // gate needs it — every handler below follows the same order for that reason.
   const fundId = parseInt(c.req.query('fund_id') || '0', 10);
   if (!fundId) return c.json({ error: 'fund_id required' }, 400);
+  await requireFundGp(c, fundId);
   const items = await Distributions.listByFund(c.env, fundId, 200);
   return c.json({ ok: true, items });
 });
@@ -321,7 +323,12 @@ funds.get('/:id/lpa', async (c) => {
 });
 
 funds.post('/', async (c) => {
-  await requireAdmin(c);
+  // Nothing to own at call time, so this gates on tier alone and then RECORDS
+  // ownership: a non-admin creator becomes the fund's GP of record, which is
+  // what every other control here checks. An admin creating a fund on behalf
+  // of a GP leaves gp_user_id unset for them to fill in, rather than silently
+  // making the operator the fiduciary of record.
+  const { user: creator, viaAdmin } = await requireFundCreator(c);
   const body = await c.req.json<Partial<{
     name: string; vintage_year: number; total_commitment: number;
     fund_size_cents: number; carried_interest: number; management_fee: number;
@@ -330,22 +337,38 @@ funds.post('/', async (c) => {
   if (!body?.name) return c.json({ error: 'name required' }, 400);
   const f = await Funds.create(c.env, body);
   if (!f) return c.json({ error: 'create failed' }, 500);
+  // Stamp the GP of record. Without this a non-admin creates a fund and is
+  // then locked out of it by every other control on this router, since they
+  // would own nothing — the fund would be operable only by an admin, which is
+  // the state this task exists to remove.
+  //
+  // gp_name/title/email are deliberately NOT set from the account profile:
+  // migration 163 is explicit that those are the strings AS THEY APPEAR ON THE
+  // DOCUMENT, signed in a legal capacity, and guessing them would put an
+  // unreviewed name on an LP-facing report. They stay unset and render as
+  // "not recorded" until the GP enters them.
+  if (!viaAdmin) {
+    await ensureFundGpColumns(c.env);
+    await c.env.DB.prepare(`UPDATE vc_funds SET gp_user_id = ? WHERE id = ?`)
+      .bind(creator.id, f.id).run();
+    (f as any).gp_user_id = creator.id;
+  }
   // Auto-generate LPA via job queue (non-blocking).
   await enqueueJob(c.env, 'lpa_generation', { fund_id: f.id });
   return c.json({ ok: true, fund: f, lpa_status: 'enqueued' }, 201);
 });
 
 funds.patch('/:id', async (c) => {
-  await requireAdmin(c);
   const id = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, id);
   const body = await c.req.json();
   const f = await Funds.update(c.env, id, body);
   return c.json({ ok: true, fund: f });
 });
 
 funds.post('/:id/regenerate-lpa', async (c) => {
-  await requireAdmin(c);
   const id = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, id);
   // Clear any prior LPA doc reference so the worker re-generates.
   await c.env.DB.prepare(`UPDATE vc_funds SET lpa_doc_id = NULL WHERE id = ?`).bind(id).run();
   const job = await Jobs.enqueue(c.env, 'lpa_generation', { fund_id: id });
@@ -354,8 +377,8 @@ funds.post('/:id/regenerate-lpa', async (c) => {
 
 // ---------- LPs ----------
 funds.get('/:id/lps', async (c) => {
-  await requireAdmin(c);
   const id = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, id);
   const r = await LPs.listByFund(c.env, id);
   return c.json({ ok: true, items: r.results || [] });
 });
@@ -382,10 +405,10 @@ const shapePeriod = (row: any) => ({
 });
 
 funds.get('/:id/report-periods', async (c) => {
-  await requireAdmin(c);
   await ensureFundGpColumns(c.env);
   const fundId = parseInt(c.req.param('id'), 10);
   if (!Number.isFinite(fundId)) return c.json({ error: 'bad id' }, 400);
+  await requireFundGp(c, fundId);
   const r = await c.env.DB.prepare(
     `SELECT * FROM fund_report_periods WHERE fund_id = ? ORDER BY period_end DESC LIMIT 40`
   ).bind(fundId).all().catch(() => ({ results: [] }));
@@ -401,10 +424,12 @@ funds.get('/:id/report-periods', async (c) => {
  * and asks for a correcting period instead.
  */
 funds.post('/:id/report-periods', async (c) => {
-  const admin = await requireAdmin(c);
   await ensureFundGpColumns(c.env);
   const fundId = parseInt(c.req.param('id'), 10);
   if (!Number.isFinite(fundId)) return c.json({ error: 'bad id' }, 400);
+  // The issuer recorded on the period is now whoever actually issued it —
+  // the GP signing their own quarterly report, or an admin acting for them.
+  const { user: issuer } = await requireFundGp(c, fundId);
 
   const body = await c.req.json().catch(() => ({} as any));
   const period = String(body?.period || '').trim();
@@ -440,7 +465,7 @@ funds.post('/:id/report-periods', async (c) => {
       periodStart, periodEnd, notes, snapshot,
       issue ? 'issued' : 'draft',
       issue ? new Date().toISOString() : null,
-      issue ? admin.id : null,
+      issue ? issuer.id : null,
       existing.id,
     ).run();
   } else {
@@ -452,7 +477,7 @@ funds.post('/:id/report-periods', async (c) => {
       fundId, period, periodStart, periodEnd, notes, snapshot,
       issue ? 'issued' : 'draft',
       issue ? new Date().toISOString() : null,
-      issue ? admin.id : null,
+      issue ? issuer.id : null,
     ).run();
   }
 
@@ -473,10 +498,10 @@ funds.post('/:id/report-periods', async (c) => {
  * already what GET /:id/lps is for, under the same gate).
  */
 funds.get('/:id/lp-report/:lpId', async (c) => {
-  await requireAdmin(c);
   await ensureFundGpColumns(c.env);
   const fundId = parseInt(c.req.param('id'), 10);
   const lpId = parseInt(c.req.param('lpId'), 10);
+  await requireFundGp(c, fundId);
   if (!Number.isFinite(fundId) || !Number.isFinite(lpId)) {
     return c.json({ error: 'bad id' }, 400);
   }
@@ -541,8 +566,8 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
 });
 
 funds.post('/:id/lps', async (c) => {
-  await requireAdmin(c);
   const fundId = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, fundId);
   const body = await c.req.json();
   const lp = await LPs.create(c.env, { ...body, fund_id: fundId });
   if (!lp) return c.json({ error: 'create failed' }, 500);
@@ -573,8 +598,8 @@ funds.post('/lps/:lpId/sign-lpa', async (c) => {
 
 // ---------- Capital call (event-driven → enqueue notices) ----------
 funds.post('/:id/capital-call', async (c) => {
-  await requireAdmin(c);
   const fundId = parseInt(c.req.param('id'), 10);
+  await requireFundGp(c, fundId);
   const body = await c.req.json<{ amount_cents?: number; amount?: number; note?: string }>();
   const amountCents = Math.round(body.amount_cents ?? Number(body.amount ?? 0) * 100);
   if (!amountCents || amountCents <= 0) return c.json({ error: 'amount/amount_cents must be > 0' }, 400);
@@ -586,9 +611,16 @@ funds.post('/:id/capital-call', async (c) => {
 
 // ---------- Distributions ----------
 funds.post('/distributions/execute', async (c) => {
-  // Admin manually triggers distribution from a liquidity event (or arbitrary cents).
-  // fund_id is REQUIRED: the worker refuses to fan out across funds.
-  const user = await requireAdmin(c);
+  // Money movement: this fans cash out to a fund's LPs. The fund's own GP may
+  // run it for their own fund; nobody may run it for anyone else's.
+  //
+  // fund_id arrives in the BODY, so the body is read before the gate — the
+  // gate cannot know which fund is targeted until it has been. That ordering
+  // is load-bearing: gating first and reading second would authorise against
+  // a fund id nobody had supplied yet.
+  //
+  // fund_id stays REQUIRED for the original reason too: the worker refuses to
+  // fan out across funds.
   const body = await c.req.json<{
     fund_id: number;
     liquidity_event_id?: number;
@@ -601,6 +633,7 @@ funds.post('/distributions/execute', async (c) => {
   if (!body?.fund_id) {
     return c.json({ error: 'fund_id required (target a specific fund)' }, 400);
   }
+  const { user } = await requireFundGp(c, Number(body.fund_id));
   // For manual runs without a real liquidity event, create a placeholder one
   // so source_liquidity_event_id is always non-null and distributions are auditable.
   let evtId = body.liquidity_event_id;
@@ -625,15 +658,21 @@ funds.post('/distributions/execute', async (c) => {
 });
 
 funds.post('/distributions/:id/mark-paid', async (c) => {
-  await requireAdmin(c);
   const id = parseInt(c.req.param('id'), 10);
   // Atomic: only credit the LP if we successfully transitioned pending → paid.
   // We fetch the row first to know the LP/amount, then run both writes in a batch
   // gated on a conditional UPDATE so a concurrent caller can't double-credit.
   const row = await c.env.DB.prepare(
-    `SELECT id, lp_id, amount_cents, status FROM fund_distributions WHERE id = ?`
+    // fund_id joins the projection so ownership can be resolved: the path
+    // parameter here identifies a DISTRIBUTION, not a fund, and marking one
+    // paid credits an LP — so the gate has to run against the fund the row
+    // actually belongs to, never against an id the caller supplied.
+    `SELECT id, lp_id, amount_cents, status, fund_id FROM fund_distributions WHERE id = ?`
   ).bind(id).first<{ id: number; lp_id: number; amount_cents: number; status: string }>();
   if (!row) return c.json({ error: 'not found' }, 404);
+  // Gate BEFORE the status check, so 'already settled' cannot confirm the
+  // existence of another GP's distribution.
+  await requireFundGp(c, Number((row as any).fund_id));
   if (row.status !== 'pending') return c.json({ error: 'already settled' }, 409);
 
   const dollars = row.amount_cents / 100;

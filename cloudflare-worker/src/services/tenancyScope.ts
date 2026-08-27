@@ -88,6 +88,30 @@ export function esignEnvelopeScope(actor: Actor | null | undefined, alias = 'e')
   };
 }
 
+/**
+ * Funds an actor may operate, as `f.*`.
+ *
+ * Ownership is `vc_funds.gp_user_id` — the GP of record added by migration
+ * 163, whose own header says it exists so the platform can tell "whether the
+ * signer is a real user and reach them". That is precisely an ownership key,
+ * and it is the only one this table has: there is no company_id and no
+ * fund_members join.
+ *
+ * Consequence worth stating plainly: a fund with a NULL gp_user_id has no
+ * owner, so no non-admin can operate it. That is the correct failure. The
+ * alternative — treating unowned funds as open — would hand every
+ * institutional-tier account write access to every legacy fund in the table,
+ * including capital calls and distributions.
+ */
+export function fundGpScope(actor: Actor | null | undefined, alias = 'f'): ScopeClause {
+  if (isUnscoped(actor)) return ALL_ROWS;
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  // `= ?` and not `IS ?`: a NULL gp_user_id must never match, and in SQL
+  // `NULL = 5` is NULL rather than true, which is the behaviour wanted here.
+  return { sql: `(${alias}.gp_user_id = ?)`, binds: [id] };
+}
+
 /** Compose a scope into a query that already has its own WHERE conditions. */
 export function andScope(baseSql: string, baseBinds: Array<string | number>, scope: ScopeClause) {
   return { sql: `${baseSql} AND ${scope.sql}`, binds: [...baseBinds, ...scope.binds] };
