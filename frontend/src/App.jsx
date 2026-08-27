@@ -237,7 +237,6 @@ const EmailChangeConfirmPage = lazy(() => import('./pages/EmailChangeConfirmPage
 const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage'));
 // Advisor sections shell — tabbed workspaces (Network, Advisory, Research).
 const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
-const AdvisorResearchWorkspace = lazy(() => import('./pages/advisor/research/AdvisorResearchWorkspace'));
 // Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
 // Engagements, Performance).
 const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
@@ -1561,21 +1560,29 @@ function AppInner() {
       <Route path="/advisor/advisory/engagements" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
-      <Route path="/advisor/research" element={<Navigate to="/advisor/research/companies" replace />} />
-      {/* DECISIONS.md D8 — /market-intel is the one market surface. This route
-          was a mock shell over the same material (zero API calls) while
-          MarketIntelPage is ~3k lines wired to 30 endpoints; rather than build
-          a second implementation, the old URL redirects. */}
+      {/* DECISIONS.md D12 — the Research row is /market-intel and nothing else.
+          D8 redirected the market tab; D9 withdrew the funds tab; D12 withdrew
+          the remaining four (companies, AI research, news, documents) for the
+          same reason D9 gave, having corrected D9's own per-tab table.
+
+          D9 recorded news and ai as having real backends. They do not, in the
+          sense that matters: `news.ts` is the platform's article authoring
+          pipeline (draft / submit / retract / cover), while the tab rendered a
+          third-party industry feed with sentiment and company tagging;
+          `assistant.ts` is a conversational chat surface, while the tab
+          rendered SWOTs, market maps, company reports and comparables. Both
+          were matched on the tab's NAME, not on its material. Companies needed
+          thirteen datasets and had one (per-project competitor analysis);
+          documents had `files.ts` — a single signed-download endpoint, not a
+          library.
+
+          `/advisor/research` now lands on the one research surface that is
+          real. The four withdrawn tabs are removed rather than redirected
+          there: /market-intel has no company, document or news data either,
+          so pointing "Companies" at it would swap a blank surface for a
+          misleading one. They return when a data source is licensed. */}
+      <Route path="/advisor/research" element={<Navigate to="/market-intel" replace />} />
       <Route path="/advisor/research/market" element={<Navigate to="/market-intel" replace />} />
-      <Route path="/advisor/research/companies" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
-      {/* DECISIONS.md D9 — the Funds research tab is withdrawn, not hidden. It
-          wanted a directory of external funds, managers, fundraises, unicorns,
-          exits and comparables; no backend serves any of it and no data
-          provider is configured, so the only honest options were a blank
-          surface or invented numbers. It returns when a source is licensed. */}
-      <Route path="/advisor/research/documents" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/ai" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/news" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
       <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
       <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
       <Route path="/partner/operations/capabilities" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
