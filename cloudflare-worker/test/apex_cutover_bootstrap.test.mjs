@@ -103,6 +103,21 @@ test('both deploy targets preserve the explicit apex route table', async () => {
 
   assert.equal(topPatterns.includes('axal.vc/*'), false);
   assert.equal(productionPatterns.includes('axal.vc/*'), false);
-  assert.equal(topPatterns.length, 68, 'custom domain plus the 67 saved apex patterns');
+  // A floor, not an equality. The rollback plan restores "the saved
+  // version/67-route table", so the table must never SHRINK below what was
+  // saved — but growing it is how coverage gaps get closed, and pinning an
+  // exact count turns every legitimate addition into a failing test that gets
+  // fixed by bumping the number, which teaches the number to mean nothing.
+  //
+  // The count alone was always weak: 68 stays 68 if a route is swapped for a
+  // different one. Per-route truth lives in
+  // frontend/test/apex_route_coverage.test.mjs, which checks that every
+  // prerendered route is actually served and that the legal pages are among
+  // them. This assertion's job is only to catch the table being gutted.
+  assert.ok(
+    topPatterns.length >= 68,
+    `apex route table shrank to ${topPatterns.length}; the saved rollback table has 68 entries`,
+  );
+  assert.ok(topPatterns.includes('app.axal.vc'), 'the Workers Custom Domain must stay bound');
   assert.deepEqual(productionPatterns, topPatterns);
 });
