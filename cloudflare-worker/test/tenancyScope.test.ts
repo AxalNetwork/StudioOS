@@ -18,7 +18,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  esignEnvelopeScope, fundGpScope, isUnscoped, andScope,
+  esignEnvelopeScope, fundGpScope, lpMembershipScope, lpSelfScope,
+  isUnscoped, andScope,
   ALL_ROWS, NO_ROWS, UNSCOPED_ROLES,
 } from '../src/services/tenancyScope.ts';
 
@@ -133,4 +134,102 @@ test('composing an admin scope leaves the base binds untouched', () => {
 test('composing a denied scope produces a query that returns nothing', () => {
   const composed = andScope('SELECT 1 WHERE x = ?', [7], esignEnvelopeScope(null));
   assert.match(composed.sql, /AND 1=0$/, 'a denied actor must not fall through to the base query alone');
+});
+
+// ---------- LP membership ----------
+
+test('LP membership denies by default like every other resource', () => {
+  for (const actor of [
+    null, undefined, {}, { id: null }, { id: 0 }, { id: -1 },
+    { id: NaN }, { id: 1.5 }, { email: 'lp@example.com' },
+    { role: 'admin' }, { id: 0, role: 'admin', email: 'a@b.co' },
+  ] as any[]) {
+    assert.equal(lpMembershipScope(actor).sql, NO_ROWS.sql,
+      `actor ${JSON.stringify(actor)} must match no LP row`);
+    assert.equal(lpSelfScope(actor).sql, NO_ROWS.sql,
+      `actor ${JSON.stringify(actor)} must own no LP row`);
+  }
+});
+
+test('an actor with no email is matched on the account link alone', () => {
+  // The arm is DROPPED, not bound to ''. `LOWER(email) = LOWER('')` is true
+  // for every row with an empty email, so binding the empty string would have
+  // handed those rows to any session missing an address — which is precisely
+  // what spinout_lab.ts's `user.email ?? ''` did before this module.
+  for (const email of [undefined, null, '', '   ', 42, {}] as any[]) {
+    const s = lpMembershipScope({ id: 8, role: 'investor', email });
+    assert.equal(s.sql, '(lp.user_id = ?)', `email ${JSON.stringify(email)} must not open the email arm`);
+    assert.deepEqual(s.binds, [8]);
+    assert.doesNotMatch(s.sql, /LOWER/, 'no email means no email comparison at all');
+  }
+});
+
+test('the email arm only reaches rows nobody has claimed', () => {
+  // `limited_partners.email` is operator-entered, so it can name one address
+  // while user_id points at another account. Without the IS NULL qualifier the
+  // arm hands such a row to whoever holds the address, over the top of the
+  // account that owns it. funds.ts and spinout_lab.ts both shipped it that way.
+  const s = lpMembershipScope({ id: 8, role: 'investor', email: 'lp@example.com' });
+  assert.match(s.sql, /lp\.user_id = \?/, 'the account link is the primary arm');
+  assert.match(s.sql, /lp\.user_id IS NULL AND LOWER\(lp\.email\) = LOWER\(\?\)/,
+    'the email arm must be qualified by an unclaimed row');
+  assert.deepEqual(s.binds, [8, 'lp@example.com']);
+  assert.equal(s.binds.length, (s.sql.match(/\?/g) || []).length);
+});
+
+test('the email arm cannot be reached without the IS NULL qualifier on either side of the OR', () => {
+  // A regression that dropped only the qualifier would still pass a loose
+  // "matches on email" assertion, so pin the shape: every LOWER(...) comparison
+  // in the clause is preceded by an unclaimed-row test.
+  const s = lpMembershipScope({ id: 3, role: 'investor', email: 'x@y.z' }).sql;
+  const lowerCount = (s.match(/LOWER\(lp\.email\)/g) || []).length;
+  const guardCount = (s.match(/lp\.user_id IS NULL AND LOWER\(lp\.email\)/g) || []).length;
+  assert.equal(lowerCount, guardCount, 'every email comparison must sit behind IS NULL');
+  assert.equal(lowerCount, 1, 'and there should be exactly one of them');
+});
+
+test('the email is trimmed but never case-folded in the bind', () => {
+  // Case-insensitivity belongs in the SQL (LOWER on both sides), not in a
+  // pre-lowered bind — folding here would silently diverge from the UPDATE in
+  // lpClaim.ts, which compares the raw address the same way.
+  const s = lpMembershipScope({ id: 4, role: 'investor', email: '  LP@Example.com  ' });
+  assert.deepEqual(s.binds, [4, 'LP@Example.com']);
+});
+
+test('lpMembershipScope is administrative — an admin sees every LP row', () => {
+  const s = lpMembershipScope({ id: 1, role: 'admin', email: 'ops@axal.vc' });
+  assert.equal(s.sql, ALL_ROWS.sql);
+  assert.deepEqual(s.binds, []);
+});
+
+test('lpSelfScope is personal — an admin sees only their own LP rows', () => {
+  // /lp-portal and /liquidity/my-portfolio answer "what do I hold". Returning
+  // every row to an admin there does not grant oversight, it corrupts a
+  // personal view: every LP's commitments summed into one operator's TVPI.
+  const s = lpSelfScope({ id: 1, role: 'admin', email: 'ops@axal.vc' });
+  assert.notEqual(s.sql, ALL_ROWS.sql, 'a self-view has no unscoped escape');
+  assert.match(s.sql, /lp\.user_id = \?/);
+  assert.deepEqual(s.binds, [1, 'ops@axal.vc']);
+});
+
+test('the two LP functions share one predicate for a non-admin', () => {
+  // The whole point of the pair. If these ever diverge, the legacy-email rule
+  // has been re-implemented twice — the failure this module exists to end.
+  const actor = { id: 11, role: 'investor', email: 'lp@example.com' };
+  assert.deepEqual(lpSelfScope(actor), lpMembershipScope(actor));
+});
+
+test('the LP scope is parenthesised and alias-configurable', () => {
+  const s = lpMembershipScope({ id: 2, role: 'investor', email: 'a@b.co' });
+  assert.ok(s.sql.startsWith('(') && s.sql.trimEnd().endsWith(')'),
+    'an unparenthesised OR leaks past any AND the caller composes it into');
+  const aliased = lpSelfScope({ id: 2, email: 'a@b.co' }, 'x');
+  assert.match(aliased.sql, /x\.user_id/);
+  assert.doesNotMatch(aliased.sql, /\blp\.user_id/);
+});
+
+test('the LP scope is not interchangeable with the other two resources', () => {
+  const lp = lpMembershipScope({ id: 3, role: 'investor', email: 'a@b.co' }).sql;
+  assert.doesNotMatch(lp, /created_by|esign_recipients|gp_user_id/);
+  assert.doesNotMatch(fundGpScope({ id: 3, role: 'investor' }).sql, /lp\.email/);
 });

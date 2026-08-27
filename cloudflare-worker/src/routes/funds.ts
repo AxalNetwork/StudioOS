@@ -19,6 +19,8 @@ import { Distributions } from '../models/distributions';
 import { logActivity } from './partnernet';
 import { clampLimit } from '../util/pagination';
 import { ensureFundGpColumns } from '../services/fundGpSchema';
+import { lpMembershipScope, lpSelfScope } from '../services/tenancyScope';
+import { claimLpRowsByEmail } from '../services/lpClaim';
 import {
   rollUpFundRow, totalFundRollups, FUND_METRIC_UNAVAILABLE,
   type FundRollup, type FundRollupRow,
@@ -54,20 +56,30 @@ funds.get('/lp-portal', async (c) => {
   // listByUser selects the fund's GP-of-record and service-provider columns so a
   // quarterly report can name the responsible fiduciary without an admin call.
   await ensureFundGpColumns(c.env);
-  const my = await LPs.listByUser(c.env, user.id);
+
+  // Claim first, then read. This handler is where the two LP predicates used to
+  // meet: the positions came back on `user_id` alone while the capital calls
+  // below matched the account email too, so a legacy LP saw calls for a fund
+  // whose position the same page had just failed to find. Claiming links those
+  // rows to the account once; every query beneath is then the same question,
+  // asked once, through lpSelfScope.
+  await claimLpRowsByEmail(c.env, Number(user.id), user.email);
+
+  const my = await LPs.listByUser(c.env, user);
   const lpRows: any[] = my.results || [];
 
   // Aggregate cash flows per-fund for TVPI / DPI
-  const distRows = await Distributions.listByUser(c.env, user.id, 200);
+  const distRows = await Distributions.listByUser(c.env, user, 200);
 
-  // Joins through canonical limited_partners (matches by user_id when set,
-  // falls back to denormalized email for legacy LPs migrated from lp_investors).
+  // Self-view, so lpSelfScope and not lpMembershipScope: an admin's own
+  // portal must show their own positions, not the sum of everyone's.
+  const callScope = lpSelfScope(user as any);
   const calls = await c.env.DB.prepare(
     `SELECT cc.* FROM capital_calls cc
        JOIN limited_partners lp ON lp.id = cc.limited_partner_id
-      WHERE lp.user_id = ? OR LOWER(lp.email) = LOWER(?)
+      WHERE ${callScope.sql}
       ORDER BY cc.created_at DESC LIMIT 50`
-  ).bind(user.id, user.email).all().catch(() => ({ results: [] }));
+  ).bind(...callScope.binds).all().catch(() => ({ results: [] }));
 
   // Performance per-LP-row: TVPI = (returns + distributions) / invested ; DPI = distributions / invested
   const perfByLp = lpRows.map((lp: any) => {
@@ -303,9 +315,15 @@ funds.get('/:id/lpa', async (c) => {
   }
 
   if (user.role !== 'admin') {
+    // The LPA is the fund's constitutional document; an LP is entitled to read
+    // their own. Same predicate as everywhere else, so a legacy LP is not
+    // refused the agreement they signed. Claim scoped to this fund — the read
+    // that justifies the write was about this fund alone.
+    await claimLpRowsByEmail(c.env, Number(user.id), user.email, id);
+    const scope = lpMembershipScope(user as any);
     const isLP = await c.env.DB.prepare(
-      `SELECT 1 AS yes FROM limited_partners WHERE fund_id = ? AND user_id = ? LIMIT 1`
-    ).bind(id, user.id).first<{ yes: number }>();
+      `SELECT 1 AS yes FROM limited_partners lp WHERE lp.fund_id = ? AND ${scope.sql} LIMIT 1`
+    ).bind(id, ...scope.binds).first<{ yes: number }>();
     if (!isLP) {
       // Non-LP, non-admin: drop `file_key` so they cannot attempt a
       // download; return non-sensitive metadata only.
