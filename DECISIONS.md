@@ -9,9 +9,10 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twelve decisions are now resolved. D6 is closed by D11, which repaired
+All seventeen decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
-per-tab table and closes out the Research row.
+per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
+D14 corrects a false statement this work had itself recorded.
 
 ### D1. Studio Ops — re-integrate, or honour the deletion?
 
@@ -384,6 +385,115 @@ is the Advisory Practice work against `partner_office_hours.ts`, which is task
 **#124** and is blocked while `/office-hours` is on this pass's do-not-touch
 list. Withdrawing it now and rebuilding it there would be churn, so it stays as
 it is, labelled, until #124 unblocks.
+
+### D13. The model menu is removed, not disabled
+
+`AssistRail` drew a model picker in all eight source canvases. It has nowhere
+to point: `services/aiRouter.ts` selects the model from the **task class** —
+`llama-guard-3-8b` for `safety`, `bge-base-en-v1.5` for `embed`,
+`qwen2.5-coder-32b` for `tool_call`, `llama-3.3-70b` for `advisor_turn` — and
+degrades down a per-task fallback chain under load. A user preference could
+only offer answers that are wrong for the task, or duplicate the one the router
+would have picked anyway.
+
+Three options were weighed: remove it, make the router honour a validated
+preference, or render it disabled with an explanation. **Removed.** Disabling
+it keeps a permanently dead control on every rail, and a control that cannot
+change anything reads as a setting the user has already made — worse than no
+control. Making the router honour a preference is real work with a safety edge
+(a caller must never be able to route a `safety` call away from the guard
+model) and belongs to its own change if it is ever wanted.
+
+What replaced it is better than either: the card now reports the model that
+**actually ran**, from `ai_usage_logs`, and says so when the router fell back
+to a smaller sibling. The old card asserted a configured name over runs that
+may not have used it.
+
+Reversible: the ROUTE map is the only thing that would have to change, and the
+component's own header records why the menu went.
+
+### D14. "There is no eadwyn AI Gateway yet" was false
+
+Recorded because it survived a whole phase boundary and shaped a plan.
+
+`AssistRail.jsx` and `ui/index.js` both said the gateway did not exist and that
+Phase 4 would build it. `cloudflare-worker/src/services/aiRouter.ts` is that
+gateway and predates the claim: sixteen task classes, a fallback chain, a
+llama-guard safety pass, content-hash caching, per-user $/day and $/month KV
+caps, an org kill switch, and a row in `ai_usage_logs` per call, with ten
+consumers already routing through it.
+
+The error was made on a **name**. Nothing in the tree is called `eadwyn`, so
+the gateway looked absent — the same failure mode as D9's "news → news.ts →
+real", where a module was matched on its name rather than on what it serves.
+
+The actual Phase 4 gap is narrower and different: nothing exposed the gateway
+to the person spending the money. The only rollup over `ai_usage_logs` was
+`/api/monitoring/ai-usage`, behind `requireAdmin`, so the rail's spend meter
+took its numbers as props. `GET /api/ai/me/spend` is the correction.
+
+Still genuinely missing after that: per-page mode persistence
+(`useAssistMode(pageKey)`), and the rail is mounted on zero pages — placement
+is now settled as "surfaces that actually reach the router", which is seven
+pages (advisory ×2, brand ×2, onboarding chat, market/competitors, deck
+reviewer).
+
+### D15. The rail goes where a user spends their own budget
+
+Placement was settled as "surfaces that actually reach `aiRouter`", traced from
+`run()` call sites through the route files to the pages. That gave seven. One
+of them is excluded on a second clause: **reaching the router is necessary, not
+sufficient.**
+
+`OnboardingChatPage` reaches it — `/api/profiling` routes `role_detect` — and
+is deliberately left out. It is a signup-funnel step for a user whose role is
+still `pending`, on a centred single-column card; the call there is the
+platform profiling THEM, not them spending anything. A dollar meter on a
+first-touch screen misdescribes whose money is moving and is the worst possible
+place to put one.
+
+The six that remain are `AdvisoryPage`, `SpinoutLabAdvisorsPage`,
+`BrandBuilderPage`, `SpinoutLabBrandPage`, `SpinoutLabMarketPage` and
+`DeckReviewerPage` — surfaces where a user deliberately runs AI work and can be
+shown what it cost.
+
+### D16. The run estimate is measured, not modelled
+
+Every rail canvas carried invented token counts — `tin: 1800, tout: 600` and
+similar — with no source. There is no honest source: nothing knows how many
+tokens a deck review takes before it takes them.
+
+So the estimate is not modelled at all. It is the caller's **own observed
+average** for that task class, from their `ai_usage_logs` rows via
+`/api/ai/me/spend`. That is a real number about real runs, it sharpens as they
+use the surface, and when they have no history it is honestly absent.
+
+`eadwynConfig` therefore sets `tin`/`tout` to zero on purpose, and `AssistRail`
+prefers `observed` → modelled → **null**, never zero. `runCost()` of zero
+tokens is `0`, and rendering that would price the run at free. "Not recorded"
+is worth more than a number nobody measured — the same rule the fund surfaces
+follow, applied to cost.
+
+### D17. No mode toggle until a page branches on the mode
+
+The canvases draw a per-surface assist toggle labelled "Remembered per page",
+and the rail's own header carried this as unfinished work: a
+`useAssistMode(pageKey)` hook that did not exist yet.
+
+It is not unfinished, it is unwarranted. **No page branches on an assist
+mode.** Turning the switch off would change nothing any of the six surfaces
+does, so shipping it — with or without persistence behind it — puts a control
+on screen that cannot affect the product, and then remembers the user's
+setting of it. That is D13's objection to the model menu, one control over, and
+it applies with more force here because persistence would make the dead control
+look deliberate.
+
+`eadwynConfig` therefore declares every surface `kind: 'fixed'` and the toggle
+does not render. `AssistRail` still supports it: a surface that ever grows real
+manual behaviour — a brand page where "off" means "I write the copy myself" is
+the plausible one — declares `kind: 'choice'` and passes `mode`/`onModeChange`,
+and `pc.manualNote` already exists to say what "off" means. The hook is worth
+building at that point and not before.
 
 ## Part 2 — Decisions taken
 

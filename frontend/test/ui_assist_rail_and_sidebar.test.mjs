@@ -1,11 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runCost, batchCost, spendMeter, formatCost } from '../src/ui/assistCost.js';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
+
+// Every .js/.jsx under a directory, repo-relative.
+function walkJs(dir) {
+  const out = [];
+  for (const e of readdirSync(resolve(root, dir), { withFileTypes: true })) {
+    const p = `${dir}/${e.name}`;
+    if (e.isDirectory()) out.push(...walkJs(p));
+    else if (/\.(js|jsx)$/.test(e.name)) out.push(p);
+  }
+  return out;
+}
 
 // Two earlier assertions in this repo passed by matching a string that only
 // existed in a comment, so everything below reads comment-stripped source.
@@ -233,4 +244,301 @@ test('the barrel exports both', () => {
   for (const name of ['AssistRail', 'SidebarNav', 'CompanySwitcher', 'runCost', 'spendMeter']) {
     assert.ok(exported.has(name), `ui/index.js must export ${name}`);
   }
+});
+
+// ---------- the model menu is gone (Phase 4, DECISIONS D13) ----------
+
+test('AssistRail offers no model picker', () => {
+  // `aiRouter`'s ROUTE map selects the model from the TASK CLASS — llama-guard
+  // for safety, bge for embeddings, qwen-coder for tool calls. A picker here
+  // could only offer wrong answers or duplicate the right one, so it was
+  // REMOVED rather than disabled: a control that cannot change anything reads
+  // as a setting the user has already made.
+  const src = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.doesNotMatch(src, /<select/, 'no model dropdown');
+  assert.doesNotMatch(src, /\bonSelectModel\b/, 'no model-selection callback');
+  assert.doesNotMatch(src, /\bmodelId\b/, 'no selected-model prop');
+  assert.doesNotMatch(src, /config\.mode\.model\s*===\s*['"]menu['"]/,
+    'the menu config branch is gone, not merely unreachable');
+});
+
+test('the model card reports the model that RAN, not the one configured', () => {
+  // aiRouter degrades down a fallback chain under load. Showing the configured
+  // name over a run that used a smaller sibling would misreport the one thing
+  // this card exists to report.
+  const src = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.match(src, /run\?\.model/, 'a known run supplies the model');
+  assert.match(src, /fallback_used/, 'and whether it fell back');
+  assert.match(src, /Model · last run/, 'labelled as the run it came from');
+  assert.match(src, /Model · routed by task/, 'and otherwise as routed, not chosen');
+});
+
+test('lastRun accepts the spend report’s shape as well as a bare cost', () => {
+  // GET /api/ai/me/spend returns last_run as an object. The rail took a number.
+  // Both are handled so wiring the endpoint does not silently render nothing.
+  const src = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.match(src, /typeof lastRun === 'object'/);
+  assert.match(src, /typeof lastRun === 'number'/);
+});
+
+test('the rail no longer ASSERTS that the AI gateway does not exist', () => {
+  // It does exist: cloudflare-worker/src/services/aiRouter.ts. The old claim
+  // was made on a name (nothing is called `eadwyn`) rather than on the code.
+  //
+  // Deliberately not `doesNotMatch` on the phrase. The first version of this
+  // test was, and it failed — on AssistRail's own correction, which QUOTES the
+  // sentence in order to refute it. A guard that cannot tell a claim from a
+  // record of a retracted claim would push the next author to delete the
+  // history rather than keep it. So the phrase is allowed to appear, and must
+  // be refuted where it does.
+  const CLAIM = /there is no `?eadwyn`? AI Gateway yet/ig;
+  for (const f of ['frontend/src/ui/AssistRail.jsx', 'frontend/src/ui/index.js']) {
+    const raw = read(f);
+    for (const m of raw.matchAll(CLAIM)) {
+      const after = raw.slice(m.index, m.index + 240);
+      assert.match(after, /was false/i,
+        `${f} states the gateway is absent without recording that it is not`);
+    }
+    assert.doesNotMatch(raw, /Presentational until the eadwyn gateway lands/i,
+      `${f} must not carry the un-refuted form`);
+  }
+  // And the correction itself must still be there to be found.
+  assert.match(read('frontend/src/ui/AssistRail.jsx'), /aiRouter\.ts/,
+    'the header must name the gateway it was wrong about');
+});
+
+test('the spend meter has a live source, and api.js names it', () => {
+  const api = scan(read('frontend/src/lib/api.js'));
+  assert.match(api, /myAiSpend:\s*\(\)\s*=>\s*request\('\/ai\/me\/spend'\)/,
+    'the self-view endpoint the meter reads');
+  assert.match(api, /monitoringAiUsage:/, 'the admin rollup stays separate');
+});
+
+// ---------- imports of lib/api must name a real export ----------
+
+test('nothing default-imports lib/api, which has no default export', () => {
+  // A code-quality bot caught `api.aiPricing` as "always undefined" in
+  // useAiSpend.js. It was right, and about more than it reported: the file
+  // did `import api from '../lib/api'`, and lib/api has NO default export —
+  // so `api` was undefined and BOTH calls would have thrown, not just the
+  // flagged one.
+  //
+  // The bot's suggested fix was to guard `typeof api.aiPricing === 'function'`
+  // before calling. That would have papered over it: the hook would have
+  // silently fetched nothing forever, and the meter would have sat empty with
+  // no error. The defect was the import.
+  //
+  // Nothing in the toolchain would have caught it — Vite transpiles rather
+  // than type-checks, and there is no eslint in this repo. So the check lives
+  // here.
+  const apiSrc = read('frontend/src/lib/api.js');
+  assert.equal(/^export default/m.test(apiSrc), false,
+    'lib/api exports named bindings only — if that changes, revisit this test');
+  const exported = new Set(
+    [...apiSrc.matchAll(/^export (?:const|function|async function) (\w+)/gm)].map((m) => m[1]),
+  );
+  assert.ok(exported.has('api'), 'the `api` named export must exist');
+
+  const offenders = [];
+  for (const f of walkJs('frontend/src')) {
+    const src = scan(read(f));
+    // `import x from '.../lib/api'` — a default import of a module with none.
+    for (const m of src.matchAll(/import\s+(\w+)\s*,?\s*(?:\{[^}]*\})?\s*from\s*'([^']*lib\/api)'/g)) {
+      offenders.push(`${f}: default-imports as \`${m[1]}\``);
+    }
+    // Named imports must name something the module actually exports.
+    for (const m of src.matchAll(/import\s*\{([^}]+)\}\s*from\s*'([^']*lib\/api)'/g)) {
+      for (const raw of m[1].split(',')) {
+        const name = raw.trim().split(/\s+as\s+/)[0].trim();
+        if (name && !exported.has(name)) offenders.push(`${f}: imports missing export \`${name}\``);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'these files import a binding lib/api does not provide — at runtime the '
+    + 'value is undefined and every call through it throws');
+});
+
+// ---------- the rail never quotes a number nobody measured ----------
+
+test('a run with no history reads "Not recorded", not $0.0000', () => {
+  // eadwynConfig sets tin/tout to 0 deliberately: nothing knows how many
+  // tokens a deck review takes before it takes them. runCost() of zero tokens
+  // is 0, and rendering that would price the run at free. The canvases each
+  // carried invented token counts instead; this refuses to invent one.
+  const src = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.match(src, /const estimate = pc\.observed\?\.cost \?\? \(modelled > 0 \? modelled : null\)/,
+    'observed first, modelled second, null third — never zero');
+  assert.match(src, /estimate == null/, 'and the null case is rendered, not formatted');
+  assert.match(src, /Not recorded/);
+});
+
+test('an unreadable spend figure hides the meter instead of drawing an empty bar', () => {
+  // `recorded: false` from the endpoint means the usage table could not be
+  // read. A 0% bar drawn from it asserts a spend the platform cannot vouch for.
+  const src = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.match(src, /const spendKnown = typeof spent === 'number' && Number\.isFinite\(spent\)/);
+  assert.match(src, /\{spendKnown && \(/, 'the bar is conditional on a known figure');
+  assert.match(src, /\{spendKnown && meter\.over/, 'and so is the over-cap warning');
+});
+
+test('the estimate is the caller’s own observed average, not a model', () => {
+  const cfg = scan(read('frontend/src/ui/eadwynConfig.js'));
+  assert.match(cfg, /export function observedRunCost/);
+  assert.match(cfg, /if \(!spend\?\.recorded\) return null/, 'no record, no estimate');
+  assert.match(cfg, /if \(!row \|\| !row\.calls\) return null/, 'no runs of this task, no estimate');
+  assert.match(cfg, /row\.spend_usd \/ row\.calls/);
+  // No invented token counts anywhere in the config.
+  assert.doesNotMatch(cfg, /tin:\s*[1-9]/, 'no modelled input tokens');
+  assert.doesNotMatch(cfg, /tout:\s*[1-9]/, 'no modelled output tokens');
+});
+
+test('onboarding is deliberately not an assist surface', () => {
+  // It reaches aiRouter (role_detect via /api/profiling) but the rail belongs
+  // where a user deliberately runs AI against their OWN budget. Onboarding is
+  // a signup-funnel step for a `pending`-role user, and the call there is the
+  // platform profiling them. "Reaches the router" is necessary, not sufficient.
+  const cfg = scan(read('frontend/src/ui/eadwynConfig.js'));
+  assert.doesNotMatch(cfg, /onboarding|role_detect|profiling/i,
+    'onboarding must not appear as a surface');
+  const raw = read('frontend/src/ui/eadwynConfig.js');
+  assert.match(raw, /OnboardingChatPage/, 'and the exclusion must be recorded, not silent');
+});
+
+test('every assist surface names a task class the router actually routes', () => {
+  // `task` is the join key to aiRouter: it picks the model, the price and the
+  // usage rows every figure on the rail is drawn from. A task the router does
+  // not know misreports all of them.
+  const cfg = read('frontend/src/ui/eadwynConfig.js');
+  const tasks = [...cfg.matchAll(/^\s*task:\s*'([a-z_]+)'/gm)].map((m) => m[1]);
+  assert.ok(tasks.length >= 4, 'the surfaces must declare their task classes');
+  const router = read('cloudflare-worker/src/services/aiRouter.ts');
+  const routed = new Set(
+    [...router.matchAll(/^\s{2}([a-z_]+):\s*\{ provider:/gm)].map((m) => m[1]),
+  );
+  assert.ok(routed.size > 5, 'the ROUTE map must have been parsed');
+  for (const t of tasks) {
+    assert.ok(routed.has(t), `task "${t}" is not in aiRouter's ROUTE map`);
+  }
+});
+
+// ---------- mounting the rail ----------
+
+test('AssistLayout renders nothing extra until it has real figures', () => {
+  // A rail with no numbers is worse than no rail: the empty frame reads as
+  // "nothing spent" rather than "not loaded". So the wrapper returns the page
+  // alone until the spend fetch lands.
+  const src = scan(read('frontend/src/ui/AssistLayout.jsx'));
+  assert.match(src, /const config = \(!loading && spend\) \? eadwynConfig/);
+  assert.match(src, /if \(!config\) return <>\{children\}<\/>/,
+    'no config means the page renders exactly as it did before');
+});
+
+test('the rail is secondary in the layout, and cannot push the page off-screen', () => {
+  const src = scan(read('frontend/src/ui/AssistLayout.jsx'));
+  assert.match(src, /min-w-0 flex-1/,
+    'without min-w-0 a wide table refuses to shrink and shoves the rail out');
+  assert.match(src, /hidden xl:flex/,
+    'below 1280px the rail is omitted, not stacked above the tool');
+});
+
+test('every mounted surface is one eadwynConfig knows', () => {
+  // A typo'd surface renders no rail at all (eadwynConfig returns null), which
+  // is silent. This makes it loud.
+  const surfaces = new Set(
+    [...read('frontend/src/ui/eadwynConfig.js').matchAll(/^  (\w+):\s*\{$/gm)].map((m) => m[1]),
+  );
+  assert.ok(surfaces.size >= 4, 'ASSIST_SURFACES must have been parsed');
+  const bad = [];
+  for (const f of walkJs('frontend/src/pages')) {
+    for (const m of scan(read(f)).matchAll(/<AssistLayout\s+surface="([^"]+)"/g)) {
+      if (!surfaces.has(m[1])) bad.push(`${f}: surface="${m[1]}"`);
+    }
+  }
+  assert.deepEqual(bad, [], 'these mounts name a surface eadwynConfig does not define');
+});
+
+test('an embedded page does not mount a second rail', () => {
+  // DeckReviewerPage renders inside another page when `embedded`. Wrapping it
+  // unconditionally would put two rails on one screen, both showing the same
+  // account-wide figures.
+  const src = scan(read('frontend/src/pages/DeckReviewerPage.jsx'));
+  assert.match(src, /if \(embedded\) return page;/,
+    'the embedded path must return the bare page');
+  assert.equal((src.match(/<AssistLayout/g) || []).length, 1, 'exactly one wrap');
+});
+
+test('no page reaches past AssistLayout to mount AssistRail itself', () => {
+  // The wrapper is the one place that knows how the rail sits beside a page.
+  // A page mounting AssistRail directly would re-derive the layout, the hook
+  // call and the honesty contract, which is how six pages end up looking like
+  // six different products.
+  const offenders = [];
+  for (const f of walkJs('frontend/src/pages')) {
+    if (/<AssistRail\b/.test(scan(read(f)))) offenders.push(f);
+  }
+  assert.deepEqual(offenders, [], 'pages mount AssistLayout, not AssistRail');
+});
+
+test('every surface eadwynConfig defines is mounted on at least one page', () => {
+  // The reverse of the surface-name check. A surface defined and never mounted
+  // is dead config that reads as shipped, which is how the rail sat exported
+  // and rendered nowhere for a whole phase.
+  const surfaces = new Set(
+    [...read('frontend/src/ui/eadwynConfig.js').matchAll(/^  (\w+):\s*\{$/gm)].map((m) => m[1]),
+  );
+  const mounted = new Set();
+  for (const f of walkJs('frontend/src/pages')) {
+    for (const m of scan(read(f)).matchAll(/<AssistLayout\s+surface="([^"]+)"/g)) mounted.add(m[1]);
+  }
+  assert.deepEqual([...surfaces].filter((s) => !mounted.has(s)), [],
+    'these surfaces are configured but no page renders them');
+});
+
+test('each mount wraps its own page, once, inside the exported component', () => {
+  // The mounts were applied by script across six files. A wrap that landed in
+  // a later helper function would still build — Vite transpiles rather than
+  // type-checks — and would render nothing while looking correct in a diff.
+  const PAGES = ['AdvisoryPage', 'SpinoutLabAdvisorsPage', 'BrandBuilderPage',
+    'SpinoutLabBrandPage', 'SpinoutLabMarketPage', 'DeckReviewerPage'];
+  for (const name of PAGES) {
+    const lines = read(`frontend/src/pages/${name}.jsx`).split('\n');
+    const start = lines.findIndex((l) => l.startsWith('export default function'));
+    assert.notEqual(start, -1, `${name} must have a default export`);
+    const end = lines.findIndex((l, i) => i > start && l === '}');
+    const page = lines.reduce((a, l, i) => (l.trim() === 'const page = (' ? [...a, i] : a), []);
+    const mount = lines.reduce((a, l, i) => (l.includes('<AssistLayout surface=') ? [...a, i] : a), []);
+    assert.equal(page.length, 1, `${name}: exactly one page binding`);
+    assert.equal(mount.length, 1, `${name}: exactly one mount`);
+    for (const i of [...page, ...mount]) {
+      assert.ok(i > start && i < end,
+        `${name}: line ${i + 1} is outside the exported component (${start + 1}-${end + 1})`);
+    }
+  }
+});
+
+test('the tabbed advisory page only shows the rail on its AI tab', () => {
+  // AdvisoryPage's other three tabs are a human advisor directory and two
+  // calculators. A spend meter beside any of them describes work the page is
+  // not doing — D15's rule, one level finer than the page.
+  const src = scan(read('frontend/src/pages/AdvisoryPage.jsx'));
+  assert.match(src, /if \(!\(tab === 'advisor'\)\) return page;/,
+    'the non-AI tabs must return the bare page');
+});
+
+test('no surface declares a mode toggle nothing reads', () => {
+  // D17. No page branches on an assist mode, so a toggle would be a control
+  // that cannot affect the product — D13's objection to the model menu, one
+  // control over. Every surface is `fixed` until a page grows real manual
+  // behaviour, at which point `kind: 'choice'` turns the switch back on.
+  const cfg = scan(read('frontend/src/ui/eadwynConfig.js'));
+  assert.match(cfg, /kind: 'fixed'/);
+  assert.doesNotMatch(cfg, /kind: 'choice'/,
+    "a surface declaring 'choice' must also have a page that reads the mode");
+  // The component keeps the capability — this is a config decision, not a
+  // deletion, so the switch is one config change away.
+  const rail = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.match(rail, /const showToggle = config\.mode\.kind === 'choice'/,
+    'AssistRail must still support a real toggle');
+  assert.match(rail, /onModeChange/, 'and the callback that drives it');
 });

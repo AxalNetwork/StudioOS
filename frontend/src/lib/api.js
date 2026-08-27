@@ -1844,6 +1844,21 @@ export const api = {
   // rate, p50/p95 latency, top 10 most expensive users).
   monitoringAiUsage: (days = 7) => request(`/monitoring/ai-usage?days=${days}`),
 
+  // Task #176 (Phase 4) — the CALLER'S OWN AI gateway spend, not the org's.
+  // `monitoringAiUsage` above is the admin rollup over every user; this is the
+  // self-view that feeds the AI rail's spend meter, so the meter reads live
+  // numbers instead of taking them as props. Distinguishes "no record" from
+  // "$0": `recorded: false` means the usage table could not be read, and the
+  // meter must say so rather than drawing an empty bar as a fact.
+  myAiSpend: () => request('/ai/me/spend'),
+
+  // The router's own routing table and price list. The rail quotes a cost
+  // before a run and shows a receipt after it; assistCost.js already forces
+  // both through ONE calculation, but the PRICES were a second copy — canvases
+  // carry hand-written per-1M figures while the receipt is computed from
+  // PRICE_USD_PER_1M_TOKENS in aiRouter. This removes that copy.
+  aiPricing: () => request('/ai/pricing'),
+
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------
   // Task #13 — analytics reads auto-retry once on 5xx with a 1s backoff so
   // a transient D1 hiccup or worker cold-start doesn't surface as a red

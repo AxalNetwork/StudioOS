@@ -6,6 +6,7 @@ import {
   Clipboard, ShieldCheck,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { AssistLayout } from '../ui';
 
 // Pitch Deck Reviewer — upload a PDF/DOC/DOCX/PPTX, extract text via Cloudflare
 // document conversion, map into standard deck sections, and generate an honest
@@ -205,8 +206,11 @@ export default function DeckReviewerPage({ embedded = false }) {
 
   const busy = phase !== 'idle';
 
-  return (
-    <div className={embedded ? 'max-w-4xl mx-auto' : 'max-w-4xl mx-auto py-6 px-4'}>
+  // The rail sits beside the page, so the page keeps its own max-width and
+  // the wrapper owns the outer padding. `embedded` renders inside another
+  // page, which supplies both — and must not get a second rail.
+  const page = (
+    <div className="max-w-4xl mx-auto">
       {!embedded && (
         <>
           <button onClick={() => navigate(-1)} className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-3">
@@ -344,6 +348,13 @@ export default function DeckReviewerPage({ embedded = false }) {
         </div>
       )}
     </div>
+  );
+
+  if (embedded) return page;
+  return (
+    <AssistLayout surface="deck_review" className="max-w-[1400px] mx-auto py-6 px-4">
+      {page}
+    </AssistLayout>
   );
 }
 

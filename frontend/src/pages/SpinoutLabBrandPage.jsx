@@ -48,6 +48,7 @@ import TemplateContentEditor from '../components/brand/TemplateContentEditor.jsx
 import TemplateEditorPreview from '../components/brand/TemplateEditorPreview.jsx';
 import { getPreviewComponent } from '../components/brand/templates/templateRegistry.js';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
+import { AssistLayout } from '../ui';
 
 // Mirrors MAX_PAGES_PER_PROJECT in cloudflare-worker/src/routes/brand.ts (and
 // the FastAPI mirror). The server rejects over-cap creates on its own — this
@@ -1006,7 +1007,7 @@ export default function SpinoutLabBrandPage() {
     );
   }
 
-  return (
+  const page = (
     <div className="max-w-[1200px] mx-auto px-4 py-6" data-testid="spinout-brand-page">
       {toast && (
         <div className={`fixed bottom-6 right-6 z-50 px-4 py-2 rounded-lg shadow-lg text-sm ${
@@ -1795,4 +1796,6 @@ export default function SpinoutLabBrandPage() {
       })()}
     </div>
   );
+
+  return <AssistLayout surface="brand">{page}</AssistLayout>;
 }

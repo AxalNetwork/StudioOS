@@ -21,14 +21,37 @@ import { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assis
  *     config={eadwynConfig(tier)}
  *     page="deals"
  *     mode={mode} onModeChange={setMode}
- *     modelId={modelId} onSelectModel={setModelId}
+ *     lastRun={spend?.last_run}
  *   />
  *
- * DELIBERATELY PRESENTATIONAL. The canvases draw the toggle permanently ON and
- * wire nothing; there is no `eadwyn` AI Gateway yet (Phase 4), so mode and model
- * are controlled props. The "Remembered per page" promise needs a real
- * `useAssistMode(pageKey)` hook with persistence — that lands with the gateway,
- * not before, so this component does not pretend to remember anything.
+ * PRESENTATIONAL, but not for the reason first recorded here. This header used
+ * to say "there is no `eadwyn` AI Gateway yet (Phase 4)". That was false, and
+ * false in the way a name makes easy: nothing in the tree is called `eadwyn`,
+ * so the gateway looked absent. `cloudflare-worker/src/services/aiRouter.ts` is
+ * it — sixteen task classes across Workers AI models, a fallback chain, a
+ * llama-guard safety pass, content-hash caching, per-user $/day and $/month KV
+ * caps, an org kill switch, and a row in `ai_usage_logs` for every call.
+ *
+ * What is actually missing is narrower, and it is what keeps these props as
+ * props:
+ *   - `totalSpend` / `planCap` now HAVE a live source (`api.myAiSpend()`, over
+ *     the caller's own `ai_usage_logs` rows). A caller that passes them by hand
+ *     is quoting itself.
+ *   - the mode TOGGLE is not rendered, and this is a decision rather than a
+ *     gap. `eadwynConfig` declares every surface `kind: 'fixed'`, because no
+ *     page branches on an assist mode: turning it "off" would change nothing
+ *     it does. Shipping the switch with a `useAssistMode(pageKey)` behind it
+ *     would persist a preference nothing reads — the same objection that
+ *     removed the model menu (D13), one control over. The switch is still
+ *     supported for a surface that ever grows real manual behaviour: declare
+ *     `kind: 'choice'` and pass `mode`/`onModeChange`. See DECISIONS D17.
+ *   - the model MENU is gone. aiRouter's ROUTE map picks the model from the
+ *     TASK CLASS — llama-guard for safety, bge for embeddings, qwen-coder for
+ *     tool calls — so a picker could only offer wrong answers or duplicate the
+ *     right one. Removed rather than disabled: a control that cannot change
+ *     anything reads as a setting the user has already made. The card now
+ *     reports the model that actually RAN when a run is known, because the
+ *     router may have degraded down its fallback chain. See DECISIONS.md D13.
  *
  * The `guardrail` slot is ForgeRail's alone: it carries the product's hard
  * boundary — Eadwyn never sends, signs or voids; every outbound action is a
@@ -56,8 +79,6 @@ export default function AssistRail({
   page,
   mode,
   onModeChange,
-  modelId,
-  onSelectModel,
   lastRun,
   className = '',
   'data-testid': testId,
@@ -82,17 +103,46 @@ export default function AssistRail({
   const showToggle = config.mode.kind === 'choice';
   const modeOn = showToggle ? (mode ?? true) : true;
 
-  const models = pc.models ?? (pc.model ? [pc.model] : []);
-  const selected = models.find((m) => m.id === modelId) ?? models[0];
-  const showModelMenu = config.mode.model === 'menu' && !isInherited && models.length > 1;
+  // NO MENU. `aiRouter` selects the model from the TASK CLASS — llama-guard for
+  // safety, bge for embeddings, qwen-coder for tool calls — so a picker here
+  // could only offer wrong answers or duplicate the right one. It was removed
+  // rather than disabled: a control that cannot change anything is worse than
+  // no control, because it reads as a setting the user has already made.
+  //
+  // What the card shows instead is what ACTUALLY RAN, when that is known.
+  // `config` states the model the router routes this page's task to; a real run
+  // may have degraded down the fallback chain, and `run.fallback_used` says so.
+  // Showing the configured name over a run that used a smaller sibling would
+  // misreport the thing the card exists to report.
+  const run = typeof lastRun === 'object' && lastRun !== null ? lastRun : null;
+  const runCostUsd = run ? run.cost_usd : (typeof lastRun === 'number' ? lastRun : null);
+  const routed = pc.model ?? null;
+  const shown = run?.model
+    ? { id: run.model, name: run.model, fromRun: true, fallback: !!run.fallback_used }
+    : (routed ? { ...routed, fromRun: false, fallback: false } : null);
 
-  // One arithmetic for the estimate and the receipt — see assistCost.js.
-  const estimate = pc.assists?.length ? batchCost(pc.run, pc.assists) : runCost(pc.run);
+  // What a run costs, in order of how much it is worth believing:
+  //   1. `pc.observed` — the caller's own average for this task class, from
+  //      ai_usage_logs. A real number about real runs.
+  //   2. a modelled figure from token counts, for a caller that supplies them.
+  //   3. NOTHING. Not zero.
+  //
+  // The third case is why this is not a plain `runCost(pc.run)`. eadwynConfig
+  // deliberately sets tin/tout to 0 because nothing knows how many tokens a
+  // deck review takes before it takes them, and runCost() of zero tokens is
+  // 0 — which would render "$0.0000" as though the run were free. An
+  // unmeasured cost is unknown, and the rail says so.
+  const modelled = pc.assists?.length ? batchCost(pc.run, pc.assists) : runCost(pc.run);
+  const estimate = pc.observed?.cost ?? (modelled > 0 ? modelled : null);
 
   // Account-wide spend: explicit total, else the sum of every page's spend.
+  // `null` here means the usage table could not be read — NOT that nothing was
+  // spent. Drawing an empty bar from it would assert a fact the platform does
+  // not have, so the meter is replaced by a line saying so.
   const spent = config.totalSpend
     ?? Object.values(config.pages ?? {}).reduce((s, p) => s + (p.spend ?? 0), 0);
-  const meter = spendMeter(spent, config.planCap);
+  const spendKnown = typeof spent === 'number' && Number.isFinite(spent);
+  const meter = spendMeter(spendKnown ? spent : 0, config.planCap);
 
   return (
     <aside
@@ -143,22 +193,21 @@ export default function AssistRail({
         </div>
       )}
 
-      {selected && (
+      {shown && (
         <Card>
-          <SectionLabel tone="faint">{isInherited ? 'Model · inherited' : 'Model'}</SectionLabel>
-          <div className="text-sm font-semibold mt-1">{selected.name}</div>
-          <div className="font-mono tabular-nums text-[11px] text-axal-faint dark:text-gray-500 mt-0.5 break-all">
-            {selected.id}
-          </div>
-          {showModelMenu && (
-            <select
-              aria-label="Model"
-              value={selected.id}
-              onChange={(e) => onSelectModel?.(e.target.value)}
-              className="mt-2 w-full text-xs border border-axal-hairline dark:border-gray-700 rounded-axal-xs px-2 py-1 bg-transparent"
-            >
-              {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+          <SectionLabel tone="faint">
+            {shown.fromRun ? 'Model · last run' : (isInherited ? 'Model · inherited' : 'Model · routed by task')}
+          </SectionLabel>
+          <div className="text-sm font-semibold mt-1">{shown.name}</div>
+          {shown.id !== shown.name && (
+            <div className="font-mono tabular-nums text-[11px] text-axal-faint dark:text-gray-500 mt-0.5 break-all">
+              {shown.id}
+            </div>
+          )}
+          {shown.fallback && (
+            <div className="text-[11px] text-axal-amber-deep dark:text-amber-400 mt-1">
+              Fell back to a smaller model on this run.
+            </div>
           )}
         </Card>
       )}
@@ -167,12 +216,16 @@ export default function AssistRail({
         <SectionLabel tone="faint">{pc.assistLabel || 'Estimated cost'}</SectionLabel>
         <div className="flex items-baseline justify-between mt-1">
           <span className="text-xs text-axal-muted dark:text-gray-400">{pc.run.unit}</span>
-          <span className="font-mono tabular-nums text-sm font-extrabold">{formatCost(estimate)}</span>
+          {estimate == null
+            ? <span className="text-xs text-axal-faint dark:text-gray-500">Not recorded</span>
+            : <span className="font-mono tabular-nums text-sm font-extrabold">{formatCost(estimate)}</span>}
         </div>
-        {lastRun != null && (
+        {runCostUsd != null && (
           <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-axal-hairline dark:border-gray-700">
-            <span className="text-xs text-axal-muted dark:text-gray-400">Last run · {pc.run.label}</span>
-            <span className="font-mono tabular-nums text-xs">{formatCost(lastRun)}</span>
+            <span className="text-xs text-axal-muted dark:text-gray-400">
+              Last run · {run?.task || pc.run.label}{run?.cached ? ' · cached' : ''}
+            </span>
+            <span className="font-mono tabular-nums text-xs">{formatCost(runCostUsd)}</span>
           </div>
         )}
       </Card>
@@ -181,16 +234,20 @@ export default function AssistRail({
         <div className="flex items-baseline justify-between">
           <SectionLabel tone="faint">This month</SectionLabel>
           <span className="font-mono tabular-nums text-xs">
-            {formatSpend(spent)} <span className="text-axal-faint">/ {formatSpend(config.planCap)}</span>
+            {spendKnown
+              ? <>{formatSpend(spent)} <span className="text-axal-faint">/ {formatSpend(config.planCap)}</span></>
+              : <span className="text-axal-faint">Not recorded</span>}
           </span>
         </div>
-        <div className="h-[5px] rounded-axal-pill bg-axal-hairline dark:bg-gray-700 mt-2 overflow-hidden">
-          <div
-            className={`h-full ${meter.over ? 'bg-red-500' : accent.fill}`}
-            style={{ width: `${meter.fraction * 100}%` }}
-          />
-        </div>
-        {meter.over && <div className="text-[11px] text-red-700 dark:text-red-400 mt-1">Over plan cap</div>}
+        {spendKnown && (
+          <div className="h-[5px] rounded-axal-pill bg-axal-hairline dark:bg-gray-700 mt-2 overflow-hidden">
+            <div
+              className={`h-full ${meter.over ? 'bg-red-500' : accent.fill}`}
+              style={{ width: `${meter.fraction * 100}%` }}
+            />
+          </div>
+        )}
+        {spendKnown && meter.over && <div className="text-[11px] text-red-700 dark:text-red-400 mt-1">Over plan cap</div>}
         {config.margin && (
           <div className="flex items-baseline justify-between mt-2 text-[11px] text-axal-muted dark:text-gray-400">
             <span>Axal VC margin</span>

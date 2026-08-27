@@ -42,6 +42,7 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 import { useAuth } from '../hooks/useAuthSync';
 import { reportError } from '../lib/log';
 import { pickLabProject } from './SpinoutLabStartupPage';
+import { AssistLayout } from '../ui';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
@@ -581,7 +582,7 @@ export default function SpinoutLabMarketPage() {
   const compShown = compRows.slice(0, 6); // design caps the grid at 6
   const youDot = { x: POS_W * 0.72, y: POS_H * 0.28 };
 
-  return (
+  const page = (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6" data-testid="page-spinout-market">
       {/* Header — brand rule, back control inline with the title, and the tool
           icon in its violet tile (design handoff). */}
@@ -1399,4 +1400,6 @@ export default function SpinoutLabMarketPage() {
       )}
     </div>
   );
+
+  return <AssistLayout surface="market">{page}</AssistLayout>;
 }

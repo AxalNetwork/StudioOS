@@ -3,6 +3,7 @@ import { Brain, Send, DollarSign, BarChart3, CheckCircle, AlertTriangle, XCircle
 import { api } from '../lib/api';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
 import IncomingLeadsStrip, { leadSourceLabel } from '../components/IncomingLeadsStrip';
+import { AssistLayout } from '../ui';
 
 // lucide-react in this repo predates the `Linkedin` glyph, so we ship a tiny
 // inline SVG (same approach as JobManagePage.jsx / IntegrationsPage.jsx).
@@ -34,7 +35,7 @@ export default function AdvisoryPage() {
     api.listProjects().then(setProjects).catch(() => {});
   }, []);
 
-  return (
+  const page = (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Advisory</h1>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">Your advisors first — plus AI strategy, financial planning, and diligence tools</p>
@@ -61,6 +62,12 @@ export default function AdvisoryPage() {
       {tab === 'diligence' && <DiligenceTab projects={projects} />}
     </div>
   );
+
+  // Only the AI tab. The directory tab lists human advisors and the other
+  // two are calculators; a spend meter beside any of them describes work
+  // the page is not doing. Same rule as D15, one level finer.
+  if (!(tab === 'advisor')) return page;
+  return <AssistLayout surface="advisory">{page}</AssistLayout>;
 }
 
 // AI Advisor tab — the REAL interactive Personal Advisor (same component the
