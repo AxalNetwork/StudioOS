@@ -98,5 +98,31 @@ test('D9 carries the correction, so the wrong table is not re-read as fact', () 
   const d = read('DECISIONS.md');
   assert.match(d, /This table was itself wrong for two rows/);
   assert.match(d, /### D12\./);
-  assert.match(d, /All twelve decisions are now resolved/);
+});
+
+test('the decisions summary counts the decisions that are actually there', () => {
+  // This used to assert the literal words "All twelve decisions are now
+  // resolved", and adding two more decisions broke it. That is the failure
+  // mode a hardcoded total always has: the cheapest repair is to bump the
+  // number, which is indistinguishable from the count being right, so the
+  // assertion stops meaning anything. Derive it instead.
+  const d = read('DECISIONS.md');
+  const partOne = d.slice(0, d.indexOf('## Part 2'));
+  const numbered = [...partOne.matchAll(/^### D(\d+)\./gm)].map((m) => Number(m[1]));
+  assert.ok(numbered.length > 0, 'Part 1 must carry numbered decisions');
+
+  // No gaps and no repeats — a duplicate D-number is how two decisions end up
+  // being cited by the same name from different files.
+  assert.deepEqual(numbered, [...numbered].sort((a, b) => a - b), 'decisions run in order');
+  assert.equal(new Set(numbered).size, numbered.length, 'no duplicate D-numbers');
+  assert.deepEqual(numbered, Array.from({ length: numbered.length }, (_, i) => i + 1),
+    'decisions are numbered 1..N with no gaps');
+
+  const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight',
+    'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
+    'seventeen', 'eighteen', 'nineteen', 'twenty'];
+  const word = WORDS[numbered.length];
+  assert.ok(word, `add ${numbered.length} to WORDS in this test`);
+  assert.match(partOne, new RegExp(`All ${word} decisions are now resolved`),
+    `the summary must say "All ${word}" — Part 1 carries ${numbered.length} decisions`);
 });

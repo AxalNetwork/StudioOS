@@ -234,3 +234,71 @@ test('the barrel exports both', () => {
     assert.ok(exported.has(name), `ui/index.js must export ${name}`);
   }
 });
+
+// ---------- the model menu is gone (Phase 4, DECISIONS D13) ----------
+
+test('AssistRail offers no model picker', () => {
+  // `aiRouter`'s ROUTE map selects the model from the TASK CLASS — llama-guard
+  // for safety, bge for embeddings, qwen-coder for tool calls. A picker here
+  // could only offer wrong answers or duplicate the right one, so it was
+  // REMOVED rather than disabled: a control that cannot change anything reads
+  // as a setting the user has already made.
+  const src = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.doesNotMatch(src, /<select/, 'no model dropdown');
+  assert.doesNotMatch(src, /\bonSelectModel\b/, 'no model-selection callback');
+  assert.doesNotMatch(src, /\bmodelId\b/, 'no selected-model prop');
+  assert.doesNotMatch(src, /config\.mode\.model\s*===\s*['"]menu['"]/,
+    'the menu config branch is gone, not merely unreachable');
+});
+
+test('the model card reports the model that RAN, not the one configured', () => {
+  // aiRouter degrades down a fallback chain under load. Showing the configured
+  // name over a run that used a smaller sibling would misreport the one thing
+  // this card exists to report.
+  const src = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.match(src, /run\?\.model/, 'a known run supplies the model');
+  assert.match(src, /fallback_used/, 'and whether it fell back');
+  assert.match(src, /Model · last run/, 'labelled as the run it came from');
+  assert.match(src, /Model · routed by task/, 'and otherwise as routed, not chosen');
+});
+
+test('lastRun accepts the spend report’s shape as well as a bare cost', () => {
+  // GET /api/ai/me/spend returns last_run as an object. The rail took a number.
+  // Both are handled so wiring the endpoint does not silently render nothing.
+  const src = scan(read('frontend/src/ui/AssistRail.jsx'));
+  assert.match(src, /typeof lastRun === 'object'/);
+  assert.match(src, /typeof lastRun === 'number'/);
+});
+
+test('the rail no longer ASSERTS that the AI gateway does not exist', () => {
+  // It does exist: cloudflare-worker/src/services/aiRouter.ts. The old claim
+  // was made on a name (nothing is called `eadwyn`) rather than on the code.
+  //
+  // Deliberately not `doesNotMatch` on the phrase. The first version of this
+  // test was, and it failed — on AssistRail's own correction, which QUOTES the
+  // sentence in order to refute it. A guard that cannot tell a claim from a
+  // record of a retracted claim would push the next author to delete the
+  // history rather than keep it. So the phrase is allowed to appear, and must
+  // be refuted where it does.
+  const CLAIM = /there is no `?eadwyn`? AI Gateway yet/ig;
+  for (const f of ['frontend/src/ui/AssistRail.jsx', 'frontend/src/ui/index.js']) {
+    const raw = read(f);
+    for (const m of raw.matchAll(CLAIM)) {
+      const after = raw.slice(m.index, m.index + 240);
+      assert.match(after, /was false/i,
+        `${f} states the gateway is absent without recording that it is not`);
+    }
+    assert.doesNotMatch(raw, /Presentational until the eadwyn gateway lands/i,
+      `${f} must not carry the un-refuted form`);
+  }
+  // And the correction itself must still be there to be found.
+  assert.match(read('frontend/src/ui/AssistRail.jsx'), /aiRouter\.ts/,
+    'the header must name the gateway it was wrong about');
+});
+
+test('the spend meter has a live source, and api.js names it', () => {
+  const api = scan(read('frontend/src/lib/api.js'));
+  assert.match(api, /myAiSpend:\s*\(\)\s*=>\s*request\('\/ai\/me\/spend'\)/,
+    'the self-view endpoint the meter reads');
+  assert.match(api, /monitoringAiUsage:/, 'the admin rollup stays separate');
+});
