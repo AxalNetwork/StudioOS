@@ -1340,6 +1340,10 @@ export const api = {
   },
   adminSendEnvelope: (payload) =>
     request('/legal/esign/send', { method: 'POST', body: JSON.stringify(payload) }),
+  // The templates THIS caller may originate — see
+  // cloudflare-worker/src/services/esignOriginators.ts. Distinct from
+  // adminListLegalTemplates, which is the full catalogue behind requireAdmin.
+  esignTemplates: () => request('/legal/esign/templates'),
   // Task #14 — forward signed PDF to legal partner(s).
   adminForwardContract: (id, data) =>
     request(`/legal/esign/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),

@@ -25,6 +25,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `pipeline/` | Pipeline helpers shared by the pipeline screens. |
 | `events/` | Public and host-side event screens. |
 | `jobs/` | Public and host-side job screens. |
+| `legal/` | Non-admin document origination (Send for signature). |
 | `insights/` | Insight reader and its public variant. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | Persona home-page templates. |

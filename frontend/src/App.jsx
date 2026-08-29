@@ -134,6 +134,9 @@ const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
 const NetworkIntroReviewPage = lazy(() => import('./pages/NetworkIntroReviewPage'));
 const RecoverPage = lazy(() => import('./pages/RecoverPage'));
 const ESignPage = lazy(() => import('./pages/ESignPage'));
+// Send for signature — the non-admin origination page. POST /legal/esign/send
+// stopped being admin-only in task #156; this is the UI that finally matches.
+const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
@@ -1307,6 +1310,7 @@ function AppInner() {
       <Route path="/auth/recover" element={<RecoverPage />} />
       <Route path="/auth/recover/*" element={<RecoverPage />} />
       <Route path="/esign/:token" element={<ESignPage />} />
+      <Route path="/legal/send" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SendForSignaturePage />)} />
       {/* Task #1 (Spin-Out Teams) — tokenized co-founder/advisor invite
           acceptance. Public route; the page bounces logged-out visitors to
           sign-in with a `?next=` return path, then POSTs the bound token. */}
