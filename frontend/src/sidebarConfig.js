@@ -23,6 +23,7 @@ import {
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   Gamepad2, ShieldAlert,
   Gavel, Inbox, FileBarChart, Radar, Wallet,
+  Mail, Gift, Map,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -68,6 +69,7 @@ export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+          { to: '/messages', icon: Mail, label: 'Messages' },
     ]},
     { key: 'admin', label: 'Admin', items: [
       { to: '/admin', icon: Shield, label: 'Admin Console' },
@@ -87,6 +89,7 @@ export const SIDEBAR_GROUPS = {
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
       { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
+          { to: '/admin/licences', icon: Map, label: 'Territory Licences' },
     ]},
     { key: 'studio', label: 'Studio', items: [
       { to: '/projects', icon: Zap, label: 'Startups' },
@@ -132,6 +135,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/incorporate/cofounder-agreement', icon: Users, label: 'Co-Founder Agreement' },
       { to: '/spinout-lab/83b', icon: Calendar, label: '83(b) Tracker' },
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
+          { to: '/perks', icon: Gift, label: 'Perks' },
     ]},
     { key: 'account', label: 'Account', items: [
     ]},
@@ -170,6 +174,7 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+          { to: '/messages', icon: Mail, label: 'Messages' },
     ]},
     { key: 'build', label: 'Build', items: [
       { to: '/execution', icon: Briefcase, label: 'Execution', match: ['/execution', '/projects', '/build/roadmap'] },
@@ -214,6 +219,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/raise/pitch', icon: Sparkles, label: 'Pitch' },
       { to: '/raise/capital', icon: DollarSign, label: 'Capital' },
       { to: '/raise/legal-engine', icon: Scale, label: 'Legal Engine' },
+          { to: '/raise/data-room', icon: Shield, label: 'Data Room' },
     ]},
     { key: 'launch', label: 'Launch', items: [
       // "Jobs" moved into the Build › Team workspace (/build/team?tab=jobs).
@@ -224,6 +230,7 @@ export const SIDEBAR_GROUPS = {
       // /refer route redirects there. Removed from the founder nav.
       { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
       { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
+          { to: '/perks', icon: Gift, label: 'Perks' },
     ]},
     { key: 'account', label: 'Account', items: [
     ]},
@@ -279,6 +286,7 @@ export const SIDEBAR_GROUPS = {
   partner: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+          { to: '/messages', icon: Mail, label: 'Messages' },
     ]},
     { key: 'sourcing', label: 'Sourcing', items: [
       { to: '/services', icon: Package, label: 'My Services' },
@@ -290,6 +298,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
       { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
+          { to: '/perks', icon: Gift, label: 'Perks' },
     ]},
     // Network — Introductions, Relationships, Organizations. Reuses the shared
     // Network workspace (also used by advisors); the standalone "Network" link
@@ -352,6 +361,7 @@ export const SIDEBAR_GROUPS = {
       // allocation, apply). Everyone else gets the founder program. An LP's
       // relationship with the Lab is the fund, not the 4-week curriculum.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: ['/spinout-lab', '/spinout-lab/investor-workspace'] },
+          { to: '/messages', icon: Mail, label: 'Messages' },
     ]},
     // Task — investor sidebar restructured around the investment lifecycle IA:
     // Network → Pipeline → Portfolio → Funds → Research. Network & Research
@@ -370,6 +380,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/pipeline/screening', icon: Target, label: 'Screening' },
       { to: '/pipeline/commit', icon: Gavel, label: 'Commit' },
       { to: '/pipeline/transactions', icon: DollarSign, label: 'Transactions' },
+          { to: '/raise/data-room', icon: Shield, label: 'Data Rooms' },
     ]},
     { key: 'portfolio', label: 'Portfolio', items: [
       { to: '/portfolio/health', icon: Briefcase, label: 'Companies' },
@@ -399,6 +410,7 @@ export const SIDEBAR_GROUPS = {
   advisor: [
     { key: 'home', label: 'Home', items: [
       { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
+          { to: '/messages', icon: Mail, label: 'Messages' },
     ]},
     // Task #23 — each Advisor workspace is its own sidebar group so its
     // sub-sections are visible directly (mirrors the founder/partner/investor
@@ -440,6 +452,7 @@ export const SIDEBAR_GROUPS = {
       // Task #13 — surface the Spin-Out Lab program to explorers so they can
       // see the full 28-day pipeline before committing.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+          { to: '/messages', icon: Mail, label: 'Messages' },
     ]},
     { key: 'account', label: 'Account', items: [
       { to: '/profile', icon: UserCircle, label: 'My Profile' },
