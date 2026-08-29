@@ -18,7 +18,7 @@
  * The first draft of this script got that wrong and reported eight
  * false positives in `captable.ts` alone.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join, relative, extname } from 'node:path';
 
 const ROOT = resolve(process.cwd());
@@ -55,18 +55,31 @@ const findings = [];
 for (const tree of TREES) {
   for (const file of walk(join(ROOT, tree))) {
     const src = readFileSync(file, 'utf8');
-    // ONLY the import statements are removed — deliberately no comment
-    // stripping. Regex comment-removal on JSX is unsound: a `/*` inside a
-    // string or a className opens a comment that runs to the next `*/` far
-    // below, and the first version of this script ate HALF of
-    // SpinoutLabScoringPage.jsx that way and reported `useState` — used
-    // nineteen times — as unused.
+    // Imports go first, then only the comments that cannot be mistaken for
+    // code.
     //
-    // Leaving comments in means a name mentioned only in prose reads as used,
-    // so this MISSES some. That is the correct direction for a guard that
-    // fails the build: a false negative costs a CodeQL alert, a false positive
-    // blocks a correct commit and teaches everyone to distrust the check.
-    const body = src.replace(/^import\s[\s\S]*?from\s*['"][^'"]+['"];?$/gm, '');
+    // Blanket regex comment-removal on JSX is unsound: an INLINE `/*` inside a
+    // string or a className opens a comment that runs to the next `*/` far
+    // below. The first version of this script did that, ate half of
+    // SpinoutLabScoringPage.jsx, and reported `useState` — used nineteen times
+    // in that file — as unused.
+    //
+    // But leaving ALL comments in was too loose in the other direction, and it
+    // bit immediately: this file's own doc header mentioned `statSync`, which
+    // made the unused `statSync` import here read as used. CodeQL found it
+    // (alert 5943) on the very guard written to prevent that class of alert.
+    //
+    // So: strip only the two unambiguous shapes. A block comment that STARTS a
+    // line at column 0 and a line that is nothing but a `//` comment are both
+    // things a string literal cannot produce. Inline comment markers — where
+    // the hazard actually lives — are left alone, so a name mentioned in a
+    // trailing comment still reads as used and is missed. That residual gap is
+    // the safe direction: a false negative costs a CodeQL alert, a false
+    // positive blocks correct work and teaches everyone to ignore the guard.
+    const body = src
+      .replace(/^import\s[\s\S]*?from\s*['"][^'"]+['"];?$/gm, '')
+      .replace(/^\/\*[\s\S]*?\*\//gm, '')
+      .replace(/^\s*\/\/[^\n]*$/gm, '');
     for (const { name } of namedImports(src)) {
       if (!new RegExp(`\\b${name}\\b`).test(body)) {
         findings.push(`${relative(ROOT, file)} — \`${name}\` is imported and never used`);
