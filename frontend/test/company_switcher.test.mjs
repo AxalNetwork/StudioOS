@@ -10,16 +10,20 @@
  * attribute.
  *
  * The second fact is the one that matters more. Enabling creation is only safe
- * while the UI is honest about what selecting a company does, because today it
- * does almost nothing: no business table carries a `company_id` — only
- * `user_company_links` does — and `services/tenancyScope.ts` scopes by user,
- * founder_id, LP email and fund GP, never by company. A second company would
- * therefore show the same rows as the first, which reads as data loss.
+ * while the UI is honest about what selecting a company does. When this file
+ * was written that was "almost nothing": no business table carried a
+ * `company_id` at all, so a second company showed the first one's rows, which
+ * reads as data loss. Migration 189 and `companyScope` started closing that,
+ * but starting is not finishing — most route files still ignore the active
+ * company, so the notice still has to stand.
  *
- * So the notice and the absence of company scoping are asserted as ONE
- * coupled fact. When company scoping lands, the last test here fails and tells
- * the author to delete the notice — rather than leaving a stale disclaimer
- * that undersells the product.
+ * The notice and the ROLLOUT are therefore asserted as one coupled fact, and
+ * the coupling is measured rather than declared. The first version asked a
+ * yes/no question — "does any company scoping exist?" — and went red the
+ * moment the first route adopted it, demanding the notice be deleted while 50
+ * of 51 route files still ignored the active company. The last test now counts
+ * the route files that read `projects` and narrow through `companyScope`, and
+ * requires the notice gone only when every one of them does.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,7 +36,6 @@ const read = (p) => readFileSync(resolve(root, p), 'utf8');
 
 const switcher = read('frontend/src/ui/CompanySwitcher.jsx');
 const api = read('frontend/src/lib/api.js');
-const scope = read('cloudflare-worker/src/services/tenancyScope.ts');
 
 test('the add-company control is not disabled', () => {
   assert.ok(
