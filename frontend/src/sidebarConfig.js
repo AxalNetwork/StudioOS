@@ -22,7 +22,7 @@ import {
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale,
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   Gamepad2, ShieldAlert,
-  Gavel, Inbox, FileBarChart, Radar, Wallet,
+  Inbox, Radar, Wallet,
   Mail, Gift, Map,
 } from 'lucide-react';
 
@@ -352,9 +352,31 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
+  // Investor/LP shell — the canvas declares nine rows (Home · Deals ·
+  // Portfolio · Axal VC Fund · Fund · Network · Research · Trust · Firm
+  // Settings). Eight land here; Trust is deliberately absent, pinned out of
+  // every sidebar by trust_center_navigation.test.mjs — it is reached from the
+  // user dropdown. The eighteen items this replaces all keep a door: a row of
+  // their own, or a workspace whose tab bar demonstrably links them.
+  //
+  //   Deals      → /pipeline renders PipelineWorkspace, whose tabs are Board ·
+  //                Screening · Commit · Transactions — a 1:1 match with the
+  //                canvas Deals zones (Pipeline · Screening · Commit ·
+  //                Closing) — plus Deal Flow and Data Room, the two former
+  //                rows that had no other investor door.
+  //   Portfolio  → /portfolio/health renders PortfolioWorkspace: Health ·
+  //                Updates · Cap Table · Performance · Growth.
+  //   Fund       → /funds renders FundOpsWorkspace: Funds admin · Performance ·
+  //                Accounting · LP Reporting · Capital Calls · LP Workspace.
+  //
+  // The canvas's "Axal VC Fund" row is the LP's relationship with Axal's own
+  // fund, which today is the Spin-Out Lab investor surface. No page canvas
+  // exists for it and the Lab is not a modification target, so the row keeps
+  // its existing destination, label and match array verbatim rather than being
+  // renamed to a surface nobody has designed.
   investor: [
-    { key: 'home', label: 'Home', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+    { key: 'shell', label: 'Workspace', items: [
+      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       // Same item at the same index as the founder and exploring navs, so the
       // program reads the same way in every profile — but it does NOT resolve
       // to the same page. App.jsx serves /spinout-lab by the role being browsed
@@ -366,48 +388,19 @@ export const SIDEBAR_GROUPS = {
       // relationship with the Lab is the fund, not the 4-week curriculum.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: ['/spinout-lab', '/spinout-lab/investor-workspace'] },
       { to: '/messages', icon: Mail, label: 'Messages' },
-    ]},
-    // Task — investor sidebar restructured around the investment lifecycle IA:
-    // Network → Pipeline → Portfolio → Funds → Research. Network & Research
-    // reuse the shared workspaces (also used by advisors). Sidebar-level change
-    // only: every prior route stays registered and URL-reachable. Surfaces
-    // trimmed from the nav (still reachable by direct URL): /pipeline (Pipeline
-    // Board), /matches, /watchlist, /scoring, /due-diligence, /market-intel,
-    // /portfolio/risk-matrix, /ic, /legal-capital, /portfolio/positions,
-    // /lp-portal, /funds/capital-calls, /portfolio/reserves,
-    // /portfolio/waterfall, /liquidity.
-    { key: 'network', label: 'Network', items: [
+
+      // One row, six destinations, all tabbed by PipelineWorkspace behind it.
+      { to: '/pipeline', icon: Handshake, label: 'Deals', match: ['/pipeline', '/deals', '/raise/data-room'] },
+
+      // One row, five destinations, all tabbed by PortfolioWorkspace behind it.
+      { to: '/portfolio/health', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
+
+      // One row, six destinations, all tabbed by FundOpsWorkspace behind it.
+      { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds', '/lp-reports'] },
+
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-    ]},
-    { key: 'pipeline', label: 'Pipeline', items: [
-      { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
-      { to: '/pipeline/screening', icon: Target, label: 'Screening' },
-      { to: '/pipeline/commit', icon: Gavel, label: 'Commit' },
-      { to: '/pipeline/transactions', icon: DollarSign, label: 'Transactions' },
-      { to: '/raise/data-room', icon: Shield, label: 'Data Rooms' },
-    ]},
-    { key: 'portfolio', label: 'Portfolio', items: [
-      { to: '/portfolio/health', icon: Briefcase, label: 'Companies' },
-      { to: '/portfolio/performance', icon: TrendingUp, label: 'Performance' },
-      { to: '/portfolio/updates', icon: FileBarChart, label: 'Reporting' },
-      { to: '/portfolio/growth', icon: Rocket, label: 'Growth' },
-    ]},
-    { key: 'funds', label: 'Funds', items: [
-      { to: '/funds', icon: Wallet, label: 'Fund Management' },
-      // NOTE: no 'LP Workspace' item here — the investor journey to it runs
-      // Home → Spin-Out Lab (sales page) → its CTAs →
-      // /spinout-lab/investor-workspace, and a second nav item opening the
-      // same content under a fund-ops name is the confusion, not the fix. The
-      // /funds/lp-workspace ROUTE stays registered and is still a tab inside
-      // Fund Ops, so deep links and the tab strip are unaffected.
-      { to: '/lp-reports', icon: UserCircle, label: 'LP Management' },
-      { to: '/funds/performance', icon: Activity, label: 'Performance' },
-      { to: '/funds/accounting', icon: Scale, label: 'Accounting' },
-    ]},
-    { key: 'research', label: 'Research', items: [
-      { to: '/market-intel', icon: Radar, label: 'Market' },
-    ]},
-    { key: 'account', label: 'Account', items: [
+      { to: '/market-intel', icon: Radar, label: 'Research' },
+      { to: '/company-settings', icon: UserCircle, label: 'Firm Settings' },
     ]},
   ],
 
