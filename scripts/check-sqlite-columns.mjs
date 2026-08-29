@@ -61,15 +61,19 @@ function walk(dir, ext) {
 
 const norm = (t) => t.replace(/[`"[\]]/g, '').toLowerCase();
 
+// Declared once, with the flag it needs: rebuilding it inside the loop below
+// allocated a fresh pattern on every pass, up to 200 per file. `replace`
+// resets lastIndex on each call, so a shared global regex is safe here.
+const JOIN_ADJACENT_STRINGS = /(['"])((?:\\.|(?!\1)[^\\])*)\1\s*\+\s*(['"])((?:\\.|(?!\3)[^\\])*)\3/g;
+
 /**
  * Join adjacent JS string literals spliced with `+` into one literal, so DDL
  * assembled across source lines reads as the single statement it becomes.
  */
 export function collapseStringConcat(src) {
-  const JOIN = /(['"])((?:\\.|(?!\1)[^\\])*)\1\s*\+\s*(['"])((?:\\.|(?!\3)[^\\])*)\3/;
   let out = src;
   for (let i = 0; i < 200; i += 1) {
-    const next = out.replace(new RegExp(JOIN, 'g'), (_m, _q1, a, _q3, b) => `'${a}${b}'`);
+    const next = out.replace(JOIN_ADJACENT_STRINGS, (_m, _q1, a, _q3, b) => `'${a}${b}'`);
     if (next === out) break;
     out = next;
   }
@@ -165,6 +169,12 @@ function jsBracket(s, open) {
  * be resolved — the caller then marks the table incomplete rather than
  * pretending to know it.
  */
+/** `ALTER TABLE <t> ADD COLUMN ${<var>}` — the identifier is captured, not built in. */
+const ALTER_INTERPOLATED = /ALTER\s+TABLE\s+([`"[]?\w+[`"\]]?)\s+ADD\s+(?:COLUMN\s+)?\$\{\s*(\w+)\s*\}/i;
+
+/** `const NAME … = [` — likewise captured and compared rather than interpolated. */
+const ARRAY_DECL = /\b(?:const|let)\s+(\w+)\b[^=\n]*=\s*\[/g;
+
 export function runtimeColumns(src) {
   const out = [];
   for (const m of src.matchAll(/for\s*\(\s*const\s+(\[[^\]]*\]|\w+)\s+of\s+([^)]+?)\)\s*\{/g)) {
@@ -173,19 +183,25 @@ export function runtimeColumns(src) {
     const tuple = binding.startsWith('[');
     const loopVar = tuple ? binding.slice(1, -1).split(',')[0].trim() : binding;
     if (!/^\w+$/.test(loopVar)) continue;
-    // The ALTER has to be inside this loop, and interpolate this variable.
+    // The ALTER has to be inside this loop and interpolate THIS variable.
+    // Both patterns below are literal and capture the identifier, which is
+    // then compared in JS. Interpolating `loopVar` into a regex would work —
+    // it is validated above and cannot carry a metacharacter — but a literal
+    // pattern needs no such argument to be trusted, and Semgrep is right that
+    // a built regex is the weaker form when a fixed one will do.
     const window = src.slice(m.index, m.index + 500);
-    const alt = new RegExp(
-      `ALTER\\s+TABLE\\s+([\`"\\[]?\\w+[\`"\\]]?)\\s+ADD\\s+(?:COLUMN\\s+)?\\$\\{\\s*${loopVar}\\s*\\}`, 'i',
-    ).exec(window);
-    if (!alt) continue;
+    const alt = ALTER_INTERPOLATED.exec(window);
+    if (!alt || alt[2] !== loopVar) continue;
     const table = norm(alt[1]);
 
     let arr = null;
     if (expr.startsWith('[')) arr = jsBracket(expr, 0);
     else if (/^[A-Za-z_]\w*$/.test(expr)) {
-      const decl = new RegExp(`\\b(?:const|let)\\s+${expr}\\b[^=]*=\\s*\\[`).exec(src);
-      if (decl) arr = jsBracket(src, decl.index + decl[0].length - 1);
+      for (const d of src.matchAll(ARRAY_DECL)) {
+        if (d[1] !== expr) continue;
+        arr = jsBracket(src, d.index + d[0].length - 1);
+        break;
+      }
     }
     if (!arr) { out.push({ table, cols: null }); continue; }
 
