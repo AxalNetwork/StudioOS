@@ -2615,7 +2615,7 @@ export const SeriesBDiligenceDeckApp: React.FC<{
 // SAMPLE_DATA — drop in the merged Axal VC row shape produced by
 // cloudflare-worker/src/routes/decks.ts heuristicSlides() to hydrate.
 // JSON columns referenced here depend on the autofill migration
-// from earlier Prompt MD (DECK_AUTOFILL_AUDIT.md +
+// from earlier Prompt MD (documentation/audits/DECK_AUTOFILL_AUDIT.md +
 // 00xx_deck_autofill_fields.sql).
 // ─────────────────────────────────────────────────────────────────
 

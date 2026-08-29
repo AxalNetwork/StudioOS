@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
 
-// DECISIONS.md D10. Companion to research_market_funds_retired and the repo's
+// documentation/architecture/DECISIONS.md D10. Companion to research_market_funds_retired and the repo's
 // other deletion guards.
 
 test('the three /advisor/network routes redirect onto the working surface', () => {

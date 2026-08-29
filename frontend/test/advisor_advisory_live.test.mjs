@@ -5,7 +5,7 @@
  * /advisor/advisory/* tabs rendered data/advisor/advisory.js — 716 lines of
  * invented opportunities, clients, engagements, deliverables and contracts,
  * with a demo clock pinned to 2026-07-11 — shown to real signed-in advisors
- * with zero API calls. PLATFORM-DELIVERY-AUDIT.md §6 named this and the
+ * with zero API calls. documentation/audits/PLATFORM-DELIVERY-AUDIT.md §6 named this and the
  * partner Operations cluster as the platform's worst standing defect.
  *
  * These tests pin the repair the same way, and additionally pin the ONE

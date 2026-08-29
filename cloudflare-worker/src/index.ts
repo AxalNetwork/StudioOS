@@ -650,7 +650,7 @@ app.route('/api/activity', activity);
 // took the entire admin/monitoring/infra UI down. These route groups remain
 // protected by the in-app requireAdmin/requireAuth RBAC (the inner perimeter).
 // Do NOT re-add requireCfAccess() here without first completing the re-engage
-// checklist in GOTCHAS.md item (h): every worker-gated path must also be a path
+// checklist in documentation/architecture/GOTCHAS.md item (h): every worker-gated path must also be a path
 // in the Access app AND admin traffic must be routed to the gated host, or the
 // admin API goes down again.
 
@@ -1456,7 +1456,7 @@ export default {
         // Task #2 — funnel_events retention purge at 04:20 UTC. First-party
         // funnel rows are pseudonymous but still subject to GDPR storage
         // limitation; 180 days is ample for cohort comparisons (window is
-        // documented in ANALYTICS_FUNNEL.md alongside the manual purge SQL).
+        // documented in documentation/architecture/ANALYTICS_FUNNEL.md alongside the manual purge SQL).
         // Best-effort: a cold DB without the table just logs and moves on.
         if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
           try {

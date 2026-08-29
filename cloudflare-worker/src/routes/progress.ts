@@ -1868,7 +1868,7 @@ progress.post('/metrics/:projectId/import-stripe', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Startup Lifecycle module (FOUNDER_UX_AUDIT.md, Critical #1).
+// Startup Lifecycle module (documentation/audits/FOUNDER_UX_AUDIT.md, Critical #1).
 //
 // A FOUNDER-editable lifecycle stage + a checklist whose completion is DERIVED
 // at read time from real signals (published landing page, logged interviews,

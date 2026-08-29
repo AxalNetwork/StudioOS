@@ -6,10 +6,10 @@ Internal codename: Axal StudioOS. Operated by **Axal VC Management LLC**
 (Delaware). Brand and platform IP owned by **Axal VC Holdings LLC**
 (Delaware). **Axal VC Fund I, LP** (Delaware) is managed by **Axal VC
 GP LLC** (Delaware) — the GP signs no platform contracts and is not the
-operating entity. See [`LEGAL_ENTITIES.md`](./LEGAL_ENTITIES.md) for the
+operating entity. See [`documentation/architecture/LEGAL_ENTITIES.md`](./LEGAL_ENTITIES.md) for the
 canonical entity map.
 
-> **Architecture in one sentence:** Production API runs on a Cloudflare Worker at `app.axal.vc/api/*` (`cloudflare-worker/`), the React SPA ships to Cloudflare Pages at `app.axal.vc` (`frontend/`), the `axal.vc` apex is GitHub Pages marketing (do NOT attach Cloudflare to the apex), D1 is the canonical user store, and the FastAPI in `backend/` exists only as a Replit dev convenience and is **never deployed**. Read [`CLAUDE.md`](./CLAUDE.md) before contributing. Cutover runbook for the `app.axal.vc` migration lives at [`MIGRATE_TO_CUSTOM_DOMAIN.md`](./MIGRATE_TO_CUSTOM_DOMAIN.md).
+> **Architecture in one sentence:** Production API runs on a Cloudflare Worker at `app.axal.vc/api/*` (`cloudflare-worker/`), the React SPA ships to Cloudflare Pages at `app.axal.vc` (`frontend/`), the `axal.vc` apex is GitHub Pages marketing (do NOT attach Cloudflare to the apex), D1 is the canonical user store, and the FastAPI in `backend/` exists only as a Replit dev convenience and is **never deployed**. Read [`CLAUDE.md`](./CLAUDE.md) before contributing. Cutover runbook for the `app.axal.vc` migration lives at [`documentation/architecture/MIGRATE_TO_CUSTOM_DOMAIN.md`](./MIGRATE_TO_CUSTOM_DOMAIN.md).
 
 ## Repo layout
 
@@ -30,11 +30,11 @@ Two workflows are configured:
 
 Required secret: `JWT_SECRET` (the dev backend fails fast at import time if unset).
 
-Optional secrets: `GITHUB_ACCESS_TOKEN`, `GMAIL_*`, `STRIPE_*`, `SUMSUB_*` — see `PRODUCTION.md`.
+Optional secrets: `GITHUB_ACCESS_TOKEN`, `GMAIL_*`, `STRIPE_*`, `SUMSUB_*` — see `documentation/architecture/PRODUCTION.md`.
 
 ## Deploy
 
-See `PRODUCTION.md` for the production Cloudflare deploy checklist, secrets, and post-deploy steps. See [`CLAUDE.md`](./CLAUDE.md) for the architecture rules every PR must respect.
+See `documentation/architecture/PRODUCTION.md` for the production Cloudflare deploy checklist, secrets, and post-deploy steps. See [`CLAUDE.md`](./CLAUDE.md) for the architecture rules every PR must respect.
 
 ## Claude Code setup
 

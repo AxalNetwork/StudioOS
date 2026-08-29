@@ -620,7 +620,7 @@ test('nothing writes workflow_tasks.assignee_user_id', () => {
   //
   // If this fails because you wired assignment, good: that is the feature
   // being finished. Update the "workflow_tasks" bullet under
-  // "### Migrations & schema" in GOTCHAS.md and delete this test, so the note
+  // "### Migrations & schema" in documentation/architecture/GOTCHAS.md and delete this test, so the note
   // does not outlive the fact it describes.
   const src = fs.readdirSync(new URL('../src/routes/', import.meta.url), { recursive: true })
     .filter((f) => String(f).endsWith('.ts'))

@@ -534,7 +534,7 @@ deliberately.
 
 ---
 
-## 6. Open questions for whoever folds this into DECISIONS.md
+## 6. Open questions for whoever folds this into ../documentation/architecture/DECISIONS.md
 
 1. **Hairline `#e8e6ee` vs `#ececf1`.** 21 canvases vs 91 — the single biggest divergence. If the
    platform is not being re-skinned to the spec-family look, `#ececf1` is the pragmatic choice.

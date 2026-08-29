@@ -1340,7 +1340,7 @@ function AppInner() {
           by Founder + Advisor modes (mode changes ordering + copy only). */}
       <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SignalsPage user={user} />)} />
       <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <CapTablePage />)} />
-      {/* DECISIONS.md D11 — /marketplace was a partner-provider directory with
+      {/* documentation/architecture/DECISIONS.md D11 — /marketplace was a partner-provider directory with
           inquiry threads and reviews whose backend exists only in the dev-only
           FastAPI: all 11 api.marketplace* calls hit /marketplace/* and the
           worker mounts none of it. Discovery is already served by working
@@ -1540,7 +1540,7 @@ function AppInner() {
           to its own route; the workspace derives the active tab from the URL.
           Bare section paths redirect to their first tab so every workspace is
           reachable by direct URL and by clicking the sidebar. */}
-      {/* DECISIONS.md D10 — /network is the one network surface. These three
+      {/* documentation/architecture/DECISIONS.md D10 — /network is the one network surface. These three
           tabs were the ones every role's sidebar linked, and none of them
           worked: Introductions and Organizations called /api/network-introductions
           and /api/organizations, neither of which the worker mounts, and
@@ -1560,7 +1560,7 @@ function AppInner() {
       <Route path="/advisor/advisory/engagements" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
-      {/* DECISIONS.md D12 — the Research row is /market-intel and nothing else.
+      {/* documentation/architecture/DECISIONS.md D12 — the Research row is /market-intel and nothing else.
           D8 redirected the market tab; D9 withdrew the funds tab; D12 withdrew
           the remaining four (companies, AI research, news, documents) for the
           same reason D9 gave, having corrected D9's own per-tab table.

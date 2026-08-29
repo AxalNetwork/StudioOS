@@ -66,7 +66,7 @@ export const AXAL_ENTITIES: Record<AxalEntityKey, AxalEntity> = {
 
 /**
  * Pick the Axal entity that signs a given document, per the routing rules in
- * LEGAL_ENTITIES.md:
+ * documentation/architecture/LEGAL_ENTITIES.md:
  *   - Fund formation / LP capital docs  -> GP LLC (as GP of the Fund)
  *   - Brand / platform IP ownership     -> Holdings LLC
  *   - Everything operational (default)  -> Management LLC

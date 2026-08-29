@@ -10,7 +10,7 @@ import { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assis
  * It is not navigation: AIRail, InvRail, AdminRail, AdvRail, PartnerRail,
  * DetailRail, EmberRail and ForgeRail contain **zero route links** between
  * them. They are the AI control surface — mode, model, spend, guardrails — and
- * the left nav is a separate element (SidebarNav). See DECISIONS.md T3.
+ * the left nav is a separate element (SidebarNav). See documentation/architecture/DECISIONS.md T3.
  *
  * What varies across the eight is entirely config; what is identical is this
  * skeleton: header row, the 10px/800 uppercase section labels, hairline cards,
@@ -51,7 +51,7 @@ import { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assis
  *     right one. Removed rather than disabled: a control that cannot change
  *     anything reads as a setting the user has already made. The card now
  *     reports the model that actually RAN when a run is known, because the
- *     router may have degraded down its fallback chain. See DECISIONS.md D13.
+ *     router may have degraded down its fallback chain. See documentation/architecture/DECISIONS.md D13.
  *
  * The `guardrail` slot is ForgeRail's alone: it carries the product's hard
  * boundary — Eadwyn never sends, signs or voids; every outbound action is a

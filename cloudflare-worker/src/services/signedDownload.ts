@@ -29,7 +29,7 @@
  *     consume is detectable post-hoc.
  * If strict atomicity is ever required (e.g. one-time decryption keys),
  * back this with a Durable Object instead of KV. Tracked in
- * SECURITY_REVIEW.md §2 / O-list.
+ * documentation/audits/SECURITY_REVIEW.md §2 / O-list.
  */
 import type { Env } from '../types';
 

@@ -11,7 +11,7 @@ Every number below is computed from the repo (the census parse, git history, pag
 | Work merged to `main` | **HOLDS** | Every Claude PR #308–#343 has a `merged_at` timestamp; the only unmerged closed PR in that range is #306, a superseded dependabot bump. |
 | Built into the shipped bundle | **HOLDS** | `docs/assets` carries 162 page chunks (CapTablePage, MetricsPage, LiquidityPage, DealsPage, FundsPage…); Inter webfont is in the shipped CSS; the Eadwyn/AssistRail code is in the `ui-*` chunk. `check-docs-fresh` green. |
 | Deployed worker serves that bundle | **UNVERIFIED from CI** | This container cannot reach `axal.vc` (proxy policy 403) and holds no Cloudflare token. **10-second check for you, below (§2).** |
-| Canvas designs ported into the app | **THE GAP** | By the repo's own census (`ROUTE_MAP.md`, Aug 27): of 107 canvases, only **4 are CURRENT**. 42 UPGRADE + 23 NEW + 7 RESKIN = **72 canvases still need UI work.** Since that census, exactly **4 commits** touched `frontend/src` (AI meter, research consolidation, Eadwyn naming, deal-flow pass UI). The port queue itself never ran. |
+| Canvas designs ported into the app | **THE GAP** | By the repo's own census (`../architecture/ROUTE_MAP.md`, Aug 27): of 107 canvases, only **4 are CURRENT**. 42 UPGRADE + 23 NEW + 7 RESKIN = **72 canvases still need UI work.** Since that census, exactly **4 commits** touched `frontend/src` (AI meter, research consolidation, Eadwyn naming, deal-flow pass UI). The port queue itself never ran. |
 | No mock data shown to real users | **BROKEN in 2 surfaces** | All 5 `/partner/operations/*` tabs and all 5 `/advisor/advisory/*` tabs render static fixtures with **zero API calls** — today, on main. The census flagged this ("correction 1"); it was never acted on. |
 
 **Your three statements, answered:**
@@ -40,7 +40,7 @@ The committed bundle's entry file is **`/assets/index-ZC6sOrQa.js`**.
 | OUT OF SCOPE | **27** | Spin-Out Lab canvas — Lab is live and frozen by your instruction. |
 | DEFERRED | **4** | Persona-hub canvas, held per /studio freeze. |
 
-*(Parse note: 107 rows parsed from ROUTE_MAP.md; its prose header says 107 canvases — the delta is rows the census itself merged or marked as stale duplicates.)*
+*(Parse note: 107 rows parsed from ../architecture/ROUTE_MAP.md; its prose header says 107 canvases — the delta is rows the census itself merged or marked as stale duplicates.)*
 
 ### The work queue (72 canvases), grouped
 
@@ -156,7 +156,7 @@ Backend drift cannot silently regress: `npm run test:drift` enforces that every 
 
 - **Task #122 "Integrate BD Console — completed":** the five `/partner/operations/*` tabs are fixtures with zero API calls, today. Whatever #122 shipped, it was not these tabs. The census said so on Aug 27 ("live operations tabs are static mock data") and the correction was never acted on.
 - **The `/advisor/advisory/*` cluster (5 tabs):** same — fixtures, zero API calls, flagged in the census, untouched.
-- **"Remaining canvas phases blocked on user decisions":** mostly untrue by Aug 29. DECISIONS.md shows the D-series essentially all RESOLVED (one OPEN: the /marketplace + /legal route split). The queue was not blocked; it was not scheduled. The one genuinely blocked item is `/office-hours` (Advisory Practice, task #124) — blocked by **your own** do-not-touch instruction.
+- **"Remaining canvas phases blocked on user decisions":** mostly untrue by Aug 29. ../architecture/DECISIONS.md shows the D-series essentially all RESOLVED (one OPEN: the /marketplace + /legal route split). The queue was not blocked; it was not scheduled. The one genuinely blocked item is `/office-hours` (Advisory Practice, task #124) — blocked by **your own** do-not-touch instruction.
 
 ## 7. The plan to close the gap (proposed waves)
 
@@ -166,7 +166,7 @@ Backend drift cannot silently regress: `npm run test:drift` enforces that every 
 - **Wave 4 — NEW surfaces with clear backends:** Data Room, Messages, Perks, Send-for-Signature polish, admin Fabric/licensing tier.
 - **Excluded until you lift the freezes:** `/office-hours` (Advisory Practice), `/studio`, `/founder`, `/partner-portal`, Spin-Out Lab (all your explicit do-not-touch list); the 4 DEFERRED persona hubs.
 
-Each wave ships as its own PR train with the census row upgraded to CURRENT as the exit criterion, so ROUTE_MAP.md becomes the running scoreboard instead of a snapshot.
+Each wave ships as its own PR train with the census row upgraded to CURRENT as the exit criterion, so ../architecture/ROUTE_MAP.md becomes the running scoreboard instead of a snapshot.
 
 ## 8. What I need from you
 

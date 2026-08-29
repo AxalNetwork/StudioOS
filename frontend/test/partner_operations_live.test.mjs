@@ -5,7 +5,7 @@
  * data/partner/operations.js — an entire fictional firm ("BrightPath
  * Advisory") with fabricated clients, contracts, a fake $8M raise and a fake
  * 4.8 rating, shown to real signed-in partners. The delivery audit
- * (PLATFORM-DELIVERY-AUDIT.md §6) called it the worst standing defect on the
+ * (documentation/audits/PLATFORM-DELIVERY-AUDIT.md §6) called it the worst standing defect on the
  * platform: a task had claimed this surface complete while no tab made a
  * single API call.
  *

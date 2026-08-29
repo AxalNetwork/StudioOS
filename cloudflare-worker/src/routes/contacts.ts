@@ -254,7 +254,7 @@ async function ensureSchema(env: Env): Promise<void> {
   // Raise Pipeline v1 — self-heal `amount` (check size) on an EXISTING
   // raise_prospects table. Canonical add is the ALTER in migration 145; this
   // PRAGMA-guarded runtime check is the reference pattern for ALTERs (see
-  // GOTCHAS.md "Migrations & schema").
+  // documentation/architecture/GOTCHAS.md "Migrations & schema").
   try {
     const info = await env.DB.prepare(`PRAGMA table_info(raise_prospects)`).all<{ name: string }>();
     const have = new Set((info.results || []).map((x) => x.name));
@@ -265,7 +265,7 @@ async function ensureSchema(env: Env): Promise<void> {
   } catch (e) { console.warn('[contacts] raise_prospects.amount bootstrap failed', e); }
   // Lead attribution — self-heal utm_json/referrer on an EXISTING contacts
   // table. Canonical add is migration 166; same PRAGMA-guarded pattern as
-  // promoted_ref_id above (see GOTCHAS.md "Migrations & schema").
+  // promoted_ref_id above (see documentation/architecture/GOTCHAS.md "Migrations & schema").
   try {
     const info = await env.DB.prepare(`PRAGMA table_info(contacts)`).all<{ name: string }>();
     const have = new Set((info.results || []).map((x) => x.name));

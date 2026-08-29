@@ -13,7 +13,7 @@ name: Daily D1 Backup → R2
 #   - Object lock: compliance mode, 365-day retention.
 #   - Lifecycle: transition to Standard-IA after 30 days.
 #   - Delete after 365 days.
-# See INCIDENT_RESPONSE.md § Backups for the dashboard checklist.
+# See documentation/operations/INCIDENT_RESPONSE.md § Backups for the dashboard checklist.
 
 on:
   schedule:

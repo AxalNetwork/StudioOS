@@ -57,7 +57,7 @@ custom_domain  = true
 # Keep the production route table deliberately narrow while the full-apex
 # cutover remains under observation. GitHub Pages retains the root/fallback
 # shell; these Worker routes cover app/API surfaces and hashed assets.
-# Do not add `axal.vc/*` until CLOUDFLARE-CUTOVER.md's stabilisation gate passes.
+# Do not add `axal.vc/*` until documentation/architecture/CLOUDFLARE-CUTOVER.md's stabilisation gate passes.
 [[routes]]
 pattern    = "axal.vc/.well-known/security.txt"
 zone_name  = "axal.vc"
@@ -266,7 +266,7 @@ zone_name  = "axal.vc"
 # precisely so a crawler hitting the APEX gets real HTML with an OG block. They
 # were reachable anyway, but only because GitHub Pages serves `docs/` directly —
 # so the moment Pages is decommissioned (the stated end state in
-# CLOUDFLARE-CUTOVER.md) `/terms`, `/privacy` and `/risk-disclosures` would 404
+# documentation/architecture/CLOUDFLARE-CUTOVER.md) `/terms`, `/privacy` and `/risk-disclosures` would 404
 # at the apex. That is the cost of an explicit table with no `axal.vc/*`: a route
 # is served only if it is listed. `frontend/test/apex_route_coverage.test.mjs`
 # now fails if a prerendered route is ever missing from either table again.
@@ -556,7 +556,7 @@ bucket_name = "studioos-publications"
 # (written by services/backup.ts at 02:00 UTC). The bucket is private;
 # object-lock (compliance mode, 365-day retention) and lifecycle to
 # Standard-IA after 30 days are configured one-time in the dashboard —
-# see INCIDENT_RESPONSE.md § Backups for the checklist. The binding is
+# see documentation/operations/INCIDENT_RESPONSE.md § Backups for the checklist. The binding is
 # OPTIONAL at runtime: services/backup.ts logs and no-ops when missing
 # so dev/preview deploys without the bucket created still boot cleanly.
 [[r2_buckets]]
@@ -898,7 +898,7 @@ zone_name  = "axal.vc"
 # precisely so a crawler hitting the APEX gets real HTML with an OG block. They
 # were reachable anyway, but only because GitHub Pages serves `docs/` directly —
 # so the moment Pages is decommissioned (the stated end state in
-# CLOUDFLARE-CUTOVER.md) `/terms`, `/privacy` and `/risk-disclosures` would 404
+# documentation/architecture/CLOUDFLARE-CUTOVER.md) `/terms`, `/privacy` and `/risk-disclosures` would 404
 # at the apex. That is the cost of an explicit table with no `axal.vc/*`: a route
 # is served only if it is listed. `frontend/test/apex_route_coverage.test.mjs`
 # now fails if a prerendered route is ever missing from either table again.

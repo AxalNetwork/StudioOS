@@ -1,5 +1,5 @@
 /**
- * The Research row is /market-intel and nothing else (DECISIONS.md D12).
+ * The Research row is /market-intel and nothing else (documentation/architecture/DECISIONS.md D12).
  *
  * Four tabs under `/advisor/research/*` — companies, AI research, news,
  * documents — rendered a 54KB fixture with zero API calls. They are withdrawn
@@ -94,7 +94,7 @@ test('the Advisory tabs are deliberately still here', () => {
   // withdrawn Research tabs and must not be deleted as "the same thing". The
   // mechanism changed because "still here" no longer requires a fixture.
   assert.equal(existsSync(resolve(root, 'frontend/src/data/advisor/advisory.js')), false,
-    'the Advisory fixture is deleted — the tabs read advisors.ts now (DECISIONS.md D31)');
+    'the Advisory fixture is deleted — the tabs read advisors.ts now (documentation/architecture/DECISIONS.md D31)');
   assert.match(read('frontend/src/App.jsx'), /path="\/advisor\/advisory\/opportunities"/);
   for (const p of [
     'frontend/src/pages/advisor/advisory/OpportunitiesPage.jsx',
@@ -123,13 +123,13 @@ test('#124 stays frozen — wiring the Advisory tabs did not touch /office-hours
     assert.ok(!/office-hours/.test(s), `${p} reaches into /office-hours — #124 is frozen`);
     assert.ok(!/partner-portal\/office/.test(s), `${p} calls a partner office-hours endpoint`);
   }
-  assert.match(read('DECISIONS.md'), /### D31\./, 'D31 must record why D12 was corrected');
+  assert.match(read('documentation/architecture/DECISIONS.md'), /### D31\./, 'D31 must record why D12 was corrected');
 });
 
 test('D9 carries the correction, so the wrong table is not re-read as fact', () => {
   // news.ts and assistant.ts are real and mounted — anyone re-verifying by
   // grepping router names lands on D9's original conclusion again.
-  const d = read('DECISIONS.md');
+  const d = read('documentation/architecture/DECISIONS.md');
   assert.match(d, /This table was itself wrong for two rows/);
   assert.match(d, /### D12\./);
 });
@@ -140,7 +140,7 @@ test('the decisions summary counts the decisions that are actually there', () =>
   // mode a hardcoded total always has: the cheapest repair is to bump the
   // number, which is indistinguishable from the count being right, so the
   // assertion stops meaning anything. Derive it instead.
-  const d = read('DECISIONS.md');
+  const d = read('documentation/architecture/DECISIONS.md');
   const partOne = d.slice(0, d.indexOf('## Part 2'));
   const numbered = [...partOne.matchAll(/^### D(\d+)\./gm)].map((m) => Number(m[1]));
   assert.ok(numbered.length > 0, 'Part 1 must carry numbered decisions');

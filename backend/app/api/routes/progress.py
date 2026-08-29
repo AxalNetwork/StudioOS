@@ -92,7 +92,7 @@ def _get_project_or_404(session: Session, project_id: int) -> Project:
 
 
 # ---------------------------------------------------------------------------
-# Startup Lifecycle module (FOUNDER_UX_AUDIT.md Critical #1) — dev mirror of the
+# Startup Lifecycle module (documentation/audits/FOUNDER_UX_AUDIT.md Critical #1) — dev mirror of the
 # Worker's GET|PUT /progress/lifecycle/:projectId. Prod = Cloudflare Worker on
 # D1; this keeps the dev FastAPI surface in parity so the founder Overview tab
 # works against `npm run dev`. Stage is founder-editable via the NEW PUT here —

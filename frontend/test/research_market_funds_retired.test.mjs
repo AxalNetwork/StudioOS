@@ -10,7 +10,7 @@ const read = (p) => readFileSync(resolve(root, p), 'utf8');
 // spinouts_page_removed, studio_ops_removed): a removal that a later change
 // could silently undo gets a test asserting it stays removed.
 //
-// UPDATED for DECISIONS.md D12. This file guarded D8 (market redirected) and
+// UPDATED for documentation/architecture/DECISIONS.md D12. This file guarded D8 (market redirected) and
 // D9 (funds withdrawn). D12 then withdrew the four remaining tabs and deleted
 // `pages/advisor/research/` outright, so three assertions here were reading
 // `AdvisorResearchWorkspace.jsx` — a file that no longer exists.
