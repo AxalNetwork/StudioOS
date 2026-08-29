@@ -172,22 +172,32 @@ export const DIRECTORY_CATEGORIES = [
     blurb: 'Advisors and domain experts offering office hours and guidance.' },
 ];
 
-// Small curated preview sets for the not-yet-live Directory tabs. Clearly
-// labelled as previews in the UI — never presented as verified live accounts.
+// Field shapes for the not-yet-live Directory tabs.
+//
+// These used to be three invented listings per tab, complete with company and
+// PERSON names ("Dr. Priya Nair", "Marcus Vale") rendered on a PUBLIC page in
+// the same card layout as the real, live Service Partners tab. Each card did
+// carry a "Preview" chip — but a Preview chip beside a plausible name reads as
+// "preview of this listing", not "this person does not exist", and a card seen
+// on its own carries no banner at all.
+//
+// The cards now show the FIELDS a listing will carry, with the identity slot
+// left explicitly blank. Nothing here names an entity, so nothing here can be
+// mistaken for one.
 export const DIRECTORY_PREVIEWS = {
   startups: [
-    { name: 'Northwind Labs', category: 'AI infrastructure', geography: 'San Francisco, USA', stage: 'Seed', tags: ['AI', 'devtools'] },
-    { name: 'Ledgerly', category: 'Fintech', geography: 'New York, USA', stage: 'Pre-seed', tags: ['payments', 'B2B'] },
-    { name: 'Ceres Bio', category: 'Climate / bio', geography: 'London, UK', stage: 'Seed', tags: ['climate', 'deeptech'] },
+    { id: 's1', category: 'Sector', geography: 'Location', stage: 'Stage', tags: ['focus', 'focus'] },
+    { id: 's2', category: 'Sector', geography: 'Location', stage: 'Stage', tags: ['focus'] },
+    { id: 's3', category: 'Sector', geography: 'Location', stage: 'Stage', tags: ['focus', 'focus'] },
   ],
   investors: [
-    { name: 'Meridian Angels', category: 'Angel syndicate', geography: 'Global', stage: 'Pre-seed → Seed', tags: ['syndicate', 'B2B SaaS'] },
-    { name: 'Harbor Fund I', category: 'Micro-VC', geography: 'New York, USA', stage: 'Seed', tags: ['fintech', 'AI'] },
-    { name: 'Atlas LP Collective', category: 'Limited partners', geography: 'Global', stage: 'Fund LP', tags: ['LP', 'co-invest'] },
+    { id: 'i1', category: 'Investor type', geography: 'Location', stage: 'Cheque stage', tags: ['thesis'] },
+    { id: 'i2', category: 'Investor type', geography: 'Location', stage: 'Cheque stage', tags: ['thesis', 'thesis'] },
+    { id: 'i3', category: 'Investor type', geography: 'Location', stage: 'Cheque stage', tags: ['thesis'] },
   ],
   advisors: [
-    { name: 'Dr. Priya Nair', category: 'GTM & pricing', geography: 'Remote', stage: 'Advisor', tags: ['GTM', 'pricing'] },
-    { name: 'Marcus Vale', category: 'Fundraising', geography: 'San Francisco, USA', stage: 'Advisor', tags: ['fundraising', 'pitch'] },
-    { name: 'Lena Fischer', category: 'Engineering leadership', geography: 'Berlin, DE', stage: 'Advisor', tags: ['engineering', 'scaling'] },
+    { id: 'a1', category: 'Speciality', geography: 'Location', stage: 'Advisor', tags: ['skill', 'skill'] },
+    { id: 'a2', category: 'Speciality', geography: 'Location', stage: 'Advisor', tags: ['skill'] },
+    { id: 'a3', category: 'Speciality', geography: 'Location', stage: 'Advisor', tags: ['skill', 'skill'] },
   ],
 };
