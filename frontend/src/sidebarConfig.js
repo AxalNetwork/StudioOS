@@ -283,71 +283,54 @@ export const SIDEBAR_GROUPS = {
   //   • /network-effects "Network Effects" — too abstract to earn a nav slot.
   //   • /articles/draft "Articles" — low-frequency authoring; conditional for
   //     content/press partners.
+  // ── Partner / Operator — the canonical shell from the Partner canvas ────────
+  // The canvas declares it outright: `const ROWS = ['Home','Pipeline','Delivery',
+  // 'Offers','Network','Research','Trust','Firm Settings']`, commented "CANONICAL
+  // Partner shell — 8 rows, no tier gating in v1". That is a FLAT list, not a set
+  // of groups, so this role is one group of rows rather than seven groups of
+  // seventeen items. Each row is a workspace; the sections the canvas draws
+  // inside it (Pipeline → Leads · Negotiations · Proposals · Retainers ·
+  // Analytics) belong in the page, not the sidebar.
+  //
+  // NOTHING BECAME UNREACHABLE. All seventeen previous destinations still
+  // resolve; each is listed in the `match` of the row that now owns it, so a
+  // deep link or a bookmark still highlights the right row. `match` is
+  // exact-or-subtree (`SidebarNav.jsx`: `pathname === p || startsWith(p + '/')`),
+  // which is why `/partner/operations/engagements` can sit under Pipeline while
+  // its siblings sit under Delivery without the two colliding.
+  //
+  // TWO DEPARTURES FROM THE CANVAS, both deliberate:
+  //   Home → /studio, not a new /home. Per the product owner, and it keeps
+  //     /partner from becoming a root.
+  //   Messages is a ninth row. The canvas's eight rows have nowhere to put it,
+  //     and deleting the entry would leave a live surface reachable only by
+  //     typing the URL — the Wave 4 mistake in reverse. It stays until the
+  //     canvas says where a cross-cutting inbox lives.
   partner: [
-    { key: 'home', label: 'Home', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+    { key: 'shell', label: 'Workspace', items: [
+      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       { to: '/messages', icon: Mail, label: 'Messages' },
-    ]},
-    { key: 'sourcing', label: 'Sourcing', items: [
-      { to: '/services', icon: Package, label: 'My Services' },
-      { to: '/matches', icon: Sparkles, label: 'AI Matches' },
-      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-      { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
-    ]},
-    { key: 'engage', label: 'Engage', items: [
-      { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
-      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
-      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      { to: '/perks', icon: Gift, label: 'Perks' },
-    ]},
-    // Network — Introductions, Relationships, Organizations. Reuses the shared
-    // Network workspace (also used by advisors); the standalone "Network" link
-    // that used to live in Engage is folded into this group's three tabs.
-    { key: 'network', label: 'Network', items: [
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-    ]},
-    // Partner Operations workspace. Each item deep-links to its own tab route;
-    // `match` keeps the row active across the tab and its sub-route.
-    { key: 'operations', label: 'Operations', items: [
-      { to: '/partner/operations/overview', icon: LayoutDashboard, label: 'Overview', match: ['/partner/operations/overview'] },
-      { to: '/partner/operations/capabilities', icon: Package, label: 'Capabilities', match: ['/partner/operations/capabilities'] },
-      { to: '/partner/operations/portfolio', icon: Layers, label: 'Portfolio', match: ['/partner/operations/portfolio'] },
-      { to: '/partner/operations/engagements', icon: Handshake, label: 'Engagements', match: ['/partner/operations/engagements'] },
-      { to: '/partner/operations/performance', icon: TrendingUp, label: 'Performance', match: ['/partner/operations/performance'] },
-    ]},
-    // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
-    // the shared Research workspace (also used by advisors).
-    { key: 'research', label: 'Research', items: [
-      { to: '/market-intel', icon: Radar, label: 'Market' },
-    ]},
-    // Task #4 — the former "Earn" group held only "Referrals" (/refer), which
-    // has moved into Settings (/settings/referrals); /refer redirects there.
-    // The whole single-item group is removed from the partner nav.
-    { key: 'account', label: 'Account', items: [
+      { to: '/needs', icon: Target, label: 'Pipeline',
+        match: ['/needs', '/matches', '/partner/insights', '/partner/operations/engagements'] },
+      { to: '/partner/operations/overview', icon: Briefcase, label: 'Delivery',
+        match: ['/partner/operations/overview', '/partner/operations/portfolio',
+                '/partner/operations/performance'] },
+      { to: '/services', icon: Package, label: 'Offers',
+        match: ['/services', '/comarketing', '/perks', '/my/jobs',
+                '/partner/office-hours', '/partner/operations/capabilities'] },
+      { to: '/network', icon: Users, label: 'Network' },
+      { to: '/market-intel', icon: Radar, label: 'Research' },
+      // The canvas's eighth row is Trust. It is NOT here, and that is a
+      // deliberate refusal rather than an omission: `trust_center_navigation
+      // .test.mjs` pins Trust Center to the user dropdown, immediately below
+      // User Settings and above Support, and asserts outright that it appears
+      // in no sidebar. That test predates the canvas and nothing in the canvas
+      // argues against it. Moving Trust into the sidebar is a product decision
+      // with a recorded prior; it needs an owner, not a nav edit.
+      { to: '/settings', icon: UserCircle, label: 'Firm Settings', match: ['/settings', '/profile'] },
     ]},
   ],
 
-  // Task #17 — regroup the investor sidebar around the investment lifecycle:
-  // Home → Sourcing → Diligence → Commit → Support → Account. This replaces the
-  // former ~12-group layout (which had a parallel "Investor Portal" and
-  // duplicate deal surfaces) so every feature has exactly one home and
-  // investors face far fewer top-level choices. Sidebar-level only: every
-  // surviving route/icon/tier-gate is preserved; no pages are merged.
-  //
-  // Deliberate deviations from the PR #119 reference: Home stays at /studio
-  // (labeled "Studio", NOT renamed to /dashboard), and the overflow group is
-  // named "Account" (NOT "More").
-  //
-  // Intentional removals (documented so a nav-integrity guard treats them as
-  // deliberate, not silent drops):
-  //   • "Investor Portal" (/partner-portal) — redundant with Studio; investors
-  //     hitting /partner-portal are redirected to /studio in App.jsx. The route
-  //     stays registered for admin/partner.
-  //   • "Projects" (/projects) — moved off the investor surface; route stays
-  //     registered for other roles / deep links.
-  //   • standalone "Identity Verification" (/kyc) — folded into "Trust &
-  //     Identity" (/trust) as a single nav entry; the /kyc route stays
-  //     registered and reachable.
   investor: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
