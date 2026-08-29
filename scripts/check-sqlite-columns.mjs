@@ -37,6 +37,15 @@
  * in, which is exactly where two had: `dd_external_sources.source_kind` and
  * `documents.signer_email`, both filters, both silently matching no row.
  *
+ * ONE THING THIS CHECK CANNOT SEE, by construction. When a table is defined
+ * more than once — and 249 of them are — the definitions are UNIONED, because
+ * nothing here can know which one D1 actually holds. The union satisfies every
+ * query, so no column ever looks missing: `capital_calls` reads as nineteen
+ * columns wide when no single version of it has ever had more than thirteen.
+ * A union is the right default for a check that must not over-report; it just
+ * means irreconcilable definitions are invisible here. `check-sqlite-table-
+ * collisions.mjs` is the complement that looks for exactly those.
+ *
  * HARVESTING IS THE HARD PART, and getting it wrong over-reports. Three
  * distinct parser faults were found and fixed while building this, each of
  * which invented columns that exist perfectly well:

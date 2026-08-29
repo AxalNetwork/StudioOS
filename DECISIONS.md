@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-six decisions are now resolved. D6 is closed by D11, which repaired
+All twenty-seven decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -954,6 +954,57 @@ keeps naming, committed by the check itself: over-reporting is loud and gets
 fixed, under-reporting looks exactly like success. The guard now prints how
 many maps it resolved and how many it could not, so "0 unresolved" is a claim
 it has to keep making.
+
+
+### D27. Two definitions, one table: what the column guard cannot see
+
+`check-sqlite-columns` **unions** every definition of a table it finds, because
+nothing static can know which one D1 actually holds. That is the right default
+for a check that must not over-report, and it has a consequence nobody had
+written down: **249 tables in this worker are defined more than once, and where
+those definitions disagree, the union hides it.** `capital_calls` reads as
+nineteen columns wide. No version of it has ever had more than thirteen.
+
+The narrow, provable question is not "do the definitions differ" — they differ
+constantly and usually harmlessly, a `.ts` `ensureSchema` mirroring a migration
+plus the columns later ALTERs filled in. It is whether two definitions are
+**mutually fatal**: each requiring a `NOT NULL` column, with no default, that
+the other has no column for. Then no single table can satisfy both, D1 holds
+one table per name, every definition is `IF NOT EXISTS` so the first to run
+wins — and one of the two code paths is dead. **Eight tables are in that
+state.**
+
+Two of them are provably broken *without knowing which shape is live*, because
+the worker's own writers disagree with each other:
+
+- **`metrics_snapshots` has three incompatible writers.** `(scope, scope_id,
+  metric_name, value)`, `(project_id, snapshot_date, mrr, arr, …)`, and
+  `(deal_id, key_metrics, traction_score, created_by)`. Each names columns the
+  others lack. At most one of the three is writing rows.
+- **`capital_calls` has two.** `routes/legalcap.ts` inserts `deal_id,
+  syndicate_id, amount_cents`; `routes/funds.ts` and `routes/capital.ts` read
+  `WHERE limited_partner_id = ?`, the shape
+  `sql/consolidate_capital_rebuild.sql` builds — which has no `deal_id` and
+  requires an `amount REAL NOT NULL` legalcap never binds.
+
+**Which shape is live is not knowable from this repository, and it was not
+guessed.** `scripts/migrate-d1.mjs` enumerates only `sql/migrations/*.sql`;
+the top-level `sql/*.sql` files are applied by hand, so file order settles
+nothing. `advisor_bookings` is the worked example that the numbered file does
+not always win: bookings are written in the `t13_t14_t15.sql` shape and that
+flow works, so `schema.sql`'s six-column version is the dead one — which is why
+the office-hours calendar repair in D25 targeted the t13 shape rather than
+`schema.sql`'s. Reading production takes one `PRAGMA table_info` per table, the
+baseline names the command, and it is a thing the user can run and this session
+cannot.
+
+So the deliverable here is a guard and a ledger, not a rewrite. Rewriting
+`capital_calls` or `metrics_snapshots` against a guessed shape would be the
+exact error this file has been cataloguing for twenty-six entries — acting on a
+convenient reading of the material instead of the material. Eight entries are
+recorded with what is provable about each; the gate fails on a ninth, and fails
+equally on an entry that has since been converged, so the ledger cannot quietly
+go stale.
 
 
 ## Part 2 — Decisions taken

@@ -17,6 +17,7 @@ import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
 import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns, aliasMap, singleTablePredicate, predicateIdents, blankLiterals, substituteBindings, coverage } from '../../scripts/check-sqlite-columns.mjs';
 import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables.mjs';
 import { routedWrites, mapColumns, assignmentBrace, unroutableColumns, unroutableSavedTo } from '../../scripts/check-write-router-columns.mjs';
+import { tableColumns, fatalCollisions, definitions } from '../../scripts/check-sqlite-table-collisions.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
   const src = `
@@ -392,6 +393,49 @@ test('every column the advisor writeRouter routes to actually exists', () => {
   // Migration 182 — 042 added these three to `mentors`, a table nothing creates.
   const a = knownColumns().get('advisors');
   assert.ok(a?.has('topics_willing_json') && a?.has('topics_unwilling_json') && a?.has('weekly_hours_band'));
+});
+
+test('only a NOT NULL column with no default makes an omission fatal', () => {
+  const cols = tableColumns([
+    'id INTEGER PRIMARY KEY AUTOINCREMENT',
+    "uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16))))",
+    'amount REAL NOT NULL',
+    'notes TEXT',
+    "status TEXT NOT NULL DEFAULT 'pending'",
+    '-- commented_out TEXT NOT NULL',
+  ].join(',\n'));
+  assert.equal(cols.get('amount'), true, 'NOT NULL with no default is required');
+  assert.equal(cols.get('uid'), false, 'a default satisfies the constraint');
+  assert.equal(cols.get('id'), false, 'a rowid alias is filled in');
+  assert.equal(cols.get('status'), false);
+  assert.equal(cols.get('notes'), false);
+  assert.ok(!cols.has('commented_out'), 'a commented-out column is not a column');
+});
+
+test('a collision counts only when neither definition can host the other', () => {
+  const all = fatalCollisions();
+  // Both directions must be fatal: a strict subset is an older shape a later
+  // ALTER filled in, which is ordinary rather than a conflict.
+  for (const [, pairs] of all) {
+    for (const p of pairs) {
+      assert.ok(p.aNeeds.length && p.bNeeds.length, 'one-directional pairs must not be reported');
+    }
+  }
+  assert.deepEqual([...all.keys()].sort(), [
+    'advisor_bookings', 'calendar_events', 'capital_calls', 'founder_checkins',
+    'ic_meetings', 'metrics_snapshots', 'service_offerings', 'wellbeing_resources',
+  ]);
+});
+
+test('the column guard unions competing definitions, which is why it cannot see them', () => {
+  // Not a defect — a stated limitation, pinned so it stays true. capital_calls
+  // has two irreconcilable definitions; knownColumns reports their union, which
+  // is wider than either.
+  const defs = definitions().get('capital_calls');
+  assert.ok(defs.length >= 2);
+  const union = knownColumns().get('capital_calls');
+  for (const d of defs) assert.ok(union.size > d.cols.size, 'the union exceeds every single definition');
+  assert.ok(union.has('amount') && union.has('amount_cents'), 'both money shapes appear at once');
 });
 
 test('every table the worker queries is created somewhere', () => {
