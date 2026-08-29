@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-three decisions are now resolved. D6 is closed by D11, which repaired
+All twenty-four decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -780,6 +780,59 @@ The scope still declines what it should: an alias bound to two tables in one
 statement maps to null and is skipped, and bare names in a join are left alone.
 Both probed — a bad qualified column fails the build, the same column under an
 ambiguous alias does not.
+
+### D24. The predicate was the last place a wrong column could hide
+
+D21 checked what a statement writes and D23 what a join names. Neither read the
+`WHERE`. That left the largest surface in the worker unexamined: **1914
+single-table statements carrying 3007 predicate references** — more than the
+INSERT lists, the SET clauses and the qualified join references put together.
+
+It is also the surface where a wrong column does the most damage quietly. A bad
+column in an INSERT loses a write; a bad column in a filter loses *the whole
+result set*, and the feature above it reports "nothing found" rather than an
+error. Both defects this pass turned up are exactly that:
+
+- `dd_external_sources.source_kind` — the table names the connector
+  `connector`. `source_kind` is the sibling column on `dd_findings`, defined
+  fourteen lines earlier in the same migration file, which is how the name got
+  borrowed. The Crunchbase enrichment therefore never saw a prior response.
+- `documents.signer_email` — `documents` has no per-signer email at all. The
+  column belongs to `esign_audit_events`; the canonical per-recipient link is
+  `esign_recipients.recipient_email`. `routes/trust.ts` had already made that
+  exact substitution, for that exact reason, with a comment saying so.
+
+The second one earns its own note. `documents.signer_email` sits in
+`execTool()` in `routes/assistant.ts`, a function with five D1-backed tools —
+and **three of the other four already carry fix comments for this same bug
+class**: `recentActivity` (`entity_type`/`entity_id`, not `target_*`),
+`upcomingMeetings` (`calendar_events` has no bare `location`), `scoringSummary`
+(`score_snapshots`, not `scoring_runs`). Three prior passes read that function
+and left the fourth in place, because each of them fixed what it could see and
+what none of them could see was the `WHERE`. Coverage is not attention. A guard
+that reads one clause will keep finding defects the readers of the other
+clauses walked past.
+
+**Two more parser faults, both over-reporting, both instructive.**
+
+Counting `SELECT` keywords is how the earlier passes rejected subqueries, and
+it is wrong for `UPDATE` and `DELETE`: they contain no `SELECT` of their own,
+so a statement like `UPDATE users … WHERE id IN (SELECT id FROM users …)`
+counts exactly one and passes the test, after which the subquery's `FROM` is
+read as a column of the outer table. The check now declines on any `(SELECT`.
+
+And `COUNT(*) AS n … GROUP BY n` names a *result*, not a column. Twenty-one of
+the first twenty-nine findings were aliases like this — `AS day`, `AS bucket`,
+`AS total_cost`, `AS n` — every one legal SQL. Harvesting the `AS` names ahead
+of the predicate and excluding them took the list from 29 to 2, and both
+survivors were real.
+
+That ratio is the entry itself. Eleven parser faults have now been found across
+these three guards and **every single one over-reported** — invented a column or
+a table by matching prose, a comment, a keyword, or a name that was never the
+material. The failure mode of a checker is not missing things. It is confidently
+naming things that are fine, until nobody reads its output any more.
+
 
 ## Part 2 — Decisions taken
 

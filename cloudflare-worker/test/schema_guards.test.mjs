@@ -2,7 +2,7 @@
  * The parsers behind the schema guards, tested on the shapes that fooled them.
  *
  * `check-sqlite-tables` and `check-sqlite-columns` are only as good as their
- * reading of the source. Six distinct parser faults were found while building
+ * reading of the source. Eleven distinct parser faults were found while building
  * them, and every one made the guard REPORT A COLUMN OR TABLE THAT EXISTS —
  * or, worse in one case, silently stop reading a query at all. A guard that
  * cries wolf gets ignored; a guard with a blind spot is decoration.
@@ -14,7 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
-import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns, aliasMap } from '../../scripts/check-sqlite-columns.mjs';
+import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns, aliasMap, singleTablePredicate, predicateIdents, blankLiterals } from '../../scripts/check-sqlite-columns.mjs';
 import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
@@ -230,10 +230,76 @@ test('the columns the qualified-reference pass found are now right', () => {
   assert.ok(!s.get('partner_deals')?.has('granted_tiers') && s.get('partner_deals')?.has('granted_tier_founder'));
 });
 
+test('a subquery puts a second table in scope, so the predicate is declined', () => {
+  // Parser fault #10. Counting SELECTs is not enough: an UPDATE has none of
+  // its own, so `UPDATE users … (SELECT … FROM users)` counts exactly one and
+  // the inner FROM was read as a column of the outer table.
+  assert.equal(
+    singleTablePredicate(
+      'UPDATE users SET tier = ? WHERE seat_primary_user_id IN (SELECT id FROM users WHERE customer_id = ?)',
+    ),
+    null,
+  );
+  assert.equal(
+    singleTablePredicate(
+      "UPDATE limited_partners SET returns = returns + ? WHERE id = ? AND EXISTS (SELECT 1 FROM fund_distributions WHERE id = ?)",
+    ),
+    null,
+  );
+  // Without a subquery the same statement shape is read normally.
+  const ok = singleTablePredicate('UPDATE users SET tier = ? WHERE stripe_customer_id = ?');
+  assert.equal(ok.table, 'users');
+});
+
+test('a SELECT-list alias is a result name, not a column', () => {
+  // Parser fault #11 — twenty-one of the first twenty-nine findings.
+  const p = singleTablePredicate(
+    "SELECT substr(created_at, 1, 10) AS day, SUM(est_cost_usd) AS total_cost FROM ai_usage_logs WHERE created_at >= ? GROUP BY day ORDER BY total_cost DESC",
+  );
+  assert.equal(p.table, 'ai_usage_logs');
+  assert.ok(p.aliases.has('day') && p.aliases.has('total_cost'));
+
+  const named = predicateIdents(p.region).map((x) => x.col);
+  assert.ok(named.includes('created_at'), 'a real column is still named');
+  // …and the function wrapping it is not.
+  assert.ok(!named.includes('substr') && !named.includes('sum'));
+});
+
+test('a predicate reads columns, never comments or literals', () => {
+  const blanked = blankLiterals("SELECT id FROM t -- the filter never ran\n WHERE kind = 'archived'");
+  assert.ok(!blanked.includes('never') && !blanked.includes('archived'));
+  assert.ok(blanked.includes('kind'), 'the column survives');
+
+  const p = singleTablePredicate("SELECT id FROM widgets WHERE kind = 'archived' -- was: status\n");
+  assert.deepEqual(predicateIdents(p.region).map((x) => x.col), ['where', 'kind']);
+});
+
+test('a join or a comma join is declined, a lone table is not', () => {
+  assert.equal(singleTablePredicate('SELECT a FROM x JOIN y ON y.id = x.id WHERE x.a = 1'), null);
+  assert.equal(singleTablePredicate('SELECT a FROM x, y WHERE x.id = y.id'), null);
+  assert.equal(singleTablePredicate('SELECT a FROM x WHERE a = 1 UNION SELECT b FROM y'), null);
+  assert.equal(singleTablePredicate('SELECT a FROM widgets w WHERE w.kind = ?').alias, 'w');
+});
+
+test('the two predicate defects are corrected at the source', () => {
+  const s = knownColumns();
+  // dd_external_sources names the connector `connector`; `source_kind` is the
+  // sibling column on dd_findings, which is how the mistake was made.
+  assert.ok(s.get('dd_external_sources')?.has('connector'));
+  assert.ok(!s.get('dd_external_sources')?.has('source_kind'));
+  assert.ok(s.get('dd_findings')?.has('source_kind'));
+  // `documents` has no signer email at all — only signed_by, set once signed.
+  assert.ok(!s.get('documents')?.has('signer_email') && s.get('documents')?.has('signed_by'));
+  // The canonical per-recipient link, and the audit table the name came from.
+  assert.ok(s.get('esign_recipients')?.has('recipient_email'));
+  assert.ok(s.get('esign_audit_events')?.has('signer_email'));
+});
+
 test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', () => {
   // The runnable form of the whole exercise. `check-sqlite-columns` is the
   // gate; this keeps the property visible in the test suite too. Covers both
-  // INSERT lists, UPDATE SET clauses and single-table SELECT lists.
+  // INSERT lists, UPDATE SET clauses, single-table SELECT lists, qualified
+  // join references and single-table predicates.
   // One reviewed gap remains on record: corporate_profiles.kyb_status, where
   // nothing writes a KYB decision at all, so a column would not help.
   const unknown = [...unknownColumns().keys()].sort();

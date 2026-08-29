@@ -24,6 +24,12 @@
  * eleven more across 1694 references, including a second copy of a broken
  * partner_deals query whose first copy had already been corrected.
  *
+ * Finally the WHERE / GROUP BY / ORDER BY / HAVING predicates of a
+ * single-table statement. That is the largest surface of the four — 1914
+ * statements, 3007 references — and the last one a column error could hide
+ * in, which is exactly where two had: `dd_external_sources.source_kind` and
+ * `documents.signer_email`, both filters, both silently matching no row.
+ *
  * HARVESTING IS THE HARD PART, and getting it wrong over-reports. Three
  * distinct parser faults were found and fixed while building this, each of
  * which invented columns that exist perfectly well:
@@ -37,6 +43,13 @@
  *      `'CREATE TABLE x (' + 'col TEXT, ' + …` — was read only as far as its
  *      first fragment. That is how `oauth_state_tokens` is defined in
  *      `integrations/oauth.ts`, and it made `pkce_verifier` look absent.
+ *
+ *   4. A subquery names a second table. Counting `SELECT` catches
+ *      `SELECT … (SELECT …)`, but an `UPDATE users … WHERE id IN (SELECT id
+ *      FROM users …)` contains exactly one, so the count test passed and the
+ *      inner `FROM users` was read as a column of the outer table.
+ *   5. `COUNT(*) AS n … GROUP BY n` names a result, not a column. Twenty-one
+ *      of the first twenty-nine predicate findings were aliases like this.
  *
  * Those three took the reported count from 106 to 20. The lesson is the one
  * this repo keeps relearning: a check is only worth its output if it reads
@@ -360,6 +373,100 @@ export function aliasMap(sql) {
   return m;
 }
 
+/**
+ * Comments and string literals blanked to spaces, so prose never reaches the
+ * identifier scanner. Length is preserved because the caller slices this same
+ * string at the offset it finds the WHERE in.
+ *
+ * Kept local rather than reusing `stripSqlLiterals` from check-sqlite-tables:
+ * that one collapses literals instead of blanking them and leaves `"…"`
+ * alone. Double quotes are ambiguous in SQLite — an identifier if one
+ * resolves, a string otherwise — and blanking them under-reports, which is
+ * the side this file errs on.
+ */
+export function blankLiterals(sql) {
+  let out = '', i = 0;
+  while (i < sql.length) {
+    if (sql[i] === '-' && sql[i + 1] === '-') {
+      const n = sql.indexOf('\n', i);
+      const end = n < 0 ? sql.length : n;
+      out += ' '.repeat(end - i); i = end; continue;
+    }
+    if (sql[i] === "'" || sql[i] === '"') {
+      const q = sql[i];
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === q && sql[j + 1] === q) { j += 2; continue; }
+        if (sql[j] === q) break;
+        j += 1;
+      }
+      const end = Math.min(j, sql.length);
+      out += ' '.repeat(end - i + 1); i = j + 1; continue;
+    }
+    out += sql[i]; i += 1;
+  }
+  return out;
+}
+
+/** Reserved words a predicate can contain that are not column names. */
+const PREDICATE_KEYWORDS = new Set(`select from where and or not null is in like glob between exists case when then else end
+order by group having limit offset asc desc collate nocase binary rtrim distinct as on join left right inner outer cross natural using
+insert into values update set delete returning conflict do nothing union all intersect except with recursive
+cast integer text real blob numeric boolean true false current_timestamp current_date current_time default primary key unique check references
+escape isnull notnull match regexp filter over partition window rows range unbounded preceding following current row groups exclude ties others
+if replace abort fail ignore rollback deferrable initially immediate deferred restrict cascade action foreign temp temporary table index view trigger`
+  .split(/\s+/).filter(Boolean));
+
+/**
+ * The predicate region of a statement that reads exactly one table, plus the
+ * SELECT-list aliases that are legal to name in it.
+ *
+ * Declines — returns null — on a join, a comma join, a set operation, a CTE,
+ * or any subquery, because each of those puts a second table in scope and the
+ * reference stops being attributable.
+ */
+export function singleTablePredicate(sql) {
+  const s = blankLiterals(sql);
+  if (/\bJOIN\b/i.test(s)) return null;
+  if ((s.match(/\bSELECT\b/gi) || []).length > 1) return null;
+  // An UPDATE or DELETE has no SELECT of its own, so counting is not enough:
+  // its one SELECT is the subquery, and the subquery's table is not ours.
+  if (/\(\s*SELECT\b/i.test(s)) return null;
+  if (/\bWITH\b|\bUNION\b|\bINTERSECT\b|\bEXCEPT\b/i.test(s)) return null;
+
+  let table = null, alias = null;
+  let m = /\bFROM\s+([`"[]?\w+[`"\]]?)(?:\s+(?:AS\s+)?([a-z]\w*))?/i.exec(s);
+  if (m) {
+    table = norm(m[1]);
+    if (m[2] && !NOT_AN_ALIAS.has(m[2].toLowerCase())) alias = m[2].toLowerCase();
+  }
+  if (!table) {
+    m = /^\s*(?:UPDATE|DELETE\s+FROM)\s+([`"[]?\w+[`"\]]?)/i.exec(s);
+    if (m) table = norm(m[1]);
+  }
+  if (!table) return null;
+  if (/\bFROM\s+[`"[]?\w+[`"\]]?\s*(?:(?:AS\s+)?[a-z]\w*)?\s*,/i.test(s)) return null;   // comma join
+
+  const w = /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING)\b/i.exec(s);
+  if (!w) return null;
+
+  // `COUNT(*) AS n … GROUP BY n` — an alias is a result name, not a column.
+  const aliases = new Set();
+  for (const a of s.slice(0, w.index).matchAll(/\bAS\s+([`"[]?[a-z_]\w*[`"\]]?)/gi)) aliases.add(norm(a[1]));
+
+  return { table, alias, aliases, region: s.slice(w.index) };
+}
+
+/** Bare and self-qualified identifiers in a predicate, minus function names. */
+export function predicateIdents(region) {
+  const noFn = region.replace(/\b[a-z_]\w*\s*\(/gi, ' (');   // a call is not a column
+  const out = [];
+  for (const m of noFn.matchAll(/\b([a-z_]\w*)(\.([a-z_]\w*))?\b/gi)) {
+    out.push(m[3] ? { qual: m[1].toLowerCase(), col: norm(m[3]) } : { qual: null, col: norm(m[1]) });
+  }
+  return out;
+}
+
 /** INSERT column lists, UPDATE SET clauses and single-table SELECT lists. */
 export function unknownColumns() {
   const schema = knownColumns();
@@ -430,6 +537,22 @@ export function unknownColumns() {
         }
       }
 
+      // WHERE / GROUP BY / ORDER BY / HAVING of a single-table statement.
+      const pred = singleTablePredicate(body);
+      if (pred && !incompleteTables.has(pred.table)) {
+        const pcols = schema.get(pred.table);
+        if (pcols) {
+          for (const { qual, col } of predicateIdents(pred.region)) {
+            if (qual && qual !== pred.alias && qual !== pred.table) continue;
+            if (PREDICATE_KEYWORDS.has(col) || pred.aliases.has(col) || /^\d/.test(col)) continue;
+            if (pcols.has(col) || dynamicColumns.has(col) || /^(rowid|oid|_rowid_)$/.test(col)) continue;
+            const k = `${pred.table}.${col}`;
+            if (!hits.has(k)) hits.set(k, []);
+            hits.get(k).push(`${rel}:${line}`);
+          }
+        }
+      }
+
       const m = /\bINSERT\s+(?:OR\s+\w+\s+)?INTO\s+([`"[]?\w+[`"\]]?)\s*\(/i.exec(body);
       if (!m) continue;
       const t = norm(m[1]);
@@ -483,7 +606,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // The skipped count is printed rather than hidden: it is the honest measure
   // of how much of the schema this check cannot speak for.
   console.log(
-    `✓ check-sqlite-columns: every INSERT, UPDATE, single-table SELECT and qualified join reference names columns that exist `
+    `✓ check-sqlite-columns: every INSERT, UPDATE, SELECT list, qualified join reference and single-table predicate names columns that exist `
     + `(${n} known gap${n === 1 ? '' : 's'} on record; ${incompleteTables.size} tables skipped as runtime-extended).`,
   );
 }
