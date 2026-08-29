@@ -125,21 +125,93 @@ const stripComments = (s) => s.split('\n').map((l) => l.replace(/--.*$/, '')).jo
 // signal_sources have. Listing it here reported those two as missing.
 const CONSTRAINT = /^\s*(PRIMARY|FOREIGN|UNIQUE|CHECK|CONSTRAINT)\b/i;
 
+/**
+ * Balanced read of the `[ … ]` starting at `open`, in JavaScript source.
+ *
+ * Comments are skipped before quotes: an apostrophe in `// at D1's 100-column
+ * limit` otherwise opens a string scan that eats the rest of the file, which
+ * is exactly how `SETTINGS_USER_COLUMNS` came back unresolved on the first
+ * attempt. Same fault the SQL scanners carried, one language over.
+ */
+function jsBracket(s, open) {
+  let depth = 0, i = open;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === '/' && s[i + 1] === '/') { const n = s.indexOf('\n', i); if (n < 0) return null; i = n + 1; continue; }
+    if (c === '/' && s[i + 1] === '*') { const n = s.indexOf('*/', i); if (n < 0) return null; i = n + 2; continue; }
+    if (c === "'" || c === '"' || c === '`') {
+      const q = c; i += 1;
+      while (i < s.length) { if (s[i] === '\\') { i += 2; continue; } if (s[i] === q) break; i += 1; }
+      i += 1; continue;
+    }
+    if (c === '[') depth += 1;
+    else if (c === ']') { depth -= 1; if (!depth) return s.slice(open, i + 1); }
+    i += 1;
+  }
+  return null;
+}
+
+/**
+ * Columns added by `for (… of <literal array>) ALTER TABLE t ADD COLUMN ${…}`.
+ *
+ * Every such loop in the worker is one of two shapes, and both carry the
+ * column names as literal data:
+ *
+ *   flat    for (const col of ['notes TEXT', …])   → the name is the first word
+ *   tuple   for (const [col, type] of [['bio','TEXT'], …])  → the first element
+ *
+ * Which one is in play is read off the loop's own destructuring, not guessed.
+ * Returns `{ table, cols }` per loop, with `cols` null when the array could not
+ * be resolved — the caller then marks the table incomplete rather than
+ * pretending to know it.
+ */
+export function runtimeColumns(src) {
+  const out = [];
+  for (const m of src.matchAll(/for\s*\(\s*const\s+(\[[^\]]*\]|\w+)\s+of\s+([^)]+?)\)\s*\{/g)) {
+    const binding = m[1];
+    const expr = m[2].trim();
+    const tuple = binding.startsWith('[');
+    const loopVar = tuple ? binding.slice(1, -1).split(',')[0].trim() : binding;
+    if (!/^\w+$/.test(loopVar)) continue;
+    // The ALTER has to be inside this loop, and interpolate this variable.
+    const window = src.slice(m.index, m.index + 500);
+    const alt = new RegExp(
+      `ALTER\\s+TABLE\\s+([\`"\\[]?\\w+[\`"\\]]?)\\s+ADD\\s+(?:COLUMN\\s+)?\\$\\{\\s*${loopVar}\\s*\\}`, 'i',
+    ).exec(window);
+    if (!alt) continue;
+    const table = norm(alt[1]);
+
+    let arr = null;
+    if (expr.startsWith('[')) arr = jsBracket(expr, 0);
+    else if (/^[A-Za-z_]\w*$/.test(expr)) {
+      const decl = new RegExp(`\\b(?:const|let)\\s+${expr}\\b[^=]*=\\s*\\[`).exec(src);
+      if (decl) arr = jsBracket(src, decl.index + decl[0].length - 1);
+    }
+    if (!arr) { out.push({ table, cols: null }); continue; }
+
+    const cols = tuple
+      ? [...arr.matchAll(/\[\s*['"]([^'"]+)['"]/g)].map((x) => norm(x[1]))
+      : [...arr.matchAll(/['"]([^'"]+)['"]/g)].map((x) => norm(x[1].trim().split(/\s+/)[0]));
+    out.push({ table, cols });
+  }
+  return out;
+}
+
 /** table -> Set(column). A table mapped to null has DDL we could not parse. */
 /** Column names added by DDL whose table name is interpolated. */
 export const dynamicColumns = new Set();
 
 /**
- * Tables whose column set cannot be known from the source.
+ * Tables extended at runtime by a loop this harvest could NOT read.
  *
- * Thirteen tables are extended at runtime by a loop over a literal list —
- * `for (const [col, type] of KYC_COLUMNS) ALTER TABLE users ADD COLUMN
- * ${col} ${type}` — so the column name never appears in a position this
- * harvest can attribute. Binding the loop variable back to its array is real
- * static analysis, and guessing at it would put the check back in the business
- * of inventing findings: every `users.kyc_*` column reads as missing and is
- * not. Such tables are skipped entirely, for every clause type, so the rule
- * stays one rule. The cost is visible — `npm run test:guards` prints the count.
+ * Thirteen tables are extended by a loop over a literal list —
+ * `for (const [col, type] of KYC_COLUMNS) ALTER TABLE users ADD COLUMN ${col}
+ * ${type}` — and `runtimeColumns()` now reads those arrays, because they are
+ * literal data sitting in the source rather than something to infer. Anything
+ * it cannot resolve lands here and is skipped for every clause type, so the
+ * soundness rule stays one rule. `npm run test:guards` prints the count: it is
+ * the honest measure of what this check cannot speak for, and it should be
+ * zero.
  */
 export const incompleteTables = new Set();
 
@@ -163,8 +235,16 @@ export function knownColumns() {
     }
     for (const m of text.matchAll(/\bALTER\s+TABLE\s+([`"[]?[\w.]+[`"\]]?)\s+ADD\s+(?:COLUMN\s+)?([`"[]?\w+[`"\]]?)/gi)) {
       const t = norm(m[1]);
+      const c = norm(m[2]);
+      // `ADD COLUMN ${col}` — `${` is not \w, so the optional COLUMN group
+      // backtracks and hands back the word COLUMN as the column name. That
+      // invented a phantom `column` on fourteen tables. The real name comes
+      // from runtimeColumns() instead.
+      if (c === 'column') continue;
+      // `ALTER TABLE ... ADD COLUMN` in prose is not a table called `...`.
+      if (!/^[a-z_]\w*$/.test(t)) continue;
       if (!schema.get(t)) schema.set(t, new Set());
-      schema.get(t).add(norm(m[2]));
+      schema.get(t).add(c);
     }
     // A view's columns are whatever it selects; treat as unparseable.
     for (const m of text.matchAll(/\bCREATE\s+(?:\w+\s+)?VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?([`"[]?[\w.]+[`"\]]?)/gi)) {
@@ -180,8 +260,11 @@ export function knownColumns() {
       dynamicColumns.add(norm(m[1]));
     }
     // The mirror image: the table is literal, the column name is the variable.
-    for (const m of text.matchAll(/\bALTER\s+TABLE\s+([`"[]?\w+[`"\]]?)\s+ADD\s+(?:COLUMN\s+)?\$\{/gi)) {
-      incompleteTables.add(norm(m[1]));
+    // Read the literal array the loop walks; only an unreadable one is a gap.
+    for (const { table, cols } of runtimeColumns(text)) {
+      if (!cols) { incompleteTables.add(table); continue; }
+      if (!schema.get(table)) schema.set(table, new Set());
+      for (const c of cols) schema.get(table).add(c);
     }
   }
   return schema;

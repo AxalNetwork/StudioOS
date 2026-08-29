@@ -75,13 +75,19 @@ async function needDto(env: Env, n: Need): Promise<any> {
 }
 
 async function quoteDto(env: Env, q: Quote): Promise<any> {
-  const partner = await env.DB.prepare('SELECT name, company, kyb_status FROM partners WHERE id = ?').bind(q.partner_id).first<any>();
+  // No `kyb_status` column exists on `partners` — nor on any table in this
+  // schema; the KYB flow lives behind /trust/kyb/* and does not write one.
+  // Naming it here threw, and this `.first()` is unguarded, so building a
+  // quote DTO failed outright. `kyb_verified` is now null rather than false:
+  // "we have no record" is not the same claim as "this partner is not
+  // verified", and a trust signal is exactly where that distinction matters.
+  const partner = await env.DB.prepare('SELECT name, company FROM partners WHERE id = ?').bind(q.partner_id).first<any>();
   return {
     id: q.id, uid: q.uid, need_id: q.need_id, rfp_id: q.rfp_id,
     partner_id: q.partner_id,
     partner_name: partner?.name || null,
     partner_company: partner?.company || null,
-    kyb_verified: partner?.kyb_status === 'verified',
+    kyb_verified: null,
     price: q.price, timeline_weeks: q.timeline_weeks,
     deliverables: q.deliverables, notes: q.notes,
     status: q.status, decided_at: q.decided_at,

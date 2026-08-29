@@ -188,26 +188,31 @@ r.post('/slots/:id/book', async (c) => {
         try {
           const founderRow = await c.env.DB.prepare('SELECT email, name FROM users WHERE id = ?')
             .bind(user.id).first<{ email: string; name: string | null }>();
+          // `partners` has `email` and `company`; there is no contact_email,
+          // no organization, and no user_id — the link to an account runs the
+          // other way, through `users.partner_id`. All three wrong names threw
+          // together, so neither the partner's own address nor the owner
+          // lookup below ever resolved.
           const partnerRow = await c.env.DB.prepare(
-            'SELECT contact_email, organization, user_id FROM partners WHERE id = ?'
-          ).bind(slot.partner_id).first<{ contact_email: string | null; organization: string | null; user_id: number | null }>();
-          const partnerOwnerEmail = partnerRow?.user_id
-            ? ((await c.env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(partnerRow.user_id).first<{ email: string }>())?.email || null)
-            : null;
+            'SELECT email, company FROM partners WHERE id = ?'
+          ).bind(slot.partner_id).first<{ email: string | null; company: string | null }>();
+          const partnerOwnerEmail = (await c.env.DB.prepare(
+            'SELECT email FROM users WHERE partner_id = ? LIMIT 1'
+          ).bind(slot.partner_id).first<{ email: string }>())?.email || null;
           const ev = {
             id: `partner_office_hour:${rowId}`,
             kind: 'partner_office_hour' as const,
             source_id: rowId,
             source_uid: uid,
-            title: `Partner office hours${partnerRow?.organization ? ' — ' + partnerRow.organization : ''}`,
+            title: `Partner office hours${partnerRow?.company ? ' — ' + partnerRow.company : ''}`,
             start_at: slotStart,
             end_at: slotEnd,
             status: 'confirmed',
             location_kind: 'video',
             location_uri: meetingUrl,
-            organizer_email: partnerRow?.contact_email || partnerOwnerEmail,
+            organizer_email: partnerRow?.email || partnerOwnerEmail,
             attendees: [
-              { email: partnerRow?.contact_email || partnerOwnerEmail, name: partnerRow?.organization || null, role: 'partner' },
+              { email: partnerRow?.email || partnerOwnerEmail, name: partnerRow?.company || null, role: 'partner' },
               { email: founderRow?.email || null, name: founderRow?.name || null, role: 'founder' },
             ],
             notes: topic + (notes ? `\n\n${notes}` : ''),

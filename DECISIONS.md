@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-one decisions are now resolved. D6 is closed by D11, which repaired
+All twenty-two decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -685,6 +685,55 @@ were the runtime-extended false positives that motivated the skip rule, and
 digits. Seventh parser fault in this family; every one of them so far has
 invented a finding rather than missed one, which is the failure direction that
 destroys trust in a guard.
+
+### D22. The blind spot D21 declared is closed, and it was hiding six defects
+
+D21 skipped thirteen tables whose columns are added by a loop over a literal
+list, printed the count, and called shrinking it the obvious next work. It is
+now zero.
+
+**The arrays were always readable.** Every such loop in the worker is one of
+two shapes — `for (const col of ['notes TEXT', …])`, where the name is the
+first word, or `for (const [col, type] of [['bio','TEXT'], …])`, where it is
+the first element — and which one applies is read off the loop's own
+destructuring rather than guessed. That is reading literal data sitting in the
+source, which is the same standard the DDL harvest already meets; the earlier
+skip was caution about a problem that turned out to be tractable, not an
+intrinsic limit.
+
+**Closing it surfaced six defects the skip had been hiding**, and one of them
+is the largest single surface this family has found. All four role variants of
+the dashboard's deal-flow query — admin, founder, investor, partner — selected
+`projects.score` and `projects.ai_decision`, and `projects` has neither. Every
+one sat in `safeQuery`, so `proprietary_deal_flow` has been empty **for every
+role**. Only two variants were single-table and therefore caught by the check;
+reading found the other two, which is the intended division of labour between a
+guard and a person.
+
+The rest: `partners` has `email` and `company`, not `contact_email` and
+`organization`, and no `user_id` at all — the link runs through
+`users.partner_id` — so the office-hours calendar invite resolved neither the
+partner's address nor its owner's. And `partners.kyb_status` exists on no table
+in this schema; the KYB flow lives behind `/trust/kyb/*` and writes no such
+column, while `trust.ts` selects the same phantom from `corporate_profiles`.
+That one is **not** given a column: `kyb_verified` becomes `null` rather than
+`false`, because "we have no record" and "this partner is not verified" are
+different claims and a trust signal is exactly where the difference matters.
+
+**Two invented facts came out of the shipped guard on the way.** `ADD COLUMN
+${col}` makes the optional `COLUMN` group backtrack and hand back the word
+COLUMN as the column name, which had planted a phantom `column` on fourteen
+tables; and `ALTER TABLE ... ADD COLUMN` written in prose had created a table
+called `...`. Neither produced a false positive — nothing is named `column` —
+but both were the harvest asserting something untrue, which is the property
+this whole family exists to eliminate. Both are now rejected and pinned by
+test.
+
+Eighth parser fault, and it was predicted before it was found: an apostrophe in
+`// at D1's 100-column limit` opened a string scan in the new JavaScript
+bracket walker and ate the rest of the file — the identical fault the SQL
+scanners carried, one language over. Knowing the shape of your own recurring
+mistake is worth more than any individual fix.
 
 ## Part 2 — Decisions taken
 

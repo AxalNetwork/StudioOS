@@ -14,7 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
-import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables } from '../../scripts/check-sqlite-columns.mjs';
+import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns } from '../../scripts/check-sqlite-columns.mjs';
 import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
@@ -135,12 +135,59 @@ test('a SELECT is only attributed when exactly one table can own the columns', (
   }
 });
 
-test('runtime-extended tables are skipped, and the set is not empty', () => {
-  knownColumns();   // populates incompleteTables as a side effect of harvesting
-  // `users` gains its kyc_* columns from a loop over KYC_COLUMNS in routes/kyc.ts.
-  // Without this rule every one of them reads as missing.
-  assert.ok(incompleteTables.has('users'), 'users is extended at runtime');
-  assert.ok(incompleteTables.size >= 10, `expected ~13 such tables, got ${incompleteTables.size}`);
+test('both dynamic-ALTER loop shapes are read', () => {
+  const flat = runtimeColumns(
+    "for (const col of ['notes TEXT', 'follow_up_at TEXT']) {\n"
+    + '  await env.DB.prepare(`ALTER TABLE advisor_profiles ADD COLUMN ${col}`).run();\n}',
+  );
+  assert.deepEqual(flat, [{ table: 'advisor_profiles', cols: ['notes', 'follow_up_at'] }]);
+
+  const tuple = runtimeColumns(
+    "for (const [col, decl] of [['utm_json', 'TEXT'], ['referrer', 'TEXT']]) {\n"
+    + '  await env.DB.prepare(`ALTER TABLE contacts ADD COLUMN ${col} ${decl}`).run();\n}',
+  );
+  assert.deepEqual(tuple, [{ table: 'contacts', cols: ['utm_json', 'referrer'] }]);
+});
+
+test("an apostrophe in a comment does not swallow the array", () => {
+  // `// at D1's 100-column limit` opened a string scan that ate the rest of
+  // the file, which is how SETTINGS_USER_COLUMNS came back unresolved.
+  const src = "const COLS = [\n"
+    + "  ['bio', 'TEXT'],\n"
+    + "  // near D1's 100-column limit; see ensureProfileExpansionSchema\n"
+    + "  ['headline', 'TEXT'],\n"
+    + '];\n'
+    + 'for (const [col, type] of COLS) {\n'
+    + '  await db.prepare(`ALTER TABLE users ADD COLUMN ${col} ${type}`).run();\n}';
+  assert.deepEqual(runtimeColumns(src), [{ table: 'users', cols: ['bio', 'headline'] }]);
+});
+
+test('nothing is left unreadable, and no column is invented', () => {
+  const s = knownColumns();   // populates incompleteTables as a side effect
+  assert.equal(incompleteTables.size, 0,
+    `every dynamic-ALTER loop should resolve; unread: ${[...incompleteTables].join(', ')}`);
+
+  // The columns those loops add are now known — this is what the skip rule cost.
+  assert.ok(s.get('users')?.has('kyc_provider'), 'users.kyc_provider comes from KYC_COLUMNS');
+  assert.ok(s.get('users')?.has('jwt_min_iat'), 'users.jwt_min_iat comes from SETTINGS_USER_COLUMNS');
+  assert.ok(s.get('partners')?.has('oh_when_to_book'), 'partners gains its office-hours guidance columns');
+
+  // `ADD COLUMN ${col}` backtracks and hands back the word COLUMN as the name;
+  // `ALTER TABLE ... ADD COLUMN` in prose is not a table called `...`.
+  assert.equal([...s].filter(([, c]) => c && c.has('column')).length, 0, 'no phantom `column`');
+  assert.ok(!s.has('...'), 'no phantom `...` table');
+});
+
+test('the columns the runtime-harvest pass found are now right', () => {
+  const s = knownColumns();
+  // partners has email/company and no user link; the link is users.partner_id.
+  assert.ok(s.get('partners')?.has('email') && !s.get('partners')?.has('contact_email'));
+  assert.ok(s.get('partners')?.has('company') && !s.get('partners')?.has('organization'));
+  assert.ok(!s.get('partners')?.has('user_id') && s.get('users')?.has('partner_id'));
+  // kyb_status is on no table at all — the KYB flow does not write one.
+  assert.equal([...s].filter(([, c]) => c && c.has('kyb_status')).length, 0);
+  // projects carries neither; the composite lives in score_snapshots.
+  assert.ok(!s.get('projects')?.has('score') && !s.get('projects')?.has('ai_decision'));
 });
 
 test('the columns the SELECT pass found are now right', () => {
