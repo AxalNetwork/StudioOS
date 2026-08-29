@@ -608,3 +608,39 @@ test('every generated tree is ignored by BOTH scanners', () => {
   // 1384 quality findings came from a 49M tree that nothing builds or serves.
   assert.deepEqual(gaps(), []);
 });
+
+/* ------------------------------------------------------------------ *
+ * workflow_tasks.assignee_user_id — pinning an inert path (Task #185) *
+ * ------------------------------------------------------------------ */
+
+test('nothing writes workflow_tasks.assignee_user_id', () => {
+  // The GOTCHAS entry for Task #185 rests on this: the column is read by one
+  // query (dashboard.ts myTasks) and written by no INSERT or UPDATE, so that
+  // query matches no row on any database — correctly migrated or not.
+  //
+  // If this fails because you wired assignment, good: that is the feature
+  // being finished. Update the "workflow_tasks" bullet under
+  // "### Migrations & schema" in GOTCHAS.md and delete this test, so the note
+  // does not outlive the fact it describes.
+  const src = fs.readdirSync(new URL('../src/routes/', import.meta.url), { recursive: true })
+    .filter((f) => String(f).endsWith('.ts'))
+    .map((f) => fs.readFileSync(new URL(`../src/routes/${f}`, import.meta.url), 'utf8'))
+    .join('\n');
+
+  const writes = [];
+  for (const m of src.matchAll(/INSERT\s+(?:OR\s+\w+\s+)?INTO\s+workflow_tasks\s*\(([^)]*)\)/gi)) {
+    if (/\bassignee_user_id\b/i.test(m[1])) writes.push(`INSERT: ${m[1].trim()}`);
+  }
+  for (const m of src.matchAll(/UPDATE\s+workflow_tasks\s+SET\b([\s\S]{0,400}?)(?:WHERE|`)/gi)) {
+    if (/\bassignee_user_id\b/i.test(m[1])) writes.push(`UPDATE: ${m[1].trim()}`);
+  }
+  assert.deepEqual(writes, []);
+});
+
+test('exactly one query reads workflow_tasks.assignee_user_id', () => {
+  // The other half of the same claim. A second reader would mean the column
+  // matters somewhere this note has not looked.
+  const dash = fs.readFileSync(new URL('../src/routes/dashboard.ts', import.meta.url), 'utf8');
+  const inDash = (dash.match(/workflow_tasks[\s\S]{0,200}?assignee_user_id/gi) || []).length;
+  assert.equal(inDash, 1, 'dashboard.ts myTasks is the one reader');
+});
