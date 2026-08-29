@@ -37,6 +37,19 @@
  * in, which is exactly where two had: `dd_external_sources.source_kind` and
  * `documents.signer_email`, both filters, both silently matching no row.
  *
+ * THE 286 IT STILL SKIPS WERE MEASURED, not assumed. Of the raw-interpolated
+ * `.prepare(`/`.exec(` templates, 141 interpolate only in value positions —
+ * after `=`, inside `IN (…)`, in a `VALUES` list — where substituting `?`
+ * would be sound. Running all four passes over those 137 that parse found
+ * nothing. So the check is NOT extended to them: the tagged-template rule
+ * above is a guarantee from src/db.ts, while "this interpolation is a value,
+ * not an identifier" is a guess about position, and a wrong guess produces
+ * exactly the false positive this file exists to avoid. Zero findings does not
+ * buy a heuristic. (The throwaway probe that measured it reported three
+ * defects, all of them its own: it re-implemented the select-list scan and
+ * read `SELECT 1` as a column named `1`, and left `RETURNING` out of the
+ * keyword list. The passes below get both right.)
+ *
  * ONE THING THIS CHECK CANNOT SEE, by construction. When a table is defined
  * more than once — and 249 of them are — the definitions are UNIONED, because
  * nothing here can know which one D1 actually holds. The union satisfies every

@@ -21,6 +21,7 @@ import { routedWrites, mapColumns, assignmentBrace, unroutableColumns, unroutabl
 import { tableColumns, fatalCollisions, definitions } from '../../scripts/check-sqlite-table-collisions.mjs';
 import { isMoney, nonIntegerCents, floatMoney } from '../../scripts/check-money-cents.mjs';
 import { selectKeys, typeFields, phantomFields, coverage as genericCoverage } from '../../scripts/check-row-generics.mjs';
+import { parseSections, bindings, missingFromProduction, unknownTables } from '../../scripts/check-wrangler-binding-parity.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
   const src = `
@@ -506,6 +507,46 @@ test('no row generic declares a field its SELECT does not return', () => {
   const { pairs, checked } = genericCoverage();
   assert.ok(checked > 150, `expected most pairs checkable, got ${checked} of ${pairs}`);
   assert.ok(pairs > checked, 'some are declined, and the count is printed rather than hidden');
+});
+
+test('a value may contain a hash, and a comment may not be read as one', () => {
+  const secs = parseSections([
+    '[[kv_namespaces]]',
+    'binding = "TOKENS"   # the session token store',
+    'id = "abc#123"',
+    '[env.production]',
+    'name = "studioos"',
+  ].join('\n'));
+  assert.equal(secs.length, 2);
+  assert.equal(secs[0].kv.get('binding'), '"TOKENS"', 'a trailing comment is stripped');
+  assert.equal(secs[0].kv.get('id'), '"abc#123"', 'a hash inside quotes is part of the value');
+});
+
+test('parity is by binding identity, not by section presence', () => {
+  // The subtle case: the table exists in both, and a binding added to only one
+  // of them would pass a name-only comparison.
+  const secs = parseSections([
+    '[[kv_namespaces]]', 'binding = "TOKENS"',
+    '[[kv_namespaces]]', 'binding = "SESSION_CACHE"',
+    '[[env.production.kv_namespaces]]', 'binding = "TOKENS"',
+  ].join('\n'));
+  const top = bindings(secs, '');
+  const prod = bindings(secs, 'env.production.');
+  assert.deepEqual([...top.get('kv_namespaces')].sort(), ['"SESSION_CACHE"', '"TOKENS"']);
+  assert.deepEqual([...prod.get('kv_namespaces')], ['"TOKENS"']);
+});
+
+test('observability inherits and is excluded; routes are per-environment', () => {
+  const secs = parseSections(['[observability]', 'enabled = true', '[[routes]]', 'pattern = "x"'].join('\n'));
+  const top = bindings(secs, '');
+  assert.ok(!top.has('observability'), 'the root config documents observability as inheriting');
+  assert.ok(!top.has('routes'), 'routes are environment-specific by design');
+});
+
+test('every wrangler binding is re-declared under [env.production]', () => {
+  // The 2026-05-05 login outage was a binding declared only at the top level.
+  assert.deepEqual(unknownTables(), [], 'an unrecognised table cannot be compared, so it fails');
+  assert.deepEqual(missingFromProduction(), []);
 });
 
 test('every table the worker queries is created somewhere', () => {

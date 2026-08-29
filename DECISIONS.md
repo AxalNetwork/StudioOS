@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-nine decisions are now resolved. D6 is closed by D11, which repaired
+All thirty decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -1108,6 +1108,61 @@ an expression with no alias, a named interface rather than an inline literal,
 and any interpolated SQL. Thirty-eight of the 207 are declined on those grounds
 and the number is in the build output, so the size of what it cannot speak for
 is visible rather than assumed.
+
+
+### D30. A comment cannot fail a build
+
+The brief asks that every new wrangler binding go into **both** tables. That
+rule is already written down — in `wrangler.toml` itself, in a comment added
+after the incident it caused:
+
+> Every binding must be re-declared under `[env.production.*]` or the
+> `--env production` deploy will produce a worker with NO bindings — which
+> breaks every DB-touching route (login, /me, etc.) and is exactly why
+> 2026-05-05 login outage happened.
+
+**Parity is correct today.** Twenty-nine bindings across fifteen tables, all
+present in both. So this guard finds nothing, and that is the entire reason to
+write it: the rule is currently obeyed by memory, the comment explaining it is
+forty lines above the block it governs, and the cost of the next person missing
+it is a login outage rather than a warning.
+
+**Identity, not presence.** Comparing section names would pass the case that
+actually happens: a `[[kv_namespaces]]` table that gains a second namespace at
+the top level and not in production. The section is present in both; the new
+binding is in one. So each table is reduced to the set of identities it
+declares, using the key that names the binding for that table type — `binding`
+for most, `queue` for a queue consumer, `service` for a tail consumer, `name`
+for a durable object, `crons` for triggers. Probed both ways: adding a third KV
+namespace at the top level alone fails the build and names it.
+
+**An unrecognised table type fails rather than being skipped.** A binding kind
+this file has never seen — Cloudflare adds them — is precisely the one that
+would slip through a guard that shrugs at what it does not know. Adding
+`[[pipelines]]` fails with a message saying to teach the guard its identity key.
+
+**What was checked and deliberately left alone.** Three things:
+
+`observability` sits at the top level and not under `[env.production]`, which
+looks exactly like the drift this guard exists to catch. It is not:
+`wrangler.toml`'s own comment lists `observability` among the keys that DO
+inherit. Reading the file before believing the pattern is the difference
+between a guard and a nuisance, and this is the second time in this exercise
+that the material contradicted the shape.
+
+`[env.preview]` is missing `assets`, `tail_consumers` and `vectorize`. That is
+left unchecked and unfixed, because whether preview is meant to serve the SPA
+at all is a question for its owner, not an assumption for a guard.
+
+And `Forge` appears in five files, which looks like a violation of D3's naming
+rule until you read them: it is `Forge Analytics`, a fictional company in the
+advisor demo fixtures. The AI is named correctly everywhere.
+
+The regulated-wording lint the brief also asks for is **not** built here. Unlike
+binding parity, it has no objective test — "advisor" is a legitimate word for a
+person in this product, and a check that cannot tell the role from the
+regulated claim would flag the whole codebase on its first run. It needs a
+decision about which surfaces the rule governs before it can be written.
 
 
 ## Part 2 — Decisions taken
