@@ -2147,6 +2147,31 @@ export const api = {
   // Wave 2 — option pools + vesting grants, both populated by the Carta sync
   // (migration 057) and read by nothing until now. Shares, not money.
   getEquityPlan: () => request('/captable/equity-plan'),
+
+  // Data room (migration 184 + routes/data_room.ts). Founder methods take the
+  // project uid; investor methods take the same uid but resolve through a
+  // grant rather than ownership.
+  dataRoom: (projectUid) => request(`/data-room/${encodeURIComponent(projectUid)}`),
+  dataRoomCreateFolder: (projectUid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/folders`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  dataRoomUpdateFolder: (projectUid, uid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/folders/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  dataRoomDeleteFolder: (projectUid, uid) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/folders/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  dataRoomUploadFile: (projectUid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/files`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  dataRoomUpdateFile: (projectUid, uid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  dataRoomDeleteFile: (projectUid, uid) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  dataRoomGrant: (projectUid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/grants`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  dataRoomRevoke: (projectUid, uid) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/grants/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  dataRoomsSharedWithMe: () => request('/data-room/shared'),
+  dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
+  dataRoomDownload: (projectUid, uid) =>
+    request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
   getCapTableByProject: (projectId) => request(`/captable/scenarios/by-project/${projectId}`),
   createCapTableVariant: (projectId, data) =>
     request(`/captable/scenarios/by-project/${projectId}/variants`, { method: 'POST', body: JSON.stringify(data) }),
