@@ -25,6 +25,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
 
 const root = resolve(process.cwd());
 const wrangler = readFileSync(resolve(root, 'wrangler.toml'), 'utf8');
@@ -182,5 +183,50 @@ test('each apex prefix is listed in both the bare and the subtree form', () => {
         assert.ok(pats.has(`${p}/*`), `${p} has no subtree counterpart ${p}/* in ${table}`);
       }
     }
+  }
+});
+
+/**
+ * Every signed-in nav destination is routed at the apex.
+ *
+ * The prerender check above only sees marketing routes — a signed-in app path
+ * is never prerendered, so it was invisible to every test in this file. On
+ * 2026-08-29 that gap was measured: 37 of the 41 top-level segments the
+ * sidebar links to had NO apex route. They resolved only because GitHub Pages
+ * served `docs/404.html`, whose inline script bounces to `/?p=...`. When the
+ * bounce did not fire, the visitor got a blank page.
+ *
+ * Routes were added; a subsequent history reconciliation reverted them and
+ * every existing check still passed. That is the failure this test exists to
+ * make impossible: nav and routing are one fact, so they are asserted together.
+ */
+function sidebarDestinations() {
+  const src = readFileSync(resolve(root, 'frontend/src/sidebarConfig.js'), 'utf8');
+  // Commented-out nav rows are deliberately parked, not shipped — `codeOnly`
+  // drops them so parking one does not demand a route for it. Reusing the
+  // shared stripper rather than a local regex is the point: its docblock
+  // records why it removes only WHOLE-LINE comments, and every parked row in
+  // this file is one. A trailing comment is left intact, which is harmless
+  // here because nothing after a `//` on a live line carries a `to:` path.
+  const code = codeOnly(src);
+  const out = new Set();
+  for (const m of code.matchAll(/to:\s*'(\/[^']*)'/g)) {
+    const seg = m[1].split('/').filter(Boolean)[0];
+    if (seg) out.add(seg);
+  }
+  return [...out].sort();
+}
+
+test('every sidebar destination is routed to the Worker at the apex', () => {
+  const segments = sidebarDestinations();
+  assert.ok(segments.length >= 35, `expected the nav set, found ${segments.length}`);
+  for (const table of TABLES) {
+    const covered = coveredSegments(table);
+    const missing = segments.filter((s) => !covered.has(s));
+    assert.deepEqual(
+      missing, [],
+      `[[${table}]] does not serve these nav destinations at axal.vc; signed-in ` +
+      'users reaching them by direct link or refresh get GitHub Pages, not the app',
+    );
   }
 });

@@ -114,6 +114,18 @@ function routesForHost(base) {
     { path: '/login', shell: true },
     { path: '/articles', shell: true },
     { path: `/articles/${encodeURIComponent(SLUG)}`, shell: true },
+    // Signed-in app paths, added 2026-08-29. Until then every route in this
+    // list happened to be one of the four apex segments that WERE routed, so
+    // the check reported all-PASS through a period when 37 of the 41 segments
+    // the sidebar links to had no apex route at all. These six span segments
+    // that were in the broken set; on the apex they are served only by the
+    // explicit route table, so a table-wide revert turns them red here.
+    { path: '/perks', shell: true },
+    { path: '/messages', shell: true },
+    { path: '/raise/data-room', shell: true },
+    { path: '/admin/licences', shell: true },
+    { path: '/portfolio/health', shell: true },
+    { path: '/spinout-lab', shell: true },
   ];
   // Apex `/` is Jekyll, not the SPA; the custom domain `/` is the SPA shell.
   appRoutes.unshift({ path: '/', shell: !isApex });
