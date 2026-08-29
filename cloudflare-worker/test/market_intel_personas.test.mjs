@@ -70,12 +70,29 @@ test('Free callers get the blurred-teaser hint, not a hard paywall', async () =>
     'Free gate must point at /billing');
   assert.match(src, /free_teaser:\s*\{[\s\S]*?gated_charts:\s*\[/,
     'Free response must include free_teaser.gated_charts hint');
+  // Asserts on the CONTENTS OF THE ARRAY, not on "the name appears somewhere
+  // after the word gated_charts".
+  //
+  // The previous form was `new RegExp(`gated_charts:[\\s\\S]*?'${chart}'`)`, and
+  // `[\\s\\S]*?` spans the whole file: the chart name only had to appear
+  // SOMEWHERE later, in any context, including a comment. Replacing the array
+  // with `gated_charts: []` — the free tier gating nothing at all — and moving
+  // the names into a comment two lines below left this suite passing 9/9.
+  //
+  // So the array is extracted and its members are checked.
+  const arrayAt = src.indexOf('gated_charts: [');
+  assert.notEqual(arrayAt, -1, 'the free_teaser payload must build a gated_charts array');
+  const arrayBody = src.slice(arrayAt + 'gated_charts: ['.length,
+    src.indexOf(']', arrayAt));
+  const listed = new Set(
+    [...arrayBody.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]),
+  );
   for (const chart of [
     'stage_focus', 'geo_distribution', 'activity_composite',
     'spinout_lab_funnel', 'signups_trend', 'pipeline_coverage',
   ]) {
-    const re = new RegExp(`gated_charts:[\\s\\S]*?'${chart}'`);
-    assert.match(src, re, `free_teaser.gated_charts must list ${chart}`);
+    assert.ok(listed.has(chart),
+      `free_teaser.gated_charts must LIST ${chart} — it currently holds [${[...listed].join(', ')}]`);
   }
 });
 
