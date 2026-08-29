@@ -26,7 +26,14 @@ import { makeD1 } from './_d1_sqlite.mjs';
 import { WORKFLOW_SCHEMA_DDL } from '../src/services/workflowSchema.ts';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
 
-const TABLES = ['workflows', 'workflow_tasks', 'shared_services_log'];
+/**
+ * The three tables, as one hardcoded pattern rather than a list compiled into
+ * a regex per name. Semgrep flags `new RegExp(...)` on a non-literal even when
+ * the input is a frozen const, and it is right that there is no reason for one
+ * here: this was the only use of the list, so a literal leaves nothing to
+ * drift between the names and the pattern.
+ */
+const TOUCHES_A_SHARED_TABLE = /\b(?:workflows|workflow_tasks|shared_services_log)\b/;
 
 /** The other tables the routes join to. Shapes only — no rows needed. */
 const NEIGHBOURS = `
@@ -51,7 +58,7 @@ function queriesUnderTest() {
   const out: Array<{ route: string; line: number; sql: string }> = [];
   for (const { name, path } of ROUTES) {
     for (const { body, line } of sqlStrings(readFileSync(path, 'utf8'))) {
-      if (!TABLES.some((t) => new RegExp(`\\b${t}\\b`).test(body))) continue;
+      if (!TOUCHES_A_SHARED_TABLE.test(body)) continue;
       // getSQL's tagged template turns each ${…} into one bind. Same here, so
       // the statement SQLite sees is the statement D1 is handed.
       out.push({ route: name, line, sql: body.replace(/\$\{[^}]*\}/g, '?') });
