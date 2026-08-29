@@ -10,21 +10,11 @@ import NetworkSubNav from '../../components/NetworkSubNav';
 import { eventsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import {
+import { EVENT_TYPE_FILTERS } from '../../lib/eventTypes';
   PROGRAMS, PROGRAM_CATEGORIES, AUDIENCES, FORMATS,
 } from '../../data/network';
 
-const EVENT_TYPES = [
-  { id: '', label: 'All types' },
-  { id: 'meetup', label: 'Meetup' },
-  { id: 'workshop', label: 'Workshop' },
-  { id: 'webinar', label: 'Webinar' },
-  { id: 'demo_day', label: 'Demo Day' },
-  { id: 'office_hours', label: 'Office Hours' },
-  { id: 'roundtable', label: 'Roundtable' },
-  { id: 'conference', label: 'Conference' },
-  { id: 'social', label: 'Social' },
-  { id: 'other', label: 'Other' },
-];
+const EVENT_TYPES = EVENT_TYPE_FILTERS;
 
 const PROGRAM_CAT_LABEL = Object.fromEntries(PROGRAM_CATEGORIES.map((c) => [c.id, c.label]));
 const FORMAT_LABEL = Object.fromEntries(FORMATS.map((f) => [f.id, f.label]));

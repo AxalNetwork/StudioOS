@@ -70,26 +70,32 @@ test('every destination the old nav reached still has a door', () => {
     'these have no nav row and no tab bar — reachable only by typing the URL');
 });
 
-test('the pending list has shrunk to what a workspace cannot own', () => {
-  // It began as seven. `PartnerWorkspaceTabs` now wraps the Pipeline and Offers
-  // pages at the route, so five of them — /matches, /partner/insights, /perks,
-  // /comarketing, /partner/office-hours — are sections of a row rather than
-  // rows, and came out of the nav and out of this list in the same commit.
+test('the two rows beyond the canvas are the two that earn it', () => {
+  // This list began as seven and was called PENDING, which promised a further
+  // absorption. `PartnerWorkspaceTabs` delivered most of it: /matches,
+  // /partner/insights, /perks, /comarketing and /partner/office-hours are
+  // sections of a row rather than rows, and left the nav and this list in the
+  // same commit.
   //
-  // Two remain, each for a stated reason rather than inertia:
-  //   /messages  the canvas's eight rows have nowhere to put a cross-cutting
-  //              inbox, and it has no other door.
-  //   /my/jobs   not a section of Offers — the partner's own listings — and it
-  //              has four inbound links elsewhere, so folding it in to reach
-  //              eight would be arithmetic, not information architecture.
-  const PENDING = ['/messages', '/my/jobs'];
+  // The two that remain are not pending. They are decided, and the investor,
+  // advisor and founder shells reached the same answer independently:
+  //
+  //   /messages  a cross-cutting inbox has no home among eight lifecycle rows,
+  //              and it has NO other door in any of the four roles. Every shell
+  //              gives it a row for that reason, so the product reads the same
+  //              way whichever profile you are in.
+  //   /my/jobs   not a section of Offers — those are the partner's own listings
+  //              — and it has four inbound links elsewhere. Folding it in to
+  //              reach exactly eight would be arithmetic, not information
+  //              architecture.
+  const KEPT = ['/messages', '/my/jobs'];
   const CANON = [
     '/studio', '/needs', '/partner/operations/overview', '/services',
     '/network', '/market-intel', '/company-settings',
   ];
   const extra = targets.filter((t) => !CANON.includes(t));
-  assert.deepEqual(extra.sort(), [...PENDING].sort(),
-    'the set of un-absorbed rows changed — shrink it, or justify the addition here');
+  assert.deepEqual(extra.sort(), [...KEPT].sort(),
+    'the set of rows beyond the canvas changed — justify the addition here, or remove it');
 });
 
 test('every section of a collapsed row is reachable from its tab bar', () => {

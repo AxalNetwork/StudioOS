@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS events (
   slug               TEXT NOT NULL UNIQUE,
   host_user_id       INTEGER REFERENCES users(id),
   project_id         INTEGER REFERENCES projects(id),
-  type               TEXT NOT NULL DEFAULT 'meetup',     -- demo_day | workshop | office_hours | networking | fireside | meetup | webinar
+  type               TEXT NOT NULL DEFAULT 'meetup',     -- see cloudflare-worker/src/services/eventTypes.ts for the canonical list
   title              TEXT NOT NULL,
   summary            TEXT,
   description        TEXT,
