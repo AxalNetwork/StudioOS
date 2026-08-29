@@ -20,6 +20,7 @@ import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables
 import { routedWrites, mapColumns, assignmentBrace, unroutableColumns, unroutableSavedTo } from '../../scripts/check-write-router-columns.mjs';
 import { tableColumns, fatalCollisions, definitions } from '../../scripts/check-sqlite-table-collisions.mjs';
 import { isMoney, nonIntegerCents, floatMoney } from '../../scripts/check-money-cents.mjs';
+import { selectKeys, typeFields, phantomFields, coverage as genericCoverage } from '../../scripts/check-row-generics.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
   const src = `
@@ -472,6 +473,39 @@ test('every *_cents column is an integer, and the legacy dollar list is closed',
   const found = [...floatMoney().keys()].sort();
   assert.deepEqual(found, Object.keys(baseline).sort());
   assert.ok(found.includes('limited_partners.commitment_amount'), 'fiduciary amounts are in the ledger');
+});
+
+test('an alias names the result whatever the expression is', () => {
+  assert.deepEqual(selectKeys('SELECT p.id, u.name AS owner, COUNT(*) AS n FROM projects p'),
+    ['id', 'owner', 'n']);
+  // Testing the whole list for `*` up front declined every aggregate query and
+  // cost about a third of the coverage.
+  assert.deepEqual(selectKeys('SELECT COUNT(*) AS c FROM t'), ['c']);
+  // A bare star, qualified or not, makes the shape the table's, not the query's.
+  assert.equal(selectKeys('SELECT * FROM projects'), null);
+  assert.equal(selectKeys('SELECT p.*, u.name AS owner FROM projects p'), null);
+  // An expression with no alias is named after its own text; nobody reads it
+  // that way, so the query is declined rather than guessed at.
+  assert.equal(selectKeys('SELECT COALESCE(a,b), id FROM t'), null);
+});
+
+test('angle brackets are not brackets in a TypeScript row type', () => {
+  // The `>` in an arrow type drove the depth negative and every field after it
+  // was skipped — an under-report, which looks exactly like a clean pass.
+  assert.deepEqual(
+    typeFields('{ id: number; nested: { a: 1 }; fn: (x: number) => void; last: string }'),
+    ['id', 'nested', 'fn', 'last'],
+  );
+  // And the outer braces must come off first, or every field sits at depth 1
+  // and none of them is read at all.
+  assert.deepEqual(typeFields('{ only: string }'), ['only']);
+});
+
+test('no row generic declares a field its SELECT does not return', () => {
+  assert.deepEqual(phantomFields(), []);
+  const { pairs, checked } = genericCoverage();
+  assert.ok(checked > 150, `expected most pairs checkable, got ${checked} of ${pairs}`);
+  assert.ok(pairs > checked, 'some are declined, and the count is printed rather than hidden');
 });
 
 test('every table the worker queries is created somewhere', () => {

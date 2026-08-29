@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-eight decisions are now resolved. D6 is closed by D11, which repaired
+All twenty-nine decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -1055,6 +1055,59 @@ LinkedIn profile text, and a partner rating filter. The one that touches money �
 `advisor.profile.hourly_rate_usd` in the writeRouter — is parsing into a REAL
 column that legitimately holds dollars today. When that column moves to cents it
 becomes wrong, and the ledger entry above is where that will be noticed.
+
+
+### D29. A fixed parser finds more work, not less
+
+The row generic is the easiest source of truth in this worker to check against:
+
+```ts
+await env.DB.prepare('SELECT id, name FROM projects WHERE id = ?')
+  .bind(id).first<{ id: number; name: string; founder_id: number }>();
+```
+
+`founder_id` is not in the select list, so it is `undefined` at runtime, and
+TypeScript says nothing — the generic is an assertion about a value the type
+system never sees. Same class as everything else here: a field that reads as
+empty rather than as an error. The generic sits inches from the SQL, it is a
+literal, and it is written by the same hand in the same breath.
+
+**No generic is currently wrong.** 169 of 207 are checked and all 169 agree
+with their SELECT. That is the whole finding, and it is worth a gate precisely
+because it is currently true and will not stay true by itself.
+
+What makes this entry worth writing down is the four parser faults, because
+**three of them under-reported, and under-reporting is the one that ships.**
+
+The first over-reported in the familiar way: a lazy `([\s\S]*?)\1` for the SQL
+body can run past its own closing quote to a later one, so a bind-less
+`.first()` in one statement was paired with the generic of a different
+statement further down. Three defects reported, none real.
+
+Then three quiet ones:
+
+- `typeFields` counted the type's own outer `{` as depth, so every field sat at
+  depth 1 and the depth test skipped all of them. **The check reported a clean
+  pass over a type it had not read.** It was caught only because an injected
+  phantom field failed to trip it — which is the only reason to inject one.
+- The same walker treated `<` and `>` as brackets. The `>` in an arrow type,
+  `(v: string) => number`, drove the depth negative and every field after it
+  was skipped.
+- `selectKeys` tested the whole select list for `*` before looking at aliases,
+  so every aggregate query — `COUNT(*) AS n` — was declined wholesale.
+
+Each fix raised the numbers rather than lowering them: 173 pairs to 207, and
+97 checked to 147 to 169. **A correct fix here found more real work; a
+suppression would have found less.** That is the cheapest available test of
+whether a parser change is a repair or a silencing, and it is the one to reach
+for next time, because fourteen parser faults into this exercise the pattern is
+no longer a surprise — the surprise is only ever which direction it fails in.
+
+The check declines four shapes and prints how many: a select list with a star,
+an expression with no alias, a named interface rather than an inline literal,
+and any interpolated SQL. Thirty-eight of the 207 are declined on those grounds
+and the number is in the build output, so the size of what it cannot speak for
+is visible rather than assumed.
 
 
 ## Part 2 — Decisions taken
