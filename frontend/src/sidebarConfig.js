@@ -310,24 +310,32 @@ export const SIDEBAR_GROUPS = {
     { key: 'shell', label: 'Workspace', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       { to: '/messages', icon: Mail, label: 'Messages' },
-      { to: '/needs', icon: Target, label: 'Pipeline',
-        match: ['/needs', '/matches', '/partner/insights', '/partner/operations/engagements'] },
+
+      { to: '/needs', icon: Target, label: 'Pipeline' },
+      { to: '/matches', icon: Handshake, label: 'Matches' },              // → Pipeline
+      { to: '/partner/insights', icon: TrendingUp, label: 'Demand' },     // → Pipeline
+
+      // Delivery owns the whole /partner/operations subtree: its workspace
+      // already tabs across Overview, Capabilities, Portfolio, Engagements and
+      // Performance, so none of them needs its own row.
       { to: '/partner/operations/overview', icon: Briefcase, label: 'Delivery',
-        match: ['/partner/operations/overview', '/partner/operations/portfolio',
-                '/partner/operations/performance'] },
-      { to: '/services', icon: Package, label: 'Offers',
-        match: ['/services', '/comarketing', '/perks', '/my/jobs',
-                '/partner/office-hours', '/partner/operations/capabilities'] },
+        match: ['/partner/operations'] },
+
+      { to: '/services', icon: Package, label: 'Offers' },
+      { to: '/perks', icon: Gift, label: 'Perks' },                       // → Offers
+      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },     // → Offers
+      { to: '/partner/office-hours', icon: Calendar, label: 'Office Hours' }, // → Offers
+      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },                 // → Offers
+
       { to: '/network', icon: Users, label: 'Network' },
       { to: '/market-intel', icon: Radar, label: 'Research' },
-      // The canvas's eighth row is Trust. It is NOT here, and that is a
-      // deliberate refusal rather than an omission: `trust_center_navigation
-      // .test.mjs` pins Trust Center to the user dropdown, immediately below
-      // User Settings and above Support, and asserts outright that it appears
-      // in no sidebar. That test predates the canvas and nothing in the canvas
-      // argues against it. Moving Trust into the sidebar is a product decision
-      // with a recorded prior; it needs an owner, not a nav edit.
-      { to: '/settings', icon: UserCircle, label: 'Firm Settings', match: ['/settings', '/profile'] },
+      // COMPANY settings, not Account. The canvas draws this row as the
+      // company's own settings page and says where the other thing lives:
+      // "Your personal name, email, identity documents and security live in
+      // Account — not here." /settings and /profile are Account, and they
+      // already have a door in the user dropdown (App.jsx), so they lose
+      // nothing by leaving this row.
+      { to: '/company-settings', icon: UserCircle, label: 'Firm Settings' },
     ]},
   ],
 

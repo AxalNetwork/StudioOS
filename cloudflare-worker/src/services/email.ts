@@ -239,7 +239,10 @@ ${noteBlock}
 </table></td></tr></table></body></html>`;
 }
 
-function escapeHtml(s: string): string {
+// Exported so `email/inviteChrome.ts` and `email/personaInviteRender.ts` escape
+// through THIS implementation. Both had grown a local copy; two escapers in one
+// mail pipeline is one that gets a fix the other does not.
+export function escapeHtml(s: string): string {
   return (s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 }
 
