@@ -76,7 +76,7 @@ HTMLs, 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
 | EmberRail | chrome | — (docked rail component) | — | `services/aiRouter.ts` | NEW | Near-identical sibling of DetailRail — same four blocks, different mode copy. Treat DetailRail + EmberRail as **one** rail spec with two wordings. |
 | Events | shared / public | `/events` + `/events/:slug` | `/events`, `/events/:slug`, `/my/events`, `/events/new`, `/events/:id/edit`, `/events/:id/manage`, `/invite/:token` | `events.ts`, `events_public.ts` | UPGRADE | E1 is close to live (filters, programs, ICS). Canvas adds month-grouped sections with counts, replay chips, programme badge. E2 (Demo Day) is the real gap: countdown + livestream, a **running order** off the live agenda with per-presenter "Request intro" (no `requestIntro` exists), attending-roster preview, logistics, and a post-event variant of the same URL (replay + "Your recap" with intros made). `/lp/spinout-demo-day` is a marketing page, not this. |
 | Explore the Spin-Out Lab | investor-LP | `/spinout-lab` | `/spinout-lab` (investor branch) | `spinout_lab.ts`; content in `lib/spinoutInvestorContent.js` | OUT OF SCOPE | `SpinoutLabInvestorPage.jsx:2` states it is a native port of this canvas with four documented departures. |
-| ForgeRail | chrome | — (docked rail component) | — | `services/aiRouter.ts` | NEW | Third rail variant, materially different: branded "Forge", model **RECOMMENDED** not inherited, discloses an explicit "Axal VC margin" line, scope chip, and a hard boundary — "Forge never sends, signs or voids; every outbound action is a human click." The three rail namings are mutually exclusive product voices; pick one before building. |
+| ForgeRail | chrome | — (docked rail component) | — | `services/aiRouter.ts` | NEW | Third rail variant, materially different: branded "Eadwyn" (D3, resolved — the canvas's own working name was "Forge"), model **RECOMMENDED** not inherited, discloses an explicit "Axal VC margin" line, scope chip, and a hard boundary — "Eadwyn never sends, signs or voids; every outbound action is a human click." The three rail namings were mutually exclusive product voices; D3 picked Eadwyn as the single one to build. |
 | Founder Journey Map | admin (internal) | — (audit artifact, not a surface) | — | — (none) | NEW | Not a screen to ship: a journey map reconstructing 10 steps across 6 phases with per-step health tones, arguing the journey is strong at the workspace and broken on both sides of it. No seeded data. Treat as an audit input. |
 | Founder Studio | founder | `/studio` | `/studio` (Dashboard) | `dashboard.ts`, `assistant.ts`, `tickets.ts`, `progress.ts`, `advisor.ts` | DEFERRED | Persona hub — no diff performed. |
 | Founder Wellbeing | founder | `/wellbeing` | `/wellbeing` (guard `['admin','founder']`), `/wellbeing/expert-dashboard`, `/wellbeing/expert/:uid` | `wellbeing.ts`, `founder_risk.ts` | UPGRADE | Live (966 lines) ships the 6-dimension encrypted check-in, tags, history, matched experts with `match_breakdown`, booking, resource directory. New: a **30-day trend** panel over the existing `/aggregate`; a **"What the pattern shows"** zone reading observations against company context; a **pinned crisis card + full-screen overlay** carrying the promise "Axal VC does not see that you opened this"; a reminder-cadence picker; **"Export my data"**. Grep confirms none of these strings exist live. |
@@ -144,7 +144,7 @@ HTMLs, 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
 | Spin-Out Lab | public | `/spinout-lab` | `/spinout-lab` | `spinout_lab.ts`, `spinout_moderation.ts`, `public.ts` | OUT OF SCOPE | Public Lab landing + cohort tracker + apply flow. |
 | Studio Ops | founder | — (see note) | — (deleted from main 2026-08-25) | — (none) | OUT OF SCOPE | Lab tool by subject — Week-2 unlocked tool and Week-2 deliverable in the master workspace canvas — but there is **no live Studio Ops surface**: the route, both pages, the worker route, the service and 16 `api.js` methods were deleted, and `frontend/test/studio_ops_removed.test.mjs` now asserts they stay gone. **Resolved (DECISIONS.md D1): honour the deletion, drop the canvas.** Not a work item in any phase. If Studio Ops returns it should be scoped fresh, not restored from this canvas. |
 | Support Security · Super | super-admin | Support → `/tickets`; Security → `/admin/security` (new) | `/tickets` (partial), `/monitoring`, `/admin` | `tickets.ts`, `monitoring.ts`, `monitoring_analytics.ts`, `trust.ts`, `admin.ts` | NEW | Two artboards, two answers. HQ Support = three queues (escalations, HQ-held users, subsidiary admins raising tickets about the admin product), tenant × queue analytics, GitHub `ticket_sync_events` health, inherited SLA bands. Security = a new destination: a `security_events` ledger (the canvas calls it "the one real backend build"), session revoke/force-re-auth, AI-safety counters, GDPR DSR clocks per territory, backup/DR **drill** status, with `admin_audit_log` demoted to one zone of eight. Gated on the absent tenancy model. |
-| Support · Subsidiary | admin | `/tickets` | `/tickets` | `tickets.ts` | UPGRADE | Turns a flat list into a territory-scoped help desk: SLA-chipped inbox with lanes, live chat routed by tenant, escalate-to-HQ writing an engineering ticket under the operator's name, canned replies with usage counts, CSAT, a Forge triage proposal. Its second artboard deliberately **refuses** a tenant-tier security console. Gated on the absent tenancy model. |
+| Support · Subsidiary | admin | `/tickets` | `/tickets` | `tickets.ts` | UPGRADE | Turns a flat list into a territory-scoped help desk: SLA-chipped inbox with lanes, live chat routed by tenant, escalate-to-HQ writing an engineering ticket under the operator's name, canned replies with usage counts, CSAT, an Eadwyn triage proposal. Its second artboard deliberately **refuses** a tenant-tier security console. Gated on the absent tenancy model. |
 | System Sheet | chrome | — (design-system reference) | — | — (none) | NEW | S1 Tokens + in-use component inventory; S2 the four states the other canvases omit (empty, loading, error, confirmation) plus a voice do/don't. **This is the file the baseline palette was transcribed from.** Partially exists as code (`index.css` `@theme`, `EmptyState.jsx`, `ErrorState.jsx`, `Skeleton.jsx`, `useToast.js`) but there is no published sheet. |
 | Team · Authority | admin / super-admin | `/admin/team` (absorbs) + `/ic` | `/admin/team` (public team-page CRUD only), `/ic`, `/ic/:uid` | `admin_team.ts`, `team_public.ts`, `ic.ts`, `votes.ts`, `users.ts`, `projects.ts` | NEW | 8 artboards enforcing one rule: **title, authority and economics are three independent axes.** Subsidiary Team hub (org chart, IC panel, people directory, external-engagement ledger where access always expires, public team page as a *projection*), Super read-only cross-tenant oversight, member profile with a locked-not-hidden economics section, a roles × surfaces × deal-power matrix edited with a typed reason + audit, an IC console where an open FLAG blocks entry to voting while only VOTE decides, a Partner-gated carry ledger, onboard/offboard flows. Live `/admin/team` only edits the marketing page. |
 | Team | founder | `/build/team` | `/build/team` | `projects.ts`, `captable.ts`, `legal.ts`, `advisors.ts`, `jobs.ts`, `cofounder.ts`, `partner_office_hours.ts` | UPGRADE | Live tabs = Advisor / Co-Founder / Jobs. Canvas = Roster / Advisors / Hiring / **Coverage**. New: the roster itself (equity %, shares, vesting progress, per-person paperwork status, person drawer with employment + documents + offboard, invite drawer issuing type-appropriate paperwork), an option-pool panel, advisor grants + vesting + cadence, and a whole Coverage tab (inbound from Brand & Pages, co-founder decision state, function-by-function coverage with fixes, quarterly headcount plan, people-cost roll-up feeding Use of Funds). |
@@ -232,16 +232,46 @@ Cheap wins — the work is a UI slice, not a build:
   caps and per-task cost, surfaced only to admins. This is the data the eight
   rail canvases want user-facing.
 
-## Route-namespace collisions to resolve before mounting anything
+## Route-namespace collisions — re-checked, and none of them are collisions
 
-| Canvas proposes | Collides with | 
-| --- | --- |
-| `/deals/pipeline`, `/deals/screening`, `/deals/commit`, `/deals/closing` | live `/deals/:dealId` — the param route swallows all four |
-| `/pipeline/{leads,proposals,…}` (partner) | live `/pipeline/{screening,commit,transactions}` (investor) |
-| `/grow/*` | live `/founder/growth/*` |
-| `/research/*` | live `/advisor/research/*` |
-| `/fund/*` | live `/funds/*` |
-| `/practice/*` | live `/advisor/advisory/*` |
+This table previously listed six collisions "to resolve before mounting
+anything". Re-verified against `main` and against the installed router, none of
+the six is a route collision. Corrected in full, because the original framing
+would have bought a redesign nobody needed.
+
+**The load-bearing error: React Router does not match in registration order.**
+`react-router-dom` 7.18.2 with `<Routes>` ranks by specificity — a static
+segment outranks a dynamic one wherever each is registered. Verified directly
+with `matchRoutes`:
+
+```
+routes registered as: /deals, /deals/:dealId, /deals/pipeline, /deals/screening
+  /deals/pipeline   -> /deals/pipeline      (NOT /deals/:dealId)
+  /deals/screening  -> /deals/screening
+  /deals/42         -> /deals/:dealId
+```
+
+Registration order *does* decide matching in Hono, which is why the worker's
+`/api/deals/pass-analytics` had to be mounted above `/api/deals/:id` in #329.
+The two systems are not the same and the earlier note conflated them.
+
+| Canvas proposes | Was recorded as | Actually |
+| --- | --- | --- |
+| `/deals/{pipeline,screening,commit,closing}` | swallowed by `/deals/:dealId` | **Not a collision.** The literals outrank the param. Mount them in any order. |
+| `/pipeline/{leads,proposals,…}` (partner) | collides with investor `/pipeline/*` | **Not a collision.** The BD Console canvas's pipeline tabs are `all` / `mine` / `floor` / `retainer` — client-side filters inside one page, not sibling routes, and none share a name with `screening`/`commit`/`transactions`. |
+| `/grow/*` | collides with `/founder/growth/*` | **Moot.** #326 withdrew the Growth section; zero `/founder/growth` routes remain. |
+| `/research/*` | collides with `/advisor/research/*` | **Not a collision — a duplicate surface.** Distinct paths that render the same material. D8 already settled the market tab (`/advisor/research/market` → `/market-intel`); the rest is the same call, not a routing one. |
+| `/fund/*` | collides with `/funds/*` | **Not a collision.** Singular and plural are distinct namespaces. It is a *legibility* hazard — two prefixes one letter apart — and the fix is to not introduce `/fund/*`, not to re-route `/funds/*`. |
+| `/practice/*` | collides with `/advisor/advisory/*` | **Not a collision — a duplicate surface.** Same class as `/research/*`. |
+
+So the real question under four of these is D7's, not a routing one: **two URLs
+serve the same material — which one survives?** The answer D8 set is the
+precedent: keep the surface with the live backend, redirect the other.
+
+Phase 2 is therefore not blocked on a namespace redesign. What it is blocked on
+is the duplicate-surface calls above, each of which is a small, independent
+decision, and D4 (**resolved: persona roots stay prohibited** — see
+`DECISIONS.md`, enforced by `frontend/test/route_namespace_policy.test.mjs`).
 
 ## The shell the canvases assume
 

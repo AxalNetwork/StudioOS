@@ -18,6 +18,8 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, canViewLpData } from '../auth';
 import { isAdmin, isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { lpMembershipScope } from '../services/tenancyScope';
+import { claimLpRowsByEmail } from '../services/lpClaim';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -46,10 +48,22 @@ async function dto(env: Env, x: ReportRow): Promise<any> {
   return { ...x, fund: fund || null };
 }
 
-/** Fund ids the caller may view: all for admin, else funds where they are an LP. */
+/**
+ * Fund ids the caller may view: all for admin, else funds where they are an LP.
+ *
+ * The membership question goes through `lpMembershipScope` — admin has already
+ * short-circuited to 'all' above, so what reaches the query is the LP arm. It
+ * matters here because a quarterly report is the one place an LP learns what
+ * their position did, and the old `user_id = ?` refused it to exactly the
+ * legacy LPs whose capital calls the platform was still sending.
+ */
 async function visibleFundIds(env: Env, user: User): Promise<number[] | 'all'> {
   if (isAdmin(user)) return 'all';
-  const rows = await env.DB.prepare('SELECT DISTINCT fund_id FROM limited_partners WHERE user_id = ?').bind(user.id).all<{ fund_id: number }>();
+  await claimLpRowsByEmail(env, Number(user.id), user.email);
+  const scope = lpMembershipScope(user as any);
+  const rows = await env.DB.prepare(
+    `SELECT DISTINCT lp.fund_id AS fund_id FROM limited_partners lp WHERE ${scope.sql}`,
+  ).bind(...scope.binds).all<{ fund_id: number }>();
   return (rows.results || []).map((row) => Number(row.fund_id));
 }
 
@@ -132,7 +146,13 @@ r.get('/:uid', async (c) => {
       const isAuthor = x.created_by != null && Number(x.created_by) === Number(user.id);
       if (!isAuthor) {
         if (x.status !== 'published') return c.json({ detail: 'Not found' }, 404);
-        const lp = await c.env.DB.prepare('SELECT 1 FROM limited_partners WHERE user_id = ? AND fund_id = ? LIMIT 1').bind(user.id, x.fund_id).first();
+        // Same predicate as the list above — a report reachable in one and
+        // refused in the other is the drift this consolidation removes.
+        await claimLpRowsByEmail(c.env, Number(user.id), user.email, Number(x.fund_id));
+        const scope = lpMembershipScope(user as any);
+        const lp = await c.env.DB.prepare(
+          `SELECT 1 FROM limited_partners lp WHERE lp.fund_id = ? AND ${scope.sql} LIMIT 1`,
+        ).bind(x.fund_id, ...scope.binds).first();
         if (!lp) return c.json({ detail: 'Forbidden' }, 403);
       }
     }

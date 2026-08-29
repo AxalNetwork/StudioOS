@@ -790,6 +790,14 @@ export const api = {
   dealFunnel: () => request('/deals/funnel'),
   draftDeal: (data) => request('/deals/draft', { method: 'POST', body: JSON.stringify(data) }),
   advanceDeal: (id) => request(`/deals/${id}/advance`, { method: 'POST' }),
+  // Task #127 — the only write path to the terminal stage. `reason` must be a
+  // key from lib/dealFlow.js PASS_TAXONOMY; the worker 400s anything else.
+  passDeal: (id, { reason, note } = {}) =>
+    request(`/deals/${id}/pass`, { method: 'POST', body: JSON.stringify({ reason, note }) }),
+  dealPassAnalytics: (reason) =>
+    request(`/deals/pass-analytics${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`),
+  dealStageAnalytics: (days) =>
+    request(`/deals/stage-analytics${days ? `?days=${encodeURIComponent(days)}` : ''}`),
   dealLeadPartners: () => request('/deals/lead-partners'),
   dealInvestorOptions: () => request('/deals/investors'),
   dealDocuments: (id) => request(`/deals/${id}/documents`),
@@ -1836,6 +1844,21 @@ export const api = {
   // rate, p50/p95 latency, top 10 most expensive users).
   monitoringAiUsage: (days = 7) => request(`/monitoring/ai-usage?days=${days}`),
 
+  // Task #176 (Phase 4) — the CALLER'S OWN AI gateway spend, not the org's.
+  // `monitoringAiUsage` above is the admin rollup over every user; this is the
+  // self-view that feeds the AI rail's spend meter, so the meter reads live
+  // numbers instead of taking them as props. Distinguishes "no record" from
+  // "$0": `recorded: false` means the usage table could not be read, and the
+  // meter must say so rather than drawing an empty bar as a fact.
+  myAiSpend: () => request('/ai/me/spend'),
+
+  // The router's own routing table and price list. The rail quotes a cost
+  // before a run and shows a receipt after it; assistCost.js already forces
+  // both through ONE calculation, but the PRICES were a second copy — canvases
+  // carry hand-written per-1M figures while the receipt is computed from
+  // PRICE_USD_PER_1M_TOKENS in aiRouter. This removes that copy.
+  aiPricing: () => request('/ai/pricing'),
+
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------
   // Task #13 — analytics reads auto-retry once on 5xx with a 1s backoff so
   // a transient D1 hiccup or worker cold-start doesn't surface as a red
@@ -1971,6 +1994,11 @@ export const api = {
     request(`/funds/${id}/lps`, { method: 'POST', body: JSON.stringify(data) }),
   fundsSignLpa: (lpId) =>
     request(`/funds/lps/${lpId}/sign-lpa`, { method: 'POST', body: JSON.stringify({}) }),
+  // Fund analytics over real D1 rows only. Metrics the schema cannot support
+  // (NAV, RVPI, TVPI, IRR) come back null with a reason in `unavailable`; the
+  // pages render "Not recorded" rather than an invented figure.
+  fundsAnalytics: () => request('/funds/analytics'),
+  fundAnalytics: (id) => request(`/funds/${id}/analytics`),
   fundsLpPortal: () => request('/funds/lp-portal'),
   // GP-only. Returns ONE limited partner's reporting data in the same shape as
   // fundsLpPortal, so the quarterly-report renderer is a single code path

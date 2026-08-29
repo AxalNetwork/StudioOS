@@ -25,6 +25,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
 import capital from '../src/routes/capital.ts';
+import { makeD1 } from './_d1_sqlite.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // >= 32 bytes
 
@@ -53,125 +54,83 @@ async function mintToken(userId: number, role: string): Promise<string> {
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
 
-function sortByCreatedDesc<T extends { created_at: string }>(rows: T[]): T[] {
-  return [...rows].sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+/**
+ * A real in-memory database behind the D1 binding.
+ *
+ * This used to be a chain of `if (sql.includes(...))` branches, each returning
+ * a hand-built row set. That stub could not distinguish a correct ownership
+ * predicate from an incorrect one — it only knew which substrings it had been
+ * taught — so when the predicate moved into `lpMembershipScope` every branch
+ * missed and five IDOR tests went red without a single behavioural change.
+ *
+ * Retuning the matchers would have made the suite green and hollow: tests that
+ * exist to stop one investor reading another's capital calls would have been
+ * asserting that a query *looks* a certain way. These now run the route's real
+ * SQL, with its real binds, against SQLite — which is what D1 is. A scoping
+ * regression fails them because the wrong rows come back.
+ *
+ * LP #300 is new here and is the point of the change: a legacy LP row with no
+ * `user_id`, carrying LEGACY_EMAIL. It is unreachable under the old
+ * `user_id = ?` predicate and reachable under the consolidated one.
+ */
+const LEGACY_ID = 30;
+const LEGACY_EMAIL = 'legacy@lp.example';
+
+const SCHEMA = `
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1);
+CREATE TABLE vc_funds (
+  id INTEGER PRIMARY KEY, name TEXT, status TEXT DEFAULT 'active',
+  total_commitment REAL DEFAULT 0, deployed_capital REAL DEFAULT 0, lp_count INTEGER DEFAULT 0,
+  created_at TEXT, updated_at TEXT);
+CREATE TABLE partners (id INTEGER PRIMARY KEY, name TEXT, status TEXT DEFAULT 'active');
+CREATE TABLE limited_partners (
+  id INTEGER PRIMARY KEY, fund_id INTEGER, user_id INTEGER, name TEXT, email TEXT,
+  commitment_amount REAL DEFAULT 0, invested_amount REAL DEFAULT 0, returns REAL DEFAULT 0,
+  status TEXT DEFAULT 'active', created_at TEXT DEFAULT '2026-01-01', updated_at TEXT);
+CREATE TABLE capital_calls (
+  id INTEGER PRIMARY KEY, limited_partner_id INTEGER, project_id INTEGER,
+  amount REAL, status TEXT DEFAULT 'pending', due_date TEXT, paid_date TEXT,
+  created_at TEXT DEFAULT '2026-01-01');
+CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, sector TEXT);
+CREATE TABLE notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT, title TEXT,
+  body TEXT, link TEXT, created_at TEXT);
+`;
+
+function seedFor(user: any): string {
+  const rows = [
+    { id: ADMIN_ID, email: 'admin@axal.vc', role: 'admin' },
+    { id: OWNER_ID, email: 'owner@lp.example', role: 'investor' },
+    { id: OTHER_ID, email: 'other@lp.example', role: 'investor' },
+    { id: LEGACY_ID, email: LEGACY_EMAIL, role: 'investor' },
+  ];
+  // The caller's own row must reflect the role the token claims, so auth
+  // resolves the same actor the test intends.
+  const users = rows
+    .map((r) => {
+      const role = user && user.id === r.id ? user.role : r.role;
+      return `(${r.id}, '${r.email}', 'U${r.id}', '${role}', 1)`;
+    })
+    .join(', ');
+  return `
+INSERT INTO users (id, email, name, role, is_active) VALUES ${users};
+INSERT INTO vc_funds (id, name) VALUES (1, 'Fund I');
+INSERT INTO limited_partners (id, fund_id, user_id, name, email, commitment_amount, status, created_at)
+  VALUES (100, 1, ${OWNER_ID}, 'Owner LP', 'owner@lp.example', 500, 'active', '2026-01-02'),
+         (200, 1, ${OTHER_ID}, 'Other LP', 'other@lp.example', 700, 'active', '2026-01-01'),
+         (300, 1, NULL,        'Legacy LP', '${LEGACY_EMAIL}',  900, 'active', '2026-01-03');
+INSERT INTO capital_calls (id, limited_partner_id, amount, status, created_at)
+  VALUES (1, 100, 500, 'pending', '2026-01-02'),
+         (2, 200, 700, 'pending', '2026-01-01'),
+         (3, 300, 900, 'pending', '2026-01-03');
+INSERT INTO projects (id, name, sector) VALUES (1, 'Test Project', 'ai');
+`;
 }
 
-/**
- * In-memory D1 stub backed by a tiny LP + capital_calls dataset. getSQL() runs
- * every statement (incl. UPDATE) through prepare().bind().all(), so all routing
- * logic lives in all(); UPDATEs fall through as no-ops. The notify LP lookup
- * returns a null user_id so the best-effort notification path is skipped.
- */
 function makeEnv(user: any): any {
-  const calls = CALLS.map((c) => ({ ...c }));
-  const handle = (rawSql: string) => {
-    const s = rawSql.toLowerCase();
-    let bound: any[] = [];
-    const api: any = {
-      bind: (...a: any[]) => { bound = a; return api; },
-      async all() {
-        // Auth: resolve the JWT's user_id to a users row.
-        if (s.includes('from users where id')) {
-          return { results: user ? [user] : [] };
-        }
-        // --- Task #9: happy-path stubs for the admin-only write/issue routes.
-        // These only matter for the admin "allowed" cases; the investor cases
-        // 403 before any SQL runs.
-        // get-or-create fund (POST /investors).
-        if (s.includes('from vc_funds') && s.includes('where name')) {
-          return { results: [{ id: 1, name: bound[0] }] };
-        }
-        // INSERT INTO limited_partners ... RETURNING * (POST /investors).
-        if (s.includes('insert into limited_partners')) {
-          return { results: [{ id: 999, fund_id: bound[0], name: bound[1], email: bound[2], commitment_amount: bound[3], invested_amount: 0, status: 'active' }] };
-        }
-        // INSERT INTO capital_calls ... RETURNING * (POST /calls).
-        if (s.includes('insert into capital_calls') && s.includes('returning')) {
-          return { results: [{ id: 999, limited_partner_id: bound[0], project_id: bound[1] ?? null, amount: bound[2], status: 'pending', due_date: bound[3] ?? null, created_at: '2026-02-01' }] };
-        }
-        // Resolve a single LP by id (POST /calls lp lookup).
-        if (s.includes('select id from limited_partners where id')) {
-          const row = LPS.find((lp) => lp.id === bound[0]);
-          return { results: row ? [{ id: row.id }] : [] };
-        }
-        // Active-LP fan-out (POST /capitalCall issue-to-all).
-        if (s.includes('from limited_partners') && s.includes("status = 'active'")) {
-          return { results: LPS.map((lp) => ({ id: lp.id, name: `LP ${lp.id}`, status: 'active' })) };
-        }
-        // Project lookup (POST /capitalCall).
-        if (s.includes('from projects')) {
-          return { results: [{ id: bound[0] ?? 1, name: 'Test Project', sector: 'ai' }] };
-        }
-        // Best-effort notify lookup -> null user disables notifications in tests.
-        if (s.includes('select user_id from limited_partners')) {
-          return { results: [{ user_id: null }] };
-        }
-        // Ownership probe in the pay route (SELECT 1 ... AND user_id = ?).
-        if (s.includes('from limited_partners') && s.includes('and user_id')) {
-          const [lpId, uid] = bound;
-          const owns = LPS.some((lp) => lp.id === lpId && lp.user_id === uid);
-          return { results: owns ? [{ '1': 1 }] : [] };
-        }
-        // Investor list / detail (limited_partners JOIN vc_funds) — Task #20
-        // per-investor scoping. The detail query carries WHERE lp.id (and, for
-        // non-admins, AND lp.user_id); the list carries an optional WHERE
-        // lp.user_id for non-admins. Admin variants have no user_id filter.
-        if (s.includes('from limited_partners lp') && s.includes('join vc_funds')) {
-          if (s.includes('where lp.id')) {
-            const lpId = bound[0];
-            const uid = s.includes('and lp.user_id') ? bound[1] : null;
-            let row = LPS.find((lp) => lp.id === lpId);
-            if (uid != null && (!row || row.user_id !== uid)) row = undefined;
-            return { results: row ? [row] : [] };
-          }
-          if (s.includes('where lp.user_id')) {
-            const uid = bound[0];
-            return { results: LPS.filter((lp) => lp.user_id === uid) };
-          }
-          return { results: [...LPS] };
-        }
-        // Non-admin scoped list (capital_calls JOIN limited_partners).
-        if (s.includes('from capital_calls cc') && s.includes('join limited_partners')) {
-          const uid = bound[0];
-          const status = s.includes('and cc.status') ? bound[1] : null;
-          const ownLpIds = LPS.filter((lp) => lp.user_id === uid).map((lp) => lp.id);
-          let rows = calls.filter((cc) => ownLpIds.includes(cc.limited_partner_id));
-          if (status) rows = rows.filter((cc) => cc.status === status);
-          return { results: sortByCreatedDesc(rows) };
-        }
-        // Per-LP capital calls for the investor-detail route (Task #20).
-        if (s.includes('from capital_calls where limited_partner_id')) {
-          const lpId = bound[0];
-          return { results: calls.filter((cc) => cc.limited_partner_id === lpId) };
-        }
-        // Single call by id (pay route + post-update re-read).
-        if (s.includes('from capital_calls where id')) {
-          const row = calls.find((cc) => cc.id === bound[0]);
-          return { results: row ? [row] : [] };
-        }
-        // Admin unscoped list.
-        if (s.includes('from capital_calls')) {
-          const status = s.includes('where status') ? bound[0] : null;
-          let rows = [...calls];
-          if (status) rows = rows.filter((cc) => cc.status === status);
-          return { results: sortByCreatedDesc(rows) };
-        }
-        return { results: [] };
-      },
-      async first() { return null; },
-      async run() { return { meta: { changes: 1 } }; },
-    };
-    return api;
-  };
-  return {
-    JWT_SECRET,
-    ENVIRONMENT: 'development',
-    DB: {
-      prepare: (sql: string) => handle(sql),
-      async batch(stmts: any[]) { return (stmts || []).map(() => ({ results: [] })); },
-    },
-  };
+  const { DB, db } = makeD1(SCHEMA, seedFor(user));
+  return { JWT_SECRET, ENVIRONMENT: 'development', DB, __db: db };
 }
 
 function listCalls(env: any, token: string, query = ''): Promise<Response> {
@@ -190,7 +149,7 @@ test('calls list: admin sees every capital call', async () => {
   const res = await listCalls(env, token);
   assert.equal(res.status, 200);
   const body = (await res.json()) as any[];
-  assert.deepEqual(body.map((c) => c.id).sort(), [1, 2]);
+  assert.deepEqual(body.map((c) => c.id).sort(), [1, 2, 3]);
 });
 
 test('calls list: a non-admin investor only sees their own LP calls', async () => {
@@ -268,7 +227,7 @@ test('investors list: admin sees every LP record', async () => {
   const res = await listInvestors(env, token);
   assert.equal(res.status, 200);
   const body = (await res.json()) as any[];
-  assert.deepEqual(body.map((lp) => lp.id).sort((a, b) => a - b), [100, 200]);
+  assert.deepEqual(body.map((lp) => lp.id).sort((a, b) => a - b), [100, 200, 300]);
 });
 
 test('investors list: a non-admin investor only sees their own LP record', async () => {
@@ -369,7 +328,12 @@ test('add investor: an admin is allowed (201)', async () => {
   const res = await addInvestor(env, token, { name: 'New LP', email: 'new@lp.com', committed_capital: 1000 });
   assert.equal(res.status, 201);
   const body = (await res.json()) as any;
-  assert.equal(body.id, 999);
+  // A real INSERT, so the id comes from the database. The old stub returned a
+  // hardcoded 999 for any INSERT, which is also why it never noticed that this
+  // route's `NOW()` is not a SQLite function and threw against D1.
+  assert.ok(Number.isInteger(body.id) && body.id > 0, 'the LP row was really inserted');
+  assert.equal(body.name, 'New LP');
+  assert.equal(body.email, 'new@lp.com');
 });
 
 test('create call: a non-admin investor is forbidden (403)', async () => {
@@ -402,6 +366,105 @@ test('issue-to-all: an admin is allowed and fans out to active investors (200)',
   const res = await issueToAllInvestors(env, token, { startup_id: 1, amount: 1000 });
   assert.equal(res.status, 200);
   const body = (await res.json()) as any;
-  assert.equal(body.calls_created.length, 2);
-  assert.equal(body.calls_created[0].amount, 500);
+  assert.equal(body.calls_created.length, 3, 'one call per active LP row');
+  // The route splits the total across active LPs and rounds to cents, so three
+  // ways leaves a residual: 3 x 333.33 is 999.99, not 1000. Asserted rather
+  // than smoothed over — `amount` here is a legacy float dollars column, and
+  // making the split whole is a money-representation change to a route this
+  // work does not otherwise touch.
+  assert.equal(body.calls_created[0].amount, 333.33);
+  const dealt = body.calls_created.reduce((sum: number, x: any) => sum + x.amount, 0);
+  assert.equal(Number(dealt.toFixed(2)), 999.99, 'a cent is left undealt by the even split');
+  assert.equal(body.total_amount, 1000, 'the total reported is still the amount requested');
+});
+
+// --- the legacy LP (task #175) ---------------------------------------------
+// LP #300 has a real position and a NULL user_id — a "legacy LP migrated from
+// lp_investors", in funds.ts's own words. Under `user_id = ?` this person was
+// refused their own LP record and their own capital call while the platform
+// went on issuing calls against the row. These tests are only possible against
+// a real database: the outcome depends on what the SQL returns.
+
+function legacyEnv() {
+  return makeEnv({ id: LEGACY_ID, role: 'investor', is_active: 1 });
+}
+
+test('legacy LP: reaches their own LP record through the verified account email', async () => {
+  const token = await mintToken(LEGACY_ID, 'investor');
+  const env = legacyEnv();
+  const res = await listInvestors(env, token);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as any[];
+  assert.deepEqual(body.map((lp) => lp.id), [300]);
+});
+
+test('legacy LP: reaches the capital call issued against that row', async () => {
+  const token = await mintToken(LEGACY_ID, 'investor');
+  const env = legacyEnv();
+  const body = (await (await listCalls(env, token)).json()) as any[];
+  assert.deepEqual(body.map((c) => c.id), [3]);
+});
+
+test('legacy LP: the row is CLAIMED on first access, not granted forever', async () => {
+  const token = await mintToken(LEGACY_ID, 'investor');
+  const env = legacyEnv();
+  const before = env.__db.prepare('SELECT user_id FROM limited_partners WHERE id = 300').get();
+  assert.equal(before.user_id, null, 'starts unclaimed');
+  await listInvestors(env, token);
+  const after = env.__db.prepare('SELECT user_id FROM limited_partners WHERE id = 300').get();
+  assert.equal(after.user_id, LEGACY_ID, 'the email match became a permanent account link');
+});
+
+test('claiming never re-points a row that already belongs to someone else', async () => {
+  // Two rows now carry the legacy address: #300, unclaimed, and #200, which
+  // OTHER_ID already owns. `limited_partners.email` is operator-entered, so
+  // this is an ordinary data-entry outcome rather than an exotic one. The
+  // caller is the account that actually holds the address, and even so only
+  // the unclaimed row may move — reassignment is an administrative act, not a
+  // side effect of a GET.
+  const token = await mintToken(LEGACY_ID, 'investor');
+  const env = legacyEnv();
+  env.__db.exec(`UPDATE limited_partners SET email = '${LEGACY_EMAIL}' WHERE id = 200`);
+  await listInvestors(env, token);
+  const rows = env.__db.prepare('SELECT id, user_id FROM limited_partners ORDER BY id').all();
+  assert.deepEqual(
+    rows.map((r: any) => [r.id, r.user_id]),
+    [[100, OWNER_ID], [200, OTHER_ID], [300, LEGACY_ID]],
+    'row 200 keeps its owner; only the unclaimed row 300 is linked',
+  );
+});
+
+test('a claimed row is never reachable by another account holding the same address', async () => {
+  // The email arm is qualified by `user_id IS NULL`. Without that qualifier
+  // the LEGACY user would reach row #200 — which OTHER_ID owns — purely
+  // because the denormalized email column names their address.
+  const token = await mintToken(LEGACY_ID, 'investor');
+  const env = legacyEnv();
+  env.__db.exec(`UPDATE limited_partners SET email = '${LEGACY_EMAIL}' WHERE id = 200`);
+  const body = (await (await listInvestors(env, token)).json()) as any[];
+  assert.ok(!body.some((lp) => lp.id === 200), 'a row with an owner is reachable only by its owner');
+  assert.deepEqual(body.map((lp) => lp.id), [300]);
+});
+
+test('legacy LP: cannot reach anyone else’s LP record by id', async () => {
+  const token = await mintToken(LEGACY_ID, 'investor');
+  const res = await getInvestor(legacyEnv(), token, 100);
+  assert.equal(res.status, 404);
+});
+
+test('paying a capital call really marks it paid and moves the money', async () => {
+  // The old stub swallowed every UPDATE as a no-op, so this route's `NOW()` —
+  // not a SQLite function, and D1 is SQLite — threw in production while the
+  // test suite stayed green. Assert the writes, not just the status code.
+  const token = await mintToken(OWNER_ID, 'investor');
+  const env = makeEnv({ id: OWNER_ID, role: 'investor', is_active: 1 });
+  const res = await payCall(env, token, 1);
+  assert.equal(res.status, 200);
+  const call = env.__db.prepare('SELECT status, paid_date FROM capital_calls WHERE id = 1').get();
+  assert.equal(call.status, 'paid');
+  assert.ok(call.paid_date, 'paid_date is stamped');
+  const lp = env.__db.prepare('SELECT invested_amount FROM limited_partners WHERE id = 100').get();
+  assert.equal(lp.invested_amount, 500, 'the call amount is recorded as invested');
+  const fund = env.__db.prepare('SELECT deployed_capital FROM vc_funds WHERE id = 1').get();
+  assert.equal(fund.deployed_capital, 500, 'and as deployed against the fund');
 });

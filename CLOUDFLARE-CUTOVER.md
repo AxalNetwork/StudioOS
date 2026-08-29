@@ -1,7 +1,9 @@
 # Jekyll → Cloudflare cutover: content inventory
 
-Status: inventory complete; apex-wide route remains disabled pending the
-stabilisation gate below.
+Status: **gate item 1 is done in code**; items 2–4 are live-operator steps that
+cannot be performed from the build environment (see *What is left*). The
+apex-wide `axal.vc/*` route remains disabled; the apex is served by an explicit
+84-entry route table instead.
 
 ## Stabilisation gate (2026-08-24)
 
@@ -14,10 +16,17 @@ contend under parallel cold traffic.
 
 Before retrying `axal.vc/*`:
 
-1. Deploy the non-blocking static, health, telemetry, and explicitly
+1. ~~Deploy the non-blocking static, health, telemetry, and explicitly
    allowlisted anonymous-public-read paths with per-isolate single-flight
    schema guards. Authenticated, optional-auth, and mutating public endpoints
-   must remain blocking.
+   must remain blocking.~~ **DONE.** `cloudflare-worker/src/index.ts`:
+   non-`/api/*` requests return before any schema work, and inside `/api/*`
+   only paths `requiresBlockingRoleSchemaBootstrap()` classifies as
+   role-dependent block. That predicate returns `true` by default and exempts
+   an explicit allowlist, so the fail-safe direction is "block", never "serve
+   against an unmigrated schema". The three `ensure*Schema` helpers share one
+   promise per isolate, so concurrent cold requests do not issue overlapping
+   rebuilds. Covered by `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs`.
 2. Confirm Cloudflare Adaptive HTTP Analytics has no 5xx responses across a
    sustained observation window. The current account exposes status counts but
    denies `edgeTimeToFirstByteMs`; document that limitation and use the
@@ -160,3 +169,120 @@ outside this repo. Both are visible from the Cloudflare and GitHub settings
 panes, and should be eyeballed once before the DNS step — not because there is
 evidence against them, but because they are the only remaining unknowns and
 they are cheap to confirm.
+
+---
+
+# Cutover runbook
+
+Added when Phase 0 was finished in-repo. Everything above this line is the
+2026-08-24 inventory and still holds; this section is what an operator
+executes, plus the two findings that turned up while checking it.
+
+## Finding 1 — nine prerendered routes had no apex route
+
+The apex has no `axal.vc/*`. That is deliberate (the wildcard attempt was
+rolled back), but it means a path is served **only if it is listed**, and nine
+prerendered routes were not:
+
+`/changelog`, `/demo`, `/pricing`, `/pricing/investor`, `/privacy`,
+`/risk-disclosures`, `/roadmap`, `/status`, `/terms`
+
+They resolved anyway — because GitHub Pages serves `docs/` directly and the
+prerendered file was sitting right there. So the omission was invisible in the
+worst possible way: nothing was broken *until* Pages is decommissioned, which
+is step 6 below. Three of the nine are the legal pages.
+
+Fixed: eight prefixes added to **both** route tables in bare and `/*` form
+(`/pricing/investor` is covered by `pricing/*`), taking each table from 68 to
+84 entries. The Worker could always serve them — its `[assets]` binding is
+rooted at `./docs`, the same directory Pages was serving.
+
+Guarded: `frontend/test/apex_route_coverage.test.mjs` fails if a prerendered
+route is missing from either table, if the two tables drift apart, if a prefix
+appears in only one of its two forms, or if the legal pages lose coverage. It
+also fails loudly if `axal.vc/*` ever returns, because that would make the rest
+of the file vacuous rather than merely redundant.
+
+## Finding 2 — passkeys survive the cutover
+
+Worth stating because it is the item most likely to be assumed broken and
+quietly worked around. `util/webauthn.ts` derives the RP ID by stripping a
+leading `app.`, so credentials registered on `app.axal.vc` are already bound to
+`axal.vc`; and `expectedOrigins()` unconditionally includes **both**
+`https://axal.vc` and `https://app.axal.vc` regardless of env config. No
+re-registration, no user-visible step.
+
+## OAuth re-registration
+
+`OAUTH_CALLBACK_BASE_URL` is pinned to `https://app.axal.vc` while `APP_URL`
+and `PUBLIC_BASE_URL` already point at the apex. That split is intentional: it
+keeps every `redirect_uri` matching what is registered in the provider consoles
+until those consoles are updated. **Flipping the var before the consoles is what
+breaks sign-in**, and it breaks it for everyone at once.
+
+Add the apex form of each URI **alongside** the existing `app.axal.vc` form —
+do not replace it. Both must be valid simultaneously, or the window between the
+console edit and the deploy is an outage.
+
+| Console | Redirect URI (append `https://axal.vc` form) | Breaks if missed |
+| --- | --- | --- |
+| Google Cloud | `/api/auth/google/callback` | **Google sign-in** |
+| Google Cloud | `/api/calendar/google/callback` | Calendar connect |
+| Microsoft Entra | `/api/calendar/microsoft/callback` | Calendar connect |
+| Slack | `/api/integrations/oauth/slack/callback` | Slack integration |
+| HubSpot | `/api/integrations/oauth/hubspot/callback` | CRM push |
+| Salesforce | `/api/integrations/oauth/salesforce/callback` | CRM push |
+| DocuSign | `/api/integrations/oauth/docusign/callback` | E-sign |
+| Carta | `/api/integrations/oauth/carta/callback` | Cap-table import |
+| Calendly | `/api/integrations/oauth/calendly/callback` | Booking |
+| Stripe | `/api/integrations/oauth/stripe/callback` | Billing connect |
+| X / Twitter | `/api/admin/x/oauth/callback` | Admin social posting |
+
+Eleven URIs, ten consoles. `affinity` and `crunchbase` are API-key
+integrations with no redirect URI — nothing to do for those.
+
+Only after every row is registered: set
+`OAUTH_CALLBACK_BASE_URL = "https://axal.vc"` in **both** `[vars]` tables of
+`wrangler.toml` and deploy. `util/url.ts` already documents this convergence as
+the end state.
+
+## Order of operations
+
+1. **Confirm the two unknowns** the inventory could not close from the repo:
+   that GitHub Pages' source really is `main` + `/docs`, and that no apex DNS
+   record points somewhere outside this repo. Both are one glance in the
+   GitHub and Cloudflare panes.
+2. **Register the eleven OAuth redirect URIs** (table above), apex form added
+   alongside the existing one. Do not flip the var yet.
+3. **Deploy the current worker** with `npm run deploy` — never bare
+   `npx wrangler deploy`, which skips the `predeploy` hook that applies D1
+   migrations and would ship the worker ahead of its schema.
+4. **Observe** per gate items 2–3 above: 24 continuous hours, five-minute
+   buckets, `/api/health` and `/api/public/stats` probed at least once per
+   bucket, plus representative Worker-served hard loads. Abort on any 5xx from
+   a probe, or two or more 5xx in any five-minute bucket.
+5. **Flip `OAUTH_CALLBACK_BASE_URL` to the apex** in both `[vars]` tables and
+   redeploy. Verify Google sign-in end to end before continuing — it is the
+   one failure that locks users out rather than degrading a feature.
+6. **Move apex DNS**, then decommission GitHub Pages. Finding 1 above is what
+   makes this step safe; without those eight prefixes it 404s the legal pages.
+7. **Only then** consider retrying `axal.vc/*`. It is no longer needed for
+   coverage — the explicit table covers every prerendered route — so it is now
+   an optimisation, not a prerequisite. If it is adopted, delete the per-route
+   checks in `apex_route_coverage.test.mjs` (which will already be failing to
+   tell you so) and say so here.
+
+## Rollback
+
+Keep, before step 6: the current Worker version id, both route tables, and the
+Pages configuration. Restoring Pages plus the 84-route table returns the apex
+to its pre-cutover behaviour without a deploy.
+
+## What could not be done from the build environment
+
+`axal.vc` is blocked by this environment's egress policy — `curl` and
+`WebFetch` both get a 403 on CONNECT, which the proxy README classifies as an
+organization policy denial and instructs not to route around. So steps 1, 4, 6
+and the console edits in step 2 are **operator actions, not deferred work**:
+they need live access to Cloudflare, GitHub, DNS and ten provider dashboards.
+Nothing above is blocked on further code.

@@ -374,7 +374,13 @@ async function createProjectHandler(c: any) {
     }
     if (founderRow.length > 0) {
       const fid = founderRow[0].id;
-      const existing = await sql`SELECT COUNT(*)::int AS n FROM projects WHERE founder_id = ${fid}`;
+      // `COUNT(*)`, not `COUNT(*)::int`. `::` is Postgres cast syntax and D1 is
+      // SQLite, which rejects it outright with `unrecognized token: ":"`. This
+      // threw for every free founder who already had a `founders` row —
+      // anyone creating a second project, or a first one after onboarding had
+      // registered them — so the core founder action returned a 500 instead of
+      // either the project or the clean 402 the cap is supposed to raise.
+      const existing = await sql`SELECT COUNT(*) AS n FROM projects WHERE founder_id = ${fid}`;
       const count = Number(existing?.[0]?.n ?? 0);
       if (count >= FREE_TIER_LIMITS.projects) {
         await sql.end();
@@ -398,8 +404,11 @@ async function createProjectHandler(c: any) {
   // admin or partner creates a project on behalf of a founder, the push
   // runs against the founder's HubSpot integration row, not the actor's.
   try {
+    // `founders` has no user_id — the link runs the other way, through
+    // `users.founder_id`. The old query threw on an unknown column, and this
+    // `.first()` is unguarded, so the route 500'd rather than degrading.
     const ownerRow = await c.env.DB.prepare(
-      'SELECT user_id FROM founders WHERE id = ?',
+      'SELECT id AS user_id FROM users WHERE founder_id = ? LIMIT 1',
     ).bind(founderId).first();
     const owner = ownerRow as { user_id: number | null } | null;
     const ownerUserId = owner?.user_id ?? null;

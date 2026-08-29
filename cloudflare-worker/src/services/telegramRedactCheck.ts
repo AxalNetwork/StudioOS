@@ -159,11 +159,14 @@ async function scanUserMentions(
   // on common substrings.
   try {
     const userRows = await env.DB.prepare(
-      `SELECT u.id, u.full_name, u.email,
+      // `full_legal_name` — there is no `full_name`. This query feeds a
+      // redaction check, so the throw meant the check scanned nobody and
+      // passed silently.
+      `SELECT u.id, u.full_legal_name, u.email,
               COALESCE(c.consented, 0) AS consented
          FROM users u
          LEFT JOIN user_promotion_consent c ON c.user_id = u.id
-        WHERE u.full_name IS NOT NULL AND length(u.full_name) >= 6`,
+        WHERE u.full_legal_name IS NOT NULL AND length(u.full_legal_name) >= 6`,
     ).all<{ id: number; full_name: string; email: string; consented: number }>();
     for (const r of userRows.results || []) {
       const name = (r.full_name || '').trim();

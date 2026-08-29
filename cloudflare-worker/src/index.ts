@@ -67,6 +67,7 @@ import marketIntel from './routes/market_intel';
 import marketIntelPublic from './routes/market_intel_public';
 import { investorProfile, investorSignals, aggregateInvestorSignals } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
+import aiRoutes from './routes/ai';
 import { runTotpRemediation } from './services/totpRemediation';
 import { writeDailySnapshot } from './services/analyticsReports';
 // Task #5 (IE) — Backup + DR. Daily KV snapshot to R2.
@@ -633,6 +634,12 @@ app.use('/api/assistant/*', async (c, next) => {
   await next();
 });
 app.route('/api/assistant', assistantRoutes);
+
+// Task #176 (Phase 4) — read-only view of the caller's own AI gateway usage.
+// Mounted OUTSIDE the /api/assistant/* gate above: that middleware guards a
+// dev-only Anthropic path, and this endpoint reports on the production
+// Workers AI router, which is a different thing that happens to sit nearby.
+app.route('/api/ai', aiRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
 // Task #33 — Cloudflare Access perimeter on /api/admin, /api/monitoring and

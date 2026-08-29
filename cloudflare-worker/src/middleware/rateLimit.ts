@@ -53,6 +53,30 @@ const BUCKETS: Bucket[] = [
     scope: 'user',
     failClosed: true,
   },
+  // E-sign origination. This route sends an Axal-branded email containing a
+  // signing link to an ARBITRARY recipient address, so opening it beyond
+  // admins turns it into an outbound-mail surface. While it was
+  // requireAdmin-only it fell through to the generic 60/min/user bucket,
+  // fail-OPEN — acceptable for admins, an unmetered spam relay for everyone
+  // else, and bypassable by knocking out KV.
+  //
+  // 10/hour/user is well above any real workflow (a founder sending a SAFE,
+  // an advisory agreement, a co-founder agreement) and far below anything
+  // useful to an abuser. failClosed because the whole point of the limit is
+  // that it cannot be removed by making KV unavailable.
+  //
+  // Only /api/legal/esign is mounted today — index.ts is explicit that the
+  // router goes there and NOT under /api/esign. Both are listed anyway, the
+  // same way COOL_OFF_PREFIXES lists both, so a future remount cannot quietly
+  // land outside the limit.
+  {
+    name: 'esign_send',
+    limit: 10,
+    windowSec: 3600,
+    test: (p, m) => m === 'POST' && (p === '/api/legal/esign/send' || p === '/api/esign/send'),
+    scope: 'user',
+    failClosed: true,
+  },
   // Task #9 — promo-code validation. Stricter than the default user bucket so
   // the redeemable-code space can't be enumerated at checkout. 20/min/user is
   // ample for a shopper typing and re-typing a code.

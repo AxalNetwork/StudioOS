@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
-import { Routes, Route, NavLink, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
+import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
-import { ActiveCompanyContext, useActiveCompany as _useActiveCompany } from './contexts/ActiveCompanyContext';
+import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
 import ViewModeContext from './contexts/ViewModeContext';
@@ -17,14 +18,13 @@ import SafeMount from './components/SafeMount';
 import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
-  Menu, X,
+  Menu,
   Shield,
-  ChevronDown, ChevronLeft, ChevronRight, Eye, ArrowLeft, Sparkles,
-  Search, Gift, Building2, Plus
+  ChevronDown, Eye, ArrowLeft, Sparkles,
+  Gift
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, defaultOpenGroups, filterItemsByTier, hasTier, hasInvestorTier } from './sidebarConfig';
-import PaywallModal, { openPaywall } from './components/PaywallModal';
-import { Lock as LockIcon } from 'lucide-react';
+import { SIDEBAR_GROUPS, filterItemsByTier } from './sidebarConfig';
+import PaywallModal from './components/PaywallModal';
 import { api } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
@@ -237,11 +237,9 @@ const EmailChangeConfirmPage = lazy(() => import('./pages/EmailChangeConfirmPage
 const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage'));
 // Advisor sections shell — tabbed workspaces (Network, Advisory, Research).
 const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
-const AdvisorResearchWorkspace = lazy(() => import('./pages/advisor/research/AdvisorResearchWorkspace'));
 // Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
 // Engagements, Performance).
 const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
-const GrowthWorkspace = lazy(() => import('./pages/growth/GrowthWorkspace'));
 // Authenticated-shell widgets — lazy so they leave the entry chunk. They only
 // ever render inside ProtectedLayout (logged-in users), so a logged-out visitor
 // hitting the landing page never downloads them. Each render site below is
@@ -352,37 +350,6 @@ function getSidebarGroups(role, primaryPersonaId, user) {
   return [groups[0], personaGroup, ...groups.slice(1)].filter(Boolean);
 }
 
-// Highlight matching substring inside a label. Returns a JSX-friendly
-// fragment when there's a match, otherwise the plain label.
-function highlightMatch(label, query) {
-  if (!query) return label;
-  const lower = label.toLowerCase();
-  const idx = lower.indexOf(query.toLowerCase());
-  if (idx === -1) return label;
-  return (
-    <>
-      {label.slice(0, idx)}
-      <mark className="bg-yellow-200 text-gray-900 rounded px-0.5">
-        {label.slice(idx, idx + query.length)}
-      </mark>
-      {label.slice(idx + query.length)}
-    </>
-  );
-}
-
-// Sidebar abbreviations for the collapsed rail. First letter of each word
-// (split on whitespace and hyphens), filtering out filler words, capped at
-// 3 chars. Examples: Dashboard→D, Admin Console→AC, Pipeline Board→PB,
-// Refer & Earn→RE.
-function abbreviateLabel(label) {
-  if (!label) return '';
-  const parts = String(label).split(/[\s\-/&]+/).filter((w) => {
-    if (!w) return false;
-    return !/^(and|the|of|a|to|for|on|in|my)$/i.test(w);
-  });
-  return parts.map((w) => w[0].toUpperCase()).join('').slice(0, 3) || label[0].toUpperCase();
-}
-
 // Carta-style user dropdown — top-right of the global header.
 function UserDropdown({ user, onLogout }) {
   const [open, setOpen] = useState(false);
@@ -459,370 +426,6 @@ function UserDropdown({ user, onLogout }) {
   );
 }
 
-// ---------- Company Switcher -------------------------------------------------
-// Context is imported from ./contexts/ActiveCompanyContext and provided by
-// ProtectedLayout. CompanySwitcher fetches all the user's company memberships
-// from the membership-scoped /company/memberships endpoint (not the public
-// company directory), populates the context, and lets the user switch between
-// them. "Add a new company" is disabled until task #5 ships.
-
-function CompanySwitcher({ collapsed }) {
-  const { company, setCompany, companies, setCompanies } = _useActiveCompany();
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const ref = useRef(null);
-
-  // Fetch all companies the current user is a member of.
-  useEffect(() => {
-    api.listMyCompanies()
-      .then(list => {
-        const arr = Array.isArray(list) ? list : [];
-        setCompanies(arr);
-        // Set the primary company (is_primary_admin=true comes first from the API)
-        // as active if nothing is selected yet.
-        if (arr.length > 0 && !company) setCompany(arr[0]);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const displayName = loading ? '…' : (company?.company_name ?? 'My Company');
-  const abbr = (displayName === '…' ? '…' :
-    displayName.replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?');
-
-  const dropdownContent = (
-    <div className={
-      collapsed
-        ? 'absolute left-full top-0 ml-2 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden min-w-[200px]'
-        : 'absolute left-3 right-3 top-full mt-1 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden'
-    }>
-      {loading && <div className="px-3 py-2.5 text-xs text-gray-500">Loading…</div>}
-      {!loading && companies.length === 0 && (
-        <div className="px-3 py-2.5 text-xs text-gray-500">No company yet.</div>
-      )}
-      {!loading && companies.map((co) => {
-        const coAbbr = (co.company_name || '?').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
-        const isActive = company?.id === co.id;
-        return (
-          <button
-            key={co.uid ?? co.id}
-            type="button"
-            onClick={() => { setCompany(co); setOpen(false); }}
-            className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs text-left transition-colors ${
-              isActive
-                ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50 dark:bg-violet-900/30'
-                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-            }`}
-          >
-            <div className="w-5 h-5 rounded bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[9px] font-bold flex items-center justify-center flex-none">
-              {coAbbr}
-            </div>
-            <span className="truncate flex-1">{co.company_name}</span>
-            {isActive && <span className="flex-none">✓</span>}
-          </button>
-        );
-      })}
-      <div className={companies.length > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}>
-        <button
-          type="button"
-          disabled
-          title="Creating additional companies is coming soon"
-          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-400 dark:text-gray-600 cursor-not-allowed"
-        >
-          <Plus size={12} />
-          Add a new company
-        </button>
-      </div>
-    </div>
-  );
-
-  if (collapsed) {
-    return (
-      <div ref={ref} className="relative flex justify-center py-2 px-1 border-b border-gray-200 dark:border-gray-700 flex-none">
-        <button
-          type="button"
-          onClick={() => setOpen(v => !v)}
-          title={displayName}
-          className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-xs font-bold flex items-center justify-center hover:bg-violet-200 dark:hover:bg-violet-900/60 transition-colors"
-        >
-          {abbr}
-        </button>
-        {open && dropdownContent}
-      </div>
-    );
-  }
-
-  return (
-    <div ref={ref} className="relative px-3 py-2 border-b border-gray-200 dark:border-gray-700 flex-none">
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 transition-colors text-left"
-      >
-        <div className="w-6 h-6 rounded bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[10px] font-bold flex items-center justify-center flex-none">
-          {abbr}
-        </div>
-        <span className="flex-1 text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{displayName}</span>
-        <ChevronDown size={12} className={`flex-none text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && dropdownContent}
-    </div>
-  );
-}
-
-function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
-  const navLocation = useLocation();
-  const [query, setQuery] = useState('');
-  // Persisted open-state per group key. We seed once from
-  // localStorage merged with `defaultOpenGroups()` so first-time users
-  // land with Home + the first content group expanded.
-  const [openKeys, setOpenKeys] = useState(() => {
-    const stored = safeReadJSON('sidebar_open_groups');
-    if (stored && typeof stored === 'object') {
-      return new Set(Object.keys(stored).filter((k) => stored[k]));
-    }
-    // Seed defaults from the first role we render — refined per render below.
-    return new Set();
-  });
-  const [seeded, setSeeded] = useState(false);
-
-  // Lazy-seed defaults once we know the role's group keys (groups change
-  // when the admin toggles "View as"). We only seed when localStorage
-  // had nothing for us (first visit).
-  useEffect(() => {
-    if (seeded) return;
-    const stored = safeReadJSON('sidebar_open_groups');
-    if (stored && typeof stored === 'object' && Object.keys(stored).length > 0) {
-      setSeeded(true);
-      return;
-    }
-    const defaults = role ? defaultOpenGroups(role) : new Set(groups.slice(0, 2).map((g) => g.key));
-    setOpenKeys(defaults);
-    setSeeded(true);
-  }, [groups, role, seeded]);
-
-  const persistOpen = useCallback((next) => {
-    const obj = {};
-    next.forEach((k) => { obj[k] = true; });
-    try { localStorage.setItem('sidebar_open_groups', JSON.stringify(obj)); } catch { /* ignore */ }
-  }, []);
-
-  const toggleGroup = useCallback((key) => {
-    setOpenKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      persistOpen(next);
-      return next;
-    });
-  }, [persistOpen]);
-
-  const q = query.trim().toLowerCase();
-  // When the user types, force-expand any group with a match so the
-  // matching items are visible without manual clicking.
-  const effectiveOpen = q
-    ? new Set(groups.filter((g) => g.items.some((it) => it.label.toLowerCase().includes(q))).map((g) => g.key))
-    : openKeys;
-
-  return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <CompanySwitcher collapsed={collapsed} />
-      <div className="px-3 pb-2 pt-2 flex-none">
-        {!collapsed ? (
-          <div className="flex items-center gap-1.5">
-            <div className="relative flex-1">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search…"
-                aria-label="Search sidebar"
-                className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:placeholder:text-gray-500"
-              />
-            </div>
-            {onCollapse && (
-              <button
-                type="button"
-                onClick={onCollapse}
-                className="hidden lg:inline-flex flex-none items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                aria-label="Collapse sidebar"
-                title="Collapse sidebar"
-              >
-                <ChevronLeft size={15} />
-              </button>
-            )}
-            {onClose && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="lg:hidden flex-none inline-flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                aria-label="Close menu"
-                title="Close menu"
-              >
-                <X size={15} />
-              </button>
-            )}
-          </div>
-        ) : (
-          onCollapse && (
-            <div className="flex justify-center pt-0.5">
-              <button
-                type="button"
-                onClick={onCollapse}
-                className="hidden lg:inline-flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                aria-label="Expand sidebar"
-                title="Expand sidebar"
-              >
-                <ChevronRight size={15} />
-              </button>
-            </div>
-          )
-        )}
-      </div>
-      <nav className="flex-1 overflow-y-auto min-h-0 py-2" aria-label="Primary navigation" data-tour="sidebar-nav">
-      {groups.map((group) => {
-        const visibleItems = q
-          ? group.items.filter((it) => it.label.toLowerCase().includes(q))
-          : group.items;
-        if (q && visibleItems.length === 0) return null;
-        const isHome = group.key === 'home';
-        // Home group renders headerless (no "Home" label / collapse chevron) —
-        // its items (Studio + Products) always show flat at the top of the nav.
-        const isOpen = isHome ? true : (collapsed ? true : effectiveOpen.has(group.key));
-        return (
-          <div key={group.key} className="mb-0.5">
-            {isHome ? null : collapsed ? (
-              <div
-                className="px-2 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-wider text-gray-400 text-center"
-                title={group.label}
-              >
-                {group.label}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => toggleGroup(group.key)}
-                aria-expanded={isOpen}
-                className="w-full flex items-center gap-1 px-5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-                <span>{group.label}</span>
-              </button>
-            )}
-            {isOpen && visibleItems.map((item) => {
-              const { to, icon: Icon, label, highlight, requiredTier, requiredInvestorTier, match } = item;
-              const abbr = abbreviateLabel(label);
-              // Task #12 — items may declare `match` (path prefixes) so a
-              // consolidated destination (e.g. Execution) highlights across
-              // all of its sub-views instead of only its exact `to` path.
-              const manualActive = Array.isArray(match)
-                ? match.some((p) => navLocation.pathname === p || navLocation.pathname.startsWith(`${p}/`))
-                : null;
-              // Task #6 / #7 — items the user can't afford render as a
-              // "locked" button that opens PaywallModal. Bypass roles + users
-              // on the right tier render as normal NavLinks. Investor tier
-              // gates take precedence when present (investor-only nav).
-              const founderLocked = !!requiredTier && !hasTier(user, requiredTier);
-              const investorLocked = !!requiredInvestorTier && !hasInvestorTier(user, requiredInvestorTier);
-              const locked = founderLocked || investorLocked;
-              if (locked) {
-                const lockTier = investorLocked ? requiredInvestorTier : requiredTier;
-                const lockLabel = lockTier === 'institutional' ? 'Institutional'
-                  : lockTier === 'professional' ? 'Professional'
-                  : lockTier === 'studio' ? 'Studio'
-                  : 'Growth';
-                return (
-                  <button
-                    key={to}
-                    type="button"
-                    onClick={() => openPaywall(lockTier)}
-                    className={collapsed
-                      ? 'w-full flex flex-col items-center gap-0.5 px-1 py-2 text-[10px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors'
-                      : 'w-full flex items-center gap-3 px-5 py-2 text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors'}
-                    title={`${label} — requires ${lockLabel} plan`}
-                  >
-                    {Icon && <Icon size={collapsed ? 18 : 16} />}
-                    {collapsed ? (
-                      <span className="truncate w-full text-center">{abbr}</span>
-                    ) : (
-                      <>
-                        <span className="truncate flex-1 text-left">{highlightMatch(label, q)}</span>
-                        <LockIcon size={11} className="flex-shrink-0" />
-                      </>
-                    )}
-                  </button>
-                );
-              }
-              return (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={manualActive === null}
-                  onClick={onNavigate}
-                  title={collapsed ? label : undefined}
-                  className={({ isActive }) => {
-                    const active = manualActive === null ? isActive : manualActive;
-                    return collapsed
-                      ? `flex flex-col items-center gap-0.5 px-1 py-2 text-[10px] transition-colors ${
-                          active
-                            ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
-                            : highlight
-                              ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
-                              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`
-                      : `flex items-center gap-3 px-5 py-2 text-sm transition-colors ${
-                          active
-                            ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
-                            : highlight
-                              ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
-                              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`;
-                  }}
-                >
-                  {Icon && <Icon size={collapsed ? 18 : 16} />}
-                  {collapsed ? (
-                    <span className="truncate w-full text-center">{abbr}</span>
-                  ) : (
-                    <span className="truncate">{highlightMatch(label, q)}</span>
-                  )}
-                </NavLink>
-              );
-            })}
-          </div>
-        );
-      })}
-    </nav>
-    <div className="flex-none border-t border-gray-200 dark:border-gray-700">
-      <NavLink
-        to="/company-settings"
-        onClick={onNavigate}
-        className={({ isActive }) =>
-          collapsed
-            ? `flex flex-col items-center gap-0.5 px-1 py-2.5 text-[10px] w-full transition-colors ${isActive ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
-            : `flex items-center gap-3 px-5 py-2.5 text-sm w-full transition-colors ${isActive ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
-        }
-        title={collapsed ? 'Company Settings' : undefined}
-      >
-        <Building2 size={collapsed ? 18 : 16} />
-        {collapsed ? (
-          <span className="truncate w-full text-center">Co.</span>
-        ) : (
-          <span className="truncate">Company Settings</span>
-        )}
-      </NavLink>
-    </div>
-    </div>
-  );
-}
 
 function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser }) {
   const [open, setOpen] = useState(false);
@@ -1957,51 +1560,35 @@ function AppInner() {
       <Route path="/advisor/advisory/engagements" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
-      <Route path="/advisor/research" element={<Navigate to="/advisor/research/companies" replace />} />
-      {/* DECISIONS.md D8 — /market-intel is the one market surface. This route
-          was a mock shell over the same material (zero API calls) while
-          MarketIntelPage is ~3k lines wired to 30 endpoints; rather than build
-          a second implementation, the old URL redirects. */}
+      {/* DECISIONS.md D12 — the Research row is /market-intel and nothing else.
+          D8 redirected the market tab; D9 withdrew the funds tab; D12 withdrew
+          the remaining four (companies, AI research, news, documents) for the
+          same reason D9 gave, having corrected D9's own per-tab table.
+
+          D9 recorded news and ai as having real backends. They do not, in the
+          sense that matters: `news.ts` is the platform's article authoring
+          pipeline (draft / submit / retract / cover), while the tab rendered a
+          third-party industry feed with sentiment and company tagging;
+          `assistant.ts` is a conversational chat surface, while the tab
+          rendered SWOTs, market maps, company reports and comparables. Both
+          were matched on the tab's NAME, not on its material. Companies needed
+          thirteen datasets and had one (per-project competitor analysis);
+          documents had `files.ts` — a single signed-download endpoint, not a
+          library.
+
+          `/advisor/research` now lands on the one research surface that is
+          real. The four withdrawn tabs are removed rather than redirected
+          there: /market-intel has no company, document or news data either,
+          so pointing "Companies" at it would swap a blank surface for a
+          misleading one. They return when a data source is licensed. */}
+      <Route path="/advisor/research" element={<Navigate to="/market-intel" replace />} />
       <Route path="/advisor/research/market" element={<Navigate to="/market-intel" replace />} />
-      <Route path="/advisor/research/companies" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
-      {/* DECISIONS.md D9 — the Funds research tab is withdrawn, not hidden. It
-          wanted a directory of external funds, managers, fundraises, unicorns,
-          exits and comparables; no backend serves any of it and no data
-          provider is configured, so the only honest options were a blank
-          surface or invented numbers. It returns when a source is licensed. */}
-      <Route path="/advisor/research/documents" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/ai" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
-      <Route path="/advisor/research/news" element={guard(['admin', 'advisor', 'investor', 'partner', 'founder'], <AdvisorResearchWorkspace />)} />
       <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
       <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
       <Route path="/partner/operations/capabilities" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
       <Route path="/partner/operations/portfolio" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
       <Route path="/partner/operations/engagements" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
       <Route path="/partner/operations/performance" element={guard(['admin', 'partner'], <PartnerOperationsWorkspace />)} />
-      {/* Growth section — market-matching / resource-discovery workspace shared by
-          the advisor and partner profiles. A single GrowthWorkspace derives its
-          tab and role prefix from the URL; bare paths redirect to the first tab
-          (Talent) so every workspace is reachable by direct URL and sidebar. */}
-      <Route path="/advisor/growth" element={<Navigate to="/advisor/growth/talent" replace />} />
-      <Route path="/advisor/growth/talent" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
-      <Route path="/advisor/growth/customers" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
-      <Route path="/advisor/growth/partnerships" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
-      <Route path="/advisor/growth/capital" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
-      <Route path="/advisor/growth/experts" element={guard(['admin', 'advisor'], <GrowthWorkspace />)} />
-      <Route path="/partner/growth" element={<Navigate to="/partner/growth/talent" replace />} />
-      <Route path="/partner/growth/talent" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      <Route path="/partner/growth/customers" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      <Route path="/partner/growth/partnerships" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      <Route path="/partner/growth/capital" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      <Route path="/partner/growth/experts" element={guard(['admin', 'partner'], <GrowthWorkspace />)} />
-      {/* Task #7 — Founder Growth reuses the shared GrowthWorkspace under a
-          /founder/growth/* prefix (mirrors the advisor/partner growth routes). */}
-      <Route path="/founder/growth" element={<Navigate to="/founder/growth/talent" replace />} />
-      <Route path="/founder/growth/talent" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
-      <Route path="/founder/growth/customers" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
-      <Route path="/founder/growth/partnerships" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
-      <Route path="/founder/growth/capital" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
-      <Route path="/founder/growth/experts" element={guard(['admin', 'founder'], <GrowthWorkspace />)} />
       {/* Task #5 — investor lifecycle sections now live. Pipeline stages render
           the tabbed PipelineWorkspace; portfolio/funds analytics render as tabs
           within their existing workspaces. Investor-scoped (admin can view). */}

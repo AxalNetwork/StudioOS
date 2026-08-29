@@ -518,36 +518,48 @@ async function advisorBookingEvents(env: Env, userId: number, isAdmin: boolean,
     // Visibility: requester, advisor (via users.advisor_id), or admin.
     const me = (await sql`SELECT advisor_id FROM users WHERE id = ${userId}` as any[])[0];
     const myAdvisorId = me?.advisor_id || null;
+    // A booking carries no time of its own — the slot does. `advisor_bookings`
+    // has (slot_id, advisor_id, founder_user_id, topic, notes, status); the
+    // scheduled_start / scheduled_end / requester_user_id / meeting_uri /
+    // questions / project_id this function used to read exist on no table.
+    // The first SELECT threw, isMissingColumnError caught it, and office-hour
+    // bookings have therefore never appeared on anyone's calendar.
     const rows = await sql`
-      SELECT b.* FROM advisor_bookings b
-      WHERE b.scheduled_start >= ${fromIso} AND b.scheduled_start <= ${toIso}
-        AND b.status IN ('requested', 'confirmed', 'completed')
+      SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+        FROM advisor_bookings b
+        JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+       WHERE s.starts_at >= ${fromIso} AND s.starts_at <= ${toIso}
+         AND b.status IN ('pending', 'confirmed', 'completed')
     ` as any[];
     const out: CalendarEvent[] = [];
     for (const b of rows) {
-      const isRequester = b.requester_user_id === userId;
+      // 'requested' was in the status list too; bookings are written 'pending'
+      // (routes/advisors.ts), so that filter matched nothing either.
+      const isRequester = b.founder_user_id === userId;
       const isAdvisor = !!(myAdvisorId && b.advisor_id === myAdvisorId);
       if (!(isAdmin || isRequester || isAdvisor)) continue;
-      const advisor = (await sql`SELECT email, name FROM advisors WHERE id = ${b.advisor_id}` as any[])[0];
-      const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.requester_user_id}` as any[])[0];
+      const advisor = (await sql`SELECT email, display_name AS name FROM advisors WHERE id = ${b.advisor_id}` as any[])[0];
+      const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.founder_user_id}` as any[])[0];
       out.push({
         id: `advisor_booking:${b.id}`,
         kind: 'advisor_booking',
         source_id: b.id,
         source_uid: b.uid,
         title: `Advisor session — ${b.topic || ''}`.trim(),
-        start_at: b.scheduled_start,
-        end_at: b.scheduled_end,
+        start_at: b.starts_at,
+        end_at: b.ends_at,
         status: b.status,
         location_kind: 'video',
-        location_uri: b.meeting_uri || null,
+        location_uri: b.meeting_url || null,
         organizer_email: advisor?.email || null,
         attendees: [
           { email: advisor?.email || null, name: advisor?.name || null, role: 'advisor' },
           { email: requester?.email || null, name: requester?.name || null, role: 'mentee' },
         ],
-        notes: b.questions || null,
-        project_id: b.project_id || null,
+        notes: b.notes || null,
+        // Nothing links an office-hour booking to a project, so this is null
+        // rather than a value invented to fill the field.
+        project_id: null,
       });
     }
     return out;
@@ -563,36 +575,41 @@ async function partnerOfficeHourEvents(env: Env, userId: number, isAdmin: boolea
   try {
     const me = (await sql`SELECT partner_id FROM users WHERE id = ${userId}` as any[])[0];
     const myPartnerId = me?.partner_id || null;
+    // Same shape, same defects as advisorBookingEvents above: the time lives
+    // on partner_office_hour_slots, the requester is founder_user_id, and
+    // bookings are written 'pending' (routes/partner_office_hours.ts).
     const rows = await sql`
-      SELECT b.* FROM partner_bookings b
-      WHERE b.scheduled_start >= ${fromIso} AND b.scheduled_start <= ${toIso}
-        AND b.status IN ('requested', 'confirmed', 'completed')
+      SELECT b.*, s.starts_at, s.ends_at, s.meeting_url
+        FROM partner_bookings b
+        JOIN partner_office_hour_slots s ON s.id = b.slot_id
+       WHERE s.starts_at >= ${fromIso} AND s.starts_at <= ${toIso}
+         AND b.status IN ('pending', 'confirmed', 'completed')
     ` as any[];
     const out: CalendarEvent[] = [];
     for (const b of rows) {
-      const isRequester = b.requester_user_id === userId;
+      const isRequester = b.founder_user_id === userId;
       const isPartnerSide = !!(myPartnerId && b.partner_id === myPartnerId);
       if (!(isAdmin || isRequester || isPartnerSide)) continue;
       const partner = (await sql`SELECT email, name FROM partners WHERE id = ${b.partner_id}` as any[])[0];
-      const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.requester_user_id}` as any[])[0];
+      const requester = (await sql`SELECT email, name FROM users WHERE id = ${b.founder_user_id}` as any[])[0];
       out.push({
         id: `partner_office_hour:${b.id}`,
         kind: 'partner_office_hour',
         source_id: b.id,
         source_uid: b.uid,
         title: `Partner office hours — ${b.topic || ''}`.trim(),
-        start_at: b.scheduled_start,
-        end_at: b.scheduled_end,
+        start_at: b.starts_at,
+        end_at: b.ends_at,
         status: b.status,
         location_kind: 'video',
-        location_uri: b.meeting_uri || null,
+        location_uri: b.meeting_url || null,
         organizer_email: partner?.email || null,
         attendees: [
           { email: partner?.email || null, name: partner?.name || null, role: 'partner' },
           { email: requester?.email || null, name: requester?.name || null, role: 'requester' },
         ],
-        notes: b.questions || null,
-        project_id: b.project_id || null,
+        notes: b.notes || null,
+        project_id: null,
       });
     }
     return out;

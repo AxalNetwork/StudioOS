@@ -32,6 +32,24 @@ export { default as Card } from './Card';
 export { default as Pill, PILL_TONES } from './Pill';
 export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
 
+// The AI control rail — eight canvases, one component. Not navigation: see
+// DECISIONS.md T3. The gateway it reports on is services/aiRouter.ts and has
+// existed all along; the spend meter now has a live source (api.myAiSpend).
+// Mode persistence and a user-selectable model do not exist yet — AssistRail's
+// header says exactly which of its props are still props and why.
+export { default as AssistRail } from './AssistRail';
+// The one place that knows how the rail sits beside a page — see D15 for
+// which surfaces get it and why onboarding does not.
+export { default as AssistLayout } from './AssistLayout';
+export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
+export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from './eadwynConfig';
+
+// The left navigation, lifted out of App.jsx unchanged (census: lift, do not
+// rebuild — the live one already beats the canvas rail), and the company
+// switcher that rides above it — the single writer of active-company context.
+export { default as SidebarNav } from './SidebarNav';
+export { default as CompanySwitcher } from './CompanySwitcher';
+
 // Pre-existing, re-exported so `ui/` is the one import surface.
 export { default as EmptyState } from '../components/EmptyState';
 export { default as ErrorState } from '../components/ErrorState';

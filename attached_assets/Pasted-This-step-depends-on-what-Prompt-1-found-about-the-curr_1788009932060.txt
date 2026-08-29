@@ -1,0 +1,44 @@
+This step depends on what Prompt 1 found about the current apex DNS
+record — tell me its type/content/proxied status again if it's been a
+while, and I'll give you the exact record change. In general terms, once
+confirmed:
+
+1. If the apex record is proxied (orange-clouded) and its target is still
+   GitHub Pages: change its content to a placeholder that no longer routes
+   to Pages (Cloudflare's own documented pattern for a "Workers-only, no
+   real origin needed" hostname is an A record pointing at 192.0.2.1,
+   kept proxied). The existing 84-entry Worker route table in wrangler.toml
+   already covers every real path — this record's target only matters for
+   genuinely unmatched requests, which should now 404 rather than silently
+   fall through to Pages.
+   If it's currently unproxied instead, tell me before changing anything —
+   that's a different, larger change than the runbook assumed.
+
+   Use:
+     curl -s -X PATCH \
+       -H "Authorization: Bearer $CLOUDFLARE_DNS_API_TOKEN" \
+       -H "Content-Type: application/json" \
+       "https://api.cloudflare.com/client/v4/zones/<ZONE_ID>/dns_records/<RECORD_ID>" \
+       --data '{"type":"A","content":"192.0.2.1","proxied":true}'
+
+2. Spot-check the apex thoroughly WHILE GitHub Pages is still enabled as a
+   fallback — hit a sample of the 84 routed paths plus a few deliberately
+   unrouted ones (e.g. https://axal.vc/this-should-404), confirming the
+   routed ones still work correctly and unrouted ones now 404 cleanly
+   instead of silently serving Pages content.
+
+3. Only once that looks right, decommission GitHub Pages:
+     gh api -X DELETE repos/AxalNetwork/StudioOS/pages
+   Confirm it's gone:
+     gh api repos/AxalNetwork/StudioOS/pages
+   (should now 404)
+
+4. Re-run the same spot-check from step 2 one more time now that Pages is
+   actually off, specifically re-checking the nine prerendered routes that
+   used to rely on Pages as a silent fallback: /changelog, /demo, /pricing,
+   /pricing/investor, /privacy, /risk-disclosures, /roadmap, /status,
+   /terms. Report results.
+
+Do NOT re-enable a wildcard axal.vc/* Worker route as part of this — that
+was deliberately rolled back after a production 504 incident and is an
+optional future optimization, not part of this cutover.

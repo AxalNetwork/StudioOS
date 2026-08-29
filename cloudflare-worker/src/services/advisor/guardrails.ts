@@ -172,8 +172,9 @@ const TOOL_PERSONA_ALLOWLIST: Record<string, string[]> = {
   // admin role review, or any user without a mapped role). They are pinned
   // to the 3-question ROLE_DETECTOR bank by selectBank(), and the /answer
   // eligibility gate 409s anything outside their visible bank, so allowing
-  // writeAnswer here only unlocks the detector writes (users.organization/
-  // headline + user_role_review.suggested_role) — without it the answer
+  // writeAnswer here only unlocks the detector writes
+  // (user_profile_ext.organization/users.headline +
+  // user_role_review.suggested_role) — without it the answer
   // that ESCAPES the unknown state is itself rejected (persona_mismatch)
   // and onboarding deadlocks. Every persona bank in writeRouter re-checks
   // the caller's role before writing, so this grants no bank access.

@@ -33,6 +33,7 @@ import { userMeetsTier } from '../src/middleware/requireTier.ts';
 import { canViewLpData } from '../src/auth.ts';
 import ic from '../src/routes/ic.ts';
 import lpReports from '../src/routes/lp_reports.ts';
+import { makeD1 as makeRealD1 } from './_d1_sqlite.mjs';
 import portfolioUpdates from '../src/routes/portfolio_updates.ts';
 import positions from '../src/routes/positions.ts';
 
@@ -307,39 +308,88 @@ test('ic PUT /:uid — admin can edit any decision (200)', async () => {
 // (D) LP Reports — canViewLpData + scoping
 // ---------------------------------------------------------------------------
 
-const LP_STUBS = {
-  noFunds: { match: (s: string) => s.includes('from vc_funds'), results: [] },
-  noLp: { match: (s: string) => s.includes('from limited_partners'), results: [] },
-};
+/**
+ * Section (D) runs against a REAL database rather than the SQL-text stub the
+ * rest of this file uses.
+ *
+ * The LP visibility rule moved into `lpMembershipScope`, and the stub's
+ * matchers keyed on the old text (`where user_id ... and fund_id`). Retuning
+ * them would have restored a green suite while testing nothing: a matcher
+ * cannot tell a correct ownership predicate from an incorrect one, and these
+ * particular tests exist to stop one LP reading another fund's quarterly
+ * report. So this section runs the route's real SQL against SQLite — which is
+ * what D1 is — and lets the returned rows decide.
+ *
+ * The other sections still use the text stub; converting them is unrelated to
+ * this change and would touch IC decisions, portfolio updates and positions.
+ */
+const LP_SCHEMA = `
+CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1);
+CREATE TABLE vc_funds (id INTEGER PRIMARY KEY, name TEXT, vintage_year INTEGER, status TEXT);
+CREATE TABLE limited_partners (
+  id INTEGER PRIMARY KEY, fund_id INTEGER, user_id INTEGER, email TEXT,
+  commitment_amount REAL DEFAULT 0, status TEXT DEFAULT 'active');
+CREATE TABLE lp_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, fund_id INTEGER, period TEXT,
+  status TEXT, nav REAL, called REAL, distributed REAL, dpi REAL, tvpi REAL, irr REAL,
+  narrative TEXT, created_by INTEGER, published_at TEXT,
+  created_at TEXT DEFAULT '2026-01-01', updated_at TEXT DEFAULT '2026-01-01');
+`;
+
+/**
+ * @param user      the caller, as requireAuth will resolve them
+ * @param opts.lpOf fund ids the caller holds a CLAIMED LP row in
+ * @param opts.legacyLpOf fund ids where the row carries their address but no user_id
+ * @param opts.reports  lp_reports rows to seed
+ */
+function lpEnv(user: any, opts: {
+  lpOf?: number[]; legacyLpOf?: number[]; reports?: any[]; email?: string;
+} = {}) {
+  const email = opts.email ?? `u${user.id}@lp.example`;
+  const { DB, db } = makeRealD1(LP_SCHEMA);
+  db.prepare('INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, ?, 1)')
+    .run(user.id, email, `U${user.id}`, user.role);
+  for (const fundId of [1, 2]) {
+    db.prepare("INSERT INTO vc_funds (id, name, vintage_year, status) VALUES (?, ?, 2024, 'active')")
+      .run(fundId, `Fund ${fundId}`);
+  }
+  let lpId = 1;
+  for (const fundId of opts.lpOf ?? []) {
+    db.prepare("INSERT INTO limited_partners (id, fund_id, user_id, email, status) VALUES (?, ?, ?, ?, 'active')")
+      .run(lpId++, fundId, user.id, email);
+  }
+  for (const fundId of opts.legacyLpOf ?? []) {
+    db.prepare("INSERT INTO limited_partners (id, fund_id, user_id, email, status) VALUES (?, ?, NULL, ?, 'active')")
+      .run(lpId++, fundId, email);
+  }
+  for (const r of opts.reports ?? []) {
+    db.prepare(`INSERT INTO lp_reports (uid, fund_id, period, status, nav, called, distributed, narrative, created_by, published_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(r.uid, r.fund_id, r.period ?? '2026-Q1', r.status, r.nav ?? null, r.called ?? null,
+           r.distributed ?? null, r.narrative ?? null, r.created_by ?? null, r.published_at ?? null);
+  }
+  return { JWT_SECRET, ENVIRONMENT: 'development', DB, __db: db };
+}
+
+const lpGet = (env: any, token: string, path: string) =>
+  lpReports.request(path, { headers: { Authorization: `Bearer ${token}` } }, env);
 
 test('lp-reports GET /: founder blocked by canViewLpData (403)', async () => {
   const token = await mintToken(1, 'founder');
-  const env = makeEnv(mkUser(1, 'founder'), [LP_STUBS.noFunds, LP_STUBS.noLp]);
-  const res = await lpReports.request('/', { headers: { Authorization: `Bearer ${token}` } }, env);
+  const res = await lpGet(lpEnv(mkUser(1, 'founder')), token, '/');
   assert.equal(res.status, 403);
 });
 
 test('lp-reports GET /: partner blocked by canViewLpData (403)', async () => {
   const token = await mintToken(1, 'partner');
-  const env = makeEnv(mkUser(1, 'partner'), [LP_STUBS.noFunds, LP_STUBS.noLp]);
-  const res = await lpReports.request('/', { headers: { Authorization: `Bearer ${token}` } }, env);
+  const res = await lpGet(lpEnv(mkUser(1, 'partner')), token, '/');
   assert.equal(res.status, 403);
 });
 
 test('lp-reports GET /: investor passes canViewLpData (200)', async () => {
   const token = await mintToken(1, 'investor');
-  const env = makeEnv(mkUser(1, 'investor'), [
-    LP_STUBS.noFunds,
-    {
-      match: (s: string, b: any[]) => s.includes('from limited_partners') && s.includes('where user_id'),
-      results: [], // investor has no LP records → no fund visibility
-    },
-    {
-      match: (s: string) => s.includes('from lp_reports') && s.includes('where'),
-      results: [],
-    },
-  ]);
-  const res = await lpReports.request('/', { headers: { Authorization: `Bearer ${token}` } }, env);
+  // No LP rows at all → no fund visibility, so an empty list rather than a 403.
+  const res = await lpGet(lpEnv(mkUser(1, 'investor')), token, '/');
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.deepEqual(body.items, []);
@@ -347,59 +397,81 @@ test('lp-reports GET /: investor passes canViewLpData (200)', async () => {
 
 test('lp-reports GET /: admin passes canViewLpData (200)', async () => {
   const token = await mintToken(1, 'admin');
-  const env = makeEnv(mkUser(1, 'admin'), [
-    LP_STUBS.noFunds,
-    {
-      match: (s: string) => s.includes('from lp_reports') && s.includes('where'),
-      results: [],
-    },
-  ]);
-  const res = await lpReports.request('/', { headers: { Authorization: `Bearer ${token}` } }, env);
+  const res = await lpGet(lpEnv(mkUser(1, 'admin')), token, '/');
   assert.equal(res.status, 200);
 });
 
 test('lp-reports GET /:uid — non-author non-LP investor cannot read unpublished report (404)', async () => {
   const token = await mintToken(2, 'investor');
-  const env = makeEnv(mkUser(2, 'investor'), [
-    LP_STUBS.noFunds,
-    {
-      match: (s: string, b: any[]) => s.includes('from lp_reports') && s.includes('where uid'),
-      results: [{ id: 1, uid: 'lp-1', fund_id: 1, period: '2026-Q1', status: 'draft', nav: null, called: null, distributed: null, dpi: null, tvpi: null, irr: null, narrative: null, created_by: 1, published_at: null, created_at: '2026-01-01', updated_at: '2026-01-01' }],
-    },
-    {
-      match: (s: string, b: any[]) => s.includes('from limited_partners') && s.includes('where user_id') && s.includes('and fund_id'),
-      results: [], // not an LP of this fund
-    },
-  ]);
-  const res = await lpReports.request('/lp-1', { headers: { Authorization: `Bearer ${token}` } }, env);
+  const env = lpEnv(mkUser(2, 'investor'), {
+    reports: [{ uid: 'lp-1', fund_id: 1, status: 'draft', created_by: 1 }],
+  });
+  const res = await lpGet(env, token, '/lp-1');
   assert.equal(res.status, 404);
+});
+
+test('lp-reports GET /:uid — an investor who is not an LP of the fund is refused (403)', async () => {
+  // Published, so it is not hidden as "not found" — but they hold no position
+  // in fund 1, and holding one in fund 2 does not carry over.
+  const token = await mintToken(2, 'investor');
+  const env = lpEnv(mkUser(2, 'investor'), {
+    lpOf: [2],
+    reports: [{ uid: 'lp-1', fund_id: 1, status: 'published', published_at: '2026-01-01', created_by: 1 }],
+  });
+  const res = await lpGet(env, token, '/lp-1');
+  assert.equal(res.status, 403);
 });
 
 test('lp-reports GET /:uid — LP investor can read published report (200)', async () => {
   const token = await mintToken(2, 'investor');
-  const env = makeEnv(mkUser(2, 'investor'), [
-    {
-      match: (s: string, b: any[]) => s.includes('from vc_funds') && s.includes('where id'),
-      results: [{ id: 1, name: 'Fund A', vintage_year: 2024, status: 'active' }],
-    },
-    {
-      match: (s: string, b: any[]) => s.includes('from lp_reports') && s.includes('where uid'),
-      results: [{ id: 1, uid: 'lp-1', fund_id: 1, period: '2026-Q1', status: 'published', nav: 100, called: 50, distributed: 0, dpi: null, tvpi: null, irr: null, narrative: 'Q1 update', created_by: 1, published_at: '2026-01-01', created_at: '2026-01-01', updated_at: '2026-01-01' }],
-    },
-    {
-      match: (s: string, b: any[]) => s.includes('from limited_partners') && s.includes('where user_id') && s.includes('and fund_id'),
-      results: [{ '1': 1 }], // IS an LP of this fund
-    },
-  ]);
-  const res = await lpReports.request('/lp-1', { headers: { Authorization: `Bearer ${token}` } }, env);
+  const env = lpEnv(mkUser(2, 'investor'), {
+    lpOf: [1],
+    reports: [{ uid: 'lp-1', fund_id: 1, status: 'published', nav: 100, called: 50,
+                distributed: 0, narrative: 'Q1 update', created_by: 1, published_at: '2026-01-01' }],
+  });
+  const res = await lpGet(env, token, '/lp-1');
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.status, 'published');
 });
 
+test('lp-reports: a legacy LP reads the report for the fund they hold', async () => {
+  // The whole point of task #175. This LP row has a real position and a NULL
+  // user_id; under `user_id = ?` this person was refused the quarterly report
+  // for a fund they are an LP of, which is the one document telling them what
+  // their position did.
+  const token = await mintToken(2, 'investor');
+  const env = lpEnv(mkUser(2, 'investor'), {
+    legacyLpOf: [1],
+    reports: [{ uid: 'lp-1', fund_id: 1, status: 'published', created_by: 1, published_at: '2026-01-01' }],
+  });
+  const res = await lpGet(env, token, '/lp-1');
+  assert.equal(res.status, 200);
+  // And the row is claimed on the way through, so the next read is an account
+  // link rather than another email match.
+  const row = env.__db.prepare('SELECT user_id FROM limited_partners WHERE fund_id = 1').get();
+  assert.equal(row.user_id, 2);
+});
+
+test('lp-reports: the list is scoped to the funds the caller is an LP of', async () => {
+  const token = await mintToken(2, 'investor');
+  const env = lpEnv(mkUser(2, 'investor'), {
+    lpOf: [1],
+    reports: [
+      { uid: 'lp-1', fund_id: 1, status: 'published', created_by: 1, published_at: '2026-01-01' },
+      { uid: 'lp-2', fund_id: 2, status: 'published', created_by: 1, published_at: '2026-01-01' },
+    ],
+  });
+  const res = await lpGet(env, token, '/');
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.deepEqual(body.items.map((r: any) => r.uid), ['lp-1'],
+    "fund 2's report must not appear for someone who holds no position in it");
+});
+
 test('lp-reports POST /: partner is blocked by requireGp (403)', async () => {
   const token = await mintToken(1, 'partner');
-  const env = makeEnv(mkUser(1, 'partner'), [LP_STUBS.noFunds, LP_STUBS.noLp]);
+  const env = lpEnv(mkUser(1, 'partner'));
   const res = await lpReports.request('/', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fund_id: 1, period: '2026-Q2' }) }, env);
   assert.equal(res.status, 403);
 });

@@ -4,6 +4,7 @@
  * returns) are dollars. New v2 columns (fund_size_cents) are integer cents.
  */
 import type { Env } from '../types';
+import { lpSelfScope, type Actor } from '../services/tenancyScope';
 
 export interface VcFund {
   id: number;
@@ -149,15 +150,31 @@ export const LPs = {
         WHERE lp.fund_id = ? ORDER BY lp.commitment_amount DESC`
     ).bind(fundId).all();
   },
-  async listByUser(env: Env, userId: number) {
+  /**
+   * The caller's own LP rows.
+   *
+   * Takes the ACTOR, not a bare user id, and scopes through `lpSelfScope`
+   * — a self-view, so an admin sees their own rows and no more. The bare-id
+   * signature was the reason this helper disagreed with the capital-call query
+   * sitting four lines below its only caller (funds.ts's /lp-portal): a bare
+   * user id can only express the strict
+   * `user_id = ?` predicate, so a legacy LP whose row was never backfilled got
+   * an empty position list under a populated list of their own capital calls.
+   *
+   * Callers pair this with `claimLpRowsByEmail` so an email match becomes a
+   * permanent account link rather than a standing grant — see the note on
+   * lpMembershipScope.
+   */
+  async listByUser(env: Env, actor: Actor) {
+    const scope = lpSelfScope(actor);
     return env.DB.prepare(
       `SELECT lp.*, f.name AS fund_name, f.status AS fund_status, f.carried_interest, f.management_fee,
               f.slug AS fund_slug, f.vintage_year AS fund_vintage,
               f.gp_name, f.gp_title, f.gp_email, f.gp_entity,
               f.fund_admin, f.auditor, f.legal_counsel, f.custodian, f.valuation_policy
        FROM limited_partners lp JOIN vc_funds f ON f.id = lp.fund_id
-       WHERE lp.user_id = ? ORDER BY lp.created_at DESC`
-    ).bind(userId).all();
+       WHERE ${scope.sql} ORDER BY lp.created_at DESC`
+    ).bind(...scope.binds).all();
   },
   async create(env: Env, data: Partial<LimitedPartner>) {
     const r = await env.DB.prepare(

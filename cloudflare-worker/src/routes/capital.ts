@@ -11,6 +11,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { lpMembershipScope } from '../services/tenancyScope';
+import { claimLpRowsByEmail } from '../services/lpClaim';
 import { requireAuth, canViewLpData } from '../auth';
 
 const capital = new Hono<{ Bindings: Env }>();
@@ -44,26 +46,25 @@ capital.get('/investors', async (c) => {
   const __u = await requireAuth(c);
   if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const sql = getSQL(c.env);
-  // Admins see every LP across all funds. A non-admin investor is scoped to
-  // their own LP record(s) (limited_partners.user_id) — without this any
-  // investor could read every LP's commitments / invested amounts across all
-  // funds (IDOR / cross-tenant leak). Mirrors the GET /calls scoping.
-  const rows = __u.role === 'admin'
-    ? await sql`
-        SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
-        FROM limited_partners lp
-        JOIN vc_funds f ON f.id = lp.fund_id
-        LEFT JOIN users u ON u.id = lp.user_id
-        ORDER BY lp.created_at DESC
-      `
-    : await sql`
-        SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
-        FROM limited_partners lp
-        JOIN vc_funds f ON f.id = lp.fund_id
-        LEFT JOIN users u ON u.id = lp.user_id
-        WHERE lp.user_id = ${__u.id}
-        ORDER BY lp.created_at DESC
-      `;
+  // Admins see every LP across all funds; everyone else sees only their own
+  // rows. Both cases come from `lpMembershipScope`, which returns ALL_ROWS for
+  // an unscoped role — so the admin and non-admin branches are one query, and
+  // the ownership rule cannot drift between them.
+  //
+  // The scope matches on verified account email as well as user_id, so a
+  // legacy LP whose user_id was never backfilled reaches their own record.
+  // Claiming that row converts the email match into a permanent account link.
+  await claimLpRowsByEmail(c.env, Number(__u.id), (__u as any).email);
+  const scope = lpMembershipScope(__u as any);
+  const rows = await sql.unsafe(
+    `SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
+       FROM limited_partners lp
+       JOIN vc_funds f ON f.id = lp.fund_id
+       LEFT JOIN users u ON u.id = lp.user_id
+      WHERE ${scope.sql}
+      ORDER BY lp.created_at DESC`,
+    [...scope.binds],
+  );
   await sql.end();
   return c.json(rows.map(lpDto));
 });
@@ -83,7 +84,7 @@ capital.post('/investors', async (c) => {
   if (funds.length === 0) {
     funds = await sql`
       INSERT INTO vc_funds (name, status, created_at, updated_at)
-      VALUES (${fundName}, 'active', NOW(), NOW())
+      VALUES (${fundName}, 'active', datetime('now'), datetime('now'))
       RETURNING id, name
     `;
   }
@@ -100,14 +101,14 @@ capital.post('/investors', async (c) => {
 
   const [lp] = await sql`
     INSERT INTO limited_partners (fund_id, name, email, commitment_amount, invested_amount, status, created_at, updated_at)
-    VALUES (${fund.id}, ${data.name}, ${data.email}, ${data.committed_capital || 0}, 0, 'active', NOW(), NOW())
+    VALUES (${fund.id}, ${data.name}, ${data.email}, ${data.committed_capital || 0}, 0, 'active', datetime('now'), datetime('now'))
     RETURNING *
   `;
   await sql`
     UPDATE vc_funds
     SET lp_count = lp_count + 1,
         total_commitment = total_commitment + ${data.committed_capital || 0},
-        updated_at = NOW()
+        updated_at = datetime('now')
     WHERE id = ${fund.id}
   `;
   await sql.end();
@@ -120,25 +121,21 @@ capital.get('/investors/:id', async (c) => {
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   // IDOR guard: a non-admin investor may only read an LP record (and its
-  // capital calls) that belongs to them (limited_partners.user_id). Scope the
-  // LP lookup itself so a non-owner gets 404 and the capital_calls query below
-  // never runs — without this any investor could read every LP's record and
-  // capital calls by guessing ids.
-  const lps = __u.role === 'admin'
-    ? await sql`
-        SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
-        FROM limited_partners lp
-        JOIN vc_funds f ON f.id = lp.fund_id
-        LEFT JOIN users u ON u.id = lp.user_id
-        WHERE lp.id = ${id}
-      `
-    : await sql`
-        SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
-        FROM limited_partners lp
-        JOIN vc_funds f ON f.id = lp.fund_id
-        LEFT JOIN users u ON u.id = lp.user_id
-        WHERE lp.id = ${id} AND lp.user_id = ${__u.id}
-      `;
+  // capital calls) that belongs to them. The scope is ANDed onto the id
+  // lookup, so a non-owner gets 404 and the capital_calls query below never
+  // runs — without this any investor could read every LP's record and capital
+  // calls by guessing ids. Admin gets ALL_ROWS from the same call, so the two
+  // branches are one query and cannot drift.
+  await claimLpRowsByEmail(c.env, Number(__u.id), (__u as any).email);
+  const scope = lpMembershipScope(__u as any);
+  const lps = await sql.unsafe(
+    `SELECT lp.*, f.name AS fund_name, u.name AS user_name, u.email AS user_email
+       FROM limited_partners lp
+       JOIN vc_funds f ON f.id = lp.fund_id
+       LEFT JOIN users u ON u.id = lp.user_id
+      WHERE lp.id = ? AND ${scope.sql}`,
+    [id, ...scope.binds],
+  );
   if (lps.length === 0) { await sql.end(); return c.json({ error: 'Investor not found' }, 404); }
   const calls = await sql`SELECT * FROM capital_calls WHERE limited_partner_id = ${id}`;
   await sql.end();
@@ -210,27 +207,24 @@ capital.get('/calls', async (c) => {
   if (!canViewLpData(__u)) return c.json({ error: "Forbidden: investor access required" }, 403);
   const status = c.req.query('status');
   const sql = getSQL(c.env);
-  // Admins see every capital call. A non-admin investor is scoped to calls tied
-  // to their own LP record(s) (limited_partners.user_id) — without this any
-  // investor could read every LP's capital calls across all funds (IDOR).
-  let rows;
-  if (__u.role === 'admin') {
-    rows = status
-      ? await sql`SELECT * FROM capital_calls WHERE status = ${status} ORDER BY created_at DESC`
-      : await sql`SELECT * FROM capital_calls ORDER BY created_at DESC`;
-  } else {
-    rows = status
-      ? await sql`
-          SELECT cc.* FROM capital_calls cc
-          JOIN limited_partners lp ON lp.id = cc.limited_partner_id
-          WHERE lp.user_id = ${__u.id} AND cc.status = ${status}
-          ORDER BY cc.created_at DESC`
-      : await sql`
-          SELECT cc.* FROM capital_calls cc
-          JOIN limited_partners lp ON lp.id = cc.limited_partner_id
-          WHERE lp.user_id = ${__u.id}
-          ORDER BY cc.created_at DESC`;
-  }
+  // Admins see every capital call; everyone else sees only calls tied to an LP
+  // row they own. Four query variants (admin/non-admin × status/no-status)
+  // collapse to one: the scope supplies ALL_ROWS for an unscoped role, and the
+  // optional status filter is a separate clause. Fewer variants is the point —
+  // the old shape had the ownership predicate written twice, so a fix to one
+  // could miss the other.
+  await claimLpRowsByEmail(c.env, Number(__u.id), (__u as any).email);
+  const scope = lpMembershipScope(__u as any);
+  const where: string[] = [scope.sql];
+  const binds: Array<string | number> = [...scope.binds];
+  if (status) { where.push('cc.status = ?'); binds.push(status); }
+  const rows = await sql.unsafe(
+    `SELECT cc.* FROM capital_calls cc
+       JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY cc.created_at DESC`,
+    binds,
+  );
   await sql.end();
   return c.json(rows.map(callDto));
 });
@@ -247,11 +241,15 @@ capital.post('/calls/:id/pay', async (c) => {
   // to one of their own LP records. Respond 404 (not 403) so a non-owner cannot
   // probe which call ids exist.
   if (__u.role !== 'admin') {
-    const owned = await sql`
-      SELECT 1 FROM limited_partners
-      WHERE id = ${call.limited_partner_id} AND user_id = ${__u.id}
-      LIMIT 1
-    `;
+    // Same membership predicate as the reads above. Paying a call is the one
+    // LP action with money attached, so a legacy LP being told their own call
+    // does not exist is the sharpest form of the split this consolidates.
+    await claimLpRowsByEmail(c.env, Number(__u.id), (__u as any).email);
+    const scope = lpMembershipScope(__u as any);
+    const owned = await sql.unsafe(
+      `SELECT 1 FROM limited_partners lp WHERE lp.id = ? AND ${scope.sql} LIMIT 1`,
+      [call.limited_partner_id, ...scope.binds],
+    );
     if (owned.length === 0) { await sql.end(); return c.json({ error: 'Capital call not found' }, 404); }
   }
   if (call.status === 'paid') { await sql.end(); return c.json({ status: 'paid', call: callDto(call) }); }
@@ -262,12 +260,12 @@ capital.post('/calls/:id/pay', async (c) => {
   if (lpId) {
     await sql`
       UPDATE limited_partners
-      SET invested_amount = invested_amount + ${call.amount}, updated_at = NOW()
+      SET invested_amount = invested_amount + ${call.amount}, updated_at = datetime('now')
       WHERE id = ${lpId}
     `;
     await sql`
       UPDATE vc_funds
-      SET deployed_capital = deployed_capital + ${call.amount}, updated_at = NOW()
+      SET deployed_capital = deployed_capital + ${call.amount}, updated_at = datetime('now')
       WHERE id = (SELECT fund_id FROM limited_partners WHERE id = ${lpId})
     `;
   }

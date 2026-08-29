@@ -257,34 +257,50 @@ async function execTool(env: Env, user: User, name: string, input: Record<string
     }
     case 'recentActivity': {
       const limit = Math.max(1, Math.min(25, Number(input.limit) || 10));
+      // `entity_type` / `entity_id` — the columns migration 036 added. The
+      // `target_*` names matched nothing, and this `.all()` is unguarded, so
+      // the tool threw rather than returning an empty list. Same wrong pair
+      // the write at the bottom of this file used before it was corrected.
       const rows = await env.DB.prepare(
-        "SELECT action, target_type, target_id, created_at FROM activity_logs WHERE user_id = ? ORDER BY id DESC LIMIT ?"
-      ).bind(user.id, limit).all<{ action: string; target_type: string | null; target_id: string | null; created_at: string }>();
+        "SELECT action, entity_type, entity_id, created_at FROM activity_logs WHERE user_id = ? ORDER BY id DESC LIMIT ?"
+      ).bind(user.id, limit).all<{ action: string; entity_type: string | null; entity_id: string | null; created_at: string }>();
       return { items: rows.results || [] };
     }
     case 'pendingContracts': {
-      // documents.signer_email matches the user; status in draft/generated/sent.
+      // `documents` has no per-signer email at all — only `signed_by`, which is
+      // written when a doc is already signed. `signer_email` is an
+      // esign_audit_events column; the canonical recipient link is
+      // `esign_recipients.recipient_email` (routes/trust.ts made the same
+      // substitution for the same reason). The old query threw on every call,
+      // so this tool answered "nothing pending" for everyone.
+      // The tables are created lazily by routes/esign.ts, hence the catch.
       const rows = await env.DB.prepare(
-        "SELECT id, doc_type, status, created_at FROM documents WHERE LOWER(COALESCE(signer_email,'')) = LOWER(?) AND status IN ('draft','generated','sent') ORDER BY id DESC LIMIT 20"
+        "SELECT e.id, e.document_type AS doc_type, r.status, e.created_at FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id WHERE LOWER(r.recipient_email) = LOWER(?) AND r.status = 'pending' ORDER BY e.id DESC LIMIT 20"
       ).bind(user.email).all<{ id: number; doc_type: string; status: string; created_at: string }>().catch(() => ({ results: [] as Array<{ id: number; doc_type: string; status: string; created_at: string }> }));
       return { items: rows.results || [] };
     }
     case 'upcomingMeetings': {
       // Best-effort; calendar_events table is created by routes/calendar.ts.
+      // `calendar_events` models a location as a kind plus a URI; there is no
+      // bare `location` column, so this select threw and the catch below turned
+      // every answer into "no upcoming meetings".
       const rows = await env.DB.prepare(
-        "SELECT title, start_at, end_at, location FROM calendar_events WHERE user_id = ? AND start_at >= datetime('now') ORDER BY start_at ASC LIMIT 5"
-      ).bind(user.id).all<{ title: string; start_at: string; end_at: string; location: string | null }>().catch(() => ({ results: [] as Array<{ title: string; start_at: string; end_at: string; location: string | null }> }));
+        "SELECT title, start_at, end_at, location_kind, location_uri FROM calendar_events WHERE user_id = ? AND start_at >= datetime('now') ORDER BY start_at ASC LIMIT 5"
+      ).bind(user.id).all<{ title: string; start_at: string; end_at: string; location_kind: string | null; location_uri: string | null }>().catch(() => ({ results: [] as Array<{ title: string; start_at: string; end_at: string; location_kind: string | null; location_uri: string | null }> }));
       return { items: rows.results || [] };
     }
     case 'scoringSummary': {
+      // `score_snapshots`, not `scoring_runs`. Nothing has ever created a
+      // table by the latter name, and both queries below end in `.catch(…)`,
+      // so this tool answered "no scores" for every user rather than erroring.
       if (user.role === 'founder' && user.founder_id) {
         const row = await env.DB.prepare(
-          "SELECT p.id, p.name, s.total_score, s.created_at FROM projects p LEFT JOIN scoring_runs s ON s.project_id = p.id WHERE p.founder_id = ? ORDER BY s.id DESC LIMIT 1"
+          "SELECT p.id, p.name, s.total_score, s.created_at FROM projects p LEFT JOIN score_snapshots s ON s.project_id = p.id WHERE p.founder_id = ? ORDER BY s.id DESC LIMIT 1"
         ).bind(user.founder_id).first<{ id: number; name: string; total_score: number | null; created_at: string | null }>().catch(() => null);
         return { kind: 'founder', latest: row };
       }
       const rows = await env.DB.prepare(
-        "SELECT p.name, s.total_score, s.created_at FROM scoring_runs s JOIN projects p ON p.id = s.project_id ORDER BY s.total_score DESC, s.id DESC LIMIT 5"
+        "SELECT p.name, s.total_score, s.created_at FROM score_snapshots s JOIN projects p ON p.id = s.project_id ORDER BY s.total_score DESC, s.id DESC LIMIT 5"
       ).all<{ name: string; total_score: number; created_at: string }>().catch(() => ({ results: [] as Array<{ name: string; total_score: number; created_at: string }> }));
       return { kind: 'top_deals', items: rows.results || [] };
     }
@@ -716,10 +732,14 @@ assistant.post('/message', async (c) => {
         send('error', { message: (e as Error).message || 'assistant failed' });
       } finally {
         // Hashed-actor activity log (T22.1) — never log plaintext email.
+        // `entity_type` / `entity_id`, not `target_*`: those are the columns
+        // migration 036 added and the only ones the table has. With the old
+        // names the whole INSERT threw "no such column" into the catch below,
+        // so no assistant message has ever been logged.
         try {
           const actor = await hashEmail(user.email);
           await c.env.DB.prepare(
-            "INSERT INTO activity_logs (user_id, actor, action, target_type, target_id, details, created_at) VALUES (?, ?, 'assistant_message', 'assistant_conversation', ?, ?, datetime('now'))"
+            "INSERT INTO activity_logs (user_id, actor, action, entity_type, entity_id, details, created_at) VALUES (?, ?, 'assistant_message', 'assistant_conversation', ?, ?, datetime('now'))"
           ).bind(user.id, actor, String(conv!.id), JSON.stringify({ model: usedModel, in: totalIn, out: totalOut, cost_micros: totalCost })).run();
         } catch {}
         close();

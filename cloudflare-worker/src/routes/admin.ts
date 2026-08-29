@@ -181,7 +181,9 @@ admin.get('/users/:user_id/profile', async (c) => {
   let integrations: any[] = [];
   try {
     const ires: any = await c.env.DB.prepare(
-      `SELECT uid, provider_name, display_name, status, last_synced_at
+      // `provider_key` (migration 016). `provider_name` matched nothing, so
+      // the catch below left this list empty on every admin profile.
+      `SELECT uid, provider_key, display_name, status, last_synced_at
          FROM integrations WHERE user_id = ? ORDER BY datetime(created_at) DESC`
     ).bind(userId).all();
     integrations = ires?.results || [];
@@ -368,6 +370,10 @@ export async function ensureAdminAuditLogTable(env: Env): Promise<void> {
       ['viewed_user_id', `ALTER TABLE admin_audit_log ADD COLUMN viewed_user_id INTEGER`],
       ['conversation_id', `ALTER TABLE admin_audit_log ADD COLUMN conversation_id INTEGER`],
       ['viewed_at', `ALTER TABLE admin_audit_log ADD COLUMN viewed_at TEXT`],
+      // Migration 178. Seven admin routers probe for this column with
+      // auditHasActor() and write a hashed admin email when it is present;
+      // until 178 it existed nowhere, so that branch never ran.
+      ['actor', `ALTER TABLE admin_audit_log ADD COLUMN actor TEXT`],
     ];
     for (const [name, sql] of adds) {
       if (!cols.has(name)) { try { await env.DB.exec(sql); } catch {} }

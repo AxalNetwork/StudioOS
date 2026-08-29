@@ -17,6 +17,8 @@ import { enqueueJob } from '../services/queue';
 import { Listings, Matches, LiquidityEvents } from '../models/liquidity';
 import { computeNetProceeds, rofrStatus } from '../services/secondaryProceeds';
 import { logActivity } from './partnernet';
+import { lpSelfScope } from '../services/tenancyScope';
+import { claimLpRowsByEmail } from '../services/lpClaim';
 
 const liquidity = new Hono<{ Bindings: Env }>();
 
@@ -56,10 +58,14 @@ liquidity.post('/list', async (c) => {
     allowed = !!owns;
   } else {
     // Any other authenticated user: require an active LP standing somewhere.
+    // lpSelfScope rather than lpMembershipScope — this branch is unreachable
+    // for admin/partner/investor, and standing has to be the caller's own.
+    await claimLpRowsByEmail(c.env, Number(user.id), (user as any).email);
+    const scope = lpSelfScope(user as any);
     const lp = await c.env.DB.prepare(
-      `SELECT 1 AS yes FROM limited_partners
-        WHERE user_id = ? AND status IN ('committed','active') LIMIT 1`
-    ).bind(user.id).first<{ yes: number }>();
+      `SELECT 1 AS yes FROM limited_partners lp
+        WHERE ${scope.sql} AND lp.status IN ('committed','active') LIMIT 1`
+    ).bind(...scope.binds).first<{ yes: number }>();
     allowed = !!lp;
   }
   if (!allowed) return c.json({ error: 'Not authorized to list shares for this subsidiary' }, 403);
@@ -217,11 +223,15 @@ liquidity.post('/execute-exit', async (c) => {
 // GET /api/liquidity/my-portfolio
 liquidity.get('/my-portfolio', async (c) => {
   const user = await requireAuth(c);
+  // A self-view: "my portfolio" must stay the caller's own even for an admin,
+  // so lpSelfScope. Same membership rule as every other LP surface.
+  await claimLpRowsByEmail(c.env, Number(user.id), (user as any).email);
+  const portfolioScope = lpSelfScope(user as any);
   const lps = await c.env.DB.prepare(
     `SELECT lp.*, f.name AS fund_name, f.status AS fund_status
        FROM limited_partners lp JOIN vc_funds f ON f.id = lp.fund_id
-      WHERE lp.user_id = ? ORDER BY lp.created_at DESC`
-  ).bind(user.id).all();
+      WHERE ${portfolioScope.sql} ORDER BY lp.created_at DESC`
+  ).bind(...portfolioScope.binds).all();
   const myListings = await Listings.listByUser(c.env, user.id);
 
   // Recent liquidity events touching this user's listings

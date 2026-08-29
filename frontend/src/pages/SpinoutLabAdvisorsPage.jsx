@@ -44,6 +44,7 @@ import { api, spinoutLab, assessment } from '../lib/api';
 import { archetypeMeta, SKILL_AXES } from '../lib/assessmentMeta';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { buildDimensions } from '../lib/scoringViewModel';
+import { AssistLayout } from '../ui';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5';
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -494,7 +495,7 @@ export default function SpinoutLabAdvisorsPage() {
 
   const week = num(user?.spinout_lab_week) || state?.week || 3;
 
-  return (
+  const page = (
     <div className="max-w-[1200px] mx-auto px-4 py-6 space-y-5" data-testid="page-spinout-advisors">
       {/* Header — canonical Lab header (LabPageHeader owns the back link, the
           icon tile, the title/status row and the week pill). */}
@@ -1028,4 +1029,6 @@ export default function SpinoutLabAdvisorsPage() {
       )}
     </div>
   );
+
+  return <AssistLayout surface="advisory">{page}</AssistLayout>;
 }

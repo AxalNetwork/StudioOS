@@ -23,19 +23,25 @@ operational gotchas previously inline in `replit.md` now live in `GOTCHAS.md`.
    iteration speed during Replit sessions. It is **never** deployed to
    production — Cloudflare Workers do not run Python. Do not change
    `wrangler.toml`'s `main` field.
-4. **The frontend ships from `frontend/` to Cloudflare Pages** (built into
-   `docs/` and historically also pushed to GitHub Pages).
+4. **The frontend is built from `frontend/` into `docs/` and served by the
+   Worker itself**, through the `[assets]` binding in `wrangler.toml`
+   (`directory = "./docs"`) — Workers Static Assets, **not** Cloudflare Pages.
+   There is no Pages project in this repo. `docs/` is committed by hand; no
+   workflow writes it, which is why `scripts/check-docs-fresh.mjs` exists.
+   GitHub Pages still serves the **apex** (`main` + `/docs`) for any path the
+   Worker route table does not claim — see `CLOUDFLARE-CUTOVER.md`, which is
+   the plan for retiring it.
 
 ## File map
 
 | Path                  | Role                                                      |
 | --------------------- | --------------------------------------------------------- |
-| `frontend/`           | React + Vite SPA → Cloudflare Pages                       |
+| `frontend/`           | React + Vite SPA → built into `docs/`, served by the Worker |
 | `cloudflare-worker/`  | Hono on CF Workers → axal.vc/api/* (production)           |
 | `cloudflare-worker/sql/` | D1 schema + migrations (canonical)                     |
 | `backend/`            | FastAPI for Replit dev only — **never deployed**          |
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
-| `docs/`               | Built frontend bundle (output of `frontend/` build)       |
+| `docs/`               | Built frontend bundle — the Worker's `[assets]` directory  |
 
 ## Rules for new work
 

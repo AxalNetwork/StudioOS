@@ -1,0 +1,6 @@
+{
+  "note": "Reviewed column references the worker makes that no table provides. An entry here is a live gap with a stated consequence, not an accepted pattern — the gate fails on NEW entries, and also on an entry here that has since been created, so this list cannot go stale. Fixing one means deleting its line.",
+  "columns": {
+    "corporate_profiles.kyb_status": "services/trust.ts resyncKycKyb reads it to decide whether a kyb_v1 legal_obligation is satisfied. The column exists on no table in this schema, so the SELECT throws into its catch, rows is empty, and the whole KYB reconciliation loop is a no-op. NOT given a column, because that alone would not help: nothing anywhere writes a KYB decision. /trust/kyb/start upserts entity_name, registration_number and registered_country and sets the obligation to in_review; there is no provider callback and no admin approve/reject that would ever set a status. Completing the KYB decision path is feature work and a product question — which store, which values, who writes them — not a rename."
+  }
+}

@@ -830,9 +830,12 @@ imports.post('/deck', async (c) => {
   if (projectId) {
     if (user.role !== 'admin') {
       const owns = await c.env.DB.prepare(
+        // `founders` has no user_id — the link is `users.founder_id`. This is
+        // an ownership gate, and with the wrong column it could not evaluate
+        // at all rather than evaluating to false.
         `SELECT 1 AS ok FROM projects p
-           LEFT JOIN founders f ON f.id = p.founder_id
-          WHERE p.id = ? AND (f.user_id = ? OR p.description = ?) LIMIT 1`,
+           LEFT JOIN users fu ON fu.founder_id = p.founder_id
+          WHERE p.id = ? AND (fu.id = ? OR p.description = ?) LIMIT 1`,
       ).bind(projectId, user.id, `imported_from:deck:user_${user.id}`).first<{ ok: number }>();
       if (!owns) return c.json({ error: 'forbidden_project' }, 403);
     }
@@ -862,9 +865,14 @@ imports.post('/deck', async (c) => {
     try {
       const payload = { slides: slides.map((s) => ({ index: s.index, body: s.text })) };
       await c.env.DB.prepare(
-        `INSERT INTO pitch_decks (project_id, version, title, slides, is_current, created_by, created_at, updated_at)
+        // No `updated_at`: neither definition of pitch_decks has one
+        // (routes/decks.ts and services/advisor/writeRouter.ts both stop at
+        // created_at) and nothing reads it. Naming it here threw into the
+        // catch below, so an imported deck was parsed and then dropped —
+        // the "schema variance" the comment guesses at was this column.
+        `INSERT INTO pitch_decks (project_id, version, title, slides, is_current, created_by, created_at)
          VALUES (?, COALESCE((SELECT MAX(version)+1 FROM pitch_decks WHERE project_id = ?), 1),
-                 'Imported from deck', ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+                 'Imported from deck', ?, 1, ?, CURRENT_TIMESTAMP)`,
       ).bind(projectId, projectId, JSON.stringify(payload), user.id).run();
     } catch {
       // Schema variance — return slides anyway so the UI can write to the builder.

@@ -23,6 +23,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin } from '../auth';
+import { lpSelfScope } from '../services/tenancyScope';
 import {
   validateTransition, presentQueueRow, summarize, downstreamEffects,
   OPEN_STATUSES, isReviewStatus,
@@ -197,11 +198,24 @@ adminLpApplications.patch('/:id', async (c) => {
 
     // Does this applicant actually hold an LP position? Drives the honest
     // downstream panel — approval alone never creates one.
+    //
+    // Asked through the SUBJECT's own membership scope, not the reviewer's:
+    // `lpSelfScope` is handed the applicant, so the panel answers the same
+    // question the applicant's own LP surfaces answer. `user_id = ?` alone
+    // told a reviewer "no position" about a legacy LP who was, in the
+    // platform's own capital-call queries, an LP — the honesty panel would
+    // have been confidently wrong in the one place it exists to be right.
+    //
+    // No claim here on purpose. Linking an LP row to an account is the
+    // account holder proving they own the address; doing it as a side effect
+    // of an operator opening a review would make the audit trail say the
+    // wrong thing about who claimed what.
     let hasHolding = false;
     try {
+      const subjectScope = lpSelfScope({ id: Number(row?.user_id), email: row?.email ?? null });
       const lp = await c.env.DB.prepare(
-        'SELECT 1 AS x FROM limited_partners WHERE user_id = ? LIMIT 1',
-      ).bind(row?.user_id).first<{ x: number }>();
+        `SELECT 1 AS x FROM limited_partners lp WHERE ${subjectScope.sql} LIMIT 1`,
+      ).bind(...subjectScope.binds).first<{ x: number }>();
       hasHolding = !!lp;
     } catch { /* table absent on a partial DB — absence is the safe answer */ }
 

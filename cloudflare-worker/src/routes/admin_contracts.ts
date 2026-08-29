@@ -420,12 +420,17 @@ function mapPartnerDealStatus(s: string): string {
 async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
   let rows: any[] = [];
   try {
+    // The same three wrong names corrected at the other partner_deals query
+    // in this file: `user_id` not `partner_user_id`, the two granted_tier_*
+    // columns not a `granted_tiers`, and no `updated_at` at all. Fixing one
+    // copy of a broken query does not fix its duplicates.
     rows = await sql`
-      SELECT d.id, d.partner_user_id, d.deal_type, d.term_months,
-             d.granted_tiers, d.status, d.created_at, d.updated_at,
+      SELECT d.id, d.user_id AS partner_user_id, d.deal_type, d.term_months,
+             d.granted_tier_founder, d.granted_tier_investor,
+             d.status, d.created_at,
              u.email AS partner_email, u.name AS partner_name
         FROM partner_deals d
-        LEFT JOIN users u ON u.id = d.partner_user_id
+        LEFT JOIN users u ON u.id = d.user_id
        ORDER BY d.created_at DESC
     `;
   } catch {
@@ -724,7 +729,7 @@ async function findContractByUid(sql: ReturnType<typeof getSQL>, uid: string): P
       const rows: any[] = await sql`
         SELECT d.*, u.email AS partner_email, u.name AS partner_name
           FROM partner_deals d
-          LEFT JOIN users u ON u.id = d.partner_user_id
+          LEFT JOIN users u ON u.id = d.user_id
          WHERE d.id = ${Number(pdMatch[1])} LIMIT 1
       `;
       if (rows.length > 0) return { source: 'partner_deal', row: rows[0] };
@@ -1201,23 +1206,43 @@ adminContracts.get('/partner-deals', async (c) => {
   try {
     let rows: any[] = [];
     try {
+      // Every column name in the previous version of this query was wrong.
+      // `partner_deals` (migration 028) has `user_id`, not `partner_user_id`;
+      // `granted_tier_founder` / `granted_tier_investor`, not a `granted_tiers`
+      // column; and no `updated_at` at all. Redemptions live in
+      // `partner_referral_redemptions` keyed by `partner_deal_id` — nothing
+      // named `partner_deal_redemptions` has ever existed. So the query threw
+      // on the first unknown identifier, the catch below returned an empty
+      // list with a note blaming the one table that IS present, and this
+      // admin table has shown zero rows for its whole life.
       rows = await sql`
-        SELECT d.id, d.partner_user_id, d.deal_type, d.term_months,
-               d.granted_tiers, d.status, d.created_at, d.updated_at,
+        SELECT d.id, d.user_id AS partner_user_id, d.deal_type, d.term_months,
+               d.granted_tier_founder, d.granted_tier_investor,
+               d.status, d.created_at,
                u.email AS partner_email, u.name AS partner_name,
-               (SELECT COUNT(*) FROM partner_deal_redemptions r
-                 WHERE r.deal_id = d.id) AS redemption_count
+               (SELECT COUNT(*) FROM partner_referral_redemptions r
+                 WHERE r.partner_deal_id = d.id) AS redemption_count
           FROM partner_deals d
-          LEFT JOIN users u ON u.id = d.partner_user_id
+          LEFT JOIN users u ON u.id = d.user_id
          ORDER BY d.created_at DESC
          LIMIT 500
       `;
-    } catch (e) {
-      // X-1 hasn't created the table yet on this environment.
-      return c.json({ items: [], note: 'partner_deals table not yet present (X-1 backend pending)' });
+    } catch (e: any) {
+      // Report what actually failed. The previous note asserted a specific
+      // cause ("partner_deals table not yet present") that was false, which is
+      // why nobody chased the empty table for as long as it stood.
+      console.error('admin partner-deals:', e?.message);
+      return c.json({ items: [], note: `partner deals unavailable: ${e?.message || 'query failed'}` });
     }
     if (dealType) rows = rows.filter(r => String(r.deal_type || '').toLowerCase() === dealType);
-    return c.json({ items: rows });
+    // The UI renders one "Granted Tiers" cell; the table stores the founder
+    // and investor grants separately. Joined here rather than in SQL so the
+    // "neither is set" case stays a null the cell can render as an em dash.
+    const items = rows.map(r => ({
+      ...r,
+      granted_tiers: [r.granted_tier_founder, r.granted_tier_investor].filter(Boolean).join(', ') || null,
+    }));
+    return c.json({ items });
   } finally {
     await sql.end();
   }

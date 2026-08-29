@@ -47,10 +47,12 @@ async function visibleProjectIds(env: Env, user: User): Promise<number[] | null>
 async function computeScore(env: Env, projectId: number): Promise<{ score: number; drivers: any }> {
   const drivers: any = {};
   // Latest score snapshot
+  // `total_score` is the column; `score` is not one. The catch turned that
+  // into a null driver on every portfolio row rather than an error.
   const sc = await env.DB.prepare(
-    'SELECT score FROM score_snapshots WHERE project_id = ? ORDER BY id DESC LIMIT 1'
-  ).bind(projectId).first<{ score: number }>().catch(() => null);
-  drivers.scoring = sc ? Number(sc.score) : null;
+    'SELECT total_score FROM score_snapshots WHERE project_id = ? ORDER BY id DESC LIMIT 1'
+  ).bind(projectId).first<{ total_score: number }>().catch(() => null);
+  drivers.scoring = sc ? Number(sc.total_score) : null;
   // Open vs total tickets
   const t = await env.DB.prepare(
     `SELECT
