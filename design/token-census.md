@@ -2,7 +2,7 @@
 
 Integration plan §16 step 3. Read-only pass over the canvas corpus; no repo source was modified.
 
-- **Corpus**: `/home/user/StudioOS/Axal VC platform/*.dc.html` — **107 canvases**, top level only.
+- **Corpus**: `/home/user/StudioOS/design/canvases/*/*.dc.html` — **107 canvases**, top level only.
   `uploads/`, `scraps/`, `assets/`, and the two `*-standalone.html` pitch-deck files were excluded.
 - **Method**: per-canvas distinct-value extraction from both `<style>` blocks **and** inline
   `style="…"` attributes (the majority of tokens live inline), aggregated to a *canvas count*.
@@ -13,7 +13,7 @@ Integration plan §16 step 3. Read-only pass over the canvas corpus; no repo sou
 
 ## 0. Headline finding — there is a token spec canvas, and there are two design generations
 
-**`Axal VC platform/System Sheet.dc.html` is a self-describing design-token sheet.** Its
+**`design/canvases/backlog/System Sheet.dc.html` is a self-describing design-token sheet.** Its
 `System · Tokens` artboard declares the palette, type scale, radius scale and spacing scale as
 literal JS constants (lines 315–365):
 

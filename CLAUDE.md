@@ -42,6 +42,7 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 | `backend/`            | FastAPI for Replit dev only — **never deployed**          |
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
 | `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
+| `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
 | `docs/`               | Built frontend bundle — the Worker's `[assets]` directory  |
 
 **`documentation/` and `docs/` are different things.** `documentation/` is
@@ -51,6 +52,13 @@ repo root once held 38 loose markdown files — they all live under
 if a seventh appears at the root (six stay because a tool reads them from
 there: this file, `replit.md`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`
 and `CHANGELOG.md`).
+
+**Every folder that carries weight explains itself.** There is a `README.md` in
+each significant directory saying what lives there and the rule for adding to
+it, and `scripts/check-folder-docs.mjs` fails the build if one is missing, if it
+does not name its own subfolders, or if it cites a file that does not exist —
+the first run caught a route README documenting a mount for a file that has
+never existed. Start at the README of whatever folder you land in.
 
 ## Rules for new work
 

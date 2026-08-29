@@ -99,7 +99,7 @@ action is a human click."* The other seven rails collapse into the same
 component under this one voice, per the AssistRail consolidation (Phase 1d).
 
 References to "ForgeRail" elsewhere in this repo name the source canvas file
-(`Axal VC platform/ForgeRail.dc.html`) and are left as-is — that file's name
+(`design/canvases/ForgeRail.dc.html`) and are left as-is — that file's name
 does not change. Only the AI's spoken name changes, everywhere it appears as
 product copy: `ROUTE_MAP.md`, `design/pattern-census.md`,
 `frontend/src/ui/AssistRail.jsx`.

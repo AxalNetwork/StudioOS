@@ -569,11 +569,11 @@ test('paths-ignore is read without a YAML dependency, quotes and all', () => {
     'paths-ignore:',
     '  - docs',
     '  # why the next one is ignored',
-    '  - "Axal VC platform"',
+    '  - "design/canvases"',
     "  - 'quoted too'",
     'queries: security-extended',
   ].join('\n');
-  assert.deepEqual(codeqlIgnores(src), ['docs', 'Axal VC platform', 'quoted too']);
+  assert.deepEqual(codeqlIgnores(src), ['docs', 'design/canvases', 'quoted too']);
 });
 
 test('a key after the list ends the block rather than being read as an entry', () => {
@@ -585,26 +585,33 @@ test('semgrep patterns are normalised, and an unanchored one is reported', () =>
   const { entries, unanchored } = semgrepIgnores([
     '# comment',
     '/docs/',
-    '/Axal VC platform/',
+    '/design/canvases/',
     'docs',
   ].join('\n'));
-  assert.deepEqual(entries, ['docs', 'Axal VC platform']);
+  assert.deepEqual(entries, ['docs', 'design/canvases']);
   assert.deepEqual(unanchored, ['docs'],
     'a bare name would also strip frontend/src/lib/docs from the scan');
 });
 
 test('the generated trees on disk are found by their generator header', () => {
+  // These are repo-relative PATHS, not top-level directory names. The canvases
+  // moved from `Axal VC platform/` to `design/canvases/`, and `design/` also
+  // holds hand-written token and pattern censuses — reporting the tree as
+  // `design` would mean ignoring those too, so the scan reports the directory
+  // the bundle is actually in and the ignore check accepts any ancestor.
   const trees = generatedTrees();
-  assert.ok(trees.includes('Axal VC platform'),
+  assert.ok(trees.includes('design/canvases/shared'),
     'the canvases ship a dc-runtime bundle and must be discoverable');
-  assert.ok(trees.includes('spin-out-lab-pipeline'),
+  assert.ok(trees.includes('spin-out-lab-pipeline/project'),
     'the tree this rule was originally written for');
-  assert.ok(!trees.includes('frontend') && !trees.includes('cloudflare-worker'),
+  assert.ok(!trees.some((t) => t === 'design'),
+    'reporting the whole of design/ would sweep the hand-written censuses into the ignore list');
+  assert.ok(!trees.some((t) => t.startsWith('frontend') || t.startsWith('cloudflare-worker')),
     'real source must never be picked up as generated');
 });
 
 test('every generated tree is ignored by BOTH scanners', () => {
-  // `Axal VC platform/` was in neither list: ~60 security alerts and 1345 of
+  // `design/canvases/` was in neither list: ~60 security alerts and 1345 of
   // 1384 quality findings came from a 49M tree that nothing builds or serves.
   assert.deepEqual(gaps(), []);
 });

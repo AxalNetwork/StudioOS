@@ -19,9 +19,9 @@
 # dc-runtime/src, not in the committed bundle.
 /spin-out-lab-pipeline/
 
-# Claude Design canvases for the Axal VC platform integration — the same
+# Claude Design canvases (design/canvases/) — the same
 # dc-runtime export as the tree above, with a byte-identical generated
 # header on its support.js. No build config references it, so it is never
 # bundled or served; canvases are ported into frontend/src/ by hand and
 # scanned there. The space in the directory name is a literal here.
-/Axal VC platform/
+/design/canvases/

@@ -1,6 +1,6 @@
 # Platform Delivery Audit — what shipped, what did not, and why you cannot see it
 
-**Date:** 2026-08-29 · **Audited against:** `origin/main` @ `f112784a` ("Rebuild docs/ for deploy") · **Trigger:** owner report that wired UIs are not visible and that `Axal VC platform/` is not configured into the app.
+**Date:** 2026-08-29 · **Audited against:** `origin/main` @ `f112784a` ("Rebuild docs/ for deploy") · **Trigger:** owner report that wired UIs are not visible and that `design/canvases/` is not configured into the app.
 
 Every number below is computed from the repo (the census parse, git history, page-level grep), not recalled from prior claims. Where a prior claim of "completed" failed a spot-check, this file says so.
 

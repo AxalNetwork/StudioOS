@@ -6,7 +6,7 @@ exists under `cloudflare-worker/src/routes/`. CURRENT vs UPGRADE calls come from
 reading the live page component side by side with the canvas, not from name
 matching. Comparisons are source-level; the app was not run.
 
-**Corpus:** 107 canonical `*.dc.html` canvases at `Axal VC platform/` (top level
+**Corpus:** 107 canonical `*.dc.html` canvases at `design/canvases/` (top level
 only). `uploads/` holds 3 stale duplicates and `scraps/` holds images — both
 excluded. Also at the root, not counted in the 107: 2 standalone pitch-deck
 HTMLs, 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,

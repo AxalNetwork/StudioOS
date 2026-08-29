@@ -28,6 +28,19 @@ nothing here is served.
 | Why is it built this way and not the obvious way? | [architecture/DECISIONS.md](architecture/DECISIONS.md) |
 | What will bite me? | [architecture/GOTCHAS.md](architecture/GOTCHAS.md) |
 
+## Every folder also explains itself
+
+Beyond this tree, each significant source folder carries its own `README.md`
+saying what lives there and the rule for adding to it — `frontend/src/pages/`,
+`cloudflare-worker/src/routes/`, `scripts/`, and 30-odd more.
+`scripts/check-folder-docs.mjs` fails the build if one is missing, if it does
+not name its own subfolders, or if it cites a file that does not exist. So the
+fastest way to understand any part of this repo is to open the README of the
+folder you are already in.
+
+`design/incoming/README.md` is the one to read before integrating a new Claude
+Design export.
+
 `CLAUDE.md` stays at the repo root and outranks everything here: where a
 document disagrees with it, `CLAUDE.md` wins and the document is the thing to
 fix.

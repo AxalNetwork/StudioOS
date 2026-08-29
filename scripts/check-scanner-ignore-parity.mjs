@@ -5,7 +5,7 @@
  *
  * WHY THIS EXISTS. Two files list the trees that static analysis should not
  * read — `.github/codeql/codeql-config.yml` (`paths-ignore`) and
- * `.semgrepignore`. They were correct, and then `Axal VC platform/` landed:
+ * `.semgrepignore`. They were correct, and then `design/canvases/` landed:
  * 49M of Claude Design canvases, 110 `.dc.html` pages and a generated
  * `support.js`, ~83k lines, referenced by no build config and served by
  * nothing. Neither list mentioned it. The result was roughly sixty security
@@ -93,21 +93,71 @@ export function semgrepIgnores(src) {
   return { entries: out, unanchored };
 }
 
-/** Top-level directories holding a file whose first line is the marker. */
+/**
+ * Directories whose subtree holds a dc-runtime bundle, as a repo-relative path.
+ *
+ * This used to return the top-level directory NAME, which was fine while the
+ * canvases sat at `design/canvases/`. They now live at `design/canvases/`, and
+ * `design/` also holds hand-written token and pattern censuses — ignoring the
+ * whole of `design/` to cover the canvases would take those with it. So the
+ * tree is reported at the depth it is actually found, and `isCovered()` below
+ * accepts an ancestor: ignoring `design/canvases` covers
+ * `design/canvases/shared`, which is where the bundle physically is.
+ */
 export function generatedTrees() {
   const found = new Set();
-  for (const e of fs.readdirSync(ROOT, { withFileTypes: true })) {
-    if (!e.isDirectory() || e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue;
-    if (hasMarker(path.join(ROOT, e.name), 0)) found.add(e.name);
-  }
+  // Descend, and report the directory the bundle is ACTUALLY in. Using the
+  // recursive hasMarker() here would report the outermost ancestor instead —
+  // `design` rather than `design/canvases/shared` — which is exactly the
+  // over-broad answer the path-level reporting is meant to avoid.
+  const scan = (dir, depth) => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue;
+      const abs = path.join(dir, e.name);
+      if (hasMarkerHere(abs)) found.add(path.relative(ROOT, abs));
+      else if (depth < 2) scan(abs, depth + 1);
+    }
+  };
+  scan(ROOT, 0);
   return [...found].sort();
 }
 
 /**
- * Depth-limited: the dc-runtime bundle sits at the tree root or one level in
- * (`spin-out-lab-pipeline/project/support.js`). Walking 49M of canvases to
- * the leaves on every CI run buys nothing.
+ * An ignore entry covers a tree if it IS that tree or an ancestor of it.
+ * `design/canvases` covers `design/canvases/shared`; `design` would too, which
+ * is allowed — over-ignoring is a judgement call, under-ignoring is the bug
+ * this guard exists to catch.
  */
+function isCovered(tree, listed) {
+  for (const entry of listed) {
+    if (tree === entry || tree.startsWith(`${entry}/`)) return true;
+  }
+  return false;
+}
+
+/**
+ * Depth-limited: the dc-runtime bundle sits at the tree root or up to two
+ * levels in — `spin-out-lab-pipeline/project/support.js`, and since the canvas
+ * archive moved under `design/`, `design/canvases/shared/support.js`. Walking
+ * 49M of canvases to the leaves on every CI run buys nothing, but stopping at
+ * depth 1 would now silently find nothing at all.
+ */
+/** The marker in THIS directory's own .js files — no descent. */
+function hasMarkerHere(dir) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+  for (const e of entries) {
+    if (!e.isFile() || !e.name.endsWith('.js')) continue;
+    try {
+      const head = fs.readFileSync(path.join(dir, e.name), 'utf8').slice(0, 400);
+      if (head.includes(GENERATED_MARKER)) return true;
+    } catch { /* unreadable — not a marker */ }
+  }
+  return false;
+}
+
 function hasMarker(dir, depth) {
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return false; }
@@ -141,8 +191,8 @@ export function gaps() {
 
   for (const t of generatedTrees()) {
     const where = [];
-    if (!cq.has(t)) where.push('.github/codeql/codeql-config.yml (paths-ignore)');
-    if (!sgSet.has(t)) where.push('.semgrepignore');
+    if (!isCovered(t, cq)) where.push('.github/codeql/codeql-config.yml (paths-ignore)');
+    if (!isCovered(t, sgSet)) where.push('.semgrepignore');
     if (where.length) out.push({ kind: 'generated-tree-not-ignored', tree: t, where });
   }
 
