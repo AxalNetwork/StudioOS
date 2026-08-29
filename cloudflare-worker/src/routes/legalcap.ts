@@ -3,6 +3,8 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireApprovedKyc } from '../auth';
 import { logActivity } from './partnernet';
+import { ensureWorkflowSchema } from '../services/workflowSchema';
+import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
 
 const legalcap = new Hono<{ Bindings: Env }>();
 
@@ -164,23 +166,14 @@ async function ensureSchema(env: Env) {
     `CREATE INDEX IF NOT EXISTS idx_se_type ON spinout_events(event_type)`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch (e: any) { console.error('legalcap schema:', e?.message); } }
+  // Shared with pipeline, networkfx and dashboard — see migration 177.
+  await ensureWorkflowSchema(env);
   migrated = true;
 }
 
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }
-async function checkAiQuota(env: Env, userId: number): Promise<boolean> {
-  try {
-    const r: any = await env.DB.prepare(`SELECT COUNT(*) as n FROM shared_services_log WHERE performed_by = ? AND action_type = 'ai_call' AND created_at > datetime('now', '-1 hour')`).bind(userId).first();
-    return (r?.n || 0) < AI_RATE_LIMIT;
-  } catch (e: any) {
-    // Fail-open if shared_services_log doesn't exist yet — never 500 on quota check
-    console.error('checkAiQuota:', e?.message);
-    return true;
-  }
-}
-async function logAi(env: Env, userId: number, kind: string, meta: any = {}) {
-  try { await env.DB.prepare(`INSERT INTO shared_services_log (workflow_id, action_type, details, performed_by) VALUES (NULL, 'ai_call', ?, ?)`).bind(JSON.stringify({ kind, ...meta }), userId).run(); } catch {}
-}
+const logAi = (env: Env, userId: number, kind: string, meta: any = {}) =>
+  recordSharedServiceAction(env, 'ai_call', userId, { kind, ...meta });
 async function llm(env: Env, system: string, prompt: string, maxTokens = 400): Promise<string | null> {
   if (!env.AI) return null;
   try {
@@ -337,7 +330,8 @@ legalcap.post('/legal/generate', async (c) => {
   const user = await requireAuth(c);
   if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
   await ensureSchema(c.env);
-  if (!(await checkAiQuota(c.env, user.id))) return c.json({ error: 'Rate limit (60 AI calls/hour)' }, 429);
+  const gate = await aiQuotaGate(c.env, user.id, { limit: AI_RATE_LIMIT });
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status);
 
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
@@ -539,7 +533,8 @@ legalcap.post('/diligence/review', async (c) => {
   const user = await requireAuth(c);
   if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
   await ensureSchema(c.env);
-  if (!(await checkAiQuota(c.env, user.id))) return c.json({ error: 'Rate limit (60 AI calls/hour)' }, 429);
+  const gate = await aiQuotaGate(c.env, user.id, { limit: AI_RATE_LIMIT });
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status);
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const dealId = parseInt(data?.deal_id);
@@ -840,7 +835,8 @@ legalcap.post('/spinout/equity-allocate', async (c) => {
   let aiRationale: string | null = null;
 
   if (!allocation) {
-    if (!(await checkAiQuota(c.env, user.id))) return c.json({ error: 'Rate limit (60 AI calls/hour). Pass an explicit allocation to override.' }, 429);
+    const gate = await aiQuotaGate(c.env, user.id, { limit: AI_RATE_LIMIT, note: 'Pass an explicit allocation to override.' });
+    if (!gate.ok) return c.json({ error: gate.error }, gate.status);
     const prompt = `Recommend an equity split for a venture-studio spin-out. Output a JSON object with keys: studio_pct, founders_pct, option_pool_pct, advisors_pct (sum to 100). Studio takes 10-20%, founders 60-80%, options 10-15%, advisors 0-5%.
 
 Project: ${project.name}
