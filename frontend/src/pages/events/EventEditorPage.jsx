@@ -8,8 +8,9 @@ import { ArrowLeft, Save, Send, Gift } from 'lucide-react';
 import { eventsApi } from '../../lib/eventsApi';
 import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
+import { EVENT_TYPE_IDS } from '../../lib/eventTypes';
 
-const EVENT_TYPES = ['demo_day', 'workshop', 'office_hours', 'networking', 'fireside', 'meetup', 'webinar'];
+const EVENT_TYPES = EVENT_TYPE_IDS;
 const LOCATION_KINDS = ['virtual', 'in_person', 'hybrid'];
 const VISIBILITIES = ['private', 'unlisted', 'public'];
 

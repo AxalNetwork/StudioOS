@@ -107,7 +107,10 @@ function intParam(v: string | undefined): number | null {
 function preferredEventTypes(track: string | null | undefined): Set<string> {
   const t = String(track || '').toLowerCase();
   if (t.startsWith('founder')) return new Set(['demo_day', 'workshop', 'office_hours']);
-  if (t.startsWith('investor')) return new Set(['demo_day', 'conference', 'webinar']);
+  // 'lp_briefing' joins this set with the type itself — an LP briefing is the
+  // event an investor most wants suggested, and until now there was no type
+  // for one. See services/eventTypes.ts.
+  if (t.startsWith('investor')) return new Set(['demo_day', 'lp_briefing', 'conference', 'webinar']);
   if (t.startsWith('partner')) return new Set(['conference', 'meetup', 'social']);
   if (t.startsWith('operator')) return new Set(['workshop', 'webinar', 'office_hours']);
   return new Set(['demo_day', 'workshop', 'meetup']);

@@ -58,29 +58,62 @@ test('every destination the old nav reached still has a door', () => {
     '/partner/operations/portfolio', '/partner/operations/engagements',
     '/partner/operations/performance', '/market-intel',
   ];
-  // A workspace counts as a door only if it actually tabs to the page. This
-  // reads PartnerOperationsWorkspace rather than trusting the claim.
+  // A door is a nav row, or a tab bar that demonstrably links it. There are two
+  // bars now: the ops workspace (Wave 1a) and the route wrapper this commit
+  // added. Both are READ rather than assumed.
   const opsTabs = read('frontend/src/pages/partner/operations/PartnerOperationsWorkspace.jsx');
-  const doorless = BEFORE.filter((p) => !targets.includes(p) && !opsTabs.includes(`to: '${p}'`));
+  const routeTabs = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
+  const doorless = BEFORE.filter((p) => !targets.includes(p)
+    && !opsTabs.includes(`to: '${p}'`)
+    && !routeTabs.includes(`to: '${p}'`));
   assert.deepEqual(doorless, [],
-    'these have no nav row and no workspace tab — reachable only by typing the URL');
+    'these have no nav row and no tab bar — reachable only by typing the URL');
 });
 
-test('the pending list can only shrink', () => {
-  // Rows that exist ONLY because their canonical owner cannot yet absorb them.
-  // When a workspace grows a WorkspaceTabs bar over its sections, its rows come
-  // out of the nav and out of this list in the same commit. Adding to it is the
-  // change this test is meant to make someone argue for.
-  const PENDING = ['/matches', '/partner/insights', '/perks', '/comarketing',
-                   '/partner/office-hours', '/my/jobs', '/messages'];
-  const extra = targets.filter((t) => ![
+test('the two rows beyond the canvas are the two that earn it', () => {
+  // This list began as seven and was called PENDING, which promised a further
+  // absorption. `PartnerWorkspaceTabs` delivered most of it: /matches,
+  // /partner/insights, /perks, /comarketing and /partner/office-hours are
+  // sections of a row rather than rows, and left the nav and this list in the
+  // same commit.
+  //
+  // The two that remain are not pending. They are decided, and the investor,
+  // advisor and founder shells reached the same answer independently:
+  //
+  //   /messages  a cross-cutting inbox has no home among eight lifecycle rows,
+  //              and it has NO other door in any of the four roles. Every shell
+  //              gives it a row for that reason, so the product reads the same
+  //              way whichever profile you are in.
+  //   /my/jobs   not a section of Offers — those are the partner's own listings
+  //              — and it has four inbound links elsewhere. Folding it in to
+  //              reach exactly eight would be arithmetic, not information
+  //              architecture.
+  const KEPT = ['/messages', '/my/jobs'];
+  const CANON = [
     '/studio', '/needs', '/partner/operations/overview', '/services',
-    // The Settings row targets COMPANY settings. /settings and /profile are
-    // Account — a different page, reached from the user dropdown.
     '/network', '/market-intel', '/company-settings',
-  ].includes(t));
-  assert.deepEqual(extra.sort(), [...PENDING].sort(),
-    'the set of un-absorbed rows changed — shrink it, or justify the addition here');
+  ];
+  const extra = targets.filter((t) => !CANON.includes(t));
+  assert.deepEqual(extra.sort(), [...KEPT].sort(),
+    'the set of rows beyond the canvas changed — justify the addition here, or remove it');
+});
+
+test('every section of a collapsed row is reachable from its tab bar', () => {
+  // Two things have to hold, and they fail independently: the path must be in a
+  // tab set, AND its route must be wrapped so the bar actually renders there.
+  // A tab set nobody mounts is the same nothing as no tab set.
+  const bars = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
+  const app = read('frontend/src/App.jsx');
+  const routeLine = (p) => app.split('\n').find(
+    (l) => l.includes(`path="${p}"`) && l.includes('<Route'));
+  for (const p of ['/matches', '/partner/insights', '/perks', '/comarketing',
+                   '/partner/office-hours', '/needs', '/services']) {
+    assert.ok(bars.includes(`to: '${p}'`), `${p} is in no tab set`);
+    const line = routeLine(p);
+    assert.ok(line, `no route for ${p}`);
+    assert.ok(line.includes('PartnerWorkspaceTabs'),
+      `${p}'s route is not wrapped, so the bar never renders on it`);
+  }
 });
 
 test('Home is /studio, and no role root was invented', () => {

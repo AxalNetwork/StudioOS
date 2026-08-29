@@ -430,6 +430,12 @@ zone_name  = "axal.vc"
 pattern    = "axal.vc/incorporate/*"
 zone_name  = "axal.vc"
 [[routes]]
+pattern    = "axal.vc/legal"
+zone_name  = "axal.vc"
+[[routes]]
+pattern    = "axal.vc/legal/*"
+zone_name  = "axal.vc"
+[[routes]]
 pattern    = "axal.vc/legal-capital"
 zone_name  = "axal.vc"
 [[routes]]
@@ -1279,6 +1285,12 @@ pattern    = "axal.vc/incorporate"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/incorporate/*"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/legal"
+zone_name  = "axal.vc"
+[[env.production.routes]]
+pattern    = "axal.vc/legal/*"
 zone_name  = "axal.vc"
 [[env.production.routes]]
 pattern    = "axal.vc/legal-capital"

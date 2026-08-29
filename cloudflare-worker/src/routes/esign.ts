@@ -32,6 +32,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { templatesFor, mayOriginate } from '../services/esignOriginators';
 import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { renderAgreementPdf, sha256Hex } from '../services/pdf';
@@ -595,6 +596,14 @@ esign.post('/send', async (c) => {
   const providerRaw = String(body?.provider ?? body?.via_provider ?? 'native').toLowerCase();
   const viaProvider: 'native' | 'docusign' = providerRaw === 'docusign' ? 'docusign' : 'native';
   if (!documentType) return c.json({ error: 'document_type is required' }, 400);
+  // The picker is not the gate. A caller may only originate a document their
+  // role may originate — otherwise the de-admin would have turned a hidden
+  // admin wizard into an open one. Admins keep the full catalogue through
+  // /admin/contracts, which is unchanged; `mayOriginate` gives them the union
+  // of every role's list here.
+  if (!mayOriginate(sender.role, documentType) && sender.role !== 'admin') {
+    return c.json({ error: 'your role may not originate this document type' }, 403);
+  }
   if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(recipientEmail)) {
     return c.json({ error: 'valid recipient_email is required' }, 400);
   }
@@ -644,6 +653,16 @@ esign.post('/send', async (c) => {
 });
 
 // GET /api/legal/esign — admin lists envelopes (filter by user_id or deal_id).
+// The templates THIS caller may originate. POST /send has taken plain
+// `requireAuth` since task #156, but the only picker in the SPA was behind
+// requireAdmin, so non-admins could sign a document and not send one. This is
+// the picker for everyone else; see services/esignOriginators.ts for why the
+// list is as short as it is.
+esign.get('/templates', async (c) => {
+  const user = await requireAuth(c);
+  return c.json({ items: templatesFor(user.role) });
+});
+
 esign.get('/', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);

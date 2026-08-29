@@ -124,7 +124,13 @@ test('both pages are still mounted as FundOpsWorkspace tabs', () => {
   assert.match(app, /path="\/funds\/performance"/);
   assert.match(app, /path="\/funds\/accounting"/);
   // Portfolio Growth stays a tab; withdrawing two sections is not withdrawing
-  // the surface, and the nav row must not point at a hole.
-  assert.match(scan(read('frontend/src/pages/PortfolioWorkspace.jsx')), /<PortfolioGrowthPage embedded/);
-  assert.match(scan(read('frontend/src/sidebarConfig.js')), /'\/portfolio\/growth'/);
+  // the surface, and the nav must not point at a hole.
+  const pw = scan(read('frontend/src/pages/PortfolioWorkspace.jsx'));
+  assert.match(pw, /<PortfolioGrowthPage embedded/);
+  // Reachability, not row-ness. The investor shell collapsed the four portfolio
+  // rows into one row on /portfolio/health, so Growth's door is now this
+  // workspace's tab bar rather than a nav entry of its own. Assert the door.
+  assert.match(pw, /to: '\/portfolio\/growth'/);
+  const sidebar = scan(read('frontend/src/sidebarConfig.js'));
+  assert.match(sidebar, /to: '\/portfolio\/health'/, 'nothing lands on the portfolio workspace');
 });

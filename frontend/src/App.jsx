@@ -134,6 +134,12 @@ const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
 const NetworkIntroReviewPage = lazy(() => import('./pages/NetworkIntroReviewPage'));
 const RecoverPage = lazy(() => import('./pages/RecoverPage'));
 const ESignPage = lazy(() => import('./pages/ESignPage'));
+// Send for signature — the non-admin origination page. POST /legal/esign/send
+// stopped being admin-only in task #156; this is the UI that finally matches.
+const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePage'));
+// The subsidiary administrator's read of their own territory licence.
+// Migration 190 made "which licence is this admin's?" answerable at all.
+const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
@@ -228,6 +234,13 @@ const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 const PerksPage = lazy(() => import('./pages/PerksPage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
+// Wraps the Pipeline/Offers pages in the tab bar that lets those shell rows
+// own their sections. Role-filtered — see PartnerWorkspaceTabs.jsx.
+const PartnerWorkspaceTabs = lazy(() => import('./pages/partner/PartnerWorkspaceTabs'));
+// The Founder shell's five workspace rows (Validate, Build, Raise, Grow,
+// Research) own their sections through this bar. Role- and tier-filtered —
+// see FounderWorkspaceTabs.jsx.
+const FounderWorkspaceTabs = lazy(() => import('./pages/founder/FounderWorkspaceTabs'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
 const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
 const PublicDirectoryPage = lazy(() => import('./pages/PublicDirectoryPage'));
@@ -1263,7 +1276,7 @@ function AppInner() {
       {/* New Brand & Landing Pages tool (design: Brand & Landing Page.dc) —
           replaces /build/brand as the founders' entry point, so it keeps the
           same roles as the old route (any founder, plus active lab members). */}
-      <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), <SpinoutLabBrandPage />)} />
+      <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), <FounderWorkspaceTabs set="grow" user={user}><SpinoutLabBrandPage /></FounderWorkspaceTabs>)} />
       <Route path="/spinout-lab/cofounder-agreement" element={guard(labRoles(['admin']), <SpinoutLabCofounderAgreementPage />)} />
       {/* Co-founder Match tool page (design: Co-founder Match.dc) — the Lab
           decision console; /cofounder stays the full browse/connections/NDA
@@ -1300,6 +1313,7 @@ function AppInner() {
       <Route path="/auth/recover" element={<RecoverPage />} />
       <Route path="/auth/recover/*" element={<RecoverPage />} />
       <Route path="/esign/:token" element={<ESignPage />} />
+      <Route path="/legal/send" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SendForSignaturePage />)} />
       {/* Task #1 (Spin-Out Teams) — tokenized co-founder/advisor invite
           acceptance. Public route; the page bounces logged-out visitors to
           sign-in with a `?next=` return path, then POSTs the bound token. */}
@@ -1335,14 +1349,14 @@ function AppInner() {
       <Route path="/build/deck-reviewer" element={<Navigate to="/raise/pitch/review" replace />} />
       <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], <CompetitorAnalysisPage />)} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], <FinancialsPage />)} />
-      <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <DiscoveryPage />)} />
+      <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <FounderWorkspaceTabs set="validate" user={user}><DiscoveryPage /></FounderWorkspaceTabs>)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
       <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
-      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <RoadmapPage />)} />
-      <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], <MetricsPage />)} />
+      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <FounderWorkspaceTabs set="build" user={user}><RoadmapPage /></FounderWorkspaceTabs>)} />
+      <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], <FounderWorkspaceTabs set="build" user={user}><MetricsPage /></FounderWorkspaceTabs>)} />
       {/* Signals — founder decision engine over public-market evidence. Shared
           by Founder + Advisor modes (mode changes ordering + copy only). */}
-      <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SignalsPage user={user} />)} />
+      <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <FounderWorkspaceTabs set="research" user={user}><SignalsPage user={user} /></FounderWorkspaceTabs>)} />
       <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <CapTablePage />)} />
       {/* documentation/architecture/DECISIONS.md D11 — /marketplace was a partner-provider directory with
           inquiry threads and reviews whose backend exists only in the dev-only
@@ -1357,12 +1371,12 @@ function AppInner() {
           Needs Board (/needs) into one tabbed page at /build/marketplace. The
           standalone routes below stay registered for the partner/investor/admin
           personas; founders are redirected into the matching ?tab= here. */}
-      <Route path="/build/marketplace" element={guard(['admin', 'founder'], <FounderMarketplacePage user={user} />)} />
-      <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=needs" replace /> : <NeedsBoardPage user={user} />)} />
-      <Route path="/services" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=services" replace /> : <ServiceCatalogPage user={user} />)} />
+      <Route path="/build/marketplace" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="validate" user={user}><FounderMarketplacePage user={user} /></FounderWorkspaceTabs>)} />
+      <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=needs" replace /> : <PartnerWorkspaceTabs set="pipeline" user={user}><NeedsBoardPage user={user} /></PartnerWorkspaceTabs>)} />
+      <Route path="/services" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=services" replace /> : <PartnerWorkspaceTabs set="offers" user={user}><ServiceCatalogPage user={user} /></PartnerWorkspaceTabs>)} />
       <Route path="/founder/post-need" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=mine" replace /> : <NeedsBoardPage user={user} />)} />
       <Route path="/partner/needs" element={guard(['admin', 'partner'], <NeedsBoardPage user={user} />)} />
-      <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], <PartnerInsightsPage />)} />
+      <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], <PartnerWorkspaceTabs set="pipeline" user={user}><PartnerInsightsPage /></PartnerWorkspaceTabs>)} />
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
@@ -1386,6 +1400,8 @@ function AppInner() {
       {/* Territory licence ledger (migration 187). Admin only — it carries the
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], <AdminLicences />)} />
+      {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
+      <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}
@@ -1434,7 +1450,7 @@ function AppInner() {
       {/* Task #12 — Founder Execution area: one deep-linkable shell wrapping the
           Projects / Board / Roadmap views. Standalone routes above stay intact
           for other personas. */}
-      <Route path="/execution" element={guard(['admin', 'founder'], <ExecutionPage />)} />
+      <Route path="/execution" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="build" user={user}><ExecutionPage /></FounderWorkspaceTabs>)} />
       <Route path="/execution/board" element={guard(['admin', 'founder'], <ExecutionPage />)} />
       <Route path="/execution/roadmap" element={guard(['admin', 'founder'], <ExecutionPage />)} />
       {/* Task #1 — RAISE Workspaces. Three founder workspaces compose the
@@ -1442,14 +1458,14 @@ function AppInner() {
           the pages it wraps. Standalone routes (/build/financials, /build/captable,
           /incorporate, /incorporate/*, /compliance, /legal-capital) stay intact
           for the investor/partner personas that share them. */}
-      <Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder']), <PitchWorkspacePage />)} />
+      <Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder']), <FounderWorkspaceTabs set="raise" user={user}><PitchWorkspacePage /></FounderWorkspaceTabs>)} />
       <Route path="/raise/pitch/positioning" element={guard(labRoles(['admin', 'founder']), <PitchWorkspacePage />)} />
       <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), <PitchWorkspacePage />)} />
-      <Route path="/raise/capital" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
+      <Route path="/raise/capital" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="raise" user={user}><CapitalWorkspacePage /></FounderWorkspaceTabs>)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       {/* Founders manage their room; investors see what was shared with them. One route, role-branched inside the page, so there is no second root. */}
-      <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'], <DataRoomPage user={user} />)} />
+      <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'], <FounderWorkspaceTabs set="raise" user={user}><DataRoomPage user={user} /></FounderWorkspaceTabs>)} />
       {/* Every persona, listed explicitly. `guard([])` would deny everyone —
           RoleGuard tests `allowedRoles.includes(effectiveRole)`, which is
           always false on an empty array, so the route would exist and be
@@ -1458,9 +1474,9 @@ function AppInner() {
       {/* Same explicit list. The partner and admin tabs inside the page are
           gated on the role again there — a role that cannot submit a listing
           simply does not see the tab. */}
-      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <PerksPage user={user} />)} />
+      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], user?.role === 'founder' ? <FounderWorkspaceTabs set="grow" user={user}><PerksPage user={user} /></FounderWorkspaceTabs> : <PartnerWorkspaceTabs set="offers" user={user}><PerksPage user={user} /></PartnerWorkspaceTabs>)} />
       <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
-      <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
+      <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], <FounderWorkspaceTabs set="raise" user={user}><LegalEnginePage /></FounderWorkspaceTabs>)} />
       <Route path="/raise/legal-engine/incorporation" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
       <Route path="/raise/legal-engine/founders" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
       <Route path="/raise/legal-engine/compliance" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
@@ -1495,21 +1511,21 @@ function AppInner() {
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], <DealsPage />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], <DealRoomPage />)} />
-      <Route path="/market-intel" element={guard(labRoles(['admin', 'partner', 'investor']), <MarketIntelPage />)} />
-      <Route path="/advisory" element={guard(['admin', 'founder'], <AdvisoryPage />)} />
+      <Route path="/market-intel" element={guard(labRoles(['admin', 'partner', 'investor']), <FounderWorkspaceTabs set="research" user={user}><MarketIntelPage /></FounderWorkspaceTabs>)} />
+      <Route path="/advisory" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="validate" user={user}><AdvisoryPage /></FounderWorkspaceTabs>)} />
       {/* Team Building consolidation (Build › Team). Founders reach Advisor/
           Advisor, Co-Founder and Jobs through the unified /build/team
           workspace; the legacy standalone routes stay live for every other
           role but redirect a founder into the matching tab so old deep links
           keep resolving. */}
-      <Route path="/build/team" element={guard(['admin', 'founder'], <TeamBuildingPage />)} />
+      <Route path="/build/team" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="grow" user={user}><TeamBuildingPage /></FounderWorkspaceTabs>)} />
       <Route path="/build/command-center" element={guard(labRoles(['admin', 'founder']), <Navigate to="/studio" replace />)} />
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
       <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
       <Route path="/office-hours" element={guard(['admin', 'advisor'], <OfficeHoursPage />)} />
-      <Route path="/partner/office-hours" element={guard(['admin', 'partner'], <PartnerOfficeHoursPage />)} />
-      <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], <CoMarketingPage user={user} />)} />
+      <Route path="/partner/office-hours" element={guard(['admin', 'partner'], <PartnerWorkspaceTabs set="offers" user={user}><PartnerOfficeHoursPage /></PartnerWorkspaceTabs>)} />
+      <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], user?.role === 'founder' ? <FounderWorkspaceTabs set="grow" user={user}><CoMarketingPage user={user} /></FounderWorkspaceTabs> : <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>)} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
       {/* Task #40 (E2) — Event host/attendee surface. */}
       <Route path="/my/events" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyEventsPage />)} />
@@ -1535,10 +1551,15 @@ function AppInner() {
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
-      <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'exploring'], <TrustCenterPage />)} />
+      {/* 'advisor' belongs here: services/trust.ts ROLE_MATRIX gives advisors four
+          obligations — two of them REQUIRED (mentor_nda_v1,
+          mentor_disclaimer_v1) — and the Trust Center link in the user dropdown
+          carries no role gating, so every advisor could see the link, click it,
+          and be bounced off the only page listing what they owe. */}
+      <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
-      <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], <LiquidityPage currentUser={user} />)} />
+      <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], <FounderWorkspaceTabs set="raise" user={user}><LiquidityPage currentUser={user} /></FounderWorkspaceTabs>)} />
       <Route path="/funds" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       <Route path="/funds/capital-calls" element={guard(['admin', 'investor'], <FundOpsWorkspace />)} />
       <Route path="/lp-portal" element={guard(['admin', 'investor'], <LPPortalPage />)} />
@@ -1633,8 +1654,8 @@ function AppInner() {
           to every authenticated profile, matching the all-roles Settings tab. */}
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals" replace />)} />
-      <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
-      <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
+      <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <PartnerWorkspaceTabs set="pipeline" user={user}><MatchesPage /></PartnerWorkspaceTabs>)} />
+      <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <FounderWorkspaceTabs set="grow" user={user}><NetworkEffectsPage /></FounderWorkspaceTabs>)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelineWorkspace />)} />
       {/* Task #1 — unified Network page (Contacts + Introductions +
           Relationships tabs). The legacy /relationships route redirects into
