@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-seven decisions are now resolved. D6 is closed by D11, which repaired
+All twenty-eight decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -1005,6 +1005,56 @@ convenient reading of the material instead of the material. Eight entries are
 recorded with what is provable about each; the gate fails on a ninth, and fails
 equally on an entry that has since been converged, so the ledger cannot quietly
 go stale.
+
+
+### D28. Money in cents, going forward — the legacy dollars are a ledger, not a lint fix
+
+The integration brief asks for money as integer cents, property-tested, with CI
+grepping money fields for float parsing. The survey that preceded the guard
+changed what it should be:
+
+**This schema already speaks both dialects.** Thirty-one `*_cents` columns
+exist — orders, syndicates, commissions, payouts, liquidity events, expert
+bookings, events, marketplace rates — and **every one is correctly declared
+INTEGER**. Alongside them sit fifty-two REAL dollar columns, and they are not
+the peripheral ones: LP commitments, called capital, capital calls,
+distributions, NAV, portfolio marks, cap-table and 409A share prices.
+
+So there was no defect to fix, and converting the fifty-two is not a lint fix.
+It is a data migration over live fiduciary records that needs a rounding
+decision and a cutover of every reader, on a database this session cannot read.
+Doing it unasked would be the opposite of the funds honesty rule.
+
+What the guard buys instead is that **the split stops growing**. Two rules,
+both narrow enough to be facts: a `*_cents` column must be INTEGER, and a new
+column holding currency must be `*_cents INTEGER` or be on the ledger. Fifty-two
+entries are recorded, the gate fails on a fifty-third, and it fails equally on
+an entry that has since been converted — so the ledger cannot go stale, and
+finishing the conversion is a matter of deleting lines from it.
+
+**The classification was the whole difficulty, and it was wrong in both
+directions first.** A regex over column names matched 138 "money-ish" columns
+and was confidently wrong about a fifth of them. `score_snapshots.capital_total`
+and its eight siblings are *scores*. `vc_funds.carried_interest` defaults to
+0.20 and `management_fee` to 0.02 — they are *fractions*. `fx_rates.usd_rate`
+is an *exchange rate*. `cap_table_vesting.total_shares` is a *count*.
+`fund_distributions.distributed_at` is a *timestamp* that happens to contain the
+word "distributed", and `event_notifications.principal_key` is a *security
+principal*. A check demanding cents of any of those would be demanding nonsense,
+and would have been ignored within a week.
+
+Two narrowings fixed it. The exclusions are an explicit list, each carrying its
+reason, rather than a cleverer pattern nobody can audit. And the rule applies
+only to columns declared with a **float type** — a TEXT column named
+`revenue_range` or `cost_to_mvp` is a label or a sentence, not an amount stored
+badly. That one distinction removed every remaining false positive at a stroke.
+
+The float-parsing half of the brief found nothing worth a rule. There are ten
+`parseFloat` sites in the worker; they parse FRED and BLS economic series,
+LinkedIn profile text, and a partner rating filter. The one that touches money —
+`advisor.profile.hourly_rate_usd` in the writeRouter — is parsing into a REAL
+column that legitimately holds dollars today. When that column moves to cents it
+becomes wrong, and the ledger entry above is where that will be noticed.
 
 
 ## Part 2 — Decisions taken

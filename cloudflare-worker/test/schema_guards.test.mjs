@@ -13,11 +13,13 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
 import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns, aliasMap, singleTablePredicate, predicateIdents, blankLiterals, substituteBindings, coverage } from '../../scripts/check-sqlite-columns.mjs';
 import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables.mjs';
 import { routedWrites, mapColumns, assignmentBrace, unroutableColumns, unroutableSavedTo } from '../../scripts/check-write-router-columns.mjs';
 import { tableColumns, fatalCollisions, definitions } from '../../scripts/check-sqlite-table-collisions.mjs';
+import { isMoney, nonIntegerCents, floatMoney } from '../../scripts/check-money-cents.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
   const src = `
@@ -436,6 +438,40 @@ test('the column guard unions competing definitions, which is why it cannot see 
   const union = knownColumns().get('capital_calls');
   for (const d of defs) assert.ok(union.size > d.cols.size, 'the union exceeds every single definition');
   assert.ok(union.has('amount') && union.has('amount_cents'), 'both money shapes appear at once');
+});
+
+test('a money word is not the same as an amount of money', () => {
+  // The classifier over-matched in both directions before these exclusions.
+  for (const yes of ['amount', 'amount_cents', 'price_usd', 'mrr', 'monthly_burn_usd',
+                     'called_capital', 'nav', 'cash_balance', 'market_cap', 'hourly_rate']) {
+    assert.ok(isMoney(yes), `${yes} should read as money`);
+  }
+  for (const no of [
+    'management_fee_pct',   // a percentage
+    'carried_interest',     // a fraction — vc_funds defaults it to 0.20
+    'usd_rate',             // an exchange rate
+    'total_shares',         // a count
+    'capital_total',        // a score component
+    'total_score',          // a score
+    'distributed_at',       // a timestamp
+    'principal_key',        // a security principal
+    'revenue_range',        // a band label
+    'revenue_notes',        // prose
+  ]) {
+    assert.ok(!isMoney(no), `${no} should not read as money`);
+  }
+});
+
+test('every *_cents column is an integer, and the legacy dollar list is closed', () => {
+  assert.deepEqual(nonIntegerCents(), [], 'a REAL cents column promises what it cannot deliver');
+  // 52 legacy REAL dollar columns are on record. The gate fails on a 53rd, and
+  // equally on one of the 52 that has since been converted.
+  const baseline = JSON.parse(
+    fs.readFileSync(new URL('../../scripts/money-cents-baseline.json', import.meta.url), 'utf8'),
+  ).columns;
+  const found = [...floatMoney().keys()].sort();
+  assert.deepEqual(found, Object.keys(baseline).sort());
+  assert.ok(found.includes('limited_partners.commitment_amount'), 'fiduciary amounts are in the ledger');
 });
 
 test('every table the worker queries is created somewhere', () => {
