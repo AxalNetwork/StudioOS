@@ -16,3 +16,13 @@ paths-ignore:
   # uploads. NOT hand-written source (support.js header: "GENERATED ... do
   # not edit"); fixes belong in dc-runtime/src, not the bundle.
   - spin-out-lab-pipeline
+  # Claude Design canvases for the Axal VC platform integration. Same
+  # dc-runtime export as the tree above — its support.js carries a
+  # byte-identical "GENERATED from dc-runtime/src/*.ts — do not edit"
+  # header — 110 .dc.html pages plus the bundle, ~83k lines. Nothing
+  # references this tree: not wrangler.toml, vite.config.js,
+  # build-frontend.mjs or package.json, and none of it reaches docs/. It
+  # is never built, bundled or served. Canvases are ported INTO
+  # frontend/src/ by hand, and that ported code is scanned like any other
+  # source. Quoted because the directory name contains spaces.
+  - "Axal VC platform"

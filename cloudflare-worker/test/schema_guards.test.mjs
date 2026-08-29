@@ -22,6 +22,7 @@ import { tableColumns, fatalCollisions, definitions } from '../../scripts/check-
 import { isMoney, nonIntegerCents, floatMoney } from '../../scripts/check-money-cents.mjs';
 import { selectKeys, typeFields, phantomFields, coverage as genericCoverage } from '../../scripts/check-row-generics.mjs';
 import { parseSections, bindings, missingFromProduction, unknownTables } from '../../scripts/check-wrangler-binding-parity.mjs';
+import { codeqlIgnores, semgrepIgnores, generatedTrees, gaps } from '../../scripts/check-scanner-ignore-parity.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
   const src = `
@@ -555,4 +556,55 @@ test('every table the worker queries is created somewhere', () => {
   assert.ok(known.size > 300, `expected a few hundred tables, got ${known.size}`);
   assert.ok(known.has('workflows') && known.has('workflow_tasks') && known.has('shared_services_log'),
     'migration 177 should have defined all three');
+});
+
+/* ------------------------------------------------------------------ *
+ * check-scanner-ignore-parity — the two static-analysis ignore lists  *
+ * ------------------------------------------------------------------ */
+
+test('paths-ignore is read without a YAML dependency, quotes and all', () => {
+  const src = [
+    'name: "x"',
+    '# a comment',
+    'paths-ignore:',
+    '  - docs',
+    '  # why the next one is ignored',
+    '  - "Axal VC platform"',
+    "  - 'quoted too'",
+    'queries: security-extended',
+  ].join('\n');
+  assert.deepEqual(codeqlIgnores(src), ['docs', 'Axal VC platform', 'quoted too']);
+});
+
+test('a key after the list ends the block rather than being read as an entry', () => {
+  const src = ['paths-ignore:', '  - docs', 'paths:', '  - frontend'].join('\n');
+  assert.deepEqual(codeqlIgnores(src), ['docs'], 'the `paths:` block is not an exclusion');
+});
+
+test('semgrep patterns are normalised, and an unanchored one is reported', () => {
+  const { entries, unanchored } = semgrepIgnores([
+    '# comment',
+    '/docs/',
+    '/Axal VC platform/',
+    'docs',
+  ].join('\n'));
+  assert.deepEqual(entries, ['docs', 'Axal VC platform']);
+  assert.deepEqual(unanchored, ['docs'],
+    'a bare name would also strip frontend/src/lib/docs from the scan');
+});
+
+test('the generated trees on disk are found by their generator header', () => {
+  const trees = generatedTrees();
+  assert.ok(trees.includes('Axal VC platform'),
+    'the canvases ship a dc-runtime bundle and must be discoverable');
+  assert.ok(trees.includes('spin-out-lab-pipeline'),
+    'the tree this rule was originally written for');
+  assert.ok(!trees.includes('frontend') && !trees.includes('cloudflare-worker'),
+    'real source must never be picked up as generated');
+});
+
+test('every generated tree is ignored by BOTH scanners', () => {
+  // `Axal VC platform/` was in neither list: ~60 security alerts and 1345 of
+  // 1384 quality findings came from a 49M tree that nothing builds or serves.
+  assert.deepEqual(gaps(), []);
 });
