@@ -79,10 +79,25 @@ export function knownTables() {
   return known;
 }
 
-/** Blank the contents of SQL string literals so prose can't look like SQL. */
+/**
+ * Blank the contents of SQL string literals AND `-- …` comments, so prose
+ * cannot look like SQL.
+ *
+ * Comments matter as much as literals: a note reading "the join threw and the
+ * filter never ran" contributed a table called `threw`, because `JOIN\s+(\w+)`
+ * does not care that it is inside a comment. Written while documenting a fix,
+ * which is exactly when such prose gets added.
+ */
 export function stripSqlLiterals(sql) {
   let out = '', i = 0;
   while (i < sql.length) {
+    if (sql[i] === '-' && sql[i + 1] === '-') {
+      const n = sql.indexOf('\n', i);
+      const end = n < 0 ? sql.length : n;
+      out += ' '.repeat(end - i);
+      i = end;
+      continue;
+    }
     if (sql[i] !== "'") { out += sql[i]; i += 1; continue; }
     out += "''";
     i += 1;

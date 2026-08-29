@@ -830,9 +830,12 @@ imports.post('/deck', async (c) => {
   if (projectId) {
     if (user.role !== 'admin') {
       const owns = await c.env.DB.prepare(
+        // `founders` has no user_id — the link is `users.founder_id`. This is
+        // an ownership gate, and with the wrong column it could not evaluate
+        // at all rather than evaluating to false.
         `SELECT 1 AS ok FROM projects p
-           LEFT JOIN founders f ON f.id = p.founder_id
-          WHERE p.id = ? AND (f.user_id = ? OR p.description = ?) LIMIT 1`,
+           LEFT JOIN users fu ON fu.founder_id = p.founder_id
+          WHERE p.id = ? AND (fu.id = ? OR p.description = ?) LIMIT 1`,
       ).bind(projectId, user.id, `imported_from:deck:user_${user.id}`).first<{ ok: number }>();
       if (!owns) return c.json({ error: 'forbidden_project' }, 403);
     }

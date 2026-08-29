@@ -14,7 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
-import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns } from '../../scripts/check-sqlite-columns.mjs';
+import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns, aliasMap } from '../../scripts/check-sqlite-columns.mjs';
 import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
@@ -202,12 +202,42 @@ test('the columns the SELECT pass found are now right', () => {
   assert.ok(!s.get('score_snapshots')?.has('score') && s.get('score_snapshots')?.has('total_score'));
 });
 
+test('an alias is only trusted when it binds to exactly one table', () => {
+  const one = aliasMap('SELECT p.id FROM partners p LEFT JOIN users u ON u.partner_id = p.id');
+  assert.equal(one.get('p'), 'partners');
+  assert.equal(one.get('u'), 'users');
+
+  // `JOIN t ON …` must not bind an alias called `on`.
+  assert.equal(aliasMap('SELECT a FROM widgets JOIN gadgets ON gadgets.id = 1').get('on'), undefined);
+
+  // The same alias on two tables is ambiguous; null means "do not judge".
+  const ambiguous = aliasMap('SELECT x.a FROM partners x JOIN projects x ON 1=1');
+  assert.equal(ambiguous.get('x'), null);
+});
+
+test('the columns the qualified-reference pass found are now right', () => {
+  const s = knownColumns();
+  assert.ok(s.get('esign_envelopes')?.has('document_type') && !s.get('esign_envelopes')?.has('agreement_type'));
+  assert.ok(s.get('users')?.has('full_legal_name') && !s.get('users')?.has('full_name'));
+  assert.ok(s.get('users')?.has('headshot_r2_key') && !s.get('users')?.has('avatar_url'));
+  // The directory opt-out is real, just on another table — it was preserved,
+  // not dropped, because widening a people directory is not a repair.
+  assert.ok(s.get('user_settings')?.has('show_in_directory'));
+  assert.ok(!s.get('users')?.has('show_in_directory'));
+  assert.ok(!s.get('projects')?.has('owner_user_id') && s.get('projects')?.has('founder_id'));
+  // The second copy of the partner_deals query, matching the first.
+  assert.ok(s.get('partner_deals')?.has('user_id') && !s.get('partner_deals')?.has('partner_user_id'));
+  assert.ok(!s.get('partner_deals')?.has('granted_tiers') && s.get('partner_deals')?.has('granted_tier_founder'));
+});
+
 test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', () => {
   // The runnable form of the whole exercise. `check-sqlite-columns` is the
   // gate; this keeps the property visible in the test suite too. Covers both
   // INSERT lists, UPDATE SET clauses and single-table SELECT lists.
+  // One reviewed gap remains on record: corporate_profiles.kyb_status, where
+  // nothing writes a KYB decision at all, so a column would not help.
   const unknown = [...unknownColumns().keys()].sort();
-  assert.deepEqual(unknown, [], `unknown columns: ${unknown.join(', ')}`);
+  assert.deepEqual(unknown, ['corporate_profiles.kyb_status'], `unexpected: ${unknown.join(', ')}`);
 });
 
 test('every table the worker queries is created somewhere', () => {

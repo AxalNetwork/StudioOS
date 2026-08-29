@@ -420,12 +420,17 @@ function mapPartnerDealStatus(s: string): string {
 async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>): Promise<UnifiedContract[]> {
   let rows: any[] = [];
   try {
+    // The same three wrong names corrected at the other partner_deals query
+    // in this file: `user_id` not `partner_user_id`, the two granted_tier_*
+    // columns not a `granted_tiers`, and no `updated_at` at all. Fixing one
+    // copy of a broken query does not fix its duplicates.
     rows = await sql`
-      SELECT d.id, d.partner_user_id, d.deal_type, d.term_months,
-             d.granted_tiers, d.status, d.created_at, d.updated_at,
+      SELECT d.id, d.user_id AS partner_user_id, d.deal_type, d.term_months,
+             d.granted_tier_founder, d.granted_tier_investor,
+             d.status, d.created_at,
              u.email AS partner_email, u.name AS partner_name
         FROM partner_deals d
-        LEFT JOIN users u ON u.id = d.partner_user_id
+        LEFT JOIN users u ON u.id = d.user_id
        ORDER BY d.created_at DESC
     `;
   } catch {

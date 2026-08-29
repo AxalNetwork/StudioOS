@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-two decisions are now resolved. D6 is closed by D11, which repaired
+All twenty-three decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -734,6 +734,52 @@ Eighth parser fault, and it was predicted before it was found: an apostrophe in
 bracket walker and ate the rest of the file — the identical fault the SQL
 scanners carried, one language over. Knowing the shape of your own recurring
 mistake is worth more than any individual fix.
+
+### D23. A join makes the query ambiguous, not the reference
+
+D21 declined joins wholesale, on the grounds that attributing a column to a
+table across one is a guess. That was too broad. A qualified `alias.column` is
+attributable the moment the FROM/JOIN clauses bind that alias to one table —
+which they almost always do. The ambiguity a join introduces belongs to the
+*bare* names in the select list, not to the qualified ones.
+
+Across 160 join queries and 1694 qualified references, eleven were wrong.
+
+`corporate_profiles.kyb_status` was the one that prompted this: it was found by
+reading, on the previous pass, and the obvious question was whether a check
+could have found it. It can, and did.
+
+The sharpest of the rest is a **second copy of a query whose first copy was
+already fixed**. `admin_contracts.ts` carries two `partner_deals` reads with the
+same three wrong names — `partner_user_id` for `user_id`, a `granted_tiers` that
+does not exist, an `updated_at` the table lacks. D18 corrected one of them. The
+other was a join, so nothing looked at it. Fixing one instance of a broken query
+does not fix its duplicates, and only a check that reads every site will say so.
+
+Two more are worth naming because of what they guard rather than what they show:
+an ownership gate in `imports.ts` that could not evaluate at all (`founders` has
+no `user_id`; the link is `users.founder_id`), and a Telegram **redaction check**
+that scanned nobody and passed silently because `users.full_name` is
+`full_legal_name`. A check that cannot run is not a check that fails safe.
+
+**Where the fix would widen exposure, it was not taken.** The coach directory
+filtered on `u.show_in_directory`, which is not a column on `users` — but it
+*is* one on `user_settings`. Dropping the filter would have listed every coach;
+joining the table it actually lives on preserves the opt-out exactly. Reaching
+for the schema before reaching for the delete key is the whole difference there.
+
+**And where no fix exists, none was invented.** `corporate_profiles.kyb_status`
+is the single baselined entry, with its reason recorded: nothing anywhere writes
+a KYB decision. `/trust/kyb/start` upserts entity fields and sets the obligation
+to `in_review`; there is no provider callback and no admin approve/reject.
+Adding the column would leave the reconciliation loop reading NULL forever, so
+it stays a documented gap and a product question — which store, which values,
+who writes them — rather than a migration that looks like progress.
+
+The scope still declines what it should: an alias bound to two tables in one
+statement maps to null and is skipped, and bare names in a join are left alone.
+Both probed — a bad qualified column fails the build, the same column under an
+ambiguous alias does not.
 
 ## Part 2 — Decisions taken
 

@@ -18,6 +18,12 @@
  * which exists on no table anywhere, and `users.organization`, which the
  * advisor writes and then reads back to decide whether it already asked.
  *
+ * A qualified `alias.column` in a JOIN query is attributable on exactly the
+ * same terms, once the alias is bound to one table by the FROM/JOIN clauses —
+ * the join makes the QUERY ambiguous, not the reference. That pass found
+ * eleven more across 1694 references, including a second copy of a broken
+ * partner_deals query whose first copy had already been corrected.
+ *
  * HARVESTING IS THE HARD PART, and getting it wrong over-reports. Three
  * distinct parser faults were found and fixed while building this, each of
  * which invented columns that exist perfectly well:
@@ -324,6 +330,36 @@ export function singleTableSelect(sql) {
   return { list: m[1], table: norm(m[2]), alias: m[4] ? m[4].toLowerCase() : null };
 }
 
+/**
+ * Words that can follow FROM/JOIN and be mistaken for an alias. `JOIN t ON …`
+ * would otherwise bind an alias called `on` to table `t`.
+ */
+const NOT_AN_ALIAS = new Set([
+  'on', 'and', 'or', 'where', 'join', 'left', 'right', 'inner', 'outer', 'cross',
+  'group', 'order', 'having', 'limit', 'union', 'as', 'set', 'using', 'natural',
+  'when', 'then', 'else', 'end', 'is', 'not', 'null', 'in', 'exists', 'case',
+]);
+
+/**
+ * alias -> table, for a query's FROM/JOIN clauses.
+ *
+ * An alias bound to two different tables in one statement is mapped to null
+ * and skipped: that is the ambiguity this check refuses to guess through.
+ */
+export function aliasMap(sql) {
+  const m = new Map();
+  // Comments are not SQL: "the join threw" would otherwise bind an alias.
+  const clean = sql.split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
+  for (const x of clean.matchAll(/\b(?:FROM|JOIN)\s+([`"[]?\w+[`"\]]?)\s+(?:AS\s+)?([a-z]\w*)\b/gi)) {
+    const alias = x[2].toLowerCase();
+    if (NOT_AN_ALIAS.has(alias)) continue;
+    const table = norm(x[1]);
+    if (m.has(alias) && m.get(alias) !== table) { m.set(alias, null); continue; }
+    m.set(alias, table);
+  }
+  return m;
+}
+
 /** INSERT column lists, UPDATE SET clauses and single-table SELECT lists. */
 export function unknownColumns() {
   const schema = knownColumns();
@@ -332,6 +368,24 @@ export function unknownColumns() {
     const rel = path.relative(ROOT, file);
     for (const { body, line } of sqlStrings(fs.readFileSync(file, 'utf8'))) {
       if (body.includes('${')) continue;                  // interpolated — column list is not literal
+      // alias.column in a JOIN query — the alias fixes the table, so the
+      // reference is as attributable as a single-table one. Only aliases
+      // bound to exactly one table are used.
+      if (/\bJOIN\b/i.test(body)) {
+        const aliases = aliasMap(body);
+        for (const x of body.matchAll(/\b([a-z]\w*)\.([a-z_]\w*)\b/gi)) {
+          const table = aliases.get(x[1].toLowerCase());
+          if (!table || incompleteTables.has(table)) continue;
+          const qcols = schema.get(table);
+          if (!qcols) continue;
+          const col = norm(x[2]);
+          if (qcols.has(col) || dynamicColumns.has(col) || /^(rowid|oid|_rowid_)$/.test(col)) continue;
+          const k = `${table}.${col}`;
+          if (!hits.has(k)) hits.set(k, []);
+          hits.get(k).push(`${rel}:${line}`);
+        }
+      }
+
       // SELECT a, b FROM t — attributable only when there is exactly one table.
       const sel = singleTableSelect(body);
       if (sel) {
@@ -429,7 +483,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // The skipped count is printed rather than hidden: it is the honest measure
   // of how much of the schema this check cannot speak for.
   console.log(
-    `✓ check-sqlite-columns: every INSERT, UPDATE and single-table SELECT names columns that exist `
+    `✓ check-sqlite-columns: every INSERT, UPDATE, single-table SELECT and qualified join reference names columns that exist `
     + `(${n} known gap${n === 1 ? '' : 's'} on record; ${incompleteTables.size} tables skipped as runtime-extended).`,
   );
 }

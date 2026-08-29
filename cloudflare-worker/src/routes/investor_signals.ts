@@ -781,11 +781,16 @@ investorSignals.get('/coach-match', async (c) => {
     // Coach pool: distinct users who have role=coach OR completed coachs_lens_v1
     // Exclude admins who are not coaches; respect directory visibility
     const coachRows = await c.env.DB.prepare(
-      `SELECT DISTINCT u.id AS user_id, u.name, u.email, u.role, u.avatar_url
+      // `headshot_r2_key`, not `avatar_url`; and `show_in_directory` lives on
+      // `user_settings`, not `users`. The filter is preserved rather than
+      // dropped — it is a visibility opt-out, and widening who appears in a
+      // people directory is not a repair.
+      `SELECT DISTINCT u.id AS user_id, u.name, u.email, u.role, u.headshot_r2_key
          FROM users u
          LEFT JOIN assessment_results ar ON ar.user_id = u.id
+         LEFT JOIN user_settings us ON us.user_id = u.id
         WHERE (u.role = 'coach' OR ar.track = 'coachs_lens_v1')
-          AND (u.show_in_directory IS NULL OR u.show_in_directory = 1)
+          AND (us.show_in_directory IS NULL OR us.show_in_directory = 1)
         ORDER BY u.name ASC`,
     ).all<{ user_id: number; name: string; email: string; role: string; avatar_url: string | null }>();
     const coaches = (coachRows.results || []) as { user_id: number; name: string; email: string; role: string; avatar_url: string | null }[];
