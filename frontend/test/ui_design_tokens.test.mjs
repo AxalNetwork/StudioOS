@@ -34,10 +34,29 @@ test('every axal- utility used in ui/ has a matching @theme token', () => {
 });
 
 test('the barrel exports every primitive and re-export it claims', async () => {
+  // Asserts on the EXPORT LIST, not on the file text.
+  //
+  // This test used to match `new RegExp(`\\b${name}\\b`)` against the raw
+  // file, and it did not work: ui/index.js's own header explains the four
+  // re-exports BY NAME ("EmptyState, ErrorState, Skeleton and InfoStrip"), so
+  // the identifiers were present in prose whether or not they were exported.
+  // Deleting all four `export { default as … }` lines left this passing.
+  //
+  // A guard that reads the comment describing the code instead of the code is
+  // worse than no guard, because the green tick is mistaken for coverage.
   const barrel = read('ui/index.js');
+  const exported = new Set([
+    // export { default as X } from '…'   and   export { X, Y } from '…'
+    ...[...barrel.matchAll(/^export\s*\{\s*default\s+as\s+(\w+)/gm)].map((m) => m[1]),
+    ...[...barrel.matchAll(/^export\s*\{([^}]+)\}/gm)]
+      .flatMap((m) => m[1].split(','))
+      .map((part) => part.trim().split(/\s+as\s+/).pop().trim())
+      .filter(Boolean),
+  ]);
   for (const name of ['SectionLabel', 'Card', 'Pill', 'Stat', 'StatGrid', 'PILL_TONES',
                       'EmptyState', 'ErrorState', 'Skeleton', 'InfoStrip']) {
-    assert.match(barrel, new RegExp(`\\b${name}\\b`), `ui/index.js does not export ${name}`);
+    assert.ok(exported.has(name),
+      `ui/index.js does not EXPORT ${name} (mentioning it in a comment is not exporting it)`);
   }
 });
 
