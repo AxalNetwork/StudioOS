@@ -41,6 +41,56 @@ function formatTime(iso) {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
+// One server page. The feed used to be requested with the API's default
+// LIMIT 20 and no offset handling at all, so a 21st public event simply did
+// not exist on this page and nothing said so.
+const PAGE_SIZE = 50;
+
+// Month sections, in the order the server already sorted the feed — ascending
+// for upcoming, descending for the archive. Re-sorting here would fight the
+// server and put the archive back in oldest-first order.
+function groupByMonth(list) {
+  const out = [];
+  for (const ev of list) {
+    const d = new Date(ev.starts_at);
+    if (Number.isNaN(d.getTime())) continue;
+    // Local month, deliberately: the tile and the time on every card already
+    // render in the viewer's timezone, so bucketing by UTC would file a
+    // late-evening event under the previous month it is shown in.
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    let bucket = out[out.length - 1];
+    if (!bucket || bucket.key !== key) {
+      bucket = {
+        key,
+        name: d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+        items: [],
+      };
+      out.push(bucket);
+    }
+    bucket.items.push(ev);
+  }
+  return out;
+}
+
+// The calendar tile on each row.
+function DateTile({ iso }) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return (
+    <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-2">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">
+        {d.toLocaleDateString(undefined, { month: 'short' })}
+      </span>
+      <span className="text-lg font-bold leading-none text-slate-900 dark:text-slate-100">
+        {d.getDate()}
+      </span>
+      <span className="text-[10px] uppercase text-slate-500">
+        {d.toLocaleDateString(undefined, { weekday: 'short' })}
+      </span>
+    </div>
+  );
+}
+
 // Map an event's location_kind onto our online / in-person / hybrid taxonomy so
 // the Format filter can work client-side against the live events feed.
 function eventFormat(ev) {
@@ -186,12 +236,22 @@ export default function PublicEventsPage() {
   const [filterTo, setFilterTo] = useState('');
   const [searchQ, setSearchQ] = useState('');
   const [when, setWhen] = useState('upcoming'); // 'upcoming' | 'past'
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+
+  // Any filter change restarts paging from the top; otherwise page 2 of the
+  // old query would be appended under the new one.
+  useEffect(() => {
+    setOffset(0);
+  }, [filterType, filterFrom, filterTo, searchQ, when]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError('');
     eventsPublic.list({
+      limit: PAGE_SIZE,
+      offset,
       type: filterType || undefined,
       from: filterFrom || undefined,
       to: filterTo || undefined,
@@ -200,7 +260,12 @@ export default function PublicEventsPage() {
     })
       .then((data) => {
         if (cancelled) return;
-        setEvents(Array.isArray(data?.events) ? data.events : []);
+        const page = Array.isArray(data?.events) ? data.events : [];
+        setEvents((prev) => (offset === 0 ? page : [...prev, ...page]));
+        // A short page is the end of the feed. A full one may or may not be —
+        // the endpoint returns no total — so the control says "Load more"
+        // rather than claiming a count nobody sent.
+        setHasMore(page.length === PAGE_SIZE);
         setLoading(false);
       })
       .catch((err) => {
@@ -210,7 +275,7 @@ export default function PublicEventsPage() {
         setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [filterType, filterFrom, filterTo, searchQ, when]);
+  }, [filterType, filterFrom, filterTo, searchQ, when, offset]);
 
   // Format is not a server-side filter on the public events API, so refine the
   // returned page client-side.
@@ -218,6 +283,8 @@ export default function PublicEventsPage() {
     () => (filterFormat ? events.filter((ev) => eventFormat(ev) === filterFormat) : events),
     [events, filterFormat],
   );
+
+  const monthSections = useMemo(() => groupByMonth(visibleEvents), [visibleEvents]);
 
   const hasEventFilters = filterType || filterFormat || filterFrom || filterTo || searchQ;
 
@@ -326,7 +393,7 @@ export default function PublicEventsPage() {
               </div>
             </div>
 
-            {loading ? (
+            {loading && offset === 0 ? (
               <div className="text-center text-slate-500 py-20 flex flex-col items-center gap-3">
                 <Loader2 className="w-6 h-6 animate-spin" /> Loading events…
               </div>
@@ -351,8 +418,19 @@ export default function PublicEventsPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
-                {visibleEvents.map((ev) => {
+              <div className="space-y-8">
+                {monthSections.map((section) => (
+                  <div key={section.key}>
+                    <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-1.5">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">
+                        {section.name}
+                      </h3>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                        {section.items.length} {section.items.length === 1 ? 'event' : 'events'}
+                      </span>
+                    </div>
+                    <div className="space-y-4">
+                {section.items.map((ev) => {
                   const fmt = eventFormat(ev);
                   const isPast = when === 'past';
                   return (
@@ -369,6 +447,7 @@ export default function PublicEventsPage() {
                         <div className="flex-1 p-5 flex flex-col justify-between">
                           <div>
                             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2">
+                              <DateTile iso={ev.starts_at} />
                               <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium uppercase tracking-wide">
                                 {ev.type?.replace(/_/g, ' ')}
                               </span>
@@ -398,7 +477,10 @@ export default function PublicEventsPage() {
                               to={`/events/${ev.slug}`}
                               className="inline-flex items-center gap-1 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition-colors"
                             >
-                              {isPast ? 'View recap' : 'Register'}
+                              {/* Not "View recap": no recording_url or replay
+                                  column exists on `events`, so a past event's
+                                  detail page is the same detail page. */}
+                              {isPast ? 'View details' : 'Register'}
                             </Link>
                             {!isPast && (ev.price_cents > 0 ? (
                               <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -413,6 +495,21 @@ export default function PublicEventsPage() {
                     </div>
                   );
                 })}
+                    </div>
+                  </div>
+                ))}
+                {hasMore && (
+                  <div className="pt-2 text-center">
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => setOffset((o) => o + PAGE_SIZE)}
+                      className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-violet-400 disabled:opacity-50"
+                    >
+                      {loading ? 'Loading…' : 'Load more events'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </section>
