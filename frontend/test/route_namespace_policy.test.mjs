@@ -108,3 +108,23 @@ test('the worker still mounts its literal deal routes above the id route', () =>
     assert.ok(at < idAt, `${literal} must be registered before the id route — Hono is order-sensitive`);
   }
 });
+
+// ---------- the singular/plural legibility hazard ----------
+
+test('/fund/* is not introduced beside the live /funds/*', () => {
+  // ROUTE_MAP records this as a *legibility* hazard rather than a collision:
+  // singular and plural are genuinely distinct namespaces, so React Router
+  // would route both correctly. The problem is human — two prefixes one letter
+  // apart, where a misread `/fund/performance` silently lands somewhere real.
+  //
+  // The recorded fix is "do not introduce /fund/*, and do not re-route the
+  // live /funds/*". That was a conclusion in a document, which is exactly the
+  // form a rule takes right before someone adds the route anyway. Enforced.
+  const singular = ROUTES.filter((p) => /^\/fund(\/|$)/.test(p));
+  assert.deepEqual(singular, [],
+    'the canvases propose /fund/* — mount it under the existing /funds/* instead');
+  // And the plural must still be there, or this test passes for the wrong
+  // reason: an empty app satisfies "no /fund/*" perfectly.
+  assert.ok(ROUTES.some((p) => p.startsWith('/funds')),
+    '/funds/* must exist, or this guard is vacuous');
+});
