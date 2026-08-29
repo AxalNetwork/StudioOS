@@ -23,7 +23,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
@@ -63,28 +63,34 @@ test('the new company becomes the active one', () => {
   assert.match(switcher, /setCompanies\(\[\.\.\.companies, created\]\)/);
 });
 
-test('the scope notice stands exactly as long as company scoping is absent', () => {
-  // Comments must be stripped first. The bare substring `company_id` appears
-  // three times in tenancyScope.ts — every one of them inside prose saying the
-  // column does NOT exist ("esign_envelopes has no company_id, so this is
-  // user-scoped"). Matching those read the file as already company-scoped and
-  // failed this test against correct code, which is the exact failure mode
-  // `codeOnly` was written for.
-  const scopeCode = codeOnly(scope);
-  const scopesByCompany =
-    /export function companyScope/.test(scopeCode) || /company_id/.test(scopeCode);
+test('the scope notice stands exactly as long as scoping is incomplete', () => {
+  // The first version of this asked a yes/no question — "does any company
+  // scoping exist?" — and went red the moment the first route adopted it,
+  // demanding the notice be deleted while 50 of 51 route files still ignored
+  // the active company. Adoption is a rollout, so the guard measures the
+  // rollout: the notice stands until every route file that reads `projects`
+  // narrows through `companyScope`, and must be gone once they all do.
+  const routes = readdirSync(resolve(root, 'cloudflare-worker/src/routes'))
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => ({ f, src: read(`cloudflare-worker/src/routes/${f}`) }));
+  const queriesProjects = routes.filter(({ src }) => /\b(FROM|JOIN)\s+projects\b/.test(codeOnly(src)));
+  const unscoped = queriesProjects.filter(({ src }) => !/companyScope/.test(codeOnly(src)));
+
+  assert.ok(queriesProjects.length > 0, 'sanity: some route reads projects');
   const hasNotice = /SCOPE_NOTICE/.test(switcher);
-  if (scopesByCompany) {
+
+  if (unscoped.length === 0) {
     assert.equal(
       hasNotice, false,
-      'tenancyScope.ts now scopes by company — delete SCOPE_NOTICE from ' +
-      'CompanySwitcher.jsx and this test, the switcher no longer overclaims',
+      'every route that reads projects now narrows through companyScope — ' +
+      'delete SCOPE_NOTICE from CompanySwitcher.jsx and this test',
     );
   } else {
     assert.ok(
       hasNotice,
-      'nothing scopes by company yet, so the switcher must say switching does ' +
-      'not separate workspace data',
+      `${unscoped.length} of ${queriesProjects.length} route files that read ` +
+      'projects still ignore the active company, so the switcher must keep ' +
+      'saying separation is incomplete',
     );
   }
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { useActiveCompany as _useActiveCompany } from '../contexts/ActiveCompanyContext';
-import { api } from '../lib/api';
+import { api, setActiveCompanyId } from '../lib/api';
 
 /**
  * CompanySwitcher — the ONLY way the active company changes.
@@ -34,8 +34,13 @@ import { api } from '../lib/api';
  * component is the single writer.
  */
 
-/** Removed by the change that makes the active company scope queries. */
-const SCOPE_NOTICE = 'Switching changes the company profile. Workspace data is not yet separated per company.';
+/**
+ * Removed by the change that finishes company scoping — not by the one that
+ * starts it. The wording is deliberately free of any section name: naming the
+ * surfaces already scoped would need an edit every time another lands, and the
+ * edit that gets forgotten is the one that leaves a stale claim in the UI.
+ */
+const SCOPE_NOTICE = 'Company separation is still rolling out. Some sections show all your data regardless of the company selected.';
 
 function CompanySwitcher({ collapsed }) {
   const { company, setCompany, companies, setCompanies } = _useActiveCompany();
@@ -58,6 +63,7 @@ function CompanySwitcher({ collapsed }) {
     try {
       const created = await api.createCompany({ company_name: name });
       setCompanies([...companies, created]);
+      setActiveCompanyId(created.id);
       setCompany(created);
       setNewName('');
       setAdding(false);
@@ -80,7 +86,7 @@ function CompanySwitcher({ collapsed }) {
         setCompanies(arr);
         // Set the primary company (is_primary_admin=true comes first from the API)
         // as active if nothing is selected yet.
-        if (arr.length > 0 && !company) setCompany(arr[0]);
+        if (arr.length > 0 && !company) { setActiveCompanyId(arr[0].id); setCompany(arr[0]); }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -116,7 +122,7 @@ function CompanySwitcher({ collapsed }) {
           <button
             key={co.uid ?? co.id}
             type="button"
-            onClick={() => { setCompany(co); setOpen(false); }}
+            onClick={() => { setActiveCompanyId(co.id); setCompany(co); setOpen(false); }}
             className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs text-left transition-colors ${
               isActive
                 ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50 dark:bg-violet-900/30'

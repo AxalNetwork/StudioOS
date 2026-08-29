@@ -134,6 +134,28 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/invite/');
 }
 
+/**
+ * The active company, as a request header.
+ *
+ * Read from module state rather than React context because `request()` is a
+ * plain function called from everywhere, including outside a component tree.
+ * `CompanySwitcher` is still the only writer — it calls `setActiveCompanyId`
+ * through the same context write that changes the UI, so the two cannot drift.
+ *
+ * This header is a CLAIM, not a grant. `middleware/activeCompany.ts` checks it
+ * against `user_company_links` on every request and ignores it when the caller
+ * is not a member, so a tampered value widens nothing.
+ */
+let _activeCompanyId = null;
+
+export function setActiveCompanyId(id) {
+  _activeCompanyId = Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function getActiveCompanyHeader() {
+  return _activeCompanyId === null ? {} : { 'X-Company-Id': String(_activeCompanyId) };
+}
+
 export async function request(path, options = {}) {
   try {
     // FormData uploads must NOT carry an explicit Content-Type — the browser
@@ -141,9 +163,10 @@ export async function request(path, options = {}) {
     // would corrupt the request body.
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const csrfHeader = getCsrfHeader(options.method);
+    const companyHeader = getActiveCompanyHeader();
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...csrfHeader, ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...options.headers };
+      ? { ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
