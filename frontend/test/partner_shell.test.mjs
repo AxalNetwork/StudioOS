@@ -75,7 +75,9 @@ test('the pending list can only shrink', () => {
                    '/partner/office-hours', '/my/jobs', '/messages'];
   const extra = targets.filter((t) => ![
     '/studio', '/needs', '/partner/operations/overview', '/services',
-    '/network', '/market-intel', '/settings',
+    // The Settings row targets COMPANY settings. /settings and /profile are
+    // Account — a different page, reached from the user dropdown.
+    '/network', '/market-intel', '/company-settings',
   ].includes(t));
   assert.deepEqual(extra.sort(), [...PENDING].sort(),
     'the set of un-absorbed rows changed — shrink it, or justify the addition here');

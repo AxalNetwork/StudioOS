@@ -329,7 +329,13 @@ export const SIDEBAR_GROUPS = {
 
       { to: '/network', icon: Users, label: 'Network' },
       { to: '/market-intel', icon: Radar, label: 'Research' },
-      { to: '/settings', icon: UserCircle, label: 'Firm Settings', match: ['/settings', '/profile'] },
+      // COMPANY settings, not Account. The canvas draws this row as the
+      // company's own settings page and says where the other thing lives:
+      // "Your personal name, email, identity documents and security live in
+      // Account — not here." /settings and /profile are Account, and they
+      // already have a door in the user dropdown (App.jsx), so they lose
+      // nothing by leaving this row.
+      { to: '/company-settings', icon: UserCircle, label: 'Firm Settings' },
     ]},
   ],
 

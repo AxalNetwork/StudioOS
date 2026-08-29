@@ -1627,7 +1627,7 @@ function AppInner() {
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
       <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferralsPage />)} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />
-      <Route path="/company-settings" element={guard(['admin', 'founder', 'partner'], <Suspense fallback={null}><CompanySettingsPage /></Suspense>)} />
+      <Route path="/company-settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsPage /></Suspense>)} />
       {/* Integrations now lives inside Settings; /integrations redirects there
           (preserving any ?query= so OAuth-return states still show). Available
           to every authenticated profile, matching the all-roles Settings tab. */}
