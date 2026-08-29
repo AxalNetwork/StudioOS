@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty decisions are now resolved. D6 is closed by D11, which repaired
+All twenty-one decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -641,6 +641,50 @@ drew at SELECT lists. `setClause` therefore terminates at the first top-level
 `SET note = 'ask them WHERE they are'` cannot end it early. Both properties are
 pinned by test, and the boundary was probed the same way the finding was: a bad
 column in the SET fails the build, a bad column in the WHERE does not.
+
+### D21. Reads are checked where one table can own the column, and nowhere else
+
+D19 declined to check SELECT lists because attributing a column to a table
+there is usually a guess. That is true in general and false in one common case:
+a SELECT with exactly one table, no join, no set operation, no subquery and no
+`*` has only one candidate owner for every bare name in its list. 773 of the
+worker's SELECTs are that shape, and checking them found six more defects —
+all of them reads, which is where the damage had been hiding.
+
+The sharpest is `SELECT user_id FROM founders`. `founders` has no `user_id`;
+the link runs the other way, through `users.founder_id`. That `.first()` is
+unguarded, so the route did not degrade — it 500'd. The rest degrade silently
+in the now-familiar way: `activity_logs.target_type`/`target_id` (the read half
+of the write D19 corrected, still wrong here), `calendar_events.location` on a
+table that models location as a kind plus a URI, `integrations.provider_name`
+where migration 016 says `provider_key`, `queue_jobs.fund_id` where the fund id
+lives in the payload JSON, and `score_snapshots.score` where the column is
+`total_score` — so every portfolio row reported a null scoring driver.
+
+**The check declines more than it judges, on purpose.** A join, a union, a CTE,
+a subquery or a `*` makes ownership ambiguous, and the scanner returns nothing
+rather than picking a table. Probed both ways: a bad column in a single-table
+SELECT fails the build, the same bad column behind a JOIN does not.
+
+**Thirteen tables are skipped entirely, and the count is printed.** They are
+extended at runtime by a loop over a literal list —
+`for (const [col, type] of KYC_COLUMNS) ALTER TABLE users ADD COLUMN ${col}
+${type}` — so the column name never appears anywhere this harvest can attribute
+it. Binding a loop variable back to its array is real static analysis; guessing
+at it would put the check back in the business of inventing findings, and every
+`users.kyc_*` column reads as missing while being perfectly present. Skipping
+is uniform across INSERT, UPDATE and SELECT so the soundness rule stays one
+rule, and `test:guards` prints "13 tables skipped as runtime-extended" so the
+blind spot is stated rather than implied. That number is the honest measure of
+what this check cannot speak for, and it is the obvious next thing to shrink.
+
+The measurement ran 17 candidates down to 6 by reading the DDL for each one
+before writing a line of fix — four `users.kyc_*` and three `partners` columns
+were the runtime-extended false positives that motivated the skip rule, and
+`SELECT 1 FROM t` briefly registered as a column named `1` because `\w` matches
+digits. Seventh parser fault in this family; every one of them so far has
+invented a finding rather than missed one, which is the failure direction that
+destroys trust in a guard.
 
 ## Part 2 — Decisions taken
 

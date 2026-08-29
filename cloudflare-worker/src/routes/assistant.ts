@@ -257,9 +257,13 @@ async function execTool(env: Env, user: User, name: string, input: Record<string
     }
     case 'recentActivity': {
       const limit = Math.max(1, Math.min(25, Number(input.limit) || 10));
+      // `entity_type` / `entity_id` — the columns migration 036 added. The
+      // `target_*` names matched nothing, and this `.all()` is unguarded, so
+      // the tool threw rather than returning an empty list. Same wrong pair
+      // the write at the bottom of this file used before it was corrected.
       const rows = await env.DB.prepare(
-        "SELECT action, target_type, target_id, created_at FROM activity_logs WHERE user_id = ? ORDER BY id DESC LIMIT ?"
-      ).bind(user.id, limit).all<{ action: string; target_type: string | null; target_id: string | null; created_at: string }>();
+        "SELECT action, entity_type, entity_id, created_at FROM activity_logs WHERE user_id = ? ORDER BY id DESC LIMIT ?"
+      ).bind(user.id, limit).all<{ action: string; entity_type: string | null; entity_id: string | null; created_at: string }>();
       return { items: rows.results || [] };
     }
     case 'pendingContracts': {
@@ -271,9 +275,12 @@ async function execTool(env: Env, user: User, name: string, input: Record<string
     }
     case 'upcomingMeetings': {
       // Best-effort; calendar_events table is created by routes/calendar.ts.
+      // `calendar_events` models a location as a kind plus a URI; there is no
+      // bare `location` column, so this select threw and the catch below turned
+      // every answer into "no upcoming meetings".
       const rows = await env.DB.prepare(
-        "SELECT title, start_at, end_at, location FROM calendar_events WHERE user_id = ? AND start_at >= datetime('now') ORDER BY start_at ASC LIMIT 5"
-      ).bind(user.id).all<{ title: string; start_at: string; end_at: string; location: string | null }>().catch(() => ({ results: [] as Array<{ title: string; start_at: string; end_at: string; location: string | null }> }));
+        "SELECT title, start_at, end_at, location_kind, location_uri FROM calendar_events WHERE user_id = ? AND start_at >= datetime('now') ORDER BY start_at ASC LIMIT 5"
+      ).bind(user.id).all<{ title: string; start_at: string; end_at: string; location_kind: string | null; location_uri: string | null }>().catch(() => ({ results: [] as Array<{ title: string; start_at: string; end_at: string; location_kind: string | null; location_uri: string | null }> }));
       return { items: rows.results || [] };
     }
     case 'scoringSummary': {

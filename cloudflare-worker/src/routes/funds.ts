@@ -197,7 +197,10 @@ funds.get('/syndication', async (c) => {
       ORDER BY l.created_at DESC LIMIT ?`
   ).bind(limit).all().catch(() => ({ results: [] }));
   const pendingCalls = await c.env.DB.prepare(
-    `SELECT id, fund_id, payload, created_at FROM queue_jobs
+    // `queue_jobs` has no fund_id column — `Jobs.enqueue` puts it in the
+    // payload. Naming it directly threw, and the catch below made this list
+    // permanently empty, so no pending capital call ever surfaced here.
+    `SELECT id, json_extract(payload, '$.fund_id') AS fund_id, payload, created_at FROM queue_jobs
       WHERE job_type IN ('capital_call', 'capital_call_notice') AND status IN ('pending','processing')
       ORDER BY created_at DESC LIMIT ?`
   ).bind(limit).all().catch(() => ({ results: [] }));
