@@ -288,3 +288,59 @@ export function projectOwnerScope(actor: Actor | null | undefined, alias = 'p'):
     binds: [founderId],
   };
 }
+
+/**
+ * A founder's projects, narrowed to ONE company.
+ *
+ * This is the scope the CompanySwitcher was always implying and never had.
+ * Before migration 189 no business table carried a `company_id` at all — the
+ * whole schema had it on `user_company_links`, the membership join itself — so
+ * selecting a company changed a label and nothing else.
+ *
+ * It layers on `projectOwnerScope` rather than replacing it. Ownership is still
+ * the outer question: a company you belong to does not hand you another
+ * founder's projects that happen to share it. Company is a NARROWING, never a
+ * widening, and composing this way means the id-space rule projectOwnerScope
+ * documents (`projects.founder_id` is a founders row, not a users row) is
+ * enforced once instead of restated here.
+ *
+ * `companyId === null` means "no company selected", NOT "no access": the caller
+ * sees every project they own. That is the single-company case, which is almost
+ * everyone, and the case before the switcher has been touched. Returning
+ * NO_ROWS for a missing header would blank the app for every existing user the
+ * moment this shipped.
+ *
+ * UNASSIGNED PROJECTS ARE VISIBLE UNDER EVERY COMPANY. `company_id IS NULL` is
+ * a real state — migration 189 backfills only founders who have a primary
+ * company, and deliberately invents nothing for those who do not. An unassigned
+ * project is not another company's data, so showing it breaks no isolation
+ * rule; hiding it would make a founder's own work vanish behind a control they
+ * did not know changed anything. When assignment UI ships, the OR clause is
+ * what it removes.
+ *
+ * ADMIN STAYS UNSCOPED, as everywhere else in this module. The cross-tenant
+ * "read-only overlay" that would let an admin view one tenant at a time is a
+ * separate feature (ROUTE_MAP: Admin · Super); bolting it on here would make an
+ * admin's blank-company case indistinguishable from a scoped one.
+ *
+ * @param companyId a company the caller has been VERIFIED to belong to.
+ *   This function does not check membership and must never be handed a raw
+ *   client value — `middleware/activeCompany.ts` resolves the header against
+ *   `user_company_links` and passes null when the claim does not hold.
+ */
+export function companyScope(
+  actor: Actor | null | undefined,
+  companyId: number | null,
+  alias = 'p',
+): ScopeClause {
+  const owner = projectOwnerScope(actor, alias);
+  // No rows is already the answer; narrowing it further cannot help, and
+  // appending to `1=0` would make the SQL harder to read for no gain.
+  if (owner.sql === NO_ROWS.sql) return owner;
+  if (isUnscoped(actor)) return owner;
+  if (companyId === null) return owner;
+  return {
+    sql: `(${owner.sql} AND (${alias}.company_id = ? OR ${alias}.company_id IS NULL))`,
+    binds: [...owner.binds, companyId],
+  };
+}
