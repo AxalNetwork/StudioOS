@@ -35,6 +35,13 @@ export interface Actor {
    * `lpMembershipScope`'s own comment says so, and a test pins the coupling.
    */
   email?: string | null;
+  /**
+   * `users.founder_id` — the founders row this account is attached to.
+   * `projectOwnerScope` reads it because `projects.founder_id` points at
+   * `founders(id)`, not at `users(id)`: a project's owner cannot be matched on
+   * the caller's user id at all.
+   */
+  founder_id?: number | null;
 }
 
 /** A composable SQL fragment. `sql` is always safe to drop after WHERE. */
@@ -232,4 +239,52 @@ export function aiUsageSelfScope(actor: Actor | null | undefined, alias = 'u'): 
 /** Compose a scope into a query that already has its own WHERE conditions. */
 export function andScope(baseSql: string, baseBinds: Array<string | number>, scope: ScopeClause) {
   return { sql: `${baseSql} AND ${scope.sql}`, binds: [...baseBinds, ...scope.binds] };
+}
+
+/**
+ * Projects the caller owns — the fourth resource, after e-sign envelopes, fund
+ * GP rows and LP memberships.
+ *
+ * `projects.founder_id` references `founders(id)`, so ownership is the
+ * caller's `users.founder_id`, never their user id. Getting that wrong does not
+ * fail loudly: `founder_id = <a user id>` is valid SQL that matches whichever
+ * unrelated founder happens to hold that number, which is worse than an error.
+ *
+ * `deleted_at IS NULL` is part of the predicate rather than left to the caller.
+ * A soft-deleted project is not owned in any sense a surface should act on, and
+ * two routes that already inline this scope both remembered the filter — which
+ * is exactly the kind of agreement that survives right up until the third
+ * copy forgets.
+ *
+ * PARTNERS GET NOTHING HERE, which is where this diverges from
+ * `canAccessFounderResource` — that predicate treats admin and partner alike as
+ * studio-wide staff. A data room is not "founder data staff may read": it is the
+ * set of documents a founder chose to share with named investors, and a
+ * blanket partner path would make the per-investor grant decorative. The
+ * divergence is the point, so it is written down rather than inferred.
+ *
+ * `routes/contacts.ts` and `routes/advisory.ts` each carry their own
+ * `ownedProjectScope` helper predating this module. They are not rewritten
+ * here: both are correct, both are covered, and a working ownership filter is
+ * the last thing to refactor speculatively. New code uses this one.
+ */
+export function projectOwnerScope(actor: Actor | null | undefined, alias = 'p'): ScopeClause {
+  if (isUnscoped(actor)) return { sql: `(${alias}.deleted_at IS NULL)`, binds: [] };
+  if (actorId(actor) === null) return NO_ROWS;
+  // ROLE-GATED, not merely founder_id-gated. `auth.ts` records why, in two
+  // places: a principal converted to another role KEEPS its residual
+  // `users.founder_id`, so a founder who later became an investor would
+  // otherwise still read their old projects through this scope. Matching on
+  // the id alone is the bug `canAccessFounderResource` and `entityListScope`
+  // were both written to avoid; this is the third copy of that rule and it
+  // agrees with them deliberately.
+  if (actor?.role !== 'founder') return NO_ROWS;
+  const founderId = typeof actor?.founder_id === 'number' ? actor.founder_id : null;
+  // A founder account with no founders row owns no projects. Falling back to
+  // the user id here would be the id-space mismatch described above.
+  if (founderId === null) return NO_ROWS;
+  return {
+    sql: `(${alias}.founder_id = ? AND ${alias}.deleted_at IS NULL)`,
+    binds: [founderId],
+  };
 }

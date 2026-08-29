@@ -21,6 +21,7 @@ import {
   esignEnvelopeScope, fundGpScope, lpMembershipScope, lpSelfScope,
   isUnscoped, andScope,
   ALL_ROWS, NO_ROWS, UNSCOPED_ROLES,
+  projectOwnerScope,
 } from '../src/services/tenancyScope.ts';
 
 // ---------- the default ----------
@@ -232,4 +233,62 @@ test('the LP scope is not interchangeable with the other two resources', () => {
   const lp = lpMembershipScope({ id: 3, role: 'investor', email: 'a@b.co' }).sql;
   assert.doesNotMatch(lp, /created_by|esign_recipients|gp_user_id/);
   assert.doesNotMatch(fundGpScope({ id: 3, role: 'investor' }).sql, /lp\.email/);
+});
+
+/* ------------------------------------------------------------------ *
+ * projectOwnerScope — the fourth resource                             *
+ * ------------------------------------------------------------------ */
+
+test('a founder is scoped to their own founders row, never their user id', () => {
+  // `projects.founder_id` references `founders(id)`. Binding the USER id here
+  // would be valid SQL that silently matches whichever unrelated founder holds
+  // that number — the worst kind of wrong, because it returns rows.
+  const s = projectOwnerScope({ id: 900, role: 'founder', founder_id: 7 });
+  assert.match(s.sql, /p\.founder_id = \?/);
+  assert.deepEqual(s.binds, [7], 'the bind is the FOUNDER id, not the user id');
+  assert.match(s.sql, /deleted_at IS NULL/, 'a soft-deleted project is not owned');
+});
+
+test('a residual founder_id on a converted account grants nothing', () => {
+  // This is the whole reason the scope is role-gated. `auth.ts` records it
+  // twice: a principal converted to another role KEEPS users.founder_id, so an
+  // id-only check would let a former founder keep reading their old projects
+  // after becoming an investor.
+  for (const role of ['investor', 'partner', 'advisor', 'exploring', '', null]) {
+    const s = projectOwnerScope({ id: 900, role, founder_id: 7 });
+    assert.equal(s.sql, '1=0', `role ${JSON.stringify(role)} must get no rows`);
+    assert.deepEqual(s.binds, []);
+  }
+});
+
+test('partners get nothing here, unlike canAccessFounderResource', () => {
+  // A deliberate divergence: that predicate treats partners as studio-wide
+  // staff, but a data room is the set of documents a founder chose to share
+  // with named investors. A blanket partner path would make the grant
+  // decorative.
+  assert.equal(projectOwnerScope({ id: 5, role: 'partner' }).sql, '1=0');
+});
+
+test('a founder with no founders row owns nothing, rather than falling back', () => {
+  assert.equal(projectOwnerScope({ id: 900, role: 'founder' }).sql, '1=0');
+  assert.equal(projectOwnerScope({ id: 900, role: 'founder', founder_id: null }).sql, '1=0');
+});
+
+test('an unidentified caller gets no rows whatever it claims', () => {
+  assert.equal(projectOwnerScope(null).sql, '1=0');
+  assert.equal(projectOwnerScope(undefined).sql, '1=0');
+  assert.equal(projectOwnerScope({ role: 'founder', founder_id: 7 }).sql, '1=0',
+    'a founder_id with no user id behind it is not an identity');
+});
+
+test('admin sees every project except the deleted ones', () => {
+  const s = projectOwnerScope({ id: 1, role: 'admin' });
+  assert.match(s.sql, /deleted_at IS NULL/);
+  assert.doesNotMatch(s.sql, /founder_id/);
+  assert.deepEqual(s.binds, []);
+});
+
+test('the alias is honoured, so the clause composes into a join', () => {
+  assert.match(projectOwnerScope({ id: 9, role: 'founder', founder_id: 2 }, 'proj').sql,
+    /proj\.founder_id/);
 });
