@@ -768,13 +768,16 @@ export async function routeAnswer(
   if (questionId === 'role_detect.organization') {
     try {
       await env.DB.prepare(
-        `UPDATE users SET organization = ? WHERE id = ?`,
-      ).bind(value, user.id).run();
-      return { status: 'saved', saved_to: { table: 'users', column: 'organization', id: user.id, page_url: '/settings' } };
+        `INSERT INTO user_profile_ext (user_id, organization, updated_at)
+         VALUES (?, ?, datetime('now'))
+         ON CONFLICT(user_id) DO UPDATE SET
+           organization = excluded.organization,
+           updated_at = excluded.updated_at`,
+      ).bind(user.id, value).run();
+      return { status: 'saved', saved_to: { table: 'user_profile_ext', column: 'organization', id: user.id, page_url: '/settings' } };
     } catch {
-      // Migration 180 adds the column; this remains for the window before it
-      // applies. The old hint claimed the answer was "remembered for later",
-      // which nothing did — say what actually happened instead.
+      // Migration 180 adds the sidecar column; keep a truthful response during
+      // the short window before the migration reaches an older environment.
       return { status: 'noop', hint: 'Could not save your organisation just now.' };
     }
   }
@@ -1450,11 +1453,14 @@ export async function hydrateAlreadyAnswered(env: Env, user: User): Promise<Set<
   if (role && role !== 'unknown') answered.add('role_detect.primary');
   try {
     const u = await env.DB.prepare(
-      `SELECT organization, headline FROM users WHERE id = ?`,
+      `SELECT e.organization, u.headline
+         FROM users u
+         LEFT JOIN user_profile_ext e ON e.user_id = u.id
+        WHERE u.id = ?`,
     ).bind(user.id).first<{ organization: string | null; headline: string | null }>().catch(() => null);
     if (u?.organization) answered.add('role_detect.organization');
     if (u?.headline)     answered.add('role_detect.headline');
-  } catch { /* organization/headline not migrated everywhere */ }
+  } catch { /* organization sidecar not migrated everywhere */ }
 
   if (role === 'founder' || role === 'admin') {
     if (user.founder_id) {

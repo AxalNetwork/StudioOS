@@ -1,13 +1,11 @@
--- 180 — users.organization, which the advisor writes, reads back, and never had.
+-- 180 — advisor organization, which the advisor writes, reads back, and never had.
 --
 -- `writeRouter` handles three role-detection answers the same way: it writes
--- the value to a `users` column, then a later read decides whether to ask the
--- question again. `role`, `headline` and `bio` all exist. `organization` never
--- did, and the damage compounds:
+-- the value, then a later read decides whether to ask the question again.
+-- `role`, `headline` and `bio` all exist. `organization` never did, and the
+-- damage compounds:
 --
---   the write   `UPDATE users SET organization = ?` throws into its catch,
---               which returns { status: 'noop', hint: 'organization column not
---               available; remembered for later.' } — and nothing remembers it.
+--   the write   had nowhere to persist the answer and returned a noop.
 --
 --   the read    `SELECT organization, headline FROM users` throws on the first
 --               unknown column, so the whole row comes back null. That is the
@@ -19,8 +17,8 @@
 -- answer, tells them it is remembered, and asks again next session — and asks
 -- for their headline again too, despite having stored it.
 --
--- Added rather than removed because the intent is unambiguous: the question is
--- authored, the write is authored, the read is authored, and the two sibling
--- columns beside it work.
+-- `users` is already at D1's 100-column limit in production. Per-user extension
+-- fields therefore live in the existing one-to-one `user_profile_ext` sidecar
+-- (migration 131), rather than adding another column to `users`.
 
-ALTER TABLE users ADD COLUMN organization TEXT;
+ALTER TABLE user_profile_ext ADD COLUMN organization TEXT;

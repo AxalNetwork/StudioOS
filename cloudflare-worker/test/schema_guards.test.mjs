@@ -112,9 +112,10 @@ test('a SET clause ends at WHERE, and not at a WHERE inside a string', () => {
 
 test('the columns the UPDATE pass found are now present', () => {
   const schema = knownColumns();
-  // Migration 180. Its absence broke the advisor's headline question too,
-  // because both answered-checks ride on one SELECT.
-  assert.ok(schema.get('users')?.has('organization'), 'users.organization should be known');
+  // Migration 180. `users` is at D1's 100-column limit, so the advisor's
+  // organization answer belongs in the existing one-to-one profile sidecar.
+  assert.ok(schema.get('user_profile_ext')?.has('organization'), 'user_profile_ext.organization should be known');
+  assert.ok(!schema.get('users')?.has('organization'), 'users.organization must not consume another users column');
   // `pipeline_stage` exists on no table; both writers now use `stage`.
   const owners = [...schema].filter(([, c]) => c && c.has('pipeline_stage')).map(([t]) => t);
   assert.deepEqual(owners, [], 'nothing should define pipeline_stage');

@@ -289,7 +289,7 @@ function isExploringUser(user: User): boolean {
 // null". So:
 //   - role unknown → bank = ROLE_DETECTOR (3 questions; the
 //     writeRouter saves primary→users.role, organization→
-//     users.organization, headline→users.headline as they land).
+//     user_profile_ext.organization, headline→users.headline as they land).
 //   - role known   → bank = persona bank (organization/headline are
 //     optional profile niceties handled by /settings; the advisor
 //     does not gate the persona pivot on them).
