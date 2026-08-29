@@ -1,0 +1,177 @@
+/**
+ * The Founder shell — twenty-one items to ten rows, and the bar that had to
+ * be built before the collapse was safe.
+ *
+ * Founder is the hardest of the four roles. Investor collapsed cleanly because
+ * three workspaces already tabbed across their whole subtrees. Founder has no
+ * such thing: `PitchWorkspacePage`, `CapitalWorkspacePage` and
+ * `LegalEnginePage` each tab only within themselves and nothing links one to
+ * another, while `ExecutionPage`, `TeamBuildingPage`, `DiscoveryPage` and
+ * `FounderMarketplacePage` have no tab bar at all.
+ *
+ * So the audit came first. Searching every `to=`, `to:`, `navigate(` and
+ * `link=` in frontend/src outside sidebarConfig.js, SEVEN destinations had
+ * zero inbound links — their sidebar row was the only door:
+ *
+ *     /messages  /execution  /signals  /build/team
+ *     /build/metrics  /network-effects  /raise/capital
+ *
+ * `FounderWorkspaceTabs` is what makes six of them survive the collapse
+ * (/messages keeps a row). Every assertion below reads that file, or App.jsx,
+ * rather than trusting the sidebar's own comments — because `match` decides
+ * which row highlights, and does not create a link.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
+
+const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+const src = codeOnly(read('frontend/src/sidebarConfig.js'));
+const founder = src.slice(src.indexOf('\n  founder: ['), src.indexOf('\n  partner: ['));
+
+const rows = [...founder.matchAll(/\{ to: '([^']*)'[^}]*label: '([^']+)'/g)]
+  .map((m) => ({ to: m[1], label: m[2] }));
+const targets = rows.map((r) => r.to);
+const labels = rows.map((r) => r.label);
+
+const bar = codeOnly(read('frontend/src/pages/founder/FounderWorkspaceTabs.jsx'));
+const app = codeOnly(read('frontend/src/App.jsx'));
+const tabsTo = (p) => bar.includes(`to: '${p}'`);
+
+test('the canvas rows are present, in the canvas order', () => {
+  // Canvas ROWS: Home · Validate · Build · Raise · Grow · Network · Research ·
+  // Trust · Company Settings. Trust is excluded on purpose (below).
+  const CANON = ['Home', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', 'Company Settings'];
+  let i = 0;
+  for (const l of labels) if (l === CANON[i]) i += 1;
+  assert.equal(i, CANON.length, `canonical rows out of order or missing: ${JSON.stringify(labels)}`);
+});
+
+test('the shell is ten rows, not twenty-one', () => {
+  assert.equal(rows.length, 10, `founder shell drifted off ten rows: ${JSON.stringify(labels)}`);
+});
+
+test('every destination the old nav reached still has a door', () => {
+  // The twenty-one items the pre-canvas founder nav carried, verbatim.
+  const BEFORE = [
+    '/studio', '/spinout-lab', '/messages',
+    '/execution', '/signals', '/build/team', '/build/metrics', '/spinout-lab/brand',
+    '/build/discovery', '/build/marketplace', '/advisory',
+    '/network', '/market-intel',
+    '/raise/pitch', '/raise/capital', '/raise/legal-engine', '/raise/data-room',
+    '/comarketing',
+    '/network-effects', '/liquidity', '/perks',
+  ];
+  const doorless = BEFORE.filter((p) => !targets.includes(p) && !tabsTo(p));
+  assert.deepEqual(doorless, [], 'no nav row and no workspace tab — reachable only by typed URL');
+});
+
+test('the seven doorless destinations are exactly the ones the bar rescues', () => {
+  // If any of these loses its tab, it becomes unreachable outright — there is
+  // no second door anywhere in frontend/src. This is the assertion that would
+  // have caught the regression in #350.
+  for (const p of ['/execution', '/signals', '/build/team', '/build/metrics',
+    '/network-effects', '/raise/capital']) {
+    assert.ok(tabsTo(p), `${p} has no inbound link anywhere else — the tab IS the door`);
+  }
+  assert.ok(targets.includes('/messages'), '/messages has no other door either');
+});
+
+test('each row that owns sections is actually wrapped at its routes', () => {
+  // A tab set that no route renders is a list, not a bar.
+  const SITES = {
+    validate: ['/build/discovery', '/build/marketplace', '/advisory'],
+    build: ['/execution', '/build/roadmap', '/build/metrics'],
+    raise: ['/raise/pitch', '/raise/capital', '/raise/legal-engine', '/raise/data-room', '/liquidity'],
+    grow: ['/build/team', '/spinout-lab/brand', '/comarketing', '/perks', '/network-effects'],
+    research: ['/market-intel', '/signals'],
+  };
+  for (const [set, paths] of Object.entries(SITES)) {
+    for (const p of paths) {
+      const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
+      assert.ok(line, `no route for ${p}`);
+      assert.ok(line.includes(`<FounderWorkspaceTabs set="${set}"`),
+        `${p} is not wrapped in the ${set} bar — the row cannot own it`);
+    }
+  }
+});
+
+test('a founder never gets two tab bars on one page', () => {
+  // /perks and /comarketing already carried the Partner Offers bar. The fix is
+  // a branch, not a second bar stacked on the first.
+  for (const p of ['/perks', '/comarketing']) {
+    const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
+    assert.match(line, /user\?\.role === 'founder'\s*\?\s*<FounderWorkspaceTabs/,
+      `${p} must serve founders the Grow bar INSTEAD of the Partner bar`);
+    assert.ok(line.includes('<PartnerWorkspaceTabs set="offers"'),
+      `${p} must still serve everyone else the Partner bar`);
+  }
+});
+
+test("liquidity's tier gate moved onto the tab rather than being dropped", () => {
+  // The /liquidity ROUTE has no tier gate — the sidebar row was the whole
+  // gate. Folding the row into an ungated tab would have widened who sees it.
+  assert.match(bar, /to: '\/liquidity'[^}]*requiredTier: 'studio'/s);
+  assert.match(bar, /hasTier\(user, t\.requiredTier\)/, 'the filter must apply the gate');
+  const line = app.split('\n').find((l) => l.includes('path="/liquidity"'));
+  assert.ok(!/requiredTier/.test(line), 'if the route ever gains its own gate, revisit this');
+});
+
+test('every tab carries the guard its route carries', () => {
+  // A tab that bounces the viewer off a route guard is worse than an absent
+  // one. Each tab's `roles` must be a subset of its route's guard list.
+  const sets = [...bar.matchAll(/\{ to: '([^']+)', label: '[^']+', icon: \w+,\s*roles: \[([^\]]*)\](, labOnlyFor: \[([^\]]*)\])?/g)];
+  assert.ok(sets.length >= 15, `only found ${sets.length} tabs — the regex went stale`);
+  for (const [, to, rolesRaw, , labRaw] of sets) {
+    const line = app.split('\n').find((l) => l.includes(`path="${to}"`));
+    assert.ok(line, `no route for tab ${to}`);
+    const guardList = line.slice(line.indexOf('guard(')).match(/\[([^\]]*)\]/);
+    assert.ok(guardList, `could not read the guard for ${to}`);
+    const allowed = new Set(guardList[1].split(',').map((x) => x.trim().replace(/'/g, '')));
+    // `labRoles(...)` widens the guard at runtime to admit the viewer's own
+    // role while spinout_lab_active === 1. A tab may rely on that ONLY by
+    // declaring labOnlyFor, which makes it disappear when the widening does
+    // not apply — otherwise it would offer a route that bounces the viewer.
+    const labWidened = new Set((labRaw || '').split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean));
+    if (labWidened.size) {
+      assert.ok(line.includes('labRoles('),
+        `tab ${to} declares labOnlyFor but its route is not wrapped in labRoles()`);
+    }
+    for (const r of rolesRaw.split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean)) {
+      assert.ok(allowed.has(r) || labWidened.has(r),
+        `tab ${to} offers '${r}' but its route guard is ${[...allowed].join(', ')}`);
+    }
+  }
+});
+
+test('Home is /studio, Settings is the company, no role root invented', () => {
+  assert.equal(rows[0].to, '/studio');
+  assert.equal(rows[0].label, 'Home');
+  assert.ok(targets.includes('/company-settings'));
+  assert.ok(!targets.includes('/settings'), 'Company Settings must not point at the personal Account page');
+  assert.ok(!targets.includes('/home'));
+  assert.ok(!targets.includes('/founder'), 'no bare /founder root');
+});
+
+test('Spin-Out Lab keeps its row, untouched', () => {
+  assert.match(founder, /\{ to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' \}/);
+});
+
+test('the Research row lands somewhere every founder can actually open', () => {
+  // /market-intel's guard is labRoles(['admin','partner','investor']) — it does
+  // not list founder at all, so a founder outside the Lab is bounced. That
+  // predates this shell; the row must not walk into it.
+  const research = rows.find((r) => r.label === 'Research');
+  assert.equal(research.to, '/signals');
+  const mi = app.split('\n').find((l) => l.includes('path="/market-intel"'));
+  assert.ok(!/\[[^\]]*'founder'[^\]]*\]/.test(mi.slice(mi.indexOf('guard('))),
+    'if /market-intel ever admits founders outright, point Research back at it');
+  assert.match(bar, /to: '\/market-intel'[^}]*labOnlyFor: \['founder'\]/s,
+    'the Market tab must hide itself for a founder outside the Lab');
+});
+
+test('Trust stays out of the sidebar', () => {
+  assert.ok(!targets.includes('/trust'), 'Trust Center belongs to the user dropdown');
+});

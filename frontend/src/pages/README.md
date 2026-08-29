@@ -18,6 +18,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | --- | --- |
 | `admin/` | Admin console screens and their tabs. |
 | `advisor/` | The advisor's own practice surfaces. |
+| `founder/` | The founder shell's workspace tab bars. |
 | `partner/` | Partner-side operations (BD console). |
 | `captable/` | Cap-table panels composed into `CapTablePage.jsx`. |
 | `raise/` | Round-manager panels. |

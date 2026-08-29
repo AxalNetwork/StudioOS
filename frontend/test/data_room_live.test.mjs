@@ -104,7 +104,13 @@ test('sharing does not promise an invitation', () => {
 test('the page is routed, role-branched, and never a second root', () => {
   const app = read('frontend/src/App.jsx');
   assert.match(app, /path="\/raise\/data-room"/, 'defining the page is not shipping it');
-  assert.match(app, /guard\(\['admin', 'founder', 'investor'\], <DataRoomPage/);
+  // Read the route's own line rather than pinning guard-to-page adjacency: the
+  // founder shell wraps this route in FounderWorkspaceTabs (Raise owns the Data
+  // room zone), which sits between them. The guard list and the page it renders
+  // are what this test is about.
+  const route = app.split('\n').find((l) => l.includes('path="/raise/data-room"'));
+  assert.match(route, /guard\(\['admin', 'founder', 'investor'\],/);
+  assert.match(route, /<DataRoomPage/);
   // The persona is a branch inside one route, not a /founder or /investor root.
   assert.ok(!/path="\/investor\/data-room"|path="\/founder\/data-room"/.test(app));
   const s = read(PAGE);

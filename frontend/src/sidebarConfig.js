@@ -170,69 +170,47 @@ export const SIDEBAR_GROUPS = {
   //
   // Newly surfaced (routes already existed and are founder-accessible, they just
   // weren't in the founder nav): Co-Marketing (/comarketing, Launch).
+  // Founder shell — the canvas declares nine rows (Home · Validate · Build ·
+  // Raise · Grow · Network · Research · Trust · Company Settings). Eight land
+  // here; Trust is deliberately absent, pinned out of every sidebar by
+  // trust_center_navigation.test.mjs — it is reached from the user dropdown.
+  // Spin-Out Lab and Messages keep rows of their own on top of that, so ten.
+  //
+  // The twenty-one items this replaces all keep a door. Five rows own their
+  // sections through FounderWorkspaceTabs, which wraps each route in App.jsx:
+  //
+  //   Validate → Discovery · Marketplace · Advisory
+  //   Build    → Execution · Roadmap · Metrics      (canvas: This week ·
+  //              Board · Roadmap · Cadence · KPI entry)
+  //   Raise    → Pitch · Capital · Legal · Data room · Liquidity
+  //   Grow     → Talent · Brand · Launch · Perks · Network effects
+  //   Research → Market · Signals
+  //
+  // Seven destinations had ZERO inbound links anywhere outside this file —
+  // /messages, /execution, /signals, /build/team, /build/metrics,
+  // /network-effects and /raise/capital. Six of them are now reachable only
+  // because those bars exist; /messages keeps a row.
+  //
+  // /liquidity's `requiredTier: 'studio'` moved onto its tab rather than being
+  // dropped: the route itself has no tier gate, so the nav was the whole gate.
+  //
+  // As in the investor shell, the Spin-Out Lab row ships verbatim — it is not
+  // a modification target, and the canvas folds it into Home without saying
+  // what Home would then be.
   founder: [
-    { key: 'home', label: 'Home', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+    { key: 'shell', label: 'Workspace', items: [
+      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/messages', icon: Mail, label: 'Messages' },
-    ]},
-    { key: 'build', label: 'Build', items: [
-      { to: '/execution', icon: Briefcase, label: 'Execution', match: ['/execution', '/projects', '/build/roadmap'] },
-      { to: '/signals', icon: Radar, label: 'Signals' },
-      // Team Building — consolidates the former "Find a Advisor" (Validate),
-      // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one
-      // workspace at /build/team. `match` keeps this row active when a founder
-      // deep-links (or is redirected from) the legacy standalone routes.
-      { to: '/build/team', icon: Users, label: 'Team', match: ['/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications'] },
-      { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
-      { to: '/spinout-lab/brand', icon: Sparkles, label: 'Brand & Landing', match: ['/spinout-lab/brand', '/build/brand'] },
-    ]},
-    { key: 'validate', label: 'Validate', items: [
-      { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
-      // Marketplace merges the two halves of the partner-services marketplace —
-      // "Needs Board" (/needs, demand) and "Service Catalogue" (/services,
-      // supply) — into one tabbed page at /build/marketplace. `match` keeps this
-      // row active across every tab and when a founder deep-links (or is
-      // redirected from) the legacy /needs and /services routes (see App.jsx).
-      { to: '/build/marketplace', icon: Package, label: 'Marketplace', match: ['/build/marketplace', '/needs', '/services'] },
-      { to: '/advisory', icon: Brain, label: 'Advisory' },
-    ]},
-    // Task #7 — Network section mirrors the advisor/partner/investor profiles:
-    // three tabs (Introductions, Relationships, Organizations) served by the
-    // shared Network workspace under /advisor/network/*. This replaces the old
-    // single "Network" link that lived in Validate; the legacy /network,
-    // /relationships and /contacts routes keep the Relationships row active.
-    { key: 'network', label: 'Network', items: [
+
+      { to: '/build/discovery', icon: MessageSquare, label: 'Validate', match: ['/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
+      { to: '/execution', icon: Briefcase, label: 'Build', match: ['/execution', '/projects', '/build/roadmap', '/build/metrics'] },
+      { to: '/raise/pitch', icon: Sparkles, label: 'Raise', match: ['/raise', '/liquidity'] },
+      { to: '/build/team', icon: TrendingUp, label: 'Grow', match: ['/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/spinout-lab/brand', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
+
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-    ]},
-    // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
-    // the shared Research workspace (also used by advisors/investors/partners).
-    { key: 'research', label: 'Research', items: [
-      { to: '/market-intel', icon: Radar, label: 'Market' },
-    ]},
-    // Task #1 — RAISE Workspaces. Ten items collapsed into three workspaces that
-    // compose the existing pages (Pitch/Capital/Legal Engine). The Pitch item is
-    // ungated so the free reviewer stays reachable — the growth gate on the deck
-    // editor and the studio gates on founder agreements / equity elections are
-    // preserved inside their workspaces.
-    { key: 'raise', label: 'Raise', items: [
-      { to: '/raise/pitch', icon: Sparkles, label: 'Pitch' },
-      { to: '/raise/capital', icon: DollarSign, label: 'Capital' },
-      { to: '/raise/legal-engine', icon: Scale, label: 'Legal Engine' },
-      { to: '/raise/data-room', icon: Shield, label: 'Data Room' },
-    ]},
-    { key: 'launch', label: 'Launch', items: [
-      // "Jobs" moved into the Build › Team workspace (/build/team?tab=jobs).
-      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
-    ]},
-    { key: 'more', label: 'More', items: [
-      // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
-      // /refer route redirects there. Removed from the founder nav.
-      { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
-      { to: '/perks', icon: Gift, label: 'Perks' },
-    ]},
-    { key: 'account', label: 'Account', items: [
+      { to: '/signals', icon: Radar, label: 'Research', match: ['/signals', '/market-intel'] },
+      { to: '/company-settings', icon: UserCircle, label: 'Company Settings' },
     ]},
   ],
 
