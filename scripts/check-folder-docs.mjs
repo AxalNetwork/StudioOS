@@ -174,9 +174,15 @@ for (const [dir] of DOCUMENTED) {
   // TRUTH — nothing named in backticks may be missing from the repo. Only
   // bare filenames are checked; a path is a different kind of claim and is
   // resolved directly.
+  // Grab the whole backticked token, then decide in JS whether it names a file.
+  // Matching the extension inside the pattern needs a repeated class that
+  // itself contains `.` followed by a required `\.`, which is ambiguous and
+  // backtracks polynomially — the shape CodeQL flags as a ReDoS. Splitting it
+  // in two removes the ambiguity entirely and reads better besides.
+  const CITED_EXT = /\.(?:ts|tsx|js|jsx|mjs|sql|py|md|css|json)$/;
   const cited = new Set();
-  for (const m of src.matchAll(/`([A-Za-z0-9_.\-/]+\.(?:ts|tsx|js|jsx|mjs|sql|py|md|css|json))`/g)) {
-    cited.add(m[1]);
+  for (const m of src.matchAll(/`([^`\s]+)`/g)) {
+    if (CITED_EXT.test(m[1])) cited.add(m[1]);
   }
   for (const name of cited) {
     // A naming pattern is not a claim. `NNN_short_name.sql` and
