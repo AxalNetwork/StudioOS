@@ -17,11 +17,13 @@ test('the three /advisor/network routes redirect onto the working surface', () =
     ['/advisor/network/relationships', '/network?tab=relationships'],
     ['/advisor/network/organizations', '/network'],
   ]) {
-    assert.match(
-      app,
-      new RegExp(`path="${from.replace(/[/?]/g, '\\$&')}" element=\\{<Navigate to="${to.replace(/[/?]/g, '\\$&')}"`),
-      `${from} should redirect to ${to}`
-    );
+    // An exact substring, not a regex. The previous form built a RegExp from
+    // these strings and escaped only `/` and `?` — CodeQL 5907
+    // (js/incomplete-sanitization) rightly flagged the partial escaping. But
+    // nothing here needs a pattern at all: the route line is a literal, and
+    // includes() asserts it more exactly than the regex did.
+    const line = `path="${from}" element={<Navigate to="${to}"`;
+    assert.ok(app.includes(line), `${from} should redirect to ${to}`);
   }
   assert.doesNotMatch(app, /AdvisorNetworkWorkspace/);
 });
