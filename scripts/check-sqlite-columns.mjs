@@ -18,6 +18,18 @@
  * which exists on no table anywhere, and `users.organization`, which the
  * advisor writes and then reads back to decide whether it already asked.
  *
+ * A qualified `alias.column` in a JOIN query is attributable on exactly the
+ * same terms, once the alias is bound to one table by the FROM/JOIN clauses —
+ * the join makes the QUERY ambiguous, not the reference. That pass found
+ * eleven more across 1694 references, including a second copy of a broken
+ * partner_deals query whose first copy had already been corrected.
+ *
+ * Finally the WHERE / GROUP BY / ORDER BY / HAVING predicates of a
+ * single-table statement. That is the largest surface of the four — 1914
+ * statements, 3007 references — and the last one a column error could hide
+ * in, which is exactly where two had: `dd_external_sources.source_kind` and
+ * `documents.signer_email`, both filters, both silently matching no row.
+ *
  * HARVESTING IS THE HARD PART, and getting it wrong over-reports. Three
  * distinct parser faults were found and fixed while building this, each of
  * which invented columns that exist perfectly well:
@@ -31,6 +43,13 @@
  *      `'CREATE TABLE x (' + 'col TEXT, ' + …` — was read only as far as its
  *      first fragment. That is how `oauth_state_tokens` is defined in
  *      `integrations/oauth.ts`, and it made `pkce_verifier` look absent.
+ *
+ *   4. A subquery names a second table. Counting `SELECT` catches
+ *      `SELECT … (SELECT …)`, but an `UPDATE users … WHERE id IN (SELECT id
+ *      FROM users …)` contains exactly one, so the count test passed and the
+ *      inner `FROM users` was read as a column of the outer table.
+ *   5. `COUNT(*) AS n … GROUP BY n` names a result, not a column. Twenty-one
+ *      of the first twenty-nine predicate findings were aliases like this.
  *
  * Those three took the reported count from 106 to 20. The lesson is the one
  * this repo keeps relearning: a check is only worth its output if it reads
@@ -61,15 +80,19 @@ function walk(dir, ext) {
 
 const norm = (t) => t.replace(/[`"[\]]/g, '').toLowerCase();
 
+// Declared once, with the flag it needs: rebuilding it inside the loop below
+// allocated a fresh pattern on every pass, up to 200 per file. `replace`
+// resets lastIndex on each call, so a shared global regex is safe here.
+const JOIN_ADJACENT_STRINGS = /(['"])((?:\\.|(?!\1)[^\\])*)\1\s*\+\s*(['"])((?:\\.|(?!\3)[^\\])*)\3/g;
+
 /**
  * Join adjacent JS string literals spliced with `+` into one literal, so DDL
  * assembled across source lines reads as the single statement it becomes.
  */
 export function collapseStringConcat(src) {
-  const JOIN = /(['"])((?:\\.|(?!\1)[^\\])*)\1\s*\+\s*(['"])((?:\\.|(?!\3)[^\\])*)\3/;
   let out = src;
   for (let i = 0; i < 200; i += 1) {
-    const next = out.replace(new RegExp(JOIN, 'g'), (_m, _q1, a, _q3, b) => `'${a}${b}'`);
+    const next = out.replace(JOIN_ADJACENT_STRINGS, (_m, _q1, a, _q3, b) => `'${a}${b}'`);
     if (next === out) break;
     out = next;
   }
@@ -165,6 +188,12 @@ function jsBracket(s, open) {
  * be resolved — the caller then marks the table incomplete rather than
  * pretending to know it.
  */
+/** `ALTER TABLE <t> ADD COLUMN ${<var>}` — the identifier is captured, not built in. */
+const ALTER_INTERPOLATED = /ALTER\s+TABLE\s+([`"[]?\w+[`"\]]?)\s+ADD\s+(?:COLUMN\s+)?\$\{\s*(\w+)\s*\}/i;
+
+/** `const NAME … = [` — likewise captured and compared rather than interpolated. */
+const ARRAY_DECL = /\b(?:const|let)\s+(\w+)\b[^=\n]*=\s*\[/g;
+
 export function runtimeColumns(src) {
   const out = [];
   for (const m of src.matchAll(/for\s*\(\s*const\s+(\[[^\]]*\]|\w+)\s+of\s+([^)]+?)\)\s*\{/g)) {
@@ -173,19 +202,25 @@ export function runtimeColumns(src) {
     const tuple = binding.startsWith('[');
     const loopVar = tuple ? binding.slice(1, -1).split(',')[0].trim() : binding;
     if (!/^\w+$/.test(loopVar)) continue;
-    // The ALTER has to be inside this loop, and interpolate this variable.
+    // The ALTER has to be inside this loop and interpolate THIS variable.
+    // Both patterns below are literal and capture the identifier, which is
+    // then compared in JS. Interpolating `loopVar` into a regex would work —
+    // it is validated above and cannot carry a metacharacter — but a literal
+    // pattern needs no such argument to be trusted, and Semgrep is right that
+    // a built regex is the weaker form when a fixed one will do.
     const window = src.slice(m.index, m.index + 500);
-    const alt = new RegExp(
-      `ALTER\\s+TABLE\\s+([\`"\\[]?\\w+[\`"\\]]?)\\s+ADD\\s+(?:COLUMN\\s+)?\\$\\{\\s*${loopVar}\\s*\\}`, 'i',
-    ).exec(window);
-    if (!alt) continue;
+    const alt = ALTER_INTERPOLATED.exec(window);
+    if (!alt || alt[2] !== loopVar) continue;
     const table = norm(alt[1]);
 
     let arr = null;
     if (expr.startsWith('[')) arr = jsBracket(expr, 0);
     else if (/^[A-Za-z_]\w*$/.test(expr)) {
-      const decl = new RegExp(`\\b(?:const|let)\\s+${expr}\\b[^=]*=\\s*\\[`).exec(src);
-      if (decl) arr = jsBracket(src, decl.index + decl[0].length - 1);
+      for (const d of src.matchAll(ARRAY_DECL)) {
+        if (d[1] !== expr) continue;
+        arr = jsBracket(src, d.index + d[0].length - 1);
+        break;
+      }
     }
     if (!arr) { out.push({ table, cols: null }); continue; }
 
@@ -308,6 +343,130 @@ export function singleTableSelect(sql) {
   return { list: m[1], table: norm(m[2]), alias: m[4] ? m[4].toLowerCase() : null };
 }
 
+/**
+ * Words that can follow FROM/JOIN and be mistaken for an alias. `JOIN t ON …`
+ * would otherwise bind an alias called `on` to table `t`.
+ */
+const NOT_AN_ALIAS = new Set([
+  'on', 'and', 'or', 'where', 'join', 'left', 'right', 'inner', 'outer', 'cross',
+  'group', 'order', 'having', 'limit', 'union', 'as', 'set', 'using', 'natural',
+  'when', 'then', 'else', 'end', 'is', 'not', 'null', 'in', 'exists', 'case',
+]);
+
+/**
+ * alias -> table, for a query's FROM/JOIN clauses.
+ *
+ * An alias bound to two different tables in one statement is mapped to null
+ * and skipped: that is the ambiguity this check refuses to guess through.
+ */
+export function aliasMap(sql) {
+  const m = new Map();
+  // Comments are not SQL: "the join threw" would otherwise bind an alias.
+  const clean = sql.split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
+  for (const x of clean.matchAll(/\b(?:FROM|JOIN)\s+([`"[]?\w+[`"\]]?)\s+(?:AS\s+)?([a-z]\w*)\b/gi)) {
+    const alias = x[2].toLowerCase();
+    if (NOT_AN_ALIAS.has(alias)) continue;
+    const table = norm(x[1]);
+    if (m.has(alias) && m.get(alias) !== table) { m.set(alias, null); continue; }
+    m.set(alias, table);
+  }
+  return m;
+}
+
+/**
+ * Comments and string literals blanked to spaces, so prose never reaches the
+ * identifier scanner. Length is preserved because the caller slices this same
+ * string at the offset it finds the WHERE in.
+ *
+ * Kept local rather than reusing `stripSqlLiterals` from check-sqlite-tables:
+ * that one collapses literals instead of blanking them and leaves `"…"`
+ * alone. Double quotes are ambiguous in SQLite — an identifier if one
+ * resolves, a string otherwise — and blanking them under-reports, which is
+ * the side this file errs on.
+ */
+export function blankLiterals(sql) {
+  let out = '', i = 0;
+  while (i < sql.length) {
+    if (sql[i] === '-' && sql[i + 1] === '-') {
+      const n = sql.indexOf('\n', i);
+      const end = n < 0 ? sql.length : n;
+      out += ' '.repeat(end - i); i = end; continue;
+    }
+    if (sql[i] === "'" || sql[i] === '"') {
+      const q = sql[i];
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === q && sql[j + 1] === q) { j += 2; continue; }
+        if (sql[j] === q) break;
+        j += 1;
+      }
+      const end = Math.min(j, sql.length);
+      out += ' '.repeat(end - i + 1); i = j + 1; continue;
+    }
+    out += sql[i]; i += 1;
+  }
+  return out;
+}
+
+/** Reserved words a predicate can contain that are not column names. */
+const PREDICATE_KEYWORDS = new Set(`select from where and or not null is in like glob between exists case when then else end
+order by group having limit offset asc desc collate nocase binary rtrim distinct as on join left right inner outer cross natural using
+insert into values update set delete returning conflict do nothing union all intersect except with recursive
+cast integer text real blob numeric boolean true false current_timestamp current_date current_time default primary key unique check references
+escape isnull notnull match regexp filter over partition window rows range unbounded preceding following current row groups exclude ties others
+if replace abort fail ignore rollback deferrable initially immediate deferred restrict cascade action foreign temp temporary table index view trigger`
+  .split(/\s+/).filter(Boolean));
+
+/**
+ * The predicate region of a statement that reads exactly one table, plus the
+ * SELECT-list aliases that are legal to name in it.
+ *
+ * Declines — returns null — on a join, a comma join, a set operation, a CTE,
+ * or any subquery, because each of those puts a second table in scope and the
+ * reference stops being attributable.
+ */
+export function singleTablePredicate(sql) {
+  const s = blankLiterals(sql);
+  if (/\bJOIN\b/i.test(s)) return null;
+  if ((s.match(/\bSELECT\b/gi) || []).length > 1) return null;
+  // An UPDATE or DELETE has no SELECT of its own, so counting is not enough:
+  // its one SELECT is the subquery, and the subquery's table is not ours.
+  if (/\(\s*SELECT\b/i.test(s)) return null;
+  if (/\bWITH\b|\bUNION\b|\bINTERSECT\b|\bEXCEPT\b/i.test(s)) return null;
+
+  let table = null, alias = null;
+  let m = /\bFROM\s+([`"[]?\w+[`"\]]?)(?:\s+(?:AS\s+)?([a-z]\w*))?/i.exec(s);
+  if (m) {
+    table = norm(m[1]);
+    if (m[2] && !NOT_AN_ALIAS.has(m[2].toLowerCase())) alias = m[2].toLowerCase();
+  }
+  if (!table) {
+    m = /^\s*(?:UPDATE|DELETE\s+FROM)\s+([`"[]?\w+[`"\]]?)/i.exec(s);
+    if (m) table = norm(m[1]);
+  }
+  if (!table) return null;
+  if (/\bFROM\s+[`"[]?\w+[`"\]]?\s*(?:(?:AS\s+)?[a-z]\w*)?\s*,/i.test(s)) return null;   // comma join
+
+  const w = /\b(WHERE|ORDER\s+BY|GROUP\s+BY|HAVING)\b/i.exec(s);
+  if (!w) return null;
+
+  // `COUNT(*) AS n … GROUP BY n` — an alias is a result name, not a column.
+  const aliases = new Set();
+  for (const a of s.slice(0, w.index).matchAll(/\bAS\s+([`"[]?[a-z_]\w*[`"\]]?)/gi)) aliases.add(norm(a[1]));
+
+  return { table, alias, aliases, region: s.slice(w.index) };
+}
+
+/** Bare and self-qualified identifiers in a predicate, minus function names. */
+export function predicateIdents(region) {
+  const noFn = region.replace(/\b[a-z_]\w*\s*\(/gi, ' (');   // a call is not a column
+  const out = [];
+  for (const m of noFn.matchAll(/\b([a-z_]\w*)(\.([a-z_]\w*))?\b/gi)) {
+    out.push(m[3] ? { qual: m[1].toLowerCase(), col: norm(m[3]) } : { qual: null, col: norm(m[1]) });
+  }
+  return out;
+}
+
 /** INSERT column lists, UPDATE SET clauses and single-table SELECT lists. */
 export function unknownColumns() {
   const schema = knownColumns();
@@ -316,6 +475,24 @@ export function unknownColumns() {
     const rel = path.relative(ROOT, file);
     for (const { body, line } of sqlStrings(fs.readFileSync(file, 'utf8'))) {
       if (body.includes('${')) continue;                  // interpolated — column list is not literal
+      // alias.column in a JOIN query — the alias fixes the table, so the
+      // reference is as attributable as a single-table one. Only aliases
+      // bound to exactly one table are used.
+      if (/\bJOIN\b/i.test(body)) {
+        const aliases = aliasMap(body);
+        for (const x of body.matchAll(/\b([a-z]\w*)\.([a-z_]\w*)\b/gi)) {
+          const table = aliases.get(x[1].toLowerCase());
+          if (!table || incompleteTables.has(table)) continue;
+          const qcols = schema.get(table);
+          if (!qcols) continue;
+          const col = norm(x[2]);
+          if (qcols.has(col) || dynamicColumns.has(col) || /^(rowid|oid|_rowid_)$/.test(col)) continue;
+          const k = `${table}.${col}`;
+          if (!hits.has(k)) hits.set(k, []);
+          hits.get(k).push(`${rel}:${line}`);
+        }
+      }
+
       // SELECT a, b FROM t — attributable only when there is exactly one table.
       const sel = singleTableSelect(body);
       if (sel) {
@@ -357,6 +534,22 @@ export function unknownColumns() {
           const k = `${ut}.${col}`;
           if (!hits.has(k)) hits.set(k, []);
           hits.get(k).push(`${rel}:${line}`);
+        }
+      }
+
+      // WHERE / GROUP BY / ORDER BY / HAVING of a single-table statement.
+      const pred = singleTablePredicate(body);
+      if (pred && !incompleteTables.has(pred.table)) {
+        const pcols = schema.get(pred.table);
+        if (pcols) {
+          for (const { qual, col } of predicateIdents(pred.region)) {
+            if (qual && qual !== pred.alias && qual !== pred.table) continue;
+            if (PREDICATE_KEYWORDS.has(col) || pred.aliases.has(col) || /^\d/.test(col)) continue;
+            if (pcols.has(col) || dynamicColumns.has(col) || /^(rowid|oid|_rowid_)$/.test(col)) continue;
+            const k = `${pred.table}.${col}`;
+            if (!hits.has(k)) hits.set(k, []);
+            hits.get(k).push(`${rel}:${line}`);
+          }
         }
       }
 
@@ -413,7 +606,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // The skipped count is printed rather than hidden: it is the honest measure
   // of how much of the schema this check cannot speak for.
   console.log(
-    `✓ check-sqlite-columns: every INSERT, UPDATE and single-table SELECT names columns that exist `
+    `✓ check-sqlite-columns: every INSERT, UPDATE, SELECT list, qualified join reference and single-table predicate names columns that exist `
     + `(${n} known gap${n === 1 ? '' : 's'} on record; ${incompleteTables.size} tables skipped as runtime-extended).`,
   );
 }

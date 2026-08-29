@@ -267,9 +267,15 @@ async function execTool(env: Env, user: User, name: string, input: Record<string
       return { items: rows.results || [] };
     }
     case 'pendingContracts': {
-      // documents.signer_email matches the user; status in draft/generated/sent.
+      // `documents` has no per-signer email at all — only `signed_by`, which is
+      // written when a doc is already signed. `signer_email` is an
+      // esign_audit_events column; the canonical recipient link is
+      // `esign_recipients.recipient_email` (routes/trust.ts made the same
+      // substitution for the same reason). The old query threw on every call,
+      // so this tool answered "nothing pending" for everyone.
+      // The tables are created lazily by routes/esign.ts, hence the catch.
       const rows = await env.DB.prepare(
-        "SELECT id, doc_type, status, created_at FROM documents WHERE LOWER(COALESCE(signer_email,'')) = LOWER(?) AND status IN ('draft','generated','sent') ORDER BY id DESC LIMIT 20"
+        "SELECT e.id, e.document_type AS doc_type, r.status, e.created_at FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id WHERE LOWER(r.recipient_email) = LOWER(?) AND r.status = 'pending' ORDER BY e.id DESC LIMIT 20"
       ).bind(user.email).all<{ id: number; doc_type: string; status: string; created_at: string }>().catch(() => ({ results: [] as Array<{ id: number; doc_type: string; status: string; created_at: string }> }));
       return { items: rows.results || [] };
     }

@@ -389,8 +389,13 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
         }
 
         try {
+          // `dd_external_sources` names the connector `connector` (see the
+          // INSERT in routes/dd.ts). `source_kind` is the sibling column on
+          // `dd_findings` in the same migration — selecting it here threw, and
+          // the catch below meant the employee-range enrichment silently never
+          // saw any prior response.
           const prior = await env.DB.prepare(
-            "SELECT id, raw_response_enc FROM dd_external_sources WHERE source_kind = 'crunchbase' AND status = 'ok' ORDER BY id DESC LIMIT 5",
+            "SELECT id, raw_response_enc FROM dd_external_sources WHERE connector = 'crunchbase' AND status = 'ok' ORDER BY id DESC LIMIT 5",
           ).all<{ id: number; raw_response_enc: string | null }>();
           for (const r of prior?.results || []) {
             if (!r.raw_response_enc) continue;

@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-two decisions are now resolved. D6 is closed by D11, which repaired
+All twenty-four decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -734,6 +734,105 @@ Eighth parser fault, and it was predicted before it was found: an apostrophe in
 bracket walker and ate the rest of the file — the identical fault the SQL
 scanners carried, one language over. Knowing the shape of your own recurring
 mistake is worth more than any individual fix.
+
+### D23. A join makes the query ambiguous, not the reference
+
+D21 declined joins wholesale, on the grounds that attributing a column to a
+table across one is a guess. That was too broad. A qualified `alias.column` is
+attributable the moment the FROM/JOIN clauses bind that alias to one table —
+which they almost always do. The ambiguity a join introduces belongs to the
+*bare* names in the select list, not to the qualified ones.
+
+Across 160 join queries and 1694 qualified references, eleven were wrong.
+
+`corporate_profiles.kyb_status` was the one that prompted this: it was found by
+reading, on the previous pass, and the obvious question was whether a check
+could have found it. It can, and did.
+
+The sharpest of the rest is a **second copy of a query whose first copy was
+already fixed**. `admin_contracts.ts` carries two `partner_deals` reads with the
+same three wrong names — `partner_user_id` for `user_id`, a `granted_tiers` that
+does not exist, an `updated_at` the table lacks. D18 corrected one of them. The
+other was a join, so nothing looked at it. Fixing one instance of a broken query
+does not fix its duplicates, and only a check that reads every site will say so.
+
+Two more are worth naming because of what they guard rather than what they show:
+an ownership gate in `imports.ts` that could not evaluate at all (`founders` has
+no `user_id`; the link is `users.founder_id`), and a Telegram **redaction check**
+that scanned nobody and passed silently because `users.full_name` is
+`full_legal_name`. A check that cannot run is not a check that fails safe.
+
+**Where the fix would widen exposure, it was not taken.** The coach directory
+filtered on `u.show_in_directory`, which is not a column on `users` — but it
+*is* one on `user_settings`. Dropping the filter would have listed every coach;
+joining the table it actually lives on preserves the opt-out exactly. Reaching
+for the schema before reaching for the delete key is the whole difference there.
+
+**And where no fix exists, none was invented.** `corporate_profiles.kyb_status`
+is the single baselined entry, with its reason recorded: nothing anywhere writes
+a KYB decision. `/trust/kyb/start` upserts entity fields and sets the obligation
+to `in_review`; there is no provider callback and no admin approve/reject.
+Adding the column would leave the reconciliation loop reading NULL forever, so
+it stays a documented gap and a product question — which store, which values,
+who writes them — rather than a migration that looks like progress.
+
+The scope still declines what it should: an alias bound to two tables in one
+statement maps to null and is skipped, and bare names in a join are left alone.
+Both probed — a bad qualified column fails the build, the same column under an
+ambiguous alias does not.
+
+### D24. The predicate was the last place a wrong column could hide
+
+D21 checked what a statement writes and D23 what a join names. Neither read the
+`WHERE`. That left the largest surface in the worker unexamined: **1914
+single-table statements carrying 3007 predicate references** — more than the
+INSERT lists, the SET clauses and the qualified join references put together.
+
+It is also the surface where a wrong column does the most damage quietly. A bad
+column in an INSERT loses a write; a bad column in a filter loses *the whole
+result set*, and the feature above it reports "nothing found" rather than an
+error. Both defects this pass turned up are exactly that:
+
+- `dd_external_sources.source_kind` — the table names the connector
+  `connector`. `source_kind` is the sibling column on `dd_findings`, defined
+  fourteen lines earlier in the same migration file, which is how the name got
+  borrowed. The Crunchbase enrichment therefore never saw a prior response.
+- `documents.signer_email` — `documents` has no per-signer email at all. The
+  column belongs to `esign_audit_events`; the canonical per-recipient link is
+  `esign_recipients.recipient_email`. `routes/trust.ts` had already made that
+  exact substitution, for that exact reason, with a comment saying so.
+
+The second one earns its own note. `documents.signer_email` sits in
+`execTool()` in `routes/assistant.ts`, a function with five D1-backed tools —
+and **three of the other four already carry fix comments for this same bug
+class**: `recentActivity` (`entity_type`/`entity_id`, not `target_*`),
+`upcomingMeetings` (`calendar_events` has no bare `location`), `scoringSummary`
+(`score_snapshots`, not `scoring_runs`). Three prior passes read that function
+and left the fourth in place, because each of them fixed what it could see and
+what none of them could see was the `WHERE`. Coverage is not attention. A guard
+that reads one clause will keep finding defects the readers of the other
+clauses walked past.
+
+**Two more parser faults, both over-reporting, both instructive.**
+
+Counting `SELECT` keywords is how the earlier passes rejected subqueries, and
+it is wrong for `UPDATE` and `DELETE`: they contain no `SELECT` of their own,
+so a statement like `UPDATE users … WHERE id IN (SELECT id FROM users …)`
+counts exactly one and passes the test, after which the subquery's `FROM` is
+read as a column of the outer table. The check now declines on any `(SELECT`.
+
+And `COUNT(*) AS n … GROUP BY n` names a *result*, not a column. Twenty-one of
+the first twenty-nine findings were aliases like this — `AS day`, `AS bucket`,
+`AS total_cost`, `AS n` — every one legal SQL. Harvesting the `AS` names ahead
+of the predicate and excluding them took the list from 29 to 2, and both
+survivors were real.
+
+That ratio is the entry itself. Eleven parser faults have now been found across
+these three guards and **every single one over-reported** — invented a column or
+a table by matching prose, a comment, a keyword, or a name that was never the
+material. The failure mode of a checker is not missing things. It is confidently
+naming things that are fine, until nobody reads its output any more.
+
 
 ## Part 2 — Decisions taken
 

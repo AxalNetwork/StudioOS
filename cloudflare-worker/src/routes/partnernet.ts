@@ -443,7 +443,11 @@ partnernet.get('/leaderboard/public', async (c) => {
     SELECT ps.id, ps.name, ps.role, ps.network_score, ps.active_relationships, ps.network_reach, ps.verified_badges
       FROM partner_summary ps
       LEFT JOIN partners p ON p.id = ps.id
-      LEFT JOIN user_settings us ON us.user_id = p.user_id
+      -- partners has no user_id; the account link is users.partner_id.
+      -- Without this hop the join threw and the directory filter below never
+      -- ran, so this list was empty rather than filtered.
+      LEFT JOIN users pu ON pu.partner_id = p.id
+      LEFT JOIN user_settings us ON us.user_id = pu.id
      WHERE ps.network_score > 0
        AND (us.show_in_directory IS NULL OR us.show_in_directory = 1)
      ORDER BY ps.network_score DESC

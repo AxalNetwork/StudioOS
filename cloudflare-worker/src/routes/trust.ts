@@ -90,7 +90,9 @@ trust.get('/agreements', async (c) => {
   let pending: any[] = [];
   try {
     const env: any = await c.env.DB.prepare(
-      `SELECT e.envelope_uuid, e.agreement_type, e.status, e.created_at, e.completed_at,
+      // `document_type` — there is no `agreement_type` column on
+      // esign_envelopes, so this whole select threw.
+      `SELECT e.envelope_uuid, e.document_type, e.status, e.created_at, e.completed_at,
               r.recipient_email, r.signed_at
          FROM esign_envelopes e
          JOIN esign_recipients r ON r.envelope_id = e.id

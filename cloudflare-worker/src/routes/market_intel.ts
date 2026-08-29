@@ -1007,7 +1007,9 @@ async function buildPersonasPayload(env: Env): Promise<PlatformPersonasPayload> 
               COUNT(DISTINCT u.id) AS n
          FROM users u
          LEFT JOIN projects p
-           ON (p.founder_id = u.founder_id OR p.owner_user_id = u.id)
+           -- projects has no owner_user_id; founder_id is the only link,
+           -- and it was already the first half of this disjunction.
+           ON p.founder_id = u.founder_id
         WHERE u.is_active = 1
         GROUP BY stage, role`,
     ).all<{ stage: string; role: string; n: number }>()).results || [];
