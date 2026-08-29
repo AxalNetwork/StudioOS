@@ -90,6 +90,12 @@ export const SIDEBAR_GROUPS = {
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
       { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
       { to: '/admin/licences', icon: Map, label: 'Territory Licences' },
+      // A subsidiary administrator's read of their OWN licence — terms,
+      // territories, seats licensed, history. /admin/licences above is HQ's
+      // ledger of every licence; this is one, read-only. Both rows are here
+      // because the same nav serves HQ and a subsidiary admin today, and
+      // GET /licence/mine 404s for anyone who administers none.
+      { to: '/admin/my-licence', icon: Map, label: 'My Licence' },
     ]},
     { key: 'studio', label: 'Studio', items: [
       { to: '/projects', icon: Zap, label: 'Startups' },

@@ -26,6 +26,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `events/` | Public and host-side event screens. |
 | `jobs/` | Public and host-side job screens. |
 | `legal/` | Non-admin document origination (Send for signature). |
+| `subsidiary/` | A territory licence holder's read of their own licence. |
 | `insights/` | Insight reader and its public variant. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | Persona home-page templates. |

@@ -1344,6 +1344,14 @@ export const api = {
   // cloudflare-worker/src/services/esignOriginators.ts. Distinct from
   // adminListLegalTemplates, which is the full catalogue behind requireAdmin.
   esignTemplates: () => request('/legal/esign/templates'),
+  // The territory licence the caller administers, or 404. Migration 190 —
+  // licence_admins is what makes "which licence is this admin's?" answerable.
+  myLicence: () => request('/licence/mine'),
+  licenceAdmins: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/admins`),
+  licenceAdminAdd: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/admins`, { method: 'POST', body: JSON.stringify(data) }),
+  licenceAdminRemove: (uid, userId) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/admins/${userId}`, { method: 'DELETE' }),
   // Task #14 — forward signed PDF to legal partner(s).
   adminForwardContract: (id, data) =>
     request(`/legal/esign/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),

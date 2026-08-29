@@ -137,6 +137,9 @@ const ESignPage = lazy(() => import('./pages/ESignPage'));
 // Send for signature — the non-admin origination page. POST /legal/esign/send
 // stopped being admin-only in task #156; this is the UI that finally matches.
 const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePage'));
+// The subsidiary administrator's read of their own territory licence.
+// Migration 190 made "which licence is this admin's?" answerable at all.
+const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
@@ -1397,6 +1400,8 @@ function AppInner() {
       {/* Territory licence ledger (migration 187). Admin only — it carries the
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], <AdminLicences />)} />
+      {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
+      <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}

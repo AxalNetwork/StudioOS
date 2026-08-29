@@ -51,7 +51,7 @@ const ISO2 = /^[A-Z]{2}$/;
 /** Statuses that still hold territory. Terminated is the only one that does not. */
 const HOLDS_TERRITORY = ['draft', 'pending_activation', 'active', 'suspended'];
 
-type LicenceRow = {
+export type LicenceRow = {
   id: number; uid: string; licence_ref: string; entity_id: number | null;
   legal_entity_name: string; brand_name: string; registered_address: string | null;
   signatory_name: string | null; signatory_title: string | null; status: string;
@@ -97,8 +97,15 @@ async function logEvent(
  */
 function seatsUsed(): null { return null; }
 
-/** Every licence with its territories and seats, in three queries not 3N. */
-async function hydrate(env: Env, rows: LicenceRow[]) {
+/**
+ * Every licence with its territories and seats, in three queries not 3N.
+ *
+ * Exported for routes/licence.ts, the holder-facing read added in task #202.
+ * A subsidiary admin must see exactly the shape HQ sees — including the null
+ * `seats_used` — so the two views cannot drift into disagreeing about the
+ * same licence.
+ */
+export async function hydrate(env: Env, rows: LicenceRow[]) {
   if (!rows.length) return [];
   const ids = rows.map((l) => l.id);
   const placeholders = ids.map(() => '?').join(',');
@@ -462,6 +469,86 @@ r.post('/:uid/terminate', async (c) => {
     ]);
     await logEvent(c.env, licence.id, 'terminated', admin.id, { released: codes }, note);
     return c.json({ ok: true, status: 'terminated', released: codes });
+  } catch (e) { return mapError(c, e); }
+});
+
+// Who administers this licence. Migration 190 — a subsidiary admin was not
+// representable before it, because territory_licences names an entity, a brand
+// and a signatory, and never a user.
+//
+// HQ writes this; the holder reads it through GET /api/licence/mine. Assigning
+// an administrator is a contractual act, so it lands in licence_events like
+// every other one.
+r.get('/:uid/admins', async (c) => {
+  try {
+    await requireAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const rows = await c.env.DB.prepare(
+      `SELECT la.admin_role, la.created_at, u.id AS user_id, u.name, u.email
+         FROM licence_admins la JOIN users u ON u.id = la.user_id
+        WHERE la.licence_id = ? ORDER BY la.admin_role, u.email`,
+    ).bind(licence.id).all<any>();
+    return c.json({ items: rows.results || [] });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/:uid/admins', async (c) => {
+  try {
+    const admin = await requireAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const b = await c.req.json().catch(() => ({} as any));
+    const email = str(b?.email, 320).toLowerCase();
+    const role = str(b?.admin_role, 20) || 'principal';
+    if (!email) return c.json({ error: 'an email address is required' }, 400);
+    if (role !== 'principal' && role !== 'delegate') {
+      return c.json({ error: "admin_role must be 'principal' or 'delegate'" }, 400);
+    }
+    // Resolve to an existing account, like the data room does. Assigning a
+    // licence to an address nobody holds would create an administrator who
+    // cannot sign in.
+    const u = await c.env.DB.prepare('SELECT id, email FROM users WHERE LOWER(email) = ?')
+      .bind(email).first<{ id: number; email: string }>();
+    if (!u) return c.json({ error: 'no account with that address' }, 404);
+
+    // licence_admins is UNIQUE on user_id alone — see migration 190. Report
+    // the conflict rather than letting the insert fail opaquely.
+    const held = await c.env.DB.prepare(
+      `SELECT l.licence_ref FROM licence_admins la
+         JOIN territory_licences l ON l.id = la.licence_id
+        WHERE la.user_id = ? AND la.licence_id != ?`,
+    ).bind(u.id, licence.id).first<{ licence_ref: string }>();
+    if (held) {
+      return c.json({ error: `that account already administers ${held.licence_ref}` }, 409);
+    }
+
+    await c.env.DB.prepare(
+      `INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role`,
+    ).bind(licence.id, u.id, role, admin.id).run();
+    await logEvent(c.env, licence.id, 'terms_changed', admin.id,
+      { administrator_added: u.email, admin_role: role });
+    return c.json({ ok: true, user_id: u.id, admin_role: role });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.delete('/:uid/admins/:userId{[0-9]+}', async (c) => {
+  try {
+    const admin = await requireAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const userId = Number(c.req.param('userId'));
+    const gone = await c.env.DB.prepare(
+      'SELECT u.email FROM licence_admins la JOIN users u ON u.id = la.user_id WHERE la.licence_id = ? AND la.user_id = ?',
+    ).bind(licence.id, userId).first<{ email: string }>();
+    if (!gone) return c.json({ error: 'not_found' }, 404);
+    await c.env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?')
+      .bind(licence.id, userId).run();
+    await logEvent(c.env, licence.id, 'terms_changed', admin.id,
+      { administrator_removed: gone.email });
+    return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
 

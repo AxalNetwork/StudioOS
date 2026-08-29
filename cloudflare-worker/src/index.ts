@@ -162,6 +162,9 @@ import dataRoomRoutes from './routes/data_room';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
+// The holder-facing read of one licence — see routes/licence.ts for why it is
+// not a role branch inside the admin ledger.
+import licence from './routes/licence';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
@@ -732,6 +735,7 @@ app.route('/api/admin/lp-applications', adminLpApplications);
 // Wave 4 — territory licence ledger. Mount BEFORE the catch-all /api/admin so
 // /api/admin/licences/* resolves here, not in the generic admin router.
 app.route('/api/admin/licences', adminLicences);
+app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
