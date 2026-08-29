@@ -79,7 +79,10 @@ dashboard.get('/', async (c) => {
       isAdmin
         ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`
         : isFounder
-          ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE submitted_by = ${user.id} AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`
+          // `submitted_by` is a tickets column; projects owns founder_id.
+          // The select list above was corrected once already — the WHERE was
+          // not, so the founder's own deal list stayed empty.
+          ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE founder_id = ${user.founder_id || 0} AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`
           // Task #3 (Y-1) — investors get the founder_user_id JOIN so
           // the Trust Center mask can null sensitive fields when no
           // active pairwise NDA exists. Partners stay un-masked.

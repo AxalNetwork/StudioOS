@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-four decisions are now resolved. D6 is closed by D11, which repaired
+All thirty decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -832,6 +832,337 @@ these three guards and **every single one over-reported** — invented a column 
 a table by matching prose, a comment, a keyword, or a name that was never the
 material. The failure mode of a checker is not missing things. It is confidently
 naming things that are fine, until nobody reads its output any more.
+
+
+### D25. `${…}` is not a reason to stop reading
+
+Every column pass so far began with the same line:
+
+```js
+if (body.includes('${')) continue;   // interpolated — column list is not literal
+```
+
+That was true of one construct and false of the other, and nobody had
+separated them. `.prepare(\`…\`)` splices raw text into SQL, so an
+interpolation there really can be an identifier and the string really is
+unreadable. But `sql\`…\`` is the tagged template in `src/db.ts`, and it does
+this:
+
+```js
+strings.forEach((str, i) => { sql += str; if (i < values.length) sql += '?'; });
+await db.prepare(sql).bind(...values).all();
+```
+
+Every `${…}` becomes a bound `?`. The **structure** of those queries is
+entirely literal. There were **833 of them — a fifth of all the SQL in the
+worker — and no column check had ever read one.**
+
+Ten defects were in there. Substituting `${…}` → `?` and running the existing
+four passes over the result found all ten, and the guard now reports its own
+coverage — 3797 strings read, 286 skipped as raw-interpolated — so the size of
+the remaining blind spot is a number in the build log rather than an
+assumption.
+
+**The most expensive one is an entire feature that has never worked.**
+`advisorBookingEvents` and `partnerOfficeHourEvents` in `services/calendar.ts`
+read `scheduled_start`, `scheduled_end`, `requester_user_id`, `meeting_uri`,
+`questions` and `project_id` off the booking rows. None of those columns exist
+on `advisor_bookings` or `partner_bookings`, which carry
+`(slot_id, advisor_id|partner_id, founder_user_id, topic, notes, status)` — the
+time lives on the slot. The status filter was wrong too: it looked for
+`'requested'`, and both booking routes write `'pending'`. The function's own
+catch handles `isMissingColumnError` by returning `[]`, so **office-hour
+bookings have never appeared on anyone's calendar**, and the calendar reported
+that as "no events" rather than as a fault.
+
+The rest are single names, but three of them repeat lessons already recorded:
+
+- `admin_contracts.ts:729` is the **third** copy of the `partner_deals` join.
+  D18 fixed the first, D23 the second, and the third was invisible because it
+  sat inside a tagged template. Three passes, three copies, one query.
+- `dashboard.ts:82` filters the founder's own deal list on
+  `projects.submitted_by`, which is a `tickets` column. The comment directly
+  above it describes a previous repair to that same query's **select list**.
+  The `WHERE` was left wrong, so the list stayed empty — D24's lesson, in the
+  file D24 did not reach.
+- `scoring.ts:316` reads `SELECT user_id FROM founders`, the same
+  non-existent link `imports.ts` used. Here it means the founder is **never
+  notified when a score lands on their project**.
+
+One column was added rather than re-targeted: `calendar_sync_records.last_error`
+(migration 181). That is the opposite case to `corporate_profiles.kyb_status`
+and the distinction is worth keeping. Here the writer exists and knows the
+value — `services/calendar/sync.ts` stamps the failure reason into it, inside a
+catch whose own comment reads *"last_error column may not exist yet — drop
+silently"*. The author suspected and shipped it anyway. There is a value, a
+writer, a stated consumer, and five sibling tables already using that exact
+column name. `kyb_status` has none of those: nothing anywhere decides a KYB
+outcome, so a column would read NULL forever. A column is warranted when
+something already knows what to put in it.
+
+
+### D26. A routed column is a column, even when the SQL never says its name
+
+`check-sqlite-columns` cannot see the advisor writeRouter's writes, and it is
+right not to try. They are `UPDATE <table> SET ${col} = ?`, where `col` comes
+out of a literal map at runtime — the SQL text carries no column name at all,
+so the string is skipped as raw-interpolated. But the map beside it does carry
+the name, and `check-write-router-coverage` was already reading that file for a
+different property: that every bank question is **routed** somewhere. It never
+checked that the destination is **real**.
+
+Three were not. Migration 042 ends with
+
+```sql
+ALTER TABLE mentors ADD COLUMN topics_willing_json TEXT;
+ALTER TABLE mentors ADD COLUMN topics_unwilling_json TEXT;
+ALTER TABLE mentors ADD COLUMN weekly_hours_band TEXT;
+```
+
+and **there is no `CREATE TABLE mentors` anywhere in this repository.** The
+naming settled on `advisors`; 042 was written against the earlier word, and
+those three statements have failed since the day they shipped. The router
+writes the same three names to `advisors`, and the answered-check reads them
+back from `advisors`. Migration 182 puts them where both already assume they
+are.
+
+The failure is quiet in a specific, worse-than-usual way. Each of these writes
+has a fallback: on error the answer is merged into a `*_extras_json` sidecar.
+So the answer is not lost, **the caller is told `status: 'saved'`**, and the
+typed column the product reads stays empty. The answered-check then reads the
+name off the row, gets `undefined`, and asks again — every session, forever.
+An advisor is asked the same three questions indefinitely while being told each
+time that the answer was saved.
+
+One thing kept it from being much worse, and it was luck rather than design:
+the answered-check selects `*` rather than a column list. Had it named its nine
+columns, one unknown name would have taken the whole row down and re-asked all
+nine — the compounding shape D-recorded for `users.organization`. `SELECT *`
+is usually the sloppier choice; here it contained the blast radius.
+
+**Two parser faults, and one of them was the guard reporting success while not
+looking.** The first version bound each `UPDATE` to the nearest preceding map
+declaration, which handed `partnerMap`'s six columns to `explorer_needs` and
+invented six defects — proximity is not identity, so maps are now resolved by
+name through the variable the UPDATE interpolates. The second is sharper: the
+declaration matcher looked for `= {` with `[^=\n]*` in between, and these maps
+are declared `Record<string, { col: string; coerce?: (v: string) => number }>`.
+The `=>` inside the type annotation is an `=`. Two maps of six resolved, the
+other four silently produced no columns, and **the guard printed a tick over
+the three defects it exists to catch.** That is the failure mode this file
+keeps naming, committed by the check itself: over-reporting is loud and gets
+fixed, under-reporting looks exactly like success. The guard now prints how
+many maps it resolved and how many it could not, so "0 unresolved" is a claim
+it has to keep making.
+
+
+### D27. Two definitions, one table: what the column guard cannot see
+
+`check-sqlite-columns` **unions** every definition of a table it finds, because
+nothing static can know which one D1 actually holds. That is the right default
+for a check that must not over-report, and it has a consequence nobody had
+written down: **249 tables in this worker are defined more than once, and where
+those definitions disagree, the union hides it.** `capital_calls` reads as
+nineteen columns wide. No version of it has ever had more than thirteen.
+
+The narrow, provable question is not "do the definitions differ" — they differ
+constantly and usually harmlessly, a `.ts` `ensureSchema` mirroring a migration
+plus the columns later ALTERs filled in. It is whether two definitions are
+**mutually fatal**: each requiring a `NOT NULL` column, with no default, that
+the other has no column for. Then no single table can satisfy both, D1 holds
+one table per name, every definition is `IF NOT EXISTS` so the first to run
+wins — and one of the two code paths is dead. **Eight tables are in that
+state.**
+
+Two of them are provably broken *without knowing which shape is live*, because
+the worker's own writers disagree with each other:
+
+- **`metrics_snapshots` has three incompatible writers.** `(scope, scope_id,
+  metric_name, value)`, `(project_id, snapshot_date, mrr, arr, …)`, and
+  `(deal_id, key_metrics, traction_score, created_by)`. Each names columns the
+  others lack. At most one of the three is writing rows.
+- **`capital_calls` has two.** `routes/legalcap.ts` inserts `deal_id,
+  syndicate_id, amount_cents`; `routes/funds.ts` and `routes/capital.ts` read
+  `WHERE limited_partner_id = ?`, the shape
+  `sql/consolidate_capital_rebuild.sql` builds — which has no `deal_id` and
+  requires an `amount REAL NOT NULL` legalcap never binds.
+
+**Which shape is live is not knowable from this repository, and it was not
+guessed.** `scripts/migrate-d1.mjs` enumerates only `sql/migrations/*.sql`;
+the top-level `sql/*.sql` files are applied by hand, so file order settles
+nothing. `advisor_bookings` is the worked example that the numbered file does
+not always win: bookings are written in the `t13_t14_t15.sql` shape and that
+flow works, so `schema.sql`'s six-column version is the dead one — which is why
+the office-hours calendar repair in D25 targeted the t13 shape rather than
+`schema.sql`'s. Reading production takes one `PRAGMA table_info` per table, the
+baseline names the command, and it is a thing the user can run and this session
+cannot.
+
+So the deliverable here is a guard and a ledger, not a rewrite. Rewriting
+`capital_calls` or `metrics_snapshots` against a guessed shape would be the
+exact error this file has been cataloguing for twenty-six entries — acting on a
+convenient reading of the material instead of the material. Eight entries are
+recorded with what is provable about each; the gate fails on a ninth, and fails
+equally on an entry that has since been converged, so the ledger cannot quietly
+go stale.
+
+
+### D28. Money in cents, going forward — the legacy dollars are a ledger, not a lint fix
+
+The integration brief asks for money as integer cents, property-tested, with CI
+grepping money fields for float parsing. The survey that preceded the guard
+changed what it should be:
+
+**This schema already speaks both dialects.** Thirty-one `*_cents` columns
+exist — orders, syndicates, commissions, payouts, liquidity events, expert
+bookings, events, marketplace rates — and **every one is correctly declared
+INTEGER**. Alongside them sit fifty-two REAL dollar columns, and they are not
+the peripheral ones: LP commitments, called capital, capital calls,
+distributions, NAV, portfolio marks, cap-table and 409A share prices.
+
+So there was no defect to fix, and converting the fifty-two is not a lint fix.
+It is a data migration over live fiduciary records that needs a rounding
+decision and a cutover of every reader, on a database this session cannot read.
+Doing it unasked would be the opposite of the funds honesty rule.
+
+What the guard buys instead is that **the split stops growing**. Two rules,
+both narrow enough to be facts: a `*_cents` column must be INTEGER, and a new
+column holding currency must be `*_cents INTEGER` or be on the ledger. Fifty-two
+entries are recorded, the gate fails on a fifty-third, and it fails equally on
+an entry that has since been converted — so the ledger cannot go stale, and
+finishing the conversion is a matter of deleting lines from it.
+
+**The classification was the whole difficulty, and it was wrong in both
+directions first.** A regex over column names matched 138 "money-ish" columns
+and was confidently wrong about a fifth of them. `score_snapshots.capital_total`
+and its eight siblings are *scores*. `vc_funds.carried_interest` defaults to
+0.20 and `management_fee` to 0.02 — they are *fractions*. `fx_rates.usd_rate`
+is an *exchange rate*. `cap_table_vesting.total_shares` is a *count*.
+`fund_distributions.distributed_at` is a *timestamp* that happens to contain the
+word "distributed", and `event_notifications.principal_key` is a *security
+principal*. A check demanding cents of any of those would be demanding nonsense,
+and would have been ignored within a week.
+
+Two narrowings fixed it. The exclusions are an explicit list, each carrying its
+reason, rather than a cleverer pattern nobody can audit. And the rule applies
+only to columns declared with a **float type** — a TEXT column named
+`revenue_range` or `cost_to_mvp` is a label or a sentence, not an amount stored
+badly. That one distinction removed every remaining false positive at a stroke.
+
+The float-parsing half of the brief found nothing worth a rule. There are ten
+`parseFloat` sites in the worker; they parse FRED and BLS economic series,
+LinkedIn profile text, and a partner rating filter. The one that touches money —
+`advisor.profile.hourly_rate_usd` in the writeRouter — is parsing into a REAL
+column that legitimately holds dollars today. When that column moves to cents it
+becomes wrong, and the ledger entry above is where that will be noticed.
+
+
+### D29. A fixed parser finds more work, not less
+
+The row generic is the easiest source of truth in this worker to check against:
+
+```ts
+await env.DB.prepare('SELECT id, name FROM projects WHERE id = ?')
+  .bind(id).first<{ id: number; name: string; founder_id: number }>();
+```
+
+`founder_id` is not in the select list, so it is `undefined` at runtime, and
+TypeScript says nothing — the generic is an assertion about a value the type
+system never sees. Same class as everything else here: a field that reads as
+empty rather than as an error. The generic sits inches from the SQL, it is a
+literal, and it is written by the same hand in the same breath.
+
+**No generic is currently wrong.** 169 of 207 are checked and all 169 agree
+with their SELECT. That is the whole finding, and it is worth a gate precisely
+because it is currently true and will not stay true by itself.
+
+What makes this entry worth writing down is the four parser faults, because
+**three of them under-reported, and under-reporting is the one that ships.**
+
+The first over-reported in the familiar way: a lazy `([\s\S]*?)\1` for the SQL
+body can run past its own closing quote to a later one, so a bind-less
+`.first()` in one statement was paired with the generic of a different
+statement further down. Three defects reported, none real.
+
+Then three quiet ones:
+
+- `typeFields` counted the type's own outer `{` as depth, so every field sat at
+  depth 1 and the depth test skipped all of them. **The check reported a clean
+  pass over a type it had not read.** It was caught only because an injected
+  phantom field failed to trip it — which is the only reason to inject one.
+- The same walker treated `<` and `>` as brackets. The `>` in an arrow type,
+  `(v: string) => number`, drove the depth negative and every field after it
+  was skipped.
+- `selectKeys` tested the whole select list for `*` before looking at aliases,
+  so every aggregate query — `COUNT(*) AS n` — was declined wholesale.
+
+Each fix raised the numbers rather than lowering them: 173 pairs to 207, and
+97 checked to 147 to 169. **A correct fix here found more real work; a
+suppression would have found less.** That is the cheapest available test of
+whether a parser change is a repair or a silencing, and it is the one to reach
+for next time, because fourteen parser faults into this exercise the pattern is
+no longer a surprise — the surprise is only ever which direction it fails in.
+
+The check declines four shapes and prints how many: a select list with a star,
+an expression with no alias, a named interface rather than an inline literal,
+and any interpolated SQL. Thirty-eight of the 207 are declined on those grounds
+and the number is in the build output, so the size of what it cannot speak for
+is visible rather than assumed.
+
+
+### D30. A comment cannot fail a build
+
+The brief asks that every new wrangler binding go into **both** tables. That
+rule is already written down — in `wrangler.toml` itself, in a comment added
+after the incident it caused:
+
+> Every binding must be re-declared under `[env.production.*]` or the
+> `--env production` deploy will produce a worker with NO bindings — which
+> breaks every DB-touching route (login, /me, etc.) and is exactly why
+> 2026-05-05 login outage happened.
+
+**Parity is correct today.** Twenty-nine bindings across fifteen tables, all
+present in both. So this guard finds nothing, and that is the entire reason to
+write it: the rule is currently obeyed by memory, the comment explaining it is
+forty lines above the block it governs, and the cost of the next person missing
+it is a login outage rather than a warning.
+
+**Identity, not presence.** Comparing section names would pass the case that
+actually happens: a `[[kv_namespaces]]` table that gains a second namespace at
+the top level and not in production. The section is present in both; the new
+binding is in one. So each table is reduced to the set of identities it
+declares, using the key that names the binding for that table type — `binding`
+for most, `queue` for a queue consumer, `service` for a tail consumer, `name`
+for a durable object, `crons` for triggers. Probed both ways: adding a third KV
+namespace at the top level alone fails the build and names it.
+
+**An unrecognised table type fails rather than being skipped.** A binding kind
+this file has never seen — Cloudflare adds them — is precisely the one that
+would slip through a guard that shrugs at what it does not know. Adding
+`[[pipelines]]` fails with a message saying to teach the guard its identity key.
+
+**What was checked and deliberately left alone.** Three things:
+
+`observability` sits at the top level and not under `[env.production]`, which
+looks exactly like the drift this guard exists to catch. It is not:
+`wrangler.toml`'s own comment lists `observability` among the keys that DO
+inherit. Reading the file before believing the pattern is the difference
+between a guard and a nuisance, and this is the second time in this exercise
+that the material contradicted the shape.
+
+`[env.preview]` is missing `assets`, `tail_consumers` and `vectorize`. That is
+left unchecked and unfixed, because whether preview is meant to serve the SPA
+at all is a question for its owner, not an assumption for a guard.
+
+And `Forge` appears in five files, which looks like a violation of D3's naming
+rule until you read them: it is `Forge Analytics`, a fictional company in the
+advisor demo fixtures. The AI is named correctly everywhere.
+
+The regulated-wording lint the brief also asks for is **not** built here. Unlike
+binding parity, it has no objective test — "advisor" is a legitimate word for a
+person in this product, and a check that cannot tell the role from the
+regulated claim would flag the whole codebase on its first run. It needs a
+decision about which surfaces the rule governs before it can be written.
 
 
 ## Part 2 — Decisions taken

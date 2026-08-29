@@ -121,7 +121,8 @@ test('the decisions summary counts the decisions that are actually there', () =>
   const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight',
     'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
     'seventeen', 'eighteen', 'nineteen', 'twenty', 'twenty-one', 'twenty-two',
-    'twenty-three', 'twenty-four', 'twenty-five'];
+    'twenty-three', 'twenty-four', 'twenty-five', 'twenty-six', 'twenty-seven',
+    'twenty-eight', 'twenty-nine', 'thirty'];
   const word = WORDS[numbered.length];
   assert.ok(word, `add ${numbered.length} to WORDS in this test`);
   assert.match(partOne, new RegExp(`All ${word} decisions are now resolved`),

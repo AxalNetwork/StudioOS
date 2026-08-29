@@ -729,7 +729,7 @@ async function findContractByUid(sql: ReturnType<typeof getSQL>, uid: string): P
       const rows: any[] = await sql`
         SELECT d.*, u.email AS partner_email, u.name AS partner_name
           FROM partner_deals d
-          LEFT JOIN users u ON u.id = d.partner_user_id
+          LEFT JOIN users u ON u.id = d.user_id
          WHERE d.id = ${Number(pdMatch[1])} LIMIT 1
       `;
       if (rows.length > 0) return { source: 'partner_deal', row: rows[0] };

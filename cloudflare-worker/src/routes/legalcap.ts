@@ -551,7 +551,10 @@ legalcap.post('/diligence/review', async (c) => {
 
   // AI summary + score adjustment
   const sql = getSQL(c.env);
-  const [project] = await sql`SELECT name, sector, stage, score FROM projects WHERE id = ${dealId}`;
+  // `projects` has no `score` — scores live in score_snapshots. Selecting it
+  // threw, so `project` was undefined and the prompt below named the deal by
+  // id instead of by name. Only `name` is read, so only `name` is selected.
+  const [project] = await sql`SELECT name FROM projects WHERE id = ${dealId}`;
   await sql.end();
   const ai = await llm(c.env,
     'You are a venture due-diligence analyst. Given a checklist with statuses, output a 2-3 sentence summary of risk + readiness.',
