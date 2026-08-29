@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All nineteen decisions are now resolved. D6 is closed by D11, which repaired
+All twenty decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -598,6 +598,49 @@ guard included. Six such strings existed; writing a seventh is how it surfaced,
 when a probe that should have failed passed instead. That is the argument for
 probing a guard rather than trusting it: the blind spot was not in the finding,
 it was in the instrument, and only a deliberate injection could show it.
+
+### D20. The column check covers UPDATE too, and stops there
+
+D19's check read INSERT column lists only. `UPDATE … SET` is the other place a
+column is named with the table certain — no alias, no join, no expression — so
+it is checkable on exactly the same terms, and extending to it cost about
+twenty lines. It found two more.
+
+**`projects.pipeline_stage` exists on no table in this schema**, and two
+spin-out endpoints write it. The instructive part is what SQLite does with an
+unknown column: it rejects the whole statement rather than ignoring the one
+term. So
+
+    UPDATE projects SET pipeline_stage = 'spun_out', stage = 'spun_out', …
+
+lost the `stage` write as well, and a spun-out project was never moved out of
+the main pipeline. The catch above it reads *"Schema may differ — ignore
+non-existent column"*: right about the cause, wrong about the consequence, and
+that mistaken confidence is why it sat there. The second site wrote
+`pipeline_stage` alone and returned `ok: true, decision: 'continue_iterate'`
+for a write that recorded nothing. Both now write `stage`, which exists and
+already takes exactly the values in question — `committed`, `mvp`, `spun_out`.
+
+**`users.organization` never existed, and its absence broke a second question.**
+`writeRouter` handles three role-detection answers identically: write to a
+`users` column, then read it back to decide whether to ask again. `role`,
+`headline` and `bio` are all fine. The `organization` write threw into a catch
+that told the user their answer was *"remembered for later"* — nothing
+remembered it. Worse, the answered-check is a single
+`SELECT organization, headline FROM users`, which throws on the first unknown
+column and returns null for the row, so `headline` was marked unanswered too
+despite being stored correctly. One missing column made the advisor re-ask two
+questions forever. Migration 180 adds it, and the hint now says what actually
+happened rather than making a promise the code cannot keep.
+
+**The scope stops at SET.** A column in the `WHERE` is not attributed, because
+`UPDATE … FROM` and correlated subqueries can put another table's columns
+there, and a check that guesses is a check nobody trusts — the same line D19
+drew at SELECT lists. `setClause` therefore terminates at the first top-level
+`WHERE`/`RETURNING`/`FROM`, skipping SQL strings so prose like
+`SET note = 'ask them WHERE they are'` cannot end it early. Both properties are
+pinned by test, and the boundary was probed the same way the finding was: a bad
+column in the SET fails the build, a bad column in the WHERE does not.
 
 ## Part 2 — Decisions taken
 

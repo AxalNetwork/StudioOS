@@ -772,9 +772,10 @@ export async function routeAnswer(
       ).bind(value, user.id).run();
       return { status: 'saved', saved_to: { table: 'users', column: 'organization', id: user.id, page_url: '/settings' } };
     } catch {
-      // Older users tables may lack the column; record as noop instead
-      // of failing the conversation.
-      return { status: 'noop', hint: 'organization column not available; remembered for later.' };
+      // Migration 180 adds the column; this remains for the window before it
+      // applies. The old hint claimed the answer was "remembered for later",
+      // which nothing did — say what actually happened instead.
+      return { status: 'noop', hint: 'Could not save your organisation just now.' };
     }
   }
   if (questionId === 'role_detect.headline') {
