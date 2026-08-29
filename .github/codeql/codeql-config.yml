@@ -16,7 +16,7 @@ paths-ignore:
   # uploads. NOT hand-written source (support.js header: "GENERATED ... do
   # not edit"); fixes belong in dc-runtime/src, not the bundle.
   - spin-out-lab-pipeline
-  # Claude Design canvases (design/canvases/). Same Same
+  # Claude Design canvases (design/canvases/). The same
   # dc-runtime export as the tree above — its support.js carries a
   # byte-identical "GENERATED from dc-runtime/src/*.ts — do not edit"
   # header — 110 .dc.html pages plus the bundle, ~83k lines. Nothing
