@@ -374,7 +374,13 @@ async function createProjectHandler(c: any) {
     }
     if (founderRow.length > 0) {
       const fid = founderRow[0].id;
-      const existing = await sql`SELECT COUNT(*)::int AS n FROM projects WHERE founder_id = ${fid}`;
+      // `COUNT(*)`, not `COUNT(*)::int`. `::` is Postgres cast syntax and D1 is
+      // SQLite, which rejects it outright with `unrecognized token: ":"`. This
+      // threw for every free founder who already had a `founders` row —
+      // anyone creating a second project, or a first one after onboarding had
+      // registered them — so the core founder action returned a 500 instead of
+      // either the project or the clean 402 the cap is supposed to raise.
+      const existing = await sql`SELECT COUNT(*) AS n FROM projects WHERE founder_id = ${fid}`;
       const count = Number(existing?.[0]?.n ?? 0);
       if (count >= FREE_TIER_LIMITS.projects) {
         await sql.end();
