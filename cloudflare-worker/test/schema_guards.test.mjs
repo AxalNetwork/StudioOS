@@ -14,7 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
-import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns, aliasMap, singleTablePredicate, predicateIdents, blankLiterals } from '../../scripts/check-sqlite-columns.mjs';
+import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns, aliasMap, singleTablePredicate, predicateIdents, blankLiterals, substituteBindings, coverage } from '../../scripts/check-sqlite-columns.mjs';
 import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
@@ -293,6 +293,49 @@ test('the two predicate defects are corrected at the source', () => {
   // The canonical per-recipient link, and the audit table the name came from.
   assert.ok(s.get('esign_recipients')?.has('recipient_email'));
   assert.ok(s.get('esign_audit_events')?.has('signer_email'));
+});
+
+test('a tagged-template interpolation is the bound ? it becomes', () => {
+  assert.equal(
+    substituteBindings('SELECT id FROM t WHERE a = ${x} AND b = ${y}'),
+    'SELECT id FROM t WHERE a = ? AND b = ?',
+  );
+  // Braces are matched, not scanned to the first `}` — an interpolation can
+  // carry an object literal or a nested template.
+  assert.equal(
+    substituteBindings('SELECT id FROM t WHERE a = ${JSON.stringify({ b: 1 })}'),
+    'SELECT id FROM t WHERE a = ?',
+  );
+  assert.equal(substituteBindings('SELECT ${oops FROM t'), null, 'unbalanced declines');
+  assert.equal(substituteBindings('SELECT id FROM t'), 'SELECT id FROM t', 'no-op when literal');
+});
+
+test('the guard reports how much of the SQL it actually read', () => {
+  unknownColumns();
+  // Raw `.prepare(`/`.exec(` interpolation can splice an identifier, so those
+  // stay skipped and the count is printed rather than hidden.
+  assert.ok(coverage.read > 3500, `expected most strings read, got ${coverage.read}`);
+  assert.ok(coverage.skipped > 0 && coverage.skipped < 500, `unexpected skip count ${coverage.skipped}`);
+});
+
+test('the ten tagged-template defects are corrected at the source', () => {
+  const s = knownColumns();
+  // A booking carries no time of its own; the slot does.
+  assert.ok(!s.get('advisor_bookings')?.has('scheduled_start'));
+  assert.ok(s.get('advisor_bookings')?.has('slot_id') && s.get('advisor_bookings')?.has('founder_user_id'));
+  assert.ok(s.get('advisor_office_hour_slots')?.has('starts_at') && s.get('advisor_office_hour_slots')?.has('meeting_url'));
+  assert.ok(s.get('partner_office_hour_slots')?.has('starts_at'));
+  assert.ok(s.get('advisors')?.has('display_name') && !s.get('advisors')?.has('name'));
+  // founders is reached through users.founder_id, never the other way.
+  assert.ok(!s.get('founders')?.has('user_id') && s.get('users')?.has('founder_id'));
+  // projects owns founder_id; submitted_by is a tickets column, score a snapshot one.
+  assert.ok(!s.get('projects')?.has('submitted_by') && !s.get('projects')?.has('user_id'));
+  assert.ok(!s.get('projects')?.has('score') && s.get('score_snapshots')?.has('total_score'));
+  assert.ok(s.get('tickets')?.has('submitted_by') && s.get('tickets')?.has('title') && !s.get('tickets')?.has('subject'));
+  // The third copy of the partner_deals join.
+  assert.ok(!s.get('partner_deals')?.has('partner_user_id'));
+  // Migration 181 — the write existed, the column did not.
+  assert.ok(s.get('calendar_sync_records')?.has('last_error'));
 });
 
 test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', () => {

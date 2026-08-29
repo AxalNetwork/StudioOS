@@ -24,6 +24,13 @@
  * eleven more across 1694 references, including a second copy of a broken
  * partner_deals query whose first copy had already been corrected.
  *
+ * And all of the above now also read the `sql\`…\`` tagged template from
+ * src/db.ts, which every pass had skipped for containing `${…}`. That tag
+ * appends a literal `?` per interpolation and binds the value, so those
+ * queries' structure is entirely literal — 833 of them, a fifth of all the SQL
+ * in the worker, carrying ten more defects. `.prepare(` and `.exec(`
+ * templates splice raw text that may be an identifier, so those stay skipped.
+ *
  * Finally the WHERE / GROUP BY / ORDER BY / HAVING predicates of a
  * single-table statement. That is the largest surface of the four — 1914
  * statements, 3007 references — and the last one a column error could hide
@@ -408,6 +415,33 @@ export function blankLiterals(sql) {
   return out;
 }
 
+/**
+ * `${…}` replaced by the `?` it actually becomes.
+ *
+ * The tagged template in src/db.ts appends a literal `?` per interpolation and
+ * binds the value, so a `sql\`…\`` query's STRUCTURE is entirely literal even
+ * though its text is not. Skipping those wholesale — as every pass did until
+ * now — hid 833 queries, a fifth of all the SQL in the worker.
+ *
+ * Braces are matched rather than scanned to the first `}`, because an
+ * interpolation can contain an object literal or a nested template.
+ */
+export function substituteBindings(sql) {
+  let out = '', i = 0;
+  while (i < sql.length) {
+    if (sql[i] !== '$' || sql[i + 1] !== '{') { out += sql[i]; i += 1; continue; }
+    let depth = 0, j = i + 1;
+    for (; j < sql.length; j += 1) {
+      if (sql[j] === '{') depth += 1;
+      else if (sql[j] === '}') { depth -= 1; if (depth === 0) break; }
+    }
+    if (depth !== 0) return null;          // unbalanced — decline the string
+    out += '?';
+    i = j + 1;
+  }
+  return out;
+}
+
 /** Reserved words a predicate can contain that are not column names. */
 const PREDICATE_KEYWORDS = new Set(`select from where and or not null is in like glob between exists case when then else end
 order by group having limit offset asc desc collate nocase binary rtrim distinct as on join left right inner outer cross natural using
@@ -468,13 +502,27 @@ export function predicateIdents(region) {
 }
 
 /** INSERT column lists, UPDATE SET clauses and single-table SELECT lists. */
+/** How much of the worker's SQL the last run could actually speak for. */
+export const coverage = { read: 0, skipped: 0 };
+
 export function unknownColumns() {
   const schema = knownColumns();
   const hits = new Map();
+  coverage.read = 0;
+  coverage.skipped = 0;
   for (const file of walk(SRC, '.ts')) {
     const rel = path.relative(ROOT, file);
-    for (const { body, line } of sqlStrings(fs.readFileSync(file, 'utf8'))) {
-      if (body.includes('${')) continue;                  // interpolated — column list is not literal
+    for (const { body: raw, kind, line } of sqlStrings(fs.readFileSync(file, 'utf8'))) {
+      let body = raw;
+      if (body.includes('${')) {
+        // Only the tagged template guarantees a binding. A `.prepare(` or
+        // `.exec(` template splices raw text, which may be an identifier, so
+        // those stay skipped.
+        if (kind !== 'sql') { coverage.skipped += 1; continue; }
+        body = substituteBindings(body);
+        if (body === null) { coverage.skipped += 1; continue; }
+      }
+      coverage.read += 1;
       // alias.column in a JOIN query — the alias fixes the table, so the
       // reference is as attributable as a single-table one. Only aliases
       // bound to exactly one table are used.
@@ -603,10 +651,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   const n = Object.keys(baseline).length;
-  // The skipped count is printed rather than hidden: it is the honest measure
-  // of how much of the schema this check cannot speak for.
+  // The skipped counts are printed rather than hidden: they are the honest
+  // measure of how much of the schema this check cannot speak for.
   console.log(
     `✓ check-sqlite-columns: every INSERT, UPDATE, SELECT list, qualified join reference and single-table predicate names columns that exist `
-    + `(${n} known gap${n === 1 ? '' : 's'} on record; ${incompleteTables.size} tables skipped as runtime-extended).`,
+    + `(${coverage.read} SQL strings read, ${coverage.skipped} skipped as raw-interpolated; `
+    + `${n} known gap${n === 1 ? '' : 's'} on record; ${incompleteTables.size} tables skipped as runtime-extended).`,
   );
 }

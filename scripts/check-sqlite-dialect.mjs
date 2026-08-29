@@ -106,7 +106,12 @@ export function sqlStrings(src) {
     }
     const body = src.slice(i + 1, j);
     if (/\b(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|WITH)\b/i.test(body)) {
-      out.push({ body, line: src.slice(0, i).split('\n').length });
+      // `kind` is the construct that introduced the string. It matters because
+      // `sql\`…\`` is the tagged template from src/db.ts, where every `${…}`
+      // becomes a bound `?` — so the SQL *structure* is fully literal even
+      // when the string is not. A `.prepare(` template interpolates raw text
+      // and can carry an identifier, which is a different thing entirely.
+      out.push({ body, kind: m[0], line: src.slice(0, i).split('\n').length });
     }
   }
   return out;

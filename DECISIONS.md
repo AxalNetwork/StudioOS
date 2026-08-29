@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-four decisions are now resolved. D6 is closed by D11, which repaired
+All twenty-five decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -832,6 +832,73 @@ these three guards and **every single one over-reported** — invented a column 
 a table by matching prose, a comment, a keyword, or a name that was never the
 material. The failure mode of a checker is not missing things. It is confidently
 naming things that are fine, until nobody reads its output any more.
+
+
+### D25. `${…}` is not a reason to stop reading
+
+Every column pass so far began with the same line:
+
+```js
+if (body.includes('${')) continue;   // interpolated — column list is not literal
+```
+
+That was true of one construct and false of the other, and nobody had
+separated them. `.prepare(\`…\`)` splices raw text into SQL, so an
+interpolation there really can be an identifier and the string really is
+unreadable. But `sql\`…\`` is the tagged template in `src/db.ts`, and it does
+this:
+
+```js
+strings.forEach((str, i) => { sql += str; if (i < values.length) sql += '?'; });
+await db.prepare(sql).bind(...values).all();
+```
+
+Every `${…}` becomes a bound `?`. The **structure** of those queries is
+entirely literal. There were **833 of them — a fifth of all the SQL in the
+worker — and no column check had ever read one.**
+
+Ten defects were in there. Substituting `${…}` → `?` and running the existing
+four passes over the result found all ten, and the guard now reports its own
+coverage — 3797 strings read, 286 skipped as raw-interpolated — so the size of
+the remaining blind spot is a number in the build log rather than an
+assumption.
+
+**The most expensive one is an entire feature that has never worked.**
+`advisorBookingEvents` and `partnerOfficeHourEvents` in `services/calendar.ts`
+read `scheduled_start`, `scheduled_end`, `requester_user_id`, `meeting_uri`,
+`questions` and `project_id` off the booking rows. None of those columns exist
+on `advisor_bookings` or `partner_bookings`, which carry
+`(slot_id, advisor_id|partner_id, founder_user_id, topic, notes, status)` — the
+time lives on the slot. The status filter was wrong too: it looked for
+`'requested'`, and both booking routes write `'pending'`. The function's own
+catch handles `isMissingColumnError` by returning `[]`, so **office-hour
+bookings have never appeared on anyone's calendar**, and the calendar reported
+that as "no events" rather than as a fault.
+
+The rest are single names, but three of them repeat lessons already recorded:
+
+- `admin_contracts.ts:729` is the **third** copy of the `partner_deals` join.
+  D18 fixed the first, D23 the second, and the third was invisible because it
+  sat inside a tagged template. Three passes, three copies, one query.
+- `dashboard.ts:82` filters the founder's own deal list on
+  `projects.submitted_by`, which is a `tickets` column. The comment directly
+  above it describes a previous repair to that same query's **select list**.
+  The `WHERE` was left wrong, so the list stayed empty — D24's lesson, in the
+  file D24 did not reach.
+- `scoring.ts:316` reads `SELECT user_id FROM founders`, the same
+  non-existent link `imports.ts` used. Here it means the founder is **never
+  notified when a score lands on their project**.
+
+One column was added rather than re-targeted: `calendar_sync_records.last_error`
+(migration 181). That is the opposite case to `corporate_profiles.kyb_status`
+and the distinction is worth keeping. Here the writer exists and knows the
+value — `services/calendar/sync.ts` stamps the failure reason into it, inside a
+catch whose own comment reads *"last_error column may not exist yet — drop
+silently"*. The author suspected and shipped it anyway. There is a value, a
+writer, a stated consumer, and five sibling tables already using that exact
+column name. `kyb_status` has none of those: nothing anywhere decides a KYB
+outcome, so a column would read NULL forever. A column is warranted when
+something already knows what to put in it.
 
 
 ## Part 2 — Decisions taken

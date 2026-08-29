@@ -444,7 +444,7 @@ export async function loadUser(env: Env, id: number) {
     WHERE user_id = ${id} AND created_at >= datetime('now','-90 days')
   `);
   const tickets = await sql`
-    SELECT id, subject, status, created_at FROM tickets
+    SELECT id, title AS subject, status, created_at FROM tickets
     WHERE user_id = ${id} ORDER BY created_at DESC LIMIT 25
   `.then(r => rows<SqlRow>(r)).catch(() => [] as SqlRow[]);
   // Billing history: pull from subscription_events if present, else synthesize

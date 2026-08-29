@@ -198,7 +198,7 @@ export async function onAxalSessionCancelled(
              WHERE user_id = ${r.user_id} AND provider = ${r.provider}
                AND source_kind = ${kind} AND source_id = ${sourceId}
           `;
-        } catch { /* last_error column may not exist yet — drop silently */ }
+        } catch { /* mapping row may already be gone — the cancel is best-effort */ }
       }
     }));
   } catch (e) {

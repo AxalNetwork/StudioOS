@@ -368,7 +368,9 @@ matches.post('/investor-match', async (c) => {
   const projects = await sql`
     SELECT * FROM projects
     WHERE id = ${projectId}
-      AND (user_id = ${user.id} OR founder_id = ${user.founder_id || 0} OR ${user.role === 'admin' ? 1 : 0} = 1)
+      -- projects.user_id does not exist; the disjunct took the whole
+      -- ownership check down with it. founder_id is the real link.
+      AND (founder_id = ${user.founder_id || 0} OR ${user.role === 'admin' ? 1 : 0} = 1)
   `;
   if (!projects.length) return c.json({ error: 'Project not found' }, 404);
   const project: any = projects[0];

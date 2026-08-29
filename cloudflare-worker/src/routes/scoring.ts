@@ -313,7 +313,10 @@ scoring.post('/score', async (c) => {
   // their project. Sandbox runs and self-runs are intentionally silent.
   try {
     if (!effectiveSandbox && project.founder_id) {
-      const fr = await sql`SELECT user_id FROM founders WHERE id = ${project.founder_id}`;
+      // `founders` has no user_id — the link runs the other way, on
+      // users.founder_id. Selecting it here threw, founderUserId was always
+      // undefined, and the founder was never paged when their score landed.
+      const fr = await sql`SELECT id AS user_id FROM users WHERE founder_id = ${project.founder_id} LIMIT 1`;
       const founderUserId = fr[0]?.user_id;
       if (founderUserId && founderUserId !== user.id) {
         const { notify } = await import('../services/notify');
