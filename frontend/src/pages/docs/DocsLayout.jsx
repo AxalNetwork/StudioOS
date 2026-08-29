@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   BookOpen, Search, ChevronRight, X, AlertTriangle,
   Compass, Rocket, Hammer, TrendingUp, DollarSign, Scale,
@@ -9,6 +9,8 @@ import ReactMarkdown from 'react-markdown';
 import { SECTIONS, filterSectionsForRole, adminOnlyAnchors } from './sections';
 import { createDocsFuse, splitForHighlight, snippet } from '../../lib/docs/search';
 import { useAuth } from '../../hooks/useAuthSync';
+import { request } from '../../lib/api';
+import { overallStatus } from '../../lib/statusOverall';
 
 // Wrap the pure-JS split helper into a JSX-friendly highlighter. Kept
 // inside the layout so the search module stays JSX-free.
@@ -140,6 +142,59 @@ function SubsectionView({ section, sub }) {
         </div>
       )}
     </section>
+  );
+}
+
+// "Still stuck?" — the canvas's contact block, with the one live element it
+// asks for: the current platform status, read from `GET /api/public/status`,
+// the same endpoint /status renders. Someone reading the docs because a
+// feature is not behaving should not have to go looking to find out the
+// platform is degraded.
+//
+// The roll-up rule is shared with /status (lib/statusOverall.js) so the two
+// pages cannot disagree, and the line renders nothing at all until the probe
+// answers — an unreachable status endpoint must not read as "all good".
+const STATUS_LINE = {
+  operational: { text: 'All systems operational', dot: 'bg-emerald-500' },
+  degraded: { text: 'Some systems degraded', dot: 'bg-amber-500' },
+  down: { text: 'Active outage', dot: 'bg-red-500' },
+};
+
+function StillStuck() {
+  const [overall, setOverall] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    request('/public/status')
+      .then((d) => { if (alive) setOverall(overallStatus(d?.services)); })
+      // A failed probe stays silent rather than claiming either state.
+      .catch(() => { if (alive) setOverall('unknown'); });
+    return () => { alive = false; };
+  }, []);
+
+  const line = STATUS_LINE[overall];
+
+  return (
+    <footer className="mt-16 pt-6 border-t border-gray-200 dark:border-gray-800">
+      <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Still stuck?</h2>
+      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        Open a ticket from the Tickets page in the sidebar, or email{' '}
+        <a className="text-violet-700 hover:underline dark:text-violet-300" href="mailto:support@axal.vc">
+          support@axal.vc
+        </a>.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        {line && (
+          <span className="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
+            <span className={`h-2 w-2 rounded-full ${line.dot}`} aria-hidden />
+            {line.text}
+          </span>
+        )}
+        <Link to="/status" className="text-violet-700 hover:underline dark:text-violet-300">
+          Status page →
+        </Link>
+      </div>
+    </footer>
   );
 }
 
@@ -464,9 +519,7 @@ export default function DocsLayout() {
               </div>
             ))}
 
-            <footer className="mt-16 pt-6 border-t border-gray-200 text-xs text-gray-500 dark:border-gray-800">
-              Need help? Open a ticket from the Tickets page in the sidebar, or email <a className="text-violet-700 hover:underline" href="mailto:support@axal.vc">support@axal.vc</a>.
-            </footer>
+            <StillStuck />
           </div>
 
           {/* "On this page" right rail — auto-built from the active section's subsections. */}

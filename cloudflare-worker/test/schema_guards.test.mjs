@@ -22,6 +22,7 @@ import { tableColumns, fatalCollisions, definitions } from '../../scripts/check-
 import { isMoney, nonIntegerCents, floatMoney } from '../../scripts/check-money-cents.mjs';
 import { selectKeys, typeFields, phantomFields, coverage as genericCoverage } from '../../scripts/check-row-generics.mjs';
 import { parseSections, bindings, missingFromProduction, unknownTables } from '../../scripts/check-wrangler-binding-parity.mjs';
+import { codeqlIgnores, semgrepIgnores, generatedTrees, gaps } from '../../scripts/check-scanner-ignore-parity.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
   const src = `
@@ -555,4 +556,98 @@ test('every table the worker queries is created somewhere', () => {
   assert.ok(known.size > 300, `expected a few hundred tables, got ${known.size}`);
   assert.ok(known.has('workflows') && known.has('workflow_tasks') && known.has('shared_services_log'),
     'migration 177 should have defined all three');
+});
+
+/* ------------------------------------------------------------------ *
+ * check-scanner-ignore-parity — the two static-analysis ignore lists  *
+ * ------------------------------------------------------------------ */
+
+test('paths-ignore is read without a YAML dependency, quotes and all', () => {
+  const src = [
+    'name: "x"',
+    '# a comment',
+    'paths-ignore:',
+    '  - docs',
+    '  # why the next one is ignored',
+    '  - "design/canvases"',
+    "  - 'quoted too'",
+    'queries: security-extended',
+  ].join('\n');
+  assert.deepEqual(codeqlIgnores(src), ['docs', 'design/canvases', 'quoted too']);
+});
+
+test('a key after the list ends the block rather than being read as an entry', () => {
+  const src = ['paths-ignore:', '  - docs', 'paths:', '  - frontend'].join('\n');
+  assert.deepEqual(codeqlIgnores(src), ['docs'], 'the `paths:` block is not an exclusion');
+});
+
+test('semgrep patterns are normalised, and an unanchored one is reported', () => {
+  const { entries, unanchored } = semgrepIgnores([
+    '# comment',
+    '/docs/',
+    '/design/canvases/',
+    'docs',
+  ].join('\n'));
+  assert.deepEqual(entries, ['docs', 'design/canvases']);
+  assert.deepEqual(unanchored, ['docs'],
+    'a bare name would also strip frontend/src/lib/docs from the scan');
+});
+
+test('the generated trees on disk are found by their generator header', () => {
+  // These are repo-relative PATHS, not top-level directory names. The canvases
+  // moved from `Axal VC platform/` to `design/canvases/`, and `design/` also
+  // holds hand-written token and pattern censuses — reporting the tree as
+  // `design` would mean ignoring those too, so the scan reports the directory
+  // the bundle is actually in and the ignore check accepts any ancestor.
+  const trees = generatedTrees();
+  assert.ok(trees.includes('design/canvases/shared'),
+    'the canvases ship a dc-runtime bundle and must be discoverable');
+  assert.ok(trees.includes('spin-out-lab-pipeline/project'),
+    'the tree this rule was originally written for');
+  assert.ok(!trees.some((t) => t === 'design'),
+    'reporting the whole of design/ would sweep the hand-written censuses into the ignore list');
+  assert.ok(!trees.some((t) => t.startsWith('frontend') || t.startsWith('cloudflare-worker')),
+    'real source must never be picked up as generated');
+});
+
+test('every generated tree is ignored by BOTH scanners', () => {
+  // `design/canvases/` was in neither list: ~60 security alerts and 1345 of
+  // 1384 quality findings came from a 49M tree that nothing builds or serves.
+  assert.deepEqual(gaps(), []);
+});
+
+/* ------------------------------------------------------------------ *
+ * workflow_tasks.assignee_user_id — pinning an inert path (Task #185) *
+ * ------------------------------------------------------------------ */
+
+test('nothing writes workflow_tasks.assignee_user_id', () => {
+  // The GOTCHAS entry for Task #185 rests on this: the column is read by one
+  // query (dashboard.ts myTasks) and written by no INSERT or UPDATE, so that
+  // query matches no row on any database — correctly migrated or not.
+  //
+  // If this fails because you wired assignment, good: that is the feature
+  // being finished. Update the "workflow_tasks" bullet under
+  // "### Migrations & schema" in documentation/architecture/GOTCHAS.md and delete this test, so the note
+  // does not outlive the fact it describes.
+  const src = fs.readdirSync(new URL('../src/routes/', import.meta.url), { recursive: true })
+    .filter((f) => String(f).endsWith('.ts'))
+    .map((f) => fs.readFileSync(new URL(`../src/routes/${f}`, import.meta.url), 'utf8'))
+    .join('\n');
+
+  const writes = [];
+  for (const m of src.matchAll(/INSERT\s+(?:OR\s+\w+\s+)?INTO\s+workflow_tasks\s*\(([^)]*)\)/gi)) {
+    if (/\bassignee_user_id\b/i.test(m[1])) writes.push(`INSERT: ${m[1].trim()}`);
+  }
+  for (const m of src.matchAll(/UPDATE\s+workflow_tasks\s+SET\b([\s\S]{0,400}?)(?:WHERE|`)/gi)) {
+    if (/\bassignee_user_id\b/i.test(m[1])) writes.push(`UPDATE: ${m[1].trim()}`);
+  }
+  assert.deepEqual(writes, []);
+});
+
+test('exactly one query reads workflow_tasks.assignee_user_id', () => {
+  // The other half of the same claim. A second reader would mean the column
+  // matters somewhere this note has not looked.
+  const dash = fs.readFileSync(new URL('../src/routes/dashboard.ts', import.meta.url), 'utf8');
+  const inDash = (dash.match(/workflow_tasks[\s\S]{0,200}?assignee_user_id/gi) || []).length;
+  assert.equal(inDash, 1, 'dashboard.ts myTasks is the one reader');
 });

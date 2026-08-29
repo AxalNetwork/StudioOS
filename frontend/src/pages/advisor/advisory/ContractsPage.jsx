@@ -1,109 +1,132 @@
-import React, { useMemo, useState } from 'react';
-import { Building2, FileText, Calendar } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { FileText, ExternalLink, Send } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { api } from '../../../lib/api';
 import {
-  CONTRACTS, CONTRACT_TYPES, money, formatDay, formatRelativeDay, TODAY,
-} from '../../../data/advisor/advisory';
-import {
-  FilterChips, StatCard, SlideOver, Field, StatusBadge,
-  EmptyState, Chip,
+  Chip, EmptyState, StatCard, FilterChips, StatusBadge, RowCard,
+  formatDay, formatRelativeDay,
 } from './kit';
 
-// Contracts — commercial documents across the advisory lifecycle (Proposals,
-// SOWs, Advisory Agreements, NDAs, Invoices, Renewals). Filter by document
-// type; each row opens a detail panel with statuses and key dates.
+// Contracts — the advisor's real e-signature envelopes (Wave 1b; previously a
+// fixture of five invented MSAs and SOWs with invented values).
+//
+// `GET /api/legal/esign` is scoped server-side by `esignEnvelopeScope(user)`,
+// so an advisor sees their own envelopes and nothing else — this page adds no
+// client-side filtering that could be mistaken for a security boundary.
+const VIEWS = [
+  { id: 'open', label: 'In flight' },
+  { id: 'done', label: 'Completed' },
+  { id: 'all', label: 'All' },
+];
 
-const TODAY_MS = new Date(TODAY).getTime();
+const OPEN_STATES = new Set(['draft', 'sent', 'partially_signed', 'pending']);
 
 export default function ContractsPage() {
-  const [type, setType] = useState('all');
-  const [selectedId, setSelectedId] = useState(null);
+  const [envelopes, setEnvelopes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [view, setView] = useState('open');
 
-  const filterOptions = useMemo(() => ([
-    { id: 'all', label: 'All', count: CONTRACTS.length },
-    ...CONTRACT_TYPES.map((t) => ({ id: t.id, label: t.label, count: CONTRACTS.filter((c) => c.docType === t.id).length })),
-  ]), []);
-
-  const visible = useMemo(
-    () => CONTRACTS.filter((c) => type === 'all' || c.docType === type),
-    [type],
-  );
-
-  const stats = useMemo(() => {
-    const active = CONTRACTS.filter((c) => ['Active', 'Signed'].includes(c.status));
-    const contractedValue = active.reduce((a, c) => a + (c.value || 0), 0);
-    const pending = CONTRACTS.filter((c) => ['Awaiting signature', 'Under review', 'Sent', 'Upcoming'].includes(c.status)).length;
-    const overdue = CONTRACTS.filter((c) => c.status === 'Overdue').length;
-    return { contractedValue, pending, overdue };
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await api.esignList();
+        setEnvelopes(r.envelopes || []);
+      } catch (e) {
+        setError(e?.message || 'Could not load your agreements.');
+      }
+      setLoading(false);
+    })();
   }, []);
 
-  const selected = CONTRACTS.find((c) => c.id === selectedId) || null;
-  const typeLabel = (id) => CONTRACT_TYPES.find((t) => t.id === id)?.label.replace(/s$/, '') || id;
+  const open = useMemo(() => envelopes.filter((e) => OPEN_STATES.has(String(e.status))), [envelopes]);
+  const done = useMemo(() => envelopes.filter((e) => String(e.status) === 'completed'), [envelopes]);
+  const shown = view === 'open' ? open : view === 'done' ? done : envelopes;
+
+  if (loading) {
+    return <div className="py-16 text-center text-sm text-gray-500 dark:text-gray-400">Loading agreements…</div>;
+  }
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Documents" value={CONTRACTS.length} hint="All commercial docs" />
-        <StatCard label="Contracted value" value={money(stats.contractedValue)} hint="Active + signed" />
-        <StatCard label="Pending" value={stats.pending} hint="Awaiting action" />
-        <StatCard label="Overdue" value={stats.overdue} hint="Needs attention" />
+    <div className="space-y-6">
+      {error && (
+        <div className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 px-4 py-2.5 text-sm text-rose-700 dark:text-rose-300">{error}</div>
+      )}
+
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard label="In flight" value={open.length} hint="sent, awaiting signatures" />
+        <StatCard label="Completed" value={done.length} />
+        <StatCard label="Total" value={envelopes.length} />
       </div>
 
-      <FilterChips options={filterOptions} value={type} onChange={setType} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <FilterChips options={VIEWS} value={view} onChange={setView} />
+        <Link
+          to="/legal/send"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-700"
+        >
+          <Send size={13} /> Send for signature
+        </Link>
+      </div>
 
-      {visible.length === 0 ? (
-        <EmptyState>No documents of this type.</EmptyState>
+      {shown.length === 0 ? (
+        <EmptyState>
+          {envelopes.length === 0
+            ? 'No agreements yet. Send one for signature and it appears here with its per-recipient progress.'
+            : view === 'open'
+              ? 'Nothing awaiting signature.'
+              : 'Nothing completed yet.'}
+        </EmptyState>
       ) : (
-        <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
-          {visible.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setSelectedId(c.id)}
-              className="w-full text-left flex items-center gap-3 p-3.5 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
-            >
-              <FileText size={16} className="text-gray-400 flex-shrink-0" />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{c.title}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 truncate flex items-center gap-1">
-                  <Building2 size={11} className="text-gray-400" /> {c.client} · {typeLabel(c.docType)}
+        <div className="space-y-2.5">
+          {shown.map((e) => {
+            const signed = Number(e.signed_count || 0);
+            const total = Number(e.recipient_count || 0);
+            return (
+              <RowCard key={e.id} onClick={() => { window.location.href = `/legal/send?envelope=${e.id}`; }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 dark:text-gray-100 inline-flex items-center gap-2">
+                      <FileText size={15} className="text-violet-500 flex-shrink-0" />
+                      <span className="truncate">{e.document_title || e.document_type || `Envelope #${e.id}`}</span>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <StatusBadge status={String(e.status).replace(/_/g, ' ')} />
+                      {e.document_type && <Chip tone="violet">{e.document_type}</Chip>}
+                      {total > 0 && (
+                        <Chip tone={signed === total ? 'emerald' : 'amber'}>
+                          {signed}/{total} signed
+                        </Chip>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-xs text-gray-600 dark:text-gray-400">{formatDay(e.created_at)}</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">
+                      {e.completed_at ? `completed ${formatRelativeDay(e.completed_at)}` : formatRelativeDay(e.created_at)}
+                    </div>
+                    {e.signed_r2_key && (
+                      <a
+                        href={api.esignDocumentUrl(e.id)}
+                        onClick={(ev) => ev.stopPropagation()}
+                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-violet-600 hover:underline"
+                      >
+                        <ExternalLink size={10} /> Signed PDF
+                      </a>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <span className="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-300 tabular-nums">{c.value != null ? money(c.value) : '—'}</span>
-              <StatusBadge status={c.status} />
-            </button>
-          ))}
+              </RowCard>
+            );
+          })}
         </div>
       )}
 
-      <ContractDetail contract={selected} typeLabel={typeLabel} onClose={() => setSelectedId(null)} />
+      <p className="text-[11px] text-gray-400 dark:text-gray-500">
+        Agreements are scoped by the server to the ones you originated or are a
+        party to. Structured deal terms and renewal tracking are not modelled
+        yet — this list reflects the envelope record itself.
+      </p>
     </div>
-  );
-}
-
-function ContractDetail({ contract, typeLabel, onClose }) {
-  if (!contract) return <SlideOver open={false} onClose={onClose} />;
-  const c = contract;
-  const expiringSoon = c.expires && c.status !== 'Paid'
-    && new Date(c.expires).getTime() >= TODAY_MS
-    && new Date(c.expires).getTime() - TODAY_MS <= 30 * 86400000;
-  return (
-    <SlideOver open onClose={onClose} title={c.title} subtitle={`${c.client} · ${typeLabel(c.docType)}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={c.status} />
-        {c.value != null && <Chip tone="violet">{money(c.value)}</Chip>}
-        {expiringSoon && <Chip tone="amber"><Calendar size={10} /> Expires {formatRelativeDay(c.expires)}</Chip>}
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Client">{c.client}</Field>
-        <Field label="Document type">{typeLabel(c.docType)}</Field>
-        <Field label="Value">{c.value != null ? money(c.value) : '—'}</Field>
-        <Field label="Status"><StatusBadge status={c.status} /></Field>
-        <Field label="Created">{formatDay(c.created)}</Field>
-        <Field label="Effective">{c.effective ? formatDay(c.effective) : '—'}</Field>
-        <Field label="Expires / due">{c.expires ? `${formatDay(c.expires)} · ${formatRelativeDay(c.expires)}` : '—'}</Field>
-      </div>
-      <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-6 text-center text-sm text-gray-500 dark:text-gray-400">
-        Document preview and e-signature are placeholders in this demo.
-      </div>
-    </SlideOver>
   );
 }

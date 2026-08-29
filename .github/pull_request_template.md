@@ -35,7 +35,7 @@ checklist catches the things linters can't.
 ## Production readiness (worker changes only)
 
 - [ ] D1 schema change? Migration file added under `cloudflare-worker/sql/`
-- [ ] New `wrangler` secret? Documented in `PRODUCTION.md` § 4
+- [ ] New `wrangler` secret? Documented in `../documentation/architecture/PRODUCTION.md` § 4
 - [ ] New binding (KV/R2/Queue/Vectorize)? Re-declared under
       `[env.production.*]` in `wrangler.toml` (Wrangler v2 doesn't inherit)
 

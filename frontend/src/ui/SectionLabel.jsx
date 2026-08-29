@@ -12,7 +12,7 @@ import React from 'react';
  * .07em leads 175-70 on raw occurrences), with the System Sheet spec asking
  * for .11em in a distant third. `.07em` ships as the default via
  * `tracking-axal-label`; pass tracking="wide" for the spec's value where a
- * design calls for it explicitly. See DECISIONS.md D2.
+ * design calls for it explicitly. See documentation/architecture/DECISIONS.md D2.
  *
  * Renders a <div> by default because most eyebrows are decorative labels, not
  * document structure. Pass `as` when the label genuinely heads a section — a

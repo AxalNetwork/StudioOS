@@ -2,7 +2,7 @@
 
 Integration plan §16 step 3. Read-only pass over the canvas corpus; no repo source was modified.
 
-- **Corpus**: `/home/user/StudioOS/Axal VC platform/*.dc.html` — **107 canvases**, top level only.
+- **Corpus**: `/home/user/StudioOS/design/canvases/*/*.dc.html` — **107 canvases**, top level only.
   `uploads/`, `scraps/`, `assets/`, and the two `*-standalone.html` pitch-deck files were excluded.
 - **Method**: per-canvas distinct-value extraction from both `<style>` blocks **and** inline
   `style="…"` attributes (the majority of tokens live inline), aggregated to a *canvas count*.
@@ -13,7 +13,7 @@ Integration plan §16 step 3. Read-only pass over the canvas corpus; no repo sou
 
 ## 0. Headline finding — there is a token spec canvas, and there are two design generations
 
-**`Axal VC platform/System Sheet.dc.html` is a self-describing design-token sheet.** Its
+**`design/canvases/backlog/System Sheet.dc.html` is a self-describing design-token sheet.** Its
 `System · Tokens` artboard declares the palette, type scale, radius scale and spacing scale as
 literal JS constants (lines 315–365):
 
@@ -534,7 +534,7 @@ deliberately.
 
 ---
 
-## 6. Open questions for whoever folds this into DECISIONS.md
+## 6. Open questions for whoever folds this into ../documentation/architecture/DECISIONS.md
 
 1. **Hairline `#e8e6ee` vs `#ececf1`.** 21 canvases vs 91 — the single biggest divergence. If the
    platform is not being re-skinned to the spec-family look, `#ececf1` is the pragmatic choice.

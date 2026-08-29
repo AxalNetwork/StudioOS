@@ -11,7 +11,7 @@ const code = (p) => read(p)
   .replace(/\/\*[\s\S]*?\*\//g, ' ')
   .replace(/^\s*\/\/.*$/gm, ' ');
 
-// DECISIONS.md D11.
+// documentation/architecture/DECISIONS.md D11.
 
 test('/marketplace redirects to a surface that works, and its page is gone', () => {
   const app = read('frontend/src/App.jsx');

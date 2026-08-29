@@ -297,6 +297,66 @@ r.post('/company/:uid/members', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// Wave 2 — change a member's role, or move primary-admin status.
+//
+// The canvas's Members & access zone asks for role change; only add and remove
+// existed, so the UI had no way to promote someone without removing and
+// re-adding them (which loses joined_at). Guards mirror POST exactly:
+//   • canEdit gates the whole route
+//   • only a primary admin (or a platform admin) may grant primary-admin
+//   • the LAST primary admin cannot be demoted — same invariant DELETE
+//     enforces, and for the same reason: a company with no primary admin has
+//     nobody who can appoint one
+r.patch('/company/:uid/members/:userId', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const company = await getCompanyOr404(c.env, c.req.param('uid'));
+    if (!company) return c.json({ detail: 'Company not found' }, 404);
+    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const userId = Number(c.req.param('userId'));
+    const link = await getLink(c.env, company.id, userId);
+    if (!link) return c.json({ detail: 'Member not found on this company' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+
+    const sets: string[] = [];
+    const params: any[] = [];
+
+    if (body.role_in_company !== undefined) {
+      if (typeof body.role_in_company !== 'string' || !body.role_in_company.trim()) {
+        return c.json({ detail: 'role_in_company must be a non-empty string' }, 400);
+      }
+      sets.push('role_in_company = ?');
+      params.push(body.role_in_company.trim().slice(0, 80));
+    }
+
+    if (body.is_primary_admin !== undefined) {
+      const next = body.is_primary_admin ? 1 : 0;
+      if (next && !isAdmin(user)) {
+        const my = await getLink(c.env, company.id, user.id);
+        if (!(my && my.is_primary_admin)) {
+          return c.json({ detail: 'Only the primary admin can grant primary admin status' }, 403);
+        }
+      }
+      if (!next && link.is_primary_admin) {
+        const cnt = await c.env.DB.prepare(
+          'SELECT COUNT(*) c FROM user_company_links WHERE company_id = ? AND is_primary_admin = 1',
+        ).bind(company.id).first<{ c: number }>();
+        if (Number(cnt?.c || 0) <= 1) {
+          return c.json({ detail: 'Cannot demote the only primary admin — appoint another first' }, 400);
+        }
+      }
+      sets.push('is_primary_admin = ?');
+      params.push(next);
+    }
+
+    if (!sets.length) return c.json({ detail: 'Nothing to update' }, 400);
+    params.push(link.id);
+    await c.env.DB.prepare(`UPDATE user_company_links SET ${sets.join(', ')} WHERE id = ?`)
+      .bind(...params).run();
+    return c.json(await detailDto(c.env, company, user));
+  } catch (e) { return mapError(c, e); }
+});
+
 r.delete('/company/:uid/members/:userId', async (c) => {
   try {
     const user = await requireAuth(c);

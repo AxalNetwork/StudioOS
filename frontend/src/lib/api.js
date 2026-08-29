@@ -667,6 +667,11 @@ export const api = {
   // Task #9 (X-2) — Authenticated partner deal portal.
   partnerPortal: {
     myDeal: () => request('/partner-portal/my-deal'),
+    // Wave 1a — the partner's real firm profile for Operations → Overview
+    // (replaces the BrightPath fixture). Per-field merge on PATCH: send only
+    // the edited keys; empty string clears company/specialization.
+    getProfile: () => request('/partner-portal/profile'),
+    updateProfile: (data) => request('/partner-portal/profile', { method: 'PATCH', body: JSON.stringify(data) }),
     setAcceptingIntros: (value) => request('/partner-portal/accepting-intros', { method: 'PATCH', body: JSON.stringify({ accepting_intros: value }) }),
     // Office-hours booking guidance the partner authors about themselves.
     // Worker: cloudflare-worker/src/routes/partner_portal.ts (D1 migration
@@ -1054,6 +1059,11 @@ export const api = {
   deliverEngagement: (id, data) => request(`/engagements/${id}/deliver`, { method: 'POST', body: JSON.stringify(data || {}) }),
   cancelEngagement: (id, data) => request(`/engagements/${id}/cancel`, { method: 'POST', body: JSON.stringify(data || {}) }),
   invoiceEngagement: (id) => request(`/engagements/${id}/invoice`, { method: 'POST' }),
+  // The invoice document itself (migration 188). Either party may read it;
+  // a non-party gets 404, not 403. `markInvoicePaid` records payment received
+  // OUT OF BAND — the platform has no payment rail and must not imply one.
+  engagementInvoice: (id) => request(`/engagements/${id}/invoice`),
+  markInvoicePaid: (id) => request(`/engagements/${id}/invoice/paid`, { method: 'POST' }),
   listEngagementReviews: (id) => request(`/engagements/${id}/reviews`),
   createEngagementReview: (id, data) => request(`/engagements/${id}/reviews`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -2113,6 +2123,10 @@ export const api = {
   createCompany: (data) => request('/company/create', { method: 'POST', body: JSON.stringify(data) }),
   updateCompany: (uid, data) => request(`/company/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
   addCompanyMember: (uid, data) => request(`/company/${uid}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  // Wave 2 — role change / primary-admin transfer. Send only the keys you are
+  // changing; both add and remove already existed, this closes the middle.
+  updateCompanyMember: (uid, userId, data) =>
+    request(`/company/${uid}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   removeCompanyMember: (uid, userId) => request(`/company/${uid}/members/${userId}`, { method: 'DELETE' }),
 
   // ---------- Personas (Epic 1) ----------
@@ -2135,6 +2149,87 @@ export const api = {
   simulateCapTable: (inputs) =>
     request('/captable/simulate', { method: 'POST', body: JSON.stringify({ inputs }) }),
   listCapTableScenarios: () => request('/captable/scenarios'),
+  // Wave 2 — option pools + vesting grants, both populated by the Carta sync
+  // (migration 057) and read by nothing until now. Shares, not money.
+  getEquityPlan: () => request('/captable/equity-plan'),
+
+  // Data room (migration 184 + routes/data_room.ts). Founder methods take the
+  // project uid; investor methods take the same uid but resolve through a
+  // grant rather than ownership.
+  dataRoom: (projectUid) => request(`/data-room/${encodeURIComponent(projectUid)}`),
+  dataRoomCreateFolder: (projectUid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/folders`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  dataRoomUpdateFolder: (projectUid, uid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/folders/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  dataRoomDeleteFolder: (projectUid, uid) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/folders/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  dataRoomUploadFile: (projectUid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/files`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  dataRoomUpdateFile: (projectUid, uid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  dataRoomDeleteFile: (projectUid, uid) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  dataRoomGrant: (projectUid, data) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/grants`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  dataRoomRevoke: (projectUid, uid) =>
+    request(`/data-room/${encodeURIComponent(projectUid)}/grants/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+  dataRoomsSharedWithMe: () => request('/data-room/shared'),
+
+  // Messages (migration 185 + routes/messages.ts). Membership is the only key:
+  // every one of these 404s for a thread the caller is not in.
+  messageThreads: () => request('/messages'),
+  messageThread: (uid) => request(`/messages/${encodeURIComponent(uid)}`),
+  messageStartThread: (data) => request('/messages', { method: 'POST', body: JSON.stringify(data || {}) }),
+  messageSend: (uid, body) =>
+    request(`/messages/${encodeURIComponent(uid)}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
+  messageMarkRead: (uid) => request(`/messages/${encodeURIComponent(uid)}/read`, { method: 'POST' }),
+  messageArchive: (uid) => request(`/messages/${encodeURIComponent(uid)}/archive`, { method: 'POST' }),
+
+  // Perks & Products (migration 186 + routes/perks.ts). `allowance_configured`
+  // on the catalogue response is load-bearing: it lets the page say "no credit
+  // allowance is set up" instead of "not enough credits", which are very
+  // different things to tell someone with a zero balance.
+  perksCatalog: () => request('/perks'),
+  perk: (uid) => request(`/perks/${encodeURIComponent(uid)}`),
+  perkClaim: (uid) => request(`/perks/${encodeURIComponent(uid)}/claim`, { method: 'POST' }),
+  perksMine: () => request('/perks/mine'),
+  perkSubmissions: () => request('/perks/partner'),
+  perkSubmit: (data) => request('/perks/partner', { method: 'POST', body: JSON.stringify(data || {}) }),
+  perkUpdate: (uid, data) =>
+    request(`/perks/partner/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  perkStats: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/stats`),
+  perkReviewQueue: () => request('/perks/admin/queue'),
+  perkReview: (uid, data) =>
+    request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  perkGrantCredits: (data) =>
+    request('/perks/admin/credits', { method: 'POST', body: JSON.stringify(data || {}) }),
+
+  // Territory licences (migration 187 + routes/admin_licences.ts). The LEDGER
+  // half of the subsidiary model — who holds which countries, on what terms.
+  // Not the scoping half: nothing else in the product reads a territory from
+  // this yet, which is why `seats_used` comes back null rather than 0.
+  licences: () => request('/admin/licences'),
+  licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
+  licenceTerritories: () => request('/admin/licences/territories'),
+  licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),
+  licenceSetTerritories: (uid, countries) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/territories`, { method: 'PUT', body: JSON.stringify({ countries }) }),
+  licenceSetSeats: (uid, seats) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/seats`, { method: 'PUT', body: JSON.stringify({ seats }) }),
+  licenceSetTerms: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/terms`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  licenceActivation: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/activation`),
+  licenceActivate: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/activate`, { method: 'POST' }),
+  licenceSuspend: (uid, note) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/suspend`, { method: 'POST', body: JSON.stringify({ note }) }),
+  licenceReinstate: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/reinstate`, { method: 'POST' }),
+  licenceRenew: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/renew`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  licenceTerminate: (uid, note) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/terminate`, { method: 'POST', body: JSON.stringify({ note }) }),
+  dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
+  dataRoomDownload: (projectUid, uid) =>
+    request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
   getCapTableByProject: (projectId) => request(`/captable/scenarios/by-project/${projectId}`),
   createCapTableVariant: (projectId, data) =>
     request(`/captable/scenarios/by-project/${projectId}/variants`, { method: 'POST', body: JSON.stringify(data) }),

@@ -16,19 +16,20 @@ const PRICING = ['$', '$$', '$$$'];
 
 const TAB_ICONS = { Handshake, Rocket, TrendingUp, GraduationCap };
 
-// Preview card for the not-yet-live Directory tabs (Startups / Investors & LPs
-// / Advisors). Explicitly badged as a preview so it's never mistaken for a
-// verified, live listing.
+// Field-shape card for the not-yet-live Directory tabs (Startups / Investors &
+// LPs / Advisors). It shows which fields a listing will carry; the identity
+// slot is a blank rule, because inventing a company — or worse, a person — on
+// a public page is not a preview, it is a fabricated listing.
 function PreviewCard({ p }) {
   return (
     <div className="rounded-xl border border-dashed border-gray-300 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{p.name}</h3>
-          <p className="text-xs text-gray-500">{p.category}</p>
+        <div className="min-w-0 flex-1">
+          <div aria-hidden className="h-4 w-2/3 rounded bg-gray-200 dark:bg-gray-700" />
+          <p className="mt-1.5 text-xs text-gray-500">{p.category}</p>
         </div>
         <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-          Preview
+          Example
         </span>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
@@ -60,14 +61,14 @@ function ComingSoonTab({ category }) {
               Coming soon
             </span>
           </p>
-          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{category.blurb} A public, searchable {category.label.toLowerCase()} directory is on the way — here's a preview of the structure.</p>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{category.blurb} A public, searchable {category.label.toLowerCase()} directory is on the way. Nobody is listed yet — the cards below show which fields a listing will carry.</p>
           <Link to="/register" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-violet-700 hover:text-violet-900 dark:text-violet-300">
             Get listed <ArrowRight size={14} />
           </Link>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {previews.map((p) => <PreviewCard key={p.name} p={p} />)}
+        {previews.map((p) => <PreviewCard key={p.id} p={p} />)}
       </div>
     </div>
   );

@@ -243,6 +243,9 @@ CREATE TABLE IF NOT EXISTS comarketing_pitches (
   target_audience TEXT,
   distribution_channels TEXT,
   co_branding_notes TEXT,
+  -- 183: the angle the review turns on, and what the partner brings.
+  angle TEXT,
+  what_you_bring TEXT,
   asset_url TEXT,
   status TEXT NOT NULL DEFAULT 'proposed', -- proposed|approved|rejected|published|withdrawn
   review_notes TEXT,

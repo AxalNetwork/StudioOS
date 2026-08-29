@@ -5,7 +5,7 @@
  * on a D1 the migration has not reached yet so POST /api/track never 500s
  * on a cold database.
  *
- * Privacy contract (see ANALYTICS_FUNNEL.md): rows are pseudonymous —
+ * Privacy contract (see documentation/architecture/ANALYTICS_FUNNEL.md): rows are pseudonymous —
  * anon_id is a client UUID minted only after analytics cookie-consent,
  * there is no IP / email / user_id, and `browser` is a coarse family
  * derived server-side (never the full user-agent). Rows older than 180

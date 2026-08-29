@@ -1464,7 +1464,7 @@ export const MinimalSeedDeckApp: React.FC<{
 //     ...rounds, founders: [...], milestones: [...] }
 // produced by cloudflare-worker/src/routes/decks.ts heuristicSlides().
 // Several JSON columns below depend on the migration in earlier
-// Prompt MD (DECK_AUTOFILL_AUDIT.md + 00xx_deck_autofill_fields.sql).
+// Prompt MD (documentation/audits/DECK_AUTOFILL_AUDIT.md + 00xx_deck_autofill_fields.sql).
 // ─────────────────────────────────────────────────────────────────
 
 export const SAMPLE_DATA: MinimalSeedData = {

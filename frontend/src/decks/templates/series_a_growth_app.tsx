@@ -1780,7 +1780,7 @@ export const SeriesAGrowthDeckApp: React.FC<{
 // produced server-side by cloudflare-worker/src/routes/decks.ts
 // heuristicSlides(). Many JSON columns referenced here depend on
 // the migration enumerated in earlier Prompt MD
-// (DECK_AUTOFILL_AUDIT.md + 00xx_deck_autofill_fields.sql).
+// (documentation/audits/DECK_AUTOFILL_AUDIT.md + 00xx_deck_autofill_fields.sql).
 // ─────────────────────────────────────────────────────────────────
 
 export const SAMPLE_DATA: SeriesAData = {

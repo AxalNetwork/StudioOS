@@ -1,5 +1,5 @@
 /**
- * Route-namespace policy (DECISIONS.md D4, resolved).
+ * Route-namespace policy (documentation/architecture/DECISIONS.md D4, resolved).
  *
  * Two things are pinned here, and both exist because the written record was
  * wrong about them once already.
@@ -12,7 +12,7 @@
  *    than by whoever remembers the reasoning.
  *
  * 2. **React Router ranks by specificity, not registration order.**
- *    ROUTE_MAP.md recorded that `/deals/:dealId` "swallows" the four stage
+ *    documentation/architecture/ROUTE_MAP.md recorded that `/deals/:dealId` "swallows" the four stage
  *    tabs the canvases propose, and it does not: a static segment outranks a
  *    dynamic one wherever each is registered. That false claim would have
  *    bought a route redesign nobody needed. Registration order DOES decide in
@@ -49,7 +49,7 @@ test('no persona is mounted as a bare route root', () => {
 test('the prohibition is recorded as resolved, not merely observed', () => {
   // The rule outlived its stated justification once. If someone reopens D4,
   // this test should be the thing that makes them come back and edit it.
-  const decisions = readFileSync(resolve(process.cwd(), 'DECISIONS.md'), 'utf8');
+  const decisions = readFileSync(resolve(process.cwd(), 'documentation/architecture/DECISIONS.md'), 'utf8');
   assert.match(decisions, /### D4\. Persona-root URLs — the prohibition stands/);
   assert.match(decisions, /\*\*RESOLVED — keep the prohibition\.\*\*/);
 });
@@ -60,14 +60,14 @@ test('D4 does not claim /founder is unclaimed — the namespace is still in use'
   const under = ROUTES.filter((p) => p.startsWith('/founder/'));
   assert.ok(under.length > 0,
     'if /founder/* ever empties, D4 needs re-reading — not silently re-deciding');
-  const decisions = readFileSync(resolve(process.cwd(), 'DECISIONS.md'), 'utf8');
+  const decisions = readFileSync(resolve(process.cwd(), 'documentation/architecture/DECISIONS.md'), 'utf8');
   assert.match(decisions, /`\/founder` is not unclaimed/);
 });
 
 // ---------- the router fact ----------
 
 test('a static segment outranks a param wherever it is registered', () => {
-  // The exact claim ROUTE_MAP.md got wrong, pinned against the installed
+  // The exact claim documentation/architecture/ROUTE_MAP.md got wrong, pinned against the installed
   // router rather than against anyone's memory of how routing works.
   const routes = [
     { path: '/deals' },
@@ -86,8 +86,8 @@ test('a static segment outranks a param wherever it is registered', () => {
   assert.equal(hit('/deals'), '/deals');
 });
 
-test('ROUTE_MAP.md carries the correction, not the original claim', () => {
-  const map = readFileSync(resolve(process.cwd(), 'ROUTE_MAP.md'), 'utf8');
+test('documentation/architecture/ROUTE_MAP.md carries the correction, not the original claim', () => {
+  const map = readFileSync(resolve(process.cwd(), 'documentation/architecture/ROUTE_MAP.md'), 'utf8');
   assert.match(map, /React Router does not match in registration order/);
   // The old wording asserted the opposite; it must not still be sitting there.
   assert.doesNotMatch(map, /the param route swallows all four/,

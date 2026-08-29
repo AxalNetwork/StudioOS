@@ -25,7 +25,7 @@ import { api } from '../lib/api';
  *                        companies nobody made.
  *   Growth benchmarks    WITHDRAWN. "Portfolio median vs industry median"
  *                        needs a licensed industry dataset. Same call as the
- *                        Funds research tab (DECISIONS.md D9): it returns when
+ *                        Funds research tab (documentation/architecture/DECISIONS.md D9): it returns when
  *                        a source is licensed, not before.
  *
  * One correction worth recording: the fixture gave each introduction a

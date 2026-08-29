@@ -1,6 +1,6 @@
 // Task #2 — First-party, consent-aware signup-funnel tracker.
 //
-// Fires the audit's ~15 funnel events (see ANALYTICS_FUNNEL.md) to the
+// Fires the audit's ~15 funnel events (see documentation/architecture/ANALYTICS_FUNNEL.md) to the
 // Worker's POST /api/track sink, which appends them to the D1 `funnel_events`
 // table. No third-party analytics, no session replay.
 //
@@ -45,7 +45,7 @@ const PAGE_CAP = 50;          // self-cap per page session (runaway-loop guard)
 const PRECONSENT_CAP = 20;    // in-memory buffer while the banner is undecided
 
 // Keep in sync with FUNNEL_EVENT_ALLOWLIST in cloudflare-worker/src/routes/track.ts
-// and the event table in ANALYTICS_FUNNEL.md.
+// and the event table in documentation/architecture/ANALYTICS_FUNNEL.md.
 export const FUNNEL_EVENTS = new Set([
   'landing_view',
   'register_view',

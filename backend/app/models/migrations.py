@@ -270,7 +270,7 @@ def ensure_interview_assessment_columns() -> None:
 
 
 def ensure_lifecycle_columns() -> None:
-    """FOUNDER_UX_AUDIT.md Critical #1 — founder-editable Startup Lifecycle stage
+    """documentation/audits/FOUNDER_UX_AUDIT.md Critical #1 — founder-editable Startup Lifecycle stage
     + manual check-offs on `projects`. Mirrors Worker D1 migration 139 so the dev
     FastAPI backend persists the same fields. Idempotent
     (`ADD COLUMN IF NOT EXISTS`). Kept SEPARATE from the privileged

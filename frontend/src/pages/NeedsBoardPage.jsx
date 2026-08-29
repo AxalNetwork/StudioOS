@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Send, Check, X, AlertCircle, Search, Filter, Briefcase, Clock, DollarSign,
   ShieldCheck, FileText, Trash2, Edit3, ChevronRight, Inbox, Handshake,
-  Play, Package, Star, Receipt, XCircle, ExternalLink,
+  Play, Package, Star, Receipt, XCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useEscapeClose } from '../components/useEscapeClose';
@@ -612,7 +612,17 @@ export function EngagementsTab({ user }) {
           <div className="text-right flex flex-col items-end gap-1 shrink-0">
             <span className={`text-xs px-2 py-0.5 rounded-full border ${ENG_TONE[e.status] || ENG_TONE.cancelled}`}>{ENG_LABEL[e.status] || e.status}</span>
             <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">${e.price.toLocaleString()}</div>
-            {e.stripe_invoice_url && <a href={e.stripe_invoice_url} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()} className="text-[11px] text-violet-700 hover:underline flex items-center gap-1"><Receipt size={11} /> Invoice {e.invoice_simulated ? '(sim)' : ''}</a>}
+            {/* This was a link guarded on a hosted-invoice URL field. D1's
+                engagements table has no such column and the worker never
+                wrote one, so the guard was unconditionally falsy in
+                production while the engagement sat marked `invoiced`.
+                `invoice_id` is a real column and now holds a real invoice
+                number (migration 188). */}
+            {e.invoice_id && (
+              <span className="text-[11px] text-violet-700 flex items-center gap-1 dark:text-violet-300">
+                <Receipt size={11} /> {e.invoice_id}
+              </span>
+            )}
           </div>
         </button>
       ))}
@@ -629,10 +639,130 @@ export function EngagementsTab({ user }) {
   );
 }
 
+/**
+ * The invoice document (migration 188 + services/engagementInvoices.ts).
+ *
+ * Rendered in-platform rather than linked out. Production never had a hosted
+ * invoice to link to: D1's engagements table carries no `stripe_invoice_url`,
+ * the worker wrote `invoice_id = 'stub-<uid>'` and nothing else, and the two
+ * `{eng.stripe_invoice_url && …}` links here were therefore dead — while the
+ * engagement sat permanently marked `invoiced`.
+ *
+ * Every amount comes back as an INTEGER of minor units and is divided by 100
+ * exactly once, here. Nothing on this screen does float arithmetic on money.
+ *
+ * The platform does not process payment and this document does not pretend
+ * otherwise: "paid" means the partner recorded that they were paid, and the
+ * footer says so to both sides.
+ */
+function InvoiceDocument({ engagementId, isPartner, onChanged }) {
+  const [inv, setInv] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    api.engagementInvoice(engagementId)
+      .then(setInv)
+      .catch(() => setErr('That invoice could not be loaded.'));
+  }, [engagementId]);
+  useEffect(load, [load]);
+
+  const fmt = (cents) => {
+    const n = Number(cents);
+    if (!Number.isFinite(n)) return '—';
+    return (n / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  async function markPaid() {
+    setBusy(true);
+    try { setInv(await api.markInvoicePaid(engagementId)); onChanged?.(); }
+    catch { setErr('Could not record that payment.'); }
+    finally { setBusy(false); }
+  }
+
+  if (err) return <p className="text-sm text-red-600">{err}</p>;
+  if (!inv) return <p className="text-sm text-gray-500">Loading the invoice…</p>;
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4 bg-white dark:bg-gray-900 dark:border-gray-800">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-gray-500">Invoice</div>
+          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{inv.invoice_number}</div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            Issued {String(inv.issued_at || '').slice(0, 10)}
+            {inv.due_at && <> · due {String(inv.due_at).slice(0, 10)}</>}
+          </div>
+        </div>
+        <span className={`text-xs px-2 py-0.5 rounded-full border ${
+          inv.status === 'paid' ? 'bg-green-50 text-green-700 border-green-200'
+            : inv.status === 'void' ? 'bg-gray-100 text-gray-500 border-gray-200'
+            : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
+          {inv.status}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-gray-500">From</div>
+          <div className="text-gray-900 dark:text-gray-100">{inv.bill_from_name || 'Not recorded'}</div>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-gray-500">Bill to</div>
+          <div className="text-gray-900 dark:text-gray-100">{inv.bill_to_name || 'Not recorded'}</div>
+        </div>
+      </div>
+
+      <table className="w-full mt-4 text-sm">
+        <thead>
+          <tr className="border-b border-gray-200 text-left text-[11px] uppercase tracking-wide text-gray-500 dark:border-gray-800">
+            <th className="py-1.5">Description</th>
+            <th className="py-1.5 text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(inv.line_items || []).map((li, i) => (
+            <tr key={i} className="border-b border-gray-100 dark:border-gray-800">
+              <td className="py-1.5 pr-3 text-gray-900 whitespace-pre-line dark:text-gray-100">{li.description}</td>
+              <td className="py-1.5 text-right text-gray-900 dark:text-gray-100">{fmt(li.amount_cents)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="mt-3 space-y-1 text-sm">
+        <div className="flex justify-between"><span className="text-gray-600 dark:text-gray-400">Subtotal</span><span className="text-gray-900 dark:text-gray-100">{fmt(inv.subtotal_cents)}</span></div>
+        {Number(inv.tax_rate_bps) > 0 && (
+          <div className="flex justify-between">
+            <span className="text-gray-600 dark:text-gray-400">Tax ({(Number(inv.tax_rate_bps) / 100).toFixed(2).replace(/\.?0+$/, '')}%)</span>
+            <span className="text-gray-900 dark:text-gray-100">{fmt(inv.tax_cents)}</span>
+          </div>
+        )}
+        <div className="flex justify-between font-semibold border-t border-gray-200 pt-1 dark:border-gray-800">
+          <span className="text-gray-900 dark:text-gray-100">Total {inv.currency}</span>
+          <span className="text-gray-900 dark:text-gray-100">{fmt(inv.total_cents)}</span>
+        </div>
+      </div>
+
+      {isPartner && inv.status === 'issued' && (
+        <button type="button" disabled={busy} onClick={markPaid}
+          className="mt-4 border border-green-300 text-green-700 hover:bg-green-50 rounded-md px-3 py-1.5 text-sm disabled:opacity-50 dark:border-green-700 dark:text-green-300">
+          Record payment received
+        </button>
+      )}
+      <p className="mt-3 text-[11px] text-gray-500">
+        Axal issues this document; it does not collect the payment. Marking it paid records that
+        you were paid directly, and both sides see that.
+      </p>
+    </div>
+  );
+}
+
 function EngagementDetailModal({ engagementId, user, isFounder, isPartner, onClose }) {
   const [eng, setEng] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [showInvoice, setShowInvoice] = useState(false);
 
   async function load() {
     setError(null);
@@ -709,22 +839,35 @@ function EngagementDetailModal({ engagementId, user, isFounder, isPartner, onClo
             </button>
           )}
           {isPartner && status === 'in_progress' && <DeliverButton busy={busy} onSubmit={(notes) => action(() => api.deliverEngagement(eng.id, { delivery_notes: notes }))} />}
-          {isPartner && (status === 'delivered' || status === 'reviewed') && !eng.stripe_invoice_id && (
+          {/* The guard was `!eng.stripe_invoice_id` — a field D1 does not have
+              and the worker never sets, so the button never hid and a second
+              click 409'd. `invoice_id` is the real column. The label said
+              "Stripe" for a flow with no Stripe in it. */}
+          {isPartner && (status === 'delivered' || status === 'reviewed') && !eng.invoice_id && (
             <button disabled={busy} onClick={() => action(() => api.invoiceEngagement(eng.id))}
               className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-md px-3 py-1.5 text-sm flex items-center gap-1 disabled:bg-gray-300">
-              <Receipt size={14} /> Issue Stripe invoice
+              <Receipt size={14} /> Issue invoice
             </button>
           )}
           {!['invoiced', 'reviewed', 'cancelled'].includes(status) && (
             <CancelButton busy={busy} onSubmit={(reason) => action(() => api.cancelEngagement(eng.id, { reason }))} />
           )}
-          {eng.stripe_invoice_url && (
-            <a href={eng.stripe_invoice_url} target="_blank" rel="noreferrer"
-              className="border border-violet-300 text-violet-700 hover:bg-violet-50 rounded-md px-3 py-1.5 text-sm flex items-center gap-1">
-              <ExternalLink size={14} /> View invoice {eng.invoice_simulated && <span className="text-[10px] text-amber-700">(simulated)</span>}
-            </a>
+          {/* Was an <a href={eng.stripe_invoice_url}> to a hosted page that
+              production never produced. The invoice is now a document this
+              platform issues and renders itself. */}
+          {eng.invoice_id && (
+            <button type="button" onClick={() => setShowInvoice((v) => !v)}
+              className="border border-violet-300 text-violet-700 hover:bg-violet-50 rounded-md px-3 py-1.5 text-sm flex items-center gap-1 dark:border-violet-700 dark:text-violet-300">
+              <Receipt size={14} /> {showInvoice ? 'Hide invoice' : 'View invoice'}
+            </button>
           )}
         </div>
+
+        {showInvoice && eng.invoice_id && (
+          <div className="mt-3">
+            <InvoiceDocument engagementId={eng.id} isPartner={isPartner} onChanged={load} />
+          </div>
+        )}
 
         {/* Two-sided review — unlocked only after delivered */}
         {(isFounder || isPartner) && ['delivered', 'reviewed', 'invoiced'].includes(status) && (

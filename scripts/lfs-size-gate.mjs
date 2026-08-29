@@ -3,7 +3,7 @@
  * lfs-size-gate.mjs
  *
  * Pre-commit / pre-push gate that enforces the Axal StudioOS LFS policy
- * (see MIGRATION_LFS_AUDIT.md).
+ * (see documentation/audits/MIGRATION_LFS_AUDIT.md).
  *
  * Rules:
  *  1. Files matching the listed extensions in .gitattributes MUST be
@@ -195,7 +195,7 @@ function main() {
     console.error(`  ✗ ${v.path}  (${(v.size / 1024).toFixed(0)} KB)`);
     console.error(`      ${v.reason}`);
   }
-  console.error("\n  See MIGRATION_LFS_AUDIT.md and .gitattributes for policy.");
+  console.error("\n  See documentation/audits/MIGRATION_LFS_AUDIT.md and .gitattributes for policy.");
   console.error("  To allow this file via LFS:");
   console.error('    git lfs track "<glob>"   # e.g. git lfs track "*.psd"');
   console.error("    git add .gitattributes <file>");

@@ -56,7 +56,7 @@ is a follow-up:
 - `integrations.py` — `/api/integrations/*` (used by `IntegrationsPage`
   webhook config). No worker file exists.
 - `admin_contracts.py` — `/api/admin/contracts/*` (used by the admin
-  contract-download UI in `lib/api.js`). No worker file exists.
+  contract-download UI in `frontend/src/lib/api.js`). No worker file exists.
 - `pipeline_votes.py` — `/api/pipeline/vote*`, `/api/pipeline/votes*` (used by
   the deal-card voting widget). The worker `pipeline.ts` only handles
   `/active`, `/projects/*`, `/ws/*` — voting endpoints are missing.

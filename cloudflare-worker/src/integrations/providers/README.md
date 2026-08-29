@@ -29,11 +29,11 @@ call runs at boot.
 
 Never log raw credentials. Return them from `connect()` as a plain
 object — the route layer encrypts and persists via
-`integrations/secrets.ts` (column cipher + AAD scoped to the row's uid).
+`cloudflare-worker/src/integrations/secrets.ts` (column cipher + AAD scoped to the row's uid).
 
 ## OAuth providers
 
-Use `integrations/oauth.ts` `buildPkce()` inside your
+Use `cloudflare-worker/src/integrations/oauth.ts` `buildPkce()` inside your
 `buildAuthorizeUrl` so the verifier is bound to the signed state. The
-callback handler in `routes/integrations.ts` will hand the verifier back
+callback handler in `cloudflare-worker/src/routes/integrations.ts` will hand the verifier back
 to your `connect()` via `input.config.pkce_verifier`.

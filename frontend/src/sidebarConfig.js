@@ -21,7 +21,7 @@ import {
   Globe, Brain, Activity, Shield, ShieldCheck,
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale,
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
-  BookOpen, Settings as SettingsIcon, Gamepad2, ShieldAlert,
+  Gamepad2, ShieldAlert,
   Gavel, Inbox, FileBarChart, Radar, Wallet,
 } from 'lucide-react';
 

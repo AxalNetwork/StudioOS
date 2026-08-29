@@ -286,7 +286,7 @@ export default function RegisterPage() {
       const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, role: laneRole, product: productIntent || undefined });
       // Task #2 — funnel: email_sent:false is the audit's silent-drop-off
       // signal (provider outage / misconfig) — alert threshold documented in
-      // ANALYTICS_FUNNEL.md.
+      // documentation/architecture/ANALYTICS_FUNNEL.md.
       track('register_success', { mode: 'classic', email_sent: res?.email_sent !== false });
       setEmailWarning(res?.email_sent === false);
       if (res?.verification_url) setVerificationUrl(res.verification_url);

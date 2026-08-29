@@ -1,10 +1,10 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
 import { useToast } from '../components/useToast';
 import {
-  User, ShieldCheck, Bell, Lock,
+  User, ShieldCheck, Bell,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard,
   Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Activity,
@@ -130,6 +130,54 @@ const PARTNER_NOTIFICATION_EVENTS = [
   { key: 'partner_capital_call_due', label: 'Capital call due in 7 days' },
   { key: 'partner_match_recommendation', label: 'AI match recommendation' },
   { key: 'partner_kyc_block', label: 'A founder you backed is blocked on KYC' },
+];
+
+// Wave 2 — notification presets.
+//
+// The Account canvas says presets "replace" the 17-row matrix. They do not
+// replace it here, and that is a deliberate departure: the matrix is the only
+// way to say "email me capital calls but not the weekly digest", and a preset
+// set cannot express that without becoming a matrix again. Presets are added
+// as the fast path ON TOP, and the grid stays for anyone who wants it. Losing
+// per-event control to match a canvas would be a downgrade sold as a redesign.
+//
+// A preset writes the SAME `notification_prefs` JSON the grid writes — there is
+// no second storage shape and no migration. `urgent` is defined by which events
+// carry money, signature or compliance consequences; everything else is
+// informational and can wait for the digest.
+const URGENT_EVENT_KEYS = new Set([
+  'capital_call_issued', 'capital_call_paid', 'agreement_ready_to_sign',
+  'contract_signed', 'kyc_status_change', 'deal_assigned',
+  'partner_capital_call_due', 'partner_kyc_block',
+]);
+
+const NOTIFICATION_PRESETS = [
+  {
+    id: 'everything',
+    label: 'Everything',
+    hint: 'Email and in-app for every event.',
+    apply: (key) => ({ email: true, in_app: true, inapp: true }),
+  },
+  {
+    id: 'important',
+    label: 'Important only',
+    hint: 'Money, signatures and compliance by email; the rest in-app.',
+    apply: (key) => (URGENT_EVENT_KEYS.has(key)
+      ? { email: true, in_app: true, inapp: true }
+      : { email: false, in_app: true, inapp: true }),
+  },
+  {
+    id: 'in_app_only',
+    label: 'In-app only',
+    hint: 'Nothing lands in your inbox.',
+    apply: (key) => ({ email: false, in_app: true, inapp: true }),
+  },
+  {
+    id: 'off',
+    label: 'Mute all',
+    hint: 'No email, no in-app. Security alerts are always sent regardless.',
+    apply: (key) => ({ email: false, in_app: false, inapp: false }),
+  },
 ];
 
 const ActivityPage = lazy(() => import('./ActivityPage'));
@@ -306,6 +354,8 @@ export default function SettingsPage() {
             <>
               <ProfileTabs data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
               <EmailSection data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
+              <YourCompaniesSection />
+              <DocumentsAgreementsSection />
               <AccountDeletionCard data={data} flash={flash} reload={() => api.getSettings().then(setData)} />
             </>
           )}
@@ -1243,6 +1293,151 @@ function JurisdictionsSection({ data, patch }) {
           );
         })}
       </div>
+    </Card>
+  );
+}
+
+// ---------- Your companies (Wave 2) -----------------------------------------
+//
+// The Account canvas asks for a "Your companies" pane. `GET /company/memberships`
+// has been live with no consumer anywhere in Settings — this page made zero
+// company calls before now.
+//
+// Read-only ON PURPOSE. The integration rule is that company context changes
+// through `CompanySwitcher` and nowhere else, so this pane reports what you
+// belong to and sends you to the switcher; it does not become a second one.
+function YourCompaniesSection() {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.listMyCompanies()
+      // The endpoint returns a bare array (not {items}), and names the
+      // caller's role `my_role` — verified against company.ts, not assumed.
+      .then((r) => { if (!cancelled) setRows(Array.isArray(r) ? r : (r?.items || [])); })
+      .catch((e) => { if (!cancelled) setErr(e?.message || 'Could not load your companies'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <Card
+      title="Your companies"
+      description="Every company this account belongs to, and your role in each."
+    >
+      {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
+      {!err && rows === null && <p className="text-sm text-gray-500">Loading…</p>}
+      {!err && rows && rows.length === 0 && (
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          You are not a member of any company yet. Create one from{' '}
+          <Link to="/company-settings" className="text-violet-600 hover:underline">Company Settings</Link>,
+          or ask an owner to add you by this account&apos;s email.
+        </p>
+      )}
+      {!err && rows && rows.length > 0 && (
+        <>
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
+            {rows.map((c) => (
+              <div key={c.uid || c.company_id || c.id} className="flex items-center gap-3 p-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {c.company_name || c.name || 'Unnamed company'}
+                    {c.is_primary_admin && (
+                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                        Primary admin
+                      </span>
+                    )}
+                  </div>
+                  {c.my_role && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">{c.my_role}</div>
+                  )}
+                </div>
+                <Link
+                  to="/company-settings"
+                  className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap"
+                >
+                  Manage
+                </Link>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
+            To work in a different company, switch it in the sidebar — that is the
+            one control that repoints the whole workspace.
+          </p>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ---------- Documents & agreements (Wave 2) ----------------------------------
+//
+// The canvas's fourth new pane. `GET /legal/esign` is scoped server-side by
+// `esignEnvelopeScope(user)`, so this lists the caller's own envelopes and adds
+// no client-side filter that could be mistaken for the boundary.
+function DocumentsAgreementsSection() {
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.esignList()
+      .then((r) => { if (!cancelled) setRows(r?.envelopes || []); })
+      .catch((e) => { if (!cancelled) setErr(e?.message || 'Could not load your agreements'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const fmt = (iso) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? '—'
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  };
+
+  return (
+    <Card
+      title="Documents & agreements"
+      description="Everything you have signed or sent for signature through Axal VC."
+    >
+      {err && <p className="text-sm text-red-600 dark:text-red-400">{err}</p>}
+      {!err && rows === null && <p className="text-sm text-gray-500">Loading…</p>}
+      {!err && rows && rows.length === 0 && (
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          No agreements on this account yet.
+        </p>
+      )}
+      {!err && rows && rows.length > 0 && (
+        <div className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-800">
+          {rows.slice(0, 20).map((e) => {
+            const signed = Number(e.signed_count || 0);
+            const total = Number(e.recipient_count || 0);
+            return (
+              <div key={e.id} className="flex items-center gap-3 p-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                    {e.document_title || e.document_type || `Envelope #${e.id}`}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {String(e.status).replace(/_/g, ' ')}
+                    {total > 0 && ` · ${signed}/${total} signed`}
+                    {' · '}{fmt(e.completed_at || e.created_at)}
+                  </div>
+                </div>
+                {e.signed_r2_key && (
+                  <a
+                    href={api.esignDocumentUrl(e.id)}
+                    className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap"
+                  >
+                    Signed PDF
+                  </a>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }
@@ -2201,8 +2396,40 @@ function NotificationsSection({ data, patch }) {
     </div>
   );
 
+  // Applying a preset rewrites every event this user can see in one patch —
+  // including the partner block when it is shown, so the visible grid and the
+  // stored prefs never disagree.
+  const applyPreset = (preset) => {
+    const keys = [
+      ...NOTIFICATION_EVENTS.map((e) => e.key),
+      ...(data.role === 'partner' ? PARTNER_NOTIFICATION_EVENTS.map((e) => e.key) : []),
+    ];
+    const next = { ...prefs };
+    for (const k of keys) next[k] = { ...(prefs[k] || {}), ...preset.apply(k) };
+    patch({ notification_prefs: next });
+  };
+
   return (
     <>
+      <Card
+        title="Notification presets"
+        description="A starting point. Every switch below stays editable — a preset just sets them all at once."
+      >
+        <div className="flex flex-wrap gap-2">
+          {NOTIFICATION_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => applyPreset(p)}
+              title={p.hint}
+              className="text-left px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-violet-400 transition-colors"
+            >
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{p.label}</div>
+              <div className="text-[11px] text-gray-500 dark:text-gray-400">{p.hint}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
+
       <Card title="Notifications" description="Choose where each kind of alert is delivered.">
         {renderTable(NOTIFICATION_EVENTS)}
       </Card>

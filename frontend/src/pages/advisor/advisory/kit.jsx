@@ -145,3 +145,67 @@ export function RowCard({ onClick, children }) {
     </button>
   );
 }
+
+// ---- Live-data helpers (Wave 1b) ------------------------------------------
+// These replace the formatters that lived in data/advisor/advisory.js, which
+// were pinned to a fixed demo "today" (2026-07-11). Real pages use the real
+// clock.
+export function formatDay(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
+export function formatDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC',
+  });
+}
+
+export function formatRelativeDay(iso) {
+  if (!iso) return '—';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '—';
+  const diff = Math.round((t - Date.now()) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === -1) return 'Yesterday';
+  if (diff < 0) return `${-diff}d ago`;
+  if (diff === 1) return 'Tomorrow';
+  return `in ${diff}d`;
+}
+
+/**
+ * Group advisor bookings by counterparty. The advisor's "clients" are not a
+ * table — they are whoever has booked them — so this derivation IS the client
+ * list. Keyed on founder_user_id so two people sharing a display name stay
+ * distinct.
+ */
+export function clientsFromBookings(bookings) {
+  const byId = new Map();
+  for (const b of bookings || []) {
+    const key = b.founder_user_id;
+    if (key == null) continue;
+    if (!byId.has(key)) {
+      byId.set(key, {
+        id: key,
+        name: b.founder_name || b.founder_email || `Member #${key}`,
+        email: b.founder_email || null,
+        bookings: [],
+      });
+    }
+    byId.get(key).bookings.push(b);
+  }
+  for (const c of byId.values()) {
+    c.bookings.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    c.total = c.bookings.length;
+    c.completed = c.bookings.filter((b) => b.status === 'completed').length;
+    c.upcoming = c.bookings.filter((b) => ['pending', 'confirmed'].includes(b.status)).length;
+    c.lastSeen = c.bookings[0]?.slot_starts_at || c.bookings[0]?.created_at || null;
+    c.topics = [...new Set(c.bookings.map((b) => b.topic).filter(Boolean))];
+  }
+  return [...byId.values()].sort((a, b) => String(b.lastSeen || '').localeCompare(String(a.lastSeen || '')));
+}

@@ -62,7 +62,7 @@ Admin docs live behind `roles: ['admin']` on sections/subsections in `frontend/s
 
 ## Persistent gotchas
 
-The full, detailed gotchas now live in [`GOTCHAS.md`](./GOTCHAS.md) so this README stays a scannable overview. Subsections (each in `GOTCHAS.md`):
+The full, detailed gotchas now live in [`documentation/architecture/GOTCHAS.md`](./GOTCHAS.md) so this README stays a scannable overview. Subsections (each in `documentation/architecture/GOTCHAS.md`):
 - [Migrations & schema](./GOTCHAS.md#migrations--schema)
 - [Skills & values taxonomy](./GOTCHAS.md#skills--values-taxonomy-task-10)
 - [Telegram broadcaster](./GOTCHAS.md#telegram-broadcaster-task-3)

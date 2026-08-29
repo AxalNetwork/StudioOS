@@ -97,7 +97,7 @@ test('the spend meter clamps its bar but tells the truth about being over', () =
 
 test('AssistRail is the AI rail, not navigation', () => {
   const src = read('frontend/src/ui/AssistRail.jsx');
-  // The whole point of DECISIONS.md T3: these canvases have zero route links.
+  // The whole point of documentation/architecture/DECISIONS.md T3: these canvases have zero route links.
   assert.doesNotMatch(src, /<NavLink|<Link\b|react-router/,
     'AssistRail must not grow navigation — that is SidebarNav');
   // ForgeRail's boundary is the product rule, so the slot must exist.

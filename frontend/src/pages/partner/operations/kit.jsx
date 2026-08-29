@@ -108,3 +108,36 @@ export function RowCard({ onClick, children, className = '' }) {
     </button>
   );
 }
+
+// ---- Live-data formatters (Wave 1a) ---------------------------------------
+// These replace the helpers that lived in data/partner/operations.js, which
+// formatted against a fixed demo "today" (2026-07-11). Real pages format
+// against the real clock.
+export function formatDay(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
+export function formatRelativeDay(iso) {
+  if (!iso) return '—';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '—';
+  const diff = Math.round((t - Date.now()) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === -1) return 'Yesterday';
+  if (diff < 0) return `${-diff}d ago`;
+  if (diff === 1) return 'Tomorrow';
+  return `in ${diff}d`;
+}
+
+// Whole-dollar display for quote/engagement prices (the needs pipeline stores
+// dollars). Not for new money columns — those are integer cents by rule.
+export function moneyUsd(v) {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  const n = Number(v);
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`;
+  return `$${n.toLocaleString()}`;
+}
