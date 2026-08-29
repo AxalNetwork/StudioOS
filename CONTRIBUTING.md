@@ -3,7 +3,7 @@
 Welcome. This guide covers the dev-side rules for staying inside our storage
 budgets and keeping the repo fast for everyone.
 
-For product/architecture context, read `replit.md` first; the detailed operational gotchas live in [`GOTCHAS.md`](./GOTCHAS.md).
+For product/architecture context, read `replit.md` first; the detailed operational gotchas live in [`documentation/architecture/GOTCHAS.md`](./GOTCHAS.md).
 
 ## TL;DR
 
@@ -22,7 +22,7 @@ For product/architecture context, read `replit.md` first; the detailed operation
 | A public PDF (quarterly Signals report, sector report) | **GitHub Releases** (not git) |
 | Favicons, OG fallback, tiny atomic assets | regular git, ships with the worker |
 
-The full decision matrix lives in [`MIGRATION_LFS_AUDIT.md`](./MIGRATION_LFS_AUDIT.md).
+The full decision matrix lives in [`documentation/audits/MIGRATION_LFS_AUDIT.md`](./MIGRATION_LFS_AUDIT.md).
 
 ## Setting up Git LFS
 

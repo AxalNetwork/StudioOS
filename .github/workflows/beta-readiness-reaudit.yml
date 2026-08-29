@@ -43,7 +43,7 @@ jobs:
               `Scheduled 14-day re-audit triggered by \`.github/workflows/beta-readiness-reaudit.yml\`.`,
               ``,
               `Previous audit: [\`${latest}\`](../blob/main/${latest}).`,
-              `Companion issue staging file: [\`BETA_READINESS_ISSUES_2026-05-20.md\`](../blob/main/BETA_READINESS_ISSUES_2026-05-20.md).`,
+              `Companion issue staging file: [\`documentation/audits/BETA_READINESS_ISSUES_2026-05-20.md\`](../blob/main/BETA_READINESS_ISSUES_2026-05-20.md).`,
               ``,
               `**Action:** Open Task #1's playbook, walk every row in the previous audit, and produce \`BETA_READINESS_AUDIT_${today}.md\`. Re-grade each row (green / partial / red); update the punch list (IB–II); close any beta-blocker/beta-nice issues that have shipped.`,
               ``,

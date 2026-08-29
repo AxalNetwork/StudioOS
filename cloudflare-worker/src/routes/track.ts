@@ -11,7 +11,7 @@
  *   - abuse bounded by the per-IP `track` rate-limit bucket (60/min/IP,
  *     fail-open) plus the batch cap below.
  *
- * Privacy contract (ANALYTICS_FUNNEL.md):
+ * Privacy contract (documentation/architecture/ANALYTICS_FUNNEL.md):
  *   - NO IP is stored (Cloudflare edge logs retain it for abuse forensics);
  *   - NO full user-agent — only a coarse browser family;
  *   - the client only ever sends events after the visitor granted the
@@ -25,7 +25,7 @@ import type { Env } from '../types';
 import { ensureFunnelEventsSchema } from '../services/funnelEventsSchema';
 
 // The audit-specified funnel event list. Anything not named here is dropped.
-// Keep in sync with EVENTS in frontend/src/lib/funnel.js + ANALYTICS_FUNNEL.md.
+// Keep in sync with EVENTS in frontend/src/lib/funnel.js + documentation/architecture/ANALYTICS_FUNNEL.md.
 export const FUNNEL_EVENT_ALLOWLIST = new Set([
   'landing_view',
   'register_view',

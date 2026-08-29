@@ -10,7 +10,7 @@
  *
  * Migration 177 is the canonical definition. This module mirrors it so the
  * worker self-heals if 177 lands unapplied on production (see the
- * pending-migrations gotcha in GOTCHAS.md), the same arrangement
+ * pending-migrations gotcha in documentation/architecture/GOTCHAS.md), the same arrangement
  * `ensureAxalFitSchema` has with migration 115.
  *
  * One module rather than four copies: four `ensureSchema` arrays holding the

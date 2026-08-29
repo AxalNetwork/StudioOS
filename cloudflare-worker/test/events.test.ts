@@ -126,10 +126,37 @@ test('public feed lists only public + published + admin_published upcoming event
   assert.equal(body.events[0].waitlist_enabled, true);
   assert.equal(typeof body.events[0].admin_published, 'undefined', 'public shape must not leak admin flags');
 
-  // ?past=1 surfaces the past public event too.
+  // ?past=1 is the ARCHIVE, not "everything". The old behaviour merely dropped
+  // the date predicate, so the Past tab led with the same upcoming events the
+  // visitor had just been looking at — asserting only `.some(slug === 'old')`
+  // could not tell the two apart, which is how it went unnoticed.
   const resPast = await eventsPublic.request('/events?past=1', {}, env, ctx);
   const bodyPast = await resPast.json();
-  assert.ok(bodyPast.events.some((e: any) => e.slug === 'old'), 'past=1 includes past events');
+  const pastSlugs = bodyPast.events.map((e: any) => e.slug);
+  assert.deepEqual(pastSlugs, ['old'], 'past=1 returns finished events only');
+});
+
+test('an event that has started but not ended is still upcoming, and the archive reads backwards', async () => {
+  const db = freshDb();
+  const pub = { visibility: 'public', status: 'published', admin_published: 1 };
+  // Running right now: started yesterday, ends tomorrow. `starts_at >= now`
+  // would have dropped it off both tabs — upcoming (it started) and past (it
+  // has not finished).
+  insertEvent(db, {
+    slug: 'in-progress', title: 'In Progress',
+    starts_at: `2000-01-01T00:00:00Z`, ends_at: '2090-01-01T00:00:00Z', ...pub,
+  });
+  insertEvent(db, { slug: 'older', title: 'Older', starts_at: '2000-01-01T18:00:00Z', ...pub });
+  insertEvent(db, { slug: 'newer', title: 'Newer', starts_at: '2020-01-01T18:00:00Z', ...pub });
+
+  const env = makeEnv(db);
+  const up = await (await eventsPublic.request('/events', {}, env, ctx)).json();
+  assert.deepEqual(up.events.map((e: any) => e.slug), ['in-progress'],
+    'a session in progress belongs on the upcoming tab');
+
+  const past = await (await eventsPublic.request('/events?past=1', {}, env, ctx)).json();
+  assert.deepEqual(past.events.map((e: any) => e.slug), ['newer', 'older'],
+    'the archive is most-recent-first, and excludes the event still running');
 });
 
 test('private events 404 on the public detail endpoint; unlisted resolve by slug', async () => {

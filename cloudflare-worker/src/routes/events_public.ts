@@ -58,11 +58,23 @@ eventsPublic.get('/events', async (c) => {
   if (type) { where.push('type = ?'); binds.push(type); }
   if (from) { where.push('starts_at >= ?'); binds.push(from); }
   if (to) { where.push('starts_at <= ?'); binds.push(to); }
-  if (!from && !to && !includePast) { where.push(`starts_at >= datetime('now')`); }
+  // Default view is upcoming; `past=1` is the archive. Dropping the date
+  // predicate (what this used to do) made the "Past" tab return *upcoming and
+  // past together, oldest first* — so a visitor clicking Past saw the same
+  // future events again. The archive is now its own half-open range, and an
+  // event is upcoming until it has FINISHED, so a session running right now
+  // stays on the upcoming tab instead of vanishing at its start time.
+  if (!from && !to) {
+    where.push(includePast
+      ? `COALESCE(ends_at, starts_at) < datetime('now')`
+      : `COALESCE(ends_at, starts_at) >= datetime('now')`);
+  }
   if (q) { where.push('(title LIKE ? OR summary LIKE ?)'); binds.push(`%${q}%`, `%${q}%`); }
 
+  // Upcoming reads forward from today; the archive reads backward from today.
+  const order = includePast ? 'DESC' : 'ASC';
   const rows = await c.env.DB.prepare(
-    `SELECT * FROM events WHERE ${where.join(' AND ')} ORDER BY starts_at ASC LIMIT ? OFFSET ?`,
+    `SELECT * FROM events WHERE ${where.join(' AND ')} ORDER BY starts_at ${order} LIMIT ? OFFSET ?`,
   ).bind(...binds, limit, offset).all();
   return c.json({ events: (rows.results || []).map((r) => shapeEvent(r)) });
 });

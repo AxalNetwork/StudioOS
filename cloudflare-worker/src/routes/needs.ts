@@ -11,6 +11,7 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, isPartner, isFounder, mapError, nowIso, newUid } from './_t13t14t15_helpers';
+import { issueInvoice, invoiceDto } from '../services/engagementInvoices';
 import {
   analysePipeline, weightedPipeline, analyseDelivery,
   type QuoteRow as QuoteAnalyticsRow, type EngagementRow as EngagementAnalyticsRow,
@@ -313,6 +314,23 @@ quotesRouter.get('/me', async (c) => {
       : await c.env.DB.prepare(sql).bind(user.partner_id ?? -1).all<Quote>();
     const items: any[] = [];
     for (const q of rows.results || []) items.push(await quoteDto(c.env, q));
+    // Wave 1a — attach the need's title/status so the Operations "Proposals"
+    // list can say what each quote was FOR. Additive keys; batch lookup
+    // (placeholders only — no values are interpolated into the SQL text).
+    const needIds = [...new Set(items.map((i) => i.need_id).filter((n) => Number.isFinite(n)))];
+    if (needIds.length) {
+      const ph = needIds.map(() => '?').join(',');
+      const needRows = await c.env.DB.prepare(
+        `SELECT id, title, status, category FROM founder_needs WHERE id IN (${ph})`,
+      ).bind(...needIds).all<any>();
+      const byId = new Map((needRows.results || []).map((n: any) => [n.id, n]));
+      for (const it of items) {
+        const n = byId.get(it.need_id);
+        it.need_title = n?.title ?? null;
+        it.need_status = n?.status ?? null;
+        it.need_category = n?.category ?? null;
+      }
+    }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
 });
@@ -428,11 +446,25 @@ engagementsRouter.get('/', async (c) => {
     const user = await requireAuth(c);
     let where = '1=1';
     const params: any[] = [];
-    if (isPartner(user)) { where = 'partner_id = ?'; params.push(user.partner_id ?? -1); }
-    else if (isFounder(user)) { where = 'founder_id = ?'; params.push(user.founder_id ?? -1); }
+    if (isPartner(user)) { where = 'e.partner_id = ?'; params.push(user.partner_id ?? -1); }
+    else if (isFounder(user)) { where = 'e.founder_id = ?'; params.push(user.founder_id ?? -1); }
     else if (!isAdmin(user)) { return c.json({ items: [] }); }
+    // Wave 1a — the list now carries display names so the Operations tabs can
+    // render "who is this engagement with" without an N+1 fetch per row. All
+    // additive keys; the bare-id shape every existing consumer reads is
+    // unchanged. LEFT JOINs on purpose: a deleted project or need must not
+    // hide the engagement row itself.
     const rows = await c.env.DB.prepare(
-      `SELECT * FROM engagements WHERE ${where} ORDER BY created_at DESC LIMIT 200`
+      `SELECT e.*, p.name AS project_name, fn.title AS need_title,
+              fn.category AS need_category,
+              pt.name AS partner_name, pt.company AS partner_company,
+              f.name AS founder_name
+         FROM engagements e
+         LEFT JOIN projects p ON p.id = e.project_id
+         LEFT JOIN founder_needs fn ON fn.id = e.need_id
+         LEFT JOIN partners pt ON pt.id = e.partner_id
+         LEFT JOIN founders f ON f.id = e.founder_id
+        WHERE ${where} ORDER BY e.created_at DESC LIMIT 200`
     ).bind(...params).all<Engagement>();
     return c.json({ items: (rows.results || []).map(engagementDto) });
   } catch (e) { return mapError(c, e); }
@@ -478,9 +510,40 @@ async function engTransition(c: Context<{ Bindings: Env }>, target: 'start' | 'd
   } else if (target === 'invoice') {
     if (!['delivered', 'reviewed'].includes(e.status)) return c.json({ detail: `Cannot invoice from ${e.status}` }, 409);
     if (!isPartnerSide) return c.json({ detail: 'Partner-side action' }, 403);
+    // This used to write `invoice_id = 'stub-<uid>'` and nothing else, with a
+    // comment noting Stripe Connect was not ported. The effect in production
+    // was a state that lied: the engagement went to `invoiced` permanently,
+    // no invoice existed, and the UI's `{e.stripe_invoice_url && …}` link was
+    // unconditionally falsy — so neither party had anything to send or pay.
+    // It now issues a real in-platform invoice document (migration 188). No
+    // payment rail is implied: see services/engagementInvoices.ts.
+    const invUid = newUid();
+    const now = nowIso();
+    const quote = await c.env.DB.prepare(
+      'SELECT price, deliverables FROM quotes WHERE id = ?',
+    ).bind(e.quote_id).first<{ price: number; deliverables: string | null }>();
+    const parties = await c.env.DB.prepare(
+      `SELECT (SELECT u.id FROM users u WHERE u.partner_id = ? LIMIT 1) AS partner_user_id,
+              (SELECT u.id FROM users u WHERE u.founder_id = ? LIMIT 1) AS founder_user_id,
+              (SELECT pt.company FROM partners pt WHERE pt.id = ?) AS bill_from_name,
+              (SELECT p.name FROM projects p WHERE p.id = ?) AS bill_to_name`,
+    ).bind(e.partner_id, e.founder_id, e.partner_id, e.project_id)
+      .first<{ partner_user_id: number | null; founder_user_id: number | null; bill_from_name: string | null; bill_to_name: string | null }>();
+    const { invoice } = await issueInvoice(c.env, {
+      engagementId: id,
+      partnerUserId: parties?.partner_user_id ?? null,
+      founderUserId: parties?.founder_user_id ?? null,
+      billFromName: parties?.bill_from_name ?? null,
+      billToName: parties?.bill_to_name ?? null,
+      // The engagement price is the accepted quote's; prefer the quote row and
+      // fall back to the engagement's own copy.
+      priceDollars: quote?.price ?? e.price,
+      deliverables: quote?.deliverables ?? null,
+    }, invUid, now);
     nextStatus = 'invoiced';
-    sets.push('invoiced_at = ?'); params.push(nowIso());
-    sets.push('invoice_id = ?'); params.push(`stub-${e.uid.slice(0, 8)}`); // Stripe Connect not in worker port
+    sets.push('invoiced_at = ?'); params.push(now);
+    // The real invoice number, not a stub.
+    sets.push('invoice_id = ?'); params.push(invoice?.invoice_number ?? invUid);
   }
   sets.unshift('status = ?'); params.unshift(nextStatus);
   sets.push('updated_at = ?'); params.push(nowIso()); params.push(id);
@@ -493,6 +556,56 @@ engagementsRouter.post('/:id/start', (c) => engTransition(c, 'start'));
 engagementsRouter.post('/:id/deliver', (c) => engTransition(c, 'deliver'));
 engagementsRouter.post('/:id/cancel', (c) => engTransition(c, 'cancel'));
 engagementsRouter.post('/:id/invoice', (c) => engTransition(c, 'invoice'));
+
+// The invoice document itself. Either party to the engagement may read it —
+// an invoice with only one readable side is not an invoice — and nobody else
+// can, including admin: a 404 rather than a 403 so a non-party cannot confirm
+// the engagement exists.
+engagementsRouter.get('/:id/invoice', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?')
+      .bind(id).first<Engagement>();
+    if (!e) return c.json({ detail: 'Not found' }, 404);
+    const mine = (isPartner(user) && user.partner_id === e.partner_id)
+      || (isFounder(user) && user.founder_id === e.founder_id);
+    if (!mine) return c.json({ detail: 'Not found' }, 404);
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM engagement_invoices WHERE engagement_id = ?',
+    ).bind(id).first<any>();
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    return c.json(invoiceDto(row));
+  } catch (err) { return mapError(c, err); }
+});
+
+// Record that payment arrived. The platform does NOT process it — there is
+// no payment rail here. This is the partner asserting they were paid OUT OF
+// BAND, and the copy on both sides says exactly that.
+engagementsRouter.post('/:id/invoice/paid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const id = Number(c.req.param('id'));
+    const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?')
+      .bind(id).first<Engagement>();
+    if (!e) return c.json({ detail: 'Not found' }, 404);
+    if (!(isPartner(user) && user.partner_id === e.partner_id)) {
+      return c.json({ detail: 'Partner-side action' }, 403);
+    }
+    const row = await c.env.DB.prepare(
+      'SELECT * FROM engagement_invoices WHERE engagement_id = ?',
+    ).bind(id).first<any>();
+    if (!row) return c.json({ detail: 'Not found' }, 404);
+    if (row.status === 'void') return c.json({ detail: 'That invoice is void' }, 409);
+    await c.env.DB.prepare(
+      "UPDATE engagement_invoices SET status = 'paid', paid_at = ?, updated_at = ? WHERE id = ?",
+    ).bind(nowIso(), nowIso(), row.id).run();
+    const fresh = await c.env.DB.prepare(
+      'SELECT * FROM engagement_invoices WHERE id = ?',
+    ).bind(row.id).first<any>();
+    return c.json(invoiceDto(fresh));
+  } catch (err) { return mapError(c, err); }
+});
 
 engagementsRouter.get('/:id/reviews', async (c) => {
   try {

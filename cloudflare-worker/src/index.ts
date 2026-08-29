@@ -158,6 +158,10 @@ import metricsRoutes from './routes/metrics';
 import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
+import dataRoomRoutes from './routes/data_room';
+import messagesRoutes from './routes/messages';
+import perksRoutes from './routes/perks';
+import adminLicences from './routes/admin_licences';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
@@ -503,6 +507,10 @@ const COOL_OFF_PREFIXES = [
   // Task #9 — minting promo codes (incl. 100%-off) is money-adjacent; pause
   // promo admin during a freshly-recovered admin's cool-off window.
   '/api/admin/promos',
+  // Wave 4 — a territory licence carries an annual fee, a revenue share and an
+  // exclusive grant over whole countries. Same class as promos: pause it for a
+  // freshly-recovered admin.
+  '/api/admin/licences',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -650,7 +658,7 @@ app.route('/api/activity', activity);
 // took the entire admin/monitoring/infra UI down. These route groups remain
 // protected by the in-app requireAdmin/requireAuth RBAC (the inner perimeter).
 // Do NOT re-add requireCfAccess() here without first completing the re-engage
-// checklist in GOTCHAS.md item (h): every worker-gated path must also be a path
+// checklist in documentation/architecture/GOTCHAS.md item (h): every worker-gated path must also be a path
 // in the Access app AND admin traffic must be routed to the gated host, or the
 // admin API goes down again.
 
@@ -721,6 +729,9 @@ app.route('/api/admin/best-fit', adminBestFit);
 app.route('/api/admin/exploring', adminExploring);
 // GP review queue for Spin-Out Fund I LP applications. requireAdmin per-route.
 app.route('/api/admin/lp-applications', adminLpApplications);
+// Wave 4 — territory licence ledger. Mount BEFORE the catch-all /api/admin so
+// /api/admin/licences/* resolves here, not in the generic admin router.
+app.route('/api/admin/licences', adminLicences);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);
@@ -847,6 +858,9 @@ app.route('/api/wellbeing', wellbeingRoutes);
 // T12 — Compliance calendar + Cap-table simulator + Co-founder matching.
 app.route('/api/compliance', complianceRoutes);
 app.route('/api/captable', captableRoutes);
+app.route('/api/data-room', dataRoomRoutes);
+app.route('/api/messages', messagesRoutes);
+app.route('/api/perks', perksRoutes);
 app.route('/api/cofounder', cofounderRoutes);
 // Task #11 — User Skill Profile (self ratings + connection-gated endorsements
 // + blended aggregate + cacheable taxonomy). Reuses cofounder_connections.
@@ -1456,7 +1470,7 @@ export default {
         // Task #2 — funnel_events retention purge at 04:20 UTC. First-party
         // funnel rows are pseudonymous but still subject to GDPR storage
         // limitation; 180 days is ample for cohort comparisons (window is
-        // documented in ANALYTICS_FUNNEL.md alongside the manual purge SQL).
+        // documented in documentation/architecture/ANALYTICS_FUNNEL.md alongside the manual purge SQL).
         // Best-effort: a cold DB without the table just logs and moves on.
         if (now.getUTCHours() === 4 && now.getUTCMinutes() === 20) {
           try {

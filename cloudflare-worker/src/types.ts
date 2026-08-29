@@ -167,7 +167,7 @@ export interface Env {
   // customer has a tax-determinable address. Flipping this on before those ops
   // steps are done makes Stripe reject the call → checkouts 502. Set to
   // "1"/"true" via `wrangler secret put STRIPE_TAX_ENABLED --env production`
-  // only after Stripe Tax is live. See GOTCHAS.md "Stripe Tax".
+  // only after Stripe Tax is live. See documentation/architecture/GOTCHAS.md "Stripe Tax".
   STRIPE_TAX_ENABLED?: string;
   // Task #6 (DG) — Stripe Connect platform OAuth client id (`ca_…`).
   // Issued from the platform's Connect Settings page in the Stripe

@@ -68,6 +68,7 @@ const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 const ExploringDashboard = lazy(() => import('./pages/ExploringDashboard'));
 const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
+const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminSpinoutLab = lazy(() => import('./pages/admin/AdminSpinoutLab'));
@@ -222,6 +223,9 @@ const RoadmapPage = lazy(() => import('./pages/RoadmapPage'));
 const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
+const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
+const MessagesPage = lazy(() => import('./pages/MessagesPage'));
+const PerksPage = lazy(() => import('./pages/PerksPage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
@@ -1340,7 +1344,7 @@ function AppInner() {
           by Founder + Advisor modes (mode changes ordering + copy only). */}
       <Route path="/signals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <SignalsPage user={user} />)} />
       <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <CapTablePage />)} />
-      {/* DECISIONS.md D11 — /marketplace was a partner-provider directory with
+      {/* documentation/architecture/DECISIONS.md D11 — /marketplace was a partner-provider directory with
           inquiry threads and reviews whose backend exists only in the dev-only
           FastAPI: all 11 api.marketplace* calls hit /marketplace/* and the
           worker mounts none of it. Discovery is already served by working
@@ -1379,6 +1383,9 @@ function AppInner() {
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
       <Route path="/admin/exploring" element={guard(['admin'], <AdminExploring />)} />
       <Route path="/admin/lp-applications" element={guard(['admin'], <AdminLpApplications />)} />
+      {/* Territory licence ledger (migration 187). Admin only — it carries the
+          fee, the revenue share and an exclusive grant over whole countries. */}
+      <Route path="/admin/licences" element={guard(['admin'], <AdminLicences />)} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}
@@ -1441,6 +1448,17 @@ function AppInner() {
       <Route path="/raise/capital" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       <Route path="/raise/capital/model" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
+      {/* Founders manage their room; investors see what was shared with them. One route, role-branched inside the page, so there is no second root. */}
+      <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'], <DataRoomPage user={user} />)} />
+      {/* Every persona, listed explicitly. `guard([])` would deny everyone —
+          RoleGuard tests `allowedRoles.includes(effectiveRole)`, which is
+          always false on an empty array, so the route would exist and be
+          unreachable. */}
+      <Route path="/messages" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MessagesPage user={user} />)} />
+      {/* Same explicit list. The partner and admin tabs inside the page are
+          gated on the role again there — a role that cannot submit a listing
+          simply does not see the tab. */}
+      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <PerksPage user={user} />)} />
       <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
       <Route path="/raise/legal-engine/incorporation" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
@@ -1540,7 +1558,7 @@ function AppInner() {
           to its own route; the workspace derives the active tab from the URL.
           Bare section paths redirect to their first tab so every workspace is
           reachable by direct URL and by clicking the sidebar. */}
-      {/* DECISIONS.md D10 — /network is the one network surface. These three
+      {/* documentation/architecture/DECISIONS.md D10 — /network is the one network surface. These three
           tabs were the ones every role's sidebar linked, and none of them
           worked: Introductions and Organizations called /api/network-introductions
           and /api/organizations, neither of which the worker mounts, and
@@ -1560,7 +1578,7 @@ function AppInner() {
       <Route path="/advisor/advisory/engagements" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/delivery" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
       <Route path="/advisor/advisory/contracts" element={guard(['admin', 'advisor'], <AdvisorAdvisoryWorkspace />)} />
-      {/* DECISIONS.md D12 — the Research row is /market-intel and nothing else.
+      {/* documentation/architecture/DECISIONS.md D12 — the Research row is /market-intel and nothing else.
           D8 redirected the market tab; D9 withdrew the funds tab; D12 withdrew
           the remaining four (companies, AI research, news, documents) for the
           same reason D9 gave, having corrected D9's own per-tab table.

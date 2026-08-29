@@ -24,7 +24,7 @@
  * D1 backups are NOT taken here. The Workers runtime has no native D1
  * export — the canonical path is the daily GitHub Actions job at
  * `.github/workflows/backup-d1.yml` which runs `wrangler d1 export`
- * and uploads to the same R2 bucket. See `INCIDENT_RESPONSE.md` for
+ * and uploads to the same R2 bucket. See `documentation/operations/INCIDENT_RESPONSE.md` for
  * the full recovery flow.
  */
 import type { Env } from '../types';

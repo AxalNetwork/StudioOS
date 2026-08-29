@@ -2,7 +2,7 @@
  * Apex route coverage (Phase 0).
  *
  * `wrangler.toml` has no `axal.vc/*` — the first apex-wide attempt was rolled
- * back after edge 504s (CLOUDFLARE-CUTOVER.md), so the apex is served by an
+ * back after edge 504s (documentation/architecture/CLOUDFLARE-CUTOVER.md), so the apex is served by an
  * EXPLICIT route table instead. A path is served only if it is listed.
  *
  * That makes an omission invisible in exactly the wrong way. An unlisted path
@@ -117,7 +117,7 @@ test('the apex table has no wildcard — so coverage has to be explicit', () => 
   for (const t of TABLES) {
     assert.equal(
       patterns(t).includes('axal.vc/*'), false,
-      `${t} gained an apex wildcard — delete this file's per-route checks and say so in CLOUDFLARE-CUTOVER.md`,
+      `${t} gained an apex wildcard — delete this file's per-route checks and say so in documentation/architecture/CLOUDFLARE-CUTOVER.md`,
     );
   }
 });

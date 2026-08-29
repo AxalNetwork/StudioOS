@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, Clock, Loader2 } from 'lucide-react';
 import { request } from '../lib/api';
+import { overallStatus } from '../lib/statusOverall';
 import { usePageMeta } from '../lib/seo';
 
 const STATUS_PILL = {
@@ -68,9 +69,11 @@ export default function StatusPage() {
 
   const services = data?.services || [];
   const incidents = data?.incidents || [];
-  const overall = services.every((s) => s.status === 'operational')
-    ? 'operational'
-    : services.some((s) => s.status === 'down') ? 'down' : 'degraded';
+  // Shared with the Help Center's "Still stuck?" block. It also returns
+  // 'unknown' for an empty probe list — the inline `every()` this replaced
+  // reported a confident "Operational" when no service had been probed at all,
+  // which is why the `unknown` pill below has never been reachable.
+  const overall = overallStatus(services);
   const OverallIcon = STATUS_PILL[overall].icon;
 
   return (

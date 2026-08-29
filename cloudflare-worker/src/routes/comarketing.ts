@@ -12,6 +12,10 @@ import { isAdmin, isPartner, mapError, nowIso, newUid, requirePartnerProfile } f
 const r = new Hono<{ Bindings: Env }>();
 
 const ASSET_TYPES = new Set(['webinar', 'blog', 'podcast', 'event', 'newsletter', 'other']);
+// Migration 183. An angle is a sentence, not an essay — the whole point of the
+// field is that it is specific.
+const ANGLE_MAX = 500;
+const BRING_MAX = 1000;
 const LEGAL_TRANSITIONS: Record<string, Set<string>> = {
   approved: new Set(['proposed']),
   rejected: new Set(['proposed']),
@@ -26,6 +30,7 @@ type Pitch = {
   proposed_date: string | null;
   target_audience: string | null; distribution_channels: string | null;
   co_branding_notes: string | null; asset_url: string | null;
+  angle: string | null; what_you_bring: string | null;
   status: string;
   review_notes: string | null; reviewed_by_user_id: number | null; reviewed_at: string | null;
   published_at: string | null; published_url: string | null;
@@ -54,6 +59,7 @@ function pitchDto(p: Pitch, attribution: any, includeReviewNotes = true): any {
     proposed_date: p.proposed_date, target_audience: p.target_audience,
     distribution_channels: p.distribution_channels,
     co_branding_notes: p.co_branding_notes, asset_url: p.asset_url,
+    angle: p.angle, what_you_bring: p.what_you_bring,
     status: p.status, published_at: p.published_at,
     published_url: p.published_url, attribution_code: p.attribution_code,
     created_at: p.created_at, updated_at: p.updated_at,
@@ -99,14 +105,16 @@ r.post('/me/pitches', async (c) => {
       `INSERT INTO comarketing_pitches
          (uid, partner_id, submitter_user_id, title, summary, asset_type,
           proposed_date, target_audience, distribution_channels, co_branding_notes,
-          asset_url, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?)`
+          asset_url, angle, what_you_bring, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?)`
     ).bind(uid, partner.id, user.id, title.slice(0, 200), summary.slice(0, 4000), asset_type,
            body.proposed_date || null,
            body.target_audience ? String(body.target_audience).slice(0, 500) : null,
            body.distribution_channels ? String(body.distribution_channels).slice(0, 500) : null,
            body.co_branding_notes ? String(body.co_branding_notes).slice(0, 2000) : null,
            body.asset_url ? String(body.asset_url).slice(0, 500) : null,
+           body.angle ? String(body.angle).slice(0, ANGLE_MAX) : null,
+           body.what_you_bring ? String(body.what_you_bring).slice(0, BRING_MAX) : null,
            nowIso(), nowIso()).run();
     const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<Pitch>();
@@ -142,10 +150,19 @@ r.patch('/me/pitches/:uid', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     if (body.asset_type && !ASSET_TYPES.has(body.asset_type)) return c.json({ detail: 'invalid asset_type' }, 400);
     const fields = ['title', 'summary', 'asset_type', 'proposed_date', 'target_audience',
-      'distribution_channels', 'co_branding_notes', 'asset_url'] as const;
+      'distribution_channels', 'co_branding_notes', 'asset_url',
+      'angle', 'what_you_bring'] as const;
+    // The same caps the create path applies, so an edit cannot smuggle past a
+    // limit the insert enforces.
+    const CAPS: Partial<Record<typeof fields[number], number>> = {
+      angle: ANGLE_MAX, what_you_bring: BRING_MAX,
+    };
     const sets: string[] = []; const params: any[] = [];
     for (const f of fields) {
-      if (body[f] !== undefined) { sets.push(`${f} = ?`); params.push(body[f]); }
+      if (body[f] === undefined) continue;
+      const cap = CAPS[f];
+      const v = cap != null && body[f] != null ? String(body[f]).slice(0, cap) : body[f];
+      sets.push(`${f} = ?`); params.push(v);
     }
     if (!sets.length) return c.json(pitchDto(p, await attribCounts(c.env, p.id)));
     sets.push('updated_at = ?'); params.push(nowIso()); params.push(p.id);

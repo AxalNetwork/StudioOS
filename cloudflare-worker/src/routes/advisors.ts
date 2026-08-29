@@ -533,13 +533,35 @@ advisors.get('/me/bookings', async (c) => {
     const status = c.req.query('status');
     const m = await myAdvisor(c.env, user);
     if (!m) return c.json({ items: [] });
+    // Wave 1b — the advisor's own Advisory workspace groups these by client
+    // and shows the slot time, so the list carries the counterparty's name and
+    // the slot window rather than making the UI fetch per row. All additive
+    // keys; existing consumers reading the bare booking shape are unaffected.
+    // LEFT JOINs on purpose: a deleted user or slot must not hide the booking.
     const sql = status
-      ? 'SELECT * FROM advisor_bookings WHERE advisor_id = ? AND status = ? ORDER BY created_at DESC LIMIT 200'
-      : 'SELECT * FROM advisor_bookings WHERE advisor_id = ? ORDER BY created_at DESC LIMIT 200';
+      ? `SELECT b.*, u.name AS founder_name, u.email AS founder_email,
+                s.starts_at AS slot_starts_at, s.ends_at AS slot_ends_at
+           FROM advisor_bookings b
+           LEFT JOIN users u ON u.id = b.founder_user_id
+           LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+          WHERE b.advisor_id = ? AND b.status = ? ORDER BY b.created_at DESC LIMIT 200`
+      : `SELECT b.*, u.name AS founder_name, u.email AS founder_email,
+                s.starts_at AS slot_starts_at, s.ends_at AS slot_ends_at
+           FROM advisor_bookings b
+           LEFT JOIN users u ON u.id = b.founder_user_id
+           LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+          WHERE b.advisor_id = ? ORDER BY b.created_at DESC LIMIT 200`;
     const rows = status
       ? await c.env.DB.prepare(sql).bind(m.id, status).all<BookingRow>()
       : await c.env.DB.prepare(sql).bind(m.id).all<BookingRow>();
-    return c.json({ items: (rows.results || []).map((r) => bookingDto(r)) });
+    return c.json({
+      items: (rows.results || []).map((r: any) => bookingDto(r, {
+        founder_name: r.founder_name ?? null,
+        founder_email: r.founder_email ?? null,
+        slot_starts_at: r.slot_starts_at ?? null,
+        slot_ends_at: r.slot_ends_at ?? null,
+      })),
+    });
   } catch (e) { return mapError(c, e); }
 });
 

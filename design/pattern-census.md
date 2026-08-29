@@ -1,6 +1,6 @@
 # Duplicate-Component-Pattern Census — Axal VC Platform
 
-Scope: 107 `*.dc.html` design canvases in `/home/user/StudioOS/Axal VC platform/`
+Scope: 107 `*.dc.html` design canvases in `design/canvases/`
 (`uploads/`, `scraps/` excluded), diffed against the live React app in
 `/home/user/StudioOS/frontend/src/`.
 

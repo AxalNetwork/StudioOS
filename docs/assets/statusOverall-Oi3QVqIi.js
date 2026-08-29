@@ -1,0 +1,1 @@
+function e(e){return!Array.isArray(e)||e.length===0?`unknown`:e.every(e=>e?.status===`operational`)?`operational`:e.some(e=>e?.status===`down`)?`down`:`degraded`}export{e as t};

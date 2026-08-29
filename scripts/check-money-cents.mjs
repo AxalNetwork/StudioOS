@@ -55,8 +55,14 @@ const MONEY = /(^|_)(amount|price|cost|revenue|mrr|arr|burn|payout|commission|ea
  * Suffixes that turn a money word into something else entirely. `distributed_at`
  * is a timestamp, `principal_key` is a security principal, `revenue_range` and
  * `ticket_band` are labels, `revenue_info` is prose.
+ *
+ * `_bps` joins `_pct` and `_ratio` here: basis points are a RATE, and a rate is
+ * definitionally not an amount of currency. `revenue_share_bps` — 3500 for a
+ * 35% share — is the shape this rule wants encouraged, since an integer count
+ * of basis points has the same exactness argument behind it that integer cents
+ * do. Without this the guard would demand cents of a percentage.
  */
-const NOT_AN_AMOUNT_SUFFIX = /_(at|key|id|range|band|info|notes|model|text|label|type|status|pct|percent|ratio|multiple|count|currency)$/i;
+const NOT_AN_AMOUNT_SUFFIX = /_(at|key|id|range|band|info|notes|model|text|label|type|status|pct|percent|bps|ratio|multiple|count|currency)$/i;
 
 /**
  * Names the pattern above catches that are not money. Each is here because it
