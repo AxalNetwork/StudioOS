@@ -2144,6 +2144,9 @@ export const api = {
   simulateCapTable: (inputs) =>
     request('/captable/simulate', { method: 'POST', body: JSON.stringify({ inputs }) }),
   listCapTableScenarios: () => request('/captable/scenarios'),
+  // Wave 2 — option pools + vesting grants, both populated by the Carta sync
+  // (migration 057) and read by nothing until now. Shares, not money.
+  getEquityPlan: () => request('/captable/equity-plan'),
   getCapTableByProject: (projectId) => request(`/captable/scenarios/by-project/${projectId}`),
   createCapTableVariant: (projectId, data) =>
     request(`/captable/scenarios/by-project/${projectId}/variants`, { method: 'POST', body: JSON.stringify(data) }),

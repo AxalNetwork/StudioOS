@@ -179,6 +179,89 @@ function isUniqueViolation(err: unknown): boolean {
   return /unique constraint failed/i.test(String((err as any)?.message ?? err ?? ''));
 }
 
+/**
+ * Wave 2 — GET /api/captable/equity-plan
+ *
+ * The Cap Table Pro canvas asks for a grant-level pool burn-down with vesting.
+ * Both tables have existed since migration 057 and are populated on every Carta
+ * sync — `cap_table_option_pools` (authorized / issued / available) and
+ * `cap_table_vesting` (start, cliff, term, total and vested shares). Nothing
+ * has ever read them: the ONLY file in the worker that names either table is
+ * `integrations/providers/carta.ts`, which writes them. A founder who connected
+ * Carta has this data in D1 and has never been shown it.
+ *
+ * Scoped by `user_id`, which is how both tables are keyed — there is no
+ * project_id on either, so this is a per-account view and does not need the
+ * tenancy module.
+ *
+ * SHARES, NOT MONEY. Every figure here is a share count (REAL in the schema,
+ * as Carta reports fractional grants). No money crosses this endpoint, so the
+ * integer-cents rule does not apply and no cents column is introduced.
+ *
+ * Vested share counts are returned AS IMPORTED and never recomputed from the
+ * dates: a cliff that has not been reflected by the provider yet is the
+ * provider's answer, and second-guessing it here would put two different
+ * vested numbers in front of the same founder. `as_of` reports when the row was
+ * last written so the UI can say how fresh the answer is.
+ */
+captable.get('/equity-plan', async (c) => {
+  const user = await requireAuth(c);
+  const pools = await c.env.DB.prepare(
+    `SELECT id, name, shares_authorized, shares_issued, shares_available, source, updated_at
+       FROM cap_table_option_pools WHERE user_id = ? ORDER BY name`,
+  ).bind(user.id).all<any>().catch(() => ({ results: [] as any[] }));
+  const vesting = await c.env.DB.prepare(
+    `SELECT id, holder_id, security_id, start_date, cliff_months, total_months,
+            total_shares, vested_shares, source, updated_at
+       FROM cap_table_vesting WHERE user_id = ? ORDER BY start_date DESC`,
+  ).bind(user.id).all<any>().catch(() => ({ results: [] as any[] }));
+
+  const poolRows = pools.results || [];
+  const vestRows = vesting.results || [];
+  const num = (v: any) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));
+  const sum = (rows: any[], k: string) => rows.reduce((a, r) => a + (num(r[k]) ?? 0), 0);
+
+  const totalGranted = sum(vestRows, 'total_shares');
+  const totalVested = sum(vestRows, 'vested_shares');
+
+  return c.json({
+    pools: poolRows.map((p) => ({
+      id: p.id,
+      name: p.name,
+      shares_authorized: num(p.shares_authorized),
+      shares_issued: num(p.shares_issued),
+      shares_available: num(p.shares_available),
+      source: p.source,
+      as_of: p.updated_at,
+    })),
+    grants: vestRows.map((v) => ({
+      id: v.id,
+      holder_id: v.holder_id,
+      security_id: v.security_id,
+      start_date: v.start_date,
+      cliff_months: num(v.cliff_months),
+      total_months: num(v.total_months),
+      total_shares: num(v.total_shares),
+      vested_shares: num(v.vested_shares),
+      source: v.source,
+      as_of: v.updated_at,
+    })),
+    // Totals are sums of what is recorded, nothing modelled. Null when there
+    // is nothing to sum, so the UI shows "Not recorded" rather than a
+    // confident zero.
+    summary: {
+      pool_count: poolRows.length,
+      grant_count: vestRows.length,
+      shares_authorized: poolRows.length ? sum(poolRows, 'shares_authorized') : null,
+      shares_issued: poolRows.length ? sum(poolRows, 'shares_issued') : null,
+      shares_available: poolRows.length ? sum(poolRows, 'shares_available') : null,
+      granted_shares: vestRows.length ? totalGranted : null,
+      vested_shares: vestRows.length ? totalVested : null,
+      unvested_shares: vestRows.length ? Math.max(0, totalGranted - totalVested) : null,
+    },
+  });
+});
+
 captable.post('/simulate', async (c) => {
   await requireAuth(c);
   const body = await c.req.json().catch(() => ({}));
