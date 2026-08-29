@@ -81,6 +81,21 @@ export function mapColumns(body) {
 }
 
 /**
+ * The three declaration shapes, as LITERAL patterns that capture the declared
+ * name so it can be compared in JS.
+ *
+ * Interpolating the name would work — it comes from the UPDATE's own
+ * `${…}` and is a validated identifier that cannot carry a metacharacter — but
+ * a literal pattern needs no such argument to be trusted, which is the same
+ * conclusion reached for `check-sqlite-columns` (Semgrep 5931, 5932). Hoisted
+ * because `matchAll` species-constructs its own copy, so a shared global regex
+ * carries no `lastIndex` between calls.
+ */
+const TERNARY_DECL = /\b(?:const|let)\s+(\w+)\s*=[^;\n]*\?\s*'(\w+)'\s*:\s*'(\w+)'/g;
+const MAP_LOOKUP_DECL = /\b(?:const|let)\s+(\w+)\s*=\s*([A-Za-z_]\w*)\s*\[/g;
+const ANY_DECL = /\b(?:const|let)\s+(\w+)\b/g;
+
+/**
  * Every `UPDATE <table> SET ${expr}` paired with the columns its map can
  * supply. `map` is null when the source could not be resolved by name.
  */
@@ -96,21 +111,21 @@ export function routedWrites(src) {
 
     // `const <base> = <cond> ? 'a' : 'b'` — a two-column choice, not a map.
     // The brand write picks between `tagline` and `theme_color` this way.
-    const ternary = [...head.matchAll(new RegExp(`\\b(?:const|let)\\s+${base}\\s*=[^;\\n]*\\?\\s*'(\\w+)'\\s*:\\s*'(\\w+)'`, 'g'))].pop();
+    const ternary = [...head.matchAll(TERNARY_DECL)].filter((m) => m[1] === base).pop();
     if (ternary) {
-      out.push({ table, expr, line, map: 'ternary', columns: [ternary[1], ternary[2]] });
+      out.push({ table, expr, line, map: 'ternary', columns: [ternary[2], ternary[3]] });
       continue;
     }
 
     // `const <base> = <MAP>[...]` — the assignment that reads the map.
-    const assign = [...head.matchAll(new RegExp(`\\b(?:const|let)\\s+${base}\\s*=\\s*([A-Za-z_]\\w*)\\s*\\[`, 'g'))].pop();
+    const assign = [...head.matchAll(MAP_LOOKUP_DECL)].filter((m) => m[1] === base).pop();
     if (!assign) { out.push({ table, expr, line, map: null, columns: [] }); continue; }
-    const mapName = assign[1];
+    const mapName = assign[2];
 
     // The declaration must precede the UPDATE — several maps share the name
     // `map`, and taking the last one in the file would cross function bodies.
-    const decl = [...head.matchAll(new RegExp(`\\b(?:const|let)\\s+${mapName}\\b`, 'g'))].pop()
-      ?? [...src.matchAll(new RegExp(`\\b(?:const|let)\\s+${mapName}\\b`, 'g'))][0];
+    const named = (hay) => [...hay.matchAll(ANY_DECL)].filter((m) => m[1] === mapName);
+    const decl = named(head).pop() ?? named(src)[0];
     if (!decl) { out.push({ table, expr, line, map: mapName, columns: [] }); continue; }
     const brace = assignmentBrace(src, decl.index + decl[0].length);
     const body = brace < 0 ? null : objectBody(src, brace);
