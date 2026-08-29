@@ -129,6 +129,20 @@ const CONSTRAINT = /^\s*(PRIMARY|FOREIGN|UNIQUE|CHECK|CONSTRAINT)\b/i;
 /** Column names added by DDL whose table name is interpolated. */
 export const dynamicColumns = new Set();
 
+/**
+ * Tables whose column set cannot be known from the source.
+ *
+ * Thirteen tables are extended at runtime by a loop over a literal list —
+ * `for (const [col, type] of KYC_COLUMNS) ALTER TABLE users ADD COLUMN
+ * ${col} ${type}` — so the column name never appears in a position this
+ * harvest can attribute. Binding the loop variable back to its array is real
+ * static analysis, and guessing at it would put the check back in the business
+ * of inventing findings: every `users.kyc_*` column reads as missing and is
+ * not. Such tables are skipped entirely, for every clause type, so the rule
+ * stays one rule. The cost is visible — `npm run test:guards` prints the count.
+ */
+export const incompleteTables = new Set();
+
 export function knownColumns() {
   const schema = new Map();
   const sources = [
@@ -165,6 +179,10 @@ export function knownColumns() {
     for (const m of text.matchAll(/\bALTER\s+TABLE\s+\$\{[^}]*\}\s+ADD\s+(?:COLUMN\s+)?([`"[]?\w+[`"\]]?)/gi)) {
       dynamicColumns.add(norm(m[1]));
     }
+    // The mirror image: the table is literal, the column name is the variable.
+    for (const m of text.matchAll(/\bALTER\s+TABLE\s+([`"[]?\w+[`"\]]?)\s+ADD\s+(?:COLUMN\s+)?\$\{/gi)) {
+      incompleteTables.add(norm(m[1]));
+    }
   }
   return schema;
 }
@@ -194,7 +212,20 @@ export function setClause(sql, from) {
   return sql.slice(from);
 }
 
-/** INSERT column lists and UPDATE SET clauses naming a column their table lacks. */
+/**
+ * A single-table SELECT's list, when every part of it is attributable: one
+ * table, no join, no set operation, no subquery, no `*`. Returns null when any
+ * of that fails — the check declines rather than guesses.
+ */
+export function singleTableSelect(sql) {
+  if (!/^\s*SELECT\b/i.test(sql)) return null;
+  if (/\bWITH\b|\bUNION\b|\bJOIN\b|\bSELECT\b[\s\S]*\bSELECT\b/i.test(sql)) return null;
+  const m = /^\s*SELECT\s+(?:DISTINCT\s+)?([\s\S]*?)\sFROM\s+([`"[]?\w+[`"\]]?)(\s+(?:AS\s+)?([a-z]\w*))?\s*(?=$|WHERE|ORDER|GROUP|LIMIT|HAVING)/i.exec(sql);
+  if (!m || m[1].includes('*')) return null;
+  return { list: m[1], table: norm(m[2]), alias: m[4] ? m[4].toLowerCase() : null };
+}
+
+/** INSERT column lists, UPDATE SET clauses and single-table SELECT lists. */
 export function unknownColumns() {
   const schema = knownColumns();
   const hits = new Map();
@@ -202,12 +233,38 @@ export function unknownColumns() {
     const rel = path.relative(ROOT, file);
     for (const { body, line } of sqlStrings(fs.readFileSync(file, 'utf8'))) {
       if (body.includes('${')) continue;                  // interpolated — column list is not literal
+      // SELECT a, b FROM t — attributable only when there is exactly one table.
+      const sel = singleTableSelect(body);
+      if (sel) {
+        const scols = schema.get(sel.table);
+        if (scols && !incompleteTables.has(sel.table)) {
+          for (const raw of topLevel(sel.list)) {
+            const item = raw.trim();
+            let col = null;
+            // `SELECT 1 FROM t` is a literal, not a column: \w matches digits.
+            const bare = /^([`"[]?[A-Za-z_]\w*[`"\]]?)$/.exec(item);
+            if (bare) col = norm(bare[1]);
+            else {
+              const q = /^([a-z]\w*)\.([`"[]?[A-Za-z_]\w*[`"\]]?)$/i.exec(item);
+              if (q && (q[1].toLowerCase() === sel.alias || norm(q[1]) === sel.table)) col = norm(q[2]);
+            }
+            // Anything else is an expression, a function or an alias — not
+            // attributable, so not this check's to judge.
+            if (!col || /^(rowid|oid|_rowid_)$/.test(col)) continue;
+            if (scols.has(col) || dynamicColumns.has(col)) continue;
+            const k = `${sel.table}.${col}`;
+            if (!hits.has(k)) hits.set(k, []);
+            hits.get(k).push(`${rel}:${line}`);
+          }
+        }
+      }
+
       // UPDATE <table> SET a = ?, b = ? — the SET columns belong to <table>
       // with no ambiguity, the same property that makes an INSERT list checkable.
       for (const um of body.matchAll(/\bUPDATE\s+(?:OR\s+\w+\s+)?([`"[]?\w+[`"\]]?)\s+SET\s/gi)) {
         const ut = norm(um[1]);
         const ucols = schema.get(ut);
-        if (!ucols) continue;
+        if (!ucols || incompleteTables.has(ut)) continue;
         const clause = setClause(body, um.index + um[0].length);
         for (const part of topLevel(clause)) {
           const c = /^\s*([`"[]?\w+[`"\]]?)\s*=/.exec(part);
@@ -224,7 +281,7 @@ export function unknownColumns() {
       if (!m) continue;
       const t = norm(m[1]);
       const cols = schema.get(t);
-      if (!cols) continue;                                // unknown or unparseable table
+      if (!cols || incompleteTables.has(t)) continue;     // unknown, unparseable, or runtime-extended
       const g = group(body, m.index + m[0].length - 1);
       if (!g) continue;
       if (!/^\s*(VALUES|SELECT)\b/i.test(body.slice(g.end + 1))) continue;   // not a column list
@@ -270,5 +327,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   const n = Object.keys(baseline).length;
-  console.log(`✓ check-sqlite-columns: every INSERT and UPDATE names columns that exist (${n} known gap${n === 1 ? '' : 's'} on record).`);
+  // The skipped count is printed rather than hidden: it is the honest measure
+  // of how much of the schema this check cannot speak for.
+  console.log(
+    `✓ check-sqlite-columns: every INSERT, UPDATE and single-table SELECT names columns that exist `
+    + `(${n} known gap${n === 1 ? '' : 's'} on record; ${incompleteTables.size} tables skipped as runtime-extended).`,
+  );
 }

@@ -14,7 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
-import { collapseStringConcat, knownColumns, unknownColumns, setClause } from '../../scripts/check-sqlite-columns.mjs';
+import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables } from '../../scripts/check-sqlite-columns.mjs';
 import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
@@ -115,10 +115,50 @@ test('the columns the UPDATE pass found are now present', () => {
   assert.ok(schema.get('projects')?.has('stage'), 'projects.stage is the real column');
 });
 
-test('the worker INSERTs and UPDATEs no column that does not exist', () => {
+test('a SELECT is only attributed when exactly one table can own the columns', () => {
+  const one = singleTableSelect('SELECT a, b FROM widgets WHERE id = ?');
+  assert.equal(one?.table, 'widgets');
+  assert.equal(one.list.trim(), 'a, b');
+
+  const aliased = singleTableSelect('SELECT w.a FROM widgets w WHERE id = ?');
+  assert.equal(aliased?.alias, 'w');
+
+  // Each of these makes attribution a guess, so the check declines.
+  for (const sql of [
+    'SELECT a FROM widgets JOIN gadgets g ON g.id = widget_id',
+    'SELECT * FROM widgets',
+    'SELECT a FROM widgets UNION SELECT a FROM gadgets',
+    'WITH x AS (SELECT 1) SELECT a FROM x',
+    'SELECT a FROM (SELECT a FROM widgets)',
+  ]) {
+    assert.equal(singleTableSelect(sql), null, `should decline: ${sql}`);
+  }
+});
+
+test('runtime-extended tables are skipped, and the set is not empty', () => {
+  knownColumns();   // populates incompleteTables as a side effect of harvesting
+  // `users` gains its kyc_* columns from a loop over KYC_COLUMNS in routes/kyc.ts.
+  // Without this rule every one of them reads as missing.
+  assert.ok(incompleteTables.has('users'), 'users is extended at runtime');
+  assert.ok(incompleteTables.size >= 10, `expected ~13 such tables, got ${incompleteTables.size}`);
+});
+
+test('the columns the SELECT pass found are now right', () => {
+  const s = knownColumns();
+  // Each pair is a real fix: the name on the left was queried, the one on the
+  // right is what the table actually has.
+  assert.ok(!s.get('activity_logs')?.has('target_type') && s.get('activity_logs')?.has('entity_type'));
+  assert.ok(!s.get('calendar_events')?.has('location') && s.get('calendar_events')?.has('location_uri'));
+  assert.ok(!s.get('founders')?.has('user_id') && s.get('users')?.has('founder_id'));
+  assert.ok(!s.get('integrations')?.has('provider_name') && s.get('integrations')?.has('provider_key'));
+  assert.ok(!s.get('queue_jobs')?.has('fund_id'), 'the fund id lives in the payload JSON');
+  assert.ok(!s.get('score_snapshots')?.has('score') && s.get('score_snapshots')?.has('total_score'));
+});
+
+test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', () => {
   // The runnable form of the whole exercise. `check-sqlite-columns` is the
   // gate; this keeps the property visible in the test suite too. Covers both
-  // INSERT column lists and UPDATE SET clauses.
+  // INSERT lists, UPDATE SET clauses and single-table SELECT lists.
   const unknown = [...unknownColumns().keys()].sort();
   assert.deepEqual(unknown, [], `unknown columns: ${unknown.join(', ')}`);
 });

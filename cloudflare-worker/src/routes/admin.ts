@@ -181,7 +181,9 @@ admin.get('/users/:user_id/profile', async (c) => {
   let integrations: any[] = [];
   try {
     const ires: any = await c.env.DB.prepare(
-      `SELECT uid, provider_name, display_name, status, last_synced_at
+      // `provider_key` (migration 016). `provider_name` matched nothing, so
+      // the catch below left this list empty on every admin profile.
+      `SELECT uid, provider_key, display_name, status, last_synced_at
          FROM integrations WHERE user_id = ? ORDER BY datetime(created_at) DESC`
     ).bind(userId).all();
     integrations = ires?.results || [];

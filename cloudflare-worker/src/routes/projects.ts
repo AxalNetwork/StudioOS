@@ -404,8 +404,11 @@ async function createProjectHandler(c: any) {
   // admin or partner creates a project on behalf of a founder, the push
   // runs against the founder's HubSpot integration row, not the actor's.
   try {
+    // `founders` has no user_id — the link runs the other way, through
+    // `users.founder_id`. The old query threw on an unknown column, and this
+    // `.first()` is unguarded, so the route 500'd rather than degrading.
     const ownerRow = await c.env.DB.prepare(
-      'SELECT user_id FROM founders WHERE id = ?',
+      'SELECT id AS user_id FROM users WHERE founder_id = ? LIMIT 1',
     ).bind(founderId).first();
     const owner = ownerRow as { user_id: number | null } | null;
     const ownerUserId = owner?.user_id ?? null;
