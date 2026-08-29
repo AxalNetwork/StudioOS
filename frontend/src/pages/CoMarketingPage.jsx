@@ -35,6 +35,7 @@ function PitchForm({ onSubmitted }) {
     title: '', summary: '', asset_type: 'webinar',
     proposed_date: '', target_audience: '', distribution_channels: '',
     co_branding_notes: '', asset_url: '',
+    angle: '', what_you_bring: '',
   };
   const [draft, setDraft] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -49,6 +50,8 @@ function PitchForm({ onSubmitted }) {
         distribution_channels: draft.distribution_channels || null,
         co_branding_notes: draft.co_branding_notes || null,
         asset_url: draft.asset_url || null,
+        angle: draft.angle || null,
+        what_you_bring: draft.what_you_bring || null,
       });
       setDraft(initial);
       onSubmitted();
@@ -76,6 +79,19 @@ function PitchForm({ onSubmitted }) {
           </select>
         </div>
         <div className="md:col-span-2">
+          <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">
+            Angle <span className="font-normal text-gray-500">· what makes this worth an audience&rsquo;s time</span>
+          </label>
+          <input value={draft.angle} maxLength={500}
+            onChange={(e) => setDraft({ ...draft, angle: e.target.value })}
+            placeholder="How we cut onboarding to 4 minutes"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
+          <p className="mt-1 text-[11px] text-gray-500">
+            Specific angles get approved. &ldquo;How we cut onboarding to 4 minutes&rdquo; beats
+            &ldquo;onboarding best practices&rdquo;.
+          </p>
+        </div>
+        <div className="md:col-span-2">
           <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Summary</label>
           <textarea value={draft.summary} rows={3}
             onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
@@ -100,6 +116,15 @@ function PitchForm({ onSubmitted }) {
           <input value={draft.distribution_channels}
             onChange={(e) => setDraft({ ...draft, distribution_channels: e.target.value })}
             placeholder="LinkedIn, partner newsletter, X"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">
+            What you bring <span className="font-normal text-gray-500">· audience &amp; distribution</span>
+          </label>
+          <textarea value={draft.what_you_bring} rows={2} maxLength={1000}
+            onChange={(e) => setDraft({ ...draft, what_you_bring: e.target.value })}
+            placeholder="Newsletter list size, community, speakers you can bring, promotion you'll run…"
             className="w-full px-3 py-2 border border-gray-300 rounded text-sm dark:border-gray-700" />
         </div>
         <div className="md:col-span-2">
@@ -302,6 +327,9 @@ function PitchDetailDrawer({ pitch, onClose }) {
               <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{pitch.title}</h2>
               <StatusPill status={pitch.status} />
             </div>
+            {pitch.angle && (
+              <p className="mt-1 text-sm font-medium text-violet-700 dark:text-violet-300">{pitch.angle}</p>
+            )}
             <p className="text-xs text-gray-500 mt-0.5">
               {pitch.asset_type}
               {pitch.published_at ? ` · published ${fmtStamp(pitch.published_at)}` : ` · created ${fmtStamp(pitch.created_at)}`}
@@ -419,6 +447,17 @@ function PitchDetailDrawer({ pitch, onClose }) {
             </>
           )}
 
+          {pitch.what_you_bring && (
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                What you said you would bring
+              </h3>
+              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                {pitch.what_you_bring}
+              </p>
+            </div>
+          )}
+
           {pitch.distribution_channels && (
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
@@ -481,6 +520,9 @@ function PartnerView() {
                       <StatusPill status={p.status} />
                       <span className="text-[11px] text-gray-500">{p.asset_type}</span>
                     </div>
+                    {p.angle && (
+                      <div className="text-sm font-medium text-violet-700 dark:text-violet-300">{p.angle}</div>
+                    )}
                     <div className="text-sm text-gray-700 whitespace-pre-wrap dark:text-gray-300">{p.summary}</div>
                     {p.review_notes && (
                       <div className="mt-2 text-xs bg-gray-50 border border-gray-200 rounded p-2 dark:border-gray-800">
@@ -554,7 +596,16 @@ function AdminQueueRow({ pitch, onChange }) {
           {pitch.partner_name ? `${pitch.partner_name}${pitch.partner_company ? ` · ${pitch.partner_company}` : ''}` : `partner #${pitch.partner_id}`}
         </span>
       </div>
+      {pitch.angle && (
+        <div className="text-sm font-medium text-violet-700 dark:text-violet-300">{pitch.angle}</div>
+      )}
       <div className="text-sm text-gray-700 whitespace-pre-wrap dark:text-gray-300">{pitch.summary}</div>
+      {pitch.what_you_bring && (
+        <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+          <span className="font-medium text-gray-700 dark:text-gray-300">What they bring:</span>{' '}
+          <span className="whitespace-pre-wrap">{pitch.what_you_bring}</span>
+        </div>
+      )}
       <div className="text-xs text-gray-500 space-x-2">
         {pitch.proposed_date && <span>Proposed: {new Date(pitch.proposed_date).toLocaleString()}</span>}
         {pitch.target_audience && <span>· Audience: {pitch.target_audience}</span>}

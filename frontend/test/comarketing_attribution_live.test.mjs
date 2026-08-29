@@ -15,10 +15,13 @@
  *      partial window as a total, and must not draw a zero week for a period
  *      it has no rows for.
  *
- * It also pins what was deliberately NOT built. The same canvas asks for an
- * "Angle" and a "what you bring" field on the pitch form. Those are two columns
- * `comarketing_pitches` does not have — that is a migration, not a port, and it
- * is held for a schema decision rather than faked into an existing column.
+ * The same canvas also asks for an "Angle" and a "what you bring" field on the
+ * pitch form. Those were held back in the first pass because they are two
+ * columns `comarketing_pitches` did not have — a migration, not a port.
+ * Migration 183 adds them; the last three tests here pin that they are real
+ * nullable columns rather than something overloaded onto `summary`, that the
+ * create and edit paths enforce the same length caps, and that the review
+ * queue actually shows the angle the review is supposed to turn on.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -120,23 +123,61 @@ function sqlCorpus() {
   return parts.join('\n');
 }
 
-test('Angle and "what you bring" are still absent from the schema', () => {
-  // The pitch form in the canvas asks for both. Neither is a column, and this
-  // pass does not invent one by overloading `summary` or `co_branding_notes`.
-  // If a migration adds them, this test fails — which is the reminder to build
-  // the fields rather than leave the port half-done.
+test('Angle and "what you bring" are stored columns, not overloaded fields', () => {
+  // These were deliberately NOT built in the first pass: they are two columns
+  // `comarketing_pitches` did not have, and faking them into `summary` or
+  // `co_branding_notes` would have made the review read the wrong field.
+  // Migration 183 adds them, nullable, with no backfill — an older pitch has
+  // no angle on file and inventing one from its summary would put words in a
+  // partner's mouth.
   const sql = sqlCorpus();
   const i = sql.indexOf('CREATE TABLE IF NOT EXISTS comarketing_pitches');
   assert.ok(i > 0, 'comarketing_pitches must exist');
   const ddl = sql.slice(i, sql.indexOf(');', i));
-  for (const col of ['angle', 'what_you_bring']) {
-    assert.ok(!new RegExp(`\\b${col}\\b`).test(ddl), `${col} is now a column — build the field`);
-  }
+  // Literal patterns, not a constructed RegExp: Semgrep flags dynamic regex
+  // construction, and there are only two columns to name.
+  assert.match(ddl, /\bangle TEXT/, 'angle must be a nullable TEXT column');
+  assert.match(ddl, /\bwhat_you_bring TEXT/, 'what_you_bring must be a nullable TEXT column');
 
-  // And the form must not have grown an input bound to a column that does not
-  // exist: the worker's create/patch allowlists would silently drop it.
+  const mig = read('cloudflare-worker/sql/migrations/183_comarketing_angle.sql');
+  assert.match(mig, /ALTER TABLE comarketing_pitches ADD COLUMN angle TEXT;/);
+  assert.match(mig, /ALTER TABLE comarketing_pitches ADD COLUMN what_you_bring TEXT;/);
+  assert.ok(!/NOT NULL|DEFAULT|UPDATE |INSERT /i.test(mig),
+    'the migration must be additive and nullable, with no backfill');
+});
+
+test('both columns are writable on create and on edit, under the same caps', () => {
   const w = read('cloudflare-worker/src/routes/comarketing.ts');
-  for (const col of ['angle', 'what_you_bring']) {
-    assert.ok(!w.includes(`'${col}'`), `the worker must not accept ${col} until it is stored`);
-  }
+  // Create.
+  const ins = w.slice(w.indexOf("r.post('/me/pitches'"), w.indexOf("r.get('/me/pitches'"));
+  assert.match(ins, /angle, what_you_bring, status/, 'the insert must name both columns');
+  assert.match(ins, /String\(body\.angle\)\.slice\(0, ANGLE_MAX\)/);
+  assert.match(ins, /String\(body\.what_you_bring\)\.slice\(0, BRING_MAX\)/);
+
+  // Edit, under the SAME caps — an edit path that skipped them would let a
+  // 50KB angle in through the back door.
+  const pat = w.slice(w.indexOf("r.patch('/me/pitches/:uid'"), w.indexOf("r.post('/me/pitches/:uid/withdraw'"));
+  assert.match(pat, /'angle', 'what_you_bring'/, 'both must be in the update allowlist');
+  assert.match(pat, /angle: ANGLE_MAX, what_you_bring: BRING_MAX/,
+    'the edit path must apply the create path caps');
+});
+
+test('the review surface shows the field the review turns on', () => {
+  // The canvas copy is explicit that approval favours specific angles. A
+  // reviewer who cannot see the angle is reviewing on the summary instead.
+  const s = read(PAGE);
+  const q = s.slice(s.indexOf('function AdminQueueRow'), s.indexOf('function AdminView'));
+  assert.match(q, /pitch\.angle/, 'the review queue must show the angle');
+  assert.match(q, /pitch\.what_you_bring/, 'the review queue must show what they bring');
+
+  // And the form must collect them, or the columns stay empty forever.
+  const f = s.slice(s.indexOf('function PitchForm'), s.indexOf('function AttributionBadge'));
+  assert.match(f, /draft\.angle/);
+  assert.match(f, /draft\.what_you_bring/);
+  assert.match(f, /angle: draft\.angle \|\| null/, 'the submit must send it');
+  assert.match(f, /what_you_bring: draft\.what_you_bring \|\| null/);
+  // Client caps must match the server's, so the UI never silently truncates
+  // differently from the API.
+  assert.match(f, /maxLength=\{500\}/);
+  assert.match(f, /maxLength=\{1000\}/);
 });
