@@ -63,13 +63,13 @@ function CopyLine({ label, value }) {
   const [done, setDone] = useState(false);
   if (!value) return null;
   return (
-    <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+    <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 dark:border-gray-800">
       <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
       <div className="mt-1 flex items-center gap-2">
-        <code className="flex-1 break-all font-mono text-sm text-gray-900">{value}</code>
+        <code className="flex-1 break-all font-mono text-sm text-gray-900 dark:text-gray-100">{value}</code>
         <button
           type="button"
-          className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs hover:bg-gray-50"
+          className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900"
           onClick={() => {
             navigator.clipboard?.writeText(value).then(() => {
               setDone(true);
@@ -120,11 +120,11 @@ function ClaimDrawer({ perk, onClose, onClaimed }) {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
-      <div className="h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="h-full w-full max-w-md overflow-y-auto bg-white p-5 shadow-xl dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between">
           <div>
             <div className="text-xs text-gray-500">{d.partner_name} · {d.category}</div>
-            <h2 className="mt-1 text-lg font-semibold text-gray-900">{d.offer}</h2>
+            <h2 className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{d.offer}</h2>
           </div>
           <button type="button" onClick={onClose} className="rounded p-1 hover:bg-gray-100" aria-label="Close">
             <X size={16} />
@@ -159,13 +159,13 @@ function ClaimDrawer({ perk, onClose, onClaimed }) {
           </div>
         ) : (
           <div className="mt-5">
-            {d.blurb && <p className="text-sm text-gray-700">{d.blurb}</p>}
+            {d.blurb && <p className="text-sm text-gray-700 dark:text-gray-300">{d.blurb}</p>}
             {d.detail && <p className="mt-3 whitespace-pre-wrap text-sm text-gray-600">{d.detail}</p>}
 
-            <div className="mt-5 rounded-lg border border-gray-200 p-3">
+            <div className="mt-5 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
               <div className="flex items-baseline justify-between">
                 <span className="text-sm text-gray-600">Cost</span>
-                <span className="font-semibold text-gray-900">{priceLabel(d)}</span>
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{priceLabel(d)}</span>
               </div>
               {d.kind === 'credits' && (
                 <div className="mt-2 flex items-baseline justify-between text-sm text-gray-600">
@@ -232,9 +232,9 @@ function Catalogue() {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white p-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
         <Coins size={16} className="text-indigo-600" />
-        <span className="text-sm font-medium text-gray-900">{n0(data.balance)} perk credits</span>
+        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{n0(data.balance)} perk credits</span>
         <span className="text-xs text-gray-500">
           Separate from introduction credits under Network — different unit, different balance.
         </span>
@@ -264,9 +264,9 @@ function Catalogue() {
       )}
 
       {shown.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
+        <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
           <Gift size={22} className="mx-auto text-gray-400" />
-          <p className="mt-3 text-sm font-medium text-gray-900">No perks are listed yet.</p>
+          <p className="mt-3 text-sm font-medium text-gray-900 dark:text-gray-100">No perks are listed yet.</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-gray-600">
             Partners submit offers and each one is reviewed before it appears here. Nothing is
             listed until a real partner has agreed to honour it.
@@ -275,17 +275,17 @@ function Catalogue() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {shown.map((p) => (
-            <div key={p.uid} className="flex flex-col rounded-lg border border-gray-200 bg-white p-4">
+            <div key={p.uid} className="flex flex-col rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="text-xs text-gray-500">{p.partner_name}</div>
-                  <div className="mt-0.5 text-sm font-semibold text-gray-900">{p.offer}</div>
+                  <div className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100">{p.offer}</div>
                 </div>
                 {p.featured && <Pill tone="bg-indigo-50 text-indigo-700 border-indigo-200">Featured</Pill>}
               </div>
               {p.blurb && <p className="mt-2 flex-1 text-sm text-gray-600">{p.blurb}</p>}
               <div className="mt-3 flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-900">{priceLabel(p)}</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{priceLabel(p)}</span>
                 {p.claimed ? (
                   <Pill tone="bg-green-50 text-green-700 border-green-200">Claimed</Pill>
                 ) : (
@@ -328,16 +328,16 @@ function MyPerks() {
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="text-sm font-semibold text-gray-900">Claimed</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Claimed</h3>
         {items.length === 0 ? (
           <p className="mt-2 text-sm text-gray-600">Nothing claimed yet.</p>
         ) : (
           <div className="mt-2 space-y-2">
             {items.map((c) => (
-              <div key={c.uid} className="rounded-lg border border-gray-200 bg-white p-4">
+              <div key={c.uid} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-medium text-gray-900">{c.offer}</div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{c.offer}</div>
                     <div className="mt-0.5 text-xs text-gray-500">
                       {c.partner_name} · claimed {String(c.created_at || '').slice(0, 10)}
                       {c.credits_spent > 0 ? ` · ${n0(c.credits_spent)} credits` : ' · no credits'}
@@ -359,7 +359,7 @@ function MyPerks() {
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold text-gray-900">Perk credit ledger</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Perk credit ledger</h3>
         <p className="mt-1 text-xs text-gray-500">
           Balance {n0(data.balance)}. Every line is a grant or a spend — the balance is the sum of
           them, not a number stored separately.
@@ -372,7 +372,7 @@ function MyPerks() {
           <div className="mt-2 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
+                <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800">
                   <th className="py-2 pr-4">When</th>
                   <th className="py-2 pr-4">What</th>
                   <th className="py-2 pr-4 text-right">Change</th>
@@ -382,7 +382,7 @@ function MyPerks() {
                 {ledger.map((l, i) => (
                   <tr key={i} className="border-b border-gray-100">
                     <td className="py-2 pr-4 text-gray-500">{String(l.created_at || '').slice(0, 10)}</td>
-                    <td className="py-2 pr-4 text-gray-900">{l.note || l.kind}</td>
+                    <td className="py-2 pr-4 text-gray-900 dark:text-gray-100">{l.note || l.kind}</td>
                     <td className={`py-2 pr-4 text-right font-medium ${l.delta < 0 ? 'text-gray-900' : 'text-green-700'}`}>
                       {l.delta > 0 ? '+' : ''}{n0(l.delta)}
                     </td>
@@ -443,54 +443,54 @@ function PartnerConsole() {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <section>
-        <h3 className="text-sm font-semibold text-gray-900">Submit a perk</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Submit a perk</h3>
         <p className="mt-1 text-xs text-gray-500">
           Every submission is reviewed before founders see it. Editing a live listing sends it
           back for review — the terms founders were shown are the terms that were approved.
         </p>
         <form onSubmit={submit} className="mt-3 space-y-3">
-          <input className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" placeholder="Your company name"
+          <input className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" placeholder="Your company name"
             value={form.partner_name} onChange={set('partner_name')} required />
-          <input className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" placeholder="The offer, e.g. 3 months free"
+          <input className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" placeholder="The offer, e.g. 3 months free"
             value={form.offer} onChange={set('offer')} required />
-          <input className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" placeholder="Category"
+          <input className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" placeholder="Category"
             value={form.category} onChange={set('category')} />
-          <textarea className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" rows={2} placeholder="One line founders see on the card"
+          <textarea className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" rows={2} placeholder="One line founders see on the card"
             value={form.blurb} onChange={set('blurb')} />
-          <textarea className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" rows={3} placeholder="Full terms, shown before anything is spent"
+          <textarea className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" rows={3} placeholder="Full terms, shown before anything is spent"
             value={form.detail} onChange={set('detail')} />
           <div className="flex gap-2">
-            <select className="rounded-md border border-gray-300 px-3 py-2 text-sm" value={form.kind} onChange={set('kind')}>
+            <select className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" value={form.kind} onChange={set('kind')}>
               <option value="credits">Costs credits</option>
               <option value="tier">Included in a plan</option>
               <option value="money">Paid engagement</option>
             </select>
             {form.kind === 'credits' && (
-              <input type="number" min="0" className="w-32 rounded-md border border-gray-300 px-3 py-2 text-sm"
+              <input type="number" min="0" className="w-32 rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
                 placeholder="Credits" value={form.credits} onChange={set('credits')} />
             )}
             {form.kind === 'tier' && (
-              <select className="rounded-md border border-gray-300 px-3 py-2 text-sm" value={form.required_tier} onChange={set('required_tier')}>
+              <select className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" value={form.required_tier} onChange={set('required_tier')}>
                 <option value="growth">Growth</option>
                 <option value="studio">Studio</option>
               </select>
             )}
             {form.kind === 'money' && (
-              <input type="number" min="0" step="0.01" className="w-32 rounded-md border border-gray-300 px-3 py-2 text-sm"
+              <input type="number" min="0" step="0.01" className="w-32 rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
                 placeholder="Price $" value={form.price_cents} onChange={set('price_cents')} />
             )}
           </div>
           <div className="flex gap-2">
-            <select className="rounded-md border border-gray-300 px-3 py-2 text-sm" value={form.fulfilment} onChange={set('fulfilment')}>
+            <select className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" value={form.fulfilment} onChange={set('fulfilment')}>
               <option value="code">Issue a code</option>
               <option value="link">Send to a link</option>
               <option value="intro">You contact them</option>
             </select>
             {form.fulfilment === 'link' && (
-              <input className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" placeholder="https://…"
+              <input className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" placeholder="https://…"
                 value={form.redeem_url} onChange={set('redeem_url')} />
             )}
-            <input type="number" min="1" className="w-28 rounded-md border border-gray-300 px-3 py-2 text-sm"
+            <input type="number" min="1" className="w-28 rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
               placeholder="Cap" value={form.claim_cap} onChange={set('claim_cap')} />
           </div>
           {err && <p className="text-sm text-red-600">{err}</p>}
@@ -502,16 +502,16 @@ function PartnerConsole() {
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold text-gray-900">Your listings</h3>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Your listings</h3>
         {items === null ? <p className="mt-2 text-sm text-gray-500">Loading…</p>
           : items.length === 0 ? <p className="mt-2 text-sm text-gray-600">Nothing submitted yet.</p>
           : (
             <div className="mt-2 space-y-2">
               {items.map((p) => (
-                <div key={p.uid} className="rounded-lg border border-gray-200 bg-white p-4">
+                <div key={p.uid} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{p.offer}</div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{p.offer}</div>
                       <div className="mt-0.5 text-xs text-gray-500">
                         {priceLabel(p)} · {n0(p.claim_count)} claim{Number(p.claim_count) === 1 ? '' : 's'}
                       </div>
@@ -555,7 +555,7 @@ function ReviewQueue() {
   if (items === null) return <p className="text-sm text-gray-500">Loading…</p>;
   if (!items.length) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
+      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
         <ClipboardCheck size={22} className="mx-auto text-gray-400" />
         <p className="mt-3 text-sm text-gray-600">Nothing is waiting for review.</p>
       </div>
@@ -564,14 +564,14 @@ function ReviewQueue() {
   return (
     <div className="space-y-3">
       {items.map((p) => (
-        <div key={p.uid} className="rounded-lg border border-gray-200 bg-white p-4">
-          <div className="text-sm font-medium text-gray-900">{p.offer}</div>
+        <div key={p.uid} className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{p.offer}</div>
           <div className="mt-0.5 text-xs text-gray-500">
             {p.partner_name} · {p.partner_email || 'no account'} · {priceLabel(p)}
           </div>
           {p.detail && <p className="mt-2 whitespace-pre-wrap text-sm text-gray-600">{p.detail}</p>}
           <input
-            className="mt-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="mt-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
             placeholder="Note — required to reject, and the partner reads it"
             value={note[p.uid] || ''}
             onChange={(e) => setNote((n) => ({ ...n, [p.uid]: e.target.value }))}
@@ -604,13 +604,13 @@ export default function PerksPage({ user }) {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <h1 className="text-xl font-semibold text-gray-900">Perks &amp; products</h1>
+      <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Perks &amp; products</h1>
       <p className="mt-1 text-sm text-gray-600">
         Offers partners have agreed to honour for people on the platform. Distinct from the
         services marketplace and from plan pricing.
       </p>
 
-      <div className="mt-5 flex gap-1 border-b border-gray-200">
+      <div className="mt-5 flex gap-1 border-b border-gray-200 dark:border-gray-800">
         {tabs.map(({ k, label, icon: Icon }) => (
           <button
             key={k} type="button" onClick={() => setTab(k)}

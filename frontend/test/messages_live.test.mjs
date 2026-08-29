@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { apiMethodNames, apiCallsIn } from './_apiMethods.mjs';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -127,8 +128,12 @@ test('the AI transcript and the support bridge are still separate stores', () =>
 });
 
 test('every api.* the page calls exists on both sides', () => {
-  const called = new Set([...read(PAGE).matchAll(/\bapi\.([A-Za-z0-9_]+)\(/g)].map((m) => m[1]));
-  const apiSrc = read('frontend/src/lib/api.js');
-  const missing = [...called].filter((m) => !new RegExp(`^\\s{2}${m}:`, 'm').test(apiSrc));
+  // apiMethodNames parses api.js ONCE and exactly (a top-level property at two
+  // spaces of indent). The previous form built a regex per method name, which
+  // Semgrep flagged as non-literal-regexp; see _apiMethods.mjs for why that
+  // finding was not reachable and why the loop was still the weaker design.
+  const called = apiCallsIn(read(PAGE));
+  const defined = apiMethodNames(read('frontend/src/lib/api.js'));
+  const missing = [...called].filter((m) => !defined.has(m));
   assert.deepEqual(missing, [], `api.js does not define: ${missing.join(', ')}`);
 });

@@ -24,6 +24,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { apiMethodNames, apiCallsIn } from './_apiMethods.mjs';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -266,10 +267,15 @@ test('every api method the page calls exists and is served', () => {
   const page = read(PAGE);
   const apiSrc = read('frontend/src/lib/api.js');
   const index = read('cloudflare-worker/src/index.ts');
-  const called = [...page.matchAll(/api\.(perk[A-Za-z]*)\(/g)].map((m) => m[1]);
+  // Exact: a top-level property of the exported object. The previous
+  // `includes(`${m}:`)` matched the substring anywhere — a comment, a URL, a
+  // nested helper — so it could pass on a method api.js does not actually
+  // expose.
+  const called = [...apiCallsIn(page)].filter((m) => m.startsWith('perk'));
   assert.ok(called.length >= 6, 'the page should be calling the perk surface');
-  for (const m of new Set(called)) {
-    assert.ok(apiSrc.includes(`${m}:`), `api.js must expose ${m}`);
+  const defined = apiMethodNames(apiSrc);
+  for (const m of called) {
+    assert.ok(defined.has(m), `api.js must expose ${m}`);
   }
   assert.match(index, /app\.route\('\/api\/perks', perksRoutes\)/, 'the worker must mount it');
 });

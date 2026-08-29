@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { apiMethodNames, apiCallsIn } from './_apiMethods.mjs';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -265,10 +266,15 @@ test('every api method the page calls exists and is served', () => {
   // REFERENCE (`act(api.licenceRenew, uid, {})`), and a regex demanding the
   // call parenthesis silently misses every one of them — which is how this
   // assertion first passed while proving less than it claimed.
-  const called = [...page.matchAll(/api\.(licences?[A-Za-z]*)\b/g)].map((m) => m[1]);
+  // Not apiCallsIn() here: six of these are passed to act() as a FUNCTION
+  // REFERENCE (`act(api.licenceRenew, uid, {})`) with no call parenthesis, so
+  // a caller-shaped pattern misses them. The name match stays; only the
+  // definition side becomes exact.
+  const called = [...new Set([...page.matchAll(/api\.(licences?[A-Za-z]*)\b/g)].map((m) => m[1]))];
   assert.ok(called.length >= 8, 'the page should exercise the flow');
-  for (const m of new Set(called)) {
-    assert.ok(apiSrc.includes(`${m}:`), `api.js must expose ${m}`);
+  const defined = apiMethodNames(apiSrc);
+  for (const m of called) {
+    assert.ok(defined.has(m), `api.js must expose ${m}`);
   }
 });
 

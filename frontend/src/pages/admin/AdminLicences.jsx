@@ -83,7 +83,7 @@ function Field({ label, value, hint }) {
   return (
     <div>
       <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-0.5 text-sm text-gray-900">{value ?? <span className="text-gray-400">Not recorded</span>}</div>
+      <div className="mt-0.5 text-sm text-gray-900 dark:text-gray-100">{value ?? <span className="text-gray-400">Not recorded</span>}</div>
       {hint && <div className="mt-0.5 text-[11px] text-gray-500">{hint}</div>}
     </div>
   );
@@ -133,7 +133,7 @@ function TerritoryEditor({ licence, held, onSaved }) {
       </label>
       <input
         id="lic-terr"
-        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm"
+        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm dark:border-gray-700"
         value={codes}
         onChange={(e) => setCodes(e.target.value)}
         placeholder="FR, BE, LU"
@@ -197,10 +197,10 @@ function SeatEditor({ licence, onSaved }) {
       <div className="grid gap-2 sm:grid-cols-2">
         {SEAT_TYPES.map((t) => (
           <label key={t.k} className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-gray-700">{t.label}</span>
+            <span className="text-gray-700 dark:text-gray-300">{t.label}</span>
             <input
               type="number" min="0"
-              className="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm"
+              className="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-700"
               value={seats[t.k]}
               onChange={(e) => setSeats((s) => ({ ...s, [t.k]: e.target.value }))}
             />
@@ -257,15 +257,15 @@ function TermsEditor({ licence, onSaved }) {
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="text-sm">
         <span className="text-[11px] uppercase tracking-wide text-gray-500">Term (years)</span>
-        <input type="number" min="1" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        <input type="number" min="1" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
           value={f.term_years} onChange={set('term_years')} />
       </label>
       <label className="text-sm">
         <span className="text-[11px] uppercase tracking-wide text-gray-500">Annual fee</span>
         <div className="mt-1 flex gap-2">
-          <input type="number" min="0" step="0.01" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          <input type="number" min="0" step="0.01" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
             value={f.annual_fee} onChange={set('annual_fee')} />
-          <input className="w-20 rounded-md border border-gray-300 px-2 py-2 text-sm uppercase"
+          <input className="w-20 rounded-md border border-gray-300 px-2 py-2 text-sm uppercase dark:border-gray-700"
             value={f.currency} onChange={set('currency')} maxLength={3} />
         </div>
       </label>
@@ -273,7 +273,7 @@ function TermsEditor({ licence, onSaved }) {
         <span className="text-[11px] uppercase tracking-wide text-gray-500">
           Revenue share (basis points)
         </span>
-        <input type="number" min="0" max="10000" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        <input type="number" min="0" max="10000" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
           value={f.revenue_share_bps} onChange={set('revenue_share_bps')} />
         <span className="text-[11px] text-gray-500">{pct(f.revenue_share_bps) || '—'}</span>
       </label>
@@ -281,18 +281,18 @@ function TermsEditor({ licence, onSaved }) {
         <span className="text-[11px] uppercase tracking-wide text-gray-500">
           Token split to HQ (basis points)
         </span>
-        <input type="number" min="0" max="10000" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        <input type="number" min="0" max="10000" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
           value={f.token_split_bps} onChange={set('token_split_bps')} />
         <span className="text-[11px] text-gray-500">{pct(f.token_split_bps) || '—'}</span>
       </label>
       <label className="text-sm">
         <span className="text-[11px] uppercase tracking-wide text-gray-500">Starts</span>
-        <input type="date" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        <input type="date" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
           value={f.starts_on} onChange={set('starts_on')} />
       </label>
       <label className="text-sm">
         <span className="text-[11px] uppercase tracking-wide text-gray-500">First renewal</span>
-        <input type="date" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        <input type="date" className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
           value={f.renews_on} onChange={set('renews_on')} />
       </label>
       <div className="sm:col-span-2">
@@ -345,7 +345,7 @@ function Detail({ uid, held, onChanged }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-gray-900">{d.brand_name}</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{d.brand_name}</h2>
             <Chip tone={STATUS_TONE[d.status]}>{d.status.replace('_', ' ')}</Chip>
           </div>
           <div className="mt-0.5 text-xs text-gray-500">{d.licence_ref} · {d.legal_entity_name}</div>
@@ -369,7 +369,7 @@ function Detail({ uid, held, onChanged }) {
           {d.status !== 'terminated' && (
             <>
               <button type="button" disabled={busy} onClick={() => act(api.licenceRenew, d.uid, {})}
-                className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300">
                 <RotateCw size={12} /> Renew
               </button>
               <button type="button" disabled={busy}
@@ -410,9 +410,9 @@ function Detail({ uid, held, onChanged }) {
       </div>
 
       {d.blockers?.length > 0 && d.status !== 'active' && (
-        <div className="mt-4 rounded-lg border border-gray-200 p-3">
-          <div className="text-sm font-medium text-gray-900">Before this can be activated</div>
-          <ul className="mt-2 space-y-1 text-sm text-gray-700">
+        <div className="mt-4 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Before this can be activated</div>
+          <ul className="mt-2 space-y-1 text-sm text-gray-700 dark:text-gray-300">
             {d.blockers.map((b, i) => (
               <li key={i} className="flex items-start gap-1.5">
                 <AlertCircle size={13} className="mt-0.5 shrink-0 text-red-500" />{b}
@@ -429,7 +429,7 @@ function Detail({ uid, held, onChanged }) {
         </button>
       )}
 
-      <div className="mt-6 flex gap-1 border-b border-gray-200">
+      <div className="mt-6 flex gap-1 border-b border-gray-200 dark:border-gray-800">
         {STEPS.map((label, i) => (
           <button
             key={label} type="button" onClick={() => setStep(i + 1)}
@@ -456,7 +456,7 @@ function Detail({ uid, held, onChanged }) {
         {step === 4 && <TermsEditor licence={d} onSaved={refresh} />}
         {step === 5 && (
           <div>
-            <h3 className="text-sm font-medium text-gray-900">History</h3>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">History</h3>
             {(d.events || []).length === 0 ? (
               <p className="mt-2 text-sm text-gray-600">Nothing recorded yet.</p>
             ) : (
@@ -464,7 +464,7 @@ function Detail({ uid, held, onChanged }) {
                 {d.events.map((e, i) => (
                   <li key={i} className="flex gap-3">
                     <span className="w-24 shrink-0 text-gray-500">{String(e.created_at || '').slice(0, 10)}</span>
-                    <span className="text-gray-900">{e.event.replace('_', ' ')}</span>
+                    <span className="text-gray-900 dark:text-gray-100">{e.event.replace('_', ' ')}</span>
                     {e.note && <span className="text-gray-600">— {e.note}</span>}
                   </li>
                 ))}
@@ -523,7 +523,7 @@ export default function AdminLicences() {
     <div className="mx-auto max-w-6xl px-4 py-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Territory licences</h1>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Territory licences</h1>
           <p className="mt-1 max-w-2xl text-sm text-gray-600">
             Who holds a licence, over which countries, on what terms, until when. Two licences
             cannot hold the same country — the territory step refuses an overlap rather than
@@ -537,7 +537,7 @@ export default function AdminLicences() {
       </div>
 
       {data.seats_used_available === false && (
-        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">
           <div className="flex items-start gap-1.5">
             <Globe size={14} className="mt-0.5 shrink-0 text-gray-500" />
             <span>{data.seats_used_reason}</span>
@@ -546,15 +546,15 @@ export default function AdminLicences() {
       )}
 
       {creating && (
-        <form onSubmit={create} className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
+        <form onSubmit={create} className="mt-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
           <div className="grid gap-3 sm:grid-cols-3">
-            <input className="rounded-md border border-gray-300 px-3 py-2 text-sm uppercase"
+            <input className="rounded-md border border-gray-300 px-3 py-2 text-sm uppercase dark:border-gray-700"
               placeholder="Reference, e.g. AXL-005" required
               value={form.licence_ref} onChange={(e) => setForm((f) => ({ ...f, licence_ref: e.target.value }))} />
-            <input className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            <input className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
               placeholder="Legal entity name" required
               value={form.legal_entity_name} onChange={(e) => setForm((f) => ({ ...f, legal_entity_name: e.target.value }))} />
-            <input className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            <input className="rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
               placeholder="Brand name in product"
               value={form.brand_name} onChange={(e) => setForm((f) => ({ ...f, brand_name: e.target.value }))} />
           </div>
@@ -570,9 +570,9 @@ export default function AdminLicences() {
       )}
 
       {items.length === 0 ? (
-        <div className="mt-6 rounded-lg border border-dashed border-gray-300 p-8 text-center">
+        <div className="mt-6 rounded-lg border border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
           <FileText size={22} className="mx-auto text-gray-400" />
-          <p className="mt-3 text-sm font-medium text-gray-900">No licences have been issued.</p>
+          <p className="mt-3 text-sm font-medium text-gray-900 dark:text-gray-100">No licences have been issued.</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-gray-600">
             This ledger starts empty. No subsidiary is seeded, because a licence is a signed
             contract with a real entity and inventing one would misrepresent the business.
@@ -589,7 +589,7 @@ export default function AdminLicences() {
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-gray-900">{l.brand_name}</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{l.brand_name}</span>
                   <Chip tone={STATUS_TONE[l.status]}>{l.status.replace('_', ' ')}</Chip>
                 </div>
                 <div className="mt-1 text-[11px] text-gray-500">
@@ -601,7 +601,7 @@ export default function AdminLicences() {
               </button>
             ))}
           </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-5">
+          <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
             {sel ? <Detail uid={sel} held={held} onChanged={load} /> : <p className="text-sm text-gray-500">Pick a licence.</p>}
           </div>
         </div>
