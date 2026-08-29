@@ -132,6 +132,54 @@ const PARTNER_NOTIFICATION_EVENTS = [
   { key: 'partner_kyc_block', label: 'A founder you backed is blocked on KYC' },
 ];
 
+// Wave 2 — notification presets.
+//
+// The Account canvas says presets "replace" the 17-row matrix. They do not
+// replace it here, and that is a deliberate departure: the matrix is the only
+// way to say "email me capital calls but not the weekly digest", and a preset
+// set cannot express that without becoming a matrix again. Presets are added
+// as the fast path ON TOP, and the grid stays for anyone who wants it. Losing
+// per-event control to match a canvas would be a downgrade sold as a redesign.
+//
+// A preset writes the SAME `notification_prefs` JSON the grid writes — there is
+// no second storage shape and no migration. `urgent` is defined by which events
+// carry money, signature or compliance consequences; everything else is
+// informational and can wait for the digest.
+const URGENT_EVENT_KEYS = new Set([
+  'capital_call_issued', 'capital_call_paid', 'agreement_ready_to_sign',
+  'contract_signed', 'kyc_status_change', 'deal_assigned',
+  'partner_capital_call_due', 'partner_kyc_block',
+]);
+
+const NOTIFICATION_PRESETS = [
+  {
+    id: 'everything',
+    label: 'Everything',
+    hint: 'Email and in-app for every event.',
+    apply: (key) => ({ email: true, in_app: true, inapp: true }),
+  },
+  {
+    id: 'important',
+    label: 'Important only',
+    hint: 'Money, signatures and compliance by email; the rest in-app.',
+    apply: (key) => (URGENT_EVENT_KEYS.has(key)
+      ? { email: true, in_app: true, inapp: true }
+      : { email: false, in_app: true, inapp: true }),
+  },
+  {
+    id: 'in_app_only',
+    label: 'In-app only',
+    hint: 'Nothing lands in your inbox.',
+    apply: (key) => ({ email: false, in_app: true, inapp: true }),
+  },
+  {
+    id: 'off',
+    label: 'Mute all',
+    hint: 'No email, no in-app. Security alerts are always sent regardless.',
+    apply: (key) => ({ email: false, in_app: false, inapp: false }),
+  },
+];
+
 const ActivityPage = lazy(() => import('./ActivityPage'));
 
 // Task #1 — Settings expansion (tabbed). Nine tabs per the audit-plan brief.
@@ -2348,8 +2396,40 @@ function NotificationsSection({ data, patch }) {
     </div>
   );
 
+  // Applying a preset rewrites every event this user can see in one patch —
+  // including the partner block when it is shown, so the visible grid and the
+  // stored prefs never disagree.
+  const applyPreset = (preset) => {
+    const keys = [
+      ...NOTIFICATION_EVENTS.map((e) => e.key),
+      ...(data.role === 'partner' ? PARTNER_NOTIFICATION_EVENTS.map((e) => e.key) : []),
+    ];
+    const next = { ...prefs };
+    for (const k of keys) next[k] = { ...(prefs[k] || {}), ...preset.apply(k) };
+    patch({ notification_prefs: next });
+  };
+
   return (
     <>
+      <Card
+        title="Notification presets"
+        description="A starting point. Every switch below stays editable — a preset just sets them all at once."
+      >
+        <div className="flex flex-wrap gap-2">
+          {NOTIFICATION_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => applyPreset(p)}
+              title={p.hint}
+              className="text-left px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-violet-400 transition-colors"
+            >
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{p.label}</div>
+              <div className="text-[11px] text-gray-500 dark:text-gray-400">{p.hint}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
+
       <Card title="Notifications" description="Choose where each kind of alert is delivered.">
         {renderTable(NOTIFICATION_EVENTS)}
       </Card>

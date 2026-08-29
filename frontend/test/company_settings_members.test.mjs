@@ -142,3 +142,45 @@ test('Settings does not become a second company switcher', () => {
   assert.ok(!/setCompany\(/.test(body), 'switching belongs to CompanySwitcher alone');
   assert.ok(!/useActiveCompany\(/.test(body), 'the pane lists memberships; it does not own active context');
 });
+
+/* ------------------------------------------------------------------ *
+ * Notification presets (Wave 2)                                       *
+ * ------------------------------------------------------------------ */
+
+test('presets write the same prefs shape the grid writes', () => {
+  // No second storage shape and no migration: a preset patches
+  // `notification_prefs`, exactly as a checkbox does.
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  assert.match(s, /patch\(\{ notification_prefs: next \}\)/);
+  assert.ok(s.includes('const applyPreset'), 'presets must exist');
+  // in_app/inapp are mirrored by the grid for the legacy reader; a preset that
+  // set only one of them would desync the bell subsystem.
+  const i = s.indexOf('const NOTIFICATION_PRESETS');
+  const block = s.slice(i, s.indexOf('const ActivityPage'));
+  const applies = block.match(/in_app: (true|false), inapp: (true|false)/g) || [];
+  assert.ok(applies.length >= 4, 'every preset must set in_app and inapp together');
+  for (const a of applies) {
+    const [, x, y] = a.match(/in_app: (true|false), inapp: (true|false)/);
+    assert.equal(x, y, `preset desyncs in_app/inapp: ${a}`);
+  }
+});
+
+test('the per-event grid survives the presets', () => {
+  // The canvas says presets "replace" the matrix. They do not: the grid is the
+  // only way to express "email capital calls but not the digest", and dropping
+  // it to match a canvas would be a downgrade sold as a redesign.
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  assert.match(s, /renderTable\(NOTIFICATION_EVENTS\)/, 'the event grid must stay');
+  assert.match(s, /renderTable\(PARTNER_NOTIFICATION_EVENTS\)/, 'the partner grid must stay');
+  assert.match(s, /stays editable/i, 'the UI must say the switches remain editable');
+});
+
+test('a preset covers exactly the events the user can see', () => {
+  // Applying a preset must not leave the partner block out of step with the
+  // core grid — the stored prefs and the visible switches have to agree.
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  const i = s.indexOf('const applyPreset');
+  const body = s.slice(i, i + 700);
+  assert.match(body, /NOTIFICATION_EVENTS\.map/);
+  assert.match(body, /data\.role === 'partner' \? PARTNER_NOTIFICATION_EVENTS\.map/);
+});
