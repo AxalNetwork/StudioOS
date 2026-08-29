@@ -1,176 +1,148 @@
-import React, { useMemo, useState } from 'react';
-import { Building2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Users, Mail } from 'lucide-react';
+import { api } from '../../../lib/api';
 import {
-  CLIENTS, CLIENT_SEGMENTS, money, formatDay, formatRelativeDay,
-} from '../../../data/advisor/advisory';
-import {
-  FilterChips, StatCard, SlideOver, Section, Field, StatusBadge, BulletList,
-  ProgressBar, Timeline, RowCard, EmptyState, Chip, Avatar,
+  Avatar, Chip, Section, SlideOver, EmptyState, StatCard, SearchInput,
+  StatusBadge, RowCard, formatDateTime, formatRelativeDay, clientsFromBookings,
 } from './kit';
 
-// Clients — account workspace. Segmented client list; each opens a detail panel
-// with the company profile, engagement history/timeline, and a health scorecard.
-
+// Clients — everyone who has booked this advisor, derived from their real
+// bookings (Wave 1b; previously a fixture roster of invented companies with
+// invented ARR and segment labels).
+//
+// There is no advisor_clients table, and inventing one would be the wrong
+// answer: an advisor's client list IS their booking history. clientsFromBookings
+// groups on founder_user_id so two people sharing a display name stay distinct.
 export default function ClientsPage() {
-  const [segment, setSegment] = useState('all');
-  const [selectedId, setSelectedId] = useState(null);
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [noProfile, setNoProfile] = useState(false);
+  const [error, setError] = useState('');
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(null);
 
-  const filterOptions = useMemo(() => ([
-    { id: 'all', label: 'All', count: CLIENTS.length },
-    ...CLIENT_SEGMENTS.map((s) => ({ id: s.id, label: s.label, count: CLIENTS.filter((c) => c.segment === s.id).length })),
-  ]), []);
-
-  const visible = useMemo(
-    () => CLIENTS.filter((c) => segment === 'all' || c.segment === segment),
-    [segment],
-  );
-
-  const stats = useMemo(() => {
-    const active = CLIENTS.filter((c) => c.segment !== 'past');
-    const arr = active.reduce((a, c) => a + (c.annualRevenue || 0), 0);
-    const ltv = CLIENTS.reduce((a, c) => a + (c.lifetimeValue || 0), 0);
-    const avgHealth = Math.round(active.reduce((a, c) => a + c.health.engagementScore, 0) / (active.length || 1));
-    return { activeCount: active.length, arr, ltv, avgHealth };
+  useEffect(() => {
+    (async () => {
+      try {
+        const me = await api.getMyAdvisor();
+        if (!me) { setNoProfile(true); setLoading(false); return; }
+      } catch { setNoProfile(true); setLoading(false); return; }
+      try {
+        const r = await api.listMyAdvisorBookings();
+        setBookings(r.items || []);
+      } catch (e) { setError(e?.message || 'Could not load your clients.'); }
+      setLoading(false);
+    })();
   }, []);
 
-  const selected = CLIENTS.find((c) => c.id === selectedId) || null;
+  const clients = useMemo(() => clientsFromBookings(bookings), [bookings]);
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return clients;
+    return clients.filter((c) =>
+      (c.name || '').toLowerCase().includes(needle)
+      || (c.email || '').toLowerCase().includes(needle)
+      || c.topics.some((t) => t.toLowerCase().includes(needle)));
+  }, [clients, q]);
+
+  if (loading) {
+    return <div className="py-16 text-center text-sm text-gray-500 dark:text-gray-400">Loading your clients…</div>;
+  }
+  if (noProfile) {
+    return <EmptyState>You do not have an advisor profile yet, so there are no clients to show.</EmptyState>;
+  }
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Active clients" value={stats.activeCount} hint="Active + strategic" />
-        <StatCard label="Annual revenue" value={money(stats.arr)} hint="Recurring across accounts" />
-        <StatCard label="Lifetime value" value={money(stats.ltv)} hint="All clients" />
-        <StatCard label="Avg. health" value={stats.avgHealth} hint="Engagement score" />
-      </div>
-
-      <FilterChips options={filterOptions} value={segment} onChange={setSegment} />
-
-      {visible.length === 0 ? (
-        <EmptyState>No clients in this segment.</EmptyState>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {visible.map((c) => (
-            <RowCard key={c.id} onClick={() => setSelectedId(c.id)}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-semibold text-gray-900 dark:text-gray-100 truncate flex items-center gap-1.5">
-                    <Building2 size={14} className="text-gray-400" /> {c.name}
-                  </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                    {c.profile.industry} · {c.profile.stage}
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <StatusBadge status={c.status} />
-                  <Chip tone={c.segment === 'strategic' ? 'violet' : c.segment === 'past' ? 'gray' : 'emerald'}>
-                    {CLIENT_SEGMENTS.find((s) => s.id === c.segment)?.label}
-                  </Chip>
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400">Lifetime value</div>
-                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{money(c.lifetimeValue)}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">Health</div>
-                  <ProgressBar value={c.health.engagementScore} tone={c.health.engagementScore >= 75 ? 'emerald' : c.health.engagementScore >= 50 ? 'amber' : 'violet'} />
-                </div>
-              </div>
-            </RowCard>
-          ))}
-        </div>
+    <div className="space-y-6">
+      {error && (
+        <div className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 px-4 py-2.5 text-sm text-rose-700 dark:text-rose-300">{error}</div>
       )}
 
-      <ClientDetail client={selected} onClose={() => setSelectedId(null)} />
-    </div>
-  );
-}
-
-function ClientDetail({ client, onClose }) {
-  if (!client) return <SlideOver open={false} onClose={onClose} />;
-  const p = client.profile;
-  const h = client.health;
-  return (
-    <SlideOver open onClose={onClose} title={client.name} subtitle={`${p.industry} · ${p.stage}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={client.status} />
-        <Chip tone="violet">{CLIENT_SEGMENTS.find((s) => s.id === client.segment)?.label}</Chip>
-        <Chip>Client since {formatDay(client.since)}</Chip>
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard label="Clients" value={clients.length} hint="anyone who has booked you" />
+        <StatCard label="Sessions held" value={clients.reduce((a, c) => a + c.completed, 0)} />
+        <StatCard label="Returning" value={clients.filter((c) => c.total > 1).length} hint="booked more than once" />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Lifetime value" value={money(client.lifetimeValue)} />
-        <StatCard label="Annual revenue" value={money(client.annualRevenue)} />
-      </div>
+      <SearchInput value={q} onChange={setQ} placeholder="Search clients or topics" />
 
-      <Section title="Company profile">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Industry">{p.industry}</Field>
-          <Field label="Stage">{p.stage}</Field>
-          <Field label="Business model">{p.businessModel}</Field>
-          <Field label="Revenue">{p.revenue}</Field>
-          <Field label="Funding">{p.funding}</Field>
-          <Field label="Markets">{p.markets.join(', ')}</Field>
-        </div>
-        <div className="mt-3">
-          <Field label="Products"><div className="flex flex-wrap gap-1.5 mt-1">{p.products.map((pr) => <Chip key={pr}>{pr}</Chip>)}</div></Field>
-        </div>
-      </Section>
-
-      {client.contacts && client.contacts.length > 0 && (
-        <Section title="Contacts">
-          <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-            {client.contacts.map((c) => (
-              <div key={c.email} className="flex items-center gap-3 p-3">
-                <Avatar name={c.name} size={36} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{c.name}</span>
-                    <Chip tone={c.primary ? 'violet' : 'gray'}>{c.role}</Chip>
+      <Section title={`Client roster (${filtered.length})`}>
+        {filtered.length === 0 ? (
+          <EmptyState>
+            {clients.length === 0
+              ? 'Nobody has booked you yet. Publish availability under Opportunities and your roster builds itself.'
+              : 'No clients match your search.'}
+          </EmptyState>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {filtered.map((c) => (
+              <RowCard key={c.id} onClick={() => setOpen(c)}>
+                <div className="flex items-center gap-3">
+                  <Avatar name={c.name} size={42} />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{c.name}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      {c.total} session{c.total === 1 ? '' : 's'} · last {formatRelativeDay(c.lastSeen)}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {c.upcoming > 0 && <Chip tone="blue">{c.upcoming} upcoming</Chip>}
+                      {c.completed > 0 && <Chip tone="emerald">{c.completed} held</Chip>}
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.title}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{c.email}</div>
                 </div>
-              </div>
+              </RowCard>
             ))}
           </div>
-        </Section>
-      )}
+        )}
+      </Section>
 
-      <Section title="Challenges"><BulletList items={p.challenges} tone="rose" /></Section>
-      <Section title="Goals"><BulletList items={p.goals} tone="emerald" /></Section>
+      <SlideOver
+        open={!!open}
+        onClose={() => setOpen(null)}
+        title={open?.name || ''}
+        subtitle={open ? `${open.total} session${open.total === 1 ? '' : 's'}` : ''}
+      >
+        {open && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Avatar name={open.name} size={56} />
+              {open.email && (
+                <a href={`mailto:${open.email}`} className="text-sm text-violet-600 hover:underline inline-flex items-center gap-1 break-all">
+                  <Mail size={13} /> {open.email}
+                </a>
+              )}
+            </div>
 
-      <Section title="Health scorecard">
-        <div className="space-y-3">
-          <HealthRow label="Engagement score" value={h.engagementScore} />
-          <HealthRow label="Satisfaction" value={h.satisfaction} />
-          <HealthRow label="Goal progress" value={h.goalProgress} />
-          <HealthRow label="Renewal probability" value={h.renewalProbability} />
-          <div className="grid grid-cols-2 gap-4 pt-1">
-            <Field label="Responsiveness"><StatusBadge status={h.responsiveness} /></Field>
+            {open.topics.length > 0 && (
+              <Section title="Topics they have raised">
+                <div className="flex flex-wrap gap-1.5">
+                  {open.topics.map((t) => <Chip key={t} tone="violet">{t}</Chip>)}
+                </div>
+              </Section>
+            )}
+
+            <Section title="Session history">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+                {open.bookings.map((b) => (
+                  <div key={b.id} className="p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{b.topic || 'Session'}</span>
+                      <StatusBadge status={b.status} />
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{formatDateTime(b.slot_starts_at)}</div>
+                    {b.notes && <p className="text-xs text-gray-600 dark:text-gray-400 mt-1.5">{b.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            </Section>
+
+            <p className="text-[11px] text-gray-400 dark:text-gray-500">
+              Private per-client notes are not stored yet — what you see here is
+              the booking record itself.
+            </p>
           </div>
-        </div>
-      </Section>
-
-      <Section title="Expansion opportunities"><BulletList items={h.expansion} tone="violet" /></Section>
-
-      <Section title="Engagement history">
-        <Timeline events={[...client.history].reverse()} renderMeta={(e) => `${formatDay(e.date)} · ${formatRelativeDay(e.date)}`} />
-      </Section>
-    </SlideOver>
-  );
-}
-
-function HealthRow({ label, value }) {
-  const tone = value >= 75 ? 'emerald' : value >= 50 ? 'amber' : 'rose';
-  return (
-    <div>
-      <div className="flex items-center justify-between text-xs mb-1">
-        <span className="text-gray-600 dark:text-gray-400">{label}</span>
-      </div>
-      <ProgressBar value={value} tone={tone} />
+        )}
+      </SlideOver>
     </div>
   );
 }

@@ -84,12 +84,46 @@ test('the pages and the fixture are gone, not orphaned', () => {
 });
 
 test('the Advisory tabs are deliberately still here', () => {
-  // D12 scoped these OUT: their home is task #124 against partner_office_hours.ts,
-  // blocked while /office-hours is do-not-touch. If someone withdraws them as
-  // "the same thing", this fails and points them at the decision.
-  assert.equal(existsSync(resolve(root, 'frontend/src/data/advisor/advisory.js')), true,
-    'the Advisory fixture stays until #124 unblocks — see DECISIONS.md D12');
+  // D12 scoped these OUT and this test asserted the FIXTURE had to stay until
+  // #124 unblocked. D31 corrected that: D12 named partner_office_hours.ts as
+  // the only possible home without checking `advisors.ts`, which carries the
+  // whole advisor side (profile, slots, bookings, transitions, reviews). The
+  // tabs are now wired there and the fixture is deleted.
+  //
+  // The intent survives and is what is asserted: these tabs are NOT the
+  // withdrawn Research tabs and must not be deleted as "the same thing". The
+  // mechanism changed because "still here" no longer requires a fixture.
+  assert.equal(existsSync(resolve(root, 'frontend/src/data/advisor/advisory.js')), false,
+    'the Advisory fixture is deleted — the tabs read advisors.ts now (DECISIONS.md D31)');
   assert.match(read('frontend/src/App.jsx'), /path="\/advisor\/advisory\/opportunities"/);
+  for (const p of [
+    'frontend/src/pages/advisor/advisory/OpportunitiesPage.jsx',
+    'frontend/src/pages/advisor/advisory/ClientsPage.jsx',
+    'frontend/src/pages/advisor/advisory/EngagementsPage.jsx',
+    'frontend/src/pages/advisor/advisory/DeliveryPage.jsx',
+    'frontend/src/pages/advisor/advisory/ContractsPage.jsx',
+  ]) {
+    assert.equal(existsSync(resolve(root, p)), true, `${p} must not be withdrawn`);
+  }
+});
+
+test('#124 stays frozen — wiring the Advisory tabs did not touch /office-hours', () => {
+  // D31's boundary, made checkable. The two were conflated by the shared word
+  // "advisory": /advisor/advisory/* reads advisors.ts, while the Advisory
+  // Practice canvas (#124) is /office-hours against partner_office_hours.ts and
+  // is on the do-not-touch list.
+  for (const p of [
+    'frontend/src/pages/advisor/advisory/OpportunitiesPage.jsx',
+    'frontend/src/pages/advisor/advisory/ClientsPage.jsx',
+    'frontend/src/pages/advisor/advisory/EngagementsPage.jsx',
+    'frontend/src/pages/advisor/advisory/DeliveryPage.jsx',
+    'frontend/src/pages/advisor/advisory/ContractsPage.jsx',
+  ]) {
+    const s = read(p);
+    assert.ok(!/office-hours/.test(s), `${p} reaches into /office-hours — #124 is frozen`);
+    assert.ok(!/partner-portal\/office/.test(s), `${p} calls a partner office-hours endpoint`);
+  }
+  assert.match(read('DECISIONS.md'), /### D31\./, 'D31 must record why D12 was corrected');
 });
 
 test('D9 carries the correction, so the wrong table is not re-read as fact', () => {
@@ -122,7 +156,8 @@ test('the decisions summary counts the decisions that are actually there', () =>
     'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
     'seventeen', 'eighteen', 'nineteen', 'twenty', 'twenty-one', 'twenty-two',
     'twenty-three', 'twenty-four', 'twenty-five', 'twenty-six', 'twenty-seven',
-    'twenty-eight', 'twenty-nine', 'thirty'];
+    'twenty-eight', 'twenty-nine', 'thirty', 'thirty-one', 'thirty-two',
+    'thirty-three', 'thirty-four', 'thirty-five'];
   const word = WORDS[numbered.length];
   assert.ok(word, `add ${numbered.length} to WORDS in this test`);
   assert.match(partOne, new RegExp(`All ${word} decisions are now resolved`),

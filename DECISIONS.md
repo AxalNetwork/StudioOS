@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All thirty decisions are now resolved. D6 is closed by D11, which repaired
+All thirty-one decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -1163,6 +1163,54 @@ binding parity, it has no objective test — "advisor" is a legitimate word for 
 person in this product, and a check that cannot tell the role from the
 regulated claim would flag the whole codebase on its first run. It needs a
 decision about which surfaces the rule governs before it can be written.
+
+
+### D31. `advisors.ts` was the advisor practice backend all along — D12 checked the wrong router
+
+**RESOLVED — the five `/advisor/advisory/*` tabs are wired; `/office-hours` (#124) stays frozen.**
+
+D12 scoped these tabs out with a claim that was half right:
+
+> `advisory.ts` is founder-facing (find an advisor, ask, diligence,
+> financial-plan), not advisor practice management. Its real home is the
+> Advisory Practice work against `partner_office_hours.ts`, which is task
+> **#124** and is blocked while `/office-hours` is on this pass's do-not-touch
+> list.
+
+The first sentence is correct and was verified again here. The second does not
+follow, and it is wrong: it names `partner_office_hours.ts` as the *only*
+possible home without checking **`advisors.ts`**, a different router carrying
+the entire advisor side:
+
+| Tab | Backend it now reads | Endpoint |
+| --- | --- | --- |
+| Opportunities | pending bookings + availability CRUD | `GET /advisors/me/bookings?status=pending`, `GET /advisors/:uid/slots`, `POST/DELETE /advisors/me/slots` |
+| Clients | derived from the advisor's own bookings | `GET /advisors/me/bookings` |
+| Engagements | confirmed/past sessions + lifecycle | `.../confirm`, `.../complete`, `.../no-show`, `.../cancel` |
+| Delivery | held sessions + the reviews clients filed | `GET /advisors/bookings/:id/reviews` |
+| Contracts | the advisor's e-sign envelopes | `GET /legal/esign` (server-scoped) |
+
+**This is D12's own failure mode, one level down.** D12 was written to record
+that "a router was matched against a tab by **name**, not by what it serves" —
+and then matched `advisory.ts` to the Advisory tabs by name, found it
+founder-facing, and stopped. Checking the adjacent router would have shown the
+material was there the whole time. Worth stating plainly because the lesson is
+not "D12 was careless": it is that *ruling a surface out* needs the same
+per-router verification as ruling one in, and only the second half got it.
+
+**#124 is untouched and still blocked.** `/office-hours` is a different route,
+a different canvas (Advisory Practice: session pricing, take-rate, paid booking,
+earnings ledger) and a different backend (`partner_office_hours.ts`). Nothing in
+this change reads or writes it. The two were conflated by the shared word
+"advisory"; they are separate work.
+
+**One honest gap remains, and is labelled in the product.** The canvas asks
+Delivery for a document deliverable trail with versions and opened/unopened
+receipts. No such store exists — `deliverable_snapshots` (migration 156) is
+cohort timing, not advisory — so the tab covers the post-session loop that *is*
+recorded and says on-screen that deliverables are not tracked yet. Pinned by
+`frontend/test/advisor_advisory_live.test.mjs`, which also fails if that notice
+is deleted without a store appearing.
 
 
 ## Part 2 — Decisions taken
