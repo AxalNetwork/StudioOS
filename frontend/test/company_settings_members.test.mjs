@@ -102,3 +102,43 @@ test('the new api method exists on both sides of the drift boundary', () => {
     'the worker must serve it',
   );
 });
+
+/* ------------------------------------------------------------------ *
+ * Settings: the two Account panes the canvas asked for (Wave 2)       *
+ * ------------------------------------------------------------------ */
+
+test('Settings renders Your companies and Documents & agreements', () => {
+  // Before Wave 2, SettingsPage.jsx made ZERO company or e-sign calls — both
+  // canvas panes were absent while both backends were live.
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  assert.ok(s.includes('api.listMyCompanies('), 'GET /company/memberships had no consumer');
+  assert.ok(s.includes('api.esignList('), 'GET /legal/esign had no consumer in Settings');
+  assert.ok(s.includes('<YourCompaniesSection'), 'the pane must be mounted, not just defined');
+  assert.ok(s.includes('<DocumentsAgreementsSection'), 'the pane must be mounted, not just defined');
+});
+
+test('Your companies reads the shape the worker actually returns', () => {
+  // Both of these were wrong in the first draft and would have failed SILENTLY
+  // — an unresolved field renders as nothing, so the pane would have looked
+  // fine while showing no roles at all. /company/memberships returns a BARE
+  // ARRAY and names the caller's role `my_role`.
+  const w = read('cloudflare-worker/src/routes/company.ts');
+  const i = w.indexOf("r.get('/company/memberships'");
+  const body = w.slice(i, i + 1200);
+  assert.match(body, /my_role: link\.role_in_company/, 'the worker exposes the role as my_role');
+  assert.match(body, /return c\.json\(out\)/, 'the worker returns a bare array, not {items}');
+
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  assert.match(s, /Array\.isArray\(r\)/, 'the pane must handle the bare-array response');
+  assert.match(s, /c\.my_role/, 'the pane must read my_role, not role_in_company');
+});
+
+test('Settings does not become a second company switcher', () => {
+  // Company context changes through ui/CompanySwitcher.jsx and nowhere else.
+  // This pane reports membership and links out; it must not call setCompany.
+  const s = read('frontend/src/pages/SettingsPage.jsx');
+  const i = s.indexOf('function YourCompaniesSection');
+  const body = s.slice(i, s.indexOf('function DocumentsAgreementsSection'));
+  assert.ok(!/setCompany\(/.test(body), 'switching belongs to CompanySwitcher alone');
+  assert.ok(!/useActiveCompany\(/.test(body), 'the pane lists memberships; it does not own active context');
+});
