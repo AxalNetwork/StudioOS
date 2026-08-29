@@ -1,216 +1,423 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Handshake, FileText, Receipt, Send } from 'lucide-react';
+import { api } from '../../../lib/api';
 import {
-  Briefcase, CheckCircle2, RefreshCw, FileSignature, ListChecks, Calendar, DollarSign,
-} from 'lucide-react';
-import {
-  PROJECTS, RETAINERS, CONTRACTS, DELIVERABLES, money, formatRelativeDay, formatDay,
-} from '../../../data/partner/operations';
-import {
-  Avatar, Chip, SubTabs, SlideOver, Section, Field, StatCard, EmptyState, Badge, ProgressBar,
+  Chip, Section, SlideOver, EmptyState, Badge, RowCard, SearchInput, FilterChips,
+  formatDay, formatRelativeDay, moneyUsd,
 } from './kit';
 
-// Engagements — project & contract management. Sub-tabs for active projects,
-// completed projects, retainers, contracts, and deliverables, with status and
-// progress. Projects open a detail slide-over.
-const TABS = [
-  { id: 'active', label: 'Active Projects', icon: Briefcase },
-  { id: 'completed', label: 'Completed', icon: CheckCircle2 },
-  { id: 'retainers', label: 'Retainers', icon: RefreshCw },
-  { id: 'contracts', label: 'Contracts', icon: FileSignature },
-  { id: 'deliverables', label: 'Deliverables', icon: ListChecks },
+// Engagements — the live BD pipeline (Wave 1a; previously fixture projects).
+//
+// Three views over the real needs → quotes → engagements state machine:
+//   Open requests — founder needs a partner can propose on (with the RFP),
+//                   including the proposal builder (BD Console canvas zone).
+//   My proposals  — submitted quotes with status and withdraw.
+//   Engagements   — accepted work with its lifecycle actions and the
+//                   invoice ledger (invoiced + awaiting-invoice rows).
+const VIEWS = [
+  { id: 'requests', label: 'Open requests' },
+  { id: 'proposals', label: 'My proposals' },
+  { id: 'engagements', label: 'Engagements' },
 ];
 
 export default function EngagementsPage() {
-  const [tab, setTab] = useState('active');
-  const [project, setProject] = useState(null);
+  const [view, setView] = useState('requests');
+  const [needs, setNeeds] = useState([]);
+  const [quotes, setQuotes] = useState([]);
+  const [engagements, setEngagements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [q, setQ] = useState('');
+  const [openNeed, setOpenNeed] = useState(null);
+  const [openEng, setOpenEng] = useState(null);
+  const [proposal, setProposal] = useState({ price: '', timeline_weeks: '', deliverables: '', notes: '' });
+  const [sending, setSending] = useState(false);
+  const [actionNote, setActionNote] = useState('');
 
-  const active = useMemo(() => PROJECTS.filter((p) => p.status === 'active'), []);
-  const completed = useMemo(() => PROJECTS.filter((p) => p.status === 'completed'), []);
-  const activeRetainerValue = useMemo(() => RETAINERS.filter((r) => r.status !== 'Closed').reduce((a, r) => a + r.monthly, 0), []);
+  const load = async () => {
+    setLoading(true); setError('');
+    const [n, mq, eng] = await Promise.allSettled([
+      api.listNeeds(), api.myQuotes(), api.listEngagements(),
+    ]);
+    if (n.status === 'fulfilled') setNeeds(n.value.items || []); else setError('Could not load open requests.');
+    if (mq.status === 'fulfilled') setQuotes(mq.value.items || []);
+    if (eng.status === 'fulfilled') setEngagements(eng.value.items || []);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const quotedNeedIds = useMemo(() => new Set(quotes.map((x) => x.need_id)), [quotes]);
+  const filteredNeeds = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return needs.filter((n) => !needle
+      || (n.title || '').toLowerCase().includes(needle)
+      || (n.description || '').toLowerCase().includes(needle)
+      || (n.category || '').toLowerCase().includes(needle));
+  }, [needs, q]);
+
+  const active = engagements.filter((e) => ['accepted', 'in_progress'].includes(e.status));
+  const wrapped = engagements.filter((e) => ['delivered', 'reviewed'].includes(e.status));
+  const invoiced = engagements.filter((e) => e.status === 'invoiced');
+
+  const startProposal = (n) => {
+    setOpenNeed(n);
+    setProposal({
+      price: '',
+      timeline_weeks: '',
+      // BD Console canvas: scope is pulled from the RFP rather than retyped.
+      deliverables: n?.rfp?.deliverables_md || '',
+      notes: '',
+    });
+  };
+
+  const submitProposal = async () => {
+    setSending(true); setError('');
+    try {
+      const price = Number(proposal.price);
+      if (!Number.isFinite(price) || price <= 0) throw new Error('Enter the proposal price in USD.');
+      if (!proposal.deliverables.trim()) throw new Error('Describe the deliverables.');
+      await api.submitQuote(openNeed.id, {
+        price,
+        timeline_weeks: proposal.timeline_weeks === '' ? null : Number(proposal.timeline_weeks),
+        deliverables: proposal.deliverables.trim(),
+        notes: proposal.notes.trim() || null,
+      });
+      setNotice(`Proposal sent for "${openNeed.title}".`);
+      setOpenNeed(null);
+      await load();
+      setView('proposals');
+    } catch (e) {
+      setError(e?.message || 'Could not submit the proposal.');
+    }
+    setSending(false);
+  };
+
+  const withdraw = async (quote) => {
+    setError('');
+    try { await api.withdrawQuote(quote.id); await load(); }
+    catch (e) { setError(e?.message || 'Could not withdraw the proposal.'); }
+  };
+
+  const engAction = async (e, action) => {
+    setError('');
+    try {
+      if (action === 'start') await api.startEngagement(e.id);
+      else if (action === 'deliver') await api.deliverEngagement(e.id, { delivery_notes: actionNote.trim() || undefined });
+      else if (action === 'cancel') await api.cancelEngagement(e.id, { reason: actionNote.trim() || undefined });
+      else if (action === 'invoice') await api.invoiceEngagement(e.id);
+      setActionNote('');
+      setOpenEng(null);
+      await load();
+    } catch (err) {
+      setError(err?.message || `Could not ${action} the engagement.`);
+    }
+  };
+
+  if (loading) {
+    return <div className="py-16 text-center text-sm text-gray-500 dark:text-gray-400">Loading your pipeline…</div>;
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Active projects" value={active.length} />
-        <StatCard label="Retainers" value={RETAINERS.length} hint={`${money(activeRetainerValue)}/mo`} />
-        <StatCard label="Contracts" value={CONTRACTS.length} />
-        <StatCard label="Open deliverables" value={DELIVERABLES.filter((d) => d.status !== 'done').length} />
-      </div>
-
-      <SubTabs tabs={TABS} value={tab} onChange={setTab} />
-
-      {tab === 'active' && <ProjectList projects={active} onOpen={setProject} emptyText="No active projects." />}
-      {tab === 'completed' && <ProjectList projects={completed} onOpen={setProject} emptyText="No completed projects." />}
-      {tab === 'retainers' && <Retainers />}
-      {tab === 'contracts' && <Contracts />}
-      {tab === 'deliverables' && <Deliverables />}
-
-      <ProjectDetail project={project} onClose={() => setProject(null)} />
-    </div>
-  );
-}
-
-function ProjectList({ projects, onOpen, emptyText }) {
-  if (projects.length === 0) return <EmptyState>{emptyText}</EmptyState>;
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {projects.map((p) => (
-        <button
-          key={p.id}
-          onClick={() => onOpen(p)}
-          className="text-left rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 hover:border-violet-300 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-900 dark:text-gray-100 truncate">{p.name}</span>
-            <Badge>{p.status}</Badge>
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{p.client} · {p.type}</div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{p.summary}</p>
-          <div className="mt-3"><ProgressBar value={p.progress} tone={p.status === 'completed' ? 'emerald' : 'violet'} /></div>
-          <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-            <span className="inline-flex items-center gap-1"><Calendar size={11} /> {formatDay(p.start)} → {formatDay(p.end)}</span>
-            <span>{money(p.budget)}</span>
-          </div>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Retainers() {
-  if (RETAINERS.length === 0) return <EmptyState>No retainers.</EmptyState>;
-  return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 dark:bg-gray-800/50 text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          <tr>
-            <th className="px-4 py-2.5 font-medium">Client</th>
-            <th className="px-4 py-2.5 font-medium">Scope</th>
-            <th className="px-4 py-2.5 font-medium">Monthly</th>
-            <th className="px-4 py-2.5 font-medium">Renewal</th>
-            <th className="px-4 py-2.5 font-medium">Status</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900">
-          {RETAINERS.map((r) => (
-            <tr key={r.id}>
-              <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{r.client}</td>
-              <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{r.scope}</td>
-              <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{money(r.monthly)}</td>
-              <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{formatRelativeDay(r.renewal)}</td>
-              <td className="px-4 py-3"><Badge>{r.status}</Badge></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function Contracts() {
-  if (CONTRACTS.length === 0) return <EmptyState>No contracts.</EmptyState>;
-  return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 dark:bg-gray-800/50 text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          <tr>
-            <th className="px-4 py-2.5 font-medium">Contract</th>
-            <th className="px-4 py-2.5 font-medium">Client</th>
-            <th className="px-4 py-2.5 font-medium">Type</th>
-            <th className="px-4 py-2.5 font-medium">Value</th>
-            <th className="px-4 py-2.5 font-medium">Term</th>
-            <th className="px-4 py-2.5 font-medium">Status</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900">
-          {CONTRACTS.map((c) => (
-            <tr key={c.id}>
-              <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">{c.title}</td>
-              <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{c.client}</td>
-              <td className="px-4 py-3"><Chip>{c.type}</Chip></td>
-              <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{money(c.value)}</td>
-              <td className="px-4 py-3 text-gray-600 dark:text-gray-400 whitespace-nowrap">{formatDay(c.start)} → {formatDay(c.end)}</td>
-              <td className="px-4 py-3"><Badge>{c.status}</Badge></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function Deliverables() {
-  if (DELIVERABLES.length === 0) return <EmptyState>No deliverables.</EmptyState>;
-  return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-      {DELIVERABLES.map((d) => (
-        <div key={d.id} className="flex items-center gap-3 p-3">
-          <ListChecks size={16} className="text-gray-400 flex-shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{d.name}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{d.client} · {d.project}</div>
-          </div>
-          <span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">{d.owner}</span>
-          <span className="text-xs text-gray-500 dark:text-gray-400 w-20 text-right">{formatRelativeDay(d.due)}</span>
-          <Badge>{d.status}</Badge>
+    <div className="space-y-5">
+      {error && (
+        <div className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 px-4 py-2.5 text-sm text-rose-700 dark:text-rose-300">{error}</div>
+      )}
+      {notice && (
+        <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2.5 text-sm text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+          <span>{notice}</span>
+          <button onClick={() => setNotice('')} className="text-emerald-600 text-xs font-medium">Dismiss</button>
         </div>
-      ))}
-    </div>
-  );
-}
+      )}
 
-function ProjectDetail({ project, onClose }) {
-  if (!project) return <SlideOver open={false} onClose={onClose} />;
-  const deliverables = DELIVERABLES.filter((d) => d.project === project.name && d.client === project.client);
-  return (
-    <SlideOver open onClose={onClose} title={project.name} subtitle={`${project.client} · ${project.type}`}>
-      <div className="flex items-center gap-2">
-        <Badge>{project.status}</Badge>
-        <Chip><DollarSign size={10} /> {money(project.budget)}</Chip>
-      </div>
+      <FilterChips options={VIEWS} value={view} onChange={setView} />
 
-      <p className="text-sm text-gray-700 dark:text-gray-300">{project.summary}</p>
-
-      <div>
-        <div className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Progress</div>
-        <ProgressBar value={project.progress} tone={project.status === 'completed' ? 'emerald' : 'violet'} />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Start">{formatDay(project.start)}</Field>
-        <Field label="Target end">{formatDay(project.end)}</Field>
-        <Field label="Lead">{project.lead}</Field>
-        <Field label="Budget">{money(project.budget)}</Field>
-      </div>
-
-      <Section title="Team">
-        <div className="space-y-2">
-          {project.team.map((t) => (
-            <div key={t} className="flex items-center gap-2.5">
-              <Avatar name={t} size={30} />
-              <span className="text-sm text-gray-900 dark:text-gray-100">{t}</span>
+      {view === 'requests' && (
+        <>
+          <SearchInput value={q} onChange={setQ} placeholder="Search open founder requests" />
+          {filteredNeeds.length === 0 ? (
+            <EmptyState>
+              {needs.length === 0
+                ? 'No open founder requests right now. New requests appear here as founders post them.'
+                : 'No requests match your search.'}
+            </EmptyState>
+          ) : (
+            <div className="space-y-2.5">
+              {filteredNeeds.map((n) => (
+                <RowCard key={n.id} onClick={() => startProposal(n)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{n.title}</div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <Chip tone="violet">{n.category}</Chip>
+                        <Badge>{n.status}</Badge>
+                        {n.rfp && <Chip tone="blue"><FileText size={10} /> RFP attached</Chip>}
+                        {quotedNeedIds.has(n.id) && <Chip tone="emerald">You proposed</Chip>}
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 line-clamp-2">{n.description}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {n.budget_min != null || n.budget_max != null
+                          ? `${n.budget_min != null ? moneyUsd(n.budget_min) : '…'}–${n.budget_max != null ? moneyUsd(n.budget_max) : '…'}`
+                          : 'Budget open'}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{n.timeline || 'Timeline open'}</div>
+                      <div className="text-[11px] text-gray-400 mt-1">{n.quote_count} proposal{n.quote_count === 1 ? '' : 's'}</div>
+                    </div>
+                  </div>
+                </RowCard>
+              ))}
             </div>
-          ))}
-        </div>
-      </Section>
+          )}
+        </>
+      )}
 
-      <Section title={`Deliverables (${deliverables.length})`}>
-        {deliverables.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">No deliverables recorded.</p>
+      {view === 'proposals' && (
+        quotes.length === 0 ? (
+          <EmptyState>No proposals yet. Browse Open requests and send your first one.</EmptyState>
         ) : (
-          <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
-            {deliverables.map((d) => (
-              <div key={d.id} className="flex items-center justify-between gap-2 p-2.5">
-                <div className="min-w-0">
-                  <div className="text-sm text-gray-900 dark:text-gray-100 truncate">{d.name}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">{d.owner} · {formatRelativeDay(d.due)}</div>
+          <div className="space-y-2.5">
+            {quotes.map((qt) => (
+              <div key={qt.id} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                      {qt.need_title || `Request #${qt.need_id}`}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <Badge tone={qt.status === 'accepted' ? 'emerald' : qt.status === 'rejected' ? 'rose' : qt.status === 'withdrawn' ? 'gray' : 'amber'}>
+                        {qt.status}
+                      </Badge>
+                      {qt.need_category && <Chip tone="violet">{qt.need_category}</Chip>}
+                      {qt.timeline_weeks != null && <Chip>{qt.timeline_weeks} wk</Chip>}
+                      <span className="text-[11px] text-gray-400">sent {formatRelativeDay(qt.created_at)}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 line-clamp-2">{qt.deliverables}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{moneyUsd(qt.price)}</div>
+                    {qt.status === 'submitted' && (
+                      <button
+                        onClick={() => withdraw(qt)}
+                        className="mt-2 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-400 hover:border-rose-300 hover:text-rose-500"
+                      >
+                        Withdraw
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <Badge>{d.status}</Badge>
               </div>
             ))}
           </div>
+        )
+      )}
+
+      {view === 'engagements' && (
+        <div className="space-y-6">
+          <Section title={`Active (${active.length})`}>
+            {active.length === 0 ? (
+              <EmptyState>No active engagements. Accepted proposals become engagements here.</EmptyState>
+            ) : (
+              <div className="space-y-2.5">
+                {active.map((e) => <EngagementRow key={e.id} e={e} onOpen={() => { setOpenEng(e); setActionNote(''); }} />)}
+              </div>
+            )}
+          </Section>
+
+          <Section title="Invoice ledger">
+            {wrapped.length === 0 && invoiced.length === 0 ? (
+              <EmptyState>Nothing to invoice yet — deliver an engagement and it appears here.</EmptyState>
+            ) : (
+              <div className="rounded-xl border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
+                {wrapped.map((e) => (
+                  <div key={e.id} className="flex items-center justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{e.need_title || `Engagement ${e.uid?.slice(0, 8)}`}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {e.project_name || e.founder_name || '—'} · delivered {formatDay(e.delivered_at)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="text-sm font-semibold tabular-nums">{moneyUsd(e.price)}</span>
+                      <button
+                        onClick={() => engAction(e, 'invoice')}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-700"
+                      >
+                        <Receipt size={12} /> Issue invoice
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {invoiced.map((e) => (
+                  <div key={e.id} className="flex items-center justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{e.need_title || `Engagement ${e.uid?.slice(0, 8)}`}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        Invoice {e.invoice_id} · {formatDay(e.invoiced_at)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-sm font-semibold tabular-nums">{moneyUsd(e.price)}</span>
+                      <Badge tone="blue">invoiced</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+        </div>
+      )}
+
+      {/* Need detail + proposal builder */}
+      <SlideOver
+        open={!!openNeed}
+        onClose={() => setOpenNeed(null)}
+        title={openNeed?.title || ''}
+        subtitle={openNeed ? `${openNeed.category} · ${openNeed.quote_count} proposal${openNeed.quote_count === 1 ? '' : 's'} so far` : ''}
+      >
+        {openNeed && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{openNeed.description}</p>
+            {openNeed.rfp ? (
+              <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-900/10 p-3.5">
+                <div className="text-[11px] uppercase tracking-wide text-blue-600 dark:text-blue-400 font-semibold mb-1.5">RFP scope</div>
+                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{openNeed.rfp.scope_md}</p>
+                {openNeed.rfp.deadline_at && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">Deadline {formatDay(openNeed.rfp.deadline_at)}</div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500 dark:text-gray-400">No formal RFP attached — propose against the description.</div>
+            )}
+
+            <div className="pt-1 border-t border-gray-100 dark:border-gray-800">
+              <div className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 font-semibold mt-3 mb-2">Your proposal</div>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400">Price (USD)</span>
+                    <input
+                      value={proposal.price}
+                      onChange={(e) => setProposal((p) => ({ ...p, price: e.target.value }))}
+                      inputMode="numeric"
+                      placeholder="e.g. 18000"
+                      className="mt-1 w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400">Timeline (weeks)</span>
+                    <input
+                      value={proposal.timeline_weeks}
+                      onChange={(e) => setProposal((p) => ({ ...p, timeline_weeks: e.target.value }))}
+                      inputMode="numeric"
+                      placeholder="e.g. 6"
+                      className="mt-1 w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2"
+                    />
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">Deliverables{openNeed.rfp?.deliverables_md ? ' (prefilled from the RFP — edit to your scope)' : ''}</span>
+                  <textarea
+                    value={proposal.deliverables}
+                    onChange={(e) => setProposal((p) => ({ ...p, deliverables: e.target.value }))}
+                    rows={5}
+                    className="mt-1 w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">Notes to the founder (optional)</span>
+                  <textarea
+                    value={proposal.notes}
+                    onChange={(e) => setProposal((p) => ({ ...p, notes: e.target.value }))}
+                    rows={2}
+                    className="mt-1 w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2"
+                  />
+                </label>
+                <button
+                  onClick={submitProposal}
+                  disabled={sending}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
+                >
+                  <Send size={14} /> {sending ? 'Sending…' : 'Send proposal'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
-      </Section>
-    </SlideOver>
+      </SlideOver>
+
+      {/* Engagement lifecycle actions */}
+      <SlideOver
+        open={!!openEng}
+        onClose={() => setOpenEng(null)}
+        title={openEng?.need_title || (openEng ? `Engagement ${openEng.uid?.slice(0, 8)}` : '')}
+        subtitle={openEng ? `${openEng.project_name || openEng.founder_name || ''} · ${moneyUsd(openEng.price)}` : ''}
+      >
+        {openEng && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge>{openEng.status}</Badge>
+              <Chip>Accepted {formatDay(openEng.created_at)}</Chip>
+              {openEng.delivered_at && <Chip tone="blue">Delivered {formatDay(openEng.delivered_at)}</Chip>}
+            </div>
+
+            <label className="block">
+              <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                Note (delivery notes, or a cancellation reason)
+              </span>
+              <textarea
+                value={actionNote}
+                onChange={(e) => setActionNote(e.target.value)}
+                rows={3}
+                className="mt-1 w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2"
+              />
+            </label>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {openEng.status === 'accepted' && (
+                <button onClick={() => engAction(openEng, 'start')} className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700">
+                  Start work
+                </button>
+              )}
+              {['accepted', 'in_progress'].includes(openEng.status) && (
+                <button onClick={() => engAction(openEng, 'deliver')} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
+                  Mark delivered
+                </button>
+              )}
+              {!['reviewed', 'invoiced', 'cancelled'].includes(openEng.status) && (
+                <button onClick={() => engAction(openEng, 'cancel')} className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400 hover:border-rose-300 hover:text-rose-500">
+                  Cancel engagement
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </SlideOver>
+    </div>
+  );
+}
+
+function EngagementRow({ e, onOpen }) {
+  return (
+    <RowCard onClick={onOpen}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-medium text-gray-900 dark:text-gray-100 inline-flex items-center gap-2">
+            <Handshake size={15} className="text-violet-500 flex-shrink-0" />
+            <span className="truncate">{e.need_title || `Engagement ${e.uid?.slice(0, 8)}`}</span>
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <Badge>{e.status}</Badge>
+            {e.need_category && <Chip tone="violet">{e.need_category}</Chip>}
+            {(e.project_name || e.founder_name) && <Chip>{e.project_name || e.founder_name}</Chip>}
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{moneyUsd(e.price)}</div>
+          <div className="text-[11px] text-gray-400 mt-0.5">since {formatDay(e.created_at)}</div>
+        </div>
+      </div>
+    </RowCard>
   );
 }

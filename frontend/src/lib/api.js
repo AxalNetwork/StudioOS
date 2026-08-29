@@ -667,6 +667,11 @@ export const api = {
   // Task #9 (X-2) — Authenticated partner deal portal.
   partnerPortal: {
     myDeal: () => request('/partner-portal/my-deal'),
+    // Wave 1a — the partner's real firm profile for Operations → Overview
+    // (replaces the BrightPath fixture). Per-field merge on PATCH: send only
+    // the edited keys; empty string clears company/specialization.
+    getProfile: () => request('/partner-portal/profile'),
+    updateProfile: (data) => request('/partner-portal/profile', { method: 'PATCH', body: JSON.stringify(data) }),
     setAcceptingIntros: (value) => request('/partner-portal/accepting-intros', { method: 'PATCH', body: JSON.stringify({ accepting_intros: value }) }),
     // Office-hours booking guidance the partner authors about themselves.
     // Worker: cloudflare-worker/src/routes/partner_portal.ts (D1 migration

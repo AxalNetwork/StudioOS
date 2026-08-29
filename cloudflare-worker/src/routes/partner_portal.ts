@@ -287,4 +287,76 @@ portal.patch('/office-hours-guidance', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// ---- Partner firm profile (Wave 1a — BD Console Overview) -----------------
+// The Operations → Overview tab previously rendered a hard-coded fictional
+// firm ("BrightPath Advisory") from a frontend fixture. These two endpoints
+// replace it with the partner's real row. The `partners` table is deliberately
+// thin — name, company, specialization, referral code, status,
+// accepting_intros — so the profile is exactly that; the UI shows honest
+// empty states rather than inventing a mission statement.
+//
+// Ownership mirrors the guidance endpoints: the row is ALWAYS resolved from
+// the authenticated user via requirePartnerProfile(); no partner id is
+// accepted from the body or URL.
+const P_MAX = { name: 120, company: 160, specialization: 240 };
+
+function profileDto(row: any) {
+  return {
+    id: row.id,
+    uid: row.uid,
+    name: row.name,
+    company: row.company || null,
+    email: row.email,
+    specialization: row.specialization || null,
+    referral_code: row.referral_code || null,
+    referrals_count: Number(row.referrals_count || 0),
+    status: row.status,
+    accepting_intros: !!row.accepting_intros,
+    created_at: row.created_at,
+  };
+}
+
+portal.get('/profile', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const partner = await requirePartnerProfile(c.env, user);
+    return c.json({ partner: profileDto(partner) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// Per-field merge, not a full replace: the Overview form edits one card and
+// sends only what changed. `undefined` leaves a field alone; an empty string
+// clears company/specialization to NULL. `name` is NOT NULL in the schema and
+// is how quotes attribute this partner to founders, so clearing it is a 400
+// rather than a silent keep.
+portal.patch('/profile', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const partner = await requirePartnerProfile(c.env, user);
+    const body = await c.req.json().catch(() => ({} as any));
+
+    const sets: string[] = [];
+    const params: any[] = [];
+    for (const k of ['name', 'company', 'specialization'] as const) {
+      const v = (body as any)[k];
+      if (v === undefined) continue;
+      if (v !== null && typeof v !== 'string') return c.json({ detail: `${k} must be a string` }, 400);
+      const s = typeof v === 'string' ? v.replace(/\r\n/g, '\n').trim().slice(0, P_MAX[k]) : '';
+      if (k === 'name') {
+        if (!s) return c.json({ detail: 'name must be a non-empty string' }, 400);
+        sets.push('name = ?'); params.push(s);
+      } else {
+        sets.push(`${k} = ?`); params.push(s ? s : null);
+      }
+    }
+    if (!sets.length) return c.json({ detail: 'Nothing to update' }, 400);
+    params.push(partner.id);
+    const row = await c.env.DB.prepare(
+      `UPDATE partners SET ${sets.join(', ')} WHERE id = ? RETURNING *`,
+    ).bind(...params).first<any>();
+    if (!row) return c.json({ detail: 'Partner not found' }, 404);
+    return c.json({ partner: profileDto(row) });
+  } catch (e) { return mapError(c, e); }
+});
+
 export default portal;

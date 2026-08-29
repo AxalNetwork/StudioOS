@@ -1,179 +1,154 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Layers, Award } from 'lucide-react';
+import { api } from '../../../lib/api';
 import {
-  Building2, Quote, Trophy, FileText, Calendar, Sparkles, MessageSquare,
-} from 'lucide-react';
-import {
-  CLIENTS, PORTFOLIO_COMPANIES, CASE_STUDIES, SUCCESS_STORIES, REFERENCES, formatRelativeDay,
-} from '../../../data/partner/operations';
-import {
-  Avatar, Chip, SubTabs, SlideOver, Section, Field, EmptyState, Badge, BulletList, RowCard,
+  Chip, Section, SlideOver, EmptyState, Badge, RowCard, StatCard, Stars,
+  formatDay, moneyUsd,
 } from './kit';
 
-// Portfolio — proof of work. Sub-tabs for clients, portfolio companies supported,
-// case studies (with a detail panel), success stories, and references.
-const TABS = [
-  { id: 'clients', label: 'Clients', icon: Building2 },
-  { id: 'companies', label: 'Companies', icon: Sparkles },
-  { id: 'cases', label: 'Case Studies', icon: FileText },
-  { id: 'stories', label: 'Success Stories', icon: Trophy },
-  { id: 'references', label: 'References', icon: MessageSquare },
-];
-
+// Portfolio — proof of work, from REAL engagements (Wave 1a; previously six
+// fictional clients and three fabricated case studies with invented metrics).
+//
+// Everything here is derived from delivered/reviewed/invoiced engagement rows
+// and the reviews founders actually left. There is deliberately no free-form
+// "case study" authoring in this pass: proof a partner writes about
+// themselves and proof a counterparty recorded are different classes of
+// evidence, and only the second exists in the schema today.
 export default function PortfolioPage() {
-  const [tab, setTab] = useState('clients');
-  const [caseStudy, setCaseStudy] = useState(null);
+  const [engagements, setEngagements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [open, setOpen] = useState(null);
+  const [reviews, setReviews] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await api.listEngagements();
+        setEngagements(r.items || []);
+      } catch (e) {
+        setError(e?.message || 'Could not load engagements.');
+      }
+      setLoading(false);
+    })();
+  }, []);
+
+  const openDetail = async (e) => {
+    setOpen(e); setReviews(null);
+    try {
+      const r = await api.listEngagementReviews(e.id);
+      setReviews(r.items || []);
+    } catch { setReviews([]); }
+  };
+
+  if (loading) {
+    return <div className="py-16 text-center text-sm text-gray-500 dark:text-gray-400">Loading your track record…</div>;
+  }
+
+  const done = engagements.filter((e) => ['delivered', 'reviewed', 'invoiced'].includes(e.status));
+  const deliveredValue = done.reduce((a, e) => a + (Number(e.price) || 0), 0);
+  const clients = new Set(done.map((e) => e.project_name || e.founder_name || e.founder_id));
 
   return (
-    <div className="space-y-4">
-      <SubTabs tabs={TABS} value={tab} onChange={setTab} />
+    <div className="space-y-6">
+      {error && (
+        <div className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 px-4 py-2.5 text-sm text-rose-700 dark:text-rose-300">{error}</div>
+      )}
 
-      {tab === 'clients' && <Clients />}
-      {tab === 'companies' && <Companies />}
-      {tab === 'cases' && <CaseStudies onOpen={setCaseStudy} />}
-      {tab === 'stories' && <Stories />}
-      {tab === 'references' && <References />}
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard label="Completed engagements" value={done.length} />
+        <StatCard label="Clients served" value={clients.size} />
+        <StatCard label="Delivered value" value={moneyUsd(deliveredValue)} />
+      </div>
 
-      <CaseStudyDetail item={caseStudy} onClose={() => setCaseStudy(null)} />
-    </div>
-  );
-}
-
-function Clients() {
-  if (CLIENTS.length === 0) return <EmptyState>No clients yet.</EmptyState>;
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {CLIENTS.map((c) => (
-        <div key={c.id} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-11 h-11 rounded-lg bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 flex items-center justify-center flex-shrink-0">
-              <Building2 size={20} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900 dark:text-gray-100 truncate">{c.name}</span>
-                <Badge>{c.status}</Badge>
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{c.industry} · {c.stage}</div>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <Chip tone="violet">{c.relationship}</Chip>
-                <Chip><Calendar size={10} /> Since {c.since.slice(0, 4)}</Chip>
-              </div>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Companies() {
-  if (PORTFOLIO_COMPANIES.length === 0) return <EmptyState>No portfolio companies yet.</EmptyState>;
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {PORTFOLIO_COMPANIES.map((c) => (
-        <div key={c.name} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-          <div className="font-medium text-gray-900 dark:text-gray-100">{c.name}</div>
-          <Chip tone="emerald" className="mt-1.5">{c.sector}</Chip>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{c.note}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CaseStudies({ onOpen }) {
-  if (CASE_STUDIES.length === 0) return <EmptyState>No case studies yet.</EmptyState>;
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {CASE_STUDIES.map((cs) => (
-        <RowCard key={cs.id} onClick={() => onOpen(cs)}>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-semibold text-gray-900 dark:text-gray-100">{cs.client}</span>
-            <Chip tone="emerald">{cs.industry}</Chip>
-          </div>
-          <div className="text-sm text-gray-700 dark:text-gray-300">{cs.title}</div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {cs.metrics.slice(0, 3).map((m) => (
-              <div key={m.label} className="rounded-lg bg-gray-50 dark:bg-gray-800 px-2.5 py-1.5">
-                <div className="text-sm font-bold text-violet-700 dark:text-violet-300">{m.value}</div>
-                <div className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400">{m.label}</div>
-              </div>
+      <Section title="Completed work">
+        {done.length === 0 ? (
+          <EmptyState>
+            <p className="font-medium text-gray-700 dark:text-gray-300">No completed engagements yet.</p>
+            <p className="mt-1">
+              Your track record builds itself: win a founder request in
+              Engagements, deliver it, and it appears here with the founder&apos;s review.
+            </p>
+          </EmptyState>
+        ) : (
+          <div className="space-y-2.5">
+            {done.map((e) => (
+              <RowCard key={e.id} onClick={() => openDetail(e)}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 dark:text-gray-100 inline-flex items-center gap-2">
+                      <Layers size={15} className="text-violet-500 flex-shrink-0" />
+                      <span className="truncate">{e.need_title || `Engagement ${e.uid?.slice(0, 8)}`}</span>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <Badge>{e.status}</Badge>
+                      {e.need_category && <Chip tone="violet">{e.need_category}</Chip>}
+                      {(e.project_name || e.founder_name) && <Chip>{e.project_name || e.founder_name}</Chip>}
+                    </div>
+                    {e.delivery_notes && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 line-clamp-2">{e.delivery_notes}</p>
+                    )}
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{moneyUsd(e.price)}</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">delivered {formatDay(e.delivered_at)}</div>
+                  </div>
+                </div>
+              </RowCard>
             ))}
           </div>
-          <div className="text-xs text-gray-400 dark:text-gray-500 mt-3">{formatRelativeDay(cs.date)}</div>
-        </RowCard>
-      ))}
-    </div>
-  );
-}
+        )}
+      </Section>
 
-function Stories() {
-  if (SUCCESS_STORIES.length === 0) return <EmptyState>No success stories yet.</EmptyState>;
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-      {SUCCESS_STORIES.map((s) => (
-        <div key={s.id} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-col">
-          <Trophy size={18} className="text-amber-500" />
-          <div className="text-lg font-bold text-violet-700 dark:text-violet-300 mt-2">{s.metric}</div>
-          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-1">{s.headline}</div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex-1">“{s.quote}”</p>
-          <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mt-3">— {s.client}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function References() {
-  if (REFERENCES.length === 0) return <EmptyState>No references yet.</EmptyState>;
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {REFERENCES.map((r) => (
-        <div key={r.id} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-          <Quote size={16} className="text-violet-400" />
-          <p className="text-sm text-gray-700 dark:text-gray-300 mt-1.5">“{r.quote}”</p>
-          <div className="flex items-center gap-2.5 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
-            <Avatar name={r.name} size={36} />
-            <div className="min-w-0">
-              <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{r.name}</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{r.title}, {r.company}</div>
+      <SlideOver
+        open={!!open}
+        onClose={() => setOpen(null)}
+        title={open?.need_title || (open ? `Engagement ${open.uid?.slice(0, 8)}` : '')}
+        subtitle={open ? `${open.project_name || open.founder_name || ''} · delivered ${formatDay(open.delivered_at)}` : ''}
+      >
+        {open && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">Value</div>
+                <div className="text-sm font-semibold">{moneyUsd(open.price)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">Status</div>
+                <Badge>{open.status}</Badge>
+              </div>
             </div>
-            <Chip className="ml-auto">{r.relationship}</Chip>
+            {open.delivery_notes && (
+              <div>
+                <div className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Delivery notes</div>
+                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{open.delivery_notes}</p>
+              </div>
+            )}
+            <Section title="Reviews">
+              {reviews === null ? (
+                <div className="text-sm text-gray-500">Loading reviews…</div>
+              ) : reviews.length === 0 ? (
+                <EmptyState>No review left on this engagement.</EmptyState>
+              ) : (
+                <div className="space-y-2.5">
+                  {reviews.map((r) => (
+                    <div key={r.id || r.uid} className="rounded-xl border border-gray-200 dark:border-gray-800 p-3.5">
+                      <div className="flex items-center justify-between">
+                        <Stars value={r.rating} showValue={false} />
+                        <Chip tone={r.reviewer_role === 'founder' ? 'emerald' : 'violet'}>
+                          <Award size={10} /> {r.reviewer_role}
+                        </Chip>
+                      </div>
+                      {r.comment && <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">“{r.comment}”</p>}
+                      <div className="text-[11px] text-gray-400 mt-2">{formatDay(r.created_at)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
           </div>
-        </div>
-      ))}
+        )}
+      </SlideOver>
     </div>
-  );
-}
-
-function CaseStudyDetail({ item, onClose }) {
-  if (!item) return <SlideOver open={false} onClose={onClose} />;
-  return (
-    <SlideOver open onClose={onClose} title={item.title} subtitle={`${item.client} · ${item.industry}`}>
-      <div className="flex flex-wrap gap-1.5">
-        {item.services.map((s) => <Chip key={s} tone="violet">{s}</Chip>)}
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        {item.metrics.map((m) => (
-          <div key={m.label} className="rounded-xl border border-gray-200 dark:border-gray-800 p-3 text-center">
-            <div className="text-lg font-bold text-violet-700 dark:text-violet-300">{m.value}</div>
-            <div className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-0.5">{m.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <Section title="Challenge">
-        <p className="text-sm text-gray-700 dark:text-gray-300">{item.challenge}</p>
-      </Section>
-      <Section title="Approach">
-        <p className="text-sm text-gray-700 dark:text-gray-300">{item.approach}</p>
-      </Section>
-      <Section title="Results">
-        <BulletList items={item.results} tone="emerald" />
-      </Section>
-
-      <Field label="Delivered">{formatRelativeDay(item.date)}</Field>
-    </SlideOver>
   );
 }

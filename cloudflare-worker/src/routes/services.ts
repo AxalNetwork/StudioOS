@@ -48,11 +48,15 @@ function serialize(o: Offering): SerializedOffering {
 function isAdmin(u: User): boolean { return u.role === 'admin'; }
 
 services.get('/offerings', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const q = (c.req.query('q') || '').trim().toLowerCase();
   const category = (c.req.query('category') || '').trim();
-  let where = 'is_active = 1';
-  const params: string[] = [];
+  // Wave 1a — `?mine=1` returns the caller's OWN catalog for the Operations →
+  // Capabilities tab, including inactive drafts (an owner manages the whole
+  // set; the marketplace listing below stays active-only for everyone else).
+  const mine = c.req.query('mine') === '1';
+  let where = mine ? 'owner_user_id = ?' : 'is_active = 1';
+  const params: (string | number)[] = mine ? [user.id] : [];
   if (category) { where += ' AND category = ?'; params.push(category); }
   const rows = await c.env.DB.prepare(
     `SELECT * FROM service_offerings WHERE ${where} ORDER BY created_at DESC LIMIT 200`,

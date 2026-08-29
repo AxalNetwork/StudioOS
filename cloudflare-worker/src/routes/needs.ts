@@ -313,6 +313,23 @@ quotesRouter.get('/me', async (c) => {
       : await c.env.DB.prepare(sql).bind(user.partner_id ?? -1).all<Quote>();
     const items: any[] = [];
     for (const q of rows.results || []) items.push(await quoteDto(c.env, q));
+    // Wave 1a — attach the need's title/status so the Operations "Proposals"
+    // list can say what each quote was FOR. Additive keys; batch lookup
+    // (placeholders only — no values are interpolated into the SQL text).
+    const needIds = [...new Set(items.map((i) => i.need_id).filter((n) => Number.isFinite(n)))];
+    if (needIds.length) {
+      const ph = needIds.map(() => '?').join(',');
+      const needRows = await c.env.DB.prepare(
+        `SELECT id, title, status, category FROM founder_needs WHERE id IN (${ph})`,
+      ).bind(...needIds).all<any>();
+      const byId = new Map((needRows.results || []).map((n: any) => [n.id, n]));
+      for (const it of items) {
+        const n = byId.get(it.need_id);
+        it.need_title = n?.title ?? null;
+        it.need_status = n?.status ?? null;
+        it.need_category = n?.category ?? null;
+      }
+    }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
 });
@@ -428,11 +445,25 @@ engagementsRouter.get('/', async (c) => {
     const user = await requireAuth(c);
     let where = '1=1';
     const params: any[] = [];
-    if (isPartner(user)) { where = 'partner_id = ?'; params.push(user.partner_id ?? -1); }
-    else if (isFounder(user)) { where = 'founder_id = ?'; params.push(user.founder_id ?? -1); }
+    if (isPartner(user)) { where = 'e.partner_id = ?'; params.push(user.partner_id ?? -1); }
+    else if (isFounder(user)) { where = 'e.founder_id = ?'; params.push(user.founder_id ?? -1); }
     else if (!isAdmin(user)) { return c.json({ items: [] }); }
+    // Wave 1a — the list now carries display names so the Operations tabs can
+    // render "who is this engagement with" without an N+1 fetch per row. All
+    // additive keys; the bare-id shape every existing consumer reads is
+    // unchanged. LEFT JOINs on purpose: a deleted project or need must not
+    // hide the engagement row itself.
     const rows = await c.env.DB.prepare(
-      `SELECT * FROM engagements WHERE ${where} ORDER BY created_at DESC LIMIT 200`
+      `SELECT e.*, p.name AS project_name, fn.title AS need_title,
+              fn.category AS need_category,
+              pt.name AS partner_name, pt.company AS partner_company,
+              f.name AS founder_name
+         FROM engagements e
+         LEFT JOIN projects p ON p.id = e.project_id
+         LEFT JOIN founder_needs fn ON fn.id = e.need_id
+         LEFT JOIN partners pt ON pt.id = e.partner_id
+         LEFT JOIN founders f ON f.id = e.founder_id
+        WHERE ${where} ORDER BY e.created_at DESC LIMIT 200`
     ).bind(...params).all<Engagement>();
     return c.json({ items: (rows.results || []).map(engagementDto) });
   } catch (e) { return mapError(c, e); }
