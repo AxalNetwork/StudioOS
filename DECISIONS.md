@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All eighteen decisions are now resolved. D6 is closed by D11, which repaired
+All nineteen decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -543,6 +543,61 @@ table is absent. Nearly every call site sat in a swallowing `catch`: the failure
 mode of a missing table is not an error, it is a feature that quietly returns
 nothing. That is the third time this repo has been wrong about something because
 a check matched a name instead of the material (see D9, D14).
+
+### D19. The async scorer gets its own table, and the harvest gets tested
+
+D18's table check has a sibling one level finer: columns. Fourteen INSERTs
+named a column that does not exist — every one inside a swallowing `catch`, so
+every one a row that has never been written. The assistant's activity log, the
+Slack admin audit row, an imported pitch deck, the audit `actor` seven admin
+routers probe for, and the queue consumer's own error-reporting path, whose
+comment says it exists to "surface the bug in `error_logs`" and which surfaced
+nothing.
+
+Thirteen were mechanical: three renames onto the columns that do exist
+(`entity_type`/`entity_id`, `admin_user_id`/`filters_json`, dropping a
+`pitch_decks.updated_at` neither definition has), and migration 178 adding the
+two sets that were genuinely absent.
+
+**The fourteenth was not, and it is the decision.** `queueWorker`'s `ai_scoring`
+job wrote into `score_snapshots` under five wrong names. Correcting them looked
+like the obvious repair and was the wrong one: the two scorers are different
+instruments. `routes/scoring.ts` produces 6 dimensions on 0–100 with sub-scores,
+runs `detectAnomalies` **before** the insert — its own comment warns that the
+other order silently swallows the flags — and stamps integrity, sandbox and
+official-week provenance. `ai-workers/scoring.ts` produces 4 category totals on
+a 0–75 scale with none of that. `score_snapshots.tier` is NOT NULL against
+thresholds of 85 and 70, which a 0–75 total can never reach, so every async row
+would be `rejected` by arithmetic rather than judgement — and seventeen
+consumers read that table, including deal memos, the Spin-Out Lab deck and the
+public pages.
+
+So migration 179 gives it `ai_score_drafts`, deliberately with **no `tier`
+column**: a tier is a decision and this scorer is not equipped to make one. The
+scales live in the column names (`total_0_75`) so nobody reads them as the
+canonical dimensions. Nothing consumes the table yet, which is the point — it
+is queryable evidence of what the async scorer produced, not an input to
+anything that decides. Same instinct as the funds honesty rule: an unaudited
+number is not a cheaper version of an audited one.
+
+**The harvest is now tested, because it was wrong six times.** Every fault
+made the guard name something that exists, except the last, which made it stop
+reading: `--` comments unstripped; then stripped *after* the comma split, so a
+comment containing a comma swallowed the columns below it; `KEY` treated as a
+constraint when SQLite has no such table constraint, so a column named `key`
+vanished; DDL built by `'…' + '…'` read only to its first fragment; `ALTER
+TABLE ${table}` unresolvable; and an apostrophe inside a `--` comment opening a
+string scan that ate the rest of the statement. The reported count fell 106 →
+27 → 20 → 18 → 16 → 14 as each was fixed, and the fourteen that survived were
+each confirmed by reading the DDL. `test/schema_guards.test.mjs` pins all six.
+
+**One of those faults was in a shipped guard.** `sqlStrings` skipped only
+whitespace between `.prepare(` and the opening quote, so a query introduced by
+an explanatory comment was invisible to *every* check built on it — the dialect
+guard included. Six such strings existed; writing a seventh is how it surfaced,
+when a probe that should have failed passed instead. That is the argument for
+probing a guard rather than trusting it: the blind spot was not in the finding,
+it was in the instrument, and only a deliberate injection could show it.
 
 ## Part 2 — Decisions taken
 

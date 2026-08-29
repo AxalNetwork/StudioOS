@@ -55,12 +55,29 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
   }
   switch (job.job_type) {
     case 'ai_scoring': {
+      // Writes to `ai_score_drafts`, not `score_snapshots` (migration 179).
+      // This scorer produces 4 category totals on a 0-75 scale with no
+      // sub-scores, no anomaly detection and no integrity stamp; the canonical
+      // table is 6 dimensions on 0-100 with all three, and seventeen consumers
+      // read it — including the tier decision, whose thresholds a 0-75 total
+      // can never reach. The previous INSERT named five columns that do not
+      // exist and swallowed the error, so no row was ever written; correcting
+      // the names would have started mixing the two instruments instead.
       const result = await aiScoreDeal(env, payload);
-      await env.DB.prepare(
-        `INSERT INTO score_snapshots (project_id, market_score, team_score, product_score, capital_score, total_score, ai_rationale)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).bind(payload.project_id, result.market, result.team, result.product, result.capital, result.total, result.rationale)
-        .run().catch(() => {});
+      try {
+        await env.DB.prepare(
+          `INSERT INTO ai_score_drafts (project_id, market_0_25, team_0_20, product_0_15, capital_0_15, total_0_75, rationale, model)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          payload.project_id, result.market, result.team, result.product,
+          result.capital, result.total, result.rationale,
+          env.AI ? '@cf/meta/llama-3.1-8b-instruct' : null,
+        ).run();
+      } catch (e: any) {
+        // Logged, not swallowed. A silent catch here is what hid the broken
+        // column names for as long as it did.
+        console.error('[queueWorker] ai_score_drafts insert failed:', e?.message);
+      }
       return;
     }
     case 'traction_review': {

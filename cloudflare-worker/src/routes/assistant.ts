@@ -719,10 +719,14 @@ assistant.post('/message', async (c) => {
         send('error', { message: (e as Error).message || 'assistant failed' });
       } finally {
         // Hashed-actor activity log (T22.1) — never log plaintext email.
+        // `entity_type` / `entity_id`, not `target_*`: those are the columns
+        // migration 036 added and the only ones the table has. With the old
+        // names the whole INSERT threw "no such column" into the catch below,
+        // so no assistant message has ever been logged.
         try {
           const actor = await hashEmail(user.email);
           await c.env.DB.prepare(
-            "INSERT INTO activity_logs (user_id, actor, action, target_type, target_id, details, created_at) VALUES (?, ?, 'assistant_message', 'assistant_conversation', ?, ?, datetime('now'))"
+            "INSERT INTO activity_logs (user_id, actor, action, entity_type, entity_id, details, created_at) VALUES (?, ?, 'assistant_message', 'assistant_conversation', ?, ?, datetime('now'))"
           ).bind(user.id, actor, String(conv!.id), JSON.stringify({ model: usedModel, in: totalIn, out: totalOut, cost_micros: totalCost })).run();
         } catch {}
         close();

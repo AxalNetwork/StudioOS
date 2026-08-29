@@ -81,9 +81,23 @@ function walk(dir) {
  */
 export function sqlStrings(src) {
   const out = [];
-  for (const m of src.matchAll(/(?:\.prepare\(|\bsql|\.exec\()\s*([`'"])/g)) {
-    const q = m[1];
-    const i = m.index + m[0].length - 1;
+  for (const m of src.matchAll(/(?:\.prepare\(|\bsql|\.exec\()/g)) {
+    // Skip whitespace AND comments before the opening quote. Only whitespace
+    // was skipped originally, so a query introduced by an explanatory comment —
+    //   await env.DB.prepare(
+    //     // why this query is shaped this way
+    //     `SELECT …`
+    // — was invisible to every check built on this function. Six such strings
+    // existed in the worker, and writing one more was how it came to light.
+    let i = m.index + m[0].length;
+    for (;;) {
+      while (i < src.length && /\s/.test(src[i])) i += 1;
+      if (src[i] === '/' && src[i + 1] === '/') { const n = src.indexOf('\n', i); if (n < 0) { i = src.length; break; } i = n + 1; continue; }
+      if (src[i] === '/' && src[i + 1] === '*') { const n = src.indexOf('*/', i); if (n < 0) { i = src.length; break; } i = n + 2; continue; }
+      break;
+    }
+    const q = src[i];
+    if (q !== '`' && q !== "'" && q !== '"') continue;
     let j = i + 1;
     while (j < src.length) {
       if (src[j] === '\\') { j += 2; continue; }
@@ -92,7 +106,7 @@ export function sqlStrings(src) {
     }
     const body = src.slice(i + 1, j);
     if (/\b(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|WITH)\b/i.test(body)) {
-      out.push({ body, line: src.slice(0, m.index).split('\n').length });
+      out.push({ body, line: src.slice(0, i).split('\n').length });
     }
   }
   return out;
