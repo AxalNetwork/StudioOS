@@ -55,7 +55,7 @@
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, relative } from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -284,11 +284,34 @@ function extractClientCalls(src) {
 // ---------------------------------------------------------------------------
 const ENVELOPE_KEYS = /(^|[{,\s])(error|detail|message|errors)\s*:/;
 
+/**
+ * Every `.ts` under routes/, at any depth.
+ *
+ * This used to be a bare `readdirSync(ROUTES_DIR)`, which was correct while
+ * the directory was flat and would have FAILED SILENTLY the moment it was
+ * not: a route moved into `routes/admin/` would simply stop being checked,
+ * and the guard would keep printing a pass. That is the worst failure mode a
+ * guard has — CLAUDE.md points at this script as the thing enforcing the
+ * api.js ↔ worker rule on every PR, so a hole in it is a hole in the rule.
+ *
+ * Nothing is nested today. The walk is here so that organising the directory
+ * later is a safe move rather than one that quietly removes coverage.
+ */
+function routeFiles(dir = ROUTES_DIR) {
+  const out = [];
+  for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const p = resolve(dir, e.name);
+    if (e.isDirectory()) out.push(...routeFiles(p));
+    else if (e.name.endsWith('.ts')) out.push(p);
+  }
+  return out;
+}
+
 function findEnvelopeViolations() {
   const out = [];
   let checked = 0;
-  for (const name of readdirSync(ROUTES_DIR).filter((f) => f.endsWith('.ts')).sort()) {
-    const src = readFileSync(resolve(ROUTES_DIR, name), 'utf8');
+  for (const file of routeFiles()) {
+    const src = readFileSync(file, 'utf8');
     const re = /c\.json\(\s*\{/g;
     let m;
     while ((m = re.exec(src)) !== null) {
@@ -305,7 +328,7 @@ function findEnvelopeViolations() {
       checked++;
       if (ENVELOPE_KEYS.test(literal)) continue;
       const line = src.slice(0, m.index).split('\n').length;
-      out.push(`${name}:${line} (${status})`);
+      out.push(`${relative(ROOT, file)}:${line} (${status})`);
     }
   }
   return { violations: out.sort(), checked };
