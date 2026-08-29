@@ -77,6 +77,7 @@
     "placeholders @ routes/email.ts": 2,
     "placeholders @ routes/financials.ts": 1,
     "placeholders @ routes/market_intel.ts": 2,
+    "placeholders @ routes/messages.ts": 1,
     "placeholders @ routes/networkfx.ts": 1,
     "placeholders @ routes/notifications.ts": 1,
     "placeholders @ routes/pipeline.ts": 4,

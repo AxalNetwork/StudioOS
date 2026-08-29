@@ -223,6 +223,7 @@ const MetricsPage = lazy(() => import('./pages/MetricsPage'));
 const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
+const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
@@ -1444,6 +1445,11 @@ function AppInner() {
       <Route path="/raise/capital/cap-table" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       {/* Founders manage their room; investors see what was shared with them. One route, role-branched inside the page, so there is no second root. */}
       <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'], <DataRoomPage user={user} />)} />
+      {/* Every persona, listed explicitly. `guard([])` would deny everyone —
+          RoleGuard tests `allowedRoles.includes(effectiveRole)`, which is
+          always false on an empty array, so the route would exist and be
+          unreachable. */}
+      <Route path="/messages" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MessagesPage user={user} />)} />
       <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
       <Route path="/raise/legal-engine/incorporation" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />

@@ -2169,6 +2169,16 @@ export const api = {
   dataRoomRevoke: (projectUid, uid) =>
     request(`/data-room/${encodeURIComponent(projectUid)}/grants/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
   dataRoomsSharedWithMe: () => request('/data-room/shared'),
+
+  // Messages (migration 185 + routes/messages.ts). Membership is the only key:
+  // every one of these 404s for a thread the caller is not in.
+  messageThreads: () => request('/messages'),
+  messageThread: (uid) => request(`/messages/${encodeURIComponent(uid)}`),
+  messageStartThread: (data) => request('/messages', { method: 'POST', body: JSON.stringify(data || {}) }),
+  messageSend: (uid, body) =>
+    request(`/messages/${encodeURIComponent(uid)}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
+  messageMarkRead: (uid) => request(`/messages/${encodeURIComponent(uid)}/read`, { method: 'POST' }),
+  messageArchive: (uid) => request(`/messages/${encodeURIComponent(uid)}/archive`, { method: 'POST' }),
   dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
   dataRoomDownload: (projectUid, uid) =>
     request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
