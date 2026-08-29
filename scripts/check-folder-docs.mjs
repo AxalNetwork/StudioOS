@@ -27,7 +27,7 @@
  * legitimately point at `index.ts` one level up, or at a sibling module. What
  * it may not do is name something that is not there at all.
  */
-import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 
 const ROOT = resolve(process.cwd());

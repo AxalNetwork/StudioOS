@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
 import { useToast } from '../components/useToast';
 import {
-  User, ShieldCheck, Bell, Lock,
+  User, ShieldCheck, Bell,
   Camera, Save, AlertTriangle, CheckCircle2, Trash2, LogOut, Download,
   Plus, X, KeyRound, Palette, Plug, CreditCard,
   Sun, Moon, ChevronDown, Check, Ban, Scale, Loader2, Activity,
