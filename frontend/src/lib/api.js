@@ -2118,6 +2118,10 @@ export const api = {
   createCompany: (data) => request('/company/create', { method: 'POST', body: JSON.stringify(data) }),
   updateCompany: (uid, data) => request(`/company/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
   addCompanyMember: (uid, data) => request(`/company/${uid}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  // Wave 2 — role change / primary-admin transfer. Send only the keys you are
+  // changing; both add and remove already existed, this closes the middle.
+  updateCompanyMember: (uid, userId, data) =>
+    request(`/company/${uid}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   removeCompanyMember: (uid, userId) => request(`/company/${uid}/members/${userId}`, { method: 'DELETE' }),
 
   // ---------- Personas (Epic 1) ----------
