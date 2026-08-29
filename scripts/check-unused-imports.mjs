@@ -22,7 +22,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join, relative, extname } from 'node:path';
 
 const ROOT = resolve(process.cwd());
-const TREES = ['frontend/src', 'cloudflare-worker/src', 'scripts'];
+const TREES = ['frontend/src', 'cloudflare-worker/src', 'scripts', 'frontend/test', 'cloudflare-worker/test'];
 const EXT = new Set(['.js', '.jsx', '.mjs', '.ts', '.tsx']);
 const SKIP = new Set(['node_modules', 'dist', '__pycache__']);
 
@@ -36,6 +36,31 @@ function walk(dir, out = []) {
     else if (EXT.has(extname(e.name))) out.push(p);
   }
   return out;
+}
+
+/**
+ * Source with template literals blanked out.
+ *
+ * Widening this guard to the test trees immediately produced four false
+ * positives in `cloudflare-worker/test/wellbeing_route.test.mjs`, where the
+ * lines
+ *
+ *     import { validateDailyBody, encryptOrFallback } from './wellbeing.helpers.mjs';
+ *
+ * are not imports at all — they sit inside a `const composed = ` … ``
+ * template that the test assembles and evaluates at runtime. Removing those
+ * names, as the guard advised, would have broken a passing test.
+ *
+ * A real import statement can never be inside backticks, so blanking template
+ * spans is sound. It errs toward MISSING an import rather than inventing one,
+ * which is the direction this file's header already argues for: a false
+ * negative costs a CodeQL alert, a false positive blocks correct work and
+ * teaches everyone to ignore the guard.
+ *
+ * Newlines are preserved so any line numbers stay meaningful.
+ */
+function withoutTemplates(src) {
+  return src.replace(/`(?:\\.|[^`\\])*`/gs, (m) => m.replace(/[^\n]/g, ' '));
 }
 
 /** Every named binding an import statement introduces, with the `type ` prefix off. */
@@ -80,7 +105,7 @@ for (const tree of TREES) {
       .replace(/^import\s[\s\S]*?from\s*['"][^'"]+['"];?$/gm, '')
       .replace(/^\/\*[\s\S]*?\*\//gm, '')
       .replace(/^\s*\/\/[^\n]*$/gm, '');
-    for (const { name } of namedImports(src)) {
+    for (const { name } of namedImports(withoutTemplates(src))) {
       if (!new RegExp(`\\b${name}\\b`).test(body)) {
         findings.push(`${relative(ROOT, file)} — \`${name}\` is imported and never used`);
       }

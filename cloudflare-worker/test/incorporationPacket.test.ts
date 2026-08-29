@@ -13,7 +13,6 @@ import {
   renderKycIdPagePdf,
   renderAuditTrailPagePdf,
   type PacketInputs,
-  type AuditEvent,
 } from '../src/services/incorporationPacket.ts';
 
 const FIXTURE: PacketInputs = {
