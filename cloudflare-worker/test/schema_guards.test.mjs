@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
 import { collapseStringConcat, knownColumns, unknownColumns, setClause, singleTableSelect, incompleteTables, runtimeColumns, aliasMap, singleTablePredicate, predicateIdents, blankLiterals, substituteBindings, coverage } from '../../scripts/check-sqlite-columns.mjs';
 import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables.mjs';
+import { routedWrites, mapColumns, assignmentBrace, unroutableColumns, unroutableSavedTo } from '../../scripts/check-write-router-columns.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
   const src = `
@@ -347,6 +348,50 @@ test('the worker INSERTs, UPDATEs and SELECTs no column that does not exist', ()
   // nothing writes a KYB decision at all, so a column would not help.
   const unknown = [...unknownColumns().keys()].sort();
   assert.deepEqual(unknown, ['corporate_profiles.kyb_status'], `unexpected: ${unknown.join(', ')}`);
+});
+
+test('a map is resolved by name, never by proximity', () => {
+  // Parser fault #12. Binding each UPDATE to the nearest preceding map
+  // attributed partnerMap's six columns to explorer_needs and invented six
+  // defects. Names are unique enough; distance is not.
+  const src = [
+    "const partnerMap = { 'a.b': 'organization', 'c.d': 'role_title' };",
+    "const pcol = partnerMap[questionId];",
+    "await db.prepare(`UPDATE partner_profiles SET ${pcol} = ?`);",
+    "const sharedLeaf = EXPLORER_SHARED_LEAF_MAP[leaf];",
+    "await db.prepare(`UPDATE explorer_needs SET ${sharedLeaf.col} = ?`);",
+  ].join('\n');
+  const w = routedWrites(src);
+  assert.equal(w.length, 2);
+  assert.deepEqual(w[0], { table: 'partner_profiles', expr: 'pcol', line: 3, map: 'partnerMap', columns: ['organization', 'role_title'] });
+  // The explorer map is declared elsewhere, so it resolves to no columns —
+  // reported as unresolved rather than borrowing partnerMap's.
+  assert.deepEqual(w[1].columns, []);
+});
+
+test('an arrow type in a declaration is not the assignment', () => {
+  // The guard's own near-miss: `Record<string, { coerce?: (v: string) => n }>`
+  // made the first version resolve 2 maps of 6 and report success on the rest.
+  const decl = "const map: Record<string, { col: string; coerce?: (v: string) => number }> = { 'q': { col: 'bio' } };";
+  const brace = assignmentBrace(decl, decl.indexOf('map') + 3);
+  assert.equal(decl[brace], '{');
+  assert.deepEqual(mapColumns(decl.slice(brace + 1)), ['bio']);
+});
+
+test('a two-literal ternary is a column choice, not a map', () => {
+  const src = [
+    "const col = questionId === 'founder.brand.tagline' ? 'tagline' : 'theme_color';",
+    "await db.prepare(`UPDATE landing_pages SET ${col} = ?`);",
+  ].join('\n');
+  assert.deepEqual(routedWrites(src)[0].columns, ['tagline', 'theme_color']);
+});
+
+test('every column the advisor writeRouter routes to actually exists', () => {
+  assert.deepEqual(unroutableColumns(), []);
+  assert.deepEqual(unroutableSavedTo(), []);
+  // Migration 182 — 042 added these three to `mentors`, a table nothing creates.
+  const a = knownColumns().get('advisors');
+  assert.ok(a?.has('topics_willing_json') && a?.has('topics_unwilling_json') && a?.has('weekly_hours_band'));
 });
 
 test('every table the worker queries is created somewhere', () => {

@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All twenty-five decisions are now resolved. D6 is closed by D11, which repaired
+All twenty-six decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -899,6 +899,61 @@ writer, a stated consumer, and five sibling tables already using that exact
 column name. `kyb_status` has none of those: nothing anywhere decides a KYB
 outcome, so a column would read NULL forever. A column is warranted when
 something already knows what to put in it.
+
+
+### D26. A routed column is a column, even when the SQL never says its name
+
+`check-sqlite-columns` cannot see the advisor writeRouter's writes, and it is
+right not to try. They are `UPDATE <table> SET ${col} = ?`, where `col` comes
+out of a literal map at runtime — the SQL text carries no column name at all,
+so the string is skipped as raw-interpolated. But the map beside it does carry
+the name, and `check-write-router-coverage` was already reading that file for a
+different property: that every bank question is **routed** somewhere. It never
+checked that the destination is **real**.
+
+Three were not. Migration 042 ends with
+
+```sql
+ALTER TABLE mentors ADD COLUMN topics_willing_json TEXT;
+ALTER TABLE mentors ADD COLUMN topics_unwilling_json TEXT;
+ALTER TABLE mentors ADD COLUMN weekly_hours_band TEXT;
+```
+
+and **there is no `CREATE TABLE mentors` anywhere in this repository.** The
+naming settled on `advisors`; 042 was written against the earlier word, and
+those three statements have failed since the day they shipped. The router
+writes the same three names to `advisors`, and the answered-check reads them
+back from `advisors`. Migration 182 puts them where both already assume they
+are.
+
+The failure is quiet in a specific, worse-than-usual way. Each of these writes
+has a fallback: on error the answer is merged into a `*_extras_json` sidecar.
+So the answer is not lost, **the caller is told `status: 'saved'`**, and the
+typed column the product reads stays empty. The answered-check then reads the
+name off the row, gets `undefined`, and asks again — every session, forever.
+An advisor is asked the same three questions indefinitely while being told each
+time that the answer was saved.
+
+One thing kept it from being much worse, and it was luck rather than design:
+the answered-check selects `*` rather than a column list. Had it named its nine
+columns, one unknown name would have taken the whole row down and re-asked all
+nine — the compounding shape D-recorded for `users.organization`. `SELECT *`
+is usually the sloppier choice; here it contained the blast radius.
+
+**Two parser faults, and one of them was the guard reporting success while not
+looking.** The first version bound each `UPDATE` to the nearest preceding map
+declaration, which handed `partnerMap`'s six columns to `explorer_needs` and
+invented six defects — proximity is not identity, so maps are now resolved by
+name through the variable the UPDATE interpolates. The second is sharper: the
+declaration matcher looked for `= {` with `[^=\n]*` in between, and these maps
+are declared `Record<string, { col: string; coerce?: (v: string) => number }>`.
+The `=>` inside the type annotation is an `=`. Two maps of six resolved, the
+other four silently produced no columns, and **the guard printed a tick over
+the three defects it exists to catch.** That is the failure mode this file
+keeps naming, committed by the check itself: over-reporting is loud and gets
+fixed, under-reporting looks exactly like success. The guard now prints how
+many maps it resolved and how many it could not, so "0 unresolved" is a claim
+it has to keep making.
 
 
 ## Part 2 — Decisions taken
