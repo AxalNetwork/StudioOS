@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "Occurrences of regulated wording in AI copy that are ON RECORD \u2014 see",
+    "scripts/check-regulated-wording.mjs. Each entry carries the reason it is",
+    "here. The check fails on anything NOT in this list, and also on an entry",
+    "whose copy has since been deleted, so the ledger cannot drift from the",
+    "code. Adding an entry is a deliberate act, not a way to silence the check."
+  ],
+  "onRecord": [
+    {
+      "file": "frontend/src/components/advisor/PersonalAdvisor.jsx",
+      "text": "Personal Advisor",
+      "why": "Shipped product name. It is on the landing page, in the command palette and in support copy; renaming it is a product and marketing decision, not a lint fix. Tracked separately."
+    },
+    {
+      "file": "frontend/src/components/advisor/AdvisorFilledBanner.jsx",
+      "text": "1 field on this page was filled by your Personal Advisor",
+      "why": "Same shipped product name, in the banner that tells a user the model filled their fields."
+    },
+    {
+      "file": "frontend/src/components/advisor/AdvisorFilledBanner.jsx",
+      "text": "Filled by your Personal Advisor",
+      "why": "Same shipped product name, on the per-field sparkle tooltip."
+    },
+    {
+      "file": "frontend/src/components/advisor/AdvisorProgressWidget.jsx",
+      "text": "Book an advisor meeting",
+      "why": "A HUMAN advisor. This is the milestone for booking office hours with a person on the advisor track, not the model describing itself."
+    }
+  ]
+}
