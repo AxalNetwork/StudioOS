@@ -18,10 +18,16 @@ import { safeReadJSON } from '../lib/storage';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import KycVerification from '../components/KycVerification';
 
-// Task #25 — every persona that can reach the Trust Center (route-guarded to
-// these roles in App.jsx) is KYC-eligible, so the Identity tab is always shown
-// for them rather than only when the obligation matrix happens to surface a
-// kyc_v1 row. Founders/partners see the "not required" state inside the tab.
+// Task #25 — these personas are KYC-eligible, so the Identity tab is always
+// shown for them rather than only when the obligation matrix happens to surface
+// a kyc_v1 row. Founders/partners see the "not required" state inside the tab.
+//
+// This is deliberately NOT "every role that can reach the page" any more.
+// Advisors were added to the /trust route guard because ROLE_MATRIX gives them
+// two REQUIRED obligations (mentor_nda_v1, mentor_disclaimer_v1) and the
+// dropdown link that reaches this page is ungated — but their matrix carries no
+// kyc_v1 row, so showing them an Identity tab would invent an obligation the
+// platform does not place on them. They land on Overview and Agreements.
 const KYC_ELIGIBLE_ROLES = new Set(['founder', 'partner', 'investor', 'admin']);
 
 // ---------------------------------------------------------------------------

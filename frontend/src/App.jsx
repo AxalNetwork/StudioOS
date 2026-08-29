@@ -1551,7 +1551,12 @@ function AppInner() {
       <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
-      <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'exploring'], <TrustCenterPage />)} />
+      {/* 'advisor' belongs here: services/trust.ts ROLE_MATRIX gives advisors four
+          obligations — two of them REQUIRED (mentor_nda_v1,
+          mentor_disclaimer_v1) — and the Trust Center link in the user dropdown
+          carries no role gating, so every advisor could see the link, click it,
+          and be bounced off the only page listing what they owe. */}
+      <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenterPage />)} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], <FounderWorkspaceTabs set="raise" user={user}><LiquidityPage currentUser={user} /></FounderWorkspaceTabs>)} />
