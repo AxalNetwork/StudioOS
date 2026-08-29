@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Layers, CheckCircle2, UserX, XCircle } from 'lucide-react';
 import { api } from '../../../lib/api';
 import {
-  Chip, Section, SlideOver, EmptyState, StatCard, FilterChips, StatusBadge,
+  Chip, SlideOver, EmptyState, StatCard, FilterChips, StatusBadge,
   RowCard, formatDateTime, formatRelativeDay,
 } from './kit';
 

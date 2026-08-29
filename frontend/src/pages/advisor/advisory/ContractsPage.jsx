@@ -3,7 +3,7 @@ import { FileText, ExternalLink, Send } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
-  Chip, Section, EmptyState, StatCard, FilterChips, StatusBadge, RowCard,
+  Chip, EmptyState, StatCard, FilterChips, StatusBadge, RowCard,
   formatDay, formatRelativeDay,
 } from './kit';
 

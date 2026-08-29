@@ -17,7 +17,6 @@ import {
 // requests is told whether the reason is that they have published no
 // availability.
 export default function OpportunitiesPage() {
-  const [profile, setProfile] = useState(null);
   const [pending, setPending] = useState([]);
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,7 +33,6 @@ export default function OpportunitiesPage() {
     let me = null;
     try {
       me = await api.getMyAdvisor();
-      setProfile(me);
       if (!me) setNoProfile(true);
     } catch { setNoProfile(true); }
     try {

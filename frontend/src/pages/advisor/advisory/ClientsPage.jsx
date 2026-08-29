@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Users, Mail } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import { api } from '../../../lib/api';
 import {
   Avatar, Chip, Section, SlideOver, EmptyState, StatCard, SearchInput,
