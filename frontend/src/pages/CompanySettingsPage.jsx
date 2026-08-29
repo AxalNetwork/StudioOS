@@ -378,10 +378,36 @@ function CompanyProfileCard({ uid, flash }) {
 //     no email is sent. The copy says so rather than implying a pending invite.
 //   • Every mutation returns the refreshed company detail, so the list below is
 //     the server's answer, never a local guess about what the write did.
+/**
+ * Title, authority and carry are THREE axes, not one.
+ *
+ * `role_in_company` was the only one — a free-text string everything a firm
+ * knows about a teammate had to be squeezed into. Migration 191 separates
+ * where someone sits (title), what they may do (authority) and what they are
+ * paid on (carry). The design's own cases are why: a Venture Partner SPONSORs
+ * while a Vice President only FLAGs, an Operating Partner is a partner by
+ * title and VIEW by authority, and carry tracks neither.
+ *
+ * The picker never hardcodes the vocabulary — GET /company/team-vocabulary
+ * serves the ladder, the functions and what each authority level MEANS, so
+ * the two sides cannot drift. Selecting a title pre-fills authority from that
+ * payload and then leaves it alone: the two are stored independently, and the
+ * server does not derive one from the other either.
+ *
+ * `role_in_company` stays. Twenty-three production accounts have one and
+ * canEdit() still reads it; retiring an access check is a separate change.
+ */
 function MembersCard({ uid, row, setRow, flash }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('Member');
   const [busy, setBusy] = useState(false);
+  const [vocab, setVocab] = useState(null);
+
+  useEffect(() => {
+    let off = false;
+    api.teamVocabulary().then((v) => { if (!off) setVocab(v); }).catch(() => {});
+    return () => { off = true; };
+  }, []);
 
   const members = row.members || [];
   const primaryAdmins = members.filter((m) => m.is_primary_admin).length;
@@ -446,6 +472,74 @@ function MembersCard({ uid, row, setRow, flash }) {
               aria-label={`Role for ${m.name || m.email}`}
               className="w-32 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             />
+
+            {vocab && (
+              <>
+                <select
+                  value={m.title || ''}
+                  onChange={(e) => {
+                    const title = e.target.value || null;
+                    // The ladder's authority is a SUGGESTION. It pre-fills only
+                    // when authority has not been set yet; an explicit choice is
+                    // never overwritten by a rename.
+                    const rung = [...vocab.ladder, ...vocab.functions]
+                      .find((x) => (x.title || x.name) === title);
+                    const patch = { title };
+                    if (title && rung && !m.authority) patch.authority = rung.defaultAuthority;
+                    run(() => api.updateCompanyMember(uid, m.user_id, patch),
+                        title ? `${m.name || m.email} is now ${title}` : 'Title cleared');
+                  }}
+                  disabled={busy}
+                  aria-label={`Title for ${m.name || m.email}`}
+                  className="w-40 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="">Title — not recorded</option>
+                  <optgroup label="Ladder">
+                    {vocab.ladder.map((r) => <option key={r.title} value={r.title}>{r.title}</option>)}
+                  </optgroup>
+                  <optgroup label="Functions">
+                    {vocab.functions.map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
+                  </optgroup>
+                </select>
+
+                <select
+                  value={m.authority || ''}
+                  onChange={(e) => run(
+                    () => api.updateCompanyMember(uid, m.user_id, { authority: e.target.value || null }),
+                    e.target.value ? `${m.name || m.email} can ${e.target.value}` : 'Authority cleared',
+                  )}
+                  disabled={busy}
+                  aria-label={`Authority for ${m.name || m.email}`}
+                  title={vocab.authority_levels.find((a) => a.key === m.authority)?.meaning || ''}
+                  className="w-28 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="">Authority —</option>
+                  {vocab.authority_levels.map((a) => (
+                    <option key={a.key} value={a.key} title={a.meaning}>{a.key}</option>
+                  ))}
+                </select>
+
+                <input
+                  type="number"
+                  min="0"
+                  max="10000"
+                  step="1"
+                  defaultValue={m.carry_bps ?? ''}
+                  placeholder="carry bps"
+                  onBlur={(e) => {
+                    const raw = e.target.value.trim();
+                    const next = raw === '' ? null : Number(raw);
+                    if (next === (m.carry_bps ?? null)) return;
+                    run(() => api.updateCompanyMember(uid, m.user_id, { carry_bps: next }),
+                        next === null ? 'Carry cleared' : `Carry set to ${(next / 100).toFixed(2)}%`);
+                  }}
+                  disabled={busy}
+                  aria-label={`Carry in basis points for ${m.name || m.email}`}
+                  title="Basis points — 150 is 1.5%. Stored as a whole number, never a float."
+                  className="w-24 border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 tabular-nums"
+                />
+              </>
+            )}
 
             {!m.is_primary_admin && (
               <button

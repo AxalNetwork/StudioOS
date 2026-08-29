@@ -2163,6 +2163,9 @@ export const api = {
   updateCompanyMember: (uid, userId, data) =>
     request(`/company/${uid}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   removeCompanyMember: (uid, userId) => request(`/company/${uid}/members/${userId}`, { method: 'DELETE' }),
+  // The ladder, the named functions, and what each authority level MEANS.
+  // A picker must never hardcode these — see services/teamAuthority.ts.
+  teamVocabulary: () => request('/company/team-vocabulary'),
 
   // ---------- Personas (Epic 1) ----------
   getPersonaTaxonomy: () => request('/personas/taxonomy'),
