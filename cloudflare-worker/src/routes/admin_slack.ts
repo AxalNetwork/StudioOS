@@ -74,7 +74,10 @@ adminSlack.post('/test/:channel', async (c) => {
   // Audit trail — same `admin_audit_log` table other admin tools use.
   try {
     await c.env.DB.prepare(
-      `INSERT INTO admin_audit_log (actor_user_id, action, report_type, details)
+      // `admin_user_id` and `filters_json` — the names every other admin
+      // route uses and the only ones the table has. `actor_user_id`/`details`
+      // matched nothing, so this audit row was never written.
+      `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json)
        VALUES (?, ?, ?, ?)`,
     ).bind(
       user.id,

@@ -862,9 +862,14 @@ imports.post('/deck', async (c) => {
     try {
       const payload = { slides: slides.map((s) => ({ index: s.index, body: s.text })) };
       await c.env.DB.prepare(
-        `INSERT INTO pitch_decks (project_id, version, title, slides, is_current, created_by, created_at, updated_at)
+        // No `updated_at`: neither definition of pitch_decks has one
+        // (routes/decks.ts and services/advisor/writeRouter.ts both stop at
+        // created_at) and nothing reads it. Naming it here threw into the
+        // catch below, so an imported deck was parsed and then dropped —
+        // the "schema variance" the comment guesses at was this column.
+        `INSERT INTO pitch_decks (project_id, version, title, slides, is_current, created_by, created_at)
          VALUES (?, COALESCE((SELECT MAX(version)+1 FROM pitch_decks WHERE project_id = ?), 1),
-                 'Imported from deck', ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+                 'Imported from deck', ?, 1, ?, CURRENT_TIMESTAMP)`,
       ).bind(projectId, projectId, JSON.stringify(payload), user.id).run();
     } catch {
       // Schema variance — return slides anyway so the UI can write to the builder.

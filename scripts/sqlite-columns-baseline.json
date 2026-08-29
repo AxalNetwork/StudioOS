@@ -1,0 +1,4 @@
+{
+  "note": "Empty on purpose. Every column this check found was fixed rather than recorded — see migrations 178 and 179. This file exists so a future finding can be marked reviewed-and-accepted with a reason, the way scripts/sqlite-tables-baseline.json does; the gate also fails on an entry here that has since been created, so it cannot go stale. An empty ledger is the goal state, not a missing one.",
+  "columns": {}
+}
