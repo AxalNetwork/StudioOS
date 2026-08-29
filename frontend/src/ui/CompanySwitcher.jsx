@@ -11,19 +11,66 @@ import { api } from '../lib/api';
  * so this reads and writes that one context rather than owning company state.
  * It fetches the user's memberships from the membership-scoped
  * /company/memberships endpoint (not the public company directory), populates
- * the context, and lets the user switch between them. "Add a new company" is
- * disabled until task #5 ships.
+ * the context, and lets the user switch between them.
+ *
+ * "Add a new company" now posts to /company/create, which has been complete on
+ * the worker since it was written: it inserts the `company_profiles` row AND
+ * the `user_company_links` row that makes the creator its primary admin. Only
+ * this button was disabled, so the feature read as missing when the whole
+ * server half already worked.
+ *
+ * WHAT SWITCHING DOES NOT YET DO. `useActiveCompany` is read by this file and
+ * CompanySettingsPage — nothing else. No business table carries a company_id
+ * (only `user_company_links` does), and `services/tenancyScope.ts` scopes by
+ * user, founder_id, LP email and fund GP, never by company. So the active
+ * company selects a PROFILE, not a data space: the rest of the sidebar shows
+ * the same rows whichever company is selected. The dropdown says so rather
+ * than letting the control imply an isolation that does not exist — a silent
+ * no-op here would read as "my data vanished" the first time someone creates
+ * a second company. Delete `SCOPE_NOTICE` in the commit that lands scoping.
  *
  * No page may show more than one company's data, and no page may change the
  * active company on its own — pages read ActiveCompanyContext, and this
  * component is the single writer.
  */
 
+/** Removed by the change that makes the active company scope queries. */
+const SCOPE_NOTICE = 'Switching changes the company profile. Workspace data is not yet separated per company.';
+
 function CompanySwitcher({ collapsed }) {
   const { company, setCompany, companies, setCompanies } = _useActiveCompany();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const ref = useRef(null);
+
+  // Create, then select. Appending to `companies` rather than refetching keeps
+  // the one-writer rule intact: this component owns both writes.
+  async function submitNew(e) {
+    e.preventDefault();
+    const name = newName.trim();
+    if (!name || saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      const created = await api.createCompany({ company_name: name });
+      setCompanies([...companies, created]);
+      setCompany(created);
+      setNewName('');
+      setAdding(false);
+      setOpen(false);
+    } catch (err) {
+      // Surface the server's reason. The endpoint 400s on a missing name and
+      // can 401 on an expired session; both are worth reading verbatim rather
+      // than flattening to "something went wrong".
+      setError(err?.message || 'Could not create the company.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // Fetch all companies the current user is a member of.
   useEffect(() => {
@@ -85,15 +132,49 @@ function CompanySwitcher({ collapsed }) {
         );
       })}
       <div className={companies.length > 0 ? 'border-t border-gray-100 dark:border-gray-800' : ''}>
-        <button
-          type="button"
-          disabled
-          title="Creating additional companies is coming soon"
-          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-400 dark:text-gray-600 cursor-not-allowed"
-        >
-          <Plus size={12} />
-          Add a new company
-        </button>
+        {!adding && (
+          <button
+            type="button"
+            onClick={() => { setAdding(true); setError(''); }}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            <Plus size={12} />
+            Add a new company
+          </button>
+        )}
+        {adding && (
+          <form onSubmit={submitNew} className="px-3 py-2.5 space-y-2">
+            <input
+              autoFocus
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') { setAdding(false); setError(''); } }}
+              placeholder="Company name"
+              maxLength={200}
+              className="w-full px-2 py-1.5 text-xs rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
+            />
+            {error && <div className="text-[11px] text-red-600 dark:text-red-400">{error}</div>}
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={!newName.trim() || saving}
+                className="flex-1 px-2 py-1.5 text-xs rounded bg-violet-600 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-700 transition-colors"
+              >
+                {saving ? 'Creating…' : 'Create'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAdding(false); setError(''); }}
+                className="px-2 py-1.5 text-xs rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+      <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+        {SCOPE_NOTICE}
       </div>
     </div>
   );
