@@ -17,6 +17,7 @@ The API client, formatters and helpers. Nothing here renders.
 | `advisor/` | Advisor-side client logic. |
 | `brand/` | Brand template content model. |
 | `docs/` | Help Center search index. |
+| `spinout/` | Spin-Out Lab client logic. |
 
 ## The drift rule
 
