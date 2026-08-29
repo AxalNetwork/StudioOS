@@ -1059,6 +1059,11 @@ export const api = {
   deliverEngagement: (id, data) => request(`/engagements/${id}/deliver`, { method: 'POST', body: JSON.stringify(data || {}) }),
   cancelEngagement: (id, data) => request(`/engagements/${id}/cancel`, { method: 'POST', body: JSON.stringify(data || {}) }),
   invoiceEngagement: (id) => request(`/engagements/${id}/invoice`, { method: 'POST' }),
+  // The invoice document itself (migration 188). Either party may read it;
+  // a non-party gets 404, not 403. `markInvoicePaid` records payment received
+  // OUT OF BAND — the platform has no payment rail and must not imply one.
+  engagementInvoice: (id) => request(`/engagements/${id}/invoice`),
+  markInvoicePaid: (id) => request(`/engagements/${id}/invoice/paid`, { method: 'POST' }),
   listEngagementReviews: (id) => request(`/engagements/${id}/reviews`),
   createEngagementReview: (id, data) => request(`/engagements/${id}/reviews`, { method: 'POST', body: JSON.stringify(data) }),
 
