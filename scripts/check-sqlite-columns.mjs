@@ -8,11 +8,15 @@
  * by the same swallowing `catch` blocks — so both produce the same symptom: a
  * feature that quietly does nothing.
  *
- * Only INSERT column lists are checked. They are the one place a column is
- * named unambiguously, with no aliasing, no joins and no expressions, so a
- * mismatch here is a fact rather than an inference. SELECT lists are much
- * richer and much harder to attribute to a table correctly, and a check that
- * has to guess is a check nobody will trust.
+ * INSERT column lists and UPDATE ... SET clauses are checked. They are the two
+ * places a column is named unambiguously — no aliasing, no joins, no
+ * expressions — so a mismatch is a fact rather than an inference. SELECT lists
+ * are much richer and much harder to attribute to a table correctly, and a
+ * check that has to guess is a check nobody will trust.
+ *
+ * UPDATE was added after INSERT and found two more: `projects.pipeline_stage`,
+ * which exists on no table anywhere, and `users.organization`, which the
+ * advisor writes and then reads back to decide whether it already asked.
  *
  * HARVESTING IS THE HARD PART, and getting it wrong over-reports. Three
  * distinct parser faults were found and fixed while building this, each of
@@ -165,7 +169,32 @@ export function knownColumns() {
   return schema;
 }
 
-/** INSERT column lists naming a column its table does not have. */
+/**
+ * The SET clause of an UPDATE, from just after `SET` to the first top-level
+ * WHERE / RETURNING / FROM. Comments and SQL strings are skipped so a
+ * `WHERE` inside either cannot end the clause early.
+ */
+export function setClause(sql, from) {
+  let depth = 0, i = from;
+  while (i < sql.length) {
+    const ch = sql[i];
+    if (ch === '-' && sql[i + 1] === '-') { const n = sql.indexOf('\n', i); i = n < 0 ? sql.length : n + 1; continue; }
+    if (ch === "'" || ch === '"') {
+      const q = ch; i += 1;
+      while (i < sql.length) { if (sql[i] === q && sql[i + 1] === q) { i += 2; continue; } if (sql[i] === q) break; i += 1; }
+      i += 1; continue;
+    }
+    if (ch === '(') depth += 1;
+    else if (ch === ')') { if (depth === 0) return sql.slice(from, i); depth -= 1; }
+    else if (depth === 0 && /\s/.test(ch) && /^\s+(WHERE|RETURNING|FROM)\b/i.test(sql.slice(i))) {
+      return sql.slice(from, i);
+    }
+    i += 1;
+  }
+  return sql.slice(from);
+}
+
+/** INSERT column lists and UPDATE SET clauses naming a column their table lacks. */
 export function unknownColumns() {
   const schema = knownColumns();
   const hits = new Map();
@@ -173,6 +202,24 @@ export function unknownColumns() {
     const rel = path.relative(ROOT, file);
     for (const { body, line } of sqlStrings(fs.readFileSync(file, 'utf8'))) {
       if (body.includes('${')) continue;                  // interpolated — column list is not literal
+      // UPDATE <table> SET a = ?, b = ? — the SET columns belong to <table>
+      // with no ambiguity, the same property that makes an INSERT list checkable.
+      for (const um of body.matchAll(/\bUPDATE\s+(?:OR\s+\w+\s+)?([`"[]?\w+[`"\]]?)\s+SET\s/gi)) {
+        const ut = norm(um[1]);
+        const ucols = schema.get(ut);
+        if (!ucols) continue;
+        const clause = setClause(body, um.index + um[0].length);
+        for (const part of topLevel(clause)) {
+          const c = /^\s*([`"[]?\w+[`"\]]?)\s*=/.exec(part);
+          if (!c) continue;
+          const col = norm(c[1]);
+          if (!col || ucols.has(col) || dynamicColumns.has(col)) continue;
+          const k = `${ut}.${col}`;
+          if (!hits.has(k)) hits.set(k, []);
+          hits.get(k).push(`${rel}:${line}`);
+        }
+      }
+
       const m = /\bINSERT\s+(?:OR\s+\w+\s+)?INTO\s+([`"[]?\w+[`"\]]?)\s*\(/i.exec(body);
       if (!m) continue;
       const t = norm(m[1]);
@@ -201,7 +248,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const resolved = Object.keys(baseline).filter((k) => !found.has(k)).sort();
 
   if (added.length) {
-    console.error('✖ check-sqlite-columns: INSERT naming a column that does not exist:\n');
+    console.error('✖ check-sqlite-columns: SQL naming a column that does not exist:\n');
     for (const k of added) {
       console.error(`  ${k}`);
       for (const w of [...new Set(found.get(k))]) console.error(`      ${w}`);
@@ -223,5 +270,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   const n = Object.keys(baseline).length;
-  console.log(`✓ check-sqlite-columns: every INSERT names columns that exist (${n} known gap${n === 1 ? '' : 's'} on record).`);
+  console.log(`✓ check-sqlite-columns: every INSERT and UPDATE names columns that exist (${n} known gap${n === 1 ? '' : 's'} on record).`);
 }

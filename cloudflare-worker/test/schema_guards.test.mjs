@@ -14,7 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
-import { collapseStringConcat, knownColumns, unknownColumns } from '../../scripts/check-sqlite-columns.mjs';
+import { collapseStringConcat, knownColumns, unknownColumns, setClause } from '../../scripts/check-sqlite-columns.mjs';
 import { stripSqlLiterals, knownTables } from '../../scripts/check-sqlite-tables.mjs';
 
 test('a query introduced by a line comment is still seen', () => {
@@ -85,9 +85,40 @@ test('the async scorer writes to its own table, never score_snapshots', () => {
   assert.ok(drafts.has('total_0_75'), 'the scale belongs in the column name');
 });
 
-test('the worker INSERTs no column that does not exist', () => {
+test('a SET clause ends at WHERE, and not at a WHERE inside a string', () => {
+  const at = (sql) => sql.indexOf('SET ') + 4;
+  const a = `UPDATE t SET a = 1, b = 2 WHERE id = ?`;
+  assert.equal(setClause(a, at(a)).trim(), 'a = 1, b = 2');
+
+  // A column named in the WHERE is not the SET clause's to vouch for; the
+  // guard deliberately attributes only SET columns, where the table is certain.
+  const b = `UPDATE t SET a = 1 WHERE weird_col = ?`;
+  assert.doesNotMatch(setClause(b, at(b)), /weird_col/);
+
+  // 'WHERE' as prose inside a value must not end the clause early.
+  const c = `UPDATE t SET note = 'ask them WHERE they are', b = 2 WHERE id = ?`;
+  assert.match(setClause(c, at(c)), /b = 2/);
+
+  // RETURNING and FROM terminate it too.
+  const d = `UPDATE t SET a = 1 RETURNING id`;
+  assert.equal(setClause(d, at(d)).trim(), 'a = 1');
+});
+
+test('the columns the UPDATE pass found are now present', () => {
+  const schema = knownColumns();
+  // Migration 180. Its absence broke the advisor's headline question too,
+  // because both answered-checks ride on one SELECT.
+  assert.ok(schema.get('users')?.has('organization'), 'users.organization should be known');
+  // `pipeline_stage` exists on no table; both writers now use `stage`.
+  const owners = [...schema].filter(([, c]) => c && c.has('pipeline_stage')).map(([t]) => t);
+  assert.deepEqual(owners, [], 'nothing should define pipeline_stage');
+  assert.ok(schema.get('projects')?.has('stage'), 'projects.stage is the real column');
+});
+
+test('the worker INSERTs and UPDATEs no column that does not exist', () => {
   // The runnable form of the whole exercise. `check-sqlite-columns` is the
-  // gate; this keeps the property visible in the test suite too.
+  // gate; this keeps the property visible in the test suite too. Covers both
+  // INSERT column lists and UPDATE SET clauses.
   const unknown = [...unknownColumns().keys()].sort();
   assert.deepEqual(unknown, [], `unknown columns: ${unknown.join(', ')}`);
 });

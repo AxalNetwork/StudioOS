@@ -941,9 +941,14 @@ legalcap.post('/spinout/go-independent', async (c) => {
     .bind(dashUrl, sub.id).run();
   if (!indUpd.meta?.changes) return c.json({ error: 'Already independent' }, 409);
 
-  // Move project out of main pipeline
+  // Move project out of main pipeline.
+  // `stage` only: `pipeline_stage` exists on no table in this schema, and
+  // SQLite rejects the whole statement on an unknown column rather than
+  // ignoring it — so the `stage = 'spun_out'` beside it never landed either,
+  // and a spun-out project stayed in the main pipeline. The two were being
+  // set to the same value anyway; `stage` is the one that exists.
   try {
-    await c.env.DB.prepare(`UPDATE projects SET pipeline_stage = 'spun_out', stage = 'spun_out', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(dealId).run();
+    await c.env.DB.prepare(`UPDATE projects SET stage = 'spun_out', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(dealId).run();
   } catch (e: any) {
     // Schema may differ — ignore non-existent column
     console.error('go-independent project update:', e?.message);
@@ -1020,7 +1025,10 @@ legalcap.post('/spinout/iterate', async (c) => {
   const dealId = parseInt(data?.deal_id);
   if (!dealId) return c.json({ error: 'deal_id required' }, 400);
   try {
-    await c.env.DB.prepare(`UPDATE projects SET pipeline_stage = 'mvp', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(dealId).run();
+    // `stage`, not `pipeline_stage` — see the spun_out site above. This one
+    // set no other column, so the "continue to iterate" decision recorded
+    // nothing at all while still returning ok: true.
+    await c.env.DB.prepare(`UPDATE projects SET stage = 'mvp', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(dealId).run();
   } catch (e: any) { console.error('iterate:', e?.message); }
   await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'spinout', entityId: dealId, metadata: { decision: 'iterate' } });
   return c.json({ ok: true, decision: 'continue_iterate' });
