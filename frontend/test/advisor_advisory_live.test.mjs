@@ -62,13 +62,25 @@ test('every api method these tabs call actually exists in api.js', () => {
   // api.getAdvisorSlots(), which does not exist — the method is
   // listAdvisorSlots(). A missing method fails silently at runtime inside a
   // try/catch, which is exactly the class of bug this Wave exists to remove.
+  // Both sides are harvested with ONE hardcoded regex each and compared as
+  // sets. The first version built `new RegExp(\`\\b${m}\\s*:\`)` per method,
+  // which Semgrep flagged (detect-non-literal-regexp, alert 5937) and which
+  // apex_route_coverage.test.mjs was already flagged for — see its header.
+  // The finding is right about the shape even though these names come from
+  // this repo's own source and match [A-Za-z0-9_]+, so no metacharacter can
+  // reach the constructor. Set membership is exact, faster, and removes the
+  // question entirely.
   const apiJs = readFileSync(resolve(process.cwd(), 'frontend/src/lib/api.js'), 'utf8');
+  const defined = new Set(
+    [...apiJs.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*)\s*:/gm)].map((m) => m[1]),
+  );
   const called = new Set();
   for (const f of pages()) {
     for (const m of src(f).matchAll(/\bapi\.([a-zA-Z][A-Za-z0-9_]*)\(/g)) called.add(m[1]);
   }
   assert.ok(called.size >= 8, `expected the tabs to call several api methods, saw ${called.size}`);
-  const missing = [...called].filter((m) => !new RegExp(`\\b${m}\\s*:`).test(apiJs));
+  assert.ok(defined.size > 100, `api.js should define hundreds of methods, harvested ${defined.size}`);
+  const missing = [...called].filter((m) => !defined.has(m));
   assert.deepEqual(missing, [], 'these api methods are called but not defined in api.js');
 });
 
