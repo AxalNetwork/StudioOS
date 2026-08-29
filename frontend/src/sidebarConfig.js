@@ -306,35 +306,48 @@ export const SIDEBAR_GROUPS = {
   //     and deleting the entry would leave a live surface reachable only by
   //     typing the URL — the Wave 4 mistake in reverse. It stays until the
   //     canvas says where a cross-cutting inbox lives.
+  // ── Partner / Operator — the canonical shell, now complete ─────────────────
+  // Canvas ROWS: Home · Pipeline · Delivery · Offers · Network · Research ·
+  // Trust · Firm Settings. "CANONICAL Partner shell — 8 rows, no tier gating
+  // in v1." Flat, and now actually eight.
+  //
+  // THE SIX PENDING ROWS ARE GONE because their workspaces absorbed them.
+  // `PartnerWorkspaceTabs` wraps the Pipeline and Offers pages at the route,
+  // so every section is one click from its row:
+  //   Pipeline → Leads · Matches · Demand · Retainers
+  //   Delivery → the /partner/operations subtree, tabbed by
+  //              PartnerOperationsWorkspace since Wave 1a
+  //   Offers   → Catalog · Perk deals · Visibility · Proof · Office hours
+  // The tabs are role-filtered against the same guards App.jsx applies, because
+  // those routes do not share one: an investor on /services must not be shown
+  // an Office Hours tab that bounces them.
+  //
+  // /my/jobs KEEPS ITS ROW. It is not a section of Offers — it is the partner's
+  // own job listings — and it has four inbound links elsewhere, so it is not at
+  // risk either way. Folding it in to reach eight would be arithmetic, not
+  // information architecture.
+  //
+  // Messages is the ninth row for the reason it always was: the canvas's eight
+  // have nowhere to put a cross-cutting inbox, and /messages has no other door.
+  //
+  // Trust is ABSENT, deliberately: trust_center_navigation.test.mjs pins Trust
+  // Center to the user dropdown and asserts it appears in no sidebar.
+  // Firm Settings is the COMPANY's settings; Account is a different page.
   partner: [
     { key: 'shell', label: 'Workspace', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       { to: '/messages', icon: Mail, label: 'Messages' },
-
-      { to: '/needs', icon: Target, label: 'Pipeline' },
-      { to: '/matches', icon: Handshake, label: 'Matches' },              // → Pipeline
-      { to: '/partner/insights', icon: TrendingUp, label: 'Demand' },     // → Pipeline
-
-      // Delivery owns the whole /partner/operations subtree: its workspace
-      // already tabs across Overview, Capabilities, Portfolio, Engagements and
-      // Performance, so none of them needs its own row.
+      { to: '/needs', icon: Target, label: 'Pipeline',
+        match: ['/needs', '/matches', '/partner/insights', '/partner/operations/engagements'] },
       { to: '/partner/operations/overview', icon: Briefcase, label: 'Delivery',
-        match: ['/partner/operations'] },
-
-      { to: '/services', icon: Package, label: 'Offers' },
-      { to: '/perks', icon: Gift, label: 'Perks' },                       // → Offers
-      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },     // → Offers
-      { to: '/partner/office-hours', icon: Calendar, label: 'Office Hours' }, // → Offers
-      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },                 // → Offers
-
+        match: ['/partner/operations/overview', '/partner/operations/portfolio',
+                '/partner/operations/performance'] },
+      { to: '/services', icon: Package, label: 'Offers',
+        match: ['/services', '/perks', '/comarketing', '/partner/office-hours',
+                '/partner/operations/capabilities'] },
+      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/network', icon: Users, label: 'Network' },
       { to: '/market-intel', icon: Radar, label: 'Research' },
-      // COMPANY settings, not Account. The canvas draws this row as the
-      // company's own settings page and says where the other thing lives:
-      // "Your personal name, email, identity documents and security live in
-      // Account — not here." /settings and /profile are Account, and they
-      // already have a door in the user dropdown (App.jsx), so they lose
-      // nothing by leaving this row.
       { to: '/company-settings', icon: UserCircle, label: 'Firm Settings' },
     ]},
   ],
@@ -399,44 +412,25 @@ export const SIDEBAR_GROUPS = {
   ],
 
   advisor: [
-    { key: 'home', label: 'Home', items: [
-      { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
+    { key: 'shell', label: 'Workspace', items: [
+      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       { to: '/messages', icon: Mail, label: 'Messages' },
-    ]},
-    // Task #23 — each Advisor workspace is its own sidebar group so its
-    // sub-sections are visible directly (mirrors the founder/partner/investor
-    // profiles). This replaces the old single "Workspaces" group that collapsed
-    // each workspace into one link. Every route these single links pointed at is
-    // preserved as a sub-entry; `match` keeps the correct row active across the
-    // tab, its sub-routes, and legacy aliases.
-    { key: 'network', label: 'Network', items: [
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-    ]},
-    { key: 'advisory', label: 'Advisory', items: [
-      { to: '/advisor/advisory/opportunities', icon: Target, label: 'Opportunities' },
-      { to: '/advisor/advisory/clients', icon: Users, label: 'Clients' },
-      { to: '/advisor/advisory/engagements', icon: Layers, label: 'Engagements' },
-      { to: '/advisor/advisory/delivery', icon: Package, label: 'Delivery' },
-      { to: '/advisor/advisory/contracts', icon: FileText, label: 'Contracts' },
-    ]},
-    { key: 'research', label: 'Research', items: [
-      { to: '/market-intel', icon: Radar, label: 'Market' },
-    ]},
-    { key: 'engagements', label: 'Engagements', items: [
+      { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
+
+      // One row, five destinations, all tabbed by the workspace behind it.
+      { to: '/advisor/advisory/opportunities', icon: Briefcase, label: 'Practice',
+        match: ['/advisor/advisory'] },
+
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      { to: '/advisors', icon: UserCircle, label: 'Advisor Directory' },
+      { to: '/advisors', icon: Users, label: 'Advisor Directory' },
+      { to: '/network', icon: Users, label: 'Network' },
+      { to: '/market-intel', icon: Radar, label: 'Research' },
       { to: '/signals', icon: Radar, label: 'Signals' },
-      { to: '/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-    ]},
-    { key: 'account', label: 'Account', items: [
+      { to: '/due-diligence', icon: ShieldAlert, label: 'Due Diligence' },
+      { to: '/company-settings', icon: UserCircle, label: 'Practice Settings' },
     ]},
   ],
 
-  // Task #9 — 'exploring' holding state: chat-onboarded users awaiting the
-  // binding agreement + admin role assignment. Deliberately lean — the
-  // Studio (Personal Advisor + Profile & Fit) plus account basics only.
-  // An explicit group is REQUIRED here: the sidebar falls back to the
-  // founder nav for unknown roles, which exploring users must never see.
   exploring: [
     { key: 'home', label: 'Home', items: [
       { to: '/exploring', icon: LayoutDashboard, label: 'Studio', highlight: true },

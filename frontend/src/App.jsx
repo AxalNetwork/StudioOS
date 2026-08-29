@@ -228,6 +228,9 @@ const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 const PerksPage = lazy(() => import('./pages/PerksPage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
+// Wraps the Pipeline/Offers pages in the tab bar that lets those shell rows
+// own their sections. Role-filtered — see PartnerWorkspaceTabs.jsx.
+const PartnerWorkspaceTabs = lazy(() => import('./pages/partner/PartnerWorkspaceTabs'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
 const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
 const PublicDirectoryPage = lazy(() => import('./pages/PublicDirectoryPage'));
@@ -1358,11 +1361,11 @@ function AppInner() {
           standalone routes below stay registered for the partner/investor/admin
           personas; founders are redirected into the matching ?tab= here. */}
       <Route path="/build/marketplace" element={guard(['admin', 'founder'], <FounderMarketplacePage user={user} />)} />
-      <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=needs" replace /> : <NeedsBoardPage user={user} />)} />
-      <Route path="/services" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=services" replace /> : <ServiceCatalogPage user={user} />)} />
+      <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=needs" replace /> : <PartnerWorkspaceTabs set="pipeline" user={user}><NeedsBoardPage user={user} /></PartnerWorkspaceTabs>)} />
+      <Route path="/services" element={guard(['admin', 'founder', 'partner', 'investor'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=services" replace /> : <PartnerWorkspaceTabs set="offers" user={user}><ServiceCatalogPage user={user} /></PartnerWorkspaceTabs>)} />
       <Route path="/founder/post-need" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=mine" replace /> : <NeedsBoardPage user={user} />)} />
       <Route path="/partner/needs" element={guard(['admin', 'partner'], <NeedsBoardPage user={user} />)} />
-      <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], <PartnerInsightsPage />)} />
+      <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], <PartnerWorkspaceTabs set="pipeline" user={user}><PartnerInsightsPage /></PartnerWorkspaceTabs>)} />
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
@@ -1458,7 +1461,7 @@ function AppInner() {
       {/* Same explicit list. The partner and admin tabs inside the page are
           gated on the role again there — a role that cannot submit a listing
           simply does not see the tab. */}
-      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <PerksPage user={user} />)} />
+      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <PartnerWorkspaceTabs set="offers" user={user}><PerksPage user={user} /></PartnerWorkspaceTabs>)} />
       <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
       <Route path="/raise/legal-engine/incorporation" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
@@ -1508,8 +1511,8 @@ function AppInner() {
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
       <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
       <Route path="/office-hours" element={guard(['admin', 'advisor'], <OfficeHoursPage />)} />
-      <Route path="/partner/office-hours" element={guard(['admin', 'partner'], <PartnerOfficeHoursPage />)} />
-      <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], <CoMarketingPage user={user} />)} />
+      <Route path="/partner/office-hours" element={guard(['admin', 'partner'], <PartnerWorkspaceTabs set="offers" user={user}><PartnerOfficeHoursPage /></PartnerWorkspaceTabs>)} />
+      <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>)} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
       {/* Task #40 (E2) — Event host/attendee surface. */}
       <Route path="/my/events" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <MyEventsPage />)} />
@@ -1633,7 +1636,7 @@ function AppInner() {
           to every authenticated profile, matching the all-roles Settings tab. */}
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals" replace />)} />
-      <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <MatchesPage />)} />
+      <Route path="/matches" element={guard(['admin', 'partner', 'investor'], <PartnerWorkspaceTabs set="pipeline" user={user}><MatchesPage /></PartnerWorkspaceTabs>)} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], <NetworkEffectsPage />)} />
       <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], <PipelineWorkspace />)} />
       {/* Task #1 — unified Network page (Contacts + Introductions +
