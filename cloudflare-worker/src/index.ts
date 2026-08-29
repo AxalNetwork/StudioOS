@@ -161,6 +161,7 @@ import captableRoutes from './routes/captable';
 import dataRoomRoutes from './routes/data_room';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
+import adminLicences from './routes/admin_licences';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
@@ -506,6 +507,10 @@ const COOL_OFF_PREFIXES = [
   // Task #9 — minting promo codes (incl. 100%-off) is money-adjacent; pause
   // promo admin during a freshly-recovered admin's cool-off window.
   '/api/admin/promos',
+  // Wave 4 — a territory licence carries an annual fee, a revenue share and an
+  // exclusive grant over whole countries. Same class as promos: pause it for a
+  // freshly-recovered admin.
+  '/api/admin/licences',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -724,6 +729,9 @@ app.route('/api/admin/best-fit', adminBestFit);
 app.route('/api/admin/exploring', adminExploring);
 // GP review queue for Spin-Out Fund I LP applications. requireAdmin per-route.
 app.route('/api/admin/lp-applications', adminLpApplications);
+// Wave 4 — territory licence ledger. Mount BEFORE the catch-all /api/admin so
+// /api/admin/licences/* resolves here, not in the generic admin router.
+app.route('/api/admin/licences', adminLicences);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
 app.route('/api/private-data', privateData);

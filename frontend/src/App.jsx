@@ -68,6 +68,7 @@ const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
 const ExploringDashboard = lazy(() => import('./pages/ExploringDashboard'));
 const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
+const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminSpinoutLab = lazy(() => import('./pages/admin/AdminSpinoutLab'));
@@ -1382,6 +1383,9 @@ function AppInner() {
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
       <Route path="/admin/exploring" element={guard(['admin'], <AdminExploring />)} />
       <Route path="/admin/lp-applications" element={guard(['admin'], <AdminLpApplications />)} />
+      {/* Territory licence ledger (migration 187). Admin only — it carries the
+          fee, the revenue share and an exclusive grant over whole countries. */}
+      <Route path="/admin/licences" element={guard(['admin'], <AdminLicences />)} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}

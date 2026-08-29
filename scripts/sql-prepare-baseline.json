@@ -71,6 +71,7 @@
     "ph @ services/matchingVectors.ts": 2,
     "ph @ services/signals/engine.ts": 2,
     "placeholders @ models/jobs.ts": 1,
+    "placeholders @ routes/admin_licences.ts": 3,
     "placeholders @ routes/admin.ts": 3,
     "placeholders @ routes/advisors.ts": 2,
     "placeholders @ routes/cofounder.ts": 4,

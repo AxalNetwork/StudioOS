@@ -2198,6 +2198,30 @@ export const api = {
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkGrantCredits: (data) =>
     request('/perks/admin/credits', { method: 'POST', body: JSON.stringify(data || {}) }),
+
+  // Territory licences (migration 187 + routes/admin_licences.ts). The LEDGER
+  // half of the subsidiary model — who holds which countries, on what terms.
+  // Not the scoping half: nothing else in the product reads a territory from
+  // this yet, which is why `seats_used` comes back null rather than 0.
+  licences: () => request('/admin/licences'),
+  licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
+  licenceTerritories: () => request('/admin/licences/territories'),
+  licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),
+  licenceSetTerritories: (uid, countries) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/territories`, { method: 'PUT', body: JSON.stringify({ countries }) }),
+  licenceSetSeats: (uid, seats) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/seats`, { method: 'PUT', body: JSON.stringify({ seats }) }),
+  licenceSetTerms: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/terms`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  licenceActivation: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/activation`),
+  licenceActivate: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/activate`, { method: 'POST' }),
+  licenceSuspend: (uid, note) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/suspend`, { method: 'POST', body: JSON.stringify({ note }) }),
+  licenceReinstate: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/reinstate`, { method: 'POST' }),
+  licenceRenew: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/renew`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  licenceTerminate: (uid, note) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/terminate`, { method: 'POST', body: JSON.stringify({ note }) }),
   dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
   dataRoomDownload: (projectUid, uid) =>
     request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
