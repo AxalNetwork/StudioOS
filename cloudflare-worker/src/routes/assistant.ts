@@ -277,14 +277,17 @@ async function execTool(env: Env, user: User, name: string, input: Record<string
       return { items: rows.results || [] };
     }
     case 'scoringSummary': {
+      // `score_snapshots`, not `scoring_runs`. Nothing has ever created a
+      // table by the latter name, and both queries below end in `.catch(…)`,
+      // so this tool answered "no scores" for every user rather than erroring.
       if (user.role === 'founder' && user.founder_id) {
         const row = await env.DB.prepare(
-          "SELECT p.id, p.name, s.total_score, s.created_at FROM projects p LEFT JOIN scoring_runs s ON s.project_id = p.id WHERE p.founder_id = ? ORDER BY s.id DESC LIMIT 1"
+          "SELECT p.id, p.name, s.total_score, s.created_at FROM projects p LEFT JOIN score_snapshots s ON s.project_id = p.id WHERE p.founder_id = ? ORDER BY s.id DESC LIMIT 1"
         ).bind(user.founder_id).first<{ id: number; name: string; total_score: number | null; created_at: string | null }>().catch(() => null);
         return { kind: 'founder', latest: row };
       }
       const rows = await env.DB.prepare(
-        "SELECT p.name, s.total_score, s.created_at FROM scoring_runs s JOIN projects p ON p.id = s.project_id ORDER BY s.total_score DESC, s.id DESC LIMIT 5"
+        "SELECT p.name, s.total_score, s.created_at FROM score_snapshots s JOIN projects p ON p.id = s.project_id ORDER BY s.total_score DESC, s.id DESC LIMIT 5"
       ).all<{ name: string; total_score: number; created_at: string }>().catch(() => ({ results: [] as Array<{ name: string; total_score: number; created_at: string }> }));
       return { kind: 'top_deals', items: rows.results || [] };
     }

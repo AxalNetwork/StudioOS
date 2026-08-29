@@ -1,0 +1,8 @@
+{
+  "note": "Tables the worker queries that nothing creates, each reviewed and each a feature whose store was never built rather than a typo. Every one is a guarded read that degrades to empty — none can throw. The gate fails on NEW entries, and also on entries here that have since been created, so this list cannot go stale. Fixing one means deleting its line.",
+  "tables": {
+    "compliance_tasks": "advisor tool `listMyTasks` (services/advisor/tools.ts). Query is wrapped and degrades to an empty list, so the advisor answers 'no tasks' to everyone. No compliance-task store has ever been built; workflow_tasks is a different thing (studio operations, not per-user compliance).",
+    "linkedin_oauth_tokens": "settings integration summary (routes/settings.ts, two sites). Both reads go through safeOne, which returns false on error, so LinkedIn always renders as disconnected. google_oauth_tokens and microsoft_oauth_tokens exist (sql/calendar.sql); the LinkedIn OAuth flow that would write this one was never built — routes/linkedin.ts stores only a profile picture URL.",
+    "subscription_events": "billing history in services/analyticsReports.ts. Deliberately optional: the query is followed by a documented fallback that synthesizes one row from the current users.mi_subscription_* state, so the admin report is correct-but-shallow rather than wrong."
+  }
+}

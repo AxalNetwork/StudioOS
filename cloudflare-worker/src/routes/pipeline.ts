@@ -3,6 +3,8 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { notifyPipelineRoom } from '../services/realtime';
+import { ensureWorkflowSchema } from '../services/workflowSchema';
+import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
 
 const pipeline = new Hono<{ Bindings: Env }>();
 
@@ -74,19 +76,16 @@ async function ensureSchema(env: Env) {
     `CREATE INDEX IF NOT EXISTS idx_gates_status ON decision_gates(status)`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch {} }
+  // workflows / workflow_tasks / shared_services_log are shared with
+  // networkfx, legalcap and dashboard, so they are owned by one module
+  // rather than by whichever router runs first. See migration 177.
+  await ensureWorkflowSchema(env);
   migrated = true;
 }
 
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }
-async function logAction(env: Env, actionType: string, performedBy: number | null, details: any = {}) {
-  try { await env.DB.prepare(`INSERT INTO shared_services_log (workflow_id, action_type, details, performed_by) VALUES (NULL, ?, ?, ?)`).bind(actionType, JSON.stringify(details), performedBy).run(); } catch {}
-}
-async function checkAiQuota(env: Env, userId: number): Promise<boolean> {
-  const sql = getSQL(env);
-  const rows = await sql`SELECT COUNT(*) as n FROM shared_services_log WHERE performed_by = ${userId} AND action_type = 'ai_call' AND created_at > datetime('now', '-1 hour')`;
-  await sql.end();
-  return (parseInt(rows[0]?.n) || 0) < REVIEW_RATE_LIMIT;
-}
+const logAction = (env: Env, actionType: string, performedBy: number | null, details: any = {}) =>
+  recordSharedServiceAction(env, actionType, performedBy, details);
 async function llmText(env: Env, system: string, prompt: string): Promise<string | null> {
   if (!env.AI) return null;
   try {
@@ -363,7 +362,8 @@ pipeline.post('/decision-gate/review', async (c) => {
   const user = await requireAuth(c);
   if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Only admins or partners can trigger reviews' }, 403);
   await ensureSchema(c.env);
-  if (!(await checkAiQuota(c.env, user.id))) return c.json({ error: 'Rate limit (60/hour)' }, 429);
+  const quota = await aiQuotaGate(c.env, user.id, { limit: REVIEW_RATE_LIMIT });
+  if (!quota.ok) return c.json({ error: quota.error }, quota.status);
 
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }

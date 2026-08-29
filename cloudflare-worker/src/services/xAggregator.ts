@@ -59,13 +59,17 @@ async function safeTopSectors(env: Env, periodStart: string, periodEnd: string, 
 /**
  * Best-effort check whether a Market Intel chart is available for the
  * current period. Used to flip `needs_media` honestly instead of always
- * nagging the admin. Probes `market_intel_personas` (canonical MI table
- * per migration history); missing table → false (no nag).
+ * nagging the admin. Probes `market_intel_indexes` — the table the Market
+ * Intel chart endpoints actually read (migration 030, and what
+ * `routes/market_intel.ts` selects from). The earlier `market_intel_personas`
+ * was named after nothing: no migration, no route and no service has ever
+ * created it, so the `catch` below swallowed a "no such table" on every call
+ * and this always answered false.
  */
 async function safeHasMIChart(env: Env, periodStart: string): Promise<boolean> {
   try {
     const r = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM market_intel_personas WHERE updated_at >= ?`,
+      `SELECT COUNT(*) AS n FROM market_intel_indexes WHERE computed_at >= ?`,
     ).bind(periodStart).first<{ n: number }>();
     return Number(r?.n ?? 0) > 0;
   } catch {

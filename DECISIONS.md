@@ -9,7 +9,7 @@ rather than by accident.
 
 ## Part 1 — Decisions
 
-All seventeen decisions are now resolved. D6 is closed by D11, which repaired
+All eighteen decisions are now resolved. D6 is closed by D11, which repaired
 the last two of the four live defects the audit found; D12 corrects D9's own
 per-tab table and closes out the Research row. D13 to D17 are Phase 4's, and
 D14 corrects a false statement this work had itself recorded.
@@ -494,6 +494,55 @@ manual behaviour — a brand page where "off" means "I write the copy myself" is
 the plausible one — declares `kind: 'choice'` and passes `mode`/`onModeChange`,
 and `pc.manualNote` already exists to say what "off" means. The hook is worth
 building at that point and not before.
+
+### D18. A quota check that cannot read its ledger denies, and the ledger exists
+
+`workflows`, `workflow_tasks` and `shared_services_log` were queried by four
+route files and created by nothing — no migration, no `ensureSchema`, no dev
+model. Not "not yet migrated": never written. Six more tables were named for
+something that does not exist (`scoring_runs` for `score_snapshots`,
+`market_intel_personas` for `market_intel_indexes`, `partner_deal_redemptions`
+for `partner_referral_redemptions`) or belong to features with no store at all.
+
+Two decisions come out of it.
+
+**The tables are created, not the references removed.** The dashboard reads
+`workflow_tasks` for a real panel, the spin-out route composes a real five-item
+founder checklist, and the marketplace intro has no record of itself other than
+the workflow task it writes. This is a feature that was built and never given a
+schema, not dead code. Migration 177 defines the three tables; the column set is
+the union of what the four routes actually select, insert and join on, and
+nothing speculative is added. `services/workflowSchema.ts` mirrors it for the
+unapplied-migration case — one module rather than four `ensureSchema` copies,
+because four copies of a definition is how the definitions drift, and a rate
+limiter counting rows in a table whose shape depends on which router ran first
+is not a rate limiter.
+
+**The AI quota gate fails closed.** Three routers each carried a private
+`checkAiQuota` over the same ledger with the same 60/hour ceiling, and the three
+disagreed about the only case that mattered: legalcap caught the read failure
+and returned "under the limit"; pipeline and networkfx did not catch it and
+500'd. Since the table did not exist, in production the limiter was either
+absent or fatal — never a limiter. `services/aiQuota.ts` replaces all three.
+"Cannot tell" answers **503**, matching what `middleware/rateLimit.ts` already
+does for its `failClosed` buckets, and distinct from the 429 that means the
+caller really is over. Collapsing the first into the second turns an outage into
+a documented bypass.
+
+The generalisation is `scripts/check-sqlite-tables.mjs`, in `test:guards`. It
+reads table references out of SQL string contents — blanking SQL literals first,
+because `'requests from the operator marketplace.'` otherwise contributes a
+table called `the` — and fails on any reference nothing creates. The three
+remaining gaps are recorded in `sqlite-tables-baseline.json` with what each
+query returns today; the gate also fails on a baseline entry that has since been
+created, so the ledger cannot rot into fiction.
+
+None of this was visible before. `tsc` does not read SQL, and a D1 stub that
+matches on SQL text answers whatever it was taught, so it cannot notice that a
+table is absent. Nearly every call site sat in a swallowing `catch`: the failure
+mode of a missing table is not an error, it is a feature that quietly returns
+nothing. That is the third time this repo has been wrong about something because
+a check matched a name instead of the material (see D9, D14).
 
 ## Part 2 — Decisions taken
 
