@@ -10,9 +10,9 @@ import NetworkSubNav from '../../components/NetworkSubNav';
 import { eventsPublic } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import {
-import { EVENT_TYPE_FILTERS } from '../../lib/eventTypes';
   PROGRAMS, PROGRAM_CATEGORIES, AUDIENCES, FORMATS,
 } from '../../data/network';
+import { EVENT_TYPE_FILTERS } from '../../lib/eventTypes';
 
 const EVENT_TYPES = EVENT_TYPE_FILTERS;
 
