@@ -25,6 +25,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
 
 const root = resolve(process.cwd());
 const wrangler = readFileSync(resolve(root, 'wrangler.toml'), 'utf8');
@@ -201,9 +202,13 @@ test('each apex prefix is listed in both the bare and the subtree form', () => {
  */
 function sidebarDestinations() {
   const src = readFileSync(resolve(root, 'frontend/src/sidebarConfig.js'), 'utf8');
-  // Commented-out nav rows are deliberately parked, not shipped. Strip line
-  // comments before matching so parking one does not demand a route for it.
-  const code = src.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+  // Commented-out nav rows are deliberately parked, not shipped — `codeOnly`
+  // drops them so parking one does not demand a route for it. Reusing the
+  // shared stripper rather than a local regex is the point: its docblock
+  // records why it removes only WHOLE-LINE comments, and every parked row in
+  // this file is one. A trailing comment is left intact, which is harmless
+  // here because nothing after a `//` on a live line carries a `to:` path.
+  const code = codeOnly(src);
   const out = new Set();
   for (const m of code.matchAll(/to:\s*'(\/[^']*)'/g)) {
     const seg = m[1].split('/').filter(Boolean)[0];
