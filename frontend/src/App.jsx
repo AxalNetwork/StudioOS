@@ -224,6 +224,7 @@ const SignalsPage = lazy(() => import('./pages/SignalsPage'));
 const CapTablePage = lazy(() => import('./pages/CapTablePage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
+const PerksPage = lazy(() => import('./pages/PerksPage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
 const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
@@ -1450,6 +1451,10 @@ function AppInner() {
           always false on an empty array, so the route would exist and be
           unreachable. */}
       <Route path="/messages" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MessagesPage user={user} />)} />
+      {/* Same explicit list. The partner and admin tabs inside the page are
+          gated on the role again there — a role that cannot submit a listing
+          simply does not see the tab. */}
+      <Route path="/perks" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <PerksPage user={user} />)} />
       <Route path="/raise/capital/pipeline" element={guard(['admin', 'founder'], <CapitalWorkspacePage />)} />
       <Route path="/raise/legal-engine" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />
       <Route path="/raise/legal-engine/incorporation" element={guard(['admin', 'founder', 'partner'], <LegalEnginePage />)} />

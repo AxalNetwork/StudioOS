@@ -2179,6 +2179,25 @@ export const api = {
     request(`/messages/${encodeURIComponent(uid)}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
   messageMarkRead: (uid) => request(`/messages/${encodeURIComponent(uid)}/read`, { method: 'POST' }),
   messageArchive: (uid) => request(`/messages/${encodeURIComponent(uid)}/archive`, { method: 'POST' }),
+
+  // Perks & Products (migration 186 + routes/perks.ts). `allowance_configured`
+  // on the catalogue response is load-bearing: it lets the page say "no credit
+  // allowance is set up" instead of "not enough credits", which are very
+  // different things to tell someone with a zero balance.
+  perksCatalog: () => request('/perks'),
+  perk: (uid) => request(`/perks/${encodeURIComponent(uid)}`),
+  perkClaim: (uid) => request(`/perks/${encodeURIComponent(uid)}/claim`, { method: 'POST' }),
+  perksMine: () => request('/perks/mine'),
+  perkSubmissions: () => request('/perks/partner'),
+  perkSubmit: (data) => request('/perks/partner', { method: 'POST', body: JSON.stringify(data || {}) }),
+  perkUpdate: (uid, data) =>
+    request(`/perks/partner/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+  perkStats: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/stats`),
+  perkReviewQueue: () => request('/perks/admin/queue'),
+  perkReview: (uid, data) =>
+    request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  perkGrantCredits: (data) =>
+    request('/perks/admin/credits', { method: 'POST', body: JSON.stringify(data || {}) }),
   dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
   dataRoomDownload: (projectUid, uid) =>
     request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),

@@ -160,6 +160,7 @@ import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
 import dataRoomRoutes from './routes/data_room';
 import messagesRoutes from './routes/messages';
+import perksRoutes from './routes/perks';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
@@ -851,6 +852,7 @@ app.route('/api/compliance', complianceRoutes);
 app.route('/api/captable', captableRoutes);
 app.route('/api/data-room', dataRoomRoutes);
 app.route('/api/messages', messagesRoutes);
+app.route('/api/perks', perksRoutes);
 app.route('/api/cofounder', cofounderRoutes);
 // Task #11 — User Skill Profile (self ratings + connection-gated endorsements
 // + blended aggregate + cacheable taxonomy). Reuses cofounder_connections.

@@ -134,6 +134,7 @@
     "sets.join(', ') @ routes/jobs.ts": 1,
     "sets.join(', ') @ routes/needs.ts": 2,
     "sets.join(', ') @ routes/partner_portal.ts": 1,
+    "sets.join(', ') @ routes/perks.ts": 1,
     "sets.join(', ') @ routes/progress.ts": 2,
     "sets.join(', ') @ routes/references.ts": 1,
     "sets.join(', ') @ services/referralSubmissions.ts": 1,
