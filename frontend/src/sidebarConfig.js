@@ -143,8 +143,12 @@ export const SIDEBAR_GROUPS = {
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
       { to: '/perks', icon: Gift, label: 'Perks' },
     ]},
-    { key: 'account', label: 'Account', items: [
-    ]},
+    // No 'account' group here on purpose. It once held Articles / Activity Log
+    // / Support / Documentation; those moved to the user menu (7c93b83e and
+    // 7481ca51) and Company Settings lives in the pinned footer for every role
+    // (task #216). The empty declaration outlived its items and rendered an
+    // ACCOUNT header over nothing — frontend/test/sidebar_empty_group.test.mjs
+    // fails if any role grows a group with no destinations again.
   ],
 
   // Task #19 — regroup the founder sidebar around the venture lifecycle:
