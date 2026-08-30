@@ -72,10 +72,22 @@ npm run d1:audit
 node scripts/migrate-d1.mjs --remote --dry-run
 ```
 
-`--dry-run` reads `schema_migrations` in production D1 and prints the plan
-without executing anything. Whatever it lists is what will run. If it lists
-something you did not expect, find out why before continuing — but do not
-compare it against a list written in a document, including this one.
+`--dry-run` reads `schema_migrations` on the target and prints the plan without
+writing anything. Whatever it lists as pending is what a live run will apply.
+If it lists something you did not expect, find out why before continuing — but
+do not compare it against a list written in a document, including this one.
+
+It is **read-only**, which has one consequence worth knowing: the live run
+creates the ledger table before reading it, and a dry run will not. Against a
+database that has never been migrated by this runner, it reports
+`schema_migrations does not exist on this target yet` and plans as if nothing
+were applied — which, in that specific case, is the truth.
+
+If the dry run prints the `has N table(s) but an empty ledger` warning, stop:
+a live run in apply mode would refuse rather than replay history, and the fix
+is the one-time `--baseline` in [§4(b)](#4-if-a-migration-fails). Any other
+wrangler failure is raised, not swallowed — a connection or auth error will
+never be reported to you as "nothing has been applied".
 
 ### 2.1 `check-docs-fresh` must be green *before* you deploy
 
