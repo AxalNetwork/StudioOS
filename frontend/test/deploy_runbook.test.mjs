@@ -127,3 +127,55 @@ test('the runbook points at the dry-run as the authority on what is pending', ()
     'the runbook no longer tells the operator to derive the pending set from --dry-run',
   );
 });
+
+/**
+ * The cutover doc is operator-facing too, and drifted the same way.
+ *
+ * `CLOUDFLARE-CUTOVER.md` is what someone follows to move the apex off GitHub
+ * Pages. It described the Worker's route table as "84-entry" in its status
+ * line, told an aborting operator to "restore the saved version/67-route
+ * table", and made the rollback "Restoring Pages plus the 84-route table" —
+ * while the real table carries 166 patterns. Someone rolling back a failed
+ * cutover would have been hunting for a table that does not exist, at the
+ * worst possible moment.
+ *
+ * A count of routes is never load-bearing: what matters is the table the
+ * operator CAPTURED before flipping. So the doc names no count, and this
+ * holds it to that.
+ */
+test('the cutover doc claims no route-table entry count', () => {
+  const doc = at('documentation/architecture/CLOUDFLARE-CUTOVER.md');
+
+  const hit = doc.match(/\b\d+[- ](?:entry|route)\s+(?:route\s+)?table\b/i);
+  assert.equal(
+    hit,
+    null,
+    `CLOUDFLARE-CUTOVER.md states a route-table size ("${hit?.[0]}"). ` +
+      'That number goes stale every time a route is added, and the rollback ' +
+      'instruction that cites it then points at a table that does not exist. ' +
+      'Name the table the operator captured, not a count.',
+  );
+});
+
+test('wrangler.toml keeps its two route tables the same size', () => {
+  // The cutover restores "both route tables"; a binding or route added to only
+  // one of them is missing in whichever environment was not edited.
+  const toml = at('wrangler.toml').split('\n').filter((l) => !/^\s*#/.test(l));
+
+  let table = null;
+  const counts = { top: 0, prod: 0 };
+  for (const line of toml) {
+    if (/^\[\[routes\]\]/.test(line)) table = 'top';
+    else if (/^\[\[env\.production\.routes\]\]/.test(line)) table = 'prod';
+    else if (/^\[\[/.test(line) || /^\[[^[]/.test(line)) table = null;
+    if (table && /^\s*pattern\s*=/.test(line)) counts[table] += 1;
+  }
+
+  assert.ok(counts.top > 0 && counts.prod > 0, `expected both route tables to be populated, got ${JSON.stringify(counts)}`);
+  assert.equal(
+    counts.top,
+    counts.prod,
+    `the two route tables have diverged (top-level ${counts.top}, [env.production] ${counts.prod}); ` +
+      'a route in only one table is missing in the other environment',
+  );
+});

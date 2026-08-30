@@ -3,7 +3,8 @@
 Status: **gate item 1 is done in code**; items 2–4 are live-operator steps that
 cannot be performed from the build environment (see *What is left*). The
 apex-wide `axal.vc/*` route remains disabled; the apex is served by an explicit
-84-entry route table instead.
+route table instead — one entry per claimed path, enumerated in `wrangler.toml`,
+which is the source of truth for its size.
 
 ## Stabilisation gate (2026-08-24)
 
@@ -35,7 +36,8 @@ Before retrying `axal.vc/*`:
      sampled in five-minute buckets. Probe `/api/health` and
      `/api/public/stats` at least once per bucket, plus representative
      Worker-served hard loads.
-   - Abort the wildcard attempt and restore the saved version/67-route table
+   - Abort the wildcard attempt and restore the saved Worker version and route
+     table (captured in gate item 4)
      immediately if either probe returns a 5xx, or Analytics reports two or
      more 5xx responses in any five-minute bucket.
 3. Hard-load representative non-prerendered routes and public APIs in a fresh
@@ -275,8 +277,9 @@ the end state.
 ## Rollback
 
 Keep, before step 6: the current Worker version id, both route tables, and the
-Pages configuration. Restoring Pages plus the 84-route table returns the apex
-to its pre-cutover behaviour without a deploy.
+Pages configuration. Restoring Pages plus that saved route table returns the
+apex to its pre-cutover behaviour without a deploy. Do not rely on a count
+written down anywhere — restore the table you captured.
 
 ## What could not be done from the build environment
 
