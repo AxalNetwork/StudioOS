@@ -10,6 +10,9 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import {
+  isTitle, isAuthority, normalizeCarryBps, teamVocabulary,
+} from '../services/teamAuthority';
 import { isAdmin, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { clampLimit, parseOffset } from '../util/pagination';
 
@@ -84,6 +87,12 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
       email: isMember ? u.email : maskEmail(u.email),
       role_in_company: lnk.role_in_company,
       is_primary_admin: !!lnk.is_primary_admin,
+      // Migration 191 — three independent axes. Null means NOT RECORDED, not
+      // "none": a member added before 191 has no title, and showing them as an
+      // Analyst on VIEW would be inventing a fact about a real person.
+      title: (lnk as any).title ?? null,
+      authority: (lnk as any).authority ?? null,
+      carry_bps: (lnk as any).carry_bps ?? null,
       joined_at: lnk.created_at,
     });
   }
@@ -136,6 +145,19 @@ r.get('/company/me', async (c) => {
 // switcher needs the whole list, in the same order `/company/me` picks its
 // winner from (primary admin first, then oldest link), so `list[0]` is the same
 // company `/company/me` would have returned.
+// /company/team-vocabulary — the ladder, the functions and what each authority
+// level MEANS, so a picker never has to hardcode them.
+//
+// Registered here for the same reason /company/memberships is: it must come
+// before `/company/:uid`, or the param route claims uid="team-vocabulary".
+// scripts/check-route-ordering enforces that; this comment is why.
+r.get('/company/team-vocabulary', async (c) => {
+  try {
+    await requireAuth(c);
+    return c.json(teamVocabulary());
+  } catch (e) { return mapError(c, e); }
+});
+
 r.get('/company/memberships', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -347,6 +369,33 @@ r.patch('/company/:uid/members/:userId', async (c) => {
       }
       sets.push('is_primary_admin = ?');
       params.push(next);
+    }
+
+    // Migration 191 — title, authority and carry are INDEPENDENT. Setting one
+    // never sets another: authorityForTitle() exists to pre-fill a picker, and
+    // is deliberately not called here. Deriving authority from title would let
+    // a rename grant or revoke power silently.
+    if (body.title !== undefined) {
+      if (body.title === null) { sets.push('title = ?'); params.push(null); }
+      else if (!isTitle(body.title)) {
+        return c.json({ detail: 'title must be a ladder rung or a named function' }, 400);
+      } else { sets.push('title = ?'); params.push(body.title); }
+    }
+
+    if (body.authority !== undefined) {
+      if (body.authority === null) { sets.push('authority = ?'); params.push(null); }
+      else if (!isAuthority(body.authority)) {
+        return c.json({ detail: 'authority must be VIEW, WORK, FLAG, SPONSOR or VOTE' }, 400);
+      } else { sets.push('authority = ?'); params.push(body.authority); }
+    }
+
+    if (body.carry_bps !== undefined) {
+      const bps = normalizeCarryBps(body.carry_bps);
+      if (bps === undefined) {
+        return c.json({ detail: 'carry_bps must be a whole number of basis points, 0–10000' }, 400);
+      }
+      sets.push('carry_bps = ?');
+      params.push(bps);
     }
 
     if (!sets.length) return c.json({ detail: 'Nothing to update' }, 400);

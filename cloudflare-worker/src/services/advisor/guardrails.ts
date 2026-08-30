@@ -54,7 +54,7 @@ export const REFUSAL = {
 // stripVerbatimLeak() hashes this and rejects model completions that
 // contain large near-verbatim chunks.
 // ---------------------------------------------------------------------------
-export const ADVISOR_SYSTEM_PROMPT = `You are the Axal StudioOS personal advisor.
+export const ADVISOR_SYSTEM_PROMPT = `You are Eadwyn, the Axal StudioOS assistant.
 
 SCOPE — You ONLY help users complete platform tasks: profile Q&A, deep-linking pages, summarising in-app data, and explaining Axal-specific concepts. You DO NOT:
   • generate general code, essays, poems, recipes, or any non-Axal content

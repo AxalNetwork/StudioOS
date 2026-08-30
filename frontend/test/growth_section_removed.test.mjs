@@ -67,8 +67,12 @@ test('no sidebar row points at a withdrawn Growth tab', () => {
 test('the investor Portfolio Growth tab is NOT what was withdrawn', () => {
   // /portfolio/growth is a different surface, wired to the live introductions
   // endpoint in #325. Withdrawing the shared Growth section must not take it.
-  const sidebar = read('frontend/src/sidebarConfig.js');
-  assert.match(sidebar, /'\/portfolio\/growth'/);
+  //
+  // Its door moved when the investor shell collapsed the four portfolio rows
+  // into one: PortfolioWorkspace's tab bar links it now, not a nav row. That
+  // is still a door, so this asserts reachability rather than row-ness — the
+  // property the test was always about.
+  assert.match(read('frontend/src/pages/PortfolioWorkspace.jsx'), /to: '\/portfolio\/growth'/);
   assert.equal(existsSync(resolve(root, 'frontend/src/pages/PortfolioGrowthPage.jsx')), true);
 });
 

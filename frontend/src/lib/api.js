@@ -134,6 +134,28 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/invite/');
 }
 
+/**
+ * The active company, as a request header.
+ *
+ * Read from module state rather than React context because `request()` is a
+ * plain function called from everywhere, including outside a component tree.
+ * `CompanySwitcher` is still the only writer — it calls `setActiveCompanyId`
+ * through the same context write that changes the UI, so the two cannot drift.
+ *
+ * This header is a CLAIM, not a grant. `middleware/activeCompany.ts` checks it
+ * against `user_company_links` on every request and ignores it when the caller
+ * is not a member, so a tampered value widens nothing.
+ */
+let _activeCompanyId = null;
+
+export function setActiveCompanyId(id) {
+  _activeCompanyId = Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function getActiveCompanyHeader() {
+  return _activeCompanyId === null ? {} : { 'X-Company-Id': String(_activeCompanyId) };
+}
+
 export async function request(path, options = {}) {
   try {
     // FormData uploads must NOT carry an explicit Content-Type — the browser
@@ -141,9 +163,10 @@ export async function request(path, options = {}) {
     // would corrupt the request body.
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const csrfHeader = getCsrfHeader(options.method);
+    const companyHeader = getActiveCompanyHeader();
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...csrfHeader, ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...options.headers };
+      ? { ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
@@ -1317,6 +1340,18 @@ export const api = {
   },
   adminSendEnvelope: (payload) =>
     request('/legal/esign/send', { method: 'POST', body: JSON.stringify(payload) }),
+  // The templates THIS caller may originate — see
+  // cloudflare-worker/src/services/esignOriginators.ts. Distinct from
+  // adminListLegalTemplates, which is the full catalogue behind requireAdmin.
+  esignTemplates: () => request('/legal/esign/templates'),
+  // The territory licence the caller administers, or 404. Migration 190 —
+  // licence_admins is what makes "which licence is this admin's?" answerable.
+  myLicence: () => request('/licence/mine'),
+  licenceAdmins: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}/admins`),
+  licenceAdminAdd: (uid, data) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/admins`, { method: 'POST', body: JSON.stringify(data) }),
+  licenceAdminRemove: (uid, userId) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/admins/${userId}`, { method: 'DELETE' }),
   // Task #14 — forward signed PDF to legal partner(s).
   adminForwardContract: (id, data) =>
     request(`/legal/esign/${id}/forward`, { method: 'POST', body: JSON.stringify(data) }),
@@ -2128,6 +2163,9 @@ export const api = {
   updateCompanyMember: (uid, userId, data) =>
     request(`/company/${uid}/members/${userId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   removeCompanyMember: (uid, userId) => request(`/company/${uid}/members/${userId}`, { method: 'DELETE' }),
+  // The ladder, the named functions, and what each authority level MEANS.
+  // A picker must never hardcode these — see services/teamAuthority.ts.
+  teamVocabulary: () => request('/company/team-vocabulary'),
 
   // ---------- Personas (Epic 1) ----------
   getPersonaTaxonomy: () => request('/personas/taxonomy'),

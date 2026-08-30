@@ -76,6 +76,33 @@ export default {
       ],
     },
     {
+      id: 'data-room',
+      title: 'Data Room',
+      overview:
+        "Your data room is one route with two audiences. A founder sees their own project's room — folders, files, who it is shared with and what those people opened. An investor sees the rooms shared with them. Nothing shows two companies at once.",
+      howto: [
+        'Founders — open Data Room from Raise, create folders, and upload files (20 MB each).',
+        'Set each file to "Open to invited" or "NDA required". An NDA file stays hidden — not greyed out, hidden — until that investor has an active NDA with you.',
+        'Share by email address. The address must already have an account here: sharing does NOT send an invitation, and an unknown address is rejected.',
+        'A grant can carry an expiry. Once it lapses the room disappears for that investor without you having to revoke it.',
+        'Investors — open Data Room to see the rooms shared with you, and download from there.',
+      ],
+      tips: [
+        'The access log is the point of the room. It records who opened which file and when, which is what tells you an investor is actually reading.',
+        'Put the documents the DD checklist asks for in the room before you share it — the first visit is the one that counts.',
+      ],
+      pitfalls: [
+        'Downloads are NOT watermarked. There is no PDF pipeline. What protects a file is that the link is per-investor, single-use, expires after two minutes, and is logged — so treat a shared file as shared.',
+        'Revoking a grant stops new downloads; it cannot recall a file someone already saved.',
+        'Adding a file to a shared folder shares it immediately. Set its visibility before you upload, not after.',
+      ],
+      related: [
+        { label: 'Due Diligence', href: '#validate-grow/due-diligence' },
+        { label: 'NDA flows', href: '#legal/nda' },
+        { label: 'Trust Center', href: '#validate-grow/trust-center' },
+      ],
+    },
+    {
       id: 'due-diligence',
       title: 'Due Diligence',
       overview:

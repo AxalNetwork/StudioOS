@@ -58,12 +58,26 @@ test('no nav row links a withdrawn tab', () => {
 test('every surviving Research group still offers Market', () => {
   // An empty group is a worse outcome than a removed one — it reads as a
   // rendering bug. Admin's group was dropped for exactly this reason.
+  //
+  // SHAPE-AGNOSTIC SINCE THE PARTNER FLATTENING. Partner's canvas declares a
+  // flat shell (`ROWS = ['Home','Pipeline',…]`), so its Research destination is
+  // a ROW, not a group with items. The original matcher only knew the group
+  // form and went red on a change that satisfies every assertion it was
+  // actually making. Both forms are now counted, and each is held to the SAME
+  // two rules it always was: it must offer Market, and it must not offer the
+  // withdrawn advisor/research tabs. Nothing is relaxed — the count floor is
+  // unchanged and a Research destination pointing anywhere else still fails.
   const nav = read('frontend/src/sidebarConfig.js');
-  const groups = [...nav.matchAll(/\{ key: 'research', label: 'Research', items: \[([\s\S]*?)\]\}/g)];
-  assert.ok(groups.length >= 4, `expected the surviving Research groups, found ${groups.length}`);
-  for (const g of groups) {
-    assert.match(g[1], /market-intel/, 'a Research group with no Market row is empty');
-    assert.doesNotMatch(g[1], /advisor\/research/);
+  const groups = [...nav.matchAll(/\{ key: 'research', label: 'Research', items: \[([\s\S]*?)\]\}/g)]
+    .map((m) => m[1]);
+  const rows = [...nav.matchAll(/\{ to: '([^']*)'[^}]*label: 'Research'[^}]*\}/g)]
+    .map((m) => m[0]);
+  const destinations = [...groups, ...rows];
+  assert.ok(destinations.length >= 4,
+    `expected the surviving Research destinations, found ${destinations.length}`);
+  for (const d of destinations) {
+    assert.match(d, /market-intel/, 'a Research destination that does not offer Market is empty');
+    assert.doesNotMatch(d, /advisor\/research/);
   }
 });
 

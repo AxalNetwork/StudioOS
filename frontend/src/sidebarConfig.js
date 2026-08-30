@@ -22,7 +22,7 @@ import {
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale,
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   Gamepad2, ShieldAlert,
-  Gavel, Inbox, FileBarChart, Radar, Wallet,
+  Inbox, Radar, Wallet,
   Mail, Gift, Map,
 } from 'lucide-react';
 
@@ -90,6 +90,12 @@ export const SIDEBAR_GROUPS = {
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
       { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
       { to: '/admin/licences', icon: Map, label: 'Territory Licences' },
+      // A subsidiary administrator's read of their OWN licence — terms,
+      // territories, seats licensed, history. /admin/licences above is HQ's
+      // ledger of every licence; this is one, read-only. Both rows are here
+      // because the same nav serves HQ and a subsidiary admin today, and
+      // GET /licence/mine 404s for anyone who administers none.
+      { to: '/admin/my-licence', icon: Map, label: 'My Licence' },
     ]},
     { key: 'studio', label: 'Studio', items: [
       { to: '/projects', icon: Zap, label: 'Startups' },
@@ -170,69 +176,47 @@ export const SIDEBAR_GROUPS = {
   //
   // Newly surfaced (routes already existed and are founder-accessible, they just
   // weren't in the founder nav): Co-Marketing (/comarketing, Launch).
+  // Founder shell — the canvas declares nine rows (Home · Validate · Build ·
+  // Raise · Grow · Network · Research · Trust · Company Settings). Eight land
+  // here; Trust is deliberately absent, pinned out of every sidebar by
+  // trust_center_navigation.test.mjs — it is reached from the user dropdown.
+  // Spin-Out Lab and Messages keep rows of their own on top of that, so ten.
+  //
+  // The twenty-one items this replaces all keep a door. Five rows own their
+  // sections through FounderWorkspaceTabs, which wraps each route in App.jsx:
+  //
+  //   Validate → Discovery · Marketplace · Advisory
+  //   Build    → Execution · Roadmap · Metrics      (canvas: This week ·
+  //              Board · Roadmap · Cadence · KPI entry)
+  //   Raise    → Pitch · Capital · Legal · Data room · Liquidity
+  //   Grow     → Talent · Brand · Launch · Perks · Network effects
+  //   Research → Market · Signals
+  //
+  // Seven destinations had ZERO inbound links anywhere outside this file —
+  // /messages, /execution, /signals, /build/team, /build/metrics,
+  // /network-effects and /raise/capital. Six of them are now reachable only
+  // because those bars exist; /messages keeps a row.
+  //
+  // /liquidity's `requiredTier: 'studio'` moved onto its tab rather than being
+  // dropped: the route itself has no tier gate, so the nav was the whole gate.
+  //
+  // As in the investor shell, the Spin-Out Lab row ships verbatim — it is not
+  // a modification target, and the canvas folds it into Home without saying
+  // what Home would then be.
   founder: [
-    { key: 'home', label: 'Home', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+    { key: 'shell', label: 'Workspace', items: [
+      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/messages', icon: Mail, label: 'Messages' },
-    ]},
-    { key: 'build', label: 'Build', items: [
-      { to: '/execution', icon: Briefcase, label: 'Execution', match: ['/execution', '/projects', '/build/roadmap'] },
-      { to: '/signals', icon: Radar, label: 'Signals' },
-      // Team Building — consolidates the former "Find a Advisor" (Validate),
-      // "Find a Co-founder" (Validate) and "Jobs" (Launch) items into one
-      // workspace at /build/team. `match` keeps this row active when a founder
-      // deep-links (or is redirected from) the legacy standalone routes.
-      { to: '/build/team', icon: Users, label: 'Team', match: ['/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications'] },
-      { to: '/build/metrics', icon: TrendingUp, label: 'Metrics' },
-      { to: '/spinout-lab/brand', icon: Sparkles, label: 'Brand & Landing', match: ['/spinout-lab/brand', '/build/brand'] },
-    ]},
-    { key: 'validate', label: 'Validate', items: [
-      { to: '/build/discovery', icon: MessageSquare, label: 'Customer Discovery' },
-      // Marketplace merges the two halves of the partner-services marketplace —
-      // "Needs Board" (/needs, demand) and "Service Catalogue" (/services,
-      // supply) — into one tabbed page at /build/marketplace. `match` keeps this
-      // row active across every tab and when a founder deep-links (or is
-      // redirected from) the legacy /needs and /services routes (see App.jsx).
-      { to: '/build/marketplace', icon: Package, label: 'Marketplace', match: ['/build/marketplace', '/needs', '/services'] },
-      { to: '/advisory', icon: Brain, label: 'Advisory' },
-    ]},
-    // Task #7 — Network section mirrors the advisor/partner/investor profiles:
-    // three tabs (Introductions, Relationships, Organizations) served by the
-    // shared Network workspace under /advisor/network/*. This replaces the old
-    // single "Network" link that lived in Validate; the legacy /network,
-    // /relationships and /contacts routes keep the Relationships row active.
-    { key: 'network', label: 'Network', items: [
+
+      { to: '/build/discovery', icon: MessageSquare, label: 'Validate', match: ['/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
+      { to: '/execution', icon: Briefcase, label: 'Build', match: ['/execution', '/projects', '/build/roadmap', '/build/metrics'] },
+      { to: '/raise/pitch', icon: Sparkles, label: 'Raise', match: ['/raise', '/liquidity'] },
+      { to: '/build/team', icon: TrendingUp, label: 'Grow', match: ['/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/spinout-lab/brand', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
+
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-    ]},
-    // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
-    // the shared Research workspace (also used by advisors/investors/partners).
-    { key: 'research', label: 'Research', items: [
-      { to: '/market-intel', icon: Radar, label: 'Market' },
-    ]},
-    // Task #1 — RAISE Workspaces. Ten items collapsed into three workspaces that
-    // compose the existing pages (Pitch/Capital/Legal Engine). The Pitch item is
-    // ungated so the free reviewer stays reachable — the growth gate on the deck
-    // editor and the studio gates on founder agreements / equity elections are
-    // preserved inside their workspaces.
-    { key: 'raise', label: 'Raise', items: [
-      { to: '/raise/pitch', icon: Sparkles, label: 'Pitch' },
-      { to: '/raise/capital', icon: DollarSign, label: 'Capital' },
-      { to: '/raise/legal-engine', icon: Scale, label: 'Legal Engine' },
-      { to: '/raise/data-room', icon: Shield, label: 'Data Room' },
-    ]},
-    { key: 'launch', label: 'Launch', items: [
-      // "Jobs" moved into the Build › Team workspace (/build/team?tab=jobs).
-      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
-    ]},
-    { key: 'more', label: 'More', items: [
-      // Task #4 — "Referrals" moved into Settings (/settings/referrals); the
-      // /refer route redirects there. Removed from the founder nav.
-      { to: '/network-effects', icon: TrendingUp, label: 'Network Effects' },
-      { to: '/liquidity', icon: TrendingUp, label: 'Liquidity & Exits', requiredTier: 'studio' },
-      { to: '/perks', icon: Gift, label: 'Perks' },
-    ]},
-    { key: 'account', label: 'Account', items: [
+      { to: '/signals', icon: Radar, label: 'Research', match: ['/signals', '/market-intel'] },
+      { to: '/company-settings', icon: UserCircle, label: 'Company Settings' },
     ]},
   ],
 
@@ -283,74 +267,100 @@ export const SIDEBAR_GROUPS = {
   //   • /network-effects "Network Effects" — too abstract to earn a nav slot.
   //   • /articles/draft "Articles" — low-frequency authoring; conditional for
   //     content/press partners.
+  // ── Partner / Operator — the canonical shell from the Partner canvas ────────
+  // The canvas declares it outright: `const ROWS = ['Home','Pipeline','Delivery',
+  // 'Offers','Network','Research','Trust','Firm Settings']`, commented "CANONICAL
+  // Partner shell — 8 rows, no tier gating in v1". That is a FLAT list, not a set
+  // of groups, so this role is one group of rows rather than seven groups of
+  // seventeen items. Each row is a workspace; the sections the canvas draws
+  // inside it (Pipeline → Leads · Negotiations · Proposals · Retainers ·
+  // Analytics) belong in the page, not the sidebar.
+  //
+  // NOTHING BECAME UNREACHABLE. All seventeen previous destinations still
+  // resolve; each is listed in the `match` of the row that now owns it, so a
+  // deep link or a bookmark still highlights the right row. `match` is
+  // exact-or-subtree (`SidebarNav.jsx`: `pathname === p || startsWith(p + '/')`),
+  // which is why `/partner/operations/engagements` can sit under Pipeline while
+  // its siblings sit under Delivery without the two colliding.
+  //
+  // TWO DEPARTURES FROM THE CANVAS, both deliberate:
+  //   Home → /studio, not a new /home. Per the product owner, and it keeps
+  //     /partner from becoming a root.
+  //   Messages is a ninth row. The canvas's eight rows have nowhere to put it,
+  //     and deleting the entry would leave a live surface reachable only by
+  //     typing the URL — the Wave 4 mistake in reverse. It stays until the
+  //     canvas says where a cross-cutting inbox lives.
+  // ── Partner / Operator — the canonical shell, now complete ─────────────────
+  // Canvas ROWS: Home · Pipeline · Delivery · Offers · Network · Research ·
+  // Trust · Firm Settings. "CANONICAL Partner shell — 8 rows, no tier gating
+  // in v1." Flat, and now actually eight.
+  //
+  // THE SIX PENDING ROWS ARE GONE because their workspaces absorbed them.
+  // `PartnerWorkspaceTabs` wraps the Pipeline and Offers pages at the route,
+  // so every section is one click from its row:
+  //   Pipeline → Leads · Matches · Demand · Retainers
+  //   Delivery → the /partner/operations subtree, tabbed by
+  //              PartnerOperationsWorkspace since Wave 1a
+  //   Offers   → Catalog · Perk deals · Visibility · Proof · Office hours
+  // The tabs are role-filtered against the same guards App.jsx applies, because
+  // those routes do not share one: an investor on /services must not be shown
+  // an Office Hours tab that bounces them.
+  //
+  // /my/jobs KEEPS ITS ROW. It is not a section of Offers — it is the partner's
+  // own job listings — and it has four inbound links elsewhere, so it is not at
+  // risk either way. Folding it in to reach eight would be arithmetic, not
+  // information architecture.
+  //
+  // Messages is the ninth row for the reason it always was: the canvas's eight
+  // have nowhere to put a cross-cutting inbox, and /messages has no other door.
+  //
+  // Trust is ABSENT, deliberately: trust_center_navigation.test.mjs pins Trust
+  // Center to the user dropdown and asserts it appears in no sidebar.
+  // Firm Settings is the COMPANY's settings; Account is a different page.
   partner: [
-    { key: 'home', label: 'Home', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+    { key: 'shell', label: 'Workspace', items: [
+      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       { to: '/messages', icon: Mail, label: 'Messages' },
-    ]},
-    { key: 'sourcing', label: 'Sourcing', items: [
-      { to: '/services', icon: Package, label: 'My Services' },
-      { to: '/matches', icon: Sparkles, label: 'AI Matches' },
-      { to: '/needs', icon: MessageSquare, label: 'Needs Board' },
-      { to: '/partner/insights', icon: TrendingUp, label: 'Demand Insights' },
-    ]},
-    { key: 'engage', label: 'Engage', items: [
-      { to: '/partner/office-hours', icon: Calendar, label: 'My Office Hours' },
-      { to: '/comarketing', icon: Megaphone, label: 'Co-Marketing' },
+      { to: '/needs', icon: Target, label: 'Pipeline',
+        match: ['/needs', '/matches', '/partner/insights', '/partner/operations/engagements'] },
+      { to: '/partner/operations/overview', icon: Briefcase, label: 'Delivery',
+        match: ['/partner/operations/overview', '/partner/operations/portfolio',
+                '/partner/operations/performance'] },
+      { to: '/services', icon: Package, label: 'Offers',
+        match: ['/services', '/perks', '/comarketing', '/partner/office-hours',
+                '/partner/operations/capabilities'] },
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      { to: '/perks', icon: Gift, label: 'Perks' },
-    ]},
-    // Network — Introductions, Relationships, Organizations. Reuses the shared
-    // Network workspace (also used by advisors); the standalone "Network" link
-    // that used to live in Engage is folded into this group's three tabs.
-    { key: 'network', label: 'Network', items: [
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-    ]},
-    // Partner Operations workspace. Each item deep-links to its own tab route;
-    // `match` keeps the row active across the tab and its sub-route.
-    { key: 'operations', label: 'Operations', items: [
-      { to: '/partner/operations/overview', icon: LayoutDashboard, label: 'Overview', match: ['/partner/operations/overview'] },
-      { to: '/partner/operations/capabilities', icon: Package, label: 'Capabilities', match: ['/partner/operations/capabilities'] },
-      { to: '/partner/operations/portfolio', icon: Layers, label: 'Portfolio', match: ['/partner/operations/portfolio'] },
-      { to: '/partner/operations/engagements', icon: Handshake, label: 'Engagements', match: ['/partner/operations/engagements'] },
-      { to: '/partner/operations/performance', icon: TrendingUp, label: 'Performance', match: ['/partner/operations/performance'] },
-    ]},
-    // Research — Market, Companies, Funds, AI Research, News, Documents. Reuses
-    // the shared Research workspace (also used by advisors).
-    { key: 'research', label: 'Research', items: [
-      { to: '/market-intel', icon: Radar, label: 'Market' },
-    ]},
-    // Task #4 — the former "Earn" group held only "Referrals" (/refer), which
-    // has moved into Settings (/settings/referrals); /refer redirects there.
-    // The whole single-item group is removed from the partner nav.
-    { key: 'account', label: 'Account', items: [
+      { to: '/network', icon: Users, label: 'Network' },
+      { to: '/market-intel', icon: Radar, label: 'Research' },
+      { to: '/company-settings', icon: UserCircle, label: 'Firm Settings' },
     ]},
   ],
 
-  // Task #17 — regroup the investor sidebar around the investment lifecycle:
-  // Home → Sourcing → Diligence → Commit → Support → Account. This replaces the
-  // former ~12-group layout (which had a parallel "Investor Portal" and
-  // duplicate deal surfaces) so every feature has exactly one home and
-  // investors face far fewer top-level choices. Sidebar-level only: every
-  // surviving route/icon/tier-gate is preserved; no pages are merged.
+  // Investor/LP shell — the canvas declares nine rows (Home · Deals ·
+  // Portfolio · Axal VC Fund · Fund · Network · Research · Trust · Firm
+  // Settings). Eight land here; Trust is deliberately absent, pinned out of
+  // every sidebar by trust_center_navigation.test.mjs — it is reached from the
+  // user dropdown. The eighteen items this replaces all keep a door: a row of
+  // their own, or a workspace whose tab bar demonstrably links them.
   //
-  // Deliberate deviations from the PR #119 reference: Home stays at /studio
-  // (labeled "Studio", NOT renamed to /dashboard), and the overflow group is
-  // named "Account" (NOT "More").
+  //   Deals      → /pipeline renders PipelineWorkspace, whose tabs are Board ·
+  //                Screening · Commit · Transactions — a 1:1 match with the
+  //                canvas Deals zones (Pipeline · Screening · Commit ·
+  //                Closing) — plus Deal Flow and Data Room, the two former
+  //                rows that had no other investor door.
+  //   Portfolio  → /portfolio/health renders PortfolioWorkspace: Health ·
+  //                Updates · Cap Table · Performance · Growth.
+  //   Fund       → /funds renders FundOpsWorkspace: Funds admin · Performance ·
+  //                Accounting · LP Reporting · Capital Calls · LP Workspace.
   //
-  // Intentional removals (documented so a nav-integrity guard treats them as
-  // deliberate, not silent drops):
-  //   • "Investor Portal" (/partner-portal) — redundant with Studio; investors
-  //     hitting /partner-portal are redirected to /studio in App.jsx. The route
-  //     stays registered for admin/partner.
-  //   • "Projects" (/projects) — moved off the investor surface; route stays
-  //     registered for other roles / deep links.
-  //   • standalone "Identity Verification" (/kyc) — folded into "Trust &
-  //     Identity" (/trust) as a single nav entry; the /kyc route stays
-  //     registered and reachable.
+  // The canvas's "Axal VC Fund" row is the LP's relationship with Axal's own
+  // fund, which today is the Spin-Out Lab investor surface. No page canvas
+  // exists for it and the Lab is not a modification target, so the row keeps
+  // its existing destination, label and match array verbatim rather than being
+  // renamed to a surface nobody has designed.
   investor: [
-    { key: 'home', label: 'Home', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+    { key: 'shell', label: 'Workspace', items: [
+      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       // Same item at the same index as the founder and exploring navs, so the
       // program reads the same way in every profile — but it does NOT resolve
       // to the same page. App.jsx serves /spinout-lab by the role being browsed
@@ -362,90 +372,42 @@ export const SIDEBAR_GROUPS = {
       // relationship with the Lab is the fund, not the 4-week curriculum.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: ['/spinout-lab', '/spinout-lab/investor-workspace'] },
       { to: '/messages', icon: Mail, label: 'Messages' },
-    ]},
-    // Task — investor sidebar restructured around the investment lifecycle IA:
-    // Network → Pipeline → Portfolio → Funds → Research. Network & Research
-    // reuse the shared workspaces (also used by advisors). Sidebar-level change
-    // only: every prior route stays registered and URL-reachable. Surfaces
-    // trimmed from the nav (still reachable by direct URL): /pipeline (Pipeline
-    // Board), /matches, /watchlist, /scoring, /due-diligence, /market-intel,
-    // /portfolio/risk-matrix, /ic, /legal-capital, /portfolio/positions,
-    // /lp-portal, /funds/capital-calls, /portfolio/reserves,
-    // /portfolio/waterfall, /liquidity.
-    { key: 'network', label: 'Network', items: [
+
+      // One row, six destinations, all tabbed by PipelineWorkspace behind it.
+      { to: '/pipeline', icon: Handshake, label: 'Deals', match: ['/pipeline', '/deals', '/raise/data-room'] },
+
+      // One row, five destinations, all tabbed by PortfolioWorkspace behind it.
+      { to: '/portfolio/health', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
+
+      // One row, six destinations, all tabbed by FundOpsWorkspace behind it.
+      { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds', '/lp-reports'] },
+
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-    ]},
-    { key: 'pipeline', label: 'Pipeline', items: [
-      { to: '/deals', icon: Handshake, label: 'Deal Flow', requiredInvestorTier: 'professional' },
-      { to: '/pipeline/screening', icon: Target, label: 'Screening' },
-      { to: '/pipeline/commit', icon: Gavel, label: 'Commit' },
-      { to: '/pipeline/transactions', icon: DollarSign, label: 'Transactions' },
-      { to: '/raise/data-room', icon: Shield, label: 'Data Rooms' },
-    ]},
-    { key: 'portfolio', label: 'Portfolio', items: [
-      { to: '/portfolio/health', icon: Briefcase, label: 'Companies' },
-      { to: '/portfolio/performance', icon: TrendingUp, label: 'Performance' },
-      { to: '/portfolio/updates', icon: FileBarChart, label: 'Reporting' },
-      { to: '/portfolio/growth', icon: Rocket, label: 'Growth' },
-    ]},
-    { key: 'funds', label: 'Funds', items: [
-      { to: '/funds', icon: Wallet, label: 'Fund Management' },
-      // NOTE: no 'LP Workspace' item here — the investor journey to it runs
-      // Home → Spin-Out Lab (sales page) → its CTAs →
-      // /spinout-lab/investor-workspace, and a second nav item opening the
-      // same content under a fund-ops name is the confusion, not the fix. The
-      // /funds/lp-workspace ROUTE stays registered and is still a tab inside
-      // Fund Ops, so deep links and the tab strip are unaffected.
-      { to: '/lp-reports', icon: UserCircle, label: 'LP Management' },
-      { to: '/funds/performance', icon: Activity, label: 'Performance' },
-      { to: '/funds/accounting', icon: Scale, label: 'Accounting' },
-    ]},
-    { key: 'research', label: 'Research', items: [
-      { to: '/market-intel', icon: Radar, label: 'Market' },
-    ]},
-    { key: 'account', label: 'Account', items: [
+      { to: '/market-intel', icon: Radar, label: 'Research' },
+      { to: '/company-settings', icon: UserCircle, label: 'Firm Settings' },
     ]},
   ],
 
   advisor: [
-    { key: 'home', label: 'Home', items: [
-      { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
+    { key: 'shell', label: 'Workspace', items: [
+      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       { to: '/messages', icon: Mail, label: 'Messages' },
-    ]},
-    // Task #23 — each Advisor workspace is its own sidebar group so its
-    // sub-sections are visible directly (mirrors the founder/partner/investor
-    // profiles). This replaces the old single "Workspaces" group that collapsed
-    // each workspace into one link. Every route these single links pointed at is
-    // preserved as a sub-entry; `match` keeps the correct row active across the
-    // tab, its sub-routes, and legacy aliases.
-    { key: 'network', label: 'Network', items: [
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-    ]},
-    { key: 'advisory', label: 'Advisory', items: [
-      { to: '/advisor/advisory/opportunities', icon: Target, label: 'Opportunities' },
-      { to: '/advisor/advisory/clients', icon: Users, label: 'Clients' },
-      { to: '/advisor/advisory/engagements', icon: Layers, label: 'Engagements' },
-      { to: '/advisor/advisory/delivery', icon: Package, label: 'Delivery' },
-      { to: '/advisor/advisory/contracts', icon: FileText, label: 'Contracts' },
-    ]},
-    { key: 'research', label: 'Research', items: [
-      { to: '/market-intel', icon: Radar, label: 'Market' },
-    ]},
-    { key: 'engagements', label: 'Engagements', items: [
+      { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
+
+      // One row, five destinations, all tabbed by the workspace behind it.
+      { to: '/advisor/advisory/opportunities', icon: Briefcase, label: 'Practice',
+        match: ['/advisor/advisory'] },
+
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      { to: '/advisors', icon: UserCircle, label: 'Advisor Directory' },
+      { to: '/advisors', icon: Users, label: 'Advisor Directory' },
+      { to: '/network', icon: Users, label: 'Network' },
+      { to: '/market-intel', icon: Radar, label: 'Research' },
       { to: '/signals', icon: Radar, label: 'Signals' },
-      { to: '/due-diligence', icon: ShieldCheck, label: 'Due Diligence' },
-    ]},
-    { key: 'account', label: 'Account', items: [
+      { to: '/due-diligence', icon: ShieldAlert, label: 'Due Diligence' },
+      { to: '/company-settings', icon: UserCircle, label: 'Practice Settings' },
     ]},
   ],
 
-  // Task #9 — 'exploring' holding state: chat-onboarded users awaiting the
-  // binding agreement + admin role assignment. Deliberately lean — the
-  // Studio (Personal Advisor + Profile & Fit) plus account basics only.
-  // An explicit group is REQUIRED here: the sidebar falls back to the
-  // founder nav for unknown roles, which exploring users must never see.
   exploring: [
     { key: 'home', label: 'Home', items: [
       { to: '/exploring', icon: LayoutDashboard, label: 'Studio', highlight: true },

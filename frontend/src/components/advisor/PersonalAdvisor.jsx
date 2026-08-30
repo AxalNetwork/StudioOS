@@ -261,7 +261,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         return;
       }
       availabilityRef.current?.(true);
-      setLoadError(e?.message || 'Could not load advisor');
+      setLoadError(e?.message || 'Could not load the assistant');
     }
   }, []);
 

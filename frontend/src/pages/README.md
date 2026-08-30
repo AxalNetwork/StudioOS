@@ -18,12 +18,15 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | --- | --- |
 | `admin/` | Admin console screens and their tabs. |
 | `advisor/` | The advisor's own practice surfaces. |
+| `founder/` | The founder shell's workspace tab bars. |
 | `partner/` | Partner-side operations (BD console). |
 | `captable/` | Cap-table panels composed into `CapTablePage.jsx`. |
 | `raise/` | Round-manager panels. |
 | `pipeline/` | Pipeline helpers shared by the pipeline screens. |
 | `events/` | Public and host-side event screens. |
 | `jobs/` | Public and host-side job screens. |
+| `legal/` | Non-admin document origination (Send for signature). |
+| `subsidiary/` | A territory licence holder's read of their own licence. |
 | `insights/` | Insight reader and its public variant. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | Persona home-page templates. |

@@ -41,7 +41,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
-import { projectOwnerScope } from '../services/tenancyScope';
+import { companyScope } from '../services/tenancyScope';
+import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 import { mintDownloadToken } from '../services/signedDownload';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -60,13 +61,27 @@ type GrantRow = {
   status: string; expires_at: string | null; created_at: string;
 };
 
-/** The caller's project, or null. Ownership goes through the tenancy module. */
-async function ownedProject(env: Env, user: any, projectUid: string): Promise<ProjectRow | null> {
-  const scope = projectOwnerScope(user, 'p');
+/**
+ * The caller's project, or null. Ownership goes through the tenancy module.
+ *
+ * `companyScope` wraps `projectOwnerScope` — ownership is still the outer
+ * question — and narrows it to the company the switcher has selected. The id
+ * comes from `resolveActiveCompany`, which checks the header against
+ * `user_company_links`, so the raw client value never reaches the bind.
+ */
+async function ownedProject(
+  env: Env, user: any, projectUid: string, companyId: number | null,
+): Promise<ProjectRow | null> {
+  const scope = companyScope(user, companyId, 'p');
   const row = await env.DB.prepare(
     `SELECT p.id, p.uid, p.name FROM projects p WHERE p.uid = ? AND ${scope.sql}`,
   ).bind(projectUid, ...scope.binds).first<ProjectRow>();
   return row || null;
+}
+
+/** The verified active company for this request, or null. */
+function activeCompany(c: any, user: any): Promise<number | null> {
+  return resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
 }
 
 /** An active, unexpired grant for this investor on this project, or null. */
@@ -219,7 +234,7 @@ r.post('/shared/:projectUid/files/:uid/download', async (c) => {
 r.get('/:projectUid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'));
+    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
     if (!project) return c.json({ detail: 'Project not found' }, 404);
 
     const folders = await c.env.DB.prepare(
@@ -265,7 +280,7 @@ r.get('/:projectUid', async (c) => {
 r.post('/:projectUid/folders', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'));
+    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
     const name = String(body.name || '').trim();
@@ -298,7 +313,7 @@ r.post('/:projectUid/folders', async (c) => {
 r.patch('/:projectUid/folders/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'));
+    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
@@ -323,7 +338,7 @@ r.patch('/:projectUid/folders/:uid', async (c) => {
 r.delete('/:projectUid/folders/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'));
+    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const res = await c.env.DB.prepare(
       'DELETE FROM data_room_folders WHERE uid = ? AND project_id = ?',
@@ -339,7 +354,7 @@ r.post('/:projectUid/files', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!c.env.FILES) return c.json({ detail: 'storage_not_configured' }, 503);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'));
+    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
     if (!project) return c.json({ detail: 'Project not found' }, 404);
 
     const body = await c.req.json().catch(() => ({} as any));
@@ -396,7 +411,7 @@ r.post('/:projectUid/files', async (c) => {
 r.patch('/:projectUid/files/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'));
+    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
@@ -428,7 +443,7 @@ r.patch('/:projectUid/files/:uid', async (c) => {
 r.delete('/:projectUid/files/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'));
+    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const file = await c.env.DB.prepare(
       'SELECT id, r2_key FROM data_room_files WHERE uid = ? AND project_id = ?',
@@ -449,7 +464,7 @@ r.delete('/:projectUid/files/:uid', async (c) => {
 r.post('/:projectUid/grants', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'));
+    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
     const email = String(body.email || '').trim().toLowerCase();
@@ -482,7 +497,7 @@ r.post('/:projectUid/grants', async (c) => {
 r.delete('/:projectUid/grants/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const project = await ownedProject(c.env, user, c.req.param('projectUid'));
+    const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     // Revoked, not deleted: the access log points at a user whose grant is
     // gone, and the founder still needs to read what that investor opened.
