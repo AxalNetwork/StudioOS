@@ -29,7 +29,7 @@ const labels = rows.map((r) => r.label);
 
 test('the canvas rows are present, in the canvas order', () => {
   // Expertise is deliberately absent — see the next test.
-  const CANON = ['Home', 'Practice', 'Network', 'Research', 'Practice Settings'];
+  const CANON = ['Home', 'Practice', 'Network', 'Research'];
   let i = 0;
   for (const l of labels) if (l === CANON[i]) i += 1;
   assert.equal(i, CANON.length, `canonical rows out of order or missing: ${JSON.stringify(labels)}`);
@@ -77,13 +77,28 @@ test('Expertise waits for a destination rather than borrowing one', () => {
     'Expertise has a row — it needs an audited destination first, like Founder Grow');
 });
 
-test('Home is /studio, Settings is the company, no role root invented', () => {
+test('Home is /studio, no role root invented', () => {
   assert.equal(rows[0].to, '/studio');
-  assert.ok(targets.includes('/company-settings'), 'Practice Settings is company settings');
+
   assert.ok(!targets.includes('/home'));
   assert.ok(!targets.includes('/advisor'), 'no bare /advisor root');
 });
 
 test('Trust stays out of the sidebar', () => {
   assert.ok(!targets.includes('/trust'), 'Trust Center belongs to the user dropdown');
+});
+
+test('Company Settings is the pinned footer only, never a nav row', () => {
+  // It used to be both: a row at the end of the group AND the pinned footer,
+  // so every role rendered it twice. The footer is the single entry point now.
+  assert.ok(
+    !targets.includes('/company-settings'),
+    'a /company-settings row is back in the nav config; it duplicates the pinned footer',
+  );
+
+  // The guard that moved here with it. SidebarNav's footer is unconditional —
+  // no role gate — so removing the row cannot strand a role without a door.
+  const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
+  assert.ok(/to="\/company-settings"/.test(nav), 'the pinned footer lost its link');
+  assert.ok(!/to="\/settings"/.test(nav), 'the footer must not point at the personal Account page');
 });

@@ -37,8 +37,9 @@ const targets = rows.map((r) => r.to);
 test('the canvas rows are all present, in the canvas order', () => {
   // A subsequence check, not equality: rows still pending absorption sit
   // between them, and the next test is what keeps that list honest.
-  const CANON = ['Home', 'Pipeline', 'Delivery', 'Offers', 'Network', 'Research',
-                 'Firm Settings'];
+  // Company Settings is the pinned footer in SidebarNav, not a nav row, so it
+  // is deliberately absent here — see the footer test at the bottom.
+  const CANON = ['Home', 'Pipeline', 'Delivery', 'Offers', 'Network', 'Research'];
   let i = 0;
   for (const l of labels) if (l === CANON[i]) i += 1;
   assert.equal(i, CANON.length,
@@ -129,4 +130,19 @@ test('Trust stays out of the sidebar', () => {
   // User Settings and Support. Asserted from the Partner side too so the two
   // cannot drift apart silently.
   assert.ok(!targets.includes('/trust'), 'Trust Center belongs to the user dropdown');
+});
+
+test('Company Settings is the pinned footer only, never a nav row', () => {
+  // It used to be both: a row at the end of the group AND the pinned footer,
+  // so every role rendered it twice. The footer is the single entry point now.
+  assert.ok(
+    !targets.includes('/company-settings'),
+    'a /company-settings row is back in the nav config; it duplicates the pinned footer',
+  );
+
+  // The guard that moved here with it. SidebarNav's footer is unconditional —
+  // no role gate — so removing the row cannot strand a role without a door.
+  const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
+  assert.ok(/to="\/company-settings"/.test(nav), 'the pinned footer lost its link');
+  assert.ok(!/to="\/settings"/.test(nav), 'the footer must not point at the personal Account page');
 });

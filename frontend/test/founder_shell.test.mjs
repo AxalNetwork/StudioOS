@@ -41,16 +41,17 @@ const app = codeOnly(read('frontend/src/App.jsx'));
 const tabsTo = (p) => bar.includes(`to: '${p}'`);
 
 test('the canvas rows are present, in the canvas order', () => {
-  // Canvas ROWS: Home · Validate · Build · Raise · Grow · Network · Research ·
-  // Trust · Company Settings. Trust is excluded on purpose (below).
-  const CANON = ['Home', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research', 'Company Settings'];
+  // Canvas ROWS: Home · Validate · Build · Raise · Grow · Network · Research.
+  // Trust is excluded on purpose (below); Company Settings is the pinned
+  // footer in SidebarNav, not a nav row, so it is not in this list.
+  const CANON = ['Home', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
   let i = 0;
   for (const l of labels) if (l === CANON[i]) i += 1;
   assert.equal(i, CANON.length, `canonical rows out of order or missing: ${JSON.stringify(labels)}`);
 });
 
-test('the shell is ten rows, not twenty-one', () => {
-  assert.equal(rows.length, 10, `founder shell drifted off ten rows: ${JSON.stringify(labels)}`);
+test('the shell is nine rows, not twenty-one', () => {
+  assert.equal(rows.length, 9, `founder shell drifted off nine rows: ${JSON.stringify(labels)}`);
 });
 
 test('every destination the old nav reached still has a door', () => {
@@ -146,11 +147,9 @@ test('every tab carries the guard its route carries', () => {
   }
 });
 
-test('Home is /studio, Settings is the company, no role root invented', () => {
+test('Home is /studio, no role root invented', () => {
   assert.equal(rows[0].to, '/studio');
   assert.equal(rows[0].label, 'Home');
-  assert.ok(targets.includes('/company-settings'));
-  assert.ok(!targets.includes('/settings'), 'Company Settings must not point at the personal Account page');
   assert.ok(!targets.includes('/home'));
   assert.ok(!targets.includes('/founder'), 'no bare /founder root');
 });
@@ -174,4 +173,19 @@ test('the Research row lands somewhere every founder can actually open', () => {
 
 test('Trust stays out of the sidebar', () => {
   assert.ok(!targets.includes('/trust'), 'Trust Center belongs to the user dropdown');
+});
+
+test('Company Settings is the pinned footer only, never a nav row', () => {
+  // It used to be both: a row at the end of the group AND the pinned footer,
+  // so every role rendered it twice. The footer is the single entry point now.
+  assert.ok(
+    !targets.includes('/company-settings'),
+    'a /company-settings row is back in the nav config; it duplicates the pinned footer',
+  );
+
+  // The guard that moved here with it. SidebarNav's footer is unconditional —
+  // no role gate — so removing the row cannot strand a role without a door.
+  const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
+  assert.ok(/to="\/company-settings"/.test(nav), 'the pinned footer lost its link');
+  assert.ok(!/to="\/settings"/.test(nav), 'the footer must not point at the personal Account page');
 });
