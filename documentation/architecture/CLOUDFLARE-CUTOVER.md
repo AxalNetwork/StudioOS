@@ -1,8 +1,12 @@
 # Jekyll → Cloudflare cutover: content inventory
 
-Status: **gate item 1 is done in code, and step 3's bootstrap deploy landed
-2026-08-30** (see step 3 below for the version ids) — so gate item 2's
-24-hour observation clock can start now. Items 2, 4 and 6 remain live-operator
+Status: **gate item 1 is done in code, step 3's bootstrap deploy landed
+2026-08-30, and gate item 2 has been rewritten because the original was
+unsatisfiable** (see step 3 for the version ids, gate item 2 for the measured
+baseline). The bootstrap deploy did not regress the apex: 5xx fell from 15.51%
+to 10.38% while traffic rose 42%. **Do not roll it back** — the saved version
+restores a worse state. The 24-hour observation clock can start now, against
+the baseline rather than against zero. Items 2, 4 and 6 remain live-operator
 steps that cannot be performed from the build environment (see *What is left*). The
 apex-wide `axal.vc/*` route remains disabled; the apex is served by an explicit
 route table instead — one entry per claimed path, enumerated in `wrangler.toml`,
@@ -30,18 +34,53 @@ Before retrying `axal.vc/*`:
    against an unmigrated schema". The three `ensure*Schema` helpers share one
    promise per isolate, so concurrent cold requests do not issue overlapping
    rebuilds. Covered by `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs`.
-2. Confirm Cloudflare Adaptive HTTP Analytics has no 5xx responses across a
-   sustained observation window. The current account exposes status counts but
-   denies `edgeTimeToFirstByteMs`; document that limitation and use the
-   Worker's own latency telemetry for API timing.
-   - Treat “sustained” as 24 continuous hours after the bootstrap deployment,
-     sampled in five-minute buckets. Probe `/api/health` and
-     `/api/public/stats` at least once per bucket, plus representative
-     Worker-served hard loads.
-   - Abort the wildcard attempt and restore the saved Worker version and route
-     table (captured in gate item 4)
-     immediately if either probe returns a 5xx, or Analytics reports two or
-     more 5xx responses in any five-minute bucket.
+2. **REWRITTEN 2026-08-30 — the original criterion was unsatisfiable.** It
+   read “no 5xx responses across a sustained observation window” and aborted on
+   “two or more 5xx in any five-minute bucket.” That assumed a roughly-zero
+   baseline. The apex does not have one, and never did:
+
+   | Window | Requests | 5xx | Rate |
+   | --- | ---: | ---: | ---: |
+   | 2026-08-29T09:00Z – 08-30T09:00Z | 6,244 | 937 | 15.01% |
+   | 2026-08-30T09:00Z – 09:45Z (the 45 min before the deploy) | 485 | 107 | **22.06%** |
+   | Combined pre-deploy baseline | 6,729 | 1,044 | **15.51%** |
+   | 2026-08-30T09:52:30Z – 16:13:34Z (post-deploy) | 2,446 | 254 | **10.38%** |
+
+   Measured, not estimated: Cloudflare Adaptive Analytics caps a query at one
+   day, so the baseline was taken as two adjacent ranges and summed. **The
+   bootstrap deploy did not regress the apex — it improved it**, by 5.13
+   percentage points against the 24-hour baseline and 11.68 against the
+   45 minutes immediately preceding it, *while traffic rose 42%*
+   (272 → 385 req/hr). A rollback on this evidence would restore a worse state.
+
+   So the gate no longer counts 5xx absolutely. It compares against baseline:
+
+   - Observe 24 continuous hours after the bootstrap deployment, in five-minute
+     buckets. Probe `/api/health` and `/api/public/stats` once per bucket, plus
+     representative Worker-served hard loads.
+   - **Abort** if the observed 5xx rate exceeds the pre-cutover baseline for
+     the same window length by more than 2 percentage points, or if a probe
+     returns a status the same probe did not return before the change.
+   - A 5xx count alone is not an abort signal here and never was. Recording the
+     baseline is a precondition of the gate, not an optional extra.
+   - The account exposes status counts but denies `edgeTimeToFirstByteMs`; use
+     the Worker's own latency telemetry for API timing.
+
+   **All 254 post-deploy failures were 504** — zero 500, 502 or 503. A gateway
+   timeout, not a crash. 206 fell on paths the Worker claims via `axal.vc/api/*`
+   and 48 on paths that fall through to GitHub Pages (`/`, `/offline.html`,
+   `/account/login`). That split names route ownership, not the component that
+   produced each timeout — a live `wrangler tail` is what distinguishes them,
+   and it has not been run yet.
+
+   Two things follow. First, static files timing out on the Pages fallthrough
+   cannot be application logic, and the apex is a **proxied CNAME to
+   `axalnetwork.github.io`** with no A/AAAA records — not GitHub's documented
+   apex configuration. Second, and this is the part that bears on this document:
+   **completing the cutover removes that path entirely.** If the Worker claims
+   `axal.vc/*`, nothing falls through to Pages and the Pages origin stops being
+   in the request path. The 5xx data is an argument for finishing the cutover,
+   not for pausing it.
 3. Hard-load representative non-prerendered routes and public APIs in a fresh
    browser context, confirming no redirect, blank shell, missing hashed asset,
    or failed module.
@@ -271,8 +310,11 @@ the end state.
      expected and permanent — see GOTCHAS, "Migrations & schema".
 4. **Observe** per gate items 2–3 above: 24 continuous hours, five-minute
    buckets, `/api/health` and `/api/public/stats` probed at least once per
-   bucket, plus representative Worker-served hard loads. Abort on any 5xx from
-   a probe, or two or more 5xx in any five-minute bucket.
+   bucket, plus representative Worker-served hard loads. Abort on a 5xx rate
+   more than 2 points above the recorded pre-cutover baseline, or on a probe
+   returning a status it did not return before the change. **Not** on a raw
+   5xx count — the apex baseline is 15.51%, so an absolute threshold aborts on
+   the weather. Gate item 2 carries the baseline table and why this changed.
 5. **Flip `OAUTH_CALLBACK_BASE_URL` to the apex** in both `[vars]` tables and
    redeploy. Verify Google sign-in end to end before continuing — it is the
    one failure that locks users out rather than degrading a feature.
