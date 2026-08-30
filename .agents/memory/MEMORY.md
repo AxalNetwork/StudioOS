@@ -14,4 +14,3 @@
 - [Cloudflare cutover observability](cloudflare-cutover-observability.md) — Adaptive HTTP status counts work, but edge-TTFB fields do not; combine five-minute 5xx buckets with route/API probes.
 - [Production schema ownership](production-schema-ownership.md) — request-time DDL is dev/preview-only; production D1 migrations must create public-route schemas before deployment.
 - [Production auth verification](production-auth-verification.md) — do not assume the workspace JWT secret can mint tokens accepted by the deployed Worker; use a real production session or prove secret parity first.
-- [Migration dry-run caveat](migration-dry-run-caveat.md) — the current --dry-run path plans from an empty ledger; never treat its zero exit as production pending-migration truth without fixing or separately querying it.
