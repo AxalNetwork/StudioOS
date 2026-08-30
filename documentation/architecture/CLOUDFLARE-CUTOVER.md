@@ -1,7 +1,9 @@
 # Jekyll → Cloudflare cutover: content inventory
 
-Status: **gate item 1 is done in code**; items 2–4 are live-operator steps that
-cannot be performed from the build environment (see *What is left*). The
+Status: **gate item 1 is done in code, and step 3's bootstrap deploy landed
+2026-08-30** (see step 3 below for the version ids) — so gate item 2's
+24-hour observation clock can start now. Items 2, 4 and 6 remain live-operator
+steps that cannot be performed from the build environment (see *What is left*). The
 apex-wide `axal.vc/*` route remains disabled; the apex is served by an explicit
 route table instead — one entry per claimed path, enumerated in `wrangler.toml`,
 which is the source of truth for its size.
@@ -256,9 +258,17 @@ the end state.
    GitHub and Cloudflare panes.
 2. **Register the eleven OAuth redirect URIs** (table above), apex form added
    alongside the existing one. Do not flip the var yet.
-3. **Deploy the current worker** with `npm run deploy` — never bare
+3. ~~**Deploy the current worker** with `npm run deploy` — never bare
    `npx wrangler deploy`, which skips the `predeploy` hook that applies D1
-   migrations and would ship the worker ahead of its schema.
+   migrations and would ship the worker ahead of its schema.~~ **DONE
+   2026-08-30.** `npm run deploy` exited 0 from the repository root: 193/193
+   migrations applied, 0 pending, and the postdeploy live smoke passed on both
+   hosts with `SKIP_LIVE_SMOKE` unset.
+   - Active Worker version: `36cccf2e-2d61-413b-ad67-6a2d14d1d72a`
+   - Rollback target (the version it replaced): `bbaae9d6-8f38-40bb-966e-e2aae408b193`
+   - This is the "bootstrap deployment" gate item 2 measures its 24 hours from.
+     One non-blocking checksum-drift warning on `109_events_core.sql` is
+     expected and permanent — see GOTCHAS, "Migrations & schema".
 4. **Observe** per gate items 2–3 above: 24 continuous hours, five-minute
    buckets, `/api/health` and `/api/public/stats` probed at least once per
    bucket, plus representative Worker-served hard loads. Abort on any 5xx from
