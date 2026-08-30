@@ -158,15 +158,67 @@ function main() {
   }
 
   if (MODE_DRY_RUN) {
-    console.log(`[migrate-d1] DRY RUN against ${target.label} — nothing executed.`);
+    // READS the live ledger. This used to plan against `new Map()` and print
+    // "assuming an empty ledger", which listed every migration ever written no
+    // matter what the target had applied — useless as the pre-deploy gate the
+    // runbook points operators at, and alarming enough that one correctly
+    // refused to deploy on it.
+    //
+    // Read-only on purpose: the live run creates the ledger before reading it,
+    // and a dry run must not write. So a missing ledger table is reported as an
+    // empty ledger rather than created. Every OTHER wrangler failure is
+    // rethrown — a connection or auth error must never be reported as
+    // "nothing has been applied", which is the one lie that would send someone
+    // into an unnecessary --baseline.
+    console.log(`[migrate-d1] DRY RUN against ${target.label} — reads only, nothing written.`);
     printAudit(files);
-    const actions = planActions(files, new Map(), {
-      mode: MODE_BASELINE ? 'baseline' : 'apply',
+
+    const dryTableRows = wrangler(target, {
+      json: true,
+      command:
+        "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' " +
+        `AND name NOT LIKE 'sqlite_%' AND name <> ${sqlQuote(LEDGER_TABLE)}`,
     });
+    const dryTableCount = Number(dryTableRows[0]?.n ?? 0);
+
+    let dryApplied = new Map();
+    let ledgerMissing = false;
+    try {
+      const rows = wrangler(target, {
+        json: true,
+        command: `SELECT filename, checksum FROM ${LEDGER_TABLE}`,
+      });
+      dryApplied = new Map(rows.map((r) => [r.filename, r.checksum]));
+    } catch (e) {
+      if (/no such table/i.test(String(e?.message ?? ''))) ledgerMissing = true;
+      else throw e;
+    }
+
+    const dryMode = MODE_BASELINE ? 'baseline' : 'apply';
+    const dryActions = planActions(files, dryApplied, { mode: dryMode });
+    const dryPending = dryActions.filter((a) => a.action !== 'skip');
+
     console.log(
-      `\n[migrate-d1] Plan (assuming an empty ledger, mode=${MODE_BASELINE ? 'baseline' : 'apply'}):`,
+      `\n[migrate-d1] ${target.label}: ${files.length} migration(s), ` +
+        `${dryApplied.size} already applied, ${dryPending.length} pending ` +
+        `(mode=${dryMode}).`,
     );
-    for (const a of actions) console.log(`  ${a.action.padEnd(5)} ${a.file.name}`);
+    if (ledgerMissing) {
+      console.log(
+        `  NOTE: ${LEDGER_TABLE} does not exist on this target yet. The live ` +
+          'run creates it; a dry run will not.',
+      );
+    }
+    if (needsBaseline({ mode: dryMode, appliedCount: dryApplied.size, appTableCount: dryTableCount })) {
+      console.log(
+        `\n\u26a0 ${target.label} has ${dryTableCount} table(s) but an empty ledger.\n` +
+          '  A live run in apply mode would REFUSE rather than replay history.\n' +
+          '  The one-time fix is a single --baseline run; see documentation/operations/DEPLOY.md.',
+      );
+    }
+
+    console.log('\n[migrate-d1] Plan:');
+    for (const a of dryActions) console.log(`  ${a.action.padEnd(5)} ${a.file.name}`);
     return;
   }
 
