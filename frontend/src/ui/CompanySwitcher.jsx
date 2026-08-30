@@ -50,6 +50,7 @@ function CompanySwitcher({ collapsed }) {
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const ref = useRef(null);
 
   // Create, then select. Appending to `companies` rather than refetching keeps
@@ -88,7 +89,10 @@ function CompanySwitcher({ collapsed }) {
         // as active if nothing is selected yet.
         if (arr.length > 0 && !company) { setActiveCompanyId(arr[0].id); setCompany(arr[0]); }
       })
-      .catch(() => {})
+      // A failed read used to be swallowed here, which rendered exactly like an
+      // account with no companies — the one state a user reports as "I created
+      // one and nothing appeared". Keep the reason.
+      .catch((err) => setLoadError(err?.message || "Could not load your companies."))
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -101,7 +105,10 @@ function CompanySwitcher({ collapsed }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const displayName = loading ? '…' : (company?.company_name ?? 'My Company');
+  // No fallback company name. "My Company" here read as a real company that the
+  // dropdown then contradicted with "No company yet." — the button and the list
+  // must agree about whether anything exists.
+  const displayName = loading ? '…' : (company?.company_name || (loadError ? 'Unavailable' : 'No company'));
   const abbr = (displayName === '…' ? '…' :
     displayName.replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?');
 
@@ -112,7 +119,10 @@ function CompanySwitcher({ collapsed }) {
         : 'absolute left-3 right-3 top-full mt-1 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden'
     }>
       {loading && <div className="px-3 py-2.5 text-xs text-gray-500">Loading…</div>}
-      {!loading && companies.length === 0 && (
+      {!loading && loadError && (
+        <div className="px-3 py-2.5 text-xs text-red-600 dark:text-red-400">{loadError}</div>
+      )}
+      {!loading && !loadError && companies.length === 0 && (
         <div className="px-3 py-2.5 text-xs text-gray-500">No company yet.</div>
       )}
       {!loading && companies.map((co) => {
