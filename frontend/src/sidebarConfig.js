@@ -216,7 +216,6 @@ export const SIDEBAR_GROUPS = {
 
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/signals', icon: Radar, label: 'Research', match: ['/signals', '/market-intel'] },
-      { to: '/company-settings', icon: UserCircle, label: 'Company Settings' },
     ]},
   ],
 
@@ -332,7 +331,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/network', icon: Users, label: 'Network' },
       { to: '/market-intel', icon: Radar, label: 'Research' },
-      { to: '/company-settings', icon: UserCircle, label: 'Firm Settings' },
     ]},
   ],
 
@@ -384,7 +382,6 @@ export const SIDEBAR_GROUPS = {
 
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/market-intel', icon: Radar, label: 'Research' },
-      { to: '/company-settings', icon: UserCircle, label: 'Firm Settings' },
     ]},
   ],
 
@@ -404,7 +401,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/market-intel', icon: Radar, label: 'Research' },
       { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/due-diligence', icon: ShieldAlert, label: 'Due Diligence' },
-      { to: '/company-settings', icon: UserCircle, label: 'Practice Settings' },
     ]},
   ],
 
