@@ -16,10 +16,10 @@ nothing here is served.
 | --- | --- |
 | `architecture/` | How the system is actually put together, and the decisions behind it. Start with `architecture/CODEBASE_MAP.md`. |
 | `audits/` | Point-in-time findings. Each one is true *as of its date* and is not maintained afterwards. |
-| `operations/` | Runbooks — what to do when something is on fire. |
+| `operations/` | Runbooks. [`DEPLOY.md`](operations/DEPLOY.md) to ship production; [`INCIDENT_RESPONSE.md`](operations/INCIDENT_RESPONSE.md) when something is on fire. |
 | `product/` | Positioning and feature notes. |
 
-## The four that answer most questions
+## The five that answer most questions
 
 | Question | File |
 | --- | --- |
@@ -27,6 +27,7 @@ nothing here is served.
 | Which canvas maps to which route, and what shipped? | [architecture/ROUTE_MAP.md](architecture/ROUTE_MAP.md) |
 | Why is it built this way and not the obvious way? | [architecture/DECISIONS.md](architecture/DECISIONS.md) |
 | What will bite me? | [architecture/GOTCHAS.md](architecture/GOTCHAS.md) |
+| How do I deploy to production? | [operations/DEPLOY.md](operations/DEPLOY.md) |
 
 ## Every folder also explains itself
 
