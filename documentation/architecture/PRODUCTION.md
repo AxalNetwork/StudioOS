@@ -49,12 +49,24 @@ secrets, and the post-deploy checklist.
 ### Cloudflare Worker (production API)
 
 ```bash
-wrangler secret put JWT_SECRET           # used for auth + Durable Object WS handshake
-npm run deploy                           # = wrangler deploy --env production
+wrangler secret put JWT_SECRET   # used for auth + Durable Object WS handshake
+npm run deploy                   # from the REPOSITORY ROOT
 ```
 
+`npm run deploy` is not a synonym for `wrangler deploy`. npm expands it into
+three scripts: `predeploy` applies pending D1 migrations
+(`scripts/migrate-d1.mjs --remote`), `deploy` builds the frontend and then runs
+`wrangler deploy --config ../wrangler.toml --env production`, and `postdeploy`
+probes the live site (`scripts/check-spa-live.mjs`). Running wrangler by hand —
+or running `npm run deploy` from inside `cloudflare-worker/`, where the script
+omits `--env production` — skips the migration hook and ships the worker ahead
+of its schema.
+
+**The full procedure, with pre-flight, migration-failure triage and rollback, is
+[documentation/operations/DEPLOY.md](../operations/DEPLOY.md).**
+
 > ✅ **Verified 2026-05-06:** `--env production` IS the correct deploy command.
-> The `[env.production.*]` block in `wrangler.toml` (lines 181–239) redeclares
+> The `[env.production.*]` block in `wrangler.toml` redeclares
 > every binding (D1, KV `TOKENS`/`RATE_LIMITS`, R2 `studioos-files`, Queue
 > `studioos-job-queue`, AI, Durable Objects), so the live worker has all bindings
 > intact — confirmed by `GET /accounts/.../workers/scripts/studioos/bindings`.
