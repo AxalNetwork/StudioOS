@@ -39,6 +39,31 @@ def distributions(fund_id: str = Query(...), _: User = Depends(get_current_user)
     return {"ok": True, "items": []}
 
 
+@router.get("/analytics")
+def fund_analytics(_: User = Depends(get_current_user)):
+    """Development parity for the Worker fund-family analytics contract."""
+    return {
+        "ok": True,
+        "items": [],
+        "totals": {
+            "fund_count": 0,
+            "lp_count": 0,
+            "committed_cents": 0,
+            "called_cents": 0,
+            "deployed_cents": 0,
+            "distributed_cents": 0,
+            "dpi": None,
+        },
+        "unavailable": {
+            "nav_cents": "Fund-level valuation marks are not recorded.",
+            "rvpi": "RVPI requires a recorded fund NAV.",
+            "tvpi": "TVPI requires a recorded fund NAV.",
+            "irr": "Net IRR requires dated cash receipts and valuation marks.",
+            "fee_accrual": "Fee accruals by period are not recorded.",
+        },
+    }
+
+
 @router.get("/{fund_id}")
 def get_fund(fund_id: str, _: User = Depends(get_current_user)):
     raise HTTPException(status_code=404, detail="Fund not found")

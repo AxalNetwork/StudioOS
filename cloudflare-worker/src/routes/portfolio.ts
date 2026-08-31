@@ -3,7 +3,8 @@
  * Mounted at /api/portfolio.
  *
  * Visibility:
- *   admin/investor/partner   -> every project
+ *   admin/partner            -> every project
+ *   investor                 -> explicitly related projects only
  *   founder                  -> only projects they own
  *   advisor                   -> 403
  *
@@ -20,6 +21,7 @@ import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, todayIso, 
 import { computeRadar } from '../services/radar';
 import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../services/skillsTaxonomySchema';
 import { ensureSkillProfileSchema } from '../services/skillProfileSchema';
+import { investorProjectIds } from './_investorProjectScope';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -34,7 +36,8 @@ function canViewDashboard(u: User): boolean {
 }
 
 async function visibleProjectIds(env: Env, user: User): Promise<number[] | null> {
-  if (isAdmin(user) || isInvestor(user) || isPartner(user)) return null;
+  if (isAdmin(user) || isPartner(user)) return null;
+  if (isInvestor(user)) return investorProjectIds(env, user);
   if (isFounder(user)) {
     if (!user.founder_id) return [];
     const rows = await env.DB.prepare('SELECT id FROM projects WHERE founder_id = ? AND deleted_at IS NULL')
@@ -208,6 +211,8 @@ r.post('/health/recompute/:uid', async (c) => {
     }
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE uid = ? AND deleted_at IS NULL').bind(c.req.param('uid')).first<any>();
     if (!project) return c.json({ detail: 'Project not found' }, 404);
+    const visible = await visibleProjectIds(c.env, user);
+    if (visible != null && !visible.includes(Number(project.id))) return c.json({ detail: 'Forbidden' }, 403);
     const row = await upsertSnapshot(c.env, project);
     return c.json(snapDto(row, project));
   } catch (e) { return mapError(c, e); }

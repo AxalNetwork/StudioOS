@@ -63,6 +63,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/decks/templates',            'the pitch-deck slide templates'],
   ['frontend/src/pages/admin',                'the admin console'],
   ['frontend/src/pages/admin/assessment',     'the assessment game editor'],
+  ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/templates/components',       'landing-page section blocks'],
   ['cloudflare-worker/src/middleware',        'the gates every request passes'],
   ['cloudflare-worker/src/util',              'small shared helpers'],

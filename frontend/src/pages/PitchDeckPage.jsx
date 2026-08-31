@@ -31,13 +31,15 @@ import { spinoutPreviewMeta as computeSpinoutPreviewMeta } from './spinoutPrevie
  * the paywall instead of applying. Free-tier exports always render the
  * Axal VC footer; Growth+ removes it; Studio may add a custom watermark.
  */
-export default function PitchDeckPage({ embedded = false }) {
+export default function PitchDeckPage({ embedded = false, initialProjects = [], initialProjectId = null }) {
   useAuth();
   const { toast, showToast } = useToast(3500);
   const addToast = (msg, kind = 'ok') => showToast({ msg, kind: kind === 'success' ? 'ok' : kind === 'error' ? 'err' : kind === 'info' ? 'info' : 'ok' });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const seededProjectId = Number(searchParams.get('project_id')) || Number(initialProjectId) || null;
 
-  const [projects, setProjects] = useState([]);
-  const [projectId, setProjectId] = useState(null);
+  const [projects, setProjects] = useState(() => Array.isArray(initialProjects) ? initialProjects : []);
+  const [projectId, setProjectId] = useState(seededProjectId);
   const [versions, setVersions] = useState([]);
   const [deck, setDeck] = useState(null);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -98,18 +100,21 @@ export default function PitchDeckPage({ embedded = false }) {
   // loads + the active project resolves. Guarded by a ref so the auto-
   // apply only happens on the first matching render (otherwise the
   // user would be force-reapplied every time they click a slide).
-  const [searchParams, setSearchParams] = useSearchParams();
   const autoAppliedRef = useRef(false);
 
   const saveTimer = useRef(null);
 
   // ---------------- bootstrap ----------------
   useEffect(() => {
-    api.listProjects().then((r) => {
-      const list = Array.isArray(r) ? r : (r?.projects || []);
-      setProjects(list);
-      if (list.length && !projectId) setProjectId(list[0].id);
-    }).catch(reportError);
+    if (!initialProjects.length) {
+      api.listProjects().then((r) => {
+        const list = Array.isArray(r) ? r : (r?.projects || []);
+        setProjects(list);
+        const requested = Number(searchParams.get('project_id'));
+        if (requested && list.some((item) => Number(item.id) === requested)) setProjectId(requested);
+        else if (list.length && !projectId) setProjectId(list[0].id);
+      }).catch(reportError);
+    }
     api.deckMethods().then((r) => {
       setMethods(r.methods || []);
       setPremiumIds(r.premium_method_ids || []);

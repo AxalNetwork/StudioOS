@@ -10,14 +10,14 @@
  * `FounderMarketplacePage` have no tab bar at all.
  *
  * So the audit came first. Searching every `to=`, `to:`, `navigate(` and
- * `link=` in frontend/src outside sidebarConfig.js, SEVEN destinations had
+ * `link=` in frontend/src outside sidebarConfig.js, six destinations had
  * zero inbound links — their sidebar row was the only door:
  *
- *     /messages  /execution  /signals  /build/team
+ *     /execution  /signals  /build/team
  *     /build/metrics  /network-effects  /raise/capital
  *
- * `FounderWorkspaceTabs` is what makes six of them survive the collapse
- * (/messages keeps a row). Every assertion below reads that file, or App.jsx,
+ * `FounderWorkspaceTabs` is what makes them survive the collapse. Every
+ * assertion below reads that file, or App.jsx,
  * rather than trusting the sidebar's own comments — because `match` decides
  * which row highlights, and does not create a link.
  */
@@ -50,14 +50,14 @@ test('the canvas rows are present, in the canvas order', () => {
   assert.equal(i, CANON.length, `canonical rows out of order or missing: ${JSON.stringify(labels)}`);
 });
 
-test('the shell is nine rows, not twenty-one', () => {
-  assert.equal(rows.length, 9, `founder shell drifted off nine rows: ${JSON.stringify(labels)}`);
+test('the shell is eight rows, not twenty-one', () => {
+  assert.equal(rows.length, 8, `founder shell drifted off eight rows: ${JSON.stringify(labels)}`);
 });
 
 test('every destination the old nav reached still has a door', () => {
   // The twenty-one items the pre-canvas founder nav carried, verbatim.
   const BEFORE = [
-    '/studio', '/spinout-lab', '/messages',
+    '/studio', '/spinout-lab',
     '/execution', '/signals', '/build/team', '/build/metrics', '/spinout-lab/brand',
     '/build/discovery', '/build/marketplace', '/advisory',
     '/network', '/market-intel',
@@ -77,17 +77,17 @@ test('the seven doorless destinations are exactly the ones the bar rescues', () 
     '/network-effects', '/raise/capital']) {
     assert.ok(tabsTo(p), `${p} has no inbound link anywhere else — the tab IS the door`);
   }
-  assert.ok(targets.includes('/messages'), '/messages has no other door either');
+  assert.ok(!targets.includes('/messages'), 'Messages is intentionally outside the eight-row canvas shell');
 });
 
 test('each row that owns sections is actually wrapped at its routes', () => {
   // A tab set that no route renders is a list, not a bar.
   const SITES = {
-    validate: ['/build/discovery', '/build/marketplace', '/advisory'],
+    validate: ['/build/marketplace', '/advisory'],
     build: ['/execution', '/build/roadmap', '/build/metrics'],
-    raise: ['/raise/pitch', '/raise/capital', '/raise/legal-engine', '/raise/data-room', '/liquidity'],
+    raise: ['/raise/capital', '/raise/legal-engine', '/raise/data-room', '/liquidity'],
     grow: ['/build/team', '/spinout-lab/brand', '/comarketing', '/perks', '/network-effects'],
-    research: ['/market-intel', '/signals'],
+    research: ['/market-intel'],
   };
   for (const [set, paths] of Object.entries(SITES)) {
     for (const p of paths) {
@@ -97,6 +97,25 @@ test('each row that owns sections is actually wrapped at its routes', () => {
         `${p} is not wrapped in the ${set} bar — the row cannot own it`);
     }
   }
+  const discovery = app.split('\n').find((line) => line.includes('path="/build/discovery"'));
+  assert.ok(discovery?.includes("<FounderValidatePage />"),
+    '/build/discovery must be owned by the dedicated A2 Validate page');
+});
+
+test('A4 owns the founder Raise landing while workspace mode retains its detailed editor', () => {
+  const line = app.split('\n').find((item) => item.includes('path="/raise/pitch"'));
+  assert.ok(line?.includes('founderRaiseLanding'), '/raise/pitch must defer ownership to A4');
+  assert.match(app, /founderRaiseLanding = effectiveRole === 'founder'[\s\S]*?get\('mode'\) !== 'workspace'/);
+  assert.match(app, /founderRaiseLanding\s*\?\s*<FounderRaiseDesk \/>/);
+  assert.match(app, /FounderWorkspaceTabs set="raise" user=\{user\}><PitchWorkspacePage \/>/);
+});
+
+test('A7 owns the founder Research landing while workspace mode retains Signals', () => {
+  const line = app.split('\n').find((item) => item.includes('path="/signals"'));
+  assert.ok(line?.includes('founderResearchLanding'), '/signals must defer ownership to A7');
+  assert.match(app, /founderResearchLanding = effectiveRole === 'founder'/);
+  assert.match(app, /founderResearchLanding\s*\?\s*<FounderResearchDesk \/>/);
+  assert.match(app, /FounderWorkspaceTabs set="research" user=\{user\}><SignalsPage user=\{user\} \/>/);
 });
 
 test('a founder never gets two tab bars on one page', () => {
@@ -104,7 +123,7 @@ test('a founder never gets two tab bars on one page', () => {
   // a branch, not a second bar stacked on the first.
   for (const p of ['/perks', '/comarketing']) {
     const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-    assert.match(line, /user\?\.role === 'founder'\s*\?\s*<FounderWorkspaceTabs/,
+    assert.match(line, /effectiveRole === 'founder'\s*\?\s*founderWorkspace\('grow', <FounderWorkspaceTabs/,
       `${p} must serve founders the Grow bar INSTEAD of the Partner bar`);
     assert.ok(line.includes('<PartnerWorkspaceTabs set="offers"'),
       `${p} must still serve everyone else the Partner bar`);

@@ -8,19 +8,18 @@ The nav side of the same projection. `PROFILE_ROUTING.md` walks the
 canvases; this walks the sidebar, so a destination that ships with no
 canvas behind it still shows up here.
 
-## `founder` — 9 destinations in 1 group
+## `founder` — 8 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Workspace | Home | `/studio` | Founder Studio |
-| Workspace | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab Workspace |
-| Workspace | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Validate | `/build/discovery` | Customer Discovery |
-| Workspace | Build | `/execution` | Pages · Founder Build |
-| Workspace | Raise | `/raise/pitch` | Pages · Founder Raise |
-| Workspace | Grow | `/build/team` | Team |
-| Workspace | Network | `/network` | Founder Workspaces Canvas, Pages · Founder Network |
-| Workspace | Research | `/signals` | Signals |
+| Home | Home | `/studio` | Founder Studio |
+| Home | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab Workspace |
+| Home | Validate | `/build/discovery` | Customer Discovery |
+| Home | Build | `/execution` | Pages · Founder Build |
+| Home | Raise | `/raise/pitch` | Pages · Founder Raise |
+| Home | Grow | `/build/team` | Team |
+| Home | Network | `/network` | Founder Workspaces Canvas, Pages · Founder Network |
+| Home | Research | `/signals` | Signals |
 
 ## `advisor` — 10 destinations in 1 group
 
@@ -128,13 +127,12 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-63 of the 88 sidebar rows above are not claimed
+62 of the 87 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
 rather than merely absent.
 
-- founder · Workspace · Messages (`/messages`)
 - advisor · Workspace · Home (`/studio`)
 - advisor · Workspace · Messages (`/messages`)
 - advisor · Workspace · Jobs (`/my/jobs`)

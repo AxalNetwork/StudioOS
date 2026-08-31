@@ -37,7 +37,7 @@ test('investor-owned deep links keep the investor workspace shell', () => {
   );
   assert.match(
     app,
-    /effectiveRole === 'investor' \? investorWorkspace\('deals', <DataRoomPage user=\{user\} \/>\) : <FounderWorkspaceTabs/,
+    /effectiveRole === 'investor' \? investorWorkspace\('deals', <DataRoomPage user=\{user\} \/>\) : founderWorkspace\('raise', <FounderWorkspaceTabs/,
     'investor Data Room must not inherit the founder workspace tab bar',
   );
 });
@@ -55,9 +55,8 @@ test('Axal VC Fund preserves the live LP access implementation', () => {
 });
 
 test('Fund preserves its institutional entitlement and honest locked state', () => {
-  assert.match(app, /fundUnlocked: hasInvestorTier\(user, 'institutional'\)/);
-  assert.match(page, /fundUnlocked && children \? children : <LockedFundNotice \/>/);
-  assert.match(page, /They are not available in this investor license/);
+  assert.match(app, /effectiveRole === 'investor' \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsWorkspace \/>/);
+  assert.match(app, /path="\/funds\/performance"[^\n]+investorFundWorkspace\(<FundOpsWorkspace \/>/);
 });
 
 test('investor visual system includes source provenance, responsive layout, and dark mode', () => {
