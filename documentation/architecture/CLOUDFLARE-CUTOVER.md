@@ -70,8 +70,27 @@ Before retrying `axal.vc/*`:
    timeout, not a crash. 206 fell on paths the Worker claims via `axal.vc/api/*`
    and 48 on paths that fall through to GitHub Pages (`/`, `/offline.html`,
    `/account/login`). That split names route ownership, not the component that
-   produced each timeout — a live `wrangler tail` is what distinguishes them,
-   and it has not been run yet.
+   produced each timeout — a live `wrangler tail` is what distinguishes them.
+
+   **The tail ran on 2026-08-30 and did not distinguish them, because the apex
+   had no traffic to sample.** Ten minutes caught 10 scheduled cron invocations
+   and zero HTTP requests; a fresh 20 minutes (21:39:21Z onward) caught zero
+   HTTP events, while Analytics for exactly that window recorded **2 apex
+   requests and zero 5xx** — both GitHub Pages fallthrough. Zero 5xx in a
+   two-request sample is not evidence of health: a ~10% failure rate needs
+   roughly thirty requests before three failures are even expected. What the
+   run *does* establish is that the correlation method works — Pages-fallthrough
+   requests never reach the Worker, and the tail correctly showed nothing for
+   them. It also shows the apex swings from ~385 req/hr in the census window to
+   ~6 req/hr at 21:40Z, so **any future tail must be timed against the traffic
+   peak**, identified from Analytics 5xx-by-hour, rather than run on demand.
+
+   The Worker-side hypothesis has also weakened on inspection. The costly part
+   of the bootstrap (`rebuildUsersRoleCheckForInvestor`) is guarded and returns
+   after one `sqlite_master` read on a healthy DB; what remains unguarded is
+   three promote-block writes against 23 users. That is seconds of cold-start
+   latency, not a ~100s gateway timeout. See GOTCHAS, "Backend / Worker", where
+   this entry was corrected after first overstating it.
 
    Two things follow. First, static files timing out on the Pages fallthrough
    cannot be application logic, and the apex is a **proxied CNAME to
