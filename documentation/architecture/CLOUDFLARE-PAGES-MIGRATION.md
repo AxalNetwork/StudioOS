@@ -1,19 +1,35 @@
 # Cloudflare Pages migration — the frontend moves, the Worker keeps the API
 
-**Decision, 2026-08-31.** The frontend moves from Workers Static Assets to
-**Cloudflare Pages**. The existing Worker keeps serving `axal.vc/api/*` — all
+**DONE, 2026-08-31.** The frontend moved from Workers Static Assets to
+**Cloudflare Pages**, and the apex now serves from it. This document is kept as
+the record of how, and of the two things that bit on the way. The existing Worker keeps serving `axal.vc/api/*` — all
 151 route files, D1 bindings, auth and cron stay exactly where they are. That
 split was chosen explicitly; the alternative (porting the API to Pages
 Functions) was considered and declined.
 
-**This supersedes fact 4 in `CLAUDE.md`**, which says the frontend is served by
-the Worker's `[assets]` binding, "Workers Static Assets, **not** Cloudflare
-Pages. There is no Pages project in this repo." That statement is still true
-*today* and stays true until the steps below are executed. It is deliberately
-not being rewritten in advance — the whole reason that file exists is that a
-previous architecture flip was declared in docs before it was real, and never
-finished. `CLAUDE.md` gets updated when the Pages project actually serves
-traffic, not before.
+**`CLAUDE.md` fact 4 has been rewritten** to describe the Pages architecture,
+which was the deal: it was annotated but left factually intact while the old
+statement was still true, and rewritten only once Pages actually served
+traffic. The Pages project is `studioos-2p8.pages.dev`, bound to `axal.vc`.
+
+## What bit, after the domain was bound
+
+Two failures, both worth keeping because both were predictable and one was
+predicted:
+
+1. **Pages HTML + Worker assets = blank page.** The apex was bound to Pages
+   while the Worker's route table still claimed 165 patterns including
+   `axal.vc/assets/*`. Worker routes beat a Pages custom domain, so Pages
+   served `index.html` referencing hashes only the Pages build had, `/assets/*`
+   went to the Worker's older `docs/`, the entry module 404'd, and the inline
+   boot watchdog spun on `?__reboot=`. Fixed by shrinking both route tables to
+   the audited four patterns. **This is the failure mode the guards now exist
+   to prevent** — see `apex_cutover_bootstrap.test.mjs` (exact allowlist) and
+   `apex_route_coverage.test.mjs`.
+2. **Rocket Loader rewrote the Vite module script.** Cloudflare's Rocket Loader
+   mangles `type="module"` on the entry tag, which can stop React booting.
+   Disabled for the zone, with `data-cfasync="false"` added at build time as
+   defence in depth.
 
 ---
 
@@ -100,7 +116,7 @@ deployed preview.
 
 ---
 
-## Order of operations
+## Order of operations (executed)
 
 1. **Finish `CLOUDFLARE-CUTOVER.md` steps 2–5** — OAuth URIs registered, the
    24-hour gate confirmed clean, `OAUTH_CALLBACK_BASE_URL` flipped and Google
