@@ -242,7 +242,7 @@ function AdvisorReviewModal({ booking, onClose, onSubmitted }) {
   );
 }
 
-export default function OfficeHoursPage() {
+export default function OfficeHoursPage({ embedded = false }) {
   const [profile, setProfile] = useState(null);
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -278,15 +278,15 @@ export default function OfficeHoursPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className={embedded ? 'space-y-6' : 'space-y-6'}>
+      {!embedded && <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Office hours</h1>
         <PageExplainer pageKey="office_hours" />
         <p className="text-sm text-gray-600 mt-1">
           Publish bookable slots and manage incoming requests. After each session you can
           review the mentee — same as they review you.
         </p>
-      </div>
+      </div>}
 
       <ProfileCard profile={profile} onSaved={loadAll} />
 

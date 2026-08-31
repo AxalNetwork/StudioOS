@@ -1,16 +1,9 @@
 /**
- * The Advisor shell, and the one consolidation in it that is actually safe.
+ * The Advisor Canvas shell contract.
  *
- * Advisor is where the canvas's flat shell pays off honestly for the first
- * time: `AdvisorAdvisoryWorkspace` renders a `WorkspaceTabs` bar across all
- * five /advisor/advisory/* pages, so ONE row can own five destinations and
- * every one stays a click away. Partner had no equivalent for Pipeline or
- * Offers, which is why it shipped fourteen rows instead of eight.
- *
- * The rest of the role keeps rows, and the audit is the reason. Searching
- * every `to=` and `navigate(` in frontend/src for the destinations a fuller
- * collapse would swallow: /office-hours 0 inbound, /messages 0, /signals 0,
- * /due-diligence 0. Four surfaces whose only door is this sidebar.
+ * Advisor has six top-level rows. Existing concrete pages remain reachable
+ * through their canonical deep links, but incidental pages no longer become
+ * competing sidebar destinations.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,11 +21,15 @@ const targets = rows.map((r) => r.to);
 const labels = rows.map((r) => r.label);
 
 test('the canvas rows are present, in the canvas order', () => {
-  // Expertise is deliberately absent — see the next test.
-  const CANON = ['Home', 'Practice', 'Network', 'Research'];
-  let i = 0;
-  for (const l of labels) if (l === CANON[i]) i += 1;
-  assert.equal(i, CANON.length, `canonical rows out of order or missing: ${JSON.stringify(labels)}`);
+  assert.deepEqual(labels, ['Home', 'Spin-Out Lab', 'Practice', 'Expertise', 'Network', 'Research']);
+  assert.deepEqual(targets, [
+    '/studio',
+    '/spinout-lab',
+    '/advisor/advisory/opportunities',
+    '/office-hours',
+    '/network',
+    '/signals',
+  ]);
 });
 
 test('Practice owns the whole advisory subtree, and the workspace tabs to all of it', () => {
@@ -41,40 +38,46 @@ test('Practice owns the whole advisory subtree, and the workspace tabs to all of
   assert.match(advisor, /match: \['\/advisor\/advisory'\]/, 'Practice must match the subtree');
 
   // The row may only own them because the workspace links every one. Read it.
-  const ws = read('frontend/src/pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx');
+  const ws = read('frontend/src/pages/advisor/AdvisorWorkspaceShell.jsx');
   for (const page of ['opportunities', 'clients', 'engagements', 'delivery', 'contracts']) {
     assert.ok(ws.includes(`to: '/advisor/advisory/${page}'`),
-      `AdvisorAdvisoryWorkspace no longer tabs to ${page} — Practice can no longer own it`);
+      `Practice no longer links to ${page}`);
   }
 });
 
-test('every destination the old nav reached still has a door', () => {
-  const BEFORE = [
-    '/office-hours', '/messages', '/network', '/market-intel', '/my/jobs',
-    '/advisors', '/signals', '/due-diligence',
-    '/advisor/advisory/opportunities', '/advisor/advisory/clients',
-    '/advisor/advisory/engagements', '/advisor/advisory/delivery',
+test('canonical deep links remain registered even when not sidebar rows', () => {
+  const app = read('frontend/src/App.jsx');
+  for (const path of [
+    '/advisor/advisory/opportunities',
+    '/advisor/advisory/clients',
+    '/advisor/advisory/engagements',
+    '/advisor/advisory/delivery',
     '/advisor/advisory/contracts',
-  ];
-  const ws = read('frontend/src/pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx');
-  const doorless = BEFORE.filter((p) => !targets.includes(p) && !ws.includes(`to: '${p}'`));
-  assert.deepEqual(doorless, [], 'no nav row and no workspace tab — reachable only by typed URL');
+    '/office-hours',
+    '/advisors',
+    '/network',
+    '/signals',
+  ]) {
+    assert.ok(app.includes(`path="${path}"`), `${path} lost its canonical route`);
+  }
+  for (const legacyRow of ['/messages', '/my/jobs', '/advisors', '/market-intel', '/due-diligence']) {
+    assert.ok(!targets.includes(legacyRow), `${legacyRow} became a competing advisor row`);
+  }
 });
 
-test('/office-hours is untouched and keeps its highlight', () => {
-  // Standing instruction, and task #124. The canvas's Practice sections
-  // (Sessions, Earnings) describe it, but the workspace does not tab to it, so
-  // folding it in would cost the door.
-  assert.match(advisor, /\{ to: '\/office-hours', icon: Calendar, label: 'Office Hours', highlight: true \}/);
+test('Expertise owns the canonical advisor profile destination', () => {
+  assert.match(advisor, /\{ to: '\/office-hours', icon: UserCircle, label: 'Expertise'/);
+  assert.match(read('frontend/src/App.jsx'), /effectiveRole === 'advisor' \? <AdvisorExpertiseWorkspace \/> : <OfficeHoursPage \/>/);
+  assert.match(read('frontend/src/pages/advisor/AdvisorExpertiseWorkspace.jsx'), /OfficeHoursPage embedded/);
 });
 
-test('Expertise waits for a destination rather than borrowing one', () => {
-  // The canvas gives Expertise five sections — Profile, Services, Proof,
-  // Thinking, Visibility — and no existing route is clearly that page.
-  // /advisors is the public directory, at most the Visibility slice. Pointing
-  // the row there to complete the shell is how a nav entry ends up lying.
-  assert.ok(!labels.includes('Expertise'),
-    'Expertise has a row — it needs an audited destination first, like Founder Grow');
+test('Advisor-only framing is isolated from shared roles', () => {
+  const network = read('frontend/src/pages/NetworkPage.jsx');
+  const signals = read('frontend/src/pages/SignalsPage.jsx');
+  assert.match(network, /role === 'advisor'/);
+  assert.match(signals, /mode === 'advisor'/);
+  assert.match(read('frontend/src/ui/SidebarNav.jsx'), /advisorAccent/);
+  assert.doesNotMatch(read('frontend/src/App.jsx'), /<Route path="\/advisor"/);
 });
 
 test('Home is /studio, no role root invented', () => {

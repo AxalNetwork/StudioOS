@@ -7,6 +7,7 @@ import SignalCard from '../components/signals/SignalCard';
 import SignalFilterBar from '../components/signals/SignalFilterBar';
 import SignalKPIStrip from '../components/signals/SignalKPIStrip';
 import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
+import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
 
 /**
  * SignalsPage — "Public-market evidence for what to build next".
@@ -91,10 +92,10 @@ export default function SignalsPage({ user }) {
 
   const signals = data?.signals || [];
 
-  return (
+  const content = (
     <div className="space-y-5 pb-10">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+      {mode !== 'advisor' && <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300">
@@ -119,7 +120,7 @@ export default function SignalsPage({ user }) {
             </button>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Data-provenance disclosure. `data_state` comes from the engine:
           'illustrative' means D1 holds no ingested signals yet and every card
@@ -212,4 +213,19 @@ export default function SignalsPage({ user }) {
       )}
     </div>
   );
+
+  if (mode === 'advisor') {
+    return (
+      <AdvisorWorkspaceShell
+        eyebrow="Research"
+        title="Know more than the room"
+        description="Public-market evidence you can use to point founders toward the next useful question — with provenance intact."
+        icon={Radar}
+        rail
+      >
+        {content}
+      </AdvisorWorkspaceShell>
+    );
+  }
+  return content;
 }

@@ -262,6 +262,7 @@ const EmailChangeConfirmPage = lazy(() => import('./pages/EmailChangeConfirmPage
 const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage'));
 // Advisor sections shell — tabbed workspaces (Network, Advisory, Research).
 const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
+const AdvisorExpertiseWorkspace = lazy(() => import('./pages/advisor/AdvisorExpertiseWorkspace'));
 // Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
 // Engagements, Performance).
 const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
@@ -601,6 +602,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const fullWidthSurface = (activeRole === 'founder'
     && ['/build/discovery', '/execution'].includes(location.pathname))
     || (activeRole === 'investor' && location.pathname.startsWith('/portfolio/'))
+    || activeRole === 'advisor'
     || location.pathname === '/spinout-lab'
     || location.pathname.startsWith('/spinout-lab/');
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
@@ -1568,7 +1570,7 @@ function AppInner() {
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
       <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
-      <Route path="/office-hours" element={guard(['admin', 'advisor'], <OfficeHoursPage />)} />
+      <Route path="/office-hours" element={guard(['admin', 'advisor'], effectiveRole === 'advisor' ? <AdvisorExpertiseWorkspace /> : <OfficeHoursPage />)} />
       <Route path="/partner/office-hours" element={guard(['admin', 'partner'], <PartnerWorkspaceTabs set="offers" user={user}><PartnerOfficeHoursPage /></PartnerWorkspaceTabs>)} />
       <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], effectiveRole === 'founder' ? founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><CoMarketingPage user={user} /></FounderWorkspaceTabs>) : <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>)} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />

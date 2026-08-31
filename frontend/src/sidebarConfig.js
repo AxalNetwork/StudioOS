@@ -353,22 +353,21 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
+  // Advisor Canvas contract: six workspace rows only. Existing concrete
+  // routes remain reachable through deep links and are grouped under the
+  // owning workspace rather than promoted to separate sidebar destinations.
   advisor: [
-    { key: 'shell', label: 'Workspace', items: [
+    { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Home' },
-      { to: '/messages', icon: Mail, label: 'Messages' },
-      { to: '/office-hours', icon: Calendar, label: 'Office Hours', highlight: true },
-
-      // One row, five destinations, all tabbed by the workspace behind it.
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/advisor/advisory/opportunities', icon: Briefcase, label: 'Practice',
         match: ['/advisor/advisory'] },
-
-      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      { to: '/advisors', icon: Users, label: 'Advisor Directory' },
-      { to: '/network', icon: Users, label: 'Network' },
-      { to: '/market-intel', icon: Radar, label: 'Research' },
-      { to: '/signals', icon: Radar, label: 'Signals' },
-      { to: '/due-diligence', icon: ShieldAlert, label: 'Due Diligence' },
+      { to: '/office-hours', icon: UserCircle, label: 'Expertise',
+        match: ['/office-hours', '/advisors'] },
+      { to: '/network', icon: Users, label: 'Network',
+        match: ['/network', '/relationships', '/contacts', '/advisor/network'] },
+      { to: '/signals', icon: Radar, label: 'Research',
+        match: ['/signals', '/market-intel'] },
     ]},
   ],
 
