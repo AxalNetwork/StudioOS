@@ -109,6 +109,8 @@ const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
 const SpinoutLabInvestorPage = lazy(() => import('./pages/SpinoutLabInvestorPage'));
 const InvestorWorkspacePage = lazy(() => import('./pages/investor/InvestorWorkspacePage'));
 const InvestorFundLanding = lazy(() => import('./pages/investor/InvestorFundLanding'));
+const InvestorNetworkWorkspace = lazy(() => import('./pages/investor/InvestorNetworkWorkspace'));
+const InvestorResearchWorkspace = lazy(() => import('./pages/investor/InvestorResearchWorkspace'));
 const SpinoutLabStartupPage = lazy(() => import('./pages/SpinoutLabStartupPage'));
 const SpinoutLabDiscoveryPage = lazy(() => import('./pages/SpinoutLabDiscoveryPage'));
 const SpinoutLabMarketPage = lazy(() => import('./pages/SpinoutLabMarketPage'));
@@ -603,7 +605,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     && ['/build/discovery', '/execution', '/raise/pitch', '/build/team', '/network', '/signals'].includes(location.pathname))
     || (activeRole === 'investor' && (
       location.pathname.startsWith('/portfolio/')
-      || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds'].includes(location.pathname)
+      || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds', '/network', '/market-intel'].includes(location.pathname)
     ))
     || activeRole === 'advisor'
     || location.pathname === '/spinout-lab'
@@ -612,7 +614,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     && ['/execution', '/raise/pitch', '/build/discovery', '/build/team', '/network', '/signals'].includes(location.pathname)
     || (activeRole === 'investor' && (
       location.pathname.startsWith('/portfolio/')
-      || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds'].includes(location.pathname)
+      || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds', '/network', '/market-intel'].includes(location.pathname)
     ));
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
 
@@ -1567,7 +1569,9 @@ function AppInner() {
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], investorWorkspace('deals', <DealsPage />))} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
-      <Route path="/market-intel" element={guard(labRoles(['admin', 'partner', 'investor']), investorWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><MarketIntelPage /></FounderWorkspaceTabs>))} />
+      <Route path="/market-intel" element={guard(labRoles(['admin', 'partner', 'investor']), effectiveRole === 'investor'
+        ? <InvestorResearchWorkspace />
+        : investorWorkspace('research', <FounderWorkspaceTabs set="research" user={user}><MarketIntelPage /></FounderWorkspaceTabs>))} />
       <Route path="/advisory" element={guard(['admin', 'founder'], <FounderWorkspaceTabs set="validate" user={user}><AdvisoryPage /></FounderWorkspaceTabs>)} />
       {/* Team Building consolidation (Build › Team). Founders reach Advisor/
           Advisor, Co-Founder and Jobs through the unified /build/team
@@ -1717,7 +1721,7 @@ function AppInner() {
           Relationships tabs). The legacy /relationships route redirects into
           the Relationships tab. Advisors are included so the Introductions
           feature (and its notification deep links) work for every user type. */}
-      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], founderNetworkLanding ? <FounderNetworkDesk /> : founderWorkspace('network', investorWorkspace('network', <NetworkPage />)))} />
+      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], effectiveRole === 'investor' ? <InvestorNetworkWorkspace /> : founderNetworkLanding ? <FounderNetworkDesk /> : founderWorkspace('network', <NetworkPage />))} />
       <Route path="/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
       {/* Task #17 — the investor sidebar no longer surfaces "Investor Portal"

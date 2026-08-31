@@ -8,19 +8,34 @@ const app = read('frontend/src/App.jsx');
 const page = read('frontend/src/pages/investor/InvestorWorkspacePage.jsx');
 const styles = read('frontend/src/pages/investor/investorWorkspace.css');
 const deals = read('frontend/src/pages/investor/InvestorDealsWorkspace.jsx');
+const research = read('frontend/src/pages/investor/InvestorResearchWorkspace.jsx');
 
 test('investor workspace routes branch on the active role', () => {
   assert.match(app, /effectiveRole === 'investor'[\s\S]{0,160}<InvestorWorkspacePage page=\{page\}/);
   for (const [path, key] of [
     ['/pipeline', 'deals'],
     ['/portfolio/health', 'portfolio'],
-    ['/market-intel', 'research'],
-    ['/network', 'network'],
     ['/trust', 'trust'],
   ]) {
     const escaped = path.replaceAll('/', '\\/');
     assert.match(app, new RegExp(`path=\"${escaped}\"[^\\n]+investorWorkspace\\('${key}'`));
   }
+  assert.match(app, /path="\/network"[\s\S]{0,180}effectiveRole === 'investor'[\s\S]{0,100}<InvestorNetworkWorkspace \/>/);
+  assert.match(app, /path="\/market-intel"[\s\S]{0,220}effectiveRole === 'investor'[\s\S]{0,100}<InvestorResearchWorkspace \/>/);
+});
+
+test('investor Research implements I8 without fabricated diligence claims', () => {
+  for (const label of ['Go deep before money moves', 'Diligence pull', 'Source library', 'Fund & manager benchmarking', 'Market deep-dives', 'Company profiles', 'Worker AI · Research']) {
+    assert.match(research, new RegExp(label.replace('&', '&amp;|&')));
+  }
+  assert.match(research, /api\.miSources\(\)/);
+  assert.match(research, /api\.miWatchlistList\(\)/);
+  assert.match(research, /\['rows', 'watchlist', 'items', 'data'\]/);
+  assert.match(research, /computed_at/);
+  assert.match(research, /sources\.map\(\(source\)/);
+  assert.match(research, /source\.live[\s\S]{0,180}source\.paid/);
+  assert.doesNotMatch(research, /Novacraft|74,000|DeepSeek|\$0\.0344|Founder-shared data room/);
+  assert.match(research, /no answer has been generated/i);
 });
 
 test('investor-owned deep links keep the investor workspace shell', () => {
