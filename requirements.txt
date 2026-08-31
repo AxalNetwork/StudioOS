@@ -47,7 +47,7 @@ frozenlist==1.8.0
     #   aiosignal
 google-api-core==2.34.0
     # via google-api-python-client
-google-api-python-client==2.198.0
+google-api-python-client==2.199.0
     # via repl-nix-workspace
 google-auth==2.56.3
     # via
@@ -78,7 +78,7 @@ httplib2==0.32.0
     #   google-auth-httplib2
 httpx==0.28.1
     # via repl-nix-workspace
-idna==3.18
+idna==3.19
     # via
     #   anyio
     #   httpx
@@ -100,7 +100,7 @@ propcache==0.5.2
     #   yarl
 proto-plus==1.28.3
     # via google-api-core
-protobuf==7.35.1
+protobuf==7.36.0
     # via
     #   google-api-core
     #   googleapis-common-protos
@@ -173,7 +173,7 @@ uritemplate==4.2.0
     # via google-api-python-client
 urllib3==2.7.0
     # via requests
-uvicorn==0.52.3
+uvicorn==0.52.4
     # via repl-nix-workspace
 yarl==1.24.5
     # via aiohttp
