@@ -10,7 +10,10 @@ const app = read('frontend/src/App.jsx');
 
 test('A6 has explicit founder-only overview ownership and preserves network deep links', () => {
   assert.match(app, /founderNetworkLanding = effectiveRole === 'founder'[\s\S]*?get\('mode'\) !== 'workspace'[\s\S]*?!networkParams\.has\('tab'\)[\s\S]*?!networkParams\.has\('intro'\)/);
-  assert.match(app, /founderNetworkLanding \? <FounderNetworkDesk \/> : founderWorkspace\('network', investorWorkspace\('network', <NetworkPage \/>/);
+  // The /network route gained a dedicated investor branch (InvestorNetworkWorkspace)
+  // ahead of the founder ternary this test pins — the founder-only ownership
+  // it is meant to protect (founderNetworkLanding, defined above) did not move.
+  assert.match(app, /effectiveRole === 'investor' \? <InvestorNetworkWorkspace \/> : founderNetworkLanding \? <FounderNetworkDesk \/> : founderWorkspace\('network', <NetworkPage \/>/);
 });
 test('A6 normalizes both relationship envelopes and reads only approved endpoints', () => {
   assert.match(desk, /normalizeRelationships = \(value\) => listFrom\(value, 'items'\)/);

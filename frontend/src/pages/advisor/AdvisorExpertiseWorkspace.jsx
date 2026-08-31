@@ -55,7 +55,7 @@ export default function AdvisorExpertiseWorkspace() {
           Listing visibility and booking acceptance are controlled by the live advisor profile above. No separate storefront status is inferred here.
         </p>
         <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-          <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1"><Store size={12} /> Profile-owned</span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-800 px-2.5 py-1"><Store size={12} /> Profile-owned</span>
           <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-cyan-800 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-300">Live state</span>
         </div>
       </section>
