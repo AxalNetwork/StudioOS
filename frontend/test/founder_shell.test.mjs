@@ -89,11 +89,22 @@ test('each row that owns sections is actually wrapped at its routes', () => {
     grow: ['/build/team', '/spinout-lab/brand', '/comarketing', '/perks', '/network-effects'],
     research: ['/market-intel'],
   };
+  // A route's `element` used to always fit on the line carrying `path="..."`.
+  // It stopped being safe to assume that the day an investor branch was added
+  // ahead of the founder one (/network, /market-intel — both gained a
+  // dedicated Investor*Workspace branch and Prettier wrapped the ternary
+  // across lines). So this reads a bounded WINDOW of lines starting at the
+  // route, not just the one line, and stops at the next <Route so it can't
+  // walk into a neighbour's markup and false-positive.
+  const appLines = app.split('\n');
   for (const [set, paths] of Object.entries(SITES)) {
     for (const p of paths) {
-      const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-      assert.ok(line, `no route for ${p}`);
-      assert.ok(line.includes(`<FounderWorkspaceTabs set="${set}"`),
+      const start = appLines.findIndex((l) => l.includes(`path="${p}"`));
+      assert.ok(start !== -1, `no route for ${p}`);
+      let end = start + 1;
+      while (end < appLines.length && end < start + 8 && !appLines[end].includes('<Route ')) end++;
+      const block = appLines.slice(start, end).join('\n');
+      assert.ok(block.includes(`<FounderWorkspaceTabs set="${set}"`),
         `${p} is not wrapped in the ${set} bar — the row cannot own it`);
     }
   }
