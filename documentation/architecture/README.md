@@ -15,6 +15,7 @@ disagrees with the code, the document is the thing to fix.
 | `GOTCHAS.md` | What will bite me? |
 | `PRODUCTION.md` | What production actually is, and how a deploy works. |
 | `CLOUDFLARE-CUTOVER.md` | The plan for retiring GitHub Pages at the apex. |
+| `CLOUDFLARE-PAGES-MIGRATION.md` | The frontend moves to Cloudflare Pages; the Worker keeps the API. Converges with the cutover at its step 6. |
 | `MIGRATE_TO_CUSTOM_DOMAIN.md` | Domain migration notes. |
 | `LEGAL_ENTITIES.md` | The entity set and what each is for. |
 | `SIGNALS.md` | The signals subsystem. |
