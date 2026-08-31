@@ -1,0 +1,23 @@
+# Cloudflare Pages — routing rules for the Axal VC frontend.
+#
+# Pages evaluates these top-to-bottom and stops at the FIRST match, which is
+# why the /assets/* rule has to come first. It replicates the behaviour of the
+# Worker's "hardened static-asset serving" (cloudflare-worker/src/index.ts,
+# Task #37): a hashed asset that no longer exists must 404 as itself, never
+# fall back to index.html. Without this rule the catch-all below would answer
+# a stale /assets/index.abc123.js with HTML and a 200, the browser would try
+# to execute HTML as a JS module, and the page renders blank — the recurring
+# Safari blank page after a deploy. A real 404 is what lets the boot watchdog
+# in index.html and the stale-chunk recovery in main.jsx reload onto the
+# current build.
+#
+# Difference from the Worker, stated so it is not mistaken for a regression:
+# the Worker answers with a plain-text body, this answers with the branded
+# 404.html. Both carry a 404 status, which is the part that matters.
+/assets/*    /404.html      404
+
+# Everything else that is not a real file in this build — client-side routes
+# like /deals/:id — falls through to the SPA so the router can handle it.
+# The 31 prerendered routes in docs/ are real files and are served directly,
+# never reaching this rule.
+/*           /index.html    200
