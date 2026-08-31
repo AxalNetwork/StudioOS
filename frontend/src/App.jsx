@@ -601,12 +601,19 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const activeRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
   const fullWidthSurface = (activeRole === 'founder'
     && ['/build/discovery', '/execution', '/raise/pitch', '/build/team', '/network', '/signals'].includes(location.pathname))
-    || (activeRole === 'investor' && location.pathname.startsWith('/portfolio/'))
+    || (activeRole === 'investor' && (
+      location.pathname.startsWith('/portfolio/')
+      || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds'].includes(location.pathname)
+    ))
     || activeRole === 'advisor'
     || location.pathname === '/spinout-lab'
     || location.pathname.startsWith('/spinout-lab/');
   const flushSurface = activeRole === 'founder'
-    && ['/execution', '/raise/pitch', '/build/discovery', '/build/team', '/network', '/signals'].includes(location.pathname);
+    && ['/execution', '/raise/pitch', '/build/discovery', '/build/team', '/network', '/signals'].includes(location.pathname)
+    || (activeRole === 'investor' && (
+      location.pathname.startsWith('/portfolio/')
+      || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds'].includes(location.pathname)
+    ));
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.

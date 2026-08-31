@@ -16,3 +16,4 @@
 - [Production auth verification](production-auth-verification.md) — do not assume the workspace JWT secret can mint tokens accepted by the deployed Worker; use a real production session or prove secret parity first.
 - [Pages build and routing](pages-build-routing.md) — Pages must install frontend dependencies explicitly; use advanced asset handling for SPA fallback plus real asset 404s.
 - [Investor deal scoping](investor-deal-scoping.md) — investor deal lists and deal-room reads must use the same relationship predicate in FastAPI and Worker.
+- [Desk edge-to-edge overrides](desk-edge-to-edge-overrides.md) — outer spacing resets must come after base desk rules or use higher specificity, otherwise later padding and max-width declarations restore the gap.
