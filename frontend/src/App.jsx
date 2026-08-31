@@ -600,11 +600,13 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
   const fullWidthSurface = (activeRole === 'founder'
-    && ['/build/discovery', '/execution'].includes(location.pathname))
+    && ['/build/discovery', '/execution', '/raise/pitch', '/build/team', '/network', '/signals'].includes(location.pathname))
     || (activeRole === 'investor' && location.pathname.startsWith('/portfolio/'))
     || activeRole === 'advisor'
     || location.pathname === '/spinout-lab'
     || location.pathname.startsWith('/spinout-lab/');
+  const flushSurface = activeRole === 'founder'
+    && ['/execution', '/raise/pitch', '/build/discovery', '/build/team', '/network', '/signals'].includes(location.pathname);
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
@@ -698,7 +700,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           )}
 
           <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
-            <div data-app-main data-density-target className={`p-4 md:p-6 ${fullWidthSurface ? '' : 'max-w-7xl mx-auto'}`}>
+            <div data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto'}`}>
               {children}
             </div>
             <footer className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
