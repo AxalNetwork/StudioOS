@@ -66,8 +66,8 @@ test('widening the guard did not invent an obligation advisors do not have', () 
   assert.doesNotMatch(page, /every persona that can reach the Trust Center[\s\S]{0,40}is KYC-eligible/);
 });
 
-test('Trust Center is still reached from the dropdown, not the sidebar', () => {
-  // trust_center_navigation.test.mjs pins it out of every sidebar; this is the
-  // other half of that arrangement and the reason the guard matters so much.
-  assert.doesNotMatch(read('frontend/src/sidebarConfig.js'), /to: '\/trust'/);
+test('Trust Center remains out of the advisor sidebar', () => {
+  const sidebar = read('frontend/src/sidebarConfig.js');
+  const advisor = sidebar.slice(sidebar.indexOf('\n  advisor: ['), sidebar.indexOf('\n  exploring: ['));
+  assert.doesNotMatch(advisor, /to: '\/trust'/);
 });

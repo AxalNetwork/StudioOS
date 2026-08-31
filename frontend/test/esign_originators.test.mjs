@@ -107,10 +107,10 @@ test('what the canvas asked for and did not get is stated, not silently dropped'
     'the page should send founders to the real co-founder flow');
 });
 
-test('/legal has apex routes in BOTH wrangler tables', () => {
+test('/legal stays on Pages rather than being intercepted by the Worker', () => {
   const wrangler = read('wrangler.toml');
   for (const p of ['axal.vc/legal"', 'axal.vc/legal/*"']) {
     const n = wrangler.split(`pattern    = "${p}`).length - 1;
-    assert.equal(n, 2, `${p} must appear once per table, found ${n}`);
+    assert.equal(n, 0, `${p} must stay on Pages; Worker interception can create an asset-hash mismatch`);
   }
 });

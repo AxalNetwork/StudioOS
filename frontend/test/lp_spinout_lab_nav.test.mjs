@@ -108,7 +108,7 @@ test('/spinout-lab serves the investor sales page to investors and the founder p
 test('the LP workspace is a first-class, role-gated route under /spinout-lab', () => {
   assert.match(
     app,
-    /path="\/spinout-lab\/investor-workspace" element=\{guard\(\['admin', 'investor'\], <SpinoutLabLpWorkspacePage \/>\)\}/,
+    /path="\/spinout-lab\/investor-workspace" element=\{guard\(\['admin', 'investor'\], investorWorkspace\('axal-vc-fund', null\)\)\}/,
     'the deeper second step must be routed and gated to investors/admins',
   );
 });
@@ -121,9 +121,11 @@ test('a logged-out visitor still gets the public marketing page', () => {
   );
 });
 
-test('both investor pages are lazily imported, so a founder never downloads them', () => {
+test('both investor surfaces are lazily imported, so a founder never downloads them', () => {
   assert.match(app, /const SpinoutLabInvestorPage = lazy\(\(\) => import\('\.\/pages\/SpinoutLabInvestorPage'\)\)/);
-  assert.match(app, /const SpinoutLabLpWorkspacePage = lazy\(\(\) => import\('\.\/pages\/SpinoutLabLpWorkspacePage'\)\)/);
+  assert.match(app, /const InvestorWorkspacePage = lazy\(\(\) => import\('\.\/pages\/investor\/InvestorWorkspacePage'\)\)/);
+  const investorWorkspace = read('pages/investor/InvestorWorkspacePage.jsx');
+  assert.match(investorWorkspace, /import SpinoutLabLpWorkspacePage from '\.\.\/SpinoutLabLpWorkspacePage'/);
 });
 
 /* -------------------------------------------------------- the sales page */
@@ -198,7 +200,7 @@ test('the duplicate LP Workspace nav item is gone, but its route is not', () => 
   );
   assert.match(
     app,
-    /path="\/funds\/lp-workspace" element=\{guard\(\['admin', 'investor'\], <FundOpsWorkspace \/>\)\}/,
+    /path="\/funds\/lp-workspace" element=\{guard\(\['admin', 'investor'\], investorFundWorkspace\(<FundOpsWorkspace \/>\)\)\}/,
     'the route must stay registered — deep links and the Fund Ops tab strip use it',
   );
   assert.match(
