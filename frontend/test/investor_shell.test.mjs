@@ -45,14 +45,14 @@ test('the canvas rows are present, in the canvas order', () => {
   // Canvas ROWS: Home · Deals · Portfolio · Axal VC Fund · Fund · Network ·
   // Research · Trust · Firm Settings. Trust is excluded on purpose (below),
   // and "Axal VC Fund" ships under its existing Spin-Out Lab name (below).
-  const CANON = ['Home', 'Deals', 'Portfolio', 'Fund', 'Network', 'Research', 'Firm Settings'];
+  const CANON = ['Home', 'Deals', 'Portfolio', 'Fund', 'Network', 'Research'];
   let i = 0;
   for (const l of labels) if (l === CANON[i]) i += 1;
   assert.equal(i, CANON.length, `canonical rows out of order or missing: ${JSON.stringify(labels)}`);
 });
 
-test('one row per workspace, and the shell is nine rows not eighteen', () => {
-  assert.equal(rows.length, 9, `investor shell drifted off nine rows: ${JSON.stringify(labels)}`);
+test('one row per workspace, and the shell is eight rows not eighteen', () => {
+  assert.equal(rows.length, 8, `investor shell drifted off eight rows: ${JSON.stringify(labels)}`);
 });
 
 test('Deals owns the pipeline subtree, and the workspace tabs to all of it', () => {
@@ -121,15 +121,28 @@ test('Messages keeps a row because it has no other door', () => {
   assert.ok(targets.includes('/messages'));
 });
 
-test('Home is /studio, Settings is the company, no role root invented', () => {
+test('Home is /studio, no role root invented', () => {
   assert.equal(rows[0].to, '/studio');
   assert.equal(rows[0].label, 'Home');
-  assert.ok(targets.includes('/company-settings'), 'Firm Settings is company settings');
-  assert.ok(!targets.includes('/settings'), 'Firm Settings must not point at the personal Account page');
   assert.ok(!targets.includes('/home'));
   assert.ok(!targets.includes('/investor'), 'no bare /investor root');
 });
 
 test('Trust stays out of the sidebar', () => {
   assert.ok(!targets.includes('/trust'), 'Trust Center belongs to the user dropdown');
+});
+
+test('Company Settings is the pinned footer only, never a nav row', () => {
+  // It used to be both: a row at the end of the group AND the pinned footer,
+  // so every role rendered it twice. The footer is the single entry point now.
+  assert.ok(
+    !targets.includes('/company-settings'),
+    'a /company-settings row is back in the nav config; it duplicates the pinned footer',
+  );
+
+  // The guard that moved here with it. SidebarNav's footer is unconditional —
+  // no role gate — so removing the row cannot strand a role without a door.
+  const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
+  assert.ok(/to="\/company-settings"/.test(nav), 'the pinned footer lost its link');
+  assert.ok(!/to="\/settings"/.test(nav), 'the footer must not point at the personal Account page');
 });

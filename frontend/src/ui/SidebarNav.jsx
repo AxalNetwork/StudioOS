@@ -140,7 +140,13 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
         const visibleItems = q
           ? group.items.filter((it) => it.label.toLowerCase().includes(q))
           : group.items;
-        if (q && visibleItems.length === 0) return null;
+        // An empty group is never a header. The guard used to be `q &&`, so it
+        // only fired while searching — which left the admin sidebar rendering a
+        // dead "ACCOUNT" row: commit 7c93b83e moved the last item out of that
+        // group and left the declaration behind, so it expanded to nothing.
+        // Found by documentation/architecture/PAGE_INVENTORY.md, which counts a
+        // role's groups from their items.
+        if (visibleItems.length === 0) return null;
         const isHome = group.key === 'home';
         // Home group renders headerless (no "Home" label / collapse chevron) —
         // its items (Studio + Products) always show flat at the top of the nav.

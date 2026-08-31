@@ -8,8 +8,8 @@ import type { Context, Next } from 'hono';
  * - Referrer-Policy: `no-referrer` — never leak full URLs (which contain
  *   query params, IDs) from the authenticated app/API surface. This is the
  *   CANONICAL value for the Worker (NICE-SEC-01); it is intentionally stricter
- *   than the `strict-origin-when-cross-origin` used by the public Jekyll
- *   marketing site (github.toml / cloudflare.toml), whose pages carry no
+ *   than the `strict-origin-when-cross-origin` used by the public static
+ *   frontend (frontend/public/_headers), whose pages carry no
  *   sensitive URLs and benefit from cross-origin referral attribution.
  * - Permissions-Policy: disable powerful browser features for any HTML responses.
  * - Cross-Origin-Resource-Policy: only same-site can load API responses as resources.
@@ -61,7 +61,8 @@ export function securityHeadersMiddleware() {
     h.set('X-Content-Type-Options', 'nosniff');
     h.set('X-Frame-Options', allowSameOriginFraming ? 'SAMEORIGIN' : 'DENY');
     // Canonical for the authenticated app/API surface (NICE-SEC-01). The
-    // public marketing site deliberately uses strict-origin-when-cross-origin.
+    // public static frontend deliberately uses strict-origin-when-cross-origin
+    // (frontend/public/_headers).
     h.set('Referrer-Policy', 'no-referrer');
     // Task #33 — broaden Permissions-Policy to deny every powerful sensor
     // by default. Add features only when an actual route needs them.

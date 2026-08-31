@@ -1,10 +1,25 @@
 # Jekyll → Cloudflare cutover: content inventory
 
-Status: **gate item 1 is done in code**; items 2–4 are live-operator steps that
-cannot be performed from the build environment (see *What is left*). The
-apex-wide `axal.vc/*` route remains disabled; the apex is served by an explicit
-route table instead — one entry per claimed path, enumerated in `wrangler.toml`,
-which is the source of truth for its size.
+Status (updated 2026-08-31): **step 1's two unknowns are confirmed, gate
+item 1 is done in code, step 3's bootstrap deploy landed 2026-08-30, and gate
+item 2 has been rewritten because the original was unsatisfiable** (see step 1
+for the confirmed unknowns, step 3 for the version ids, gate item 2 for the
+measured baseline). The bootstrap deploy did not regress the apex: 5xx fell
+from 15.51% to 10.38% while traffic rose 42%. **Do not roll it back** — the
+saved version restores a worse state. **The 24-hour observation window closes
+2026-08-31T09:52:30Z** (24h after the post-deploy window recorded in step 3) —
+compare wall-clock time against that, not against whenever this status line is
+read. Closing on schedule is not itself a pass: gate item 2 requires no 5xx-
+rate breach of baseline+2pts and no new probe status across the *entire* 24h,
+which needs a live Analytics read this session cannot perform (egress to
+axal.vc and the Cloudflare API returns 403). Steps 2, 4's live confirmation,
+5 and 6 remain live-operator steps (see *What is left*). **The apex-wide
+`axal.vc/*` route is not part of the remaining plan** — step 7 downgrades it to
+an optional optimisation once coverage is proven, which it already is. What
+removes Jekyll/GitHub Pages is step 6 (move apex DNS, decommission Pages), not
+a wildcard route. The apex is served by an explicit route table — one entry
+per claimed path, enumerated in `wrangler.toml`, which is the source of truth
+for its size.
 
 ## Stabilisation gate (2026-08-24)
 
@@ -28,18 +43,72 @@ Before retrying `axal.vc/*`:
    against an unmigrated schema". The three `ensure*Schema` helpers share one
    promise per isolate, so concurrent cold requests do not issue overlapping
    rebuilds. Covered by `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs`.
-2. Confirm Cloudflare Adaptive HTTP Analytics has no 5xx responses across a
-   sustained observation window. The current account exposes status counts but
-   denies `edgeTimeToFirstByteMs`; document that limitation and use the
-   Worker's own latency telemetry for API timing.
-   - Treat “sustained” as 24 continuous hours after the bootstrap deployment,
-     sampled in five-minute buckets. Probe `/api/health` and
-     `/api/public/stats` at least once per bucket, plus representative
-     Worker-served hard loads.
-   - Abort the wildcard attempt and restore the saved Worker version and route
-     table (captured in gate item 4)
-     immediately if either probe returns a 5xx, or Analytics reports two or
-     more 5xx responses in any five-minute bucket.
+2. **REWRITTEN 2026-08-30 — the original criterion was unsatisfiable.** It
+   read “no 5xx responses across a sustained observation window” and aborted on
+   “two or more 5xx in any five-minute bucket.” That assumed a roughly-zero
+   baseline. The apex does not have one, and never did:
+
+   | Window | Requests | 5xx | Rate |
+   | --- | ---: | ---: | ---: |
+   | 2026-08-29T09:00Z – 08-30T09:00Z | 6,244 | 937 | 15.01% |
+   | 2026-08-30T09:00Z – 09:45Z (the 45 min before the deploy) | 485 | 107 | **22.06%** |
+   | Combined pre-deploy baseline | 6,729 | 1,044 | **15.51%** |
+   | 2026-08-30T09:52:30Z – 16:13:34Z (post-deploy) | 2,446 | 254 | **10.38%** |
+
+   Measured, not estimated: Cloudflare Adaptive Analytics caps a query at one
+   day, so the baseline was taken as two adjacent ranges and summed. **The
+   bootstrap deploy did not regress the apex — it improved it**, by 5.13
+   percentage points against the 24-hour baseline and 11.68 against the
+   45 minutes immediately preceding it, *while traffic rose 42%*
+   (272 → 385 req/hr). A rollback on this evidence would restore a worse state.
+
+   So the gate no longer counts 5xx absolutely. It compares against baseline:
+
+   - Observe 24 continuous hours after the bootstrap deployment, in five-minute
+     buckets. Probe `/api/health` and `/api/public/stats` once per bucket, plus
+     representative Worker-served hard loads.
+   - **Abort** if the observed 5xx rate exceeds the pre-cutover baseline for
+     the same window length by more than 2 percentage points, or if a probe
+     returns a status the same probe did not return before the change.
+   - A 5xx count alone is not an abort signal here and never was. Recording the
+     baseline is a precondition of the gate, not an optional extra.
+   - The account exposes status counts but denies `edgeTimeToFirstByteMs`; use
+     the Worker's own latency telemetry for API timing.
+
+   **All 254 post-deploy failures were 504** — zero 500, 502 or 503. A gateway
+   timeout, not a crash. 206 fell on paths the Worker claims via `axal.vc/api/*`
+   and 48 on paths that fall through to GitHub Pages (`/`, `/offline.html`,
+   `/account/login`). That split names route ownership, not the component that
+   produced each timeout — a live `wrangler tail` is what distinguishes them.
+
+   **The tail ran on 2026-08-30 and did not distinguish them, because the apex
+   had no traffic to sample.** Ten minutes caught 10 scheduled cron invocations
+   and zero HTTP requests; a fresh 20 minutes (21:39:21Z onward) caught zero
+   HTTP events, while Analytics for exactly that window recorded **2 apex
+   requests and zero 5xx** — both GitHub Pages fallthrough. Zero 5xx in a
+   two-request sample is not evidence of health: a ~10% failure rate needs
+   roughly thirty requests before three failures are even expected. What the
+   run *does* establish is that the correlation method works — Pages-fallthrough
+   requests never reach the Worker, and the tail correctly showed nothing for
+   them. It also shows the apex swings from ~385 req/hr in the census window to
+   ~6 req/hr at 21:40Z, so **any future tail must be timed against the traffic
+   peak**, identified from Analytics 5xx-by-hour, rather than run on demand.
+
+   The Worker-side hypothesis has also weakened on inspection. The costly part
+   of the bootstrap (`rebuildUsersRoleCheckForInvestor`) is guarded and returns
+   after one `sqlite_master` read on a healthy DB; what remains unguarded is
+   three promote-block writes against 23 users. That is seconds of cold-start
+   latency, not a ~100s gateway timeout. See GOTCHAS, "Backend / Worker", where
+   this entry was corrected after first overstating it.
+
+   Two things follow. First, static files timing out on the Pages fallthrough
+   cannot be application logic, and the apex is a **proxied CNAME to
+   `axalnetwork.github.io`** with no A/AAAA records — not GitHub's documented
+   apex configuration. Second, and this is the part that bears on this document:
+   **completing the cutover removes that path entirely.** If the Worker claims
+   `axal.vc/*`, nothing falls through to Pages and the Pages origin stops being
+   in the request path. The 5xx data is an argument for finishing the cutover,
+   not for pausing it.
 3. Hard-load representative non-prerendered routes and public APIs in a fresh
    browser context, confirming no redirect, blank shell, missing hashed asset,
    or failed module.
@@ -250,19 +319,37 @@ the end state.
 
 ## Order of operations
 
-1. **Confirm the two unknowns** the inventory could not close from the repo:
-   that GitHub Pages' source really is `main` + `/docs`, and that no apex DNS
-   record points somewhere outside this repo. Both are one glance in the
-   GitHub and Cloudflare panes.
+1. ~~**Confirm the two unknowns** the inventory could not close from the
+   repo: that GitHub Pages' source really is `main` + `/docs`, and that no
+   apex DNS record points somewhere outside this repo.~~ **DONE, both halves,
+   from two separate Replit diagnostics this session — recorded here because
+   neither was marked off at the time.** GitHub Pages source: `main` + `/docs`
+   (the Jekyll-content-inventory prompt, prompt 1). Apex DNS: Cloudflare
+   returns exactly one apex record — `axal.vc` CNAME → `axalnetwork.github.io`,
+   proxied, TTL 1 (the four-question apex-504 diagnostic, question 3, "Who
+   served them"). `axalnetwork.github.io` **is** this repo's Pages site, so
+   the "somewhere outside this repo" risk is closed: there is nothing to
+   discover here, only step 6 below left to act on it.
 2. **Register the eleven OAuth redirect URIs** (table above), apex form added
    alongside the existing one. Do not flip the var yet.
-3. **Deploy the current worker** with `npm run deploy` — never bare
+3. ~~**Deploy the current worker** with `npm run deploy` — never bare
    `npx wrangler deploy`, which skips the `predeploy` hook that applies D1
-   migrations and would ship the worker ahead of its schema.
+   migrations and would ship the worker ahead of its schema.~~ **DONE
+   2026-08-30.** `npm run deploy` exited 0 from the repository root: 193/193
+   migrations applied, 0 pending, and the postdeploy live smoke passed on both
+   hosts with `SKIP_LIVE_SMOKE` unset.
+   - Active Worker version: `36cccf2e-2d61-413b-ad67-6a2d14d1d72a`
+   - Rollback target (the version it replaced): `bbaae9d6-8f38-40bb-966e-e2aae408b193`
+   - This is the "bootstrap deployment" gate item 2 measures its 24 hours from.
+     One non-blocking checksum-drift warning on `109_events_core.sql` is
+     expected and permanent — see GOTCHAS, "Migrations & schema".
 4. **Observe** per gate items 2–3 above: 24 continuous hours, five-minute
    buckets, `/api/health` and `/api/public/stats` probed at least once per
-   bucket, plus representative Worker-served hard loads. Abort on any 5xx from
-   a probe, or two or more 5xx in any five-minute bucket.
+   bucket, plus representative Worker-served hard loads. Abort on a 5xx rate
+   more than 2 points above the recorded pre-cutover baseline, or on a probe
+   returning a status it did not return before the change. **Not** on a raw
+   5xx count — the apex baseline is 15.51%, so an absolute threshold aborts on
+   the weather. Gate item 2 carries the baseline table and why this changed.
 5. **Flip `OAUTH_CALLBACK_BASE_URL` to the apex** in both `[vars]` tables and
    redeploy. Verify Google sign-in end to end before continuing — it is the
    one failure that locks users out rather than degrading a feature.

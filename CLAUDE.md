@@ -26,7 +26,13 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 4. **The frontend is built from `frontend/` into `docs/` and served by the
    Worker itself**, through the `[assets]` binding in `wrangler.toml`
    (`directory = "./docs"`) — Workers Static Assets, **not** Cloudflare Pages.
-   There is no Pages project in this repo. `docs/` is committed by hand; no
+   There is no Pages project in this repo. **This is being changed on purpose
+   (decided 2026-08-31): the frontend moves to Cloudflare Pages, the Worker
+   keeps `/api/*`.** Every word above is still true today and stays true until
+   the steps in `documentation/architecture/CLOUDFLARE-PAGES-MIGRATION.md` are
+   executed — this fact gets rewritten when Pages actually serves traffic, not
+   in advance, because a previous flip was declared in docs before it was real
+   and never finished. `docs/` is committed by hand; no
    workflow writes it, which is why `scripts/check-docs-fresh.mjs` exists.
    GitHub Pages still serves the **apex** (`main` + `/docs`) for any path the
    Worker route table does not claim — see `documentation/architecture/CLOUDFLARE-CUTOVER.md`, which is

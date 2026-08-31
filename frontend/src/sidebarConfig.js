@@ -143,8 +143,12 @@ export const SIDEBAR_GROUPS = {
       { to: '/partner-portal', icon: UserCircle, label: 'Partner / Investor Portal' },
       { to: '/perks', icon: Gift, label: 'Perks' },
     ]},
-    { key: 'account', label: 'Account', items: [
-    ]},
+    // No 'account' group here on purpose. It once held Articles / Activity Log
+    // / Support / Documentation; those moved to the user menu (7c93b83e and
+    // 7481ca51) and Company Settings lives in the pinned footer for every role
+    // (task #216). The empty declaration outlived its items and rendered an
+    // ACCOUNT header over nothing — frontend/test/sidebar_empty_group.test.mjs
+    // fails if any role grows a group with no destinations again.
   ],
 
   // Task #19 — regroup the founder sidebar around the venture lifecycle:
@@ -216,7 +220,6 @@ export const SIDEBAR_GROUPS = {
 
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/signals', icon: Radar, label: 'Research', match: ['/signals', '/market-intel'] },
-      { to: '/company-settings', icon: UserCircle, label: 'Company Settings' },
     ]},
   ],
 
@@ -332,7 +335,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
       { to: '/network', icon: Users, label: 'Network' },
       { to: '/market-intel', icon: Radar, label: 'Research' },
-      { to: '/company-settings', icon: UserCircle, label: 'Firm Settings' },
     ]},
   ],
 
@@ -384,7 +386,6 @@ export const SIDEBAR_GROUPS = {
 
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/market-intel', icon: Radar, label: 'Research' },
-      { to: '/company-settings', icon: UserCircle, label: 'Firm Settings' },
     ]},
   ],
 
@@ -404,7 +405,6 @@ export const SIDEBAR_GROUPS = {
       { to: '/market-intel', icon: Radar, label: 'Research' },
       { to: '/signals', icon: Radar, label: 'Signals' },
       { to: '/due-diligence', icon: ShieldAlert, label: 'Due Diligence' },
-      { to: '/company-settings', icon: UserCircle, label: 'Practice Settings' },
     ]},
   ],
 
