@@ -209,7 +209,7 @@ export const SIDEBAR_GROUPS = {
   // what Home would then be.
   founder: [
     { key: 'home', label: 'Home', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/build/discovery', icon: MessageSquare, label: 'Validate', match: ['/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
       { to: '/execution', icon: Briefcase, label: 'Build', match: ['/execution', '/projects', '/build/roadmap', '/build/metrics'] },
@@ -312,7 +312,7 @@ export const SIDEBAR_GROUPS = {
   // Firm Settings is the COMPANY's settings; Account is a different page.
   partner: [
     { key: 'shell', label: '', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/needs', icon: Target, label: 'Pipeline',
         match: ['/needs', '/matches', '/partner/insights', '/partner/operations/engagements'] },
@@ -333,7 +333,7 @@ export const SIDEBAR_GROUPS = {
   // deep links remain matched to their owning row.
   investor: [
     { key: 'home', label: 'Home', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/pipeline', icon: Handshake, label: 'Deals', match: ['/pipeline', '/deals', '/raise/data-room'] },
       { to: '/portfolio/health', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
@@ -350,7 +350,7 @@ export const SIDEBAR_GROUPS = {
   // owning workspace rather than promoted to separate sidebar destinations.
   advisor: [
     { key: 'home', label: 'Home', items: [
-      { to: '/studio', icon: LayoutDashboard, label: 'Home' },
+      { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/advisor/advisory/opportunities', icon: Briefcase, label: 'Practice',
         match: ['/advisor/advisory'] },
