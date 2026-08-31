@@ -169,7 +169,7 @@ it, where in their nav, and how do they get there.*
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Account | `/settings` · `/settings/:section` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Auth and Onboarding | `/login` · `/register` · `/onboarding/persona` · `/onboarding/founder\\|investor\\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Auth and Onboarding | `/login` · `/register` · `/onboarding/chat` · `/onboarding/persona` · `/onboarding/founder\\|investor\\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Emails | — | — (not routed) | Templates (no surface) | Not reachable yet | UPGRADE | Low |
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Help Center | `/docs` · `/docs/admin/*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -188,7 +188,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Auth and Onboarding | `/login` · `/register` · `/onboarding/persona` · `/onboarding/founder\\|investor\\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Auth and Onboarding | `/login` · `/register` · `/onboarding/chat` · `/onboarding/persona` · `/onboarding/founder\\|investor\\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Axal VC Website | `/` · `/about` · `/for-founders` · `/for-investors` · `/spinout-lab/brief` · `/contact` · `/articles` · `/directory` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
