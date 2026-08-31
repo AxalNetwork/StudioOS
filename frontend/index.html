@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <script>
+  <script data-cfasync="false">
     // Theme init — runs before first paint so the background is always correct.
     // Reads axal_appearance_v1 from localStorage (same key + shape as
     // SettingsContext). Falls back to 'light' (the app default).
@@ -22,7 +22,7 @@
       } catch (e) { /* localStorage blocked or JSON invalid — stay light */ }
     })();
   </script>
-  <script>
+  <script data-cfasync="false">
     // Dev-only: unregister any stale service worker + clear caches BEFORE any
     // module loads. The SW precaches '/' and serves stale HTML referencing old
     // Vite optimizer dep hashes, causing "Outdated Optimize Dep" 504s after
@@ -51,7 +51,7 @@
       } catch (e) { /* no-op */ }
     })();
   </script>
-  <script>
+  <script data-cfasync="false">
     // Task #37 — production boot watchdog (un-bundled, so it runs even when the
     // entry module 404s). The recurring Safari blank page happens when the apex
     // root HTML (served by GitHub Pages) references a build hash the Worker no
@@ -193,7 +193,7 @@
   <!-- Turnstile is loaded on-demand (frontend/src/lib/turnstile.js) only by the
        few forms that render a widget, instead of globally on every page. -->
 
-  <script>
+  <script data-cfasync="false">
     // GitHub Pages SPA — restore path encoded by 404.html
     (function() {
       var q = window.location.search;
@@ -211,6 +211,6 @@
       Loading…
     </div>
   </div>
-  <script type="module" src="/src/main.jsx"></script>
+  <script data-cfasync="false" type="module" src="/src/main.jsx"></script>
 </body>
 </html>

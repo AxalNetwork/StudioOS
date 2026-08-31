@@ -1,37 +1,20 @@
-/**
- * Apex route coverage (Phase 0).
- *
- * `wrangler.toml` has no `axal.vc/*` — the first apex-wide attempt was rolled
- * back after edge 504s (documentation/architecture/CLOUDFLARE-CUTOVER.md), so the apex is served by an
- * EXPLICIT route table instead. A path is served only if it is listed.
- *
- * That makes an omission invisible in exactly the wrong way. An unlisted path
- * still resolves today, because GitHub Pages serves `docs/` directly and the
- * prerendered file is sitting right there. It stops resolving the moment Pages
- * is decommissioned — which is the stated end state of the cutover. So the
- * failure does not appear when the route is dropped; it appears weeks later,
- * during the DNS change, on the pages nobody re-checks.
- *
- * When this check was written, nine prerendered routes were missing from both
- * tables: /changelog, /demo, /pricing, /pricing/investor, /privacy,
- * /risk-disclosures, /roadmap, /status and /terms. Three of those are the
- * legal pages.
- *
- * Prerendering is the signal used here on purpose: a route is prerendered
- * precisely so a crawler hitting the APEX gets real HTML with an OG block.
- * Prerendering a route and not routing it is self-contradictory.
- */
+/** Durable coverage for the deliberately narrow Worker route table. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { resolve, join } from 'node:path';
-import { codeOnly } from './_codeOnly.mjs';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const root = resolve(process.cwd());
 const wrangler = readFileSync(resolve(root, 'wrangler.toml'), 'utf8');
 
 const APEX = 'axal.vc/';
 const TABLES = ['routes', 'env.production.routes'];
+const EXPECTED = [
+  'app.axal.vc',
+  'axal.vc/api/*',
+  'axal.vc/landing/*',
+  'axal.vc/p/*',
+];
 
 /**
  * Every `pattern` in every array-of-tables, keyed by header.
@@ -44,7 +27,7 @@ const TABLES = ['routes', 'env.production.routes'];
  *
  * A line scanner tracking the current `[[header]]` needs neither a constructed
  * pattern nor an escape step, and it reads the file the way TOML actually
- * nests. Verified against `tomllib`: 84 patterns per table, both identical.
+ * nests.
  */
 function routeTables() {
   const tables = new Map();
@@ -67,166 +50,32 @@ function routeTables() {
 const TABLE_PATTERNS = routeTables();
 const patterns = (table) => TABLE_PATTERNS.get(table) ?? [];
 
-/**
- * Top-level segment of an apex pattern, or null when there isn't one.
- *
- * The wildcard is a distinct CASE, not a character to strip. The previous
- * `.replace('*', '')` turned `axal.vc/*` into an empty string that the caller
- * then skipped — right answer, reached by accident, and unreadable as intent.
- * Returning null says it.
- */
-function apexSegment(pattern) {
-  if (!pattern.startsWith(APEX)) return null;   // app.axal.vc custom domain
-  const first = pattern.slice(APEX.length).split('/')[0].trim();
-  if (!first || first === '*') return null;     // the apex wildcard itself
-  return first;
-}
-
-function coveredSegments(table) {
-  const out = new Set();
-  for (const p of patterns(table)) {
-    const seg = apexSegment(p);
-    if (seg) out.add(seg);
-  }
-  return out;
-}
-
-/** Routes the build prerenders into docs/<route>/index.html. */
-function prerenderedRoutes() {
-  const docs = resolve(root, 'docs');
-  const found = [];
-  const walk = (dir, rel, depth) => {
-    if (depth > 3) return;
-    for (const name of readdirSync(dir)) {
-      if (name.startsWith('.') || name === 'assets') continue;
-      const abs = join(dir, name);
-      let st;
-      try { st = statSync(abs); } catch { continue; }
-      if (!st.isDirectory()) continue;
-      const here = `${rel}/${name}`;
-      if (existsSync(join(abs, 'index.html'))) found.push(here);
-      walk(abs, here, depth + 1);
-    }
-  };
-  walk(docs, '', 1);
-  return found.sort();
-}
-
-test('the apex table has no wildcard — so coverage has to be explicit', () => {
-  // If a future change adds `axal.vc/*`, this test's premise is gone and the
-  // rest of it becomes noise. Fail loudly instead of passing vacuously.
-  for (const t of TABLES) {
-    assert.equal(
-      patterns(t).includes('axal.vc/*'), false,
-      `${t} gained an apex wildcard — delete this file's per-route checks and say so in documentation/architecture/CLOUDFLARE-CUTOVER.md`,
-    );
-  }
-});
-
-test('every prerendered route is routed to the Worker at the apex', () => {
-  const routes = prerenderedRoutes();
-  assert.ok(routes.length >= 25, `expected the prerender set, found ${routes.length}`);
-  for (const table of TABLES) {
-    const covered = coveredSegments(table);
-    const missing = routes.filter((r) => !covered.has(r.split('/').filter(Boolean)[0]));
-    assert.deepEqual(
-      missing, [],
-      `[[${table}]] does not serve these prerendered routes; they survive today only because GitHub Pages does`,
-    );
-  }
-});
-
 test('the two route tables are identical', () => {
-  // CLAUDE.md: every binding goes into BOTH tables. `npm run deploy` passes
-  // --env production, so a route added only to the top-level table is a route
-  // that does not exist in production — and the top-level table is the one a
-  // reader is most likely to edit.
   assert.deepEqual(
     patterns('env.production.routes'), patterns('routes'),
     'the production table has drifted from the top-level table',
   );
 });
 
-test('the legal pages are reachable at the apex', () => {
-  // Named individually because these are the ones a regulator follows a link
-  // to, and the ones least likely to be clicked internally before a cutover.
-  for (const table of TABLES) {
-    const covered = coveredSegments(table);
-    for (const seg of ['terms', 'privacy', 'risk-disclosures']) {
-      assert.ok(covered.has(seg), `${seg} must be served at the apex (${table})`);
-    }
-  }
-});
-
-test('each apex prefix is listed in both the bare and the subtree form', () => {
-  // `axal.vc/pricing` does not match `/pricing/investor`, and `axal.vc/pricing/*`
-  // does not match `/pricing`. Listing one without the other half-serves the
-  // route, which reads as working until someone opens the other URL.
-  // Three principled exceptions, listed rather than pattern-matched so adding a
-  // fourth is a deliberate edit and not a widened regex:
-  //
-  //   /api, /assets  — subtree-only namespaces. Nothing is served AT `/api`;
-  //                    a bare route would hand the SPA shell to a caller who
-  //                    asked for the API root.
-  //   security.txt   — one fixed document at one URL. `security.txt/*` is
-  //                    meaningless.
-  const SUBTREE_ONLY = new Set(['axal.vc/api/*', 'axal.vc/assets/*']);
-  const BARE_ONLY = new Set(['axal.vc/.well-known/security.txt']);
-  for (const table of TABLES) {
-    const pats = new Set(patterns(table).filter((p) => p.startsWith('axal.vc/')));
-    for (const p of pats) {
-      if (SUBTREE_ONLY.has(p) || BARE_ONLY.has(p)) continue;
-      if (p.endsWith('/*')) {
-        const bare = p.slice(0, -2);
-        assert.ok(pats.has(bare), `${p} has no bare counterpart ${bare} in ${table}`);
-      } else {
-        assert.ok(pats.has(`${p}/*`), `${p} has no subtree counterpart ${p}/* in ${table}`);
-      }
-    }
-  }
-});
-
-/**
- * Every signed-in nav destination is routed at the apex.
- *
- * The prerender check above only sees marketing routes — a signed-in app path
- * is never prerendered, so it was invisible to every test in this file. On
- * 2026-08-29 that gap was measured: 37 of the 41 top-level segments the
- * sidebar links to had NO apex route. They resolved only because GitHub Pages
- * served `docs/404.html`, whose inline script bounces to `/?p=...`. When the
- * bounce did not fire, the visitor got a blank page.
- *
- * Routes were added; a subsequent history reconciliation reverted them and
- * every existing check still passed. That is the failure this test exists to
- * make impossible: nav and routing are one fact, so they are asserted together.
- */
-function sidebarDestinations() {
-  const src = readFileSync(resolve(root, 'frontend/src/sidebarConfig.js'), 'utf8');
-  // Commented-out nav rows are deliberately parked, not shipped — `codeOnly`
-  // drops them so parking one does not demand a route for it. Reusing the
-  // shared stripper rather than a local regex is the point: its docblock
-  // records why it removes only WHOLE-LINE comments, and every parked row in
-  // this file is one. A trailing comment is left intact, which is harmless
-  // here because nothing after a `//` on a live line carries a `to:` path.
-  const code = codeOnly(src);
-  const out = new Set();
-  for (const m of code.matchAll(/to:\s*'(\/[^']*)'/g)) {
-    const seg = m[1].split('/').filter(Boolean)[0];
-    if (seg) out.add(seg);
-  }
-  return [...out].sort();
-}
-
-test('every sidebar destination is routed to the Worker at the apex', () => {
-  const segments = sidebarDestinations();
-  assert.ok(segments.length >= 35, `expected the nav set, found ${segments.length}`);
-  for (const table of TABLES) {
-    const covered = coveredSegments(table);
-    const missing = segments.filter((s) => !covered.has(s));
+test('only the three durable apex path routes are Worker-routed', () => {
+  for (const t of TABLES) {
     assert.deepEqual(
-      missing, [],
-      `[[${table}]] does not serve these nav destinations at axal.vc; signed-in ` +
-      'users reaching them by direct link or refresh get GitHub Pages, not the app',
+      patterns(t),
+      EXPECTED,
+      `${t} must contain only the custom domain and durable apex route allowlist`,
     );
+    const apexPaths = patterns(t).filter((p) => p.startsWith(APEX));
+    assert.deepEqual(
+      apexPaths,
+      EXPECTED.slice(1),
+      `${t} contains an unexpected axal.vc path route`,
+    );
+  }
+});
+
+test('the apex wildcard and assets prefix remain on Cloudflare Pages', () => {
+  for (const table of TABLES) {
+    assert.equal(patterns(table).includes('axal.vc/*'), false);
+    assert.equal(patterns(table).includes('axal.vc/assets/*'), false);
   }
 });
