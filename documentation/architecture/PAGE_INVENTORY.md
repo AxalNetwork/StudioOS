@@ -37,18 +37,19 @@ canvas behind it still shows up here.
 | Workspace | Signals | `/signals` | Signals |
 | Workspace | Due Diligence | `/due-diligence` | — (no canvas; shipped ahead of the design corpus) |
 
-## `investor` — 8 destinations in 1 group
+## `investor` — 9 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Workspace | Home | `/studio` | Investor LP Canvas |
-| Workspace | Spin-Out Lab | `/spinout-lab` | Explore the Spin-Out Lab, Fund Brief One-Pager |
-| Workspace | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Deals | `/pipeline` | Deal Flow |
-| Workspace | Portfolio | `/portfolio/health` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Fund | `/funds` | Pages · Investor Fund |
-| Workspace | Network | `/network` | Pages · Investor Network |
-| Workspace | Research | `/market-intel` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Home | `/studio` | Investor LP Canvas |
+| Home | Spin-Out Lab | `/spinout-lab` | Explore the Spin-Out Lab, Fund Brief One-Pager |
+| Home | Deals | `/pipeline` | Deal Flow |
+| Home | Portfolio | `/portfolio/health` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace |
+| Home | Fund | `/funds` | Pages · Investor Fund |
+| Home | Network | `/network` | Pages · Investor Network |
+| Home | Research | `/market-intel` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Trust | `/trust` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `partner` — 8 destinations in 1 group
 
@@ -127,7 +128,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-63 of the 87 sidebar rows above are not claimed
+63 of the 88 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -141,9 +142,9 @@ rather than merely absent.
 - advisor · Workspace · Network (`/network`)
 - advisor · Workspace · Research (`/market-intel`)
 - advisor · Workspace · Due Diligence (`/due-diligence`)
-- investor · Workspace · Messages (`/messages`)
-- investor · Workspace · Portfolio (`/portfolio/health`)
-- investor · Workspace · Research (`/market-intel`)
+- investor · Home · Portfolio (`/portfolio/health`)
+- investor · Home · Research (`/market-intel`)
+- investor · Home · Trust (`/trust`)
 - partner · Workspace · Home (`/studio`)
 - partner · Workspace · Messages (`/messages`)
 - partner · Workspace · Offers (`/services`)

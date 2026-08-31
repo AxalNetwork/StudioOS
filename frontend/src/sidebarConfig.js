@@ -22,7 +22,7 @@ import {
   Network, Sparkles, Briefcase, TrendingUp, Layers, Scale,
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   Gamepad2, ShieldAlert,
-  Inbox, Radar, Wallet,
+  Inbox, Radar, Wallet, Landmark,
   Mail, Gift, Map,
 } from 'lucide-react';
 
@@ -338,54 +338,20 @@ export const SIDEBAR_GROUPS = {
     ]},
   ],
 
-  // Investor/LP shell — the canvas declares nine rows (Home · Deals ·
-  // Portfolio · Axal VC Fund · Fund · Network · Research · Trust · Firm
-  // Settings). Eight land here; Trust is deliberately absent, pinned out of
-  // every sidebar by trust_center_navigation.test.mjs — it is reached from the
-  // user dropdown. The eighteen items this replaces all keep a door: a row of
-  // their own, or a workspace whose tab bar demonstrably links them.
-  //
-  //   Deals      → /pipeline renders PipelineWorkspace, whose tabs are Board ·
-  //                Screening · Commit · Transactions — a 1:1 match with the
-  //                canvas Deals zones (Pipeline · Screening · Commit ·
-  //                Closing) — plus Deal Flow and Data Room, the two former
-  //                rows that had no other investor door.
-  //   Portfolio  → /portfolio/health renders PortfolioWorkspace: Health ·
-  //                Updates · Cap Table · Performance · Growth.
-  //   Fund       → /funds renders FundOpsWorkspace: Funds admin · Performance ·
-  //                Accounting · LP Reporting · Capital Calls · LP Workspace.
-  //
-  // The canvas's "Axal VC Fund" row is the LP's relationship with Axal's own
-  // fund, which today is the Spin-Out Lab investor surface. No page canvas
-  // exists for it and the Lab is not a modification target, so the row keeps
-  // its existing destination, label and match array verbatim rather than being
-  // renamed to a surface nobody has designed.
+  // Investor/LP shell — a single headerless group, matching the approved
+  // Investor LP Canvas. Each row is a complete investor workspace; legacy
+  // deep links remain matched to their owning row.
   investor: [
-    { key: 'shell', label: 'Workspace', items: [
+    { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Home' },
-      // Same item at the same index as the founder and exploring navs, so the
-      // program reads the same way in every profile — but it does NOT resolve
-      // to the same page. App.jsx serves /spinout-lab by the role being browsed
-      // as: an investor gets the Fund I sales page (SpinoutLabInvestorPage —
-      // what founders do inside the Lab, the operating stack, the underwriting
-      // edge, studio proof), whose CTAs route into the deeper
-      // /spinout-lab/investor-workspace (fund terms, raise status, reporting,
-      // allocation, apply). Everyone else gets the founder program. An LP's
-      // relationship with the Lab is the fund, not the 4-week curriculum.
-      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab', match: ['/spinout-lab', '/spinout-lab/investor-workspace'] },
-      { to: '/messages', icon: Mail, label: 'Messages' },
-
-      // One row, six destinations, all tabbed by PipelineWorkspace behind it.
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/pipeline', icon: Handshake, label: 'Deals', match: ['/pipeline', '/deals', '/raise/data-room'] },
-
-      // One row, five destinations, all tabbed by PortfolioWorkspace behind it.
       { to: '/portfolio/health', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
-
-      // One row, six destinations, all tabbed by FundOpsWorkspace behind it.
-      { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds', '/lp-reports'] },
-
+      { to: '/spinout-lab/investor-workspace', icon: Landmark, label: 'Axal VC Fund' },
+      { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds', '/lp-reports'], requiredInvestorTier: 'institutional' },
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/market-intel', icon: Radar, label: 'Research' },
+      { to: '/trust', icon: ShieldCheck, label: 'Trust' },
     ]},
   ],
 

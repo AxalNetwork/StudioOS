@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eef0ef;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#047857;text-decoration:none}a:hover{color:#047857}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 18px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.5 Inter,system-ui,sans-serif;color:rgba(24,24,27,.55)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f8f7;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:196px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;gap:9px;padding:8px 16px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .nav.on{color:#047857;background:#f0fdf6;font-weight:700;box-shadow:inset 2px 0 0 #047857}
+    .main{flex:1;min-width:0;padding:22px 24px 30px}
+    .rail{width:288px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:18px 18px 26px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:12px}
+    .prop{background:#f4fdf8;border:1px solid #a7f3d0;border-radius:12px;padding:15px 17px}
+    .proph{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+    .propb{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#065f46;background:#d9f7e7;border:1px solid #a7f3d0;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #047857;background:#047857;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#615c6e;cursor:pointer}
+    .add{font-size:11.5px;line-height:1.5;background:#eaf9f0;border-left:2px solid #10b981;padding:6px 10px;border-radius:0 6px 6px 0;color:#14532d}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px;scroll-margin-top:26px}
+    .zt{font-size:15px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#615c6e}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:12px;padding:9px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .tag{font-size:10px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px}
+    .shield{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:4px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .seamd{width:5px;height:5px;border-radius:50%;background:#0891b2;flex:none}
+    .seaml{font-size:10.5px;color:#0e7490;line-height:1.5;font-variant-numeric:tabular-nums}
+    .rec{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:.04em;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 7px}
+    .recd{width:6px;height:6px;border-radius:50%;background:#dc2626;flex:none}
+  </style>
+</helmet>
+
+<!-- ══════════ V1 · SYSTEM ══════════ -->
+<section class="ab" id="v1">
+  <div class="ab-hd"><a class="ab-id" href="#v1">V1</a><span class="ab-nm">System — AI rail · license boundary · the three-sided seam</span></div>
+  <div class="ab-sub" style="max-width:980px;margin:-8px 0 20px">Emerald, where Founder is violet and Investor indigo. Three licenses, three axioms: build a company · deploy capital into companies · <strong>turn expertise into engagements</strong>. This is the leanest of the three — seven rows, no tier gating, everything on — and that leanness is the design, not an omission. One naming change carries product-wide: the assisted mode is <strong>"AI fills the blanks"</strong>, because "Personal Advisor" collides with the human profession this license serves.</div>
+
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+    <div style="width:306px;flex:none;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);padding:18px">
+      <dc-import name="AdvRail" page="Practice" hint-size="100%,700px"></dc-import>
+    </div>
+
+    <div style="flex:1;min-width:420px;display:grid;gap:16px">
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+        <div class="lbl">License boundary — one license, everything on</div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:13px">
+          <div style="width:204px;flex:none;background:#fbfbfc;border:1px solid #ececf1;border-radius:10px;padding:12px 0">
+            <sc-for list="{{ navLic }}" as="n" hint-placeholder-count="7">
+              <div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span style="flex:1">{{ n.label }}</span></div>
+            </sc-for>
+          </div>
+          <div style="flex:1;min-width:230px">
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Seven rows, no locked row and no add-on. The Investor product gates its GP back office behind an Institutional tier because running a fund is a different business; advising is one business, so there is nothing to upsell and nothing to grey out.</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:14px;padding-top:13px;border-top:1px solid #f2f1f5;flex-wrap:wrap">
+              <div style="display:inline-flex;background:#f4f4f6;border:1px solid #ececf1;border-radius:9px;padding:3px">
+                <span style="font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;background:#fff;color:#047857;box-shadow:0 1px 2px rgba(24,24,27,.07)">Advisor</span>
+                <span style="font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;color:#4a4553">Founder</span>
+              </div>
+              <div style="font-size:11.5px;color:#615c6e;line-height:1.55;flex:1;min-width:200px">The family switcher, beside the workspace switcher. Many advisors are also founders; the products stay separate.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+        <div class="lbl">The seam — three-sided now</div>
+        <div style="font-size:12px;color:#3f3a49;margin-top:9px;line-height:1.65">This license transacts with both of the others. Seven objects cross the boundary; none of their tools ever render here.</div>
+        <div style="display:grid;grid-template-columns:1fr 1.2fr 1.2fr;gap:12px;margin-top:14px">
+          <span class="th">Shared object</span><span class="th">Their side</span><span class="th">Advisor side</span>
+        </div>
+        <sc-for list="{{ seamRows }}" as="s" hint-placeholder-count="7">
+          <div style="display:grid;grid-template-columns:1fr 1.2fr 1.2fr;gap:12px">
+            <span class="td" style="font-weight:700">{{ s.obj }}</span>
+            <span class="td" style="color:#615c6e">{{ s.them }}</span>
+            <span class="td">{{ s.here }}</span>
+          </div>
+        </sc-for>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:16px">
+          <sc-for list="{{ seamKinds }}" as="k" hint-placeholder-count="3">
+            <div style="border:1px solid #a5edf5;background:#f8feff;border-radius:11px;padding:13px 14px">
+              <span class="seam"><span class="seamd"></span>{{ k.chip }}</span>
+              <div style="font-size:12px;font-weight:700;margin-top:9px">{{ k.title }}</div>
+              <div style="font-size:11.5px;color:#3f3a49;margin-top:5px;line-height:1.55">{{ k.body }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.6">Cyan stays the family's seam hue across all three products, so a founder-produced object looks the same whichever license is reading it. Emerald is this product's own accent and never marks the seam.</div>
+      </div>
+
+      <!-- DARK MODE — the rail is identical across all five pages, so it is specified once here. -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+        <div style="width:292px;flex:none;background:#141a17;border:1px solid #29332d;border-radius:12px;box-shadow:0 2px 14px rgba(0,0,0,.3);padding:17px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span class="lbl" style="color:#a3b0a8">Worker AI · dark</span>
+            <span style="font-size:11px;color:#6b7a71">›</span>
+          </div>
+          <div style="border:1px solid #1f5a45;background:#12261f;border-radius:9px;padding:10px 11px;margin-top:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="font-size:12px;font-weight:800;color:#6ee7b7">AI fills the blanks</span>
+              <span style="width:24px;height:14px;border-radius:999px;background:#34d399;position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#141a17"></span></span>
+            </div>
+            <div style="font-size:10.5px;color:#a7f3d0;margin-top:4px;line-height:1.45">Emerald inverts the light-mode move: it <em>darkens</em> to 700 on white for contrast, and <em>lifts</em> to 400 on near-black. Neither direction is the 600 the palette starts from.</div>
+          </div>
+          <div style="border:1px solid #1f5a45;background:#12261f;border-radius:9px;padding:10px 11px;margin-top:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+              <span style="font-size:12px;font-weight:800;color:#f2f5f3">Llama 3.3 70B Fast</span>
+              <span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#6ee7b7;background:#15382c;border:1px solid #1f5a45;border-radius:3px;padding:2px 5px;flex:none">RECOMMENDED</span>
+            </div>
+            <div class="num" style="font-size:10.5px;color:#a3b0a8;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">@cf/meta/llama-3.3-70b-instruct-fp8-fast</div>
+            <div class="num" style="font-size:10.5px;color:#a3b0a8;margin-top:8px;padding-top:7px;border-top:1px solid #29332d">$0.293 / M in · $2.253 / M out</div>
+            <div class="num" style="font-size:11px;font-weight:700;color:#34d399;margin-top:6px">{{ practiceCost }} per session prep</div>
+          </div>
+          <div style="border:1px solid #7f2b2b;background:#2a1414;border-radius:9px;padding:10px 11px;margin-top:8px">
+            <span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:.04em;color:#fca5a5;background:#3d1a1a;border:1px solid #7f2b2b;border-radius:4px;padding:2px 7px"><span style="width:6px;height:6px;border-radius:50%;background:#f87171"></span>Recording · both notified</span>
+            <div style="font-size:10.5px;color:#fca5a5;margin-top:7px;line-height:1.5">Consent red stays red on dark. It lightens to red-400 but never softens into a neutral — a recording marker that stops reading as a warning has failed.</div>
+          </div>
+          <div style="border:1px solid #29332d;border-radius:9px;padding:11px;margin-top:9px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+              <span class="num" style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:#f2f5f3">$18.60</span>
+              <span style="font-size:10.5px;color:#a3b0a8">of $40.00</span>
+            </div>
+            <div style="height:5px;background:#29332d;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:47%;background:#34d399;border-radius:999px"></div></div>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:340px;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+          <div class="lbl">Token pairs — light / dark</div>
+          <div style="font-size:12px;color:#3f3a49;margin-top:9px;line-height:1.6">Every page references these; no page defines its own colour.</div>
+          <div style="display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:10px;margin-top:14px">
+            <span class="th">Token</span><span class="th">Light</span><span class="th">Dark</span>
+          </div>
+          <sc-for list="{{ tokens }}" as="t" hint-placeholder-count="14">
+            <div style="display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:10px;align-items:center">
+              <span class="td" style="font-weight:600">{{ t.name }}</span>
+              <span class="td num" style="display:flex;align-items:center;gap:7px;font-family:ui-monospace,Menlo,monospace;font-size:11px"><span style="{{ t.lSwatch }}"></span>{{ t.light }}</span>
+              <span class="td num" style="display:flex;align-items:center;gap:7px;font-family:ui-monospace,Menlo,monospace;font-size:11px"><span style="{{ t.dSwatch }}"></span>{{ t.dark }}</span>
+            </div>
+          </sc-for>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.65"><strong>Two rules an implementer must not flatten.</strong> The accent is emerald-<strong>700</strong> wherever it carries text, because white on emerald-600 measures 3.77:1 against 5.70:1 for the Founder's violet-600 — the same numbered step is not the same contrast across hues, so the accent had to move rather than be inherited. And it lifts to emerald-400 on dark, where 600 goes muddy against near-black. Emerald-600 survives only as a non-text fill: the toggle track and the usage bar.</div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+        <div class="lbl">Proposal anatomy · and consent, which is specific to this license</div>
+        <div class="prop" style="margin-top:12px">
+          <div class="proph"><span class="propb">Proposal · AI</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ v1Will }}</span></div>
+          <div class="add">+ Session prep for Meridian Labs, drawn from their last three updates and your two open questions. Nothing sent.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+            <div class="acc">Accept</div><div class="gho">Edit first</div><div class="dis">Discard</div>
+            <span class="num" style="font-size:10.5px;color:#615c6e;margin-left:auto">{{ v1Receipt }}</span>
+          </div>
+        </div>
+        <div style="border:1px solid #fecaca;background:#fffbfb;border-radius:11px;padding:13px 15px;margin-top:12px">
+          <span class="rec"><span class="recd"></span>Recording · both parties notified</span>
+          <div style="font-size:11.5px;color:#7f1d1d;margin-top:8px;line-height:1.6">Transcripts and follow-ups only exist if the session was recorded, and recording state is explicit to <em>both</em> sides — a red marker in the session card, in the client's own product, and on every artifact derived from it. No consent, no transcript, and the AI simply has nothing to work from. That is a hard gate, not a preference.</div>
+        </div>
+        <div style="display:grid;gap:8px;margin-top:14px">
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· Cost shown <strong>before</strong>, receipted <strong>after</strong> — the same arithmetic both times.</div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· Anything a client will read passes <span class="num" style="font-family:ui-monospace,Menlo,monospace;font-size:11px">@cf/meta/llama-guard-3-8b</span> and carries the shield.</div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· <strong>Hidden margin on AI, honest margin on revenue.</strong> The token rate is all-in, with no separate fee line — but the platform cut on your earnings is shown as its own line, every time.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ V2 · HOME ══════════ -->
+<section class="ab" id="v2">
+  <div class="ab-hd"><a class="ab-id" href="#v2">V2</a><span class="ab-nm">Home — "Where does my practice stand today?"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navH }}" as="n" hint-placeholder-count="7"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Where does my practice stand today?</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Two calls, one decision, one deliverable due. The brief is composed; the calendar is the spine.</div>
+
+      <div style="margin-top:15px;background:#fff;border:1px solid #a7f3d0;border-radius:12px;padding:6px 6px 6px 17px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 10px rgba(5,150,105,.08)">
+        <span style="width:16px;height:16px;display:block;flex:none;color:#047857" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+        <span style="flex:1;font-size:13.5px;color:#3f3a49">Which clients haven't heard from me in three weeks, and what did I promise them?</span>
+        <div class="acc" style="padding:9px 15px;font-size:12.5px">{{ homeAsk }}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-top:15px">
+        <sc-for list="{{ homeStats }}" as="s" hint-placeholder-count="4">
+          <div class="card" style="padding:14px 16px">
+            <div class="lbl" style="font-size:9.5px">{{ s.label }}</div>
+            <div class="num" style="font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:6px;line-height:1">{{ s.value }}</div>
+            <div style="font-size:10.5px;color:#615c6e;margin-top:5px;line-height:1.45">{{ s.note }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh"><span class="zt">Today · Tue Aug 25</span><span class="zs">Composed 07:10 · every line carries its receipt</span></div>
+        <div class="prop">
+          <div class="proph"><span class="propb">Proposal · brief</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ homeCost }}</span></div>
+          <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">Two calls today, both prepped. Meridian's is the one that matters — their burn moved 31% against plan and you promised a pricing view by Thursday, which is not started. One inbound request has been waiting two days and expires tomorrow. Your payout cleared Friday; the next lands Sep 1.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept as today's brief</div><div class="gho">Edit</div><div class="dis">Discard</div></div>
+        </div>
+
+        <div style="display:grid;gap:9px;margin-top:14px">
+          <sc-for list="{{ feed }}" as="f" hint-placeholder-count="6">
+            <div style="{{ f.rowStyle }}">
+              <div style="display:flex;align-items:flex-start;gap:12px;min-width:0;flex:1">
+                <div style="width:30px;height:30px;border-radius:9px;background:{{ f.chipBg }};color:{{ f.chipInk }};display:flex;align-items:center;justify-content:center;flex:none;padding:7px;box-sizing:border-box" dangerouslySetInnerHTML="{{ f.icon }}"></div>
+                <div style="min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:13px;font-weight:700">{{ f.title }}</span>
+                    <sc-if value="{{ f.seam }}"><span class="seam"><span class="seamd"></span>{{ f.seam }}</span></sc-if>
+                    <sc-if value="{{ f.rec }}"><span class="rec"><span class="recd"></span>{{ f.rec }}</span></sc-if>
+                  </div>
+                  <div style="font-size:11.5px;color:#4a4553;margin-top:5px;line-height:1.55">{{ f.body }}</div>
+                  <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:5px">{{ f.receipt }}</div>
+                </div>
+              </div>
+              <span class="acc" style="flex:none">{{ f.action }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdvRail" page="Home" hint-size="100%,680px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ V3 · PRACTICE ══════════ -->
+<section class="ab" id="v3">
+  <div class="ab-hd"><a class="ab-id" href="#v3">V3</a><span class="ab-nm">Practice — "Run my advisory business"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navP }}" as="n" hint-placeholder-count="7"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Run my advisory business</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Requests in, engagements running, work sent, money out. One page, five zones.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+        <sc-for list="{{ anchP }}" as="a" hint-placeholder-count="5"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:16px">
+        <div class="zh" id="pr-opps"><span class="zt">Opportunities</span><span class="zs">3 inbound · 1 expires tomorrow</span></div>
+        <div style="display:grid;gap:10px">
+          <sc-for list="{{ opps }}" as="o" hint-placeholder-count="3">
+            <div style="{{ o.rowStyle }}">
+              <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:13px;font-weight:700">{{ o.who }}</span>
+                  <span style="{{ o.kindStyle }}">{{ o.kind }}</span>
+                  <sc-if value="{{ o.seam }}"><span class="seam"><span class="seamd"></span>{{ o.seam }}</span></sc-if>
+                </div>
+                <div style="font-size:11.5px;color:#4a4553;margin-top:5px;line-height:1.55">{{ o.ask }}</div>
+                <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:5px">{{ o.meta }}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex:none;flex-wrap:wrap">
+                <span class="acc">Accept with terms</span><span class="gho">Decline</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="prop" style="margin-top:12px">
+          <div class="proph"><span class="propb">Proposal · engagement</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">≈ $0.0031</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">Drafted from Kelp Bio's request and your standard terms: three months, two sessions a month, one written review per cycle, $4,500/month. Scope names what is <em>excluded</em> too — fundraising introductions are not in this package.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Send proposal</div><div class="gho">Edit terms</div><div class="dis">Discard</div><span class="shield" style="margin-left:auto">Screened</span></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="pr-engage"><span class="zt">Active engagements</span><span class="zs">4 clients · 1 renewal due</span></div>
+          <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .9fr;gap:11px">
+            <span class="th">Client</span><span class="th">Scope</span><span class="th">Contract</span><span class="th">Next due</span>
+          </div>
+          <sc-for list="{{ engagements }}" as="e" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:1.2fr .9fr .8fr .9fr;gap:11px;align-items:center">
+              <span class="td" style="font-weight:600">{{ e.client }}</span>
+              <span class="td num">{{ e.scope }}</span>
+              <span class="td"><span style="{{ e.pill }}">{{ e.contract }}</span></span>
+              <span class="td num">{{ e.due }}</span>
+            </div>
+          </sc-for>
+          <div class="seaml" style="margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="seam"><span class="seamd"></span>Seam</span><span>Each engagement is the same object the founder sees under Advisory as "help engaged" — one contract, two products.</span></div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="pr-delivery"><span class="zt">Delivery desk</span><span class="zs">Work product · sent and opened</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ deliverables }}" as="d" hint-placeholder-count="4">
+              <div style="{{ d.rowStyle }}">
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:12.5px;font-weight:700">{{ d.name }}</div>
+                  <div style="font-size:11px;color:#615c6e;margin-top:4px;line-height:1.5">{{ d.client }}</div>
+                  <sc-if value="{{ d.seam }}"><div class="seaml" style="margin-top:5px">{{ d.seam }}</div></sc-if>
+                </div>
+                <span style="{{ d.pill }}">{{ d.state }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="pr-sessions"><span class="zt">Sessions &amp; availability</span><span class="zs">Week of Aug 24 · 6 slots open</span></div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:9px">
+          <sc-for list="{{ week }}" as="w" hint-placeholder-count="5">
+            <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:10px;padding:10px">
+              <div class="lbl" style="font-size:9px">{{ w.day }}</div>
+              <div style="display:grid;gap:6px;margin-top:9px">
+                <sc-for list="{{ w.slots }}" as="s" hint-placeholder-count="2">
+                  <div style="{{ s.style }}">
+                    <div class="num" style="font-size:10.5px;font-weight:700">{{ s.time }}</div>
+                    <div style="font-size:10px;margin-top:3px;line-height:1.35">{{ s.who }}</div>
+                    <sc-if value="{{ s.rec }}"><span class="rec" style="margin-top:5px;font-size:8.5px">Recording on</span></sc-if>
+                    <sc-if value="{{ s.gated }}"><span style="display:inline-block;margin-top:5px;font-size:8.5px;font-weight:800;letter-spacing:.05em;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:3px;padding:2px 5px">PAYOUT GATED</span></sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.55">{{ gateNote }}</div>
+        <div class="prop" style="margin-top:13px">
+          <div class="proph"><span class="propb">Proposal · session prep</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ practiceCost }}</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">Meridian Labs, 14:00. Their last three updates, the two questions you left open in July, and the one commitment you made and have not delivered — assembled before you walk in, so the first ten minutes are not spent remembering.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept prep</div><div class="gho">Edit</div><div class="dis">Discard</div></div>
+        </div>
+        <div class="prop" style="margin-top:11px">
+          <div class="proph"><span class="propb">Proposal · follow-up from transcript</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">≈ $0.0004</span><span class="rec" style="margin-left:8px"><span class="recd"></span>Recorded with consent</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">Yesterday's Halverton call ran 52 minutes and transcribed for $0.026. Three commitments were made — two by you. The follow-up names who owns what and by when.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Send follow-up</div><div class="gho">Review the 3</div><div class="dis">Discard</div><span class="shield" style="margin-left:auto">Screened</span></div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="pr-earnings"><span class="zt">Earnings</span><span class="zs">August · platform cut shown on every line</span></div>
+        <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
+          <div style="flex:1;min-width:300px">
+            <div style="display:grid;grid-template-columns:1.3fr .8fr .8fr .8fr;gap:11px">
+              <span class="th">Source</span><span class="th">Gross</span><span class="th">Platform cut</span><span class="th">You receive</span>
+            </div>
+            <sc-for list="{{ earnings }}" as="e" hint-placeholder-count="5">
+              <div style="{{ e.rowStyle }}">
+                <span class="td" style="font-weight:{{ e.weight }};border-top:none;padding:8px 0">{{ e.source }}</span>
+                <span class="td num" style="font-weight:{{ e.weight }};border-top:none;padding:8px 0">{{ e.gross }}</span>
+                <span class="td num" style="font-weight:{{ e.weight }};border-top:none;padding:8px 0;color:#b45309">{{ e.cut }}</span>
+                <span class="td num" style="font-weight:{{ e.weight }};border-top:none;padding:8px 0">{{ e.net }}</span>
+              </div>
+            </sc-for>
+            <div style="font-size:11px;color:#615c6e;margin-top:11px;line-height:1.55">{{ cutNote }}</div>
+          </div>
+          <div style="width:284px;flex:none">
+            <div class="lbl" style="margin-bottom:9px">Payout account · all three states</div>
+            <div style="display:grid;gap:9px">
+              <sc-for list="{{ payoutStates }}" as="p" hint-placeholder-count="3">
+                <div style="{{ p.cardStyle }}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="width:7px;height:7px;border-radius:50%;background:{{ p.ink }};flex:none"></span>
+                      <span style="font-size:12.5px;font-weight:800;color:{{ p.ink }}">{{ p.state }}</span>
+                    </div>
+                    <sc-if value="{{ p.current }}"><span style="font-size:9px;font-weight:800;letter-spacing:.07em;color:#065f46;background:#d9f7e7;border:1px solid #a7f3d0;border-radius:3px;padding:2px 6px">YOURS</span></sc-if>
+                  </div>
+                  <div style="font-size:11px;color:#3f3a49;margin-top:7px;line-height:1.5">{{ p.body }}</div>
+                  <div style="font-size:10.5px;font-weight:700;color:{{ p.ink }};margin-top:7px">{{ p.gate }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:grid;gap:7px;margin-top:11px">
+              <sc-for list="{{ payouts }}" as="p" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                  <span class="num" style="font-size:11px;color:#615c6e">{{ p.date }}</span>
+                  <span class="num" style="font-size:11.5px;font-weight:700">{{ p.amount }}</span>
+                  <span style="{{ p.pill }}">{{ p.state }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdvRail" page="Practice" hint-size="100%,860px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ V4 · EXPERTISE ══════════ -->
+<section class="ab" id="v4">
+  <div class="ab-hd"><a class="ab-id" href="#v4">V4</a><span class="ab-nm">Expertise — "Package what I know"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navE }}" as="n" hint-placeholder-count="7"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Package what I know</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Your storefront. Proof is fed from client outcomes across the seam — never a number you typed about yourself.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+        <sc-for list="{{ anchE }}" as="a" hint-placeholder-count="5"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:19px 21px;margin-top:16px">
+        <div class="zh" id="ex-profile"><span class="zt">Public profile</span><span class="zs">This is what a founder sees before booking</span></div>
+        <div style="display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap">
+          <div style="width:74px;height:74px;border-radius:14px;background:#d9f7e7;color:#065f46;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;flex:none">PR</div>
+          <div style="flex:1;min-width:280px">
+            <div style="font-size:18px;font-weight:800;letter-spacing:-.02em">Priyanka Raghunathan</div>
+            <div style="font-size:13px;color:#3f3a49;margin-top:5px;line-height:1.55">Fractional CPO. I help seed-stage teams work out what to charge and what to cut — usually in the six weeks before a raise.</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+              <sc-for list="{{ areas }}" as="a" hint-placeholder-count="6"><span class="tag" style="font-size:10.5px">{{ a }}</span></sc-for>
+            </div>
+          </div>
+          <div style="width:190px;flex:none;display:grid;gap:9px">
+            <sc-for list="{{ profileStats }}" as="p" hint-placeholder-count="3">
+              <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:9px;padding:10px 12px">
+                <div class="lbl" style="font-size:9px">{{ p.label }}</div>
+                <div class="num" style="font-size:15px;font-weight:800;margin-top:4px">{{ p.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="ex-services"><span class="zt">Services &amp; pricing</span><span class="zs">4 live · 1 draft</span></div>
+          <div style="display:grid;gap:10px">
+            <sc-for list="{{ services }}" as="s" hint-placeholder-count="4">
+              <div style="{{ s.rowStyle }}">
+                <div style="min-width:0;flex:1">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-size:12.5px;font-weight:700">{{ s.name }}</span>
+                    <span style="{{ s.pill }}">{{ s.state }}</span>
+                  </div>
+                  <div style="font-size:11px;color:#615c6e;margin-top:4px;line-height:1.5">{{ s.includes }}</div>
+                </div>
+                <div style="text-align:right;flex:none">
+                  <div class="num" style="font-size:13.5px;font-weight:800">{{ s.price }}</div>
+                  <div class="num" style="font-size:10px;color:#615c6e;margin-top:3px">{{ s.booked }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div class="prop" style="margin-top:12px">
+            <div class="proph"><span class="propb">Proposal · service description</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">≈ $0.0012</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Written from how you actually described this work in sessions, not from a template — the phrase "what to charge and what to cut" is yours, used in eleven calls.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept</div><div class="gho">Edit</div><div class="dis">Discard</div></div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="ex-proof"><span class="zt">Proof</span><span class="zs">Seam-fed · you cannot write these</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ proof }}" as="p" hint-placeholder-count="3">
+              <div style="border:1px solid #a5edf5;background:#f8feff;border-radius:10px;padding:12px 13px">
+                <span class="seam"><span class="seamd"></span>{{ p.src }}</span>
+                <div style="font-size:11.5px;color:#3f3a49;margin-top:8px;line-height:1.6">{{ p.text }}</div>
+                <div class="num" style="font-size:10.5px;color:#0e7490;margin-top:6px">{{ p.meta }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.55">Outcomes come from the client's own record — a raise closed, a metric moved — and testimonials are written on their side and published with their consent. Nothing in this zone is self-reported, which is the only reason it is worth reading.</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="ex-thinking"><span class="zt">Published thinking</span><span class="zs">6 pieces · 14,200 reads</span></div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Proposal · you've explained this 9 times</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ expertiseCost }}</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">"Pricing before product-market fit" came up in nine sessions across five clients this quarter. Drafted as an article in your voice, from your transcripts — with the client specifics stripped out and flagged for you to check.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Open the draft</div><div class="gho">Change the angle</div><div class="dis">Not now</div><span class="rec" style="margin-left:auto"><span class="recd"></span>From consented transcripts</span></div>
+          </div>
+          <div style="display:grid;gap:7px;margin-top:12px">
+            <sc-for list="{{ articles }}" as="a" hint-placeholder-count="3">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                <span style="font-size:11.5px;font-weight:600;min-width:0">{{ a.title }}</span>
+                <span class="num" style="font-size:10.5px;color:#615c6e;flex:none">{{ a.stats }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="ex-visibility"><span class="zt">Visibility</span><span class="zs">Where you appear</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ visibility }}" as="v" hint-placeholder-count="4">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                <div style="min-width:0">
+                  <div style="font-size:12px;font-weight:700">{{ v.surface }}</div>
+                  <div style="font-size:10.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ v.note }}</div>
+                </div>
+                <span class="num" style="font-size:11px;font-weight:700;flex:none">{{ v.stat }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.55">Conversion is measured per surface, so positioning advice has something to point at: the directory sends volume, the Lab cohort sends the clients who stay.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdvRail" page="Expertise" hint-size="100%,820px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ V5 · NETWORK ══════════ -->
+<section class="ab" id="v5">
+  <div class="ab-hd"><a class="ab-id" href="#v5">V5</a><span class="ab-nm">Network — "Work my relationships"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navN }}" as="n" hint-placeholder-count="7"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Work my relationships</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Advisors are the platform's strongest referrers, so referral state lives on the relationship card — not in a separate tool.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0">
+        <sc-for list="{{ anchN }}" as="a" hint-placeholder-count="3"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:16px">
+        <div class="zh" id="nw-book"><span class="zt">Relationship book</span><span class="zs">148 · 11 going cold · 4 referrals in motion</span></div>
+        <div style="display:grid;grid-template-columns:1.2fr .8fr .7fr 1.1fr .8fr;gap:11px">
+          <span class="th">Person</span><span class="th">Type</span><span class="th">Strength</span><span class="th">Context</span><span class="th">Last touch</span>
+        </div>
+        <sc-for list="{{ rels }}" as="r" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:1.2fr .8fr .7fr 1.1fr .8fr;gap:11px;align-items:center">
+            <span class="td" style="font-weight:600">{{ r.name }}</span>
+            <span class="td"><span style="{{ r.typeStyle }}">{{ r.type }}</span></span>
+            <span class="td"><span style="{{ r.strStyle }}">{{ r.strength }}</span></span>
+            <span class="td" style="min-width:0">
+              <span>{{ r.context }}</span>
+              <sc-if value="{{ r.referral }}"><span style="{{ r.refStyle }}">{{ r.referral }}</span></sc-if>
+            </span>
+            <span class="td num" style="color:{{ r.touchInk }}">{{ r.touch }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="nw-intros"><span class="zt">Introductions desk</span><span class="zs">3 asked · 5 offered · 2 in motion</span></div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Proposal · double opt-in intro</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ netCost }}</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Meridian needs a security reviewer before their SOC 2 push; Aoife did exactly that at two companies you advised. Written from both sides' context, and asking each of them separately before either name is shared.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Ask both</div><div class="gho">Edit</div><div class="dis">Discard</div><span class="shield" style="margin-left:auto">Screened</span></div>
+          </div>
+          <div class="prop" style="margin-top:11px">
+            <div class="proph"><span class="propb">Proposal · who needs what you just published</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">≈ $0.0004</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Seven people in your book are pre-raise and asked about pricing in the last quarter. Your new piece answers them — one line each, not a broadcast.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Review the 7</div><div class="dis">Skip</div></div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="nw-orgs"><span class="zt">Organizations</span><span class="zs">34 companies, funds and studios</span></div>
+          <div style="display:grid;gap:8px">
+            <sc-for list="{{ orgs }}" as="o" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid #f0eff4;background:#fbfbfc;border-radius:9px">
+                <div style="min-width:0">
+                  <div style="font-size:12px;font-weight:700">{{ o.name }}</div>
+                  <div style="font-size:10.5px;color:#615c6e;margin-top:3px">{{ o.note }}</div>
+                </div>
+                <span class="num" style="font-size:11px;color:#615c6e;flex:none">{{ o.people }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;line-height:1.55">Referral credit is attributed at the organization level too, so a studio that sent you four clients reads as a channel rather than four unconnected names.</div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdvRail" page="Network" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════ V6 · RESEARCH ══════════ -->
+<section class="ab" id="v6">
+  <div class="ab-hd"><a class="ab-id" href="#v6">V6</a><span class="ab-nm">Research — "Know more than the room"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navR }}" as="n" hint-placeholder-count="7"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Know more than the room</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Credibility is the product. This page exists so you walk into a call having read what they wrote.</div>
+
+      <div id="rs-ask" style="margin-top:15px;background:#fff;border:1px solid #a7f3d0;border-radius:12px;padding:6px 6px 6px 17px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 10px rgba(5,150,105,.08)">
+        <span style="width:16px;height:16px;display:block;flex:none;color:#047857" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+        <span style="flex:1;font-size:13.5px;color:#3f3a49">What has Meridian actually changed about pricing since we last spoke?</span>
+        <div class="acc" style="padding:9px 15px;font-size:12.5px">{{ resAsk }}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:11px 0 0">
+        <sc-for list="{{ anchR }}" as="a" hint-placeholder-count="5"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:15px">
+        <div class="zh" id="rs-client"><span class="zt">Client prep · Meridian Labs</span><span class="zs">{{ resReceipt }}</span></div>
+        <div style="border:1px solid #a5edf5;background:#f8feff;border-radius:10px;padding:11px 13px">
+          <span class="seam"><span class="seamd"></span>Client-shared history</span>
+          <div class="seaml" style="margin-top:7px">Scope: 3 updates, 2 board briefs, 1 pricing model · shared under your engagement<br>Their last action: opened your Q2 deliverable · 1h ago</div>
+        </div>
+        <div class="prop" style="margin-top:12px">
+          <div class="proph"><span class="propb">Proposal · sourced answer</span><span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ resFirstCost }} first pass</span></div>
+          <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">They raised the entry tier from $200 to $290 in July and lost two of fourteen accounts — both under 20 seats, both named in the Q2 update. Net revenue is up 9%. The thing they have not done is the annual-prepay discount you recommended in May, and the update does not say why.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Attach to the 14:00 session</div><div class="gho">Ask a follow-up</div><div class="dis">Discard</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px;border-color:#a7f3d0;background:linear-gradient(180deg,#f7fffb,#fff)">
+        <div class="zh" id="rs-library"><span class="zt">Cached input — prep gets cheaper the deeper you go</span><span class="zs">Document library · client histories and your own playbooks</span></div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+          <div style="flex:1;min-width:280px">
+            <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">The first question reads the client's whole history — 58,000 tokens at $0.440/M, or {{ resFirstCost }}. Every question after hits cached input at <strong>$0.014/M</strong>, so a follow-up lands at {{ resCachedCost }}. Prepping a call properly means twenty questions, not one: {{ resTwenty }} for the set.</div>
+            <div style="font-size:12.5px;color:#3f3a49;margin-top:9px;line-height:1.7">That is the economic argument for this page. Reading a client closely used to cost an hour; it now costs less than the coffee you drink while doing it.</div>
+          </div>
+          <div style="width:250px;flex:none;background:#fff;border:1px solid #ececf1;border-radius:11px;padding:14px">
+            <div class="lbl" style="font-size:9.5px">Cost of one client's history</div>
+            <div style="display:grid;gap:9px;margin-top:11px">
+              <sc-for list="{{ cacheRows }}" as="c" hint-placeholder-count="3">
+                <div>
+                  <div class="num" style="display:flex;justify-content:space-between;font-size:11.5px;color:#3f3a49"><span>{{ c.label }}</span><span style="font-weight:700">{{ c.cost }}</span></div>
+                  <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:{{ c.pct }}%;background:{{ c.ink }};border-radius:999px"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
+        <sc-for list="{{ resCards }}" as="r" hint-placeholder-count="3">
+          <div class="card" style="padding:16px 18px">
+            <div class="zt" id="{{ r.anchorId }}" style="font-size:14px">{{ r.title }}</div>
+            <div style="font-size:11.5px;color:#4a4553;margin-top:7px;line-height:1.6">{{ r.body }}</div>
+            <div class="num" style="font-size:11px;color:#615c6e;margin-top:9px">{{ r.meta }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AdvRail" page="Research" hint-size="100%,780px"></dc-import></div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { anch:{} };
+
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  anchorsFor(key, list) {
+    const active = this.state.anch[key] || list[0][1];
+    return list.map(([label, id]) => ({
+      label, href:'#' + id,
+      go: () => { const a = Object.assign({}, this.state.anch); a[key] = id; this.setState({ anch:a }); },
+      style:'font-size:11px;font-weight:' + (active === id ? '700' : '600')
+        + ';color:' + (active === id ? '#047857' : '#615c6e')
+        + ';background:' + (active === id ? '#f0fdf6' : '#fff')
+        + ';border:1px solid ' + (active === id ? '#a7f3d0' : '#ececf1')
+        + ';border-radius:999px;padding:5px 11px;cursor:pointer;text-decoration:none;display:inline-block'
+    }));
+  }
+
+  renderVals() {
+    const I = {
+      home:  this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      prac:  this.ic('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+      exp:   this.ic('<circle cx="12" cy="9" r="5"/><path d="M8.5 13.5 7 22l5-2.5L17 22l-1.5-8.5"/>'),
+      net:   this.ic('<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'),
+      res:   this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      trust: this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/><path d="m9 12 2 2 4-4"/>'),
+      cog:   this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>'),
+      cal:   this.ic('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+      doc:   this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>'),
+      cash:  this.ic('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/>'),
+      inbox: this.ic('<path d="M3 12h5l2 3h4l2-3h5"/><path d="M4 12 6 5h12l2 7v7H4Z"/>'),
+      link:  this.ic('<path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1-1"/>')
+    };
+    const ROWS = [
+      ['Home', I.home], ['Practice', I.prac], ['Expertise', I.exp],
+      ['Network', I.net], ['Research', I.res], ['Trust', I.trust], ['Practice Settings', I.cog]
+    ];
+    const nav = (active) => ROWS.map(([label, icon]) => ({ label, icon, cls: label === active ? 'nav on' : 'nav' }));
+
+    // ---- ONE cost arithmetic, shared with the rail ----
+    const c4 = (n) => '$' + n.toFixed(4);
+    const tk = (n) => n.toLocaleString('en-US');
+    const run = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    const HOME = run(14200, 1180, 0.293, 2.253);
+    const PRAC = run(26400, 1620, 0.293, 2.253);
+    const EXPC = run(31000, 2400, 0.293, 2.253);
+    const NETC = run(2400, 440, 0.351, 0.555);
+    const RESF = run(58000, 1300, 0.440, 1.320);
+    const RESC = run(58000, 1300, 0.014, 1.320);
+
+    // ---- Earnings: gross is the fact, the cut is a rate, net is derived ----
+    const CUT = 0.15;
+    const LINES = [
+      { source:'Office-hours sessions · 9', gross:5400 },
+      { source:'Engagement retainers · 3', gross:11500 },
+      { source:'Expert calls, investor-side · 2', gross:1600 }
+    ];
+    const usd = (n) => '$' + n.toLocaleString('en-US');
+    const grossTotal = LINES.reduce((a, l) => a + l.gross, 0);
+    const cutTotal = Math.round(grossTotal * CUT);
+    const netTotal = grossTotal - cutTotal;
+    const earnRows = LINES.map(l => {
+      const cut = Math.round(l.gross * CUT);
+      return { source:l.source, gross:usd(l.gross), cut:'−' + usd(cut), net:usd(l.gross - cut), weight:'500',
+        rowStyle:'display:grid;grid-template-columns:1.3fr .8fr .8fr .8fr;gap:11px;border-bottom:1px solid #f6f5f9' };
+    }).concat([{ source:'August to date', gross:usd(grossTotal), cut:'−' + usd(cutTotal), net:usd(netTotal), weight:'800',
+      rowStyle:'display:grid;grid-template-columns:1.3fr .8fr .8fr .8fr;gap:11px;border-top:1px solid #ececf1;margin-top:2px' }]);
+
+    const pill = (t, map) => {
+      const c = map[t] || ['#f4f4f6','#615c6e','#e4e4e8'];
+      return 'font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';flex:none;white-space:nowrap';
+    };
+    const ST = {
+      'Signed':['#ecfdf5','#047857','#a7f3d0'], 'Opened':['#ecfdf5','#047857','#a7f3d0'],
+      'Paid':['#ecfdf5','#047857','#a7f3d0'], 'Live':['#ecfdf5','#047857','#a7f3d0'],
+      'Sent':['#f0fdf6','#065f46','#a7f3d0'], 'In motion':['#f0fdf6','#065f46','#a7f3d0'],
+      'Renewal due':['#fffbeb','#92400e','#fde68a'], 'Draft':['#fffbeb','#92400e','#fde68a'],
+      'Pending':['#fffbeb','#92400e','#fde68a'], 'Due Thu':['#fffbeb','#92400e','#fde68a'],
+      'Not started':['#fef2f2','#b91c1c','#fecaca'], 'Overdue':['#fef2f2','#b91c1c','#fecaca'],
+      'Scheduled':['#f4f4f6','#615c6e','#e4e4e8']
+    };
+
+    return {
+      tokens: [
+        ['Page surface', '#f7f8f7', '#101512'],
+        ['Card surface', '#ffffff', '#1a211d'],
+        ['Rail surface', '#ffffff', '#141a17'],
+        ['Border', '#ececf1', '#29332d'],
+        ['Text primary', '#18181b', '#f2f5f3'],
+        ['Text muted', '#615c6e', '#a3b0a8'],
+        ['Accent · text', '#047857', '#34d399'],
+        ['Accent · fill only', '#059669', '#34d399'],
+        ['Accent tint', '#f2fdf7', '#12261f'],
+        ['Accent border', '#a7f3d0', '#1f5a45'],
+        ['Seam · cyan → teal', '#0e7490', '#5eead4'],
+        ['Consent red', '#b91c1c', '#f87171'],
+        ['Warning', '#92400e', '#fbbf24'],
+        ['Platform cut', '#b45309', '#fbbf24']
+      ].map(([name, light, dark]) => ({
+        name, light, dark,
+        lSwatch:'width:11px;height:11px;border-radius:3px;flex:none;background:' + light + ';border:1px solid rgba(24,24,27,.14)',
+        dSwatch:'width:11px;height:11px;border-radius:3px;flex:none;background:' + dark + ';border:1px solid rgba(24,24,27,.14)'
+      })),
+
+      searchIcon: I.res,
+      navLic: nav(null), navH: nav('Home'), navP: nav('Practice'),
+      navE: nav('Expertise'), navN: nav('Network'), navR: nav('Research'),
+
+      v1Will: 'will cost ≈ ' + c4(PRAC),
+      v1Receipt: 'ran in 5.8s · ' + tk(26400) + ' in / ' + tk(1620) + ' out · ' + c4(PRAC),
+      homeAsk: 'Ask · ≈ ' + c4(HOME),
+      homeCost: '≈ ' + c4(HOME),
+      practiceCost: '≈ ' + c4(PRAC),
+      expertiseCost: '≈ ' + c4(EXPC),
+      netCost: '≈ ' + c4(NETC),
+      resAsk: 'Research · ≈ ' + c4(RESF),
+      resReceipt: 'Ran 9s ago · ' + tk(58000) + ' in / ' + tk(1300) + ' out · ' + c4(RESF),
+      resFirstCost: c4(RESF), resCachedCost: c4(RESC),
+      resTwenty: '$' + (RESF + 19 * RESC).toFixed(2),
+      cacheRows: [
+        { label:'First question', cost:c4(RESF), pct:'100', ink:'#047857' },
+        { label:'Each follow-up', cost:c4(RESC), pct:String(Math.round(RESC / RESF * 100)), ink:'#10b981' },
+        { label:'Same query, no cache', cost:c4(RESF), pct:'100', ink:'#d4d2dc' }
+      ],
+
+      // ---- V1 seam ----
+      seamRows: [
+        { obj:'The engagement', them:'Founder: Advisory → help engaged', here:'Practice → client engagement' },
+        { obj:'The session', them:'Founder: office hours booked', here:'Practice → calendar + delivery' },
+        { obj:'The deliverable', them:'Founder: guidance received', here:'Practice → work product sent' },
+        { obj:'The expert call', them:'Investor: diligence input bought', here:'Practice → paid session' },
+        { obj:'The intro', them:'Network → help received', here:'Network → support given' },
+        { obj:'The referral', them:'Platform: referral pipeline', here:'Home → referrals in motion' },
+        { obj:'The testimonial', them:'Founder: outcome achieved', here:'Expertise → track record entry' }
+      ],
+      seamKinds: [
+        { chip:'Provenance', title:'Where it came from', body:'"From Meridian Labs · 2h ago" — the object names its origin, so nothing here reads as your own claim.' },
+        { chip:'Share state', title:'What you were given', body:'"3 updates, 2 board briefs shared under your engagement" — scope is explicit, and so is what was not shared.' },
+        { chip:'Counterparty', title:'What they just did', body:'"Meridian Labs opened your deliverable · 1h ago" — you see the act, never their tool.' }
+      ],
+
+      // ---- Home ----
+      homeStats: [
+        { label:'Today', value:'2 calls', note:'both prepped · 14:00 is the one' },
+        { label:'Awaiting your yes', value:'3', note:'1 expires tomorrow' },
+        { label:'Due this week', value:'2', note:'1 not started' },
+        { label:'August, after cut', value:usd(netTotal), note:'next payout Sep 1' }
+      ],
+      feed: [
+        { title:'Meridian Labs · 14:00, 60 min', seam:null, rec:'Recording on · both notified', icon:I.cal, tone:'accent',
+          body:'Prep is assembled. Their burn moved 31% against plan and you owe them a pricing view by Thursday.',
+          receipt:'Source: their Q2 update, p.2 · your May session notes', action:'Open prep' },
+        { title:'Kelp Bio · advisory request', seam:'From Kelp Bio · 2 days ago', icon:I.inbox, tone:'due',
+          body:'Pre-seed, wants three months on pricing and packaging. Expires tomorrow — a decline costs nothing, silence costs the referral.',
+          receipt:'Referred by Novacraft Labs · your third from them', action:'Accept with terms' },
+        { title:'Pricing review · Meridian', seam:null, icon:I.doc, tone:'bad',
+          body:'Promised Thursday, not started. It is the deliverable the 14:00 call will ask about.',
+          receipt:'Committed in your Jul 28 follow-up', action:'Start it' },
+        { title:'Halverton opened your Q2 review', seam:'From Halverton · 1h ago', icon:I.doc, tone:'seam',
+          body:'Read twice, 9 minutes on the retention section. No reply yet.',
+          receipt:'Delivered Aug 22 · opened Aug 25', action:'Follow up' },
+        { title:'Payout cleared', seam:null, icon:I.cash, tone:'plain',
+          body:usd(4590) + ' landed Friday, covering nine sessions after the platform cut. Next payout Sep 1.',
+          receipt:'Stripe Connect · verified account · 15% cut shown per line', action:'Open earnings' },
+        { title:'2 referrals in motion', seam:'Platform pipeline', icon:I.link, tone:'seam',
+          body:'One under review, one accepted into the Lab. Both credited to you.',
+          receipt:'Referral pipeline · updated this morning', action:'See both' }
+      ].map(f => {
+        const M = { accent:['#f0fdf6','#065f46','#047857'], seam:['#f0fdff','#0e7490','#0891b2'],
+                    due:['#fffbeb','#92400e','#f59e0b'], bad:['#fef2f2','#b91c1c','#ef4444'], plain:['#f4f4f6','#615c6e','#d4d4d8'] };
+        const c = M[f.tone];
+        return { title:f.title, seam:f.seam, rec:f.rec, body:f.body, receipt:f.receipt, action:f.action, icon:f.icon,
+          chipBg:c[0], chipInk:c[1],
+          rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px 15px;border:1px solid #f0eff4;border-left:3px solid '+c[2]+';border-radius:0 10px 10px 0;background:#fbfbfc' };
+      }),
+
+      // ---- Practice ----
+      anchP: this.anchorsFor('P', [['Opportunities','pr-opps'],['Engagements','pr-engage'],['Delivery','pr-delivery'],['Sessions','pr-sessions'],['Earnings','pr-earnings']]),
+      opps: [
+        { who:'Kelp Bio', kind:'Founder', seam:'Referred by Novacraft', ask:'Three months on pricing and packaging, pre-seed. Wants two sessions a month plus written reviews.',
+          meta:'Received Aug 23 · expires tomorrow · budget stated $4–5k/mo', tone:'due' },
+        { who:'Thornbury Capital', kind:'Investor', seam:null, ask:'One paid expert call — pricing diligence on a workflow company they are screening. 60 minutes.',
+          meta:'Received Aug 24 · your rate applies · no conflict flagged', tone:'plain' },
+        { who:'Aperture', kind:'Founder', seam:'From the Lab cohort', ask:'Ongoing, open scope. No budget stated and no specific question — worth a call before terms.',
+          meta:'Received Aug 21 · second approach', tone:'plain' }
+      ].map(o => {
+        const K = { Founder:['#f0fdf6','#065f46','#a7f3d0'], Investor:['#f5f5ff','#3730a3','#c7d2fe'] };
+        return { who:o.who, kind:o.kind, seam:o.seam, ask:o.ask, meta:o.meta,
+          kindStyle:pill(o.kind, K),
+          rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:13px 14px;border:1px solid '
+            + (o.tone === 'due' ? '#fde68a;background:#fffdf5' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px' };
+      }),
+      engagements: [
+        { client:'Meridian Labs', scope:'2 sessions/mo', contract:'Signed', due:'Thu Aug 27' },
+        { client:'Halverton', scope:'Monthly review', contract:'Signed', due:'Sep 4' },
+        { client:'Novacraft Labs', scope:'Sprint, 6 weeks', contract:'Renewal due', due:'Aug 29' },
+        { client:'Verwood', scope:'Advisory, equity', contract:'Signed', due:'Sep 11' }
+      ].map(e => ({ ...e, pill:pill(e.contract, ST) })),
+      deliverables: [
+        { name:'Q2 advisory review', client:'Halverton', state:'Opened', seam:'Opened twice · 9 min on retention · 1h ago' },
+        { name:'Pricing tier model', client:'Meridian Labs', state:'Not started', seam:null },
+        { name:'Board brief · Aug', client:'Verwood', state:'Sent', seam:'Delivered Aug 22 · not yet opened' },
+        { name:'Packaging teardown', client:'Novacraft Labs', state:'Opened', seam:'Opened Aug 20 · replied' }
+      ].map(d => ({ ...d, pill:pill(d.state, ST),
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid '
+          + (d.state === 'Not started' ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc') + ';border-radius:9px' })),
+      week: [
+        { day:'Mon 24', slots:[{ time:'10:00', who:'Novacraft · sprint', booked:true, rec:true }] },
+        { day:'Tue 25', slots:[{ time:'11:00', who:'Thornbury · expert call', booked:true, rec:false }, { time:'14:00', who:'Meridian Labs', booked:true, rec:true }] },
+        { day:'Wed 26', slots:[{ time:'09:00', who:'Open', booked:false, rec:false }, { time:'15:00', who:'Held · unpaid', booked:false, rec:false, gated:true }] },
+        { day:'Thu 27', slots:[{ time:'13:00', who:'Halverton · review', booked:true, rec:true }] },
+        { day:'Fri 28', slots:[{ time:'10:00', who:'Open', booked:false, rec:false }, { time:'11:00', who:'Open', booked:false, rec:false }] }
+      ].map(w => ({ day:w.day, slots:w.slots.map(s => ({ time:s.time, who:s.who, rec:s.rec, gated:!!s.gated,
+        style:'border-radius:7px;padding:8px 9px;border:1px solid '
+          + (s.gated ? '#fde68a;background:#fffdf5;color:#92400e'
+              : (s.booked ? '#a7f3d0;background:#f2fdf7;color:#065f46' : '#ececf1;background:#fff;color:#615c6e')) })) })),
+      gateNote: 'Wed 15:00 is the gated case: a founder booked it while the payout account was still pending, so the slot is held and shown as unpaid to both sides rather than charging and silently failing.',
+      earnings: earnRows,
+      cutNote: 'Platform cut is ' + Math.round(CUT * 100) + '% of gross, charged per line and shown on every one — ' + usd(cutTotal)
+        + ' this month. Token spend on this page is separate and sits in the rail; the AI rate is all-in with no fee line, the revenue cut is never hidden.',
+      payoutStates: [
+        { state:'Verified', current:true, ink:'#047857', tone:['#a7f3d0','#f2fdf7'],
+          body:'Stripe Connect verified Jun 4. Charges settle to your account on the normal schedule.',
+          gate:'Paid sessions bookable and chargeable.' },
+        { state:'Pending', current:false, ink:'#92400e', tone:['#fde68a','#fffdf5'],
+          body:'Details submitted, Stripe still verifying — usually under two business days. Nothing is wrong yet.',
+          gate:'Bookable, held uncharged until verification clears.' },
+        { state:'Blocked', current:false, ink:'#b91c1c', tone:['#fecaca','#fffbfb'],
+          body:'Verification failed or a document expired. Stripe names the reason; the fix is always on their side, not ours.',
+          gate:'Paid slots hidden from your public profile. Free intro calls still bookable.' }
+      ].map(p => ({ state:p.state, current:p.current, ink:p.ink, body:p.body, gate:p.gate,
+        cardStyle:'border:1px solid ' + p.tone[0] + ';background:' + p.tone[1] + ';border-radius:11px;padding:12px 14px' })),
+      payouts: [
+        { date:'Aug 22', amount:usd(4590), state:'Paid' },
+        { date:'Sep 1', amount:usd(9945), state:'Scheduled' },
+        { date:'Jul 25', amount:usd(3820), state:'Paid' }
+      ].map(p => ({ ...p, pill:pill(p.state, ST) })),
+
+      // ---- Expertise ----
+      anchE: this.anchorsFor('E', [['Profile','ex-profile'],['Services','ex-services'],['Proof','ex-proof'],['Thinking','ex-thinking'],['Visibility','ex-visibility']]),
+      areas: ['Pricing strategy','Packaging','Seed GTM','PLG onboarding','Fractional CPO','Pre-raise narrative'],
+      profileStats: [
+        { label:'Sessions delivered', value:'147' },
+        { label:'Rating', value:'4.9 / 5' },
+        { label:'Repeat clients', value:'11 of 19' }
+      ],
+      services: [
+        { name:'Intro call', price:'Free', includes:'20 minutes. Scope check, no deliverable. One per client.', state:'Live', booked:'34 booked' },
+        { name:'Single session', price:'$300', includes:'60 minutes, recorded with consent, written follow-up within 24h.', state:'Live', booked:'89 booked' },
+        { name:'Five-session pack', price:'$1,250', includes:'Five sessions over ten weeks, each with prep and follow-up. Saves $250.', state:'Live', booked:'12 booked' },
+        { name:'Monthly retainer', price:'$4,500', includes:'Two sessions a month, one written review per cycle, async questions.', state:'Live', booked:'3 active' },
+        { name:'Pricing teardown', price:'$1,800', includes:'Fixed-scope review of your pricing page, tiers and packaging. Two weeks.', state:'Draft', booked:'not published' }
+      ].map(s => ({ ...s, pill:pill(s.state, ST),
+        rowStyle:'display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:12px 13px;border:1px solid '
+          + (s.state === 'Draft' ? '#fde68a;background:#fffdf5' : '#f0eff4;background:#fbfbfc') + ';border-radius:10px' })),
+      proof: [
+        { src:'From Novacraft Labs · outcome', text:'Raised $1.5M seed nine weeks after the packaging teardown. Entry tier restructured from three plans to two.', meta:'Recorded on their side · Aug 2026' },
+        { src:'From Halverton · testimonial', text:'"She told us to kill the mid tier. Revenue went up the month we did."', meta:'Written by the founder · published with consent' },
+        { src:'From Verwood · outcome', text:'Net revenue retention moved from 96% to 112% over two quarters of the retainer.', meta:'From their own metrics · not self-reported' }
+      ],
+      articles: [
+        { title:'Pricing before product-market fit', stats:'4,100 reads · 31 saves' },
+        { title:'The mid-tier trap', stats:'6,200 reads · 88 saves' },
+        { title:'What to cut before a seed raise', stats:'3,900 reads · 24 saves' }
+      ],
+      visibility: [
+        { surface:'Expert directory', note:'Ranked on rating and repeat rate, not recency of payment.', stat:'41 views/wk' },
+        { surface:'Get-help surfaces', note:'Shown to founders whose stated problem matches your areas.', stat:'12 requests' },
+        { surface:'Lab cohort matching', note:'Matched into Spin-Out Lab cohorts by gap, not by bid.', stat:'4 clients' },
+        { surface:'Your published thinking', note:'Articles carry a booking link. Slowest channel, best retention.', stat:'7 clients' }
+      ],
+
+      // ---- Network ----
+      anchN: this.anchorsFor('N', [['Relationships','nw-book'],['Introductions','nw-intros'],['Organizations','nw-orgs']]),
+      rels: [
+        { name:'Guillaume Lauzier', type:'Client', strength:'Strong', context:'Novacraft · sprint', referral:'referred · accepted', touch:'2 days', cold:false },
+        { name:'Amara Osei', type:'Founder', strength:'Warm', context:'Met at the Lab demo', referral:'referred · under review', touch:'11 days', cold:false },
+        { name:'Aoife Brennan', type:'Advisor', strength:'Strong', context:'Security · 2 shared clients', referral:null, touch:'6 days', cold:false },
+        { name:'Marisol Vega', type:'Investor', strength:'Warm', context:'Thornbury · expert calls', referral:null, touch:'19 days', cold:false },
+        { name:'Tobias Ncube', type:'Client', strength:'Warm', context:'Verwood · ended Jun', referral:null, touch:'74 days', cold:true }
+      ].map(r => {
+        const T = { Client:['#f0fdf6','#065f46','#a7f3d0'], Founder:['#f4f4f6','#4a4553','#e4e4e8'],
+                    Advisor:['#f0fdff','#0e7490','#a5edf5'], Investor:['#f5f5ff','#3730a3','#c7d2fe'] };
+        const S2 = { Strong:['#ecfdf5','#047857','#a7f3d0'], Warm:['#f0fdf6','#065f46','#d9f7e7'] };
+        return { name:r.name, type:r.type, strength:r.strength, context:r.context, touch:r.touch, referral:r.referral,
+          touchInk: r.cold ? '#b91c1c' : '#615c6e',
+          typeStyle:pill(r.type, T), strStyle:pill(r.strength, S2),
+          refStyle:'display:inline-block;margin-left:7px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap' };
+      }),
+      orgs: [
+        { name:'Novacraft Labs', note:'Client · sent you 3 referrals', people:'2 known' },
+        { name:'Thornbury Capital', note:'Investor · expert calls', people:'2 known' },
+        { name:'Axal VC Spin-Out Lab', note:'Cohort matching · 4 clients', people:'6 known' },
+        { name:'Verwood', note:'Former client · realised exit', people:'3 known' }
+      ],
+
+      // ---- Research ----
+      anchR: this.anchorsFor('R', [['Ask','rs-ask'],['Client prep','rs-client'],['Markets','rs-markets'],['Companies','rs-companies'],['Library','rs-library']]),
+      resCards: [
+        { anchorId:'rs-markets', title:'Market deep-dives', body:'Attachable to an engagement as prep, so a client sees the reading behind the advice — with its run date, since a stale number should look stale.', meta:'7 saved · oldest Mar 2026' },
+        { anchorId:'rs-companies', title:'Companies &amp; competitors', body:'Your clients and the companies they are measured against, built from public filings and what they have shared with you.', meta:'19 tracked' },
+        { anchorId:'rs-funds', title:'Funds &amp; investors', body:'For advising founders who are raising: who writes at this stage, what they ask, and what they passed on.', meta:'28 funds' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -37,7 +37,7 @@
 //    same exportFundBriefPdf the workspace uses — not a decorative button.
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, FileDown, Landmark, Loader2, Rocket } from 'lucide-react';
+import { ArrowRight, FileDown, Landmark, Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { spinoutLab } from '../lib/api';
 import { reportError } from '../lib/log';
@@ -180,18 +180,6 @@ export default function SpinoutLabInvestorPage() {
 
   return (
     <div className="mx-auto max-w-[1240px] px-5 sm:px-8 pb-20" data-testid="spinout-investor-page">
-
-      {/* header row — replaces the design's detached sticky nav */}
-      <div className="flex flex-wrap items-center justify-between gap-3 py-5">
-        <div className="flex items-center gap-3 min-w-0">
-          <Rocket size={20} className="flex-none text-violet-700 dark:text-violet-400" />
-          <div className="text-[15px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100 whitespace-nowrap">Axal VC · Spin-Out Lab</div>
-          <span className="inline-flex flex-none items-center rounded-full border border-green-300/60 dark:border-green-800 bg-green-50 dark:bg-green-950/40 px-2.5 py-0.5 text-[10px] font-bold text-green-700 dark:text-green-300 whitespace-nowrap">Fund I open</span>
-        </div>
-        <Link to={LP_WORKSPACE_PATH} data-testid="link-lp-workspace-top" className="inline-flex items-center gap-1.5 rounded-lg bg-violet-700 hover:bg-violet-800 px-4 py-2 text-[12.5px] font-bold text-white transition-colors">
-          Review the fund <ArrowRight size={13} />
-        </Link>
-      </div>
 
       {/* ============ HERO ============ */}
       <div className="relative overflow-hidden rounded-3xl border border-gray-200 dark:border-gray-800">

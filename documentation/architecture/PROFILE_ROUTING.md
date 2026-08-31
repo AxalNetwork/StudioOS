@@ -92,23 +92,23 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Data Room | `/raise/data-room` | Workspace | Full page (proposed) | Sidebar → Workspace → Deals | NEW | Low |
-| Deal Flow | `/pipeline` · `/pipeline/screening\\|commit\\|transactions` · `/deals` · `/deals/:dealId` | Workspace | Full page | Sidebar → Workspace → Deals | UPGRADE | High |
+| Data Room | `/raise/data-room` | Home | Full page (proposed) | Sidebar → Home → Deals | NEW | Low |
+| Deal Flow | `/pipeline` · `/pipeline/screening\\|commit\\|transactions` · `/deals` · `/deals/:dealId` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Explore the Spin-Out Lab | `/spinout-lab` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Fund Brief One-Pager | `/spinout-lab` · `/spinout-lab/investor-workspace` | Workspace | Full page + print stylesheet | Sidebar → Workspace → Spin-Out Lab | CURRENT | High |
-| Investor LP Canvas | `/studio` | Workspace | Full page | Sidebar → Workspace → Home | DEFERRED | High |
+| Explore the Spin-Out Lab | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Fund Brief One-Pager | `/spinout-lab` · `/spinout-lab/investor-workspace` | Home | Full page + print stylesheet | Sidebar → Home → Spin-Out Lab | CURRENT | High |
+| Investor LP Canvas | `/studio` | Home | Full page | Sidebar → Home → Home | DEFERRED | High |
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Liquidity & Secondaries | `/liquidity` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Workspace | Full page | Sidebar → Workspace → Spin-Out Lab | DEFERRED | High |
-| Pages · Investor Deals | `/pipeline/active` | Workspace | Full page | Sidebar → Workspace → Deals | UPGRADE | High |
-| Pages · Investor Fund | `/funds` · `/funds/capital-calls` · `/funds/accounting` · `/lp-reports` | Workspace | Full page (proposed) | Sidebar → Workspace → Fund | UPGRADE | Low |
-| Pages · Investor Network | `/network` | Workspace | Full page | Sidebar → Workspace → Network | RESKIN | High |
-| Pages · Investor Portfolio | `/portfolio/positions` · `/portfolio/updates` | Workspace | Full page (proposed) | Sidebar → Workspace → Portfolio | UPGRADE | Low |
+| LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Home | Full page | Sidebar → Home → Axal VC Fund | DEFERRED | High |
+| Pages · Investor Deals | `/pipeline/active` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
+| Pages · Investor Fund | `/funds` · `/funds/capital-calls` · `/funds/accounting` · `/lp-reports` | Home | Full page (proposed) | Sidebar → Home → Fund | UPGRADE | Low |
+| Pages · Investor Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
+| Pages · Investor Portfolio | `/portfolio/positions` · `/portfolio/updates` | Home | Full page (proposed) | Sidebar → Home → Portfolio | UPGRADE | Low |
 | Pages · Investor Research | `/advisor/research*` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
-| Portfolio | `/portfolio/health\\|updates\\|positions\\|performance\\|growth` | Workspace | Full page (proposed) | Sidebar → Workspace → Portfolio | UPGRADE | Low |
-| Quarterly Report | `/lp-reports` · `/lp-portal` | Workspace | Full page + print stylesheet | Sidebar → Workspace → Fund | UPGRADE | High |
+| Portfolio | `/portfolio/health\\|updates\\|positions\\|performance\\|growth` | Home | Full page (proposed) | Sidebar → Home → Portfolio | UPGRADE | Low |
+| Quarterly Report | `/lp-reports` · `/lp-portal` | Home | Full page + print stylesheet | Sidebar → Home → Fund | UPGRADE | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
 ## Partner / Operator — 8 canvases
