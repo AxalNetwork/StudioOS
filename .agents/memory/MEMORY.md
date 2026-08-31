@@ -14,3 +14,4 @@
 - [Cloudflare cutover observability](cloudflare-cutover-observability.md) — Adaptive HTTP status counts work, but edge-TTFB fields do not; combine five-minute 5xx buckets with route/API probes.
 - [Production schema ownership](production-schema-ownership.md) — request-time DDL is dev/preview-only; production D1 migrations must create public-route schemas before deployment.
 - [Production auth verification](production-auth-verification.md) — do not assume the workspace JWT secret can mint tokens accepted by the deployed Worker; use a real production session or prove secret parity first.
+- [Pages build and routing](pages-build-routing.md) — Pages must install frontend dependencies explicitly; use advanced asset handling for SPA fallback plus real asset 404s.
