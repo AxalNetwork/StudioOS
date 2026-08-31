@@ -17,6 +17,7 @@ import {
   computeFundMetrics, rollUpPosition, currentPeriod, daysSince,
   type CashFlow, type KpiCadence,
 } from '../services/portfolioMetrics';
+import { investorProjectIds } from './_investorProjectScope';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -47,14 +48,16 @@ const DIST_KINDS = new Set(['exit', 'secondary', 'dividend', 'recapitalization']
  * Latest mark per project (build queue #125). One grouped query rather
  * than per-project lookups — the old per-row pattern here was an N+1.
  */
-async function latestMarksByProject(env: Env): Promise<Map<number, { fmv: number; as_of_date: string; basis: string }>> {
+async function latestMarksByProject(env: Env, projectIds: number[] | null = null): Promise<Map<number, { fmv: number; as_of_date: string; basis: string }>> {
+  const scopeCsv = projectIds == null ? null : projectIds.join(',');
   const rows = await env.DB.prepare(
     `SELECT m.project_id, m.fmv, m.as_of_date, m.basis
        FROM portfolio_marks m
        JOIN (SELECT project_id, MAX(as_of_date) AS d FROM portfolio_marks GROUP BY project_id) latest
          ON latest.project_id = m.project_id AND latest.d = m.as_of_date
-      GROUP BY m.project_id`,
-  ).all<any>().catch(() => ({ results: [] as any[] }));
+       WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(m.project_id AS TEXT) || ',') > 0)
+       GROUP BY m.project_id`,
+  ).bind(scopeCsv, scopeCsv).all<any>().catch(() => ({ results: [] as any[] }));
   const out = new Map<number, { fmv: number; as_of_date: string; basis: string }>();
   for (const row of (rows.results || [])) {
     out.set(Number(row.project_id), {
@@ -71,6 +74,8 @@ r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const projectIds = await investorProjectIds(c.env, user);
+    const scopeCsv = projectIds == null ? null : projectIds.join(',');
     // Single grouped query joined to projects, replacing the previous
     // two-queries-per-project loop (N+1) that would not scale past a
     // handful of holdings.
@@ -84,8 +89,9 @@ r.get('/', async (c) => {
               pr.sector AS proj_sector, pr.stage AS proj_stage, pr.status AS proj_status
          FROM portfolio_positions p
          LEFT JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL
+        WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0)
         GROUP BY p.project_id`
-    ).all<any>();
+    ).bind(scopeCsv, scopeCsv).all<any>();
     // Latest ownership/round per project, also in one pass.
     const latestRows = await c.env.DB.prepare(
       `SELECT p.project_id, p.ownership_pct, p.round_name
@@ -93,11 +99,12 @@ r.get('/', async (c) => {
          JOIN (SELECT project_id, MAX(COALESCE(position_date, created_at)) AS d
                  FROM portfolio_positions GROUP BY project_id) l
            ON l.project_id = p.project_id AND l.d = COALESCE(p.position_date, p.created_at)
-        GROUP BY p.project_id`
-    ).all<any>();
+         WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0)
+         GROUP BY p.project_id`
+    ).bind(scopeCsv, scopeCsv).all<any>();
     const latestBy = new Map<number, any>();
     for (const l of (latestRows.results || [])) latestBy.set(Number(l.project_id), l);
-    const marks = await latestMarksByProject(c.env);
+    const marks = await latestMarksByProject(c.env, projectIds);
 
     const items = (rows.results || []).map((row: any) => {
       const pid = Number(row.project_id);
@@ -133,9 +140,9 @@ r.get('/', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// GET /api/positions/analytics — fund-level performance (build queue #125)
+// GET /api/positions/analytics — accessible-book performance (build queue #125)
 //
-// Portfolio-level metrics computed from what the platform actually
+// Metrics computed from positions visible to this caller:
 // holds: cost basis from portfolio_positions (dated by position_date),
 // realisations from portfolio_distributions, carrying value from the
 // latest portfolio_marks row per project. Everything is GROSS of fees
@@ -145,16 +152,22 @@ r.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const projectIds = await investorProjectIds(c.env, user);
+    const scopeCsv = projectIds == null ? null : projectIds.join(',');
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
 
     const [positions, distributions, marks] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT project_id, invested_amount, position_date, created_at FROM portfolio_positions`,
-      ).all<any>(),
+        `SELECT project_id, invested_amount, position_date, created_at
+           FROM portfolio_positions
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0)`,
+      ).bind(scopeCsv, scopeCsv).all<any>(),
       c.env.DB.prepare(
-        `SELECT project_id, amount, distribution_date FROM portfolio_distributions`,
-      ).all<any>().catch(() => ({ results: [] as any[] })),
-      latestMarksByProject(c.env),
+        `SELECT project_id, amount, distribution_date
+           FROM portfolio_distributions
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0)`,
+      ).bind(scopeCsv, scopeCsv).all<any>().catch(() => ({ results: [] as any[] })),
+      latestMarksByProject(c.env, projectIds),
     ]);
 
     const flows: CashFlow[] = [];
@@ -207,6 +220,8 @@ r.get('/kpi-compliance', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const projectIds = await investorProjectIds(c.env, user);
+    const scopeCsv = projectIds == null ? null : projectIds.join(',');
     const cadence: KpiCadence = c.req.query('cadence') === 'monthly' ? 'monthly' : 'quarterly';
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
     const period = currentPeriod(cadence, today);
@@ -221,14 +236,16 @@ r.get('/kpi-compliance', async (c) => {
       c.env.DB.prepare(
         `SELECT DISTINCT p.project_id, pr.uid, pr.name
            FROM portfolio_positions p
-           LEFT JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL`,
-      ).all<any>(),
+           LEFT JOIN projects pr ON pr.id = p.project_id AND pr.deleted_at IS NULL
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(p.project_id AS TEXT) || ',') > 0)`,
+      ).bind(scopeCsv, scopeCsv).all<any>(),
       c.env.DB.prepare(
         `SELECT project_id, period, MAX(COALESCE(submitted_at, updated_at)) AS last_at
            FROM portfolio_updates
           WHERE status = 'submitted'
+            AND (? IS NULL OR instr(',' || ? || ',', ',' || CAST(project_id AS TEXT) || ',') > 0)
           GROUP BY project_id, period`,
-      ).all<any>().catch(() => ({ results: [] as any[] })),
+      ).bind(scopeCsv, scopeCsv).all<any>().catch(() => ({ results: [] as any[] })),
     ]);
 
     const thisPeriod = new Set<number>();
@@ -275,6 +292,8 @@ r.get('/:projectUid', async (c) => {
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const proj = await c.env.DB.prepare('SELECT id, uid, name, sector, stage, status FROM projects WHERE uid = ? AND deleted_at IS NULL').bind(c.req.param('projectUid')).first<any>();
     if (!proj) return c.json({ detail: 'Not found' }, 404);
+    const projectIds = await investorProjectIds(c.env, user);
+    if (projectIds != null && !projectIds.includes(Number(proj.id))) return c.json({ detail: 'Forbidden' }, 403);
     const rounds = await c.env.DB.prepare(
       'SELECT * FROM portfolio_positions WHERE project_id = ? ORDER BY COALESCE(position_date, created_at) ASC'
     ).bind(proj.id).all<PositionRow>();

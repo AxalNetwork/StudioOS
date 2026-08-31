@@ -74,6 +74,10 @@ export default function InvestorWorkspacePage({ page = 'deals', children, fundUn
   const key = useMemo(() => (COPY[page] ? page : 'trust'), [page]);
   const meta = COPY[key];
   const [refreshKey, setRefreshKey] = useState(0);
+  // Portfolio owns the complete I4 composition, including its title and right
+  // rail. Rendering the generic workspace chrome around it duplicates the
+  // canvas header and is the mismatch the I4 correction removes.
+  if (key === 'portfolio' && children) return children;
   return (
     <main className="investor-workspace" data-testid={`investor-workspace-${key}`}>
       <div className="investor-frame">

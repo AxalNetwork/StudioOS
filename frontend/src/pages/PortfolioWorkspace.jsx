@@ -15,8 +15,9 @@ import PortfolioUpdatesPage from './PortfolioUpdatesPage';
 import PortfolioPositionsPage from './PortfolioPositionsPage';
 import PortfolioPerformancePage from './PortfolioPerformancePage';
 import PortfolioGrowthPage from './PortfolioGrowthPage';
+import InvestorPortfolioCanvas from './investor/InvestorPortfolioCanvas';
 
-export default function PortfolioWorkspace() {
+export default function PortfolioWorkspace({ activeRole }) {
   const { pathname } = useLocation();
   const { role } = useAuth();
   const active = pathname.includes('/updates')
@@ -36,6 +37,10 @@ export default function PortfolioWorkspace() {
     { to: '/portfolio/performance', label: 'Performance', icon: TrendingUp, roles: ['admin', 'investor'] },
     { to: '/portfolio/growth', label: 'Growth', icon: Rocket, roles: ['admin', 'investor'] },
   ].filter((t) => !role || t.roles.includes(role));
+
+  if ((activeRole || role) === 'investor' && active === 'health') {
+    return <InvestorPortfolioCanvas active={active} />;
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

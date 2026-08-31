@@ -31,50 +31,50 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| 83b Election Tracker | `/spinout-lab/83b` · `/incorporate/83b` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Advisors | `/spinout-lab/advisors` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Apply and Status | `/spinout-lab/apply` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Brand & Landing Page | `/spinout-lab/brand` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Cap Table | `/spinout-lab/captable` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Cap Table Pro | `/raise/capital/cap-table` · `/build/captable` · `/share/captable/:token` | Workspace | Full page | Sidebar → Workspace → Raise | UPGRADE | High |
-| Capital | `/spinout-lab/capital` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Co-founder Agreement | `/spinout-lab/cofounder-agreement` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Co-founder Match | `/spinout-lab/cofounder-match` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
+| 83b Election Tracker | `/spinout-lab/83b` · `/incorporate/83b` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Advisors | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Apply and Status | `/spinout-lab/apply` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Brand & Landing Page | `/spinout-lab/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Cap Table | `/spinout-lab/captable` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Cap Table Pro | `/raise/capital/cap-table` · `/build/captable` · `/share/captable/:token` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
+| Capital | `/spinout-lab/capital` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Co-founder Agreement | `/spinout-lab/cofounder-agreement` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Co-founder Match | `/spinout-lab/cofounder-match` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Company Settings | `/company-settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Compliance | `/spinout-lab/compliance` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Customer Acquisition Landing Page | `/spinout-lab/brand` | Workspace | Full page | Sidebar → Workspace → Spin-Out Lab | CURRENT | High |
-| Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Workspace | Full page | Sidebar → Workspace → Spin-Out Lab | CURRENT | High |
-| Customer Discovery | `/spinout-lab/discovery` · `/build/discovery` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Validate | OUT OF SCOPE | High |
-| Customer Templates | `/spinout-lab/brand` · `/build/brand` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Data Room | `/raise/data-room` | Workspace | Full page (proposed) | Sidebar → Workspace → Raise | NEW | Low |
+| Compliance | `/spinout-lab/compliance` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Customer Acquisition Landing Page | `/spinout-lab/brand` | Home | Full page | Sidebar → Home → Spin-Out Lab | CURRENT | High |
+| Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Home | Full page | Sidebar → Home → Spin-Out Lab | CURRENT | High |
+| Customer Discovery | `/spinout-lab/discovery` · `/build/discovery` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Validate | OUT OF SCOPE | High |
+| Customer Templates | `/spinout-lab/brand` · `/build/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Data Room | `/raise/data-room` | Home | Full page (proposed) | Sidebar → Home → Raise | NEW | Low |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Founder Studio | `/studio` | Workspace | Full page | Sidebar → Workspace → Home | DEFERRED | High |
+| Founder Studio | `/studio` | Home | Full page | Sidebar → Home → Home | DEFERRED | High |
 | Founder Wellbeing | `/wellbeing` · `/wellbeing/expert-dashboard` · `/wellbeing/expert/:uid` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Founder Workspaces Canvas | `/build/*` · `/raise/*` · `/founder/growth/*` · `/network` | Workspace | Full page | Sidebar → Workspace → Network | NEW | High |
+| Founder Workspaces Canvas | `/build/*` · `/raise/*` · `/founder/growth/*` · `/network` | Home | Full page | Sidebar → Home → Network | NEW | High |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
-| Graduation Certificate | `/spinout-lab/certificate` · `/verify/:token` | Workspace | Full page + print stylesheet | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
+| Graduation Certificate | `/spinout-lab/certificate` · `/verify/:token` | Home | Full page + print stylesheet | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Liquidity & Secondaries | `/liquidity` | Workspace | Full page | Sidebar → Workspace → Raise | UPGRADE | High |
-| Metrics | `/build/metrics` | Workspace | Full page | Sidebar → Workspace → Build | UPGRADE | High |
-| Office Hours | `/spinout-lab/office-hours` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Pages · Founder Build | `/execution` · `/build/metrics` | Workspace | Full page | Sidebar → Workspace → Build | UPGRADE | High |
+| Liquidity & Secondaries | `/liquidity` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
+| Metrics | `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
+| Office Hours | `/spinout-lab/office-hours` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Pages · Founder Build | `/execution` · `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
 | Pages · Founder Grow | `/founder/growth/{talent` | — (not routed) | Full page (proposed) | Not reachable yet | RESKIN | Low |
-| Pages · Founder Network | `/network` | Workspace | Full page | Sidebar → Workspace → Network | RESKIN | High |
-| Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` | Workspace | Full page (proposed) | Sidebar → Workspace → Raise | UPGRADE | Low |
-| Pages · Founder Research | `/market-intel` | Workspace | Full page | Sidebar → Workspace → Research | RESKIN | High |
-| Perks & Products | `/perks` | Workspace | Full page | Sidebar → Workspace → Grow | NEW | High |
-| Pitch Deck Builder | `/spinout-lab/pitch-deck` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Profiling | `/spinout-lab/profiling` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Revenue | `/spinout-lab/revenue` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Round Manager | `/raise/capital/pipeline` | Workspace | Full page | Sidebar → Workspace → Raise | UPGRADE | High |
-| Scoring Engine | `/spinout-lab/scoring` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
-| Signals | `/signals` | Workspace | Full page | Sidebar → Workspace → Research | UPGRADE | High |
-| Spin-Out Lab Workspace | `/spinout-lab` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
+| Pages · Founder Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
+| Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` | Home | Full page (proposed) | Sidebar → Home → Raise | UPGRADE | Low |
+| Pages · Founder Research | `/market-intel` | Home | Full page | Sidebar → Home → Research | RESKIN | High |
+| Perks & Products | `/perks` | Home | Full page | Sidebar → Home → Grow | NEW | High |
+| Pitch Deck Builder | `/spinout-lab/pitch-deck` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Profiling | `/spinout-lab/profiling` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Revenue | `/spinout-lab/revenue` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Round Manager | `/raise/capital/pipeline` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
+| Scoring Engine | `/spinout-lab/scoring` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Signals | `/signals` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
+| Spin-Out Lab Workspace | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
-| Team | `/build/team` | Workspace | Full page | Sidebar → Workspace → Grow | UPGRADE | High |
-| Use of Funds | `/spinout-lab/use-of-funds` | Workspace | Full page (Spin-Out Lab — frozen) | Sidebar → Workspace → Spin-Out Lab | OUT OF SCOPE | High |
+| Team | `/build/team` | Home | Full page | Sidebar → Home → Grow | UPGRADE | High |
+| Use of Funds | `/spinout-lab/use-of-funds` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 
 ## Advisor — 7 canvases
 

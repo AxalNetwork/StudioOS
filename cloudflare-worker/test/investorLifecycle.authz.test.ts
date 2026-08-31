@@ -578,7 +578,7 @@ test('portfolio-updates GET /:uid — founder cannot read other founder\'s updat
   assert.equal(res.status, 403);
 });
 
-test('portfolio-updates GET /:uid — investor can read submitted update (200)', async () => {
+test('portfolio-updates GET /:uid — related investor can read submitted update (200)', async () => {
   const token = await mintToken(1, 'investor');
   const env = makeEnv(mkUser(1, 'investor'), [
     {
@@ -589,11 +589,27 @@ test('portfolio-updates GET /:uid — investor can read submitted update (200)',
       match: (s: string, b: any[]) => s.includes('from projects') && s.includes('where id') && s.includes('deleted_at'),
       results: [{ id: 20, uid: 'proj-20', name: 'Proj', sector: 'ai', stage: 'seed', status: 'active' }],
     },
+    {
+      match: (s: string) => s.includes('from investor_dealroom_members') && s.includes('join deals'),
+      results: [{ project_id: 20 }],
+    },
   ]);
   const res = await portfolioUpdates.request('/pu-1', { headers: { Authorization: `Bearer ${token}` } }, env);
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.title, 'Submitted');
+});
+
+test('portfolio-updates GET /:uid — unrelated investor cannot read submitted update (403)', async () => {
+  const token = await mintToken(1, 'investor');
+  const env = makeEnv(mkUser(1, 'investor'), [
+    {
+      match: (s: string) => s.includes('from portfolio_updates') && s.includes('where uid'),
+      results: [{ id: 1, uid: 'pu-other', project_id: 99, author_user_id: 5, period: '2026-06', title: 'Other book', body: '', kpis_json: null, status: 'submitted', submitted_at: '2026-06-15', created_at: '2026-06-01', updated_at: '2026-06-15' }],
+    },
+  ]);
+  const res = await portfolioUpdates.request('/pu-other', { headers: { Authorization: `Bearer ${token}` } }, env);
+  assert.equal(res.status, 403);
 });
 
 test('portfolio-updates GET /:uid — investor blocked from draft (403 for non-admin)', async () => {
@@ -664,7 +680,7 @@ test('positions GET /: admin passes canViewLpData (200)', async () => {
   assert.equal(res.status, 200);
 });
 
-test('positions GET /:uid — investor can read project detail (200)', async () => {
+test('positions GET /:uid — related investor can read project detail (200)', async () => {
   const token = await mintToken(1, 'investor');
   const env = makeEnv(mkUser(1, 'investor'), [
     {
@@ -679,11 +695,27 @@ test('positions GET /:uid — investor can read project detail (200)', async () 
       match: (s: string, b: any[]) => s.includes('from cap_table_holders') && s.includes('where project_id'),
       results: [],
     },
+    {
+      match: (s: string) => s.includes('from investor_dealroom_members') && s.includes('join deals'),
+      results: [{ project_id: 10 }],
+    },
   ]);
   const res = await positions.request('/proj-10', { headers: { Authorization: `Bearer ${token}` } }, env);
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.project.name, 'TestCo');
+});
+
+test('positions GET /:uid — unrelated investor cannot read project detail (403)', async () => {
+  const token = await mintToken(1, 'investor');
+  const env = makeEnv(mkUser(1, 'investor'), [
+    {
+      match: (s: string) => s.includes('from projects') && s.includes('where uid'),
+      results: [{ id: 99, uid: 'proj-other', name: 'OtherCo', sector: 'ai', stage: 'seed', status: 'active' }],
+    },
+  ]);
+  const res = await positions.request('/proj-other', { headers: { Authorization: `Bearer ${token}` } }, env);
+  assert.equal(res.status, 403);
 });
 
 test('positions POST /: investor blocked by requireAdmin (403)', async () => {

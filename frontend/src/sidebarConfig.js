@@ -208,11 +208,9 @@ export const SIDEBAR_GROUPS = {
   // a modification target, and the canvas folds it into Home without saying
   // what Home would then be.
   founder: [
-    { key: 'shell', label: 'Workspace', items: [
+    { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Home' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      { to: '/messages', icon: Mail, label: 'Messages' },
-
       { to: '/build/discovery', icon: MessageSquare, label: 'Validate', match: ['/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
       { to: '/execution', icon: Briefcase, label: 'Build', match: ['/execution', '/projects', '/build/roadmap', '/build/metrics'] },
       { to: '/raise/pitch', icon: Sparkles, label: 'Raise', match: ['/raise', '/liquidity'] },

@@ -35,6 +35,7 @@ export default function PitchWorkspacePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const raiseSeed = location.state?.founderRaiseSeed;
 
   const active = location.pathname.startsWith('/raise/pitch/review')
     ? 'review'
@@ -78,7 +79,13 @@ export default function PitchWorkspacePage() {
         })}
       </div>
 
-      {active === 'deck' && (deckLocked ? <LockedDeck /> : <PitchDeckPage embedded />)}
+      {active === 'deck' && (deckLocked ? <LockedDeck /> : (
+        <PitchDeckPage
+          embedded
+          initialProjects={raiseSeed?.projects}
+          initialProjectId={raiseSeed?.projectId}
+        />
+      ))}
       {active === 'positioning' && (deckLocked ? <LockedDeck /> : <PitchPositioningPage embedded />)}
       {active === 'review' && <DeckReviewerPage embedded />}
     </div>

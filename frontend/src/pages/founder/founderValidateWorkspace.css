@@ -1,0 +1,26 @@
+.validate-workspace-shell {
+  min-height: 100dvh;
+  background: #f8f7fa;
+}
+
+.validate-back {
+  margin: 14px 24px 0;
+  border: 1px solid #ddd5e8;
+  border-radius: 7px;
+  padding: 7px 11px;
+  background: #fff;
+  color: #6030bc;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dark .validate-workspace-shell {
+  background: #15131a;
+}
+
+.dark .validate-back {
+  border-color: #3b3645;
+  background: #211e29;
+  color: #c5a8ff;
+}

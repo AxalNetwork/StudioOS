@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import WaitlistLeadsPanel from '../components/WaitlistLeadsPanel';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -40,29 +40,51 @@ function emptyInterview() {
   };
 }
 
-export default function DiscoveryPage() {
+export default function DiscoveryPage({
+  initialProjects = null,
+  initialProjectId = null,
+  initialInterviews = null,
+  initialSignals = null,
+  initialPainView = null,
+  initialTab = null,
+  workspaceMode = false,
+}) {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [projects, setProjects] = useState([]);
-  const [projectId, setProjectId] = useState(null);
-  const [interviews, setInterviews] = useState([]);
-  const [signals, setSignals] = useState(null);
-  const [painView, setPainView] = useState(null);
+  const [projects, setProjects] = useState(() => initialProjects || []);
+  const [projectId, setProjectId] = useState(() => initialProjectId || null);
+  const [interviews, setInterviews] = useState(() => initialInterviews || []);
+  const [signals, setSignals] = useState(() => initialSignals || null);
+  const [painView, setPainView] = useState(() => initialPainView || null);
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const hasSeededWorkspace = useRef(Boolean(initialProjects?.length && initialProjectId));
 
   // Active tab from the URL (?tab=), defaulting to Leads — the top of the
   // discovery funnel and where the legacy /customer-discovery route lands.
   // project_id is preserved alongside tab in every URL write below.
-  const activeTab = TABS.some((t) => t.id === searchParams.get('tab')) ? searchParams.get('tab') : 'leads';
+  const requestedTab = searchParams.get('tab');
+  const activeTab = TABS.some((tab) => tab.id === requestedTab)
+    ? requestedTab
+    : (TABS.some((tab) => tab.id === initialTab) ? initialTab : 'leads');
   const setTab = (id) => setSearchParams((prev) => {
     const next = new URLSearchParams(prev);
     next.set('tab', id);
+    if (workspaceMode) next.set('mode', 'workspace');
     return next;
   }, { replace: true });
 
   useEffect(() => {
+    if (initialProjects?.length) {
+      const fromQuery = parseInt(searchParams.get('project_id'), 10);
+      const selected = initialProjects.find((project) => project.id === fromQuery)
+        || initialProjects.find((project) => project.id === initialProjectId)
+        || initialProjects[0];
+      setProjects(initialProjects);
+      setProjectId(selected?.id || null);
+      return undefined;
+    }
     (async () => {
       try {
         const list = await api.listProjects();
@@ -76,6 +98,13 @@ export default function DiscoveryPage() {
           setProjectId(safeList[0].id);
         }
       } catch (e) {
+        const fromQuery = parseInt(searchParams.get('project_id'), 10);
+        if (fromQuery) {
+          setProjects([{ id: fromQuery, name: `Startup #${fromQuery}` }]);
+          setProjectId(fromQuery);
+          setError(e.message || 'The startup list could not be refreshed.');
+          return;
+        }
         // Defensive 404 — backend may return "Not found" when the user has
         // no project scope yet. Treat as the same "no projects" empty state
         // rendered below; don't surface a raw red banner.
@@ -92,6 +121,10 @@ export default function DiscoveryPage() {
 
   useEffect(() => {
     if (!projectId) return;
+    if (hasSeededWorkspace.current) {
+      hasSeededWorkspace.current = false;
+      return;
+    }
     setSearchParams((prev) => { const n = new URLSearchParams(prev); n.set('project_id', String(projectId)); return n; }, { replace: true });
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
