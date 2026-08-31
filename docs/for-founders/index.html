@@ -25,7 +25,7 @@
   <meta name="twitter:image" content="https://axal.vc/og/product-founders.png?v=896964db" />
   <meta name="twitter:image:alt" content="For Founders" />
   <!-- END og:managed -->
-  <script>
+  <script data-cfasync="false">
     // Theme init — runs before first paint so the background is always correct.
     // Reads axal_appearance_v1 from localStorage (same key + shape as
     // SettingsContext). Falls back to 'light' (the app default).
@@ -46,7 +46,7 @@
       } catch (e) { /* localStorage blocked or JSON invalid — stay light */ }
     })();
   </script>
-  <script>
+  <script data-cfasync="false">
     // Dev-only: unregister any stale service worker + clear caches BEFORE any
     // module loads. The SW precaches '/' and serves stale HTML referencing old
     // Vite optimizer dep hashes, causing "Outdated Optimize Dep" 504s after
@@ -75,7 +75,7 @@
       } catch (e) { /* no-op */ }
     })();
   </script>
-  <script>
+  <script data-cfasync="false">
     // Task #37 — production boot watchdog (un-bundled, so it runs even when the
     // entry module 404s). The recurring Safari blank page happens when the apex
     // root HTML (served by GitHub Pages) references a build hash the Worker no
@@ -195,7 +195,7 @@
   <!-- Turnstile is loaded on-demand (frontend/src/lib/turnstile.js) only by the
        few forms that render a widget, instead of globally on every page. -->
 
-  <script>
+  <script data-cfasync="false">
     // GitHub Pages SPA — restore path encoded by 404.html
     (function() {
       var q = window.location.search;
@@ -206,7 +206,7 @@
       }
     })();
   </script>
-  <script type="module" crossorigin src="/assets/index-C7kv3l0Y.js"></script>
+  <script data-cfasync="false" type="module" crossorigin src="/assets/index-C7kv3l0Y.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-Dd_uD5pT.js">
   <link rel="modulepreload" crossorigin href="/assets/react-vendor-D5i28JsH.js">
   <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-DqDXbR12.js">

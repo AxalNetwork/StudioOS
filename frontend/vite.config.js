@@ -3,8 +3,22 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 
+const disableRocketLoader = {
+  name: 'disable-cloudflare-rocket-loader',
+  enforce: 'post',
+  transformIndexHtml: {
+    order: 'post',
+    handler(html) {
+      return html.replace(
+        /<script type="module"/g,
+        '<script data-cfasync="false" type="module"',
+      );
+    },
+  },
+};
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), disableRocketLoader],
   // Transpile dev-served source AND pre-bundled deps down to es2020 so older
   // Safari doesn't hit a silent parse error (blank white page). Dev-only
   // concern: prod builds already target lower via build defaults.

@@ -193,24 +193,14 @@ Smart Placement is off.
 
 ### 2.5 The `routes` tables
 
-Both `[[routes]]` and `[[env.production.routes]]` contain **68 entries each**,
-and a normalised diff of the two shows them **identical**. It is an explicit
-allowlist, **not** a wildcard — there is no `axal.vc/*` entry, deliberately
-(see the `CLOUDFLARE-CUTOVER.md` stabilisation gate referenced at L57-60).
+Both `[[routes]]` and `[[env.production.routes]]` contain **four entries each**,
+and a normalised diff of the two shows them **identical**. The table contains
+one Workers Custom Domain (`app.axal.vc`) and only three apex path routes:
+`axal.vc/api/*`, `axal.vc/landing/*`, and `axal.vc/p/*`.
 
-Structure of the 68:
-
-1. One Workers Custom Domain: `pattern = "app.axal.vc"`, `custom_domain = true`.
-2. 34 bare zone routes on `axal.vc` (no trailing `/*`):
-   `/.well-known/security.txt`, `/deck/print-export`, `/admin/refer-earn`,
-   `/share/deck`, `/for-service-partners`, `/due-diligence`, `/for-investors`,
-   `/for-advisors`, `/for-founders`, `/communities`, `/spinout-lab`,
-   `/dashboard`, `/directory`, `/insights`, `/register`, `/products`,
-   `/articles`, `/landing`, `/contact`, `/circles`, `/authors`, `/events`,
-   `/invite`, `/studio`, `/admin`, `/about`, `/refer`, `/login`, `/jobs`,
-   `/deck`, `/app`, `/lp`, `/p`.
-3. 33 matching `/*` prefix routes for the same surfaces, plus
-   `axal.vc/api/*` and `axal.vc/assets/*`.
+The apex remains on Cloudflare Pages. There is deliberately no `axal.vc/*` or
+`axal.vc/assets/*` Worker route, so Pages continues to serve the root, SPA
+fallback, and static assets from the same deployment.
 
 All zone routes carry `zone_name = "axal.vc"`.
 
