@@ -36,7 +36,7 @@ function ErrorNote({ children }) {
 }
 
 // ── Skills radar ────────────────────────────────────────────────────────────
-function SkillsRadarCard({ state, className }) {
+function SkillsRadarCard({ state, className, audience = 'founder' }) {
   const { data, error } = state;
   let body;
   if (error) {
@@ -65,7 +65,7 @@ function SkillsRadarCard({ state, className }) {
 
       body = (
         <>
-          <div className="text-[11.5px] text-[#a1a1aa] dark:text-gray-400 mb-[14px]">Radar of founder skill dimensions</div>
+          <div className="text-[11.5px] text-[#a1a1aa] dark:text-gray-400 mb-[14px]">Radar of {audience === 'investor' ? 'investment' : audience === 'advisor' ? 'advisory' : 'founder'} skill dimensions</div>
           <div className="flex justify-center mb-4">
             <SkillRadar skillVector={skillVector} height={210} />
           </div>
@@ -97,7 +97,7 @@ function SkillsRadarCard({ state, className }) {
       );
     }
   }
-  return <CardShell title="Skills graph" className={className}>{body}</CardShell>;
+  return <CardShell title={audience === 'founder' ? 'Skills graph' : 'Skills'} className={className}>{body}</CardShell>;
 }
 
 // ── 15-dimension values lean ──────────────────────────────────────────────────
@@ -107,7 +107,7 @@ function getConfBucket(conf) {
   return { label: 'Low', color: 'text-[#a1a1aa] dark:text-gray-500', bar: 'bg-[#c4b5fd] dark:bg-violet-400', fill: Math.max(5, conf * 100) };
 }
 
-function ValuesLeanCard({ state, className }) {
+function ValuesLeanCard({ state, className, audience = 'founder' }) {
   const { data, error } = state;
   let body;
   if (error) {
@@ -153,11 +153,11 @@ function ValuesLeanCard({ state, className }) {
       );
     }
   }
-  return <CardShell title="Values graph" className={className}>{body}</CardShell>;
+  return <CardShell title={audience === 'founder' ? 'Values graph' : 'Values'} className={className}>{body}</CardShell>;
 }
 
 // ── Archetype ─────────────────────────────────────────────────────────────────
-function ArchetypeCard({ state, fitState, className }) {
+function ArchetypeCard({ state, fitState, className, audience = 'founder' }) {
   const { data, error } = state;
   const fitData = fitState?.data;
   let body;
@@ -216,7 +216,12 @@ function ArchetypeCard({ state, fitState, className }) {
       );
     }
   }
-  return <CardShell title="Founder archetype" className={className}>{body}</CardShell>;
+  const archetypeTitle = audience === 'investor'
+    ? 'Investor archetype'
+    : audience === 'advisor'
+      ? 'Advisor archetype'
+      : 'Founder archetype';
+  return <CardShell title={archetypeTitle} className={className}>{body}</CardShell>;
 }
 
 // ── Completion % ──────────────────────────────────────────────────────────────
@@ -554,7 +559,8 @@ function BookConsultationCard({ className }) {
 }
 
 // ── Section ───────────────────────────────────────────────────────────────────
-export default function ProfileFitSection({ className = '' }) {
+export default function ProfileFitSection({ className = '', compact = false, studio = false, audience = 'founder' }) {
+  const condensed = compact || studio;
   const [radar, setRadar] = useState({ data: null, error: '' });
   const [values, setValues] = useState({ data: null, error: '' });
   const [results, setResults] = useState({ data: null, error: '' });
@@ -569,10 +575,28 @@ export default function ProfileFitSection({ className = '' }) {
     wire(api.radar.me(), setRadar);
     wire(api.values.getMe(), setValues);
     wire(assessment.myResults(), setResults);
-    wire(api.advisor.progress(), setProgress);
+    if (!condensed) wire(api.advisor.progress(), setProgress);
     wire(api.bestFit.me(), setFit);
     return () => { alive = false; };
-  }, []);
+  }, [condensed]);
+
+  if (condensed) {
+    return (
+      <section id="profile" className={`pf-root ${className}`}>
+        <style>{`
+          .pf-mono { font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+          .pf-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+          .pf-card { border-radius: 16px; box-shadow: 0 1px 2px rgba(24,24,27,.03); }
+          @keyframes pfFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+        `}</style>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-[14px] items-start" data-testid={`${audience}-assessment-band`}>
+          <SkillsRadarCard state={radar} audience={audience} />
+          <ValuesLeanCard state={values} audience={audience} />
+          <ArchetypeCard state={results} fitState={fit} audience={audience} />
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section id="profile" className={`pf-root space-y-[20px] ${className}`}>
@@ -584,11 +608,11 @@ export default function ProfileFitSection({ className = '' }) {
       `}</style>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-[20px] items-start">
-        <SkillsRadarCard state={radar} />
-        <ValuesLeanCard state={values} />
+         <SkillsRadarCard state={radar} audience={audience} />
+         <ValuesLeanCard state={values} audience={audience} />
       </div>
       
-      <ArchetypeCard state={results} fitState={fit} />
+       <ArchetypeCard state={results} fitState={fit} audience={audience} />
       
       <FitCard progressState={progress} fitState={fit} />
       

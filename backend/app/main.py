@@ -807,6 +807,12 @@ def dashboard(request: Request, user=Depends(get_current_user)):
                 continue
             if is_founder and user.founder_id is not None and p.founder_id != user.founder_id:
                 continue
+            # Match the production Worker's conservative investor feed. The
+            # local database has no per-user match_scores cache, so development
+            # may expose the curated tier_1/tier_2 subset but must never fall
+            # through to every active platform project.
+            if is_investor and status not in ("tier_1", "tier_2"):
+                continue
             deals.append({
                 "id": p.id,
                 "name": p.name,

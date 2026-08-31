@@ -12,6 +12,9 @@ import InvestorQuotaBars from '../components/InvestorQuotaBars';
 import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
 import ProfileFitSection from '../components/profile/ProfileFitSection';
 import VentureNextStep from '../components/VentureNextStep';
+import FounderStudioHome from './founder/FounderStudioHome';
+import InvestorStudioHome from './investor/InvestorStudioHome';
+import AdvisorStudioHome from './advisor/AdvisorStudioHome';
 // Task #81 — reuse the founder command-center lifecycle rail for the investor
 // deal desk (rendered read-only: canEdit={false}).
 import LifecycleModule from '../components/command-center/LifecycleModule';
@@ -21,7 +24,7 @@ import LifecycleModule from '../components/command-center/LifecycleModule';
 // duplicated guidance the user already had).
 import ProductTour from '../components/ProductTour';
 
-export default function Dashboard() {
+export default function Dashboard({ activeRole, authUser }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -78,13 +81,18 @@ export default function Dashboard() {
   // Task #81 — once we know the viewer is an investor, pull their read-only
   // deal-lifecycle funnel. Silent on error so the deal desk still renders.
   useEffect(() => {
-    if (data?.role_view !== 'investor') return;
+    const viewingInvestor = (activeRole || data?.role_view) === 'investor';
+    const ownsInvestorScope = data?.user?.role === 'investor';
+    if (!viewingInvestor || !ownsInvestorScope) {
+      setInvestorLC(undefined);
+      return;
+    }
     let cancelled = false;
     api.investorLifecycle()
       .then((d) => { if (!cancelled) setInvestorLC(d); })
       .catch((e) => { if (!cancelled) { setInvestorLC(null); reportError('Dashboard:investorLifecycle', e); } });
     return () => { cancelled = true; };
-  }, [data?.role_view]);
+  }, [activeRole, data?.role_view, data?.user?.role]);
 
   // Task #10 — a 200 response with no `user` is a malformed payload. Capture it
   // so it's debuggable; the render below shows a recoverable state rather than
@@ -113,7 +121,7 @@ export default function Dashboard() {
     // Task #81 — the lifecycle effect is keyed on role_view (unchanged by a
     // manual refresh), so re-pull the funnel here to keep it in step with the
     // freshly-aggregated dashboard payload.
-    if (data?.role_view === 'investor') {
+    if ((activeRole || data?.role_view) === 'investor') {
       api.investorLifecycle()
         .then((d) => setInvestorLC(d))
         .catch((e) => { setInvestorLC(null); reportError('Dashboard:investorLifecycle', e); });
@@ -126,6 +134,37 @@ export default function Dashboard() {
       <Loader2 className="animate-spin" size={16} /> Loading your studio…
     </div>
   );
+  if (error && activeRole === 'investor' && authUser) {
+    const previewingInvestor = authUser.role !== 'investor';
+    return (
+      <div className="space-y-6">
+        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <InvestorStudioHome
+          user={authUser}
+          dashboard={null}
+          lifecycle={null}
+          previewing={previewingInvestor}
+          dashboardUnavailable={previewingInvestor ? '' : error}
+          onRetryDashboard={() => { setLoading(true); load(); }}
+        />
+      </div>
+    );
+  }
+  if (error && activeRole === 'advisor' && authUser) {
+    const previewingAdvisor = authUser.role !== 'advisor';
+    return (
+      <div className="space-y-6">
+        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <AdvisorStudioHome
+          user={authUser}
+          dashboard={null}
+          previewing={previewingAdvisor}
+          dashboardUnavailable={previewingAdvisor ? '' : error}
+          onRetryDashboard={() => { setLoading(true); load(); }}
+        />
+      </div>
+    );
+  }
   if (error) return (
     <DashboardFallback
       title="We couldn't load your dashboard"
@@ -148,6 +187,64 @@ export default function Dashboard() {
   const isInvestor = role_view === 'investor';
   const isOperator = role_view === 'founder' || role_view === 'admin' || (operator_workspace?.assigned_tasks?.length > 0);
   const unreadNotifs = notifications?.length || 0;
+
+  if ((activeRole || role_view) === 'founder') {
+    return (
+      <div className="space-y-6">
+        {googleNotice && (
+          <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
+            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
+            sign you out of Google globally — if you're on a shared device, also sign
+            out of your Google account in this browser. You can manage this anytime
+            under <Link to="/settings/security" className="underline">Settings → Security → Connected accounts</Link>.
+          </InfoStrip>
+        )}
+        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <FounderStudioHome user={user} />
+      </div>
+    );
+  }
+
+  if ((activeRole || role_view) === 'investor') {
+    const previewingInvestor = user.role !== 'investor';
+    return (
+      <div className="space-y-6">
+        {googleNotice && (
+          <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
+            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/settings/security" className="underline">Settings → Security</Link>.
+          </InfoStrip>
+        )}
+        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <InvestorStudioHome
+          user={user}
+          dashboard={previewingInvestor ? null : data}
+          lifecycle={previewingInvestor ? null : investorLC}
+          previewing={previewingInvestor}
+          onRetryDashboard={() => { setLoading(true); load(); }}
+        />
+      </div>
+    );
+  }
+
+  if ((activeRole || role_view) === 'advisor') {
+    const previewingAdvisor = user.role !== 'advisor';
+    return (
+      <div className="space-y-6">
+        {googleNotice && (
+          <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
+            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/settings/security" className="underline">Settings → Security</Link>.
+          </InfoStrip>
+        )}
+        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <AdvisorStudioHome
+          user={user}
+          dashboard={previewingAdvisor ? null : data}
+          previewing={previewingAdvisor}
+          onRetryDashboard={() => { setLoading(true); load(); }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -190,7 +287,6 @@ export default function Dashboard() {
       {/* Task #7 (W-2) — investor trial countdown banner (auto-hides) */}
       <InvestorTrialBanner user={user} />
 
-      {/* Task #12 (AC-3) — Personal Advisor replaces the legacy persona tile. */}
       <PersonalAdvisor />
 
       {isInvestor ? (

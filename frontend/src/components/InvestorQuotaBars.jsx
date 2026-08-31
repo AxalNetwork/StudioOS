@@ -33,13 +33,21 @@ function Bar({ used, cap, label, hint, accent }) {
   );
 }
 
-export default function InvestorQuotaBars({ user }) {
+export default function InvestorQuotaBars({ user, compact = false }) {
   const [billing, setBilling] = useState(null);
   const [intros, setIntros] = useState(null);
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
-    if (!user || user.role !== 'investor') return;
+    // An admin previewing the investor role must never request or present a
+    // different investor's quota. The authenticated quota endpoints decide
+    // access; permanent investor accounts remain the only viewer that renders.
+    if (!user || user.role !== 'investor') {
+      setSettled(true);
+      return;
+    }
     let cancelled = false;
+    setSettled(false);
     Promise.allSettled([
       api.investorBillingStatus(),
       api.introductionsQuota(),
@@ -47,12 +55,14 @@ export default function InvestorQuotaBars({ user }) {
       if (cancelled) return;
       if (b.status === 'fulfilled') setBilling(b.value);
       if (i.status === 'fulfilled') setIntros(i.value);
+      setSettled(true);
     });
     return () => { cancelled = true; };
   }, [user]);
 
-  if (!user || user.role !== 'investor') return null;
-  if (!billing && !intros) return null;
+  if (!user || user.role !== 'investor') return compact ? <div className="text-xs text-gray-500 dark:text-gray-400 py-3">Quota data is available only to the signed-in investor account.</div> : null;
+  if (!settled) return compact ? <div className="text-xs text-gray-500 dark:text-gray-400 py-3">Loading quota records…</div> : null;
+  if (!billing && !intros) return compact ? <div className="text-xs text-gray-500 dark:text-gray-400 py-3">Quota records are unavailable in this environment.</div> : null;
 
   const tier = String(billing?.tier || intros?.tier || 'free');
   const introsUsed = intros?.used ?? billing?.quotas?.intros_used ?? 0;
@@ -64,7 +74,7 @@ export default function InvestorQuotaBars({ user }) {
   const dealroomsUsed = billing?.quotas?.dealroom_used ?? 0;
 
   return (
-    <div data-card className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 mb-4">
+    <div data-card className={compact ? '' : 'rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 mb-4'}>
       <div className="flex items-center justify-between mb-3">
         <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
           Investor plan · <span className="font-semibold capitalize text-gray-700 dark:text-gray-200">{tier}</span>

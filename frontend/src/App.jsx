@@ -1387,7 +1387,7 @@ function AppInner() {
           stay permissive so deep links keep working during the split. */}
       {/* Spin-Out Lab members (role `exploring`, lab-active) build their skills +
           values profile in Studio too — the lab Profiling page reads from it. */}
-      <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <Dashboard />)} />
+      <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <Dashboard activeRole={effectiveRole} authUser={user} />)} />
       {/* Task #9 — holding-state dashboard for chat-onboarded users awaiting admin role review. */}
       <Route path="/exploring" element={guard(['admin', 'exploring'], <ExploringDashboard />)} />
       <Route path="/dashboard" element={<DashboardRedirect />} />

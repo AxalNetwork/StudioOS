@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8fa;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#6d28d9;background:#faf7ff;border-color:#d8c9ff;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#faf7ff;border-color:#d8c9ff;color:#6d28d9;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#faf7ff;border:1px solid #d8c9ff;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6d28d9;background:#f0e9ff;border:1px solid #d8c9ff;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #6d28d9;background:#6d28d9;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="5">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /build</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#6d28d9;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}" style="{{ n.style }}">{{ n.label }}</div></sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Build</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="5">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <!-- ONLY-HERE STRIP -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- INSTRUMENT -->
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="5"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5">
+                <span class="td" style="{{ c.style }}">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <!-- AI DEPTH -->
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="violet" page="Build" hint-size="100%,540px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const V = { ink:'#7c3aed', deep:'#6d28d9', tint:'#faf7ff', edge:'#d8c9ff' };
+    // CANONICAL Founder shell — 9 rows, copied from Detail Layer Canvas F_ROWS.
+    // Do not retype in sibling page files; copy this array.
+    const ROWS = ['Home','Validate','Build','Raise','Grow','Network','Research','Trust','Company Settings'];
+    const nav = ROWS.map(label => ({
+      label, cls: label === 'Build' ? 'nav on' : 'nav',
+      style: label === 'Build'
+        ? 'color:' + V.deep + ';background:' + V.tint + ';font-weight:700;box-shadow:inset 2px 0 0 ' + V.ink
+        : ''
+    }));
+
+    const ARCH = {
+      'WORK BOARD': ['#eff6ff','#1d4ed8','#dbeafe'],
+      'LEDGER':     ['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION': ['#f0fdf6','#065f46','#a7f3d0'],
+      'FEED':       ['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'],
+      'ANALYTICS':  ['#f0fdff','#0e7490','#a5edf5']
+    };
+    const archStyle = (a) => {
+      const c = ARCH[a];
+      return 'background:' + c[0] + ';color:' + c[1] + ';border:1px solid ' + c[2];
+    };
+
+    const ZONES = ['This week','Board','Roadmap','Cadence','KPI entry'];
+    const zoneRow = (active, attn) => ZONES.map(label => ({
+      label, cls: label === active ? 'zb on' : 'zb', attn: (attn || []).indexOf(label) >= 0
+    }));
+
+    const pill = (t) => {
+      const M = {
+        'Done':['#ecfdf5','#047857','#a7f3d0'], 'On track':['#ecfdf5','#047857','#a7f3d0'],
+        'Shipped':['#ecfdf5','#047857','#a7f3d0'], 'Confirmed':['#ecfdf5','#047857','#a7f3d0'],
+        'In flight':['#faf7ff','#6d28d9','#d8c9ff'], 'Active':['#faf7ff','#6d28d9','#d8c9ff'],
+        'In progress':['#faf7ff','#6d28d9','#d8c9ff'],
+        'Carried':['#fffbeb','#92400e','#fde68a'], 'At risk':['#fffbeb','#92400e','#fde68a'],
+        'Provisional':['#fffbeb','#92400e','#fde68a'], 'Estimate':['#fffbeb','#92400e','#fde68a'],
+        'Blocked':['#fef2f2','#b91c1c','#fecaca'], 'Missed':['#fef2f2','#b91c1c','#fecaca'],
+        'Off plan':['#fef2f2','#b91c1c','#fecaca'],
+        'Backlog':['#f4f4f6','#615c6e','#e4e4e8'], 'Not started':['#f4f4f6','#615c6e','#e4e4e8'],
+        'Manual':['#f4f4f6','#615c6e','#e4e4e8'], 'Synced':['#f0fdff','#0e7490','#a5edf5']
+      };
+      const c = M[t] || M['Backlog'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0] + ';color:' + c[1] + ';border:1px solid ' + c[2] + ';white-space:nowrap';
+    };
+    const cell = (text, opt) => Object.assign({ text, style:'', pill:null, pillStyle:'', seam:null },
+      opt || {}, opt && opt.pill ? { pillStyle: pill(opt.pill) } : {});
+    const fil = (labels, onIdx) => labels.map((label, i) => ({ label, cls: i === onIdx ? 'fil on' : 'fil' }));
+
+    const PAGES = [
+      { id:'fb1', badge:'FB1', route:'/build/this-week', zone:'This week', arch:'WORK BOARD',
+        title:'Build · This week', h1:'This week · Aug 24–30',
+        blurb:'The compressed zone shows this week\u2019s five commitments. The full page adds every prior week, what carried, and the retro archive — which is how you find out that "ship the digest" has now moved three times.',
+        sub:'Commitment history, carry-overs, streaks and the retro archive.',
+        cmpTitle:'This week · 5 commitments', cmpBody:'2 done, 2 in flight, 1 carried from last week.',
+        viewMore:'View more · 14 weeks of history →',
+        filters: fil(['This week','Last 4','All 14','Carried only'], 0),
+        ops:['Export CSV','Configure zone'],
+        adds:[
+          { label:'Weeks logged', value:'14', note:'since Mar 2026' },
+          { label:'Completion rate', value:'71%', note:'50 of 70 commitments' },
+          { label:'Current streak', value:'6 wks', note:'all five set on Monday' },
+          { label:'Most carried', value:'3×', note:'"Async digest v1"' }
+        ],
+        instTitle:'Commitment history', instMeta:'Newest first · 14 weeks',
+        cols:'1.5fr .8fr .8fr 1.4fr', head:['Commitment','Week','Outcome','Note'],
+        rows:[
+          { cells:[cell('Async digest v1'), cell('Aug 24'), cell('', { pill:'Carried' }), cell('Third carry. Blocked on the handoff schema.')] },
+          { cells:[cell('Pricing page copy'), cell('Aug 24'), cell('', { pill:'In flight' }), cell('Draft with Rin.')] },
+          { cells:[cell('Interview 3 ops leads'), cell('Aug 24'), cell('', { pill:'Done' }), cell('All three logged in Discovery.')] },
+          { cells:[cell('Handoff timeline view'), cell('Aug 17'), cell('', { pill:'Done' }), cell('Shipped Thursday.')] },
+          { cells:[cell('Async digest v1'), cell('Aug 17'), cell('', { pill:'Carried' }), cell('Second carry.')] },
+          { cells:[cell('SOC 2 scoping call'), cell('Aug 10'), cell('', { pill:'Missed' }), cell('Never scheduled. Dropped, not deferred.')] }
+        ],
+        instNote:'Carry-overs are counted, not hidden. A commitment that moves three times is a scoping problem, and the only way to see that is to keep the history the compressed zone cannot hold.',
+        aiLabel:'Proposal · Monday plan', aiCost:'≈ $0.0005',
+        aiBody:'Five commitments drafted from last week\u2019s board state. "Async digest v1" is proposed as two smaller commitments instead of one, because at three carries the size is the problem — the model says so and cites the carry count.',
+        aiAccept:'Accept the five', aiFoot:'Nothing is committed until you accept.' },
+
+      { id:'fb2', badge:'FB2', route:'/build/board', zone:'Board', arch:'WORK BOARD',
+        title:'Build · Board', h1:'Execution board',
+        blurb:'Compressed shows the top five cards. The full board adds swimlanes, WIP limits and automations — the machinery that keeps a board honest once it has more than a dozen cards.',
+        sub:'Swimlanes, filters, WIP limits and automations.',
+        cmpTitle:'Execution board · 18 open', cmpBody:'Top five by staleness. Two over WIP in Engineering.',
+        viewMore:'View more · 18 cards, 4 lanes →',
+        filters: fil(['All lanes','Engineering','GTM','Mine','Stale > 7d'], 0),
+        ops:['Bulk move','Automations','Configure lanes'],
+        adds:[
+          { label:'Open cards', value:'18', note:'across 4 lanes' },
+          { label:'Over WIP', value:'1 lane', note:'Engineering, limit 4' },
+          { label:'Stale > 7 days', value:'5', note:'2 with no owner' },
+          { label:'Automations', value:'3', note:'1 paused' }
+        ],
+        instTitle:'Swimlanes', instMeta:'WIP limits enforced · drag to move',
+        cols:'1.6fr .9fr .8fr 1.2fr', head:['Card','Lane','Age','Owner'],
+        rows:[
+          { cells:[cell('Handoff schema decision'), cell('Engineering'), cell('11 d', { pill:'At risk' }), cell('Amara')] },
+          { cells:[cell('Async digest v1'), cell('Engineering'), cell('19 d', { pill:'Blocked' }), cell('Amara')] },
+          { cells:[cell('Pricing page copy'), cell('GTM'), cell('3 d', { pill:'In flight' }), cell('Rin')] },
+          { cells:[cell('Onboarding email seq'), cell('GTM'), cell('9 d', { pill:'At risk' }), cell('unassigned')] },
+          { cells:[cell('Permissions model'), cell('Engineering'), cell('2 d', { pill:'Backlog' }), cell('unassigned')] },
+          { cells:[cell('SOC 2 evidence list'), cell('Ops'), cell('14 d', { pill:'At risk' }), cell('Guillaume')] }
+        ],
+        instNote:'Engineering is one card over its WIP limit of four, which is why the permissions card sits in backlog rather than starting. The limit is a configuration, not a suggestion — the board refuses the fifth card.',
+        aiLabel:'Proposal · groom 11 backlog cards', aiCost:'11 × per-card rate',
+        aiBody:'Each backlog card gets a scope line, an owner suggestion and a lane. Two are proposed for deletion as duplicates of cards already in flight — named, with the duplicate cited, so you can disagree.',
+        aiAccept:'Review the 11', aiFoot:'Batch cost estimated before it runs.' },
+
+      { id:'fb3', badge:'FB3', route:'/build/roadmap', zone:'Roadmap', arch:'WORK BOARD',
+        title:'Build · Roadmap', h1:'Roadmap',
+        blurb:'Compressed shows three quarters as cards. The full page adds a timeline, dependency chains and saved scenarios — so a slip can be traced to what it actually blocks.',
+        sub:'Timeline view, scenarios and dependencies.',
+        cmpTitle:'Roadmap · 3 quarters', cmpBody:'Q3 in flight, Q4 committed, Q1 provisional.',
+        viewMore:'View more · timeline, 4 dependencies →',
+        filters: fil(['Timeline','Board','Dependencies','Scenarios'], 0),
+        ops:['New scenario','Export','Configure'],
+        adds:[
+          { label:'Items', value:'9', note:'across 3 quarters' },
+          { label:'Dependencies', value:'4', note:'1 unresolved' },
+          { label:'Saved scenarios', value:'2', note:'"raise slips 6wk"' },
+          { label:'At risk', value:'2', note:'both Q4' }
+        ],
+        instTitle:'Dependency chain', instMeta:'Unresolved links flagged',
+        cols:'1.5fr 1fr .9fr 1.3fr', head:['Item','Quarter','State','Blocks'],
+        rows:[
+          { cells:[cell('Handoff schema'), cell('Q3 2026'), cell('', { pill:'Blocked' }), cell('Async digest, Slack integration')] },
+          { cells:[cell('Async digest v1'), cell('Q3 2026'), cell('', { pill:'In flight' }), cell('Self-serve trial')] },
+          { cells:[cell('Slack integration'), cell('Q4 2026'), cell('', { pill:'At risk' }), cell('nothing downstream')] },
+          { cells:[cell('Permissions model'), cell('Q4 2026'), cell('', { pill:'At risk' }), cell('SSO, audit log')] },
+          { cells:[cell('EU data residency'), cell('Q1 2027'), cell('', { pill:'Provisional' }), cell('EU self-serve')] },
+          { cells:[cell('SSO'), cell('Q1 2027'), cell('', { pill:'Provisional' }), cell('enterprise pilot')] }
+        ],
+        instNote:'One unresolved dependency explains both Q4 risks: the handoff schema blocks two items and has been open eleven days. The compressed card can say "at risk"; only this view can say why.',
+        aiLabel:'Proposal · tradeoff, reasoned', aiCost:'≈ $0.011',
+        aiBody:'Asked which Q4 item to cut, the reasoning model argues for deferring permissions: seven of twelve interviews named the handoff, none named permissions, and permissions is a one-week task at 20 seats but a month at 200 — so it gets cheaper to defer, not dearer.',
+        aiAccept:'Accept the reorder', aiFoot:'Routed to the reasoning model on purpose.' },
+
+      { id:'fb4', badge:'FB4', route:'/build/cadence', zone:'Cadence', arch:'FEED',
+        title:'Build · Cadence', h1:'Operating cadence',
+        blurb:'Compressed shows the three rituals and when they next run. The full page adds the scheduler, the review archive and templates — the record that makes a cadence more than a calendar entry.',
+        sub:'Ritual scheduler, review archive and templates.',
+        cmpTitle:'Cadence · 3 rituals', cmpBody:'Monday plan, Wednesday standup, Friday retro.',
+        viewMore:'View more · 41 reviews archived →',
+        filters: fil(['All rituals','Plans','Retros','Skipped'], 0),
+        ops:['New ritual','Edit templates','Export archive'],
+        adds:[
+          { label:'Reviews archived', value:'41', note:'since Mar 2026' },
+          { label:'Adherence', value:'88%', note:'5 skipped in 14 weeks' },
+          { label:'Templates', value:'3', note:'1 customised' },
+          { label:'Avg retro length', value:'22 min', note:'target 30' }
+        ],
+        instTitle:'Review archive', instMeta:'Searchable · newest first',
+        cols:'1fr 1fr 1.1fr 1.5fr', head:['Date','Ritual','State','What came out of it'],
+        rows:[
+          { cells:[cell('Aug 21'), cell('Friday retro'), cell('', { pill:'Done' }), cell('Decided to split the digest card. Not yet done.')] },
+          { cells:[cell('Aug 19'), cell('Standup'), cell('', { pill:'Done' }), cell('Handoff schema flagged as blocking.')] },
+          { cells:[cell('Aug 17'), cell('Monday plan'), cell('', { pill:'Done' }), cell('Five commitments set. Two carried in.')] },
+          { cells:[cell('Aug 14'), cell('Friday retro'), cell('', { pill:'Missed' }), cell('Skipped — travel. No note left.')] },
+          { cells:[cell('Aug 12'), cell('Standup'), cell('', { pill:'Done' }), cell('Rin onboarded to the GTM lane.')] }
+        ],
+        instNote:'The archive is the point: the Aug 21 retro decided to split the digest card, and it is still one card. A cadence you cannot audit is a calendar, not an operating rhythm.',
+        aiLabel:'Proposal · retro summary', aiCost:'≈ $0.0004',
+        aiBody:'Friday\u2019s retro summarised from the board\u2019s week: three cards moved, one carried a third time, one commitment missed with no note. The summary names the two decisions taken and the one that was taken last week and never acted on.',
+        aiAccept:'Accept summary', aiFoot:'Files into the archive on accept.' },
+
+      { id:'fb5', badge:'FB5', route:'/build/kpi', zone:'KPI entry', arch:'LEDGER',
+        title:'Build · KPI entry', h1:'KPI entry',
+        blurb:'Compressed is a single-month entry form. The full page adds bulk entry, imports, metric definitions, targets and full history — the ledger behind the numbers the investor product reads across the seam.',
+        sub:'Bulk entry, imports, metric definitions, targets and history.',
+        cmpTitle:'KPI entry · 6 metrics', cmpBody:'August open. MRR and burn entered, four to go.',
+        viewMore:'View more · 14 months, definitions and targets →',
+        filters: fil(['Aug 2026','Last 6 mo','All 14 mo','Missing only'], 0),
+        ops:['Bulk entry','Import CSV','Stripe sync','Definitions'],
+        adds:[
+          { label:'Months on record', value:'14', note:'Jul 2025 – Aug 2026' },
+          { label:'Metrics tracked', value:'6', note:'2 Stripe-synced' },
+          { label:'Missing cells', value:'4', note:'all August' },
+          { label:'Against target', value:'4 of 6', note:'burn and runway off' }
+        ],
+        instTitle:'August 2026 · entry', instMeta:'Tabular · source shown per metric',
+        cols:'1.3fr .8fr .8fr .8fr 1.1fr', head:['Metric','Value','Target','vs target','Source'],
+        rows:[
+          { cells:[cell('MRR'), cell('$104,800'), cell('$100,000'), cell('+4.8%', { pill:'On track' }), cell('', { seam:'Stripe-synced' })] },
+          { cells:[cell('Net burn'), cell('$61,200'), cell('$55,000'), cell('+11.3%', { pill:'Off plan' }), cell('', { pill:'Manual' })] },
+          { cells:[cell('Runway'), cell('11.4 mo'), cell('14 mo'), cell('−2.6 mo', { pill:'Off plan' }), cell('derived')] },
+          { cells:[cell('Headcount'), cell('4'), cell('5'), cell('−1', { pill:'At risk' }), cell('', { pill:'Manual' })] },
+          { cells:[cell('Logo churn'), cell('—'), cell('< 2%'), cell('—'), cell('', { pill:'Not started' })] },
+          { cells:[cell('Pipeline'), cell('—'), cell('$40,000'), cell('—'), cell('', { pill:'Not started' })] }
+        ],
+        instNote:'Runway is derived from burn and cash, never typed — which is why it cannot disagree with the two numbers above it. Metric definitions live on this page precisely so "net burn" means the same thing in month 14 as in month 1.',
+        aiLabel:'Proposal · explain the burn variance', aiCost:'≈ $0.0003',
+        aiBody:'Burn is 11.3% over plan. The annotation names the two causes from your own ledger — a contractor month that was not in the plan and one prepaid annual tool — and states that neither recurs, so the runway figure is pessimistic by about half a month.',
+        aiAccept:'Attach annotation', aiFoot:'Annotations travel with the metric to Portfolio.' }
+    ];
+
+    return {
+      nav,
+      pages: PAGES.map(p => Object.assign({}, p, {
+        archStyle: archStyle(p.arch),
+        zones: zoneRow(p.zone, ['This week'])
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>
