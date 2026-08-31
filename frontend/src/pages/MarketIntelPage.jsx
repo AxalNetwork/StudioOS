@@ -7,6 +7,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, LineCh
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { getPersonaKey } from '../lib/advisor/persona';
+import PartnerWorkspaceShell from './partner/PartnerWorkspaceShell';
 
 export default function MarketIntelPage() {
   const { user } = useAuth();
@@ -18,6 +19,7 @@ export default function MarketIntelPage() {
   const [benchmarks, setBenchmarks] = useState(null);
   const [conviction, setConviction] = useState([]);
   const [enriched, setEnriched] = useState([]);
+  const [loadError, setLoadError] = useState('');
   const [tab, setTab] = useState('compass');
   // Task #83 — the ~21 MI sub-tabs are regrouped under 5 top-level lenses (see
   // LENSES below). `lens` scopes the sub-tab dropdown; `tab` still drives every
@@ -39,7 +41,9 @@ export default function MarketIntelPage() {
       setRounds(r.rounds || []);
       setBenchmarks(b);
       setConviction(c.high_conviction_plays || []);
-    }).catch(() => {});
+    }).catch((error) => {
+      setLoadError((current) => current || error?.message || 'Market intelligence is temporarily unavailable.');
+    });
     api.listProjects().then((rows) => {
       const list = (Array.isArray(rows) ? rows : [])
         .filter((p) => p.crunchbase_uuid)
@@ -59,7 +63,9 @@ export default function MarketIntelPage() {
           };
         });
       setEnriched(list);
-    }).catch(() => {});
+    }).catch((error) => {
+      setLoadError((current) => current || error?.message || 'Company context is temporarily unavailable.');
+    });
   }, []);
 
   const fmtTime = (iso) => {
@@ -119,7 +125,7 @@ export default function MarketIntelPage() {
     if (!L.tabs.includes(tab)) setTab(L.tabs[0]);
   };
 
-  return (
+  const content = (
     <div data-testid="market-intel-page" data-active-tab={tab}>
       <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
         <div>
@@ -131,6 +137,13 @@ export default function MarketIntelPage() {
           <div className="text-xs text-gray-500">Last updated {fmtTime(tab === 'studio' ? benchmarks?.updated_at : pulseUpdatedAt)}</div>
         )}
       </div>
+
+      {loadError && (
+        <div role="alert" className="mb-5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="font-semibold">Some live market data could not be loaded.</p>
+          <p className="mt-1 text-xs opacity-80">{loadError}</p>
+        </div>
+      )}
 
       {/* Why this matters — top-of-page explainer panel (Epic 0.4). Plain-English
           framing for partners/LPs new to the surface so each tab has context. */}
@@ -506,6 +519,14 @@ export default function MarketIntelPage() {
       )}
     </div>
   );
+  if (user?.role === 'partner') {
+    return (
+      <PartnerWorkspaceShell workspace="research" icon={Globe}>
+        {content}
+      </PartnerWorkspaceShell>
+    );
+  }
+  return content;
 }
 
 // ---------- Axal VC Investor Signals (Task #4) ----------------------------------

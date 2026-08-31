@@ -6,6 +6,7 @@ import { ContactsPanel } from './ContactsPage';
 import { RelationshipsPanel } from './RelationshipsPage';
 import IntroductionsPanel from './IntroductionsPanel';
 import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
+import PartnerWorkspaceShell from './partner/PartnerWorkspaceShell';
 
 // Task #1 — unified Network page. Merges the former Contacts inbox and the
 // Network/Relationships surface into one page with tabs selected via the
@@ -42,9 +43,9 @@ export default function NetworkPage() {
   };
 
   const content = (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
+    <div className={`${role === 'partner' ? 'space-y-6' : 'p-6 max-w-6xl mx-auto space-y-6'}`}>
       <div className="flex items-center gap-3">
-        <Network className="text-violet-600" size={24} />
+        <Network className={role === 'partner' ? 'text-amber-600' : 'text-violet-600'} size={24} />
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Network &amp; Relationships</h1>
           <p className="text-sm text-gray-600 dark:text-gray-400">Contacts, curated introductions, partner relationships, and your network graph in one place.</p>
@@ -58,7 +59,13 @@ export default function NetworkPage() {
             const active = activeTab === t.id;
             return (
               <button key={t.id} onClick={() => selectTab(t.id)}
-                className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px ${active ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+                className={`flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+                  active
+                    ? role === 'partner'
+                      ? 'border-amber-500 text-amber-700 dark:text-amber-300'
+                      : 'border-violet-600 text-violet-700'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}>
                 <Icon size={14} /> {t.label}
               </button>
             );
@@ -72,6 +79,13 @@ export default function NetworkPage() {
     </div>
   );
 
+  if (role === 'partner') {
+    return (
+      <PartnerWorkspaceShell workspace="network" icon={Network}>
+        {content}
+      </PartnerWorkspaceShell>
+    );
+  }
   if (role === 'advisor') {
     return (
       <AdvisorWorkspaceShell

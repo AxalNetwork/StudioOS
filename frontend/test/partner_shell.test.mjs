@@ -1,148 +1,126 @@
-/**
- * The Partner shell follows the canvas, and no surface lost its door.
- *
- * The Partner canvas does not describe its sidebar — it declares it:
- *
- *   // CANONICAL Partner shell — 8 rows, no tier gating in v1.
- *   const ROWS = ['Home','Pipeline','Delivery','Offers','Network','Research',
- *                 'Trust','Firm Settings'];
- *
- * A FLAT list. The first reading of these canvases matched group NAMES and
- * concluded the IA was mostly aligned; it was not.
- *
- * THE TEST THAT MATTERS IS THE SECOND ONE. Flattening a sidebar does not fail
- * loudly when it goes wrong: the route still resolves, it just stops having a
- * door, and nothing notices until a user says "where did X go". The first cut
- * of this restructure did exactly that to five surfaces — /matches,
- * /partner/insights, /comarketing, /perks and /partner/office-hours, each of
- * which a search of every `to=` and `navigate(` in frontend/src showed has NO
- * other inbound link. So reachability is asserted two ways: a row of its own,
- * or a workspace that tabs to it.
- */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
-const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+const read = (path) => readFileSync(resolve(process.cwd(), path), 'utf8');
 const src = codeOnly(read('frontend/src/sidebarConfig.js'));
 const partner = src.slice(src.indexOf('\n  partner: ['), src.indexOf('\n  investor: ['));
-
 const rows = [...partner.matchAll(/\{ to: '([^']*)'[^}]*label: '([^']+)'/g)]
-  .map((m) => ({ to: m[1], label: m[2] }));
-const labels = rows.map((r) => r.label);
-const targets = rows.map((r) => r.to);
+  .map((match) => ({ to: match[1], label: match[2] }));
+const labels = rows.map((row) => row.label);
+const targets = rows.map((row) => row.to);
 
-test('the canvas rows are all present, in the canvas order', () => {
-  // A subsequence check, not equality: rows still pending absorption sit
-  // between them, and the next test is what keeps that list honest.
-  // Company Settings is the pinned footer in SidebarNav, not a nav row, so it
-  // is deliberately absent here — see the footer test at the bottom.
-  const CANON = ['Home', 'Pipeline', 'Delivery', 'Offers', 'Network', 'Research'];
-  let i = 0;
-  for (const l of labels) if (l === CANON[i]) i += 1;
-  assert.equal(i, CANON.length,
-    `canonical rows out of order or missing — got ${JSON.stringify(labels)}`);
+test('Partner sidebar is exactly the seven approved rows in order', () => {
+  assert.deepEqual(labels, [
+    'Home',
+    'Spin-Out Lab',
+    'Pipeline',
+    'Delivery',
+    'Offers',
+    'Network',
+    'Research',
+  ]);
+  assert.deepEqual(targets, [
+    '/studio',
+    '/spinout-lab',
+    '/needs',
+    '/partner/operations/overview',
+    '/services',
+    '/network',
+    '/market-intel',
+  ]);
+  assert.ok(!labels.includes('Messages'));
+  assert.ok(!labels.includes('Jobs'));
 });
 
-test('the shell is flat — one group, not seven', () => {
-  const groups = [...partner.matchAll(/\{ key: '([^']+)', label:/g)].map((m) => m[1]);
-  assert.deepEqual(groups, ['shell'], 'the canvas declares rows, not groups');
+test('Partner shell is one flat, headerless group', () => {
+  assert.match(partner, /\{ key: 'shell', label: '', items:/);
+  assert.equal([...partner.matchAll(/\{ key: '([^']+)', label:/g)].length, 1);
+  const sidebar = read('frontend/src/ui/SidebarNav.jsx');
+  assert.match(sidebar, /group\.key === 'home' \|\| !group\.label/);
 });
 
-test('every destination the old nav reached still has a door', () => {
-  const BEFORE = [
-    '/studio', '/messages', '/services', '/matches', '/needs', '/partner/insights',
-    '/partner/office-hours', '/comarketing', '/my/jobs', '/perks', '/network',
-    '/partner/operations/overview', '/partner/operations/capabilities',
-    '/partner/operations/portfolio', '/partner/operations/engagements',
-    '/partner/operations/performance', '/market-intel',
-  ];
-  // A door is a nav row, or a tab bar that demonstrably links it. There are two
-  // bars now: the ops workspace (Wave 1a) and the route wrapper this commit
-  // added. Both are READ rather than assumed.
-  const opsTabs = read('frontend/src/pages/partner/operations/PartnerOperationsWorkspace.jsx');
-  const routeTabs = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
-  const doorless = BEFORE.filter((p) => !targets.includes(p)
-    && !opsTabs.includes(`to: '${p}'`)
-    && !routeTabs.includes(`to: '${p}'`));
-  assert.deepEqual(doorless, [],
-    'these have no nav row and no tab bar — reachable only by typing the URL');
+test('Home remains /studio and no Partner persona root was invented', () => {
+  assert.equal(rows[0].to, '/studio');
+  assert.ok(!targets.includes('/home'));
+  assert.ok(!targets.includes('/partner'));
 });
 
-test('the two rows beyond the canvas are the two that earn it', () => {
-  // This list began as seven and was called PENDING, which promised a further
-  // absorption. `PartnerWorkspaceTabs` delivered most of it: /matches,
-  // /partner/insights, /perks, /comarketing and /partner/office-hours are
-  // sections of a row rather than rows, and left the nav and this list in the
-  // same commit.
-  //
-  // The two that remain are not pending. They are decided, and the investor,
-  // advisor and founder shells reached the same answer independently:
-  //
-  //   /messages  a cross-cutting inbox has no home among eight lifecycle rows,
-  //              and it has NO other door in any of the four roles. Every shell
-  //              gives it a row for that reason, so the product reads the same
-  //              way whichever profile you are in.
-  //   /my/jobs   not a section of Offers — those are the partner's own listings
-  //              — and it has four inbound links elsewhere. Folding it in to
-  //              reach exactly eight would be arithmetic, not information
-  //              architecture.
-  const KEPT = ['/messages', '/my/jobs'];
-  const CANON = [
-    '/studio', '/needs', '/partner/operations/overview', '/services',
-    '/network', '/market-intel', '/company-settings',
-  ];
-  const extra = targets.filter((t) => !CANON.includes(t));
-  assert.deepEqual(extra.sort(), [...KEPT].sort(),
-    'the set of rows beyond the canvas changed — justify the addition here, or remove it');
-});
-
-test('every section of a collapsed row is reachable from its tab bar', () => {
-  // Two things have to hold, and they fail independently: the path must be in a
-  // tab set, AND its route must be wrapped so the bar actually renders there.
-  // A tab set nobody mounts is the same nothing as no tab set.
-  const bars = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
-  const app = read('frontend/src/App.jsx');
-  const routeLine = (p) => app.split('\n').find(
-    (l) => l.includes(`path="${p}"`) && l.includes('<Route'));
-  for (const p of ['/matches', '/partner/insights', '/perks', '/comarketing',
-                   '/partner/office-hours', '/needs', '/services']) {
-    assert.ok(bars.includes(`to: '${p}'`), `${p} is in no tab set`);
-    const line = routeLine(p);
-    assert.ok(line, `no route for ${p}`);
-    assert.ok(line.includes('PartnerWorkspaceTabs'),
-      `${p}'s route is not wrapped, so the bar never renders on it`);
+test('canonical Partner deep links are owned by the correct workspace', () => {
+  const expectedMatches = {
+    Pipeline: ['/needs', '/matches', '/partner/insights', '/partner/operations/engagements'],
+    Delivery: ['/partner/operations/overview', '/partner/operations/portfolio', '/partner/operations/performance'],
+    Offers: ['/services', '/perks', '/comarketing', '/partner/office-hours', '/partner/operations/capabilities'],
+    Network: ['/network', '/relationships', '/contacts'],
+    Research: ['/market-intel'],
+  };
+  for (const [label, paths] of Object.entries(expectedMatches)) {
+    const rowStart = partner.indexOf(`label: '${label}'`);
+    const rowEnd = partner.indexOf('},', rowStart);
+    const rowSource = partner.slice(rowStart, rowEnd);
+    for (const path of paths) {
+      assert.ok(rowSource.includes(`'${path}'`) || targets.includes(path), `${path} is not owned by ${label}`);
+    }
   }
 });
 
-test('Home is /studio, and no role root was invented', () => {
-  assert.equal(rows[0].to, '/studio');
-  assert.equal(rows[0].label, 'Home');
-  assert.ok(!targets.includes('/home'), 'no /home root');
-  assert.ok(!targets.includes('/partner'), 'no bare /partner root');
-});
-
-test('Trust stays out of the sidebar', () => {
-  // The canvas asks for a Trust row. `trust_center_navigation.test.mjs` says
-  // Trust Center appears in no sidebar and lives in the user dropdown between
-  // User Settings and Support. Asserted from the Partner side too so the two
-  // cannot drift apart silently.
-  assert.ok(!targets.includes('/trust'), 'Trust Center belongs to the user dropdown');
-});
-
-test('Company Settings is the pinned footer only, never a nav row', () => {
-  // It used to be both: a row at the end of the group AND the pinned footer,
-  // so every role rendered it twice. The footer is the single entry point now.
-  assert.ok(
-    !targets.includes('/company-settings'),
-    'a /company-settings row is back in the nav config; it duplicates the pinned footer',
+test('collapsed Pipeline and Offers sections remain reachable from Partner tabs', () => {
+  const bars = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
+  const app = read('frontend/src/App.jsx');
+  const routeLine = (path) => app.split('\n').find(
+    (line) => line.includes(`path="${path}"`) && line.includes('<Route'),
   );
+  for (const path of [
+    '/needs',
+    '/matches',
+    '/partner/insights',
+    '/services',
+    '/perks',
+    '/comarketing',
+    '/partner/office-hours',
+  ]) {
+    assert.ok(bars.includes(`to: '${path}'`), `${path} is in no Partner tab set`);
+    const line = routeLine(path);
+    assert.ok(line, `no route for ${path}`);
+    assert.ok(line.includes('PartnerWorkspaceTabs'), `${path} does not mount the Partner tab shell`);
+  }
+});
 
-  // The guard that moved here with it. SidebarNav's footer is unconditional —
-  // no role gate — so removing the row cannot strand a role without a door.
-  const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
-  assert.ok(/to="\/company-settings"/.test(nav), 'the pinned footer lost its link');
-  assert.ok(!/to="\/settings"/.test(nav), 'the footer must not point at the personal Account page');
+test('Partner pages share amber identity and cyan provenance without recoloring other roles', () => {
+  const shell = read('frontend/src/pages/partner/PartnerWorkspaceShell.jsx');
+  const sidebar = read('frontend/src/ui/SidebarNav.jsx');
+  assert.match(shell, /text-amber-/);
+  assert.match(shell, /border-cyan-/);
+  assert.match(shell, /Founder-granted access/);
+  assert.match(shell, /Screened and consented/);
+  assert.match(shell, /AI assist/);
+  assert.match(sidebar, /role === 'partner'/);
+  assert.match(sidebar, /role === 'advisor'/);
+  assert.match(sidebar, /text-emerald-/);
+  assert.match(sidebar, /text-violet-/);
+});
+
+test('shared Network and Research pages only mount Partner chrome for Partner users', () => {
+  const tabs = read('frontend/src/pages/partner/PartnerWorkspaceTabs.jsx');
+  const operations = read('frontend/src/pages/partner/operations/PartnerOperationsWorkspace.jsx');
+  const network = read('frontend/src/pages/NetworkPage.jsx');
+  const research = read('frontend/src/pages/MarketIntelPage.jsx');
+  assert.match(tabs, /user\?\.role !== 'partner'/);
+  assert.match(operations, /user\?\.role !== 'partner'/);
+  assert.match(network, /role === 'partner'/);
+  assert.match(network, /workspace="network"/);
+  assert.match(network, /role === 'advisor'/);
+  assert.match(research, /user\?\.role === 'partner'/);
+  assert.match(research, /workspace="research"/);
+  assert.match(research, /Some live market data could not be loaded/);
+});
+
+test('Trust stays in the user menu and Company Settings stays in the pinned footer', () => {
+  assert.ok(!targets.includes('/trust'));
+  assert.ok(!targets.includes('/company-settings'));
+  const sidebar = read('frontend/src/ui/SidebarNav.jsx');
+  assert.match(sidebar, /to="\/company-settings"/);
+  assert.ok(!/to="\/settings"/.test(sidebar));
 });

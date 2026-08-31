@@ -29,6 +29,7 @@ import CompanySwitcher from './CompanySwitcher';
 export default function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
   const navLocation = useLocation();
   const advisorAccent = role === 'advisor';
+  const partnerAccent = role === 'partner';
   const [query, setQuery] = useState('');
   // Persisted open-state per group key. We seed once from
   // localStorage merged with `defaultOpenGroups()` so first-time users
@@ -94,7 +95,9 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search…"
                 aria-label="Search sidebar"
-                className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className={`w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-gray-900 focus:outline-none focus:ring-2 placeholder:text-gray-400 dark:placeholder:text-gray-500 ${
+                  partnerAccent ? 'focus:ring-amber-500/40 focus:border-amber-400' : 'focus:ring-violet-500/40 focus:border-violet-400'
+                }`}
               />
             </div>
             {onCollapse && (
@@ -148,13 +151,12 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
         // Found by documentation/architecture/PAGE_INVENTORY.md, which counts a
         // role's groups from their items.
         if (visibleItems.length === 0) return null;
-        const isHome = group.key === 'home';
-        // Home group renders headerless (no "Home" label / collapse chevron) —
-        // its items (Studio + Products) always show flat at the top of the nav.
-        const isOpen = isHome ? true : (collapsed ? true : effectiveOpen.has(group.key));
+        const isHeaderless = group.key === 'home' || !group.label;
+        // Home and explicitly-unlabelled role shells render flat and always open.
+        const isOpen = isHeaderless ? true : (collapsed ? true : effectiveOpen.has(group.key));
         return (
           <div key={group.key} className="mb-0.5">
-            {isHome ? null : collapsed ? (
+            {isHeaderless ? null : collapsed ? (
               <div
                 className="px-2 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-wider text-gray-400 text-center"
                 title={group.label}
@@ -179,7 +181,9 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
               // consolidated destination (e.g. Execution) highlights across
               // all of its sub-views instead of only its exact `to` path.
               const manualActive = Array.isArray(match)
-                ? match.some((p) => navLocation.pathname === p || navLocation.pathname.startsWith(`${p}/`))
+                ? navLocation.pathname === to
+                  || navLocation.pathname.startsWith(`${to}/`)
+                  || match.some((p) => navLocation.pathname === p || navLocation.pathname.startsWith(`${p}/`))
                 : null;
               // Task #6 / #7 — items the user can't afford render as a
               // "locked" button that opens PaywallModal. Bypass roles + users
@@ -230,7 +234,9 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                           active
                             ? advisorAccent
                               ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-r-2 border-emerald-600'
-                              : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
+                              : partnerAccent
+                                ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border-r-2 border-amber-500'
+                                : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
                             : highlight
                               ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
                               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -239,7 +245,9 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                           active
                             ? advisorAccent
                               ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-r-2 border-emerald-600'
-                              : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
+                              : partnerAccent
+                                ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border-r-2 border-amber-500'
+                                : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 border-r-2 border-violet-600'
                             : highlight
                               ? 'text-violet-700 dark:text-violet-300 font-medium bg-violet-50/60 dark:bg-violet-900/20 hover:bg-violet-100 dark:hover:bg-violet-900/40'
                               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -265,8 +273,8 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
         onClick={onNavigate}
         className={({ isActive }) =>
           collapsed
-            ? `flex flex-col items-center gap-0.5 px-1 py-2.5 text-[10px] w-full transition-colors ${isActive ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
-            : `flex items-center gap-3 px-5 py-2.5 text-sm w-full transition-colors ${isActive ? 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
+            ? `flex flex-col items-center gap-0.5 px-1 py-2.5 text-[10px] w-full transition-colors ${isActive ? partnerAccent ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40' : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
+            : `flex items-center gap-3 px-5 py-2.5 text-sm w-full transition-colors ${isActive ? partnerAccent ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40' : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
         }
         title={collapsed ? 'Company Settings' : undefined}
       >
