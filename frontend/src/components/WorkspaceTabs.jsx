@@ -16,7 +16,7 @@ export function WorkspaceHeader({ icon: Icon, title, description }) {
   );
 }
 
-export default function WorkspaceTabs({ tabs }) {
+export default function WorkspaceTabs({ tabs, tone = 'violet' }) {
   const location = useLocation();
   const navigate = useNavigate();
   return (
@@ -32,9 +32,11 @@ export default function WorkspaceTabs({ tabs }) {
             type="button"
             data-testid={t.testId}
             onClick={() => navigate(t.to)}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+             className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
               isActive
-                ? 'border-violet-600 text-violet-700 dark:text-violet-300'
+                 ? tone === 'amber'
+                   ? 'border-amber-500 text-amber-700 dark:border-amber-400 dark:text-amber-300'
+                   : 'border-violet-600 text-violet-700 dark:text-violet-300'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
             }`}
           >

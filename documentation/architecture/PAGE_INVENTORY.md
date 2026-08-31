@@ -46,18 +46,17 @@ canvas behind it still shows up here.
 | Home | Research | `/market-intel` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Trust | `/trust` | — (no canvas; shipped ahead of the design corpus) |
 
-## `partner` — 8 destinations in 1 group
+## `partner` — 7 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Workspace | Home | `/studio` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Pipeline | `/needs` | BD Console, Pages · Partner Pipeline |
-| Workspace | Delivery | `/partner/operations/overview` | BD Console |
-| Workspace | Offers | `/services` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Jobs | `/my/jobs` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Network | `/network` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Research | `/market-intel` | — (no canvas; shipped ahead of the design corpus) |
+| Headerless | Home | `/studio` | Partner Operator Canvas |
+| Headerless | Spin-Out Lab | `/spinout-lab` | Partner Operator Canvas |
+| Headerless | Pipeline | `/needs` | BD Console, Pages · Partner Pipeline, Partner Operator Canvas |
+| Headerless | Delivery | `/partner/operations/overview` | BD Console |
+| Headerless | Offers | `/services` | Partner Operator Canvas |
+| Headerless | Network | `/network` | Partner Operator Canvas |
+| Headerless | Research | `/market-intel` | Partner Operator Canvas |
 
 ## `admin` — 48 destinations in 6 groups
 
@@ -123,7 +122,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-56 of the 83 sidebar rows above are not claimed
+50 of the 82 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -133,12 +132,6 @@ rather than merely absent.
 - investor · Home · Portfolio (`/portfolio/health`)
 - investor · Home · Research (`/market-intel`)
 - investor · Home · Trust (`/trust`)
-- partner · Workspace · Home (`/studio`)
-- partner · Workspace · Messages (`/messages`)
-- partner · Workspace · Offers (`/services`)
-- partner · Workspace · Jobs (`/my/jobs`)
-- partner · Workspace · Network (`/network`)
-- partner · Workspace · Research (`/market-intel`)
 - admin · Home · Studio (`/studio`)
 - admin · Home · Messages (`/messages`)
 - admin · Admin · Due Diligence (`/admin/due-diligence`)

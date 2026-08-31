@@ -1,6 +1,7 @@
 import React from 'react';
 import { Target, Handshake, TrendingUp, Layers, Package, Gift, Megaphone, Calendar, Award } from 'lucide-react';
 import WorkspaceTabs from '../../components/WorkspaceTabs';
+import PartnerWorkspaceShell from './PartnerWorkspaceShell';
 
 /**
  * The tab bars that let the Partner shell's Pipeline and Offers rows actually
@@ -62,12 +63,25 @@ const SETS = {
 
 export default function PartnerWorkspaceTabs({ set, user, children }) {
   const tabs = (SETS[set] || []).filter((t) => t.roles.includes(user?.role));
-  // One visible tab is a bar that says nothing. Render the page alone.
+  const visibleTabs = tabs.map(({ to, label, icon }) => ({ to, label, icon }));
+  if (user?.role !== 'partner') {
+    return (
+      <>
+        {visibleTabs.length > 1 && <WorkspaceTabs tabs={visibleTabs} />}
+        {children}
+      </>
+    );
+  }
+  const meta = set === 'offers'
+    ? { workspace: 'offers', icon: Package }
+    : { workspace: 'pipeline', icon: Target };
   return (
-    <>
-      {tabs.length > 1 && <WorkspaceTabs tabs={tabs.map(({ to, label, icon }) => ({ to, label, icon }))} />}
+    <PartnerWorkspaceShell
+      {...meta}
+      tabs={visibleTabs}
+    >
       {children}
-    </>
+    </PartnerWorkspaceShell>
   );
 }
 

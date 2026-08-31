@@ -106,8 +106,8 @@ export function parseSidebar(src) {
     const r = line.match(/^\s{2}([a-z]+):\s*\[/);
     if (r) { role = r[1]; roles[role] = []; group = null; continue; }
     if (!role) continue;
-    const g = line.match(/\{\s*key:\s*'([^']+)',\s*label:\s*'([^']+)'/);
-    if (g) { group = g[2]; continue; }
+    const g = line.match(/\{\s*key:\s*'([^']+)',\s*label:\s*'([^']*)'/);
+    if (g) { group = g[2] || 'Headerless'; continue; }
     const it = line.match(/\{\s*to:\s*'([^']+)'[^}]*?label:\s*'([^']+)'/);
     if (it && group) {
       const mm = line.match(/match:\s*\[([^\]]*)\]/);

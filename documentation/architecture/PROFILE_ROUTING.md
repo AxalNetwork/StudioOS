@@ -115,12 +115,12 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| BD Console | `/partner/operations/overview` · `/capabilities` · `/portfolio` · `/engagements` · `/performance` · `/needs` | Workspace | Full page | Sidebar → Workspace → Delivery | UPGRADE | High |
+| BD Console | `/partner/operations/overview` · `/capabilities` · `/portfolio` · `/engagements` · `/performance` · `/needs` | Headerless | Full page | Sidebar → Headerless → Delivery | UPGRADE | High |
 | Co-marketing | `/comarketing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
-| Pages · Partner Pipeline | `/needs` · `/partner/operations/*` | Workspace | Full page | Sidebar → Workspace → Pipeline | UPGRADE | High |
-| Partner Operator Canvas | `/partner/operations/*` · `/partner/growth/*` · `/partner/insights` · `/partner-portal` | — (no nav entry) | Full page | Deep link / in-page action | DEFERRED | Medium |
+| Pages · Partner Pipeline | `/needs` · `/partner/operations/*` | Headerless | Full page | Sidebar → Headerless → Pipeline | UPGRADE | High |
+| Partner Operator Canvas | `/studio` · `/spinout-lab` · `/needs` · `/matches` · `/partner/insights` · `/partner/operations/*` · `/services` · `/perks` · `/comarketing` · `/partner/office-hours` · `/network` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Home | UPGRADE | High |
 | Perks & Products | `/perks` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
@@ -161,7 +161,7 @@ it, where in their nav, and how do they get there.*
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Mobile Canvas | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Navigation Shell | — | — (not routed) | Embedded rail | Not reachable yet | UPGRADE | Low |
-| PartnerRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
+| PartnerRail | — | — (not routed) | Embedded rail | Not reachable yet | UPGRADE | Low |
 | System Sheet | — | — (not routed) | Reference (no surface) | Not reachable yet | NEW | Low |
 
 ## Shared (multi-workspace) — 15 canvases
@@ -207,8 +207,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 64 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 34 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 65 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 33 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 28 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

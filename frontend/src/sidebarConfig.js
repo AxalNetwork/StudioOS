@@ -307,21 +307,13 @@ export const SIDEBAR_GROUPS = {
   // those routes do not share one: an investor on /services must not be shown
   // an Office Hours tab that bounces them.
   //
-  // /my/jobs KEEPS ITS ROW. It is not a section of Offers — it is the partner's
-  // own job listings — and it has four inbound links elsewhere, so it is not at
-  // risk either way. Folding it in to reach eight would be arithmetic, not
-  // information architecture.
-  //
-  // Messages is the ninth row for the reason it always was: the canvas's eight
-  // have nowhere to put a cross-cutting inbox, and /messages has no other door.
-  //
   // Trust is ABSENT, deliberately: trust_center_navigation.test.mjs pins Trust
   // Center to the user dropdown and asserts it appears in no sidebar.
   // Firm Settings is the COMPANY's settings; Account is a different page.
   partner: [
-    { key: 'shell', label: 'Workspace', items: [
+    { key: 'shell', label: '', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Home' },
-      { to: '/messages', icon: Mail, label: 'Messages' },
+      { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
       { to: '/needs', icon: Target, label: 'Pipeline',
         match: ['/needs', '/matches', '/partner/insights', '/partner/operations/engagements'] },
       { to: '/partner/operations/overview', icon: Briefcase, label: 'Delivery',
@@ -330,8 +322,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/services', icon: Package, label: 'Offers',
         match: ['/services', '/perks', '/comarketing', '/partner/office-hours',
                 '/partner/operations/capabilities'] },
-      { to: '/my/jobs', icon: Briefcase, label: 'Jobs' },
-      { to: '/network', icon: Users, label: 'Network' },
+      { to: '/network', icon: Users, label: 'Network',
+        match: ['/network', '/relationships', '/contacts'] },
       { to: '/market-intel', icon: Radar, label: 'Research' },
     ]},
   ],

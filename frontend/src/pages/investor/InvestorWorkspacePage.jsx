@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Landmark, LockKeyhole, RefreshCw } from 'lucide-react';
 import SpinoutLabLpWorkspacePage from '../SpinoutLabLpWorkspacePage';
+import InvestorDealsWorkspace from './InvestorDealsWorkspace';
+import { useLocation } from 'react-router-dom';
 import './investorWorkspace.css';
 
 const COPY = {
@@ -71,6 +73,7 @@ function WorkspaceBody({ page, children, fundUnlocked }) {
 }
 
 export default function InvestorWorkspacePage({ page = 'deals', children, fundUnlocked = false }) {
+  const { pathname } = useLocation();
   const key = useMemo(() => (COPY[page] ? page : 'trust'), [page]);
   const meta = COPY[key];
   const [refreshKey, setRefreshKey] = useState(0);
@@ -78,6 +81,18 @@ export default function InvestorWorkspacePage({ page = 'deals', children, fundUn
   // rail. Rendering the generic workspace chrome around it duplicates the
   // canvas header and is the mismatch the I4 correction removes.
   if (key === 'portfolio' && children) return children;
+  const ownsDealsRoute = key === 'deals' && (
+    pathname === '/deals'
+    || pathname === '/pipeline'
+    || pathname === '/pipeline/screening'
+    || pathname === '/pipeline/commit'
+    || pathname === '/pipeline/transactions'
+  );
+  if (ownsDealsRoute) return (
+    <main className="investor-workspace" data-testid="investor-workspace-deals">
+      <InvestorDealsWorkspace />
+    </main>
+  );
   return (
     <main className="investor-workspace" data-testid={`investor-workspace-${key}`}>
       <div className="investor-frame">

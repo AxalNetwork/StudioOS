@@ -154,13 +154,33 @@ def deal_funnel(session: Session = Depends(get_session), user: User = Depends(ge
 # List + create
 # ---------------------------------------------------------------------------
 @router.get("/")
-def list_deals(status: str = None, session: Session = Depends(get_session), user: User = Depends(get_current_user)):
+def list_deals(
+    status: str = None,
+    scope: str = None,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
     stmt = select(Deal).order_by(Deal.created_at.desc())
+    _role = getattr(user, "role", None)
+    role = (_role.value if hasattr(_role, "value") else str(_role or "")).lower()
     # IDOR guard: founders can only list deals on their own projects.
     if not is_privileged(user):
         if not user.founder_id:
             return []
         stmt = stmt.join(Project, Project.id == Deal.project_id).where(Project.founder_id == user.founder_id)
+    # Keep the development backend aligned with the Worker: an investor asking
+    # for "mine" receives only deals whose room they can actually read.
+    if role == "investor" and scope == "mine":
+        related = session.exec(
+            _sql(
+                "SELECT DISTINCT deal_id FROM deal_invitations WHERE investor_user_id = :uid "
+                "UNION SELECT DISTINCT deal_id FROM commitments WHERE investor_user_id = :uid"
+            ).bindparams(uid=user.id)
+        ).all()
+        related_ids = [int(row[0]) for row in related]
+        if not related_ids:
+            return []
+        stmt = stmt.where(Deal.id.in_(related_ids))
     if status:
         stmt = stmt.where(Deal.status == status)
     deals = session.exec(stmt).all()
