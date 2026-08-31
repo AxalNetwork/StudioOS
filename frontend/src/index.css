@@ -263,6 +263,7 @@ select::-ms-expand { display: none; }
 /* Dashboards / list pages that opt in via the main content wrapper get
    tighter top/bottom padding too. */
 [data-density="compact"] [data-app-main] { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+[data-app-main].edge-to-edge-surface { padding: 0; }
 
 /* Compact density also tightens the most common Tailwind vertical-rhythm
    helpers when used inside the page wrapper. This is intentionally
