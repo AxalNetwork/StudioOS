@@ -107,10 +107,22 @@ test('what the canvas asked for and did not get is stated, not silently dropped'
     'the page should send founders to the real co-founder flow');
 });
 
-test('/legal stays on Pages rather than being intercepted by the Worker', () => {
+test('/legal is served by Cloudflare Pages, NOT carved out to the Worker', () => {
+  // This assertion is INVERTED from what it originally said, and the inversion
+  // is the point. It used to require `axal.vc/legal` + `axal.vc/legal/*` in
+  // both wrangler tables, because the Worker served apex HTML and a page with
+  // no route was a 404.
+  //
+  // Since 2026-08-31 Cloudflare Pages owns the apex frontend and the Worker
+  // keeps only /api/*, /landing/* and /p/*. Re-adding a page route here does
+  // not make /legal/send *more* reachable — it pairs Pages-served HTML with a
+  // different Worker asset build, which is exactly what produced the blank
+  // page and the `?__reboot=` loop on the apex. See GOTCHAS, "Apex hashed
+  // assets / blank pages", and frontend/test/apex_route_coverage.test.mjs for
+  // the same rule stated once for the whole table.
   const wrangler = read('wrangler.toml');
-  for (const p of ['axal.vc/legal"', 'axal.vc/legal/*"']) {
-    const n = wrangler.split(`pattern    = "${p}`).length - 1;
-    assert.equal(n, 0, `${p} must stay on Pages; Worker interception can create an asset-hash mismatch`);
+  for (const p of ['axal.vc/legal', 'axal.vc/legal/*']) {
+    const n = wrangler.split(`pattern    = "${p}"`).length - 1;
+    assert.equal(n, 0, `${p} must NOT be Worker-routed — Pages owns it, found ${n}`);
   }
 });

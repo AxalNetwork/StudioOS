@@ -23,20 +23,29 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    iteration speed during Replit sessions. It is **never** deployed to
    production — Cloudflare Workers do not run Python. Do not change
    `wrangler.toml`'s `main` field.
-4. **The frontend is built from `frontend/` into `docs/` and served by the
-   Worker itself**, through the `[assets]` binding in `wrangler.toml`
-   (`directory = "./docs"`) — Workers Static Assets, **not** Cloudflare Pages.
-   There is no Pages project in this repo. **This is being changed on purpose
-   (decided 2026-08-31): the frontend moves to Cloudflare Pages, the Worker
-   keeps `/api/*`.** Every word above is still true today and stays true until
-   the steps in `documentation/architecture/CLOUDFLARE-PAGES-MIGRATION.md` are
-   executed — this fact gets rewritten when Pages actually serves traffic, not
-   in advance, because a previous flip was declared in docs before it was real
-   and never finished. `docs/` is committed by hand; no
-   workflow writes it, which is why `scripts/check-docs-fresh.mjs` exists.
-   GitHub Pages still serves the **apex** (`main` + `/docs`) for any path the
-   Worker route table does not claim — see `documentation/architecture/CLOUDFLARE-CUTOVER.md`, which is
-   the plan for retiring it.
+4. **The frontend is served by Cloudflare Pages**, built from `frontend/` into
+   `docs/`. Pages owns the apex HTML, every frontend route, and `/assets/*`
+   **together** — that pairing is the whole point, not an implementation
+   detail. The Worker keeps exactly four route patterns, mirrored in both
+   tables: `app.axal.vc` (Workers Custom Domain), `axal.vc/api/*`,
+   `axal.vc/landing/*`, `axal.vc/p/*`. Pages runs in **Advanced Mode** — a
+   `_worker.js` at the build root handles every request, which means
+   `_redirects` and `_headers` files are inert and the security headers live in
+   that script.
+   **Never re-add a page or asset route to the Worker's apex table.** Worker
+   routes beat a Pages custom domain, so an `axal.vc/assets/*` entry serves
+   Pages HTML alongside a different Worker asset build: the entry module 404s
+   and the boot watchdog spins on `?__reboot=`. That is not a hypothetical —
+   it took the apex down on 2026-08-31 and is guarded by
+   `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
+   `frontend/test/apex_route_coverage.test.mjs`.
+   GitHub Pages no longer serves the apex; the DNS CNAME points at the Pages
+   project. `docs/` is committed by hand, which is why
+   `scripts/check-docs-fresh.mjs` exists. **`app.axal.vc` is still Worker-served
+   from the Worker's own `[assets]` copy of `docs/`**, so it updates only on
+   `npm run deploy` while the apex updates on every push to `main` — the two
+   hosts can legitimately sit at different builds, and each is internally
+   consistent.
 
 ## File map
 
