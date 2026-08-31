@@ -7,6 +7,7 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const app = read('frontend/src/App.jsx');
 const page = read('frontend/src/pages/investor/InvestorWorkspacePage.jsx');
 const styles = read('frontend/src/pages/investor/investorWorkspace.css');
+const deals = read('frontend/src/pages/investor/InvestorDealsWorkspace.jsx');
 
 test('investor workspace routes branch on the active role', () => {
   assert.match(app, /effectiveRole === 'investor'[\s\S]{0,160}<InvestorWorkspacePage page=\{page\}/);
@@ -63,4 +64,41 @@ test('investor visual system includes source provenance, responsive layout, and 
   assert.match(styles, /--inv-seam:/);
   assert.match(styles, /\.dark \.investor-workspace/);
   assert.match(styles, /@media \(max-width: 767px\)/);
+});
+
+test('investor Deals implements the I3 hierarchy with live sources', () => {
+  for (const label of ['Find and close investments', 'Pipeline', 'Screening', 'Commit', 'Closing', 'Deals AI']) {
+    assert.match(deals, new RegExp(label));
+  }
+  for (const stage of ['Sourcing', 'Screening', 'Diligence', 'Commit', 'Closing']) {
+    assert.match(deals, new RegExp(`label: '${stage}'`));
+  }
+  assert.match(deals, /api\.listDeals\(undefined, 'mine'\)/);
+  assert.match(deals, /api\.myDealInvitations\(\)/);
+  assert.match(deals, /api\.respondDealInvitation/);
+  assert.doesNotMatch(deals, /api\.pipelineActive\(\)/, 'investors must not consume the studio-wide pipeline source');
+  assert.match(deals, /committed > 0[\s\S]{0,80}'commit'/);
+  assert.match(deals, /Total committed to deal/);
+});
+
+test('investor Deals does not ship illustrative canvas data as live data', () => {
+  for (const sample of ['Novacraft', 'Meridian Labs', 'Halverton', 'DeepSeek', 'Llama 3.3', '$0.0149', '$4.2M allocated']) {
+    assert.doesNotMatch(deals, new RegExp(sample.replace('$', '\\$')));
+  }
+  assert.match(deals, /never invents a memo, cost, model, or result/);
+});
+
+test('investor Deals exposes only canonical deal-room IDs and partial source failures', () => {
+  assert.match(deals, /navigate\(`\/deals\/\$\{id\}`\)/);
+  assert.match(deals, /invitations could not be loaded/);
+  assert.match(deals, /if \(dealsResult\.status === 'rejected'\)/);
+  assert.match(deals, /navigate\('\/raise\/data-room'\)/);
+});
+
+test('only canonical investor deal routes replace their child with I3', () => {
+  assert.match(page, /pathname === '\/deals'/);
+  assert.match(page, /pathname === '\/pipeline\/screening'/);
+  assert.match(page, /if \(ownsDealsRoute\)/);
+  assert.match(page, /<InvestorDealsWorkspace \/>/);
+  assert.doesNotMatch(page, /pathname === '\/deals\/:dealId'/);
 });
