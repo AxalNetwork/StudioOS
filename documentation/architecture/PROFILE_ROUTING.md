@@ -80,13 +80,13 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Advisor Canvas | `/advisor/advisory/*` · `/advisor/network/*` · `/advisor/research/*` · `/advisor/growth/*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Advisor Detail · Practice | `/advisor/advisory/opportunities` · `/clients` · `/engagements` · `/delivery` · `/contracts` | Workspace | Full page | Sidebar → Workspace → Practice | UPGRADE | High |
-| Advisor Studio | `/spinout-lab/advisors` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
-| Advisory Practice | `/office-hours` | Workspace | Full page | Sidebar → Workspace → Office Hours | UPGRADE | High |
+| Advisor Canvas | `/studio` · `/advisor/advisory/*` · `/office-hours` · `/network` · `/signals` | Home | Full page | Sidebar → Home → Home | UPGRADE | High |
+| Advisor Detail · Practice | `/advisor/advisory/opportunities` · `/clients` · `/engagements` · `/delivery` · `/contracts` | Home | Full page | Sidebar → Home → Practice | UPGRADE | High |
+| Advisor Studio | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
+| Advisory Practice | `/office-hours` | Home | Full page | Sidebar → Home → Expertise | UPGRADE | High |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Pages · Advisor Cohorts | `/advisor/cohorts/{founders` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Signals | `/signals` | Workspace | Full page | Sidebar → Workspace → Signals | UPGRADE | High |
+| Signals | `/signals` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
 
 ## LP / Investor — 18 canvases
 
@@ -207,8 +207,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 63 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 35 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 64 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 34 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 28 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

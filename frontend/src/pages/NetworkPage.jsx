@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuthSync';
 import { ContactsPanel } from './ContactsPage';
 import { RelationshipsPanel } from './RelationshipsPage';
 import IntroductionsPanel from './IntroductionsPanel';
+import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
 
 // Task #1 — unified Network page. Merges the former Contacts inbox and the
 // Network/Relationships surface into one page with tabs selected via the
@@ -40,7 +41,7 @@ export default function NetworkPage() {
     setParams(next, { replace: true });
   };
 
-  return (
+  const content = (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <Network className="text-violet-600" size={24} />
@@ -70,4 +71,19 @@ export default function NetworkPage() {
       {activeTab === 'relationships' && <RelationshipsPanel />}
     </div>
   );
+
+  if (role === 'advisor') {
+    return (
+      <AdvisorWorkspaceShell
+        eyebrow="Network"
+        title="Work my relationships"
+        description="Keep warm introductions, relationships, and consented contact context in one scoped workspace."
+        icon={Network}
+        rail
+      >
+        {content}
+      </AdvisorWorkspaceShell>
+    );
+  }
+  return content;
 }

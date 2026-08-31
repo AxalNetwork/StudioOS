@@ -21,20 +21,16 @@ canvas behind it still shows up here.
 | Home | Network | `/network` | Founder Workspaces Canvas, Pages · Founder Network |
 | Home | Research | `/signals` | Signals |
 
-## `advisor` — 10 destinations in 1 group
+## `advisor` — 6 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Workspace | Home | `/studio` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Office Hours | `/office-hours` | Advisory Practice |
-| Workspace | Practice | `/advisor/advisory/opportunities` | Advisor Detail · Practice |
-| Workspace | Jobs | `/my/jobs` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Advisor Directory | `/advisors` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Network | `/network` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Research | `/market-intel` | — (no canvas; shipped ahead of the design corpus) |
-| Workspace | Signals | `/signals` | Signals |
-| Workspace | Due Diligence | `/due-diligence` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Home | `/studio` | Advisor Canvas |
+| Home | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Practice | `/advisor/advisory/opportunities` | Advisor Detail · Practice |
+| Home | Expertise | `/office-hours` | Advisor Canvas, Advisory Practice |
+| Home | Network | `/network` | Advisor Canvas |
+| Home | Research | `/signals` | Advisor Canvas, Signals |
 
 ## `investor` — 9 destinations in 1 group
 
@@ -127,19 +123,13 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-62 of the 87 sidebar rows above are not claimed
+56 of the 83 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
 rather than merely absent.
 
-- advisor · Workspace · Home (`/studio`)
-- advisor · Workspace · Messages (`/messages`)
-- advisor · Workspace · Jobs (`/my/jobs`)
-- advisor · Workspace · Advisor Directory (`/advisors`)
-- advisor · Workspace · Network (`/network`)
-- advisor · Workspace · Research (`/market-intel`)
-- advisor · Workspace · Due Diligence (`/due-diligence`)
+- advisor · Home · Spin-Out Lab (`/spinout-lab`)
 - investor · Home · Portfolio (`/portfolio/health`)
 - investor · Home · Research (`/market-intel`)
 - investor · Home · Trust (`/trust`)
