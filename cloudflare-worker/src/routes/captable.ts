@@ -13,6 +13,9 @@
  *   GET    /scenarios/{uid}/export.csv   — 409A-friendly CSV export
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
+import { projectInActiveCompany } from '../services/tenancyScope';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { ensureTier } from '../middleware/requireTier';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
@@ -125,33 +128,107 @@ async function loadByUid(env: Env, uid: string): Promise<ScenarioRow | null> {
 
 type AuthUser = AccessUser & { id: number; role: string };
 
-async function loadProject(env: Env, projectId: number): Promise<{ id: number; founder_id: number | null } | null> {
-  return env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
-    .bind(projectId).first<{ id: number; founder_id: number | null }>();
+type ProjectRow = { id: number; founder_id: number | null; company_id?: number | null };
+type Ctx = Context<{ Bindings: Env }>;
+
+/** The project row as stored — no company narrowing. Only the gates below read this. */
+async function loadProjectRow(env: Env, projectId: number): Promise<ProjectRow | null> {
+  return env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ?')
+    .bind(projectId).first<ProjectRow>();
+}
+
+/**
+ * Roles whose access to a project does NOT come from owning it.
+ *
+ * Mirrors `canReadProject` in services/captableAccess: admin, partner and
+ * investor may read any project. Company scoping narrows the OWNERSHIP path
+ * only — `projects.company_id` is the founder's company, and under the
+ * agreed model every other role's active company is their own firm, an id
+ * this column never carries. Narrowing them by it would not restrict them, it
+ * would erase them. The same set is used for the write gates: writes are
+ * still refused afterwards by `canWriteProject`/`canWriteScenario` exactly as
+ * before, so exempting the wider set here loosens nothing.
+ */
+function isCompanyExempt(user: { role?: string | null }): boolean {
+  const r = String(user.role || '').toLowerCase();
+  return r === 'admin' || r === 'partner' || r === 'investor';
+}
+
+/** The caller's active company for this request, verified once and memoised. */
+async function activeCompanyFor(c: Ctx, user: any): Promise<number | null> {
+  const cached = (c as any).get?.(ACTIVE_COMPANY_KEY);
+  if (cached !== undefined) return cached as number | null;
+  const id = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  (c as any).set?.(ACTIVE_COMPANY_KEY, id);
+  return id;
+}
+const ACTIVE_COMPANY_KEY = '__activeCompanyId';
+
+/**
+ * Load a project, narrowed to the caller's active company — stage 2 of
+ * company scoping, the shape progress.ts/financials.ts/compliance.ts share.
+ * Null for a project outside the active company, which every direct call
+ * site already turns into 404 'Project not found': exactly what a
+ * `companyScope` query would produce.
+ */
+async function loadProject(c: Ctx, projectId: number, user: AuthUser): Promise<ProjectRow | null> {
+  const row = await loadProjectRow(c.env, projectId);
+  if (!row) return null;
+  if (isCompanyExempt(user)) return row;
+  return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
+}
+
+/**
+ * A scenario bound to a project the caller cannot see under their active
+ * company is itself invisible.
+ *
+ * This is the one place the progress.ts pattern is not enough on its own.
+ * `canReadScenario` admits the scenario's OWNER before it ever looks at the
+ * project, so if the narrowed loader simply returned null here, a founder
+ * would still reach their scenario through the owner path with the project
+ * hidden — a cross-company leak, and one that would report `project: null`
+ * as if the binding did not exist. So the project is loaded RAW, and the
+ * company rule is applied explicitly: bound + row exists + caller on the
+ * ownership path + outside the active company → 404, the same answer the
+ * project itself gives.
+ *
+ * A bound scenario whose project row is genuinely GONE is unchanged: it
+ * still falls through to the owner path, as it always has. Only the
+ * out-of-company case is new.
+ */
+async function projectForScenario(c: Ctx, row: ScenarioRow, user: AuthUser): Promise<ProjectRow | null> {
+  if (row.project_id == null) return null;
+  const proj = await loadProjectRow(c.env, row.project_id);
+  if (!proj) return null;
+  if (isCompanyExempt(user)) return proj;
+  if (!projectInActiveCompany(await activeCompanyFor(c, user), proj)) {
+    throw new HttpError(404, 'Scenario not found');
+  }
+  return proj;
 }
 
 /** Read-gate a scenario by uid: owner / admin / (project-bound → project read). */
-async function ensureScenarioReadOr404(env: Env, uid: string, user: AuthUser): Promise<ScenarioRow> {
-  const row = await loadByUid(env, uid);
+async function ensureScenarioReadOr404(c: Ctx, uid: string, user: AuthUser): Promise<ScenarioRow> {
+  const row = await loadByUid(c.env, uid);
   if (!row) throw new HttpError(404, 'Scenario not found');
-  const proj = row.project_id != null ? await loadProject(env, row.project_id) : null;
+  const proj = await projectForScenario(c, row, user);
   if (!canReadScenario(user, row, proj)) throw new HttpError(403, 'Not your scenario');
   return row;
 }
 
 /** Write-gate a scenario by uid: owner / admin / (project-bound → project write). */
-async function ensureScenarioWriteOr404(env: Env, uid: string, user: AuthUser): Promise<ScenarioRow> {
-  const row = await loadByUid(env, uid);
+async function ensureScenarioWriteOr404(c: Ctx, uid: string, user: AuthUser): Promise<ScenarioRow> {
+  const row = await loadByUid(c.env, uid);
   if (!row) throw new HttpError(404, 'Scenario not found');
-  const proj = row.project_id != null ? await loadProject(env, row.project_id) : null;
+  const proj = await projectForScenario(c, row, user);
   if (!canWriteScenario(user, row, proj)) throw new HttpError(403, 'Not your scenario');
   return row;
 }
 
 /** Attaching a cap table to a project requires project WRITE access. */
-async function ensureProjectWriteAccess(env: Env, projectId: number | null | undefined, user: AuthUser) {
+async function ensureProjectWriteAccess(c: Ctx, projectId: number | null | undefined, user: AuthUser) {
   if (projectId == null) return;
-  const proj = await loadProject(env, projectId);
+  const proj = await loadProject(c, projectId, user);
   if (!proj) throw new HttpError(404, 'Project not found');
   if (!canWriteProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
 }
@@ -294,7 +371,7 @@ captable.post('/scenarios', async (c) => {
   const errs = validateInputs(inputs);
   if (errs.length) return c.json({ detail: { code: 'invalid_inputs', errors: errs } }, 400);
   const projectId = body?.project_id ?? null;
-  try { await ensureProjectWriteAccess(c.env, projectId, user); }
+  try { await ensureProjectWriteAccess(c, projectId, user); }
   catch (e) { return asJsonError(c, e); }
   const result = simulate(inputs);
   const now = new Date().toISOString();
@@ -361,7 +438,7 @@ captable.get('/scenarios/by-project/:projectId', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  const proj = await loadProject(c.env, projectId);
+  const proj = await loadProject(c, projectId, user);
   if (!proj) return c.json({ detail: 'Project not found' }, 404);
   if (!canReadProject(user, proj)) return c.json({ detail: "You don't have access to that project" }, 403);
   const row = await c.env.DB.prepare(
@@ -379,7 +456,7 @@ captable.post('/scenarios/by-project/:projectId/variants', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  try { await ensureProjectWriteAccess(c.env, projectId, user); }
+  try { await ensureProjectWriteAccess(c, projectId, user); }
   catch (e) { return asJsonError(c, e); }
   const body = await c.req.json().catch(() => ({}));
   const name = String(body?.name || '').trim();
@@ -408,7 +485,7 @@ captable.get('/scenarios/by-project/:projectId/compare', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  const proj = await loadProject(c.env, projectId);
+  const proj = await loadProject(c, projectId, user);
   if (!proj) return c.json({ detail: 'Project not found' }, 404);
   if (!canReadProject(user, proj)) return c.json({ detail: "You don't have access to that project" }, 403);
   const res = await c.env.DB.prepare(
@@ -426,7 +503,7 @@ captable.get('/scenarios/by-project/:projectId/compare', async (c) => {
 captable.get('/scenarios/:uid', async (c) => {
   const user = await requireAuth(c);
   try {
-    const row = await ensureScenarioReadOr404(c.env, c.req.param('uid'), user);
+    const row = await ensureScenarioReadOr404(c, c.req.param('uid'), user);
     return c.json(serialize(row));
   } catch (e) { return asJsonError(c, e); }
 });
@@ -435,7 +512,7 @@ captable.put('/scenarios/:uid', async (c) => {
   ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
   let row: ScenarioRow;
-  try { row = await ensureScenarioWriteOr404(c.env, c.req.param('uid'), user); }
+  try { row = await ensureScenarioWriteOr404(c, c.req.param('uid'), user); }
   catch (e) { return asJsonError(c, e); }
   const body = await c.req.json().catch(() => ({}));
   const name = String(body?.name || '').trim();
@@ -444,7 +521,7 @@ captable.put('/scenarios/:uid', async (c) => {
   const errs = validateInputs(inputs);
   if (errs.length) return c.json({ detail: { code: 'invalid_inputs', errors: errs } }, 400);
   if (body?.project_id !== undefined && body?.project_id !== null) {
-    try { await ensureProjectWriteAccess(c.env, body.project_id, user); }
+    try { await ensureProjectWriteAccess(c, body.project_id, user); }
     catch (e) { return asJsonError(c, e); }
     // Task #28 — one cap table per project: refuse to bind this scenario to a
     // project that a DIFFERENT scenario already owns (prevents PUT duplicates).
@@ -486,7 +563,7 @@ captable.put('/scenarios/:uid', async (c) => {
 captable.delete('/scenarios/:uid', async (c) => {
   ensureTier(await requireAuth(c), 'growth');
   const user = await requireAuth(c);
-  try { await ensureScenarioWriteOr404(c.env, c.req.param('uid'), user); }
+  try { await ensureScenarioWriteOr404(c, c.req.param('uid'), user); }
   catch (e) { return asJsonError(c, e); }
   await c.env.DB.prepare('DELETE FROM cap_table_scenarios WHERE uid = ?').bind(c.req.param('uid')).run();
   return c.json({ ok: true });
@@ -495,7 +572,7 @@ captable.delete('/scenarios/:uid', async (c) => {
 captable.get('/scenarios/:uid/export.csv', async (c) => {
   const user = await requireAuth(c);
   let row: ScenarioRow;
-  try { row = await ensureScenarioReadOr404(c.env, c.req.param('uid'), user); }
+  try { row = await ensureScenarioReadOr404(c, c.req.param('uid'), user); }
   catch (e) { return asJsonError(c, e); }
   const result: SimulateResult = row.result_json
     ? safeJson(row.result_json, simulate(safeJson<Inputs>(row.inputs_json, {} as Inputs)) as SimulateResult)
@@ -533,7 +610,7 @@ captable.post('/scenarios/:uid/share', async (c) => {
   // Sharing is a WRITE-level act: it hands the cap table to an outsider,
   // so scenario READ access is deliberately not enough. Reuses the
   // existing gate so project-bound scenarios follow project write rules.
-  await ensureScenarioWriteOr404(c.env, uid, user);
+  await ensureScenarioWriteOr404(c, uid, user);
 
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
   const audience: ShareAudience = isShareAudience(body.audience) ? body.audience : 'summary';
@@ -573,7 +650,7 @@ captable.get('/scenarios/:uid/shares', async (c) => {
   const user = await requireAuth(c);
   await ensureCapTableShareSchema(c.env);
   const uid = c.req.param('uid');
-  await ensureScenarioWriteOr404(c.env, uid, user);
+  await ensureScenarioWriteOr404(c, uid, user);
   const rows = await c.env.DB.prepare(
     `SELECT id, audience, expires_at, used_at, view_limit, view_count, last_viewed_at,
             label, revoked_at, created_at
@@ -596,7 +673,7 @@ captable.delete('/shares/:id', async (c) => {
     'SELECT id, scenario_uid FROM captable_share_tokens WHERE id = ?',
   ).bind(id).first<{ id: number; scenario_uid: string }>();
   if (!tok) return c.json({ detail: 'Not found' }, 404);
-  await ensureScenarioWriteOr404(c.env, tok.scenario_uid, user);
+  await ensureScenarioWriteOr404(c, tok.scenario_uid, user);
   // Revoke by expiring rather than deleting, so the view history stays
   // attributable to a link the owner can still see they created.
   await c.env.DB.prepare(
@@ -743,8 +820,8 @@ const VALUATION_METHODS = new Set([
 ]);
 
 /** Read-gate a project the same way a project-bound scenario is read-gated. */
-async function ensureProjectReadAccess(env: Env, projectId: number, user: AuthUser) {
-  const proj = await loadProject(env, projectId);
+async function ensureProjectReadAccess(c: Ctx, projectId: number, user: AuthUser) {
+  const proj = await loadProject(c, projectId, user);
   if (!proj) throw new HttpError(404, 'Project not found');
   if (!canReadProject(user as AccessUser, proj)) {
     throw new HttpError(403, "You don't have access to that project");
@@ -765,7 +842,7 @@ captable.get('/409a/:projectId', async (c) => {
     const user = await requireAuth(c);
     const projectId = parseInt(c.req.param('projectId'), 10);
     if (!Number.isFinite(projectId)) throw new HttpError(400, 'Invalid project id');
-    await ensureProjectReadAccess(c.env, projectId, user as AuthUser);
+    await ensureProjectReadAccess(c, projectId, user as AuthUser);
     await ensure409aSchema(c.env);
 
     const [valuations, events] = await Promise.all([
@@ -820,7 +897,7 @@ captable.post('/409a/:projectId', async (c) => {
     const user = await requireAuth(c);
     const projectId = parseInt(c.req.param('projectId'), 10);
     if (!Number.isFinite(projectId)) throw new HttpError(400, 'Invalid project id');
-    await ensureProjectWriteAccess(c.env, projectId, user as AuthUser);
+    await ensureProjectWriteAccess(c, projectId, user as AuthUser);
     await ensure409aSchema(c.env);
 
     const body: any = await c.req.json().catch(() => ({}));
@@ -866,7 +943,7 @@ captable.post('/409a/:projectId/events', async (c) => {
     const user = await requireAuth(c);
     const projectId = parseInt(c.req.param('projectId'), 10);
     if (!Number.isFinite(projectId)) throw new HttpError(400, 'Invalid project id');
-    await ensureProjectWriteAccess(c.env, projectId, user as AuthUser);
+    await ensureProjectWriteAccess(c, projectId, user as AuthUser);
     await ensure409aSchema(c.env);
 
     const body: any = await c.req.json().catch(() => ({}));
@@ -903,7 +980,7 @@ captable.delete('/409a/:projectId/events/:id', async (c) => {
     if (!Number.isFinite(projectId) || !Number.isFinite(eventId)) {
       throw new HttpError(400, 'Invalid id');
     }
-    await ensureProjectWriteAccess(c.env, projectId, user as AuthUser);
+    await ensureProjectWriteAccess(c, projectId, user as AuthUser);
     await ensure409aSchema(c.env);
     // project_id in the WHERE clause, not just the event id — otherwise
     // anyone with write access to any project could delete any event.

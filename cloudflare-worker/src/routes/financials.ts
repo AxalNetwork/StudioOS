@@ -17,6 +17,9 @@
  * the export handler below).
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
+import { projectInActiveCompany } from '../services/tenancyScope';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import type { Env } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 
@@ -363,17 +366,48 @@ function capitalRecompute(_a: Assumptions, computed: Computed): CapitalRecompute
 // ---------------------------------------------------------------------------
 // Authorization helpers — port of _ensure_can_view / _ensure_can_edit.
 // ---------------------------------------------------------------------------
-type Project = { id: number; name: string; founder_id: number | null };
+type Project = { id: number; name: string; founder_id: number | null; company_id?: number | null };
 
-async function loadProject(env: Env, projectId: number): Promise<Project | null> {
-  // Note: `projects` table does NOT have a `submitted_by` column on prod
-  // (that column lives on the `issues` table — schema.sql:418). Selecting
-  // it threw "no such column: submitted_by" and 500'd the GET handler.
-  const row = await env.DB.prepare(
-    'SELECT id, name, founder_id FROM projects WHERE id = ?',
+/**
+ * Load a project, narrowed to the caller's active company — stage 2 of company
+ * scoping, the same shape progress.ts took in stage 1.
+ *
+ * Returns null rather than throwing because every call site below already
+ * reads `if (!project) return 404`, which is exactly what a `companyScope`
+ * query would produce: the row is not there. 404 is also the honest status —
+ * the project is the caller's own, it is just not in the workspace they have
+ * selected.
+ *
+ * Privileged callers are exempt because `projects.company_id` is the FOUNDER's
+ * company; a partner's active company is their agency, an id this column never
+ * carries, and narrowing them by it would erase their access rather than
+ * restrict it. `projectInActiveCompany` takes no actor for this reason — the
+ * decision that this is the ownership path is made here, once.
+ *
+ * `submitted_by` is deliberately not selected: `projects` does not have that
+ * column on prod (it lives on `issues` — schema.sql:418) and selecting it
+ * 500'd the GET handler once already.
+ */
+async function loadProject(
+  c: Context<{ Bindings: Env }>, projectId: number, user: { role: string },
+): Promise<Project | null> {
+  const row = await c.env.DB.prepare(
+    'SELECT id, name, founder_id, company_id FROM projects WHERE id = ?',
   ).bind(projectId).first<Project>();
-  return row || null;
+  if (!row) return null;
+  if (isPrivileged(user.role)) return row;
+  return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
 }
+
+/** The caller's active company for this request, verified once and memoised. */
+async function activeCompanyFor(c: Context<{ Bindings: Env }>, user: any): Promise<number | null> {
+  const cached = (c as any).get?.(ACTIVE_COMPANY_KEY);
+  if (cached !== undefined) return cached as number | null;
+  const id = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  (c as any).set?.(ACTIVE_COMPANY_KEY, id);
+  return id;
+}
+const ACTIVE_COMPANY_KEY = '__activeCompanyId';
 
 function isPrivileged(role: string): boolean {
   // Task #3 (DF) — investor removed from read-allowlist per IDOR contract.
@@ -411,7 +445,7 @@ financials.get('/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
 
@@ -460,7 +494,7 @@ financials.put('/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
   await ensureFinancialsModelSchema(c.env);
@@ -557,7 +591,7 @@ financials.post('/:projectId/recompute', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
   await ensureFinancialsModelSchema(c.env);
@@ -600,7 +634,7 @@ financials.get('/:projectId/export.xlsx', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
   await ensureFinancialsModelSchema(c.env);
