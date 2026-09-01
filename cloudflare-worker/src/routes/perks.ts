@@ -53,6 +53,7 @@
  *     them would be inventing commercial relationships.
  */
 import { Hono } from 'hono';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
@@ -99,11 +100,30 @@ async function allowanceConfigured(env: Env): Promise<boolean> {
   return !!row;
 }
 
-/** The listing a partner owns, or null. Ownership is the only key. */
-async function myPerk(env: Env, uid: string, userId: number): Promise<PerkRow | null> {
+/**
+ * The listing a partner owns, or null. Ownership is the first key; company
+ * scoping (stage 10) narrows within it.
+ *
+ * The company clause is ANDed onto a query that already matches
+ * `partner_user_id`, so it can only ever narrow the caller's OWN listings and
+ * can never reach another partner's — the property that lets an `IS NULL` arm
+ * be safe in a predicate whose answer is a 404. A listing with no company was
+ * made before the partner had a primary one and stays theirs under all of them.
+ */
+async function myPerk(
+  env: Env, uid: string, userId: number, companyId: number | null = null,
+): Promise<PerkRow | null> {
+  // Two full literals, never a clause dropped into the query text.
+  if (companyId === null) {
+    return await env.DB.prepare(
+      'SELECT * FROM perks WHERE uid = ? AND partner_user_id = ?',
+    ).bind(uid, userId).first<PerkRow>();
+  }
   return await env.DB.prepare(
-    'SELECT * FROM perks WHERE uid = ? AND partner_user_id = ?',
-  ).bind(uid, userId).first<PerkRow>();
+    `SELECT * FROM perks
+      WHERE uid = ? AND partner_user_id = ?
+        AND (company_id = ? OR company_id IS NULL)`,
+  ).bind(uid, userId, companyId).first<PerkRow>();
 }
 
 /** What a listing costs THIS caller, and whether they can take it. */
@@ -173,11 +193,22 @@ r.get('/mine', async (c) => {
 r.get('/partner', async (c) => {
   try {
     const user = await requireAuth(c);
-    const rows = await c.env.DB.prepare(
-      `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count
-         FROM perks p WHERE p.partner_user_id = ?
-        ORDER BY p.created_at DESC LIMIT 200`,
-    ).bind(user.id).all<any>();
+    // "What does MY agency offer" — a claim about a firm, so it narrows. The
+    // catalogue below is a marketplace and deliberately does not.
+    const companyId = await activeCompanyFor(c, user);
+    const rows = await (companyId === null
+      ? c.env.DB.prepare(
+          `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count
+             FROM perks p WHERE p.partner_user_id = ?
+            ORDER BY p.created_at DESC LIMIT 200`,
+        ).bind(user.id)
+      : c.env.DB.prepare(
+          `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count
+             FROM perks p
+            WHERE p.partner_user_id = ? AND (p.company_id = ? OR p.company_id IS NULL)
+            ORDER BY p.created_at DESC LIMIT 200`,
+        ).bind(user.id, companyId)
+    ).all<any>();
     return c.json({ items: rows.results || [] });
   } catch (e) { return mapError(c, e); }
 });
@@ -202,13 +233,15 @@ r.post('/partner', async (c) => {
     await c.env.DB.prepare(
       `INSERT INTO perks (uid, partner_user_id, partner_name, category, offer, blurb,
                           detail, kind, credits, required_tier, price_cents, fulfilment,
-                          redeem_url, claim_cap, status, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'in_review', ?, ?)`,
+                          redeem_url, claim_cap, status, created_at, updated_at, company_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'in_review', ?, ?, ?)`,
     ).bind(
       uid, user.id, partnerName, str(b?.category, 80) || 'Other', offer,
       str(b?.blurb, 500) || null, str(b?.detail) || null, kind, credits, requiredTier,
       priceCents, fulfilment, str(b?.redeem_url, 500) || null, intOrNull(b?.claim_cap),
-      nowIso(), nowIso(),
+      // The agency the listing was submitted under. None selected records
+      // NULL rather than a guess at the partner's primary company.
+      nowIso(), nowIso(), await activeCompanyFor(c, user),
     ).run();
     return c.json({ uid, status: 'in_review' }, 201);
   } catch (e) { return mapError(c, e); }
@@ -217,7 +250,7 @@ r.post('/partner', async (c) => {
 r.patch('/partner/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
-    const perk = await myPerk(c.env, c.req.param('uid'), user.id);
+    const perk = await myPerk(c.env, c.req.param('uid'), user.id, await activeCompanyFor(c, user));
     // 404 rather than 403: a listing the caller does not own should not be
     // confirmed to exist.
     if (!perk) return c.json({ error: 'not_found' }, 404);
@@ -248,7 +281,7 @@ r.patch('/partner/:uid', async (c) => {
 r.get('/partner/:uid/stats', async (c) => {
   try {
     const user = await requireAuth(c);
-    const perk = await myPerk(c.env, c.req.param('uid'), user.id);
+    const perk = await myPerk(c.env, c.req.param('uid'), user.id, await activeCompanyFor(c, user));
     if (!perk) return c.json({ error: 'not_found' }, 404);
     const views = await c.env.DB.prepare(
       'SELECT COUNT(*) AS n FROM perk_views WHERE perk_id = ?',
