@@ -12,6 +12,8 @@
  * is applied; the migration is the canonical record.
  */
 import { Hono } from 'hono';
+import { projectInActiveCompany } from '../services/tenancyScope';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, requireRole } from '../auth';
@@ -318,12 +320,49 @@ export async function ingestContact(
   ).run();
 }
 
-/** Project ids owned by the founder (or 'all' for admin). */
-async function ownedProjectScope(env: Env, user: User): Promise<'all' | number[]> {
+/** The caller's active company for this request, verified once and memoised. */
+async function activeCompanyFor(c: Context<{ Bindings: Env }>, user: User): Promise<number | null> {
+  const cached = (c as any).get?.(ACTIVE_COMPANY_KEY);
+  if (cached !== undefined) return cached as number | null;
+  const id = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  (c as any).set?.(ACTIVE_COMPANY_KEY, id);
+  return id;
+}
+const ACTIVE_COMPANY_KEY = '__activeCompanyId';
+
+/**
+ * Project ids owned by the founder (or 'all' for admin), narrowed to the
+ * caller's active company.
+ *
+ * Company scoping, stage 3. This is the one surface in the rollout that is not
+ * a project LOADER — it is the id list twenty-one handlers filter by, so
+ * narrowing it here scopes all of them at once and no handler changes shape.
+ *
+ * `'all'` is admin and stays unscoped, exactly as `companyScope` leaves admin
+ * unscoped. The array branch is the ownership path, and it is the only place
+ * the company rule may apply: `projects.company_id` is the FOUNDER's company,
+ * an id no other role's own firm can ever equal.
+ *
+ * Filtered in code with `projectInActiveCompany` rather than in the SQL so it
+ * cannot drift from the loaders the other four files use — one predicate,
+ * one meaning, tested against the SQL clause it mirrors.
+ *
+ * NOTE ON THE LAB. `requireRaiseUser` admits an ACTIVE Spin-Out Lab member
+ * (role `exploring`, `spinout_lab_active = 1`) to the raise workflow. They
+ * reach this function through the array branch like any other owner, so their
+ * projects narrow by company the same way — which is correct, and touches
+ * nothing inside the Lab itself.
+ */
+async function ownedProjectScope(c: Context<{ Bindings: Env }>, user: User): Promise<'all' | number[]> {
   if (isAdmin(user)) return 'all';
   if (!user.founder_id) return [];
-  const rows = await env.DB.prepare('SELECT id FROM projects WHERE founder_id = ? AND deleted_at IS NULL').bind(user.founder_id).all<{ id: number }>();
-  return (rows.results || []).map((x) => Number(x.id));
+  const rows = await c.env.DB.prepare(
+    'SELECT id, company_id FROM projects WHERE founder_id = ? AND deleted_at IS NULL',
+  ).bind(user.founder_id).all<{ id: number; company_id: number | null }>();
+  const companyId = await activeCompanyFor(c, user);
+  return (rows.results || [])
+    .filter((x) => projectInActiveCompany(companyId, x))
+    .map((x) => Number(x.id));
 }
 
 /**
@@ -342,11 +381,11 @@ async function requireRaiseUser(c: Context<{ Bindings: Env }>): Promise<User> {
   throw new Error('Forbidden');
 }
 
-async function loadOwned(env: Env, uid: string, user: User): Promise<ContactRow | 'notfound' | 'forbidden'> {
-  const row = await env.DB.prepare('SELECT * FROM contacts WHERE uid = ?').bind(uid).first<ContactRow>();
+async function loadOwned(c: Context<{ Bindings: Env }>, uid: string, user: User): Promise<ContactRow | 'notfound' | 'forbidden'> {
+  const row = await c.env.DB.prepare('SELECT * FROM contacts WHERE uid = ?').bind(uid).first<ContactRow>();
   if (!row) return 'notfound';
   if (isAdmin(user)) return row;
-  const scope = await ownedProjectScope(env, user);
+  const scope = await ownedProjectScope(c, user);
   if (scope === 'all' || (Array.isArray(scope) && scope.includes(row.project_id))) return row;
   return 'forbidden';
 }
@@ -451,7 +490,7 @@ r.get('/', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     // Filters are qualified with the `c.` alias — the leads query LEFT JOINs
     // landing_pages, which shares the project_id and audience column names.
     let where = '1=1';
@@ -496,7 +535,7 @@ r.post('/', async (c) => {
     if (!Number.isFinite(projectId) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       return c.json({ detail: 'project_id and a valid email are required' }, 400);
     }
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     if (scope !== 'all' && !scope.includes(projectId)) return c.json({ detail: 'Forbidden' }, 403);
     await ingestContact(c.env, {
       projectId, email, name: body.name, audience: body.audience,
@@ -521,7 +560,7 @@ r.post('/invite', async (c) => {
     if (!Number.isFinite(projectId) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       return c.json({ detail: 'project_id and a valid email are required' }, 400);
     }
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     if (scope !== 'all' && !scope.includes(projectId)) return c.json({ detail: 'Forbidden' }, 403);
     const message = body.message ? String(body.message).slice(0, 2000) : '';
     await ingestContact(c.env, {
@@ -562,7 +601,7 @@ r.get('/raise-prospects', async (c) => {
   try {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     let where = '1=1';
     const params: any[] = [];
     if (scope !== 'all') {
@@ -587,7 +626,7 @@ r.put('/raise-prospects/:id', async (c) => {
     const id = Number(c.req.param('id'));
     const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
     if (!row) return c.json({ detail: 'Not found' }, 404);
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     if (scope !== 'all' && !scope.includes(Number(row.project_id))) return c.json({ detail: 'Forbidden' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
     let stage = row.stage;
@@ -636,7 +675,7 @@ r.post('/raise-prospects', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     const projectId = Number(body.project_id);
     if (!Number.isFinite(projectId)) return c.json({ detail: 'project_id is required' }, 400);
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     if (scope !== 'all' && !scope.includes(projectId)) return c.json({ detail: 'Forbidden' }, 403);
     const out = await createProspect(c.env, projectId, body);
     if (out === 'invalid') return c.json({ detail: 'A name or a valid email is required' }, 400);
@@ -655,7 +694,7 @@ r.post('/raise-prospects/import', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     const projectId = Number(body.project_id);
     if (!Number.isFinite(projectId)) return c.json({ detail: 'project_id is required' }, 400);
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     if (scope !== 'all' && !scope.includes(projectId)) return c.json({ detail: 'Forbidden' }, 403);
     const rows = Array.isArray(body.rows) ? body.rows : null;
     if (!rows || rows.length === 0) return c.json({ detail: 'rows is required' }, 400);
@@ -681,7 +720,7 @@ r.get('/raise-prospects/:id', async (c) => {
     const id = Number(c.req.param('id'));
     const row = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
     if (!row) return c.json({ detail: 'Not found' }, 404);
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     if (scope !== 'all' && !scope.includes(Number(row.project_id))) return c.json({ detail: 'Forbidden' }, 403);
     let contact: any = null;
     if (row.contact_id != null) {
@@ -700,7 +739,7 @@ r.get('/raise-round', async (c) => {
   try {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     const pid = resolveProjectId(scope, c.req.query('project_id'));
     if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     if (pid === 'ambiguous') return c.json({ detail: 'project_id is required' }, 400);
@@ -733,7 +772,7 @@ r.put('/raise-round', async (c) => {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     const pid = resolveProjectId(scope, body.project_id !== undefined ? String(body.project_id) : undefined);
     if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     if (pid === 'ambiguous' || pid === null) return c.json({ detail: 'project_id is required' }, 400);
@@ -817,7 +856,7 @@ r.get('/raise-closes', async (c) => {
   try {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     const pid = resolveProjectId(scope, c.req.query('project_id'));
     if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     if (pid === 'ambiguous') return c.json({ detail: 'project_id is required' }, 400);
@@ -860,7 +899,7 @@ r.post('/raise-closes', async (c) => {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     const pid = resolveProjectId(scope, body.project_id !== undefined ? String(body.project_id) : undefined);
     if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     if (pid === 'ambiguous' || pid === null) return c.json({ detail: 'project_id is required' }, 400);
@@ -896,7 +935,7 @@ r.put('/raise-closes/:id', async (c) => {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     const row = await c.env.DB.prepare('SELECT * FROM raise_closes WHERE id = ?')
       .bind(Number(c.req.param('id'))).first<any>();
     if (!row) return c.json({ detail: 'Not found' }, 404);
@@ -936,7 +975,7 @@ r.get('/raise-pro-rata', async (c) => {
   try {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     const pid = resolveProjectId(scope, c.req.query('project_id'));
     if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     if (pid === 'ambiguous') return c.json({ detail: 'project_id is required' }, 400);
@@ -989,7 +1028,7 @@ r.post('/raise-pro-rata', async (c) => {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     const pid = resolveProjectId(scope, body.project_id !== undefined ? String(body.project_id) : undefined);
     if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     if (pid === 'ambiguous' || pid === null) return c.json({ detail: 'project_id is required' }, 400);
@@ -1053,7 +1092,7 @@ r.put('/raise-pro-rata/:id', async (c) => {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     const row = await c.env.DB.prepare('SELECT * FROM raise_pro_rata WHERE id = ?')
       .bind(Number(c.req.param('id'))).first<any>();
     if (!row) return c.json({ detail: 'Not found' }, 404);
@@ -1096,7 +1135,7 @@ r.get('/raise-updates', async (c) => {
   try {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     const pid = resolveProjectId(scope, c.req.query('project_id'));
     if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     if (pid === 'ambiguous') return c.json({ detail: 'project_id is required' }, 400);
@@ -1117,7 +1156,7 @@ r.post('/raise-updates', async (c) => {
     const user = await requireRaiseUser(c);
     await ensureSchema(c.env);
     const body = await c.req.json().catch(() => ({} as any));
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c, user);
     const pid = resolveProjectId(scope, body.project_id !== undefined ? String(body.project_id) : undefined);
     if (pid === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     if (pid === 'ambiguous' || pid === null) return c.json({ detail: 'project_id is required' }, 400);
@@ -1165,7 +1204,7 @@ r.get('/:uid', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
-    const row = await loadOwned(c.env, c.req.param('uid'), user);
+    const row = await loadOwned(c, c.req.param('uid'), user);
     if (row === 'notfound') return c.json({ detail: 'Not found' }, 404);
     if (row === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     const replies = await c.env.DB.prepare('SELECT id, direction, body, created_by, created_at FROM contact_replies WHERE contact_id = ? ORDER BY created_at ASC').bind(row.id).all<any>();
@@ -1179,7 +1218,7 @@ r.put('/:uid', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
-    const row = await loadOwned(c.env, c.req.param('uid'), user);
+    const row = await loadOwned(c, c.req.param('uid'), user);
     if (row === 'notfound') return c.json({ detail: 'Not found' }, 404);
     if (row === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
@@ -1202,7 +1241,7 @@ r.post('/:uid/reply', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
-    const row = await loadOwned(c.env, c.req.param('uid'), user);
+    const row = await loadOwned(c, c.req.param('uid'), user);
     if (row === 'notfound') return c.json({ detail: 'Not found' }, 404);
     if (row === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
@@ -1221,7 +1260,7 @@ r.post('/:uid/tasks', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
-    const row = await loadOwned(c.env, c.req.param('uid'), user);
+    const row = await loadOwned(c, c.req.param('uid'), user);
     if (row === 'notfound') return c.json({ detail: 'Not found' }, 404);
     if (row === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
@@ -1238,7 +1277,7 @@ r.post('/:uid/tasks/:taskId/toggle', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
-    const row = await loadOwned(c.env, c.req.param('uid'), user);
+    const row = await loadOwned(c, c.req.param('uid'), user);
     if (row === 'notfound') return c.json({ detail: 'Not found' }, 404);
     if (row === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     const taskId = Number(c.req.param('taskId'));
@@ -1265,7 +1304,7 @@ r.post('/:uid/promote', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
     await ensureSchema(c.env);
-    const row = await loadOwned(c.env, c.req.param('uid'), user);
+    const row = await loadOwned(c, c.req.param('uid'), user);
     if (row === 'notfound') return c.json({ detail: 'Not found' }, 404);
     if (row === 'forbidden') return c.json({ detail: 'Forbidden' }, 403);
     const db = c.env.DB;
