@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireRole } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { isAdmin, mapError, nowIso } from './_t13t14t15_helpers';
 import {
   ensureAdvisorProfilesSchema,
@@ -14,22 +15,47 @@ const advisory = new Hono<{ Bindings: Env }>();
 
 // --- Advisor directory (Task #75) helpers ------------------------------------
 
-/** Project ids owned by the founder (or 'all' for admin). Mirrors contacts.ts. */
-async function ownedProjectScope(env: Env, user: User): Promise<'all' | number[]> {
+/**
+ * Project ids owned by the founder (or 'all' for admin). Mirrors contacts.ts —
+ * including, as of stage 9, its company narrowing. The two copies drifted:
+ * contacts.ts was narrowed and this one was not, so a founder could assign an
+ * advisor to a project the picker had already stopped showing them.
+ *
+ * `'all'` is the admin answer and is deliberately never narrowed.
+ */
+async function ownedProjectScope(
+  env: Env, user: User, companyId: number | null = null,
+): Promise<'all' | number[]> {
   if (isAdmin(user)) return 'all';
   if (!user.founder_id) return [];
-  const rows = await env.DB.prepare('SELECT id FROM projects WHERE founder_id = ? AND deleted_at IS NULL')
-    .bind(user.founder_id).all<{ id: number }>();
+  // Two full literals, never a clause dropped into the query text.
+  const rows = await (companyId === null
+    ? env.DB.prepare('SELECT id FROM projects WHERE founder_id = ? AND deleted_at IS NULL')
+        .bind(user.founder_id)
+    : env.DB.prepare(
+        `SELECT id FROM projects
+          WHERE founder_id = ? AND deleted_at IS NULL
+            AND (company_id = ? OR company_id IS NULL)`,
+      ).bind(user.founder_id, companyId)
+  ).all<{ id: number }>();
   return (rows.results || []).map((x) => Number(x.id));
 }
 
 /** Load an advisor profile the caller owns; null → 404 (never 403, per IDOR rule). */
-async function loadOwnedAdvisor(env: Env, id: number, user: User): Promise<AdvisorProfileRow | null> {
+async function loadOwnedAdvisor(
+  env: Env, id: number, user: User, companyId: number | null = null,
+): Promise<AdvisorProfileRow | null> {
   const row = await env.DB.prepare('SELECT * FROM advisor_profiles WHERE id = ?').bind(id).first<AdvisorProfileRow>();
   if (!row) return null;
   if (isAdmin(user)) return row;
-  if (user.founder_id && Number(row.founder_id) === Number(user.founder_id)) return row;
-  return null;
+  if (!user.founder_id || Number(row.founder_id) !== Number(user.founder_id)) return null;
+  // Ownership is settled above; the company only narrows what is already the
+  // caller's. This decides a 404, so a company that could GRANT rather than
+  // narrow would be a hole. A profile with no company stays reachable under
+  // every one of the founder's.
+  const owning = (row as AdvisorProfileRow & { company_id?: number | null }).company_id ?? null;
+  if (companyId !== null && owning !== null && owning !== companyId) return null;
+  return row;
 }
 
 async function loadAssignments(env: Env, profileId: number): Promise<AdvisorAssignment[]> {
@@ -218,6 +244,14 @@ advisory.get('/advisors', async (c) => {
       if (!user.founder_id) return c.json({ items: [] });
       where += ' AND founder_id = ?';
       params.push(user.founder_id);
+      // Company scoping, stage 9. Without this the roster disagrees with the
+      // project picker: a founder switches company and still sees advisors
+      // they added under the other one.
+      const companyId = await activeCompanyFor(c, user);
+      if (companyId !== null) {
+        where += ' AND (company_id = ? OR company_id IS NULL)';
+        params.push(companyId);
+      }
     }
     const rows = await c.env.DB.prepare(
       `SELECT * FROM advisor_profiles WHERE ${where} ORDER BY status ASC, updated_at DESC LIMIT 500`,
@@ -250,7 +284,7 @@ advisory.put('/advisors/:id', async (c) => {
     const user = await requireRole(c, 'founder');
     await ensureAdvisorProfilesSchema(c.env);
     const id = Number(c.req.param('id'));
-    const row = await loadOwnedAdvisor(c.env, id, user);
+    const row = await loadOwnedAdvisor(c.env, id, user, await activeCompanyFor(c, user));
     if (!row) return c.json({ detail: 'Not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
 
@@ -308,7 +342,7 @@ advisory.put('/advisors/:id/assignments', async (c) => {
     const user = await requireRole(c, 'founder');
     await ensureAdvisorProfilesSchema(c.env);
     const id = Number(c.req.param('id'));
-    const row = await loadOwnedAdvisor(c.env, id, user);
+    const row = await loadOwnedAdvisor(c.env, id, user, await activeCompanyFor(c, user));
     if (!row) return c.json({ detail: 'Not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
     const requested = Array.isArray(body.project_ids)
@@ -316,7 +350,7 @@ advisory.put('/advisors/:id/assignments', async (c) => {
       : [];
 
     // Every target startup must be owned by the caller.
-    const scope = await ownedProjectScope(c.env, user);
+    const scope = await ownedProjectScope(c.env, user, await activeCompanyFor(c, user));
     if (scope !== 'all') {
       const owned = new Set(scope);
       for (const pid of requested) {
@@ -352,7 +386,7 @@ advisory.post('/advisors/:id/archive', async (c) => {
     const user = await requireRole(c, 'founder');
     await ensureAdvisorProfilesSchema(c.env);
     const id = Number(c.req.param('id'));
-    const row = await loadOwnedAdvisor(c.env, id, user);
+    const row = await loadOwnedAdvisor(c.env, id, user, await activeCompanyFor(c, user));
     if (!row) return c.json({ detail: 'Not found' }, 404);
     await c.env.DB.prepare('UPDATE advisor_profiles SET status=?, updated_at=? WHERE id=?')
       .bind('archived', nowIso(), id).run();
@@ -367,7 +401,7 @@ advisory.post('/advisors/:id/restore', async (c) => {
     const user = await requireRole(c, 'founder');
     await ensureAdvisorProfilesSchema(c.env);
     const id = Number(c.req.param('id'));
-    const row = await loadOwnedAdvisor(c.env, id, user);
+    const row = await loadOwnedAdvisor(c.env, id, user, await activeCompanyFor(c, user));
     if (!row) return c.json({ detail: 'Not found' }, 404);
     await c.env.DB.prepare('UPDATE advisor_profiles SET status=?, updated_at=? WHERE id=?')
       .bind('active', nowIso(), id).run();
