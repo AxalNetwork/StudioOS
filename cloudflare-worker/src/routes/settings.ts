@@ -23,6 +23,7 @@ import type { Env, UserSessionRow } from '../types';
 import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken, selectJwt } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { hasTotpConfigured, loadTotp, persistNewTotpEnrolment } from '../services/authTotp';
 import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
 import { putHeadshotFromDataUri, getHeadshot } from '../services/r2';
@@ -982,7 +983,14 @@ settings.post('/founder/invites', async (c) => {
       await sql.end();
       return c.json({ error: 'Founder profile required to invite to a project' }, 403);
     }
-    const owns = await sql`SELECT id FROM projects WHERE id = ${projectId} AND founder_id = ${user.founder_id} AND deleted_at IS NULL`;
+    // Company scoping: a founder acting for one company must not invite a
+    // collaborator onto another company's project. Two full literals; the
+    // refusal is the existing one, so a project in the other company is
+    // indistinguishable from one that does not exist.
+    const inviteCompanyId = await activeCompanyFor(c, user);
+    const owns = inviteCompanyId === null
+      ? await sql`SELECT id FROM projects WHERE id = ${projectId} AND founder_id = ${user.founder_id} AND deleted_at IS NULL`
+      : await sql`SELECT id FROM projects WHERE id = ${projectId} AND founder_id = ${user.founder_id} AND (company_id = ${inviteCompanyId} OR company_id IS NULL) AND deleted_at IS NULL`;
     if (!owns.length) {
       await sql.end();
       return c.json({ error: 'Project not found or not owned by you' }, 403);

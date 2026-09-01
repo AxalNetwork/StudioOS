@@ -40,6 +40,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { hashEmail } from '../util/hashEmail';
 
 const assistant = new Hono<{ Bindings: Env }>();
@@ -242,7 +243,15 @@ function featuresForRole(role: string): FeatureEntry[] {
 // Tool implementations. All run in the same Worker isolate against D1.
 // Returns are *plain JS values*; the caller stringifies + sanitises.
 // ---------------------------------------------------------------------------
-async function execTool(env: Env, user: User, name: string, input: Record<string, unknown>): Promise<unknown> {
+/**
+ * @param companyId  the caller's VERIFIED active company, resolved once by the
+ *                   handler and threaded in. Tools that read a founder's own
+ *                   projects narrow on it; anything else ignores it.
+ */
+async function execTool(
+  env: Env, user: User, name: string, input: Record<string, unknown>,
+  companyId: number | null = null,
+): Promise<unknown> {
   switch (name) {
     case 'listAvailableFeatures': {
       return { features: featuresForRole(user.role).map(f => ({ url: f.url, label: f.label, keywords: f.keywords })) };
@@ -294,9 +303,16 @@ async function execTool(env: Env, user: User, name: string, input: Record<string
       // table by the latter name, and both queries below end in `.catch(…)`,
       // so this tool answered "no scores" for every user rather than erroring.
       if (user.role === 'founder' && user.founder_id) {
-        const row = await env.DB.prepare(
-          "SELECT p.id, p.name, s.total_score, s.created_at FROM projects p LEFT JOIN score_snapshots s ON s.project_id = p.id WHERE p.founder_id = ? ORDER BY s.id DESC LIMIT 1"
-        ).bind(user.founder_id).first<{ id: number; name: string; total_score: number | null; created_at: string | null }>().catch(() => null);
+        // Company scoping: the assistant must answer about the company the
+        // founder is actually looking at, or it reports the other one's score.
+        const row = await (companyId === null
+          ? env.DB.prepare(
+              "SELECT p.id, p.name, s.total_score, s.created_at FROM projects p LEFT JOIN score_snapshots s ON s.project_id = p.id WHERE p.founder_id = ? ORDER BY s.id DESC LIMIT 1"
+            ).bind(user.founder_id)
+          : env.DB.prepare(
+              "SELECT p.id, p.name, s.total_score, s.created_at FROM projects p LEFT JOIN score_snapshots s ON s.project_id = p.id WHERE p.founder_id = ? AND (p.company_id = ? OR p.company_id IS NULL) ORDER BY s.id DESC LIMIT 1"
+            ).bind(user.founder_id, companyId)
+        ).first<{ id: number; name: string; total_score: number | null; created_at: string | null }>().catch(() => null);
         return { kind: 'founder', latest: row };
       }
       const rows = await env.DB.prepare(
@@ -700,7 +716,7 @@ assistant.post('/message', async (c) => {
             send('tool_call', { name: t.name, input: t.input });
             let resultJson: unknown;
             let ok = true;
-            try { resultJson = await execTool(c.env, user, t.name, t.input); }
+            try { resultJson = await execTool(c.env, user, t.name, t.input, await activeCompanyFor(c, user)); }
             catch (e) { ok = false; resultJson = { error: (e as Error).message }; }
             const resultText = sanitiseToolText(JSON.stringify(resultJson));
             send('tool_result', { name: t.name, ok });

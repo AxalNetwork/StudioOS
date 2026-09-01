@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { MARKET_PULSE, STUDIO_BENCHMARKS } from './market_intel';
 
 const privateData = new Hono<{ Bindings: Env }>();
@@ -48,9 +49,14 @@ privateData.get('/portfolio/metrics', async (c) => {
     // Founders see only OFFICIAL, APPROVED, hash-verified snapshots — sandbox
     // runs are practice and a flagged run reads as "no score yet" until admin
     // signs off. Goes through getVerifiedLatestSnapshot so reads are audited.
-    const baseProjects = user.founder_id
-      ? await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} AND deleted_at IS NULL`
-      : [];
+    // Company scoping: this is the founder's own dashboard, so it must agree
+    // with the project picker. The admin overview further down is untouched.
+    const pdCompanyId = await activeCompanyFor(c, user);
+    const baseProjects = !user.founder_id
+      ? []
+      : pdCompanyId === null
+        ? await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} AND deleted_at IS NULL`
+        : await sql`SELECT * FROM projects WHERE founder_id = ${user.founder_id} AND (company_id = ${pdCompanyId} OR company_id IS NULL) AND deleted_at IS NULL`;
     const { getVerifiedLatestSnapshot } = await import('../services/scoreIntegrity');
     const projects = await Promise.all(
       baseProjects.map(async (p: any) => {
@@ -126,9 +132,16 @@ privateData.get('/founder/:userId', async (c) => {
   const target = await sql`SELECT * FROM users WHERE id = ${userId}`;
   if (target.length === 0 || target[0].role !== 'founder') { await sql.end(); return c.json({ error: 'Founder not found' }, 404); }
 
-  const projects = target[0].founder_id
-    ? await sql`SELECT * FROM projects WHERE founder_id = ${target[0].founder_id} AND deleted_at IS NULL`
-    : [];
+  // Two callers reach here: an admin looking at someone, and a founder looking
+  // at themselves. Only the self case narrows — narrowing the admin case would
+  // filter one person's projects by ANOTHER person's active company, which is
+  // not a company they can even select.
+  const selfCompanyId = user.role === 'admin' ? null : await activeCompanyFor(c, user);
+  const projects = !target[0].founder_id
+    ? []
+    : selfCompanyId === null
+      ? await sql`SELECT * FROM projects WHERE founder_id = ${target[0].founder_id} AND deleted_at IS NULL`
+      : await sql`SELECT * FROM projects WHERE founder_id = ${target[0].founder_id} AND (company_id = ${selfCompanyId} OR company_id IS NULL) AND deleted_at IS NULL`;
   await sql.end();
   return c.json({ role: 'founder', projects, total_projects: projects.length });
 });
