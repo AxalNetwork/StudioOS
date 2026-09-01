@@ -8,6 +8,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import { isAdmin, isPartner, mapError, nowIso, newUid, requirePartnerProfile } from './_t13t14t15_helpers';
+import { activeCompanyFor } from '../middleware/activeCompany';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -105,8 +106,8 @@ r.post('/me/pitches', async (c) => {
       `INSERT INTO comarketing_pitches
          (uid, partner_id, submitter_user_id, title, summary, asset_type,
           proposed_date, target_audience, distribution_channels, co_branding_notes,
-          asset_url, angle, what_you_bring, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?)`
+          asset_url, angle, what_you_bring, status, created_at, updated_at, company_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?)`
     ).bind(uid, partner.id, user.id, title.slice(0, 200), summary.slice(0, 4000), asset_type,
            body.proposed_date || null,
            body.target_audience ? String(body.target_audience).slice(0, 500) : null,
@@ -115,7 +116,9 @@ r.post('/me/pitches', async (c) => {
            body.asset_url ? String(body.asset_url).slice(0, 500) : null,
            body.angle ? String(body.angle).slice(0, ANGLE_MAX) : null,
            body.what_you_bring ? String(body.what_you_bring).slice(0, BRING_MAX) : null,
-           nowIso(), nowIso()).run();
+           // Company scoping, stage 8: the pitch records the agency that made
+           // it. No company selected records NULL, not a guess at the primary.
+           nowIso(), nowIso(), await activeCompanyFor(c, user)).run();
     const p = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?')
       .bind((ins as any).meta?.last_row_id).first<Pitch>();
     return c.json(pitchDto(p!, await attribCounts(c.env, p!.id)));
@@ -127,12 +130,37 @@ r.get('/me/pitches', async (c) => {
     const user = await requireAuth(c);
     const partner = await requirePartnerProfile(c.env, user);
     const status = c.req.query('status');
-    const sql = status
-      ? 'SELECT * FROM comarketing_pitches WHERE partner_id = ? AND status = ? ORDER BY created_at DESC'
-      : 'SELECT * FROM comarketing_pitches WHERE partner_id = ? ORDER BY created_at DESC';
-    const rows = status
-      ? await c.env.DB.prepare(sql).bind(partner.id, status).all<Pitch>()
-      : await c.env.DB.prepare(sql).bind(partner.id).all<Pitch>();
+    // Company scoping, stage 8. "My pitches" is a claim about THIS agency, so
+    // it narrows; a pitch with a NULL company_id was made before the partner
+    // had a primary company and stays visible under all of theirs.
+    //
+    // Four full literals rather than one template with a clause interpolated.
+    // The handler already spelled the status variants out for the same reason
+    // — nothing may reach the query TEXT — and the company doubles it.
+    const companyId = await activeCompanyFor(c, user);
+    const rows = await (
+      status
+        ? companyId !== null
+          ? c.env.DB.prepare(
+              `SELECT * FROM comarketing_pitches
+                WHERE partner_id = ? AND status = ?
+                  AND (company_id = ? OR company_id IS NULL)
+                ORDER BY created_at DESC`,
+            ).bind(partner.id, status, companyId)
+          : c.env.DB.prepare(
+              'SELECT * FROM comarketing_pitches WHERE partner_id = ? AND status = ? ORDER BY created_at DESC',
+            ).bind(partner.id, status)
+        : companyId !== null
+          ? c.env.DB.prepare(
+              `SELECT * FROM comarketing_pitches
+                WHERE partner_id = ?
+                  AND (company_id = ? OR company_id IS NULL)
+                ORDER BY created_at DESC`,
+            ).bind(partner.id, companyId)
+          : c.env.DB.prepare(
+              'SELECT * FROM comarketing_pitches WHERE partner_id = ? ORDER BY created_at DESC',
+            ).bind(partner.id)
+    ).all<Pitch>();
     const items: any[] = [];
     for (const p of rows.results || []) items.push(pitchDto(p, await attribCounts(c.env, p.id)));
     return c.json({ items });
@@ -306,6 +334,18 @@ r.get('/me/attributions', async (c) => {
     const pitchUid = c.req.query('pitch_uid');
     let where = 'partner_id = ?';
     const params: any[] = [partner.id];
+    // An attribution hangs off a pitch, so it inherits that pitch's agency
+    // rather than carrying a company of its own — migration 196 gives it no
+    // column. Without this the attributions list would still report reach for
+    // pitches the list above has stopped showing, and the two views of the
+    // same agency would disagree.
+    const companyId = await activeCompanyFor(c, user);
+    if (companyId !== null) {
+      where += ` AND pitch_id IN (
+        SELECT id FROM comarketing_pitches
+         WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL))`;
+      params.push(partner.id, companyId);
+    }
     if (pitchUid) {
       const p = await c.env.DB.prepare('SELECT id FROM comarketing_pitches WHERE uid = ?').bind(pitchUid).first<{ id: number }>();
       if (p) { where += ' AND pitch_id = ?'; params.push(p.id); }

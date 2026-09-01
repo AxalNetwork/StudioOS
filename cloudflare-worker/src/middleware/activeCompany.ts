@@ -57,3 +57,24 @@ export async function resolveActiveCompany(
 
   return link ? claimed : null;
 }
+
+/**
+ * The same answer, taken straight off a Hono context.
+ *
+ * Every scoped route needs the identical three lines — read the header, verify
+ * it, use the result — and each hand-rolled copy is a chance to skip the
+ * verification and pass the raw header into a query. `resolveActiveCompany`
+ * stays the primitive (it takes an env, so it is testable without a request);
+ * this is the shape a route actually calls.
+ *
+ * `c` is deliberately loose. Routers in this worker are typed several ways and
+ * the only thing needed here is `.env` and `.req.header`; a precise Hono
+ * generic would force every caller to thread its own Bindings type through for
+ * no added safety.
+ */
+export async function activeCompanyFor(
+  c: { env: { DB: D1Database }; req: { header: (name: string) => string | undefined } },
+  user: { id?: number | null } | null | undefined,
+): Promise<number | null> {
+  return resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+}
