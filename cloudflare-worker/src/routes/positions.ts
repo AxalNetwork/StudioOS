@@ -17,7 +17,7 @@ import {
   computeFundMetrics, rollUpPosition, currentPeriod, daysSince,
   type CashFlow, type KpiCadence,
 } from '../services/portfolioMetrics';
-import { investorProjectIds } from './_investorProjectScope';
+import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -74,7 +74,7 @@ r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorProjectIds(c.env, user);
+    const projectIds = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
     const scopeCsv = projectIds == null ? null : projectIds.join(',');
     // Single grouped query joined to projects, replacing the previous
     // two-queries-per-project loop (N+1) that would not scale past a
@@ -152,7 +152,7 @@ r.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorProjectIds(c.env, user);
+    const projectIds = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
     const scopeCsv = projectIds == null ? null : projectIds.join(',');
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
 
@@ -220,7 +220,7 @@ r.get('/kpi-compliance', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorProjectIds(c.env, user);
+    const projectIds = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
     const scopeCsv = projectIds == null ? null : projectIds.join(',');
     const cadence: KpiCadence = c.req.query('cadence') === 'monthly' ? 'monthly' : 'quarterly';
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
@@ -292,7 +292,7 @@ r.get('/:projectUid', async (c) => {
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const proj = await c.env.DB.prepare('SELECT id, uid, name, sector, stage, status FROM projects WHERE uid = ? AND deleted_at IS NULL').bind(c.req.param('projectUid')).first<any>();
     if (!proj) return c.json({ detail: 'Not found' }, 404);
-    const projectIds = await investorProjectIds(c.env, user);
+    const projectIds = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
     if (projectIds != null && !projectIds.includes(Number(proj.id))) return c.json({ detail: 'Forbidden' }, 403);
     const rounds = await c.env.DB.prepare(
       'SELECT * FROM portfolio_positions WHERE project_id = ? ORDER BY COALESCE(position_date, created_at) ASC'
