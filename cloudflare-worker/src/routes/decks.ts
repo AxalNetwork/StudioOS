@@ -8,6 +8,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
 import { ensureTier, tierCovers } from '../middleware/requireTier';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
@@ -455,12 +457,36 @@ export function sanitizeImageUrl(input: string | null | undefined): string | nul
   return u.toString();
 }
 
-async function projectOwned(env: Env, user: any, projectId: number): Promise<any> {
-  const row = await env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?').bind(projectId).first<any>();
+/**
+ * The project behind a deck, or a throw. The single gate this file has, which
+ * is why the company clause belongs here and not at its thirteen call sites.
+ *
+ * COMPANY SCOPING, and read THIS file's exemption set rather than a sibling's:
+ * admin, partner AND investor are all exempt here, because a deck is shown to
+ * people who do not own the project. Only the founder branch narrows, and only
+ * after ownership is established — this throws Forbidden, so a company that
+ * could grant rather than narrow would be a hole.
+ *
+ * Takes the context rather than the env because the active company is a
+ * property of the REQUEST. Passing the env would have meant resolving the
+ * header at every call site, which is the arrangement that lets one of them
+ * quietly forget.
+ */
+async function projectOwned(
+  c: { env: Env; req: { header: (n: string) => string | undefined } },
+  user: any,
+  projectId: number,
+): Promise<any> {
+  const row = await c.env.DB.prepare(
+    'SELECT id, founder_id, company_id FROM projects WHERE id = ?',
+  ).bind(projectId).first<any>();
   if (!row) throw new Error('NotFound');
   const role = String(user?.role || '').toLowerCase();
   if (role === 'admin' || role === 'partner' || role === 'investor') return row;
-  if (role === 'founder' && user.founder_id && row.founder_id === user.founder_id) return row;
+  if (role === 'founder' && user.founder_id && row.founder_id === user.founder_id) {
+    if (!projectInActiveCompany(await activeCompanyFor(c, user), row)) throw new Error('NotFound');
+    return row;
+  }
   throw new Error('Forbidden');
 }
 
@@ -503,7 +529,7 @@ decks.post('/generate', async (c) => {
   if (!pid) return c.json({ error: 'project_id required' }, 400);
   let p: any;
   try {
-    await projectOwned(c.env, user, pid);
+    await projectOwned(c, user, pid);
     p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
   } catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
@@ -541,7 +567,7 @@ decks.post('/positioning', async (c) => {
 
   let p: any;
   try {
-    await projectOwned(c.env, user, pid);
+    await projectOwned(c, user, pid);
     p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
   } catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
@@ -689,7 +715,7 @@ Rules:
 decks.get('/by-project/:pid', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
+  try { await projectOwned(c, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const rows = await c.env.DB.prepare(
     `SELECT id, project_id, version, title, is_current, created_at FROM pitch_decks
@@ -900,7 +926,7 @@ decks.get('/:id/engagement', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c.env, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const tokens = await c.env.DB.prepare(
     `SELECT id, expires_at, used_at, view_limit, view_count, last_viewed_at, created_at
@@ -979,7 +1005,7 @@ decks.get('/:id', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c.env, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   return c.json(rowToDeck(row));
 });
@@ -994,7 +1020,7 @@ decks.put('/:id', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c.env, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const persistedMethod = extractDeckMethodId(row);
   if (persistedMethod && PREMIUM_METHOD_IDS.includes(persistedMethod as any)) {
@@ -1105,7 +1131,7 @@ decks.post('/:id/restore', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c.env, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   let slides: any[] = [];
   try { slides = sanitizeSlides(JSON.parse(row.slides || '[]')); } catch {}
@@ -1120,7 +1146,7 @@ decks.post('/:id/share', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c.env, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const ttlHours = Math.min(
@@ -1250,7 +1276,7 @@ decks.get('/recommend', async (c) => {
   if (!pid) return c.json({ error: 'project_id required' }, 400);
   let proj: any;
   try {
-    await projectOwned(c.env, user, pid);
+    await projectOwned(c, user, pid);
     proj = await c.env.DB.prepare('SELECT id, name, sector, stage FROM projects WHERE id = ?')
       .bind(pid).first<any>();
   } catch (e: any) {
@@ -1283,7 +1309,7 @@ decks.post('/apply-method', async (c) => {
   }
   let proj: any;
   try {
-    await projectOwned(c.env, user, pid);
+    await projectOwned(c, user, pid);
     proj = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
   } catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
@@ -1381,7 +1407,7 @@ decks.post('/:id/autofill', async (c) => {
   let row: any;
   try { row = await getDeckRow(c.env, id); }
   catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c.env, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
 
   // Extract method_id from the persisted slides. /apply-method stamps
@@ -1492,7 +1518,7 @@ decks.post('/:id/export', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c.env, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const format = String(body?.format || 'pdf').toLowerCase();

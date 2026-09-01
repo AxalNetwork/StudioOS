@@ -26,6 +26,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
 
 const imports = new Hono<{ Bindings: Env }>();
 
@@ -77,15 +78,33 @@ export async function ensureProjectForImport(
   user: User,
   name: string,
   sourceTag: string,
+  /**
+   * The importer's VERIFIED active company, or null for "none selected".
+   * Both the dedupe above and the insert below use it — an imported project
+   * that recorded no company would sit in every company at once, which is the
+   * state migration 189 backfilled away and nothing should re-create.
+   */
+  companyId: number | null = null,
 ): Promise<number> {
   const trimmed = (name || '').trim() || `Imported ${sourceTag} deal`;
   // Try to find an existing project the user already touched (founder path)
   // or a project we previously created for the same import source + name.
   const founderId = (user as any).founder_id || null;
   if (founderId) {
-    const hit = await env.DB.prepare(
-      `SELECT id FROM projects WHERE founder_id = ? AND LOWER(name) = LOWER(?) LIMIT 1`,
-    ).bind(founderId, trimmed).first<{ id: number }>();
+    // Company scoping. The dedupe is narrowed as well as the creation below,
+    // and that is the point rather than a side effect: without it, importing
+    // "Acme" while acting for company B would MERGE into the company-A project
+    // of the same name and file B's data under A. A NULL-company project still
+    // matches, because it belongs to every company of theirs.
+    const hit = companyId === null
+      ? await env.DB.prepare(
+          `SELECT id FROM projects WHERE founder_id = ? AND LOWER(name) = LOWER(?) LIMIT 1`,
+        ).bind(founderId, trimmed).first<{ id: number }>()
+      : await env.DB.prepare(
+          `SELECT id FROM projects
+            WHERE founder_id = ? AND LOWER(name) = LOWER(?)
+              AND (company_id = ? OR company_id IS NULL) LIMIT 1`,
+        ).bind(founderId, trimmed, companyId).first<{ id: number }>();
     if (hit?.id) return Number(hit.id);
   } else {
     const hit = await env.DB.prepare(
@@ -95,13 +114,14 @@ export async function ensureProjectForImport(
     if (hit?.id) return Number(hit.id);
   }
   const ins = await env.DB.prepare(
-    `INSERT INTO projects (name, description, founder_id, status, stage, created_at, updated_at)
-     VALUES (?, ?, ?, 'intake', 'idea', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `INSERT INTO projects (name, description, founder_id, company_id, status, stage, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'intake', 'idea', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
      RETURNING id`,
   ).bind(
     trimmed,
     founderId ? null : `imported_from:${sourceTag}:user_${user.id}`,
     founderId,
+    companyId,
   ).first<{ id: number }>();
   return Number(ins?.id || 0);
 }
@@ -525,7 +545,8 @@ imports.post('/angellist/commit', async (c) => {
       // founder-scoped project listings.
       let projectId = projectIdByName.get(company.toLowerCase());
       if (!projectId) {
-        projectId = await ensureProjectForImport(c.env, user, company, 'angellist');
+        projectId = await ensureProjectForImport(
+          c.env, user, company, 'angellist', await activeCompanyFor(c, user));
         if (projectId) {
           // Best-effort: backfill sector/stage from CSV when we just
           // created the placeholder (no-op when already populated).
@@ -829,14 +850,25 @@ imports.post('/deck', async (c) => {
   // user's project by guessing the id.
   if (projectId) {
     if (user.role !== 'admin') {
-      const owns = await c.env.DB.prepare(
-        // `founders` has no user_id — the link is `users.founder_id`. This is
-        // an ownership gate, and with the wrong column it could not evaluate
-        // at all rather than evaluating to false.
-        `SELECT 1 AS ok FROM projects p
-           LEFT JOIN users fu ON fu.founder_id = p.founder_id
-          WHERE p.id = ? AND (fu.id = ? OR p.description = ?) LIMIT 1`,
-      ).bind(projectId, user.id, `imported_from:deck:user_${user.id}`).first<{ ok: number }>();
+      // Company scoping: an import must not attach to a project the picker
+      // has stopped showing. Two full literals; admin is exempt above.
+      const uploadCompanyId = await activeCompanyFor(c, user);
+      const owns = uploadCompanyId === null
+        ? await c.env.DB.prepare(
+            // `founders` has no user_id — the link is `users.founder_id`. This
+            // is an ownership gate, and with the wrong column it could not
+            // evaluate at all rather than evaluating to false.
+            `SELECT 1 AS ok FROM projects p
+               LEFT JOIN users fu ON fu.founder_id = p.founder_id
+              WHERE p.id = ? AND (fu.id = ? OR p.description = ?) LIMIT 1`,
+          ).bind(projectId, user.id, `imported_from:deck:user_${user.id}`).first<{ ok: number }>()
+        : await c.env.DB.prepare(
+            `SELECT 1 AS ok FROM projects p
+               LEFT JOIN users fu ON fu.founder_id = p.founder_id
+              WHERE p.id = ? AND (fu.id = ? OR p.description = ?)
+                AND (p.company_id = ? OR p.company_id IS NULL) LIMIT 1`,
+          ).bind(projectId, user.id, `imported_from:deck:user_${user.id}`, uploadCompanyId)
+            .first<{ ok: number }>();
       if (!owns) return c.json({ error: 'forbidden_project' }, 403);
     }
   }

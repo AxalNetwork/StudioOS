@@ -419,7 +419,16 @@ async function createProjectHandler(c: any) {
 
   const founderId = await resolveFounderIdForCreate(user as any, data, sql);
 
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
+  // Company scoping. Migration 189 backfilled `company_id` onto the projects
+  // that existed then; without this every project created SINCE has landed with
+  // NULL, which reads as "visible under every company" — so the picker narrowed
+  // while nothing new ever belonged to a company. A creator with no company
+  // selected still records NULL, which is the honest answer rather than a guess
+  // at their primary.
+  const createCompanyId = await resolveActiveCompany(
+    c.env, user as any, c.req.header(ACTIVE_COMPANY_HEADER));
+
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${name}, ${data.description || null}, ${data.sector || null}, ${data.stage || 'idea'}, ${founderId}, ${createCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${data.use_of_funds || null}) RETURNING *`;
 
   await sql`INSERT INTO deals (project_id, status) VALUES (${project.id}, 'applied')`;
   await sql`INSERT INTO activity_logs (project_id, action, details) VALUES (${project.id}, 'project_created', ${`Project '${project.name}' submitted`})`;
@@ -462,7 +471,7 @@ projects.post('/', createProjectHandler);
 projects.post('', createProjectHandler);
 
 projects.post('/submit', async (c) => {
-  await requireAuth(c);
+  const submitUser = await requireAuth(c);
   const data = await c.req.json();
 
   // Epic 5: reject any client-supplied score / tier / breakdown BEFORE any
@@ -495,7 +504,9 @@ projects.post('/submit', async (c) => {
     founderId = f.id;
   }
 
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${useOfFunds}) RETURNING *`;
+  const submitCompanyId = await resolveActiveCompany(
+    c.env, submitUser as any, c.req.header(ACTIVE_COMPANY_HEADER));
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${submitCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${useOfFunds}) RETURNING *`;
 
   const result = runFullScore(data);
   const b = result.breakdown;

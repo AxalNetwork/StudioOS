@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireApprovedKyc, canAccessFounderResource, entityListScope } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
 import { seedStandardEventsForJurisdiction } from './compliance';
 import { CONTRACT_DOC_TYPES } from './admin_contracts';
 import { getActiveTemplateBody } from '../services/legalTemplateStore';
@@ -171,7 +173,7 @@ legal.post('/incorporate/wizard', async (c) => {
   if (!body.company_name?.trim()) return c.json({ error: 'company_name is required' }, 400);
 
   const sql = getSQL(c.env);
-  const projRows = await sql`SELECT id, name, founder_id, entity_id FROM projects WHERE id = ${body.project_id}`;
+  const projRows = await sql`SELECT id, name, founder_id, entity_id, company_id FROM projects WHERE id = ${body.project_id}`;
   if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = projRows[0] as any;
 
@@ -188,6 +190,13 @@ legal.post('/incorporate/wizard', async (c) => {
       await sql.end();
       return c.json({ error: 'Forbidden: you do not own this project' }, 403);
     }
+       // Company scoping. Only this branch narrows: admin and partner are
+      // exempt above, and investors are already blocked from this write path.
+      // 404 rather than 403 so the switcher cannot enumerate projects.
+      if (!projectInActiveCompany(await activeCompanyFor(c, user), project)) {
+        await sql.end();
+        return c.json({ error: 'Project not found' }, 404);
+      }
   }
 
   // Reuse existing entity if jurisdictions match (idempotency).
@@ -370,7 +379,7 @@ legal.post('/incorporate/checkout', async (c) => {
   if (!body.company_name?.trim()) return c.json({ error: 'company_name is required' }, 400);
 
   const sql = getSQL(c.env);
-  const projRows = await sql`SELECT id, name, founder_id, entity_id FROM projects WHERE id = ${body.project_id}`;
+  const projRows = await sql`SELECT id, name, founder_id, entity_id, company_id FROM projects WHERE id = ${body.project_id}`;
   if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = projRows[0] as any;
 
@@ -378,6 +387,13 @@ legal.post('/incorporate/checkout', async (c) => {
   if (user.role !== 'admin' && user.role !== 'partner') {
     const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
+       // Company scoping. Only this branch narrows: admin and partner are
+      // exempt above, and investors are already blocked from this write path.
+      // 404 rather than 403 so the switcher cannot enumerate projects.
+      if (!projectInActiveCompany(await activeCompanyFor(c, user), project)) {
+        await sql.end();
+        return c.json({ error: 'Project not found' }, 404);
+      }
   }
 
   await sql.end();
@@ -569,13 +585,20 @@ legal.post('/incorporation/order', async (c) => {
   if (!companyName) return c.json({ error: 'company_name is required' }, 400);
 
   const sql = getSQL(c.env);
-  const projRows = await sql`SELECT id, name, founder_id FROM projects WHERE id = ${body.project_id}`;
+  const projRows = await sql`SELECT id, name, founder_id, company_id FROM projects WHERE id = ${body.project_id}`;
   if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = projRows[0] as any;
   // Ownership: admin/partner OR founder-owns-project. Investors blocked.
   if (user.role !== 'admin' && user.role !== 'partner') {
     const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
+       // Company scoping. Only this branch narrows: admin and partner are
+      // exempt above, and investors are already blocked from this write path.
+      // 404 rather than 403 so the switcher cannot enumerate projects.
+      if (!projectInActiveCompany(await activeCompanyFor(c, user), project)) {
+        await sql.end();
+        return c.json({ error: 'Project not found' }, 404);
+      }
   }
   await sql.end();
 
@@ -968,7 +991,7 @@ legal.post('/cofounder-agreement', async (c) => {
   const value = parsed.value;
 
   const sql = getSQL(c.env);
-  const projRows = await sql`SELECT id, founder_id FROM projects WHERE id = ${value.project_id}`;
+  const projRows = await sql`SELECT id, founder_id, company_id FROM projects WHERE id = ${value.project_id}`;
   if (projRows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = projRows[0] as any;
 
@@ -983,6 +1006,13 @@ legal.post('/cofounder-agreement', async (c) => {
       await sql.end();
       return c.json({ error: 'Forbidden: you do not own this project' }, 403);
     }
+       // Company scoping. Only this branch narrows: admin and partner are
+      // exempt above, and investors are already blocked from this write path.
+      // 404 rather than 403 so the switcher cannot enumerate projects.
+      if (!projectInActiveCompany(await activeCompanyFor(c, user), project)) {
+        await sql.end();
+        return c.json({ error: 'Project not found' }, 404);
+      }
   }
 
   const content = renderCofounderAgreement(value);

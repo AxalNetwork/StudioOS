@@ -5,6 +5,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, canAccessFounderResource } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
 import { ensureTier } from '../middleware/requireTier';
 import { runFullScore, tierLabel } from '../services/scoring';
 import { formatUseOfFundsText } from '../util/useOfFunds';
@@ -134,6 +136,16 @@ scoring.post('/score', async (c) => {
   if (!canAccessFounderResource(user, project.founder_id) && !isExploringSandboxOwner) {
     await sql.end();
     return c.json({ error: 'Forbidden' }, 403);
+  }
+  // Company scoping, applied ONLY to the founder-owner path. `exploring` is a
+  // Spin-Out Lab role and is out of bounds for this rollout; admin, partner and
+  // investor reach this project by another route entirely and are not narrowed
+  // by a company that is not theirs. 404 rather than 403 so the switcher does
+  // not become an oracle for which projects exist.
+  if (user.role === 'founder' && user.founder_id === project.founder_id
+      && !projectInActiveCompany(await activeCompanyFor(c, user), project)) {
+    await sql.end();
+    return c.json({ error: 'Project not found' }, 404);
   }
 
   // Practice-by-default: sandbox is honored for every role (see willBeOfficial
@@ -421,7 +433,7 @@ scoring.get('/scores/:projectId', async (c) => {
   const projectId = parseInt(c.req.param('projectId'));
   const sql = getSQL(c.env);
 
-  const owners = await sql`SELECT founder_id FROM projects WHERE id = ${projectId}`;
+  const owners = await sql`SELECT founder_id, company_id FROM projects WHERE id = ${projectId}`;
   if (owners.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const ownerFounderId = owners[0].founder_id;
 
@@ -433,6 +445,12 @@ scoring.get('/scores/:projectId', async (c) => {
   if (!canAccessFounderResource(user, ownerFounderId) && !isExploringOwner) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
+  }
+  // Same narrowing, same reasoning, as the scoring route above.
+  if (user.role === 'founder' && user.founder_id === ownerFounderId
+      && !projectInActiveCompany(await activeCompanyFor(c, user), owners[0] as any)) {
+    await sql.end();
+    return c.json({ error: 'Project not found' }, 404);
   }
 
   // Project owners see their own sandbox runs (founder or `exploring` lab
