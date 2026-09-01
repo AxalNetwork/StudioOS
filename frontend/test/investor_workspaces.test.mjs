@@ -32,15 +32,28 @@ test('investor workspace routes branch on the active role', () => {
 });
 
 test('investor Research implements I8 without fabricated diligence claims', () => {
-  for (const label of ['Go deep before money moves', 'Diligence pull', 'Source library', 'Fund & manager benchmarking', 'Market deep-dives', 'Company profiles', 'Worker AI · Research']) {
-    // JSX may write `&` either literally or as `&amp;`, so both encodings pass.
-    // This used to build `new RegExp(label.replace('&', '&amp;|&'))`, which put
-    // the alternation at TOP level: 'Fund & manager benchmarking' compiled to
-    // `Fund &amp;|& manager benchmarking` and was satisfied by either HALF.
-    // Two literal containment checks want the whole label, so this is stricter
-    // than what it replaces as well as being free of constructed patterns.
-    assert.ok(research.includes(label) || research.includes(label.replaceAll('&', '&amp;')),
-      `investor Research is missing "${label}"`);
+  // Each label is the exact text the workspace renders, so each is checked
+  // with a plain `includes`. Two earlier forms are worth not going back to.
+  //
+  // It began as `new RegExp(label.replace('&', '&amp;|&'))`, which put the
+  // alternation at TOP level: 'Fund & manager benchmarking' compiled to
+  // `Fund &amp;|& manager benchmarking` and was satisfied by EITHER HALF —
+  // 'Fund &amp;' alone passed it.
+  //
+  // Replacing that with `includes(label) || includes(label.replaceAll('&',
+  // '&amp;'))` fixed the halves but kept a transformation to serve a single
+  // string: exactly one of these seven labels contains `&`, and the source
+  // spells it `&amp;`. Semgrep read that replaceAll as hand-rolled HTML
+  // escaping (detect-replaceall-sanitization). Its premise does not hold here
+  // — these are literal needles in a source-text assertion, with no untrusted
+  // input and no HTML sink — but the rule pointed at something true anyway:
+  // the transformation was doing no work that writing the entity could not.
+  //
+  // So the entity is written out. This pins the encoding that actually ships;
+  // if the JSX ever switches to a bare `&`, this failing is the right outcome
+  // rather than something a tolerant matcher should absorb silently.
+  for (const label of ['Go deep before money moves', 'Diligence pull', 'Source library', 'Fund &amp; manager benchmarking', 'Market deep-dives', 'Company profiles', 'Worker AI · Research']) {
+    assert.ok(research.includes(label), `investor Research is missing "${label}"`);
   }
   assert.match(research, /api\.miSources\(\)/);
   assert.match(research, /api\.miWatchlistList\(\)/);
