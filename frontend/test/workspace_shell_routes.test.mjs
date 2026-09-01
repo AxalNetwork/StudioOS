@@ -196,3 +196,20 @@ test('a bucket prefix belongs to one shell, except the two shared ones', () => {
       `${prefix} is claimed by more than one shell: ${roles.join(', ')}`);
   }
 });
+
+test('researchRole is declared after the effectiveRole it reads', () => {
+  // Regression guard. researchRole was first written above effectiveRole,
+  // which put the read inside the temporal dead zone of a `const` in the same
+  // function body: ReferenceError on every render of AppInner, so a blank app
+  // for everyone. Neither `vite build` nor the type check sees it — it is a
+  // runtime error — and a code-quality bot was what caught it.
+  const lines = appSrc.split('\n');
+  const declaredAt = (re) => lines.findIndex((l) => re.test(l));
+  const effective = declaredAt(/^\s*const effectiveRole = resolveActiveRole\(/);
+  const research = declaredAt(/^\s*const researchRole =/);
+  assert.ok(effective > -1, 'effectiveRole is no longer declared via resolveActiveRole');
+  assert.ok(research > -1, 'researchRole is gone — update or remove this guard');
+  assert.ok(research > effective,
+    `researchRole (line ${research + 1}) reads effectiveRole (line ${effective + 1}) `
+    + 'before it is initialised — this crashes AppInner on every render');
+});

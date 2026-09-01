@@ -1231,11 +1231,6 @@ function AppInner() {
     isImpersonating, onExitImpersonation: exitImpersonation, realUser, onImpersonate: handleImpersonate,
   };
 
-  // Which shell's Research zone list to render. Admin has no research shell of
-  // its own, so it previews the founder one rather than falling through to a
-  // bucket with no zones.
-  const researchRole = (!effectiveRole || effectiveRole === 'admin') ? 'founder' : effectiveRole;
-
   const guard = (roles, component) => (
     <RequireAuth {...authProps}>
       <RoleGuard user={user} allowedRoles={roles} viewMode={viewMode} realUser={realUser} isImpersonating={isImpersonating} impersonationTargetRef={pendingImpersonationPathRef}>
@@ -1271,6 +1266,16 @@ function AppInner() {
   // who the viewer is — which is exactly how an admin previewing Investor View
   // ended up with an "Investor View" chip above the FOUNDER Spin-Out Lab.
   const effectiveRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
+
+  // Which shell's Research zone list to render. Admin has no research shell of
+  // its own, so it previews the founder one rather than falling through to a
+  // bucket with no zones.
+  //
+  // MUST stay below effectiveRole. It was briefly declared above it, which put
+  // the read inside the temporal dead zone of a `const` in the same function
+  // body — a ReferenceError on every render of AppInner, so a blank app. The
+  // build does not catch it because it is a runtime error, not a compile one.
+  const researchRole = (!effectiveRole || effectiveRole === 'admin') ? 'founder' : effectiveRole;
   const investorWorkspace = (page, component, options = {}) => (
     effectiveRole === 'investor'
       ? <InvestorWorkspacePage page={page} {...options}>{component}</InvestorWorkspacePage>
