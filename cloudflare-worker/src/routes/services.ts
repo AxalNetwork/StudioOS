@@ -13,6 +13,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
 
 const services = new Hono<{ Bindings: Env }>();
 
@@ -57,6 +58,21 @@ services.get('/offerings', async (c) => {
   const mine = c.req.query('mine') === '1';
   let where = mine ? 'owner_user_id = ?' : 'is_active = 1';
   const params: (string | number)[] = mine ? [user.id] : [];
+  // Company scoping, stage 8. Only the `?mine=1` arm narrows: it answers "what
+  // does MY agency offer", which is a claim about a firm. The marketplace arm
+  // below it is the founder-facing catalog and must keep showing every active
+  // offering — narrowing a catalog hides the providers a founder could hire
+  // and makes the switcher look broken. Same rule as the deal list in stage 6.
+  //
+  // An offering with a NULL company_id belongs to an owner with no primary
+  // company and stays visible under every one of theirs.
+  if (mine) {
+    const companyId = await activeCompanyFor(c, user);
+    if (companyId !== null) {
+      where += ' AND (company_id = ? OR company_id IS NULL)';
+      params.push(companyId);
+    }
+  }
   if (category) { where += ' AND category = ?'; params.push(category); }
   const rows = await c.env.DB.prepare(
     `SELECT * FROM service_offerings WHERE ${where} ORDER BY created_at DESC LIMIT 200`,
@@ -90,21 +106,42 @@ services.post('/offerings', async (c) => {
   const price = body?.price_usd != null ? Number(body.price_usd) : null;
   const uid = crypto.randomUUID();
   const now = new Date().toISOString();
+  // The agency is recorded at creation, alongside the owner. A creator with no
+  // company selected records NULL rather than a guess at their primary — the
+  // honest answer when they never named a firm, and one that keeps the
+  // offering visible under all of them.
+  const companyId = await activeCompanyFor(c, user);
   const r = await c.env.DB.prepare(
-    `INSERT INTO service_offerings (uid, owner_user_id, title, category, summary, price_usd, is_active, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+    `INSERT INTO service_offerings (uid, owner_user_id, title, category, summary, price_usd, is_active, created_at, updated_at, company_id)
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
   ).bind(uid, user.id, title.slice(0, 200), category, summary,
-         price != null && Number.isFinite(price) ? price : null, now, now).run();
+         price != null && Number.isFinite(price) ? price : null, now, now, companyId).run();
   const fresh = await c.env.DB.prepare('SELECT * FROM service_offerings WHERE id = ?')
     .bind(r.meta.last_row_id).first<Offering>();
   return c.json(serialize(fresh as Offering));
 });
 
-async function ensureOwnerOr404(env: Env, id: number, user: User): Promise<Offering | null> {
+/**
+ * The write gate for PUT and DELETE, now also asking WHICH AGENCY.
+ *
+ * This is an authorisation check, not a filter — its answer becomes a 404 —
+ * so the company test runs only AFTER ownership has been established, and an
+ * admin is exempt from both. Ordering it the other way would let a company id
+ * decide access on a row the caller does not own.
+ *
+ * A NULL company on the row means the owner recorded no agency for it, and it
+ * stays editable under any of theirs.
+ */
+async function ensureOwnerOr404(
+  env: Env, id: number, user: User, companyId: number | null,
+): Promise<Offering | null> {
   const row = await env.DB.prepare('SELECT * FROM service_offerings WHERE id = ?')
     .bind(id).first<Offering>();
   if (!row) return null;
-  if (row.owner_user_id !== user.id && !isAdmin(user)) return null;
+  if (isAdmin(user)) return row;
+  if (row.owner_user_id !== user.id) return null;
+  const owning = (row as Offering & { company_id?: number | null }).company_id ?? null;
+  if (companyId !== null && owning !== null && owning !== companyId) return null;
   return row;
 }
 
@@ -112,7 +149,7 @@ services.put('/offerings/:id', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
-  const row = await ensureOwnerOr404(c.env, id, user);
+  const row = await ensureOwnerOr404(c.env, id, user, await activeCompanyFor(c, user));
   if (!row) return c.json({ detail: 'Offering not found' }, 404);
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
   const title = body?.title != null ? String(body.title).slice(0, 200) : row.title;
@@ -137,7 +174,7 @@ services.delete('/offerings/:id', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
-  const row = await ensureOwnerOr404(c.env, id, user);
+  const row = await ensureOwnerOr404(c.env, id, user, await activeCompanyFor(c, user));
   if (!row) return c.json({ detail: 'Offering not found' }, 404);
   await c.env.DB.prepare('DELETE FROM service_offerings WHERE id = ?').bind(id).run();
   return c.json({ ok: true });

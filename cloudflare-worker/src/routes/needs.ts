@@ -7,6 +7,7 @@
  * (cancelled is terminal from any non-terminal state).
  */
 import { Hono } from 'hono';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -261,12 +262,14 @@ needs.post('/:id/quotes', async (c) => {
     try {
       const ins = await c.env.DB.prepare(
         `INSERT INTO quotes
-          (uid, need_id, rfp_id, partner_id, price, timeline_weeks, deliverables, notes, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?)`
+          (uid, need_id, rfp_id, partner_id, price, timeline_weeks, deliverables, notes, status, created_at, updated_at, company_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'submitted', ?, ?, ?)`
+      // Company scoping, stage 8: the bid records the agency that made it, and
+      // the engagement created when a founder accepts inherits it from here.
       ).bind(uid, id, rfp?.id ?? null, user.partner_id || (isAdmin(user) ? Number(body.partner_id || 0) : 0),
              price, body.timeline_weeks != null ? Number(body.timeline_weeks) : null,
              deliverables.slice(0, 4000), body.notes ? String(body.notes).slice(0, 2000) : null,
-             nowIso(), nowIso()).run();
+             nowIso(), nowIso(), await activeCompanyFor(c, user)).run();
       const q = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?')
         .bind((ins as any).meta?.last_row_id).first<Quote>();
       return c.json(await quoteDto(c.env, q!));
@@ -306,12 +309,24 @@ quotesRouter.get('/me', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!isPartner(user) && !isAdmin(user)) return c.json({ items: [] });
-    const sql = isAdmin(user)
-      ? 'SELECT * FROM quotes ORDER BY created_at DESC LIMIT 200'
-      : 'SELECT * FROM quotes WHERE partner_id = ? ORDER BY created_at DESC LIMIT 200';
-    const rows = isAdmin(user)
-      ? await c.env.DB.prepare(sql).all<Quote>()
-      : await c.env.DB.prepare(sql).bind(user.partner_id ?? -1).all<Quote>();
+    // Company scoping, stage 8. "My quotes" is a claim about THIS agency.
+    // The admin arm is an oversight view and is deliberately left wide — the
+    // same exemption every stage of this rollout has honoured, and the reason
+    // each file's exemption set has to be read rather than copied.
+    const companyId = isAdmin(user) ? null : await activeCompanyFor(c, user);
+    const rows = await (
+      isAdmin(user)
+        ? c.env.DB.prepare('SELECT * FROM quotes ORDER BY created_at DESC LIMIT 200')
+        : companyId !== null
+          ? c.env.DB.prepare(
+              `SELECT * FROM quotes
+                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL)
+                ORDER BY created_at DESC LIMIT 200`,
+            ).bind(user.partner_id ?? -1, companyId)
+          : c.env.DB.prepare(
+              'SELECT * FROM quotes WHERE partner_id = ? ORDER BY created_at DESC LIMIT 200',
+            ).bind(user.partner_id ?? -1)
+    ).all<Quote>();
     const items: any[] = [];
     for (const q of rows.results || []) items.push(await quoteDto(c.env, q));
     // Wave 1a — attach the need's title/status so the Operations "Proposals"
@@ -354,20 +369,39 @@ quotesRouter.get('/analytics', async (c) => {
       return c.json({ pipeline: null, forecast: null, delivery: null });
     }
     const admin = isAdmin(user);
-    const quotes = admin
-      ? await c.env.DB.prepare(
-          'SELECT status, price AS amount, created_at, decided_at FROM quotes ORDER BY created_at DESC LIMIT 1000',
-        ).all<QuoteAnalyticsRow>()
-      : await c.env.DB.prepare(
-          'SELECT status, price AS amount, created_at, decided_at FROM quotes WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1000',
-        ).bind(user.partner_id ?? -1).all<QuoteAnalyticsRow>();
-    const engagements = admin
-      ? await c.env.DB.prepare(
-          'SELECT status, price AS amount FROM engagements ORDER BY created_at DESC LIMIT 1000',
-        ).all<EngagementAnalyticsRow>().catch(() => ({ results: [] as EngagementAnalyticsRow[] }))
-      : await c.env.DB.prepare(
-          'SELECT status, price AS amount FROM engagements WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1000',
-        ).bind(user.partner_id ?? -1).all<EngagementAnalyticsRow>().catch(() => ({ results: [] as EngagementAnalyticsRow[] }));
+    // The analytics must answer for the SAME set of rows the lists show, or a
+    // partner reads a win rate for one agency beside a pipeline for another.
+    const analyticsCompany = admin ? null : await activeCompanyFor(c, user);
+    const quotes = await (
+      admin
+        ? c.env.DB.prepare(
+            'SELECT status, price AS amount, created_at, decided_at FROM quotes ORDER BY created_at DESC LIMIT 1000',
+          )
+        : analyticsCompany !== null
+          ? c.env.DB.prepare(
+              `SELECT status, price AS amount, created_at, decided_at FROM quotes
+                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL)
+                ORDER BY created_at DESC LIMIT 1000`,
+            ).bind(user.partner_id ?? -1, analyticsCompany)
+          : c.env.DB.prepare(
+              'SELECT status, price AS amount, created_at, decided_at FROM quotes WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1000',
+            ).bind(user.partner_id ?? -1)
+    ).all<QuoteAnalyticsRow>();
+    const engagements = await (
+      admin
+        ? c.env.DB.prepare(
+            'SELECT status, price AS amount FROM engagements ORDER BY created_at DESC LIMIT 1000',
+          )
+        : analyticsCompany !== null
+          ? c.env.DB.prepare(
+              `SELECT status, price AS amount FROM engagements
+                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL)
+                ORDER BY created_at DESC LIMIT 1000`,
+            ).bind(user.partner_id ?? -1, analyticsCompany)
+          : c.env.DB.prepare(
+              'SELECT status, price AS amount FROM engagements WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1000',
+            ).bind(user.partner_id ?? -1)
+    ).all<EngagementAnalyticsRow>().catch(() => ({ results: [] as EngagementAnalyticsRow[] }));
 
     const q = quotes.results || [];
     return c.json({
@@ -417,9 +451,15 @@ async function quoteTransition(c: Context<{ Bindings: Env }>, target: 'accept' |
   try {
     await c.env.DB.prepare(
       `INSERT INTO engagements
-         (uid, need_id, quote_id, partner_id, founder_id, project_id, price, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'accepted', ?, ?)`
-    ).bind(eUid, q.need_id, q.id, q.partner_id, need.founder_id, need.project_id, q.price, nowIso(), nowIso()).run();
+         (uid, need_id, quote_id, partner_id, founder_id, project_id, price, status, created_at, updated_at, company_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'accepted', ?, ?, ?)`
+    // The agency comes from the QUOTE, not from whoever accepted it. A founder
+    // accepts under their own company; copying that here would file the
+    // partner's engagement under the founder's firm. `company_id` on both
+    // tables means the partner's agency and only that — the founder's side of
+    // the same row is answered through project_id and migration 189.
+    ).bind(eUid, q.need_id, q.id, q.partner_id, need.founder_id, need.project_id, q.price,
+           nowIso(), nowIso(), (q as Quote & { company_id?: number | null }).company_id ?? null).run();
   } catch { /* idempotent — UNIQUE(quote_id) protects re-acceptance */ }
   const fresh = await c.env.DB.prepare('SELECT * FROM quotes WHERE id = ?').bind(id).first<Quote>();
   return c.json(await quoteDto(c.env, fresh!));
@@ -434,9 +474,28 @@ quotesRouter.post('/:id/withdraw', (c) => quoteTransition(c, 'withdraw'));
 // ---------------------------------------------------------------------------
 const engagementsRouter = new Hono<{ Bindings: Env }>();
 
-function canSeeEngagement(e: Engagement, u: User): boolean {
+/**
+ * May this caller see this engagement, under the company they are acting for?
+ *
+ * Company scoping, stage 8. Only the PARTNER arm consults `companyId`, and the
+ * asymmetry is the point: `engagements.company_id` records the partner's
+ * AGENCY. A founder's side of the same row is answered through `project_id`
+ * and migration 189, so testing the founder against a partner's agency column
+ * would refuse them their own engagement.
+ *
+ * Ordered so ownership is proved first and the company only narrows what is
+ * already the caller's — this decides a 403, so a company that could grant
+ * rather than narrow would be a hole rather than a filter.
+ *
+ * A NULL company on the row means the partner had no primary company when it
+ * was created; it stays visible under every one of theirs.
+ */
+function canSeeEngagement(e: Engagement, u: User, companyId: number | null = null): boolean {
   if (isAdmin(u)) return true;
-  if (isPartner(u) && u.partner_id === e.partner_id) return true;
+  if (isPartner(u) && u.partner_id === e.partner_id) {
+    const owning = (e as Engagement & { company_id?: number | null }).company_id ?? null;
+    return companyId === null || owning === null || owning === companyId;
+  }
   if (isFounder(u) && u.founder_id === e.founder_id) return true;
   return false;
 }
@@ -446,8 +505,24 @@ engagementsRouter.get('/', async (c) => {
     const user = await requireAuth(c);
     let where = '1=1';
     const params: any[] = [];
-    if (isPartner(user)) { where = 'e.partner_id = ?'; params.push(user.partner_id ?? -1); }
-    else if (isFounder(user)) { where = 'e.founder_id = ?'; params.push(user.founder_id ?? -1); }
+    // Company scoping, stage 8, and the two branches ask DIFFERENT questions.
+    // A partner's engagements narrow on `e.company_id` — their agency. A
+    // founder's narrow on the PROJECT's company, because that is where a
+    // founder's company lives (migration 189) and `e.company_id` is not
+    // theirs to be tested against. Admin stays wide.
+    const companyId = isAdmin(user) ? null : await activeCompanyFor(c, user);
+    if (isPartner(user)) {
+      where = 'e.partner_id = ?'; params.push(user.partner_id ?? -1);
+      if (companyId !== null) {
+        where += ' AND (e.company_id = ? OR e.company_id IS NULL)'; params.push(companyId);
+      }
+    }
+    else if (isFounder(user)) {
+      where = 'e.founder_id = ?'; params.push(user.founder_id ?? -1);
+      if (companyId !== null) {
+        where += ' AND (p.company_id = ? OR p.company_id IS NULL)'; params.push(companyId);
+      }
+    }
     else if (!isAdmin(user)) { return c.json({ items: [] }); }
     // Wave 1a — the list now carries display names so the Operations tabs can
     // render "who is this engagement with" without an N+1 fetch per row. All
@@ -476,7 +551,7 @@ engagementsRouter.get('/:id', async (c) => {
     const id = Number(c.req.param('id'));
     const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
     if (!e) return c.json({ detail: 'Engagement not found' }, 404);
-    if (!canSeeEngagement(e, user)) return c.json({ detail: 'Forbidden' }, 403);
+    if (!canSeeEngagement(e, user, await activeCompanyFor(c, user))) return c.json({ detail: 'Forbidden' }, 403);
     return c.json(engagementDto(e));
   } catch (e) { return mapError(c, e); }
 });
@@ -486,7 +561,7 @@ async function engTransition(c: Context<{ Bindings: Env }>, target: 'start' | 'd
   const id = Number(c.req.param('id'));
   const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
   if (!e) return c.json({ detail: 'Engagement not found' }, 404);
-  if (!canSeeEngagement(e, user)) return c.json({ detail: 'Forbidden' }, 403);
+  if (!canSeeEngagement(e, user, await activeCompanyFor(c, user))) return c.json({ detail: 'Forbidden' }, 403);
   const body = await c.req.json().catch(() => ({} as any));
   const isPartnerSide = isAdmin(user) || (isPartner(user) && user.partner_id === e.partner_id);
   const isFounderSide = isAdmin(user) || (isFounder(user) && user.founder_id === e.founder_id);
@@ -613,7 +688,7 @@ engagementsRouter.get('/:id/reviews', async (c) => {
     const id = Number(c.req.param('id'));
     const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
     if (!e) return c.json({ detail: 'Engagement not found' }, 404);
-    if (!canSeeEngagement(e, user)) return c.json({ detail: 'Forbidden' }, 403);
+    if (!canSeeEngagement(e, user, await activeCompanyFor(c, user))) return c.json({ detail: 'Forbidden' }, 403);
     const rows = await c.env.DB.prepare(
       'SELECT * FROM engagement_reviews WHERE engagement_id = ? ORDER BY created_at ASC'
     ).bind(id).all<any>();
@@ -627,7 +702,7 @@ engagementsRouter.post('/:id/reviews', async (c) => {
     const id = Number(c.req.param('id'));
     const e = await c.env.DB.prepare('SELECT * FROM engagements WHERE id = ?').bind(id).first<Engagement>();
     if (!e) return c.json({ detail: 'Engagement not found' }, 404);
-    if (!canSeeEngagement(e, user)) return c.json({ detail: 'Forbidden' }, 403);
+    if (!canSeeEngagement(e, user, await activeCompanyFor(c, user))) return c.json({ detail: 'Forbidden' }, 403);
     if (!['delivered', 'reviewed', 'invoiced'].includes(e.status)) {
       return c.json({ detail: 'Engagement must be delivered before reviewing' }, 409);
     }
