@@ -15,7 +15,13 @@ const pretty = (value) => text(value).replace(/[_-]/g, ' ').replace(/\b\w/g, (le
 const direction = (row) => String(row.direction || '').toLowerCase() === 'incoming' ? 'Asked' : 'Offered';
 const isStalled = (row) => String(row.status || '').toLowerCase() === 'expired';
 const isLanded = (row) => ['accepted', 'connected'].includes(String(row.status || '').toLowerCase());
-const counterpart = (row) => row.counterpart || (row.direction === 'incoming' ? row.initiator : row.recipient) || {};
+// `/introductions/propositions` names the other side `target`; the older
+// shapes named it counterpart/initiator/recipient. Read all of them so the
+// name renders instead of falling through to 'Counterpart not recorded'.
+const counterpart = (row) => row.counterpart
+  || (row.direction === 'incoming' ? row.initiator : row.recipient)
+  || row.target
+  || {};
 const introductionLabel = (row) => {
   const name = text(counterpart(row).name, 'Counterpart not recorded');
   return direction(row) === 'Asked' ? `${name} → you` : `you → ${name}`;
@@ -48,7 +54,7 @@ export default function FounderNetworkIntroductions() {
     setStatus('loading'); setError('');
     try {
       const result = await api.networkIntroductionsList();
-      setRows(list(result, 'items', 'introductions'));
+      setRows(list(result, 'propositions', 'items', 'introductions'));
       setStatus('ready');
     } catch (cause) {
       setRows([]);

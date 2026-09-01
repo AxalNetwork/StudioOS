@@ -91,7 +91,7 @@ const MIGRATED = ['founder', 'investor'];
 
 const PREFIXES = {
   founder: ['/validate', '/build', '/raise', '/grow', '/network', '/research'],
-  investor: ['/deals', '/portfolio', '/fund', '/network', '/research'],
+  investor: ['/deals', '/portfolio', '/funds', '/network', '/research'],
   advisor: ['/practice', '/cohorts', '/expertise', '/network', '/research'],
   partner: ['/pipeline', '/delivery', '/offers', '/network', '/research'],
 };

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { routeBlock } from './_routes.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const app = read('frontend/src/App.jsx');
@@ -39,21 +40,30 @@ test('investor Research implements I8 without fabricated diligence claims', () =
 });
 
 test('investor-owned deep links keep the investor workspace shell', () => {
+  // Each of these reads the route's own block, bounded by the next <Route, so
+  // it cannot be satisfied by a neighbouring route's markup. The last two used
+  // `[^\n]+` and a single flat ternary against the whole file: `724dfc9f`
+  // wrapped /raise/data-room across six lines and both stopped matching, with
+  // nothing about the routing having changed. The branch order they were
+  // pinning — investor first, founder second — is still exactly what ships.
   assert.match(
-    app,
-    /path="\/deals\/:dealId"[^\n]+investorWorkspace\('deals', <DealRoomPage \/>/,
+    routeBlock(app, '/deals/:dealId'),
+    /investorWorkspace\('deals', <DealRoomPage \/>/,
   );
   assert.match(
-    app,
-    /path="\/lp-portal"[^\n]+investorWorkspace\('axal-vc-fund', <LPPortalPage \/>/,
+    routeBlock(app, '/lp-portal'),
+    /investorWorkspace\('axal-vc-fund', <LPPortalPage \/>/,
+  );
+  const dataRoom = routeBlock(app, '/raise/data-room');
+  assert.match(dataRoom, /investorWorkspace\('deals'/);
+  assert.match(
+    dataRoom,
+    /effectiveRole === 'investor'\s*\?\s*investorWorkspace\('deals', <DataRoomPage user=\{user\} \/>\)/,
+    'the investor branch must be the first arm, ahead of any founder shell',
   );
   assert.match(
-    app,
-    /path="\/raise\/data-room"[^\n]+investorWorkspace\('deals'/,
-  );
-  assert.match(
-    app,
-    /effectiveRole === 'investor' \? investorWorkspace\('deals', <DataRoomPage user=\{user\} \/>\) : founderWorkspace\('raise', <FounderWorkspaceTabs/,
+    dataRoom,
+    /founderWorkspace\('raise', <FounderWorkspaceTabs/,
     'investor Data Room must not inherit the founder workspace tab bar',
   );
 });

@@ -38,9 +38,23 @@ test('I4 is wired to real portfolio sources and preserves detailed tools', () =>
   ]) {
     assert.match(portfolio, new RegExp(`api\\.${call}`));
   }
-  for (const route of ['/portfolio/positions', '/portfolio/updates', '/portfolio/growth', '/portfolio/performance']) {
+  // The doors the canvas must keep open to the detailed tools. The third one
+  // is /portfolio/value-add, not /portfolio/growth: `shellConfig.js` declares
+  // `{ slug: 'value-add', … legacy: '/portfolio/growth' }`, so value-add is
+  // the canonical path and growth is its legacy alias. `724dfc9f` repointed
+  // the canvas onto the canonical path — this assertion was still naming the
+  // legacy one, which is the alias a canvas should be the LAST thing linking.
+  for (const route of ['/portfolio/positions', '/portfolio/updates', '/portfolio/value-add', '/portfolio/performance']) {
     assert.match(portfolio, new RegExp(route.replaceAll('/', '\\/')));
   }
+  // The alias still has to resolve, or every link that predates the rename
+  // 404s. Read the declaration rather than restating it, so renaming the slug
+  // in one place cannot leave this test asserting a path nothing routes.
+  const shell = read('frontend/src/workspaces/shellConfig.js');
+  const legacy = /\{ slug: 'value-add',[^}]*legacy: '([^']+)' \}/.exec(shell);
+  assert.ok(legacy, 'shellConfig no longer declares the value-add legacy path');
+  assert.match(app, new RegExp(`path="${legacy[1].replaceAll('/', '\\/')}"`),
+    `${legacy[1]} is declared legacy for value-add but nothing routes it`);
   assert.match(portfolio, /Missing values stay blank rather than being estimated/);
   assert.match(portfolio, /At cost/);
   assert.match(portfolio, /mark coverage/);

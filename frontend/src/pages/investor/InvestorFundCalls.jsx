@@ -9,7 +9,7 @@ const filters = [['call3', 'Call 3'], ['all', 'All calls'], ['outstanding', 'Out
 export default function InvestorFundCalls() {
   const [filter, setFilter] = useState('call3');
   return <div className="i6-fund if2-shell"><main className="i6-main if2-main" data-testid="investor-fund-calls"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>Calls</b></div><h1>Capital calls</h1><p>Schedule builder, letters, wire tracking and delinquency.</p></div></header>
-    <nav className="if2-zones" aria-label="Fund sections"><Link to="/fund/lps">LPs</Link><Link className="is-active" to="/fund/calls">Calls</Link><Link to="/fund/accounting">Accounting</Link><Link to="/fund/reporting">Reporting</Link></nav>
+    <nav className="if2-zones" aria-label="Fund sections"><Link to="/funds/lps">LPs</Link><Link className="is-active" to="/funds/calls">Calls</Link><Link to="/funds/ledger">Accounting</Link><Link to="/funds/reporting">Reporting</Link></nav>
     <div className="if2-filters">{filters.map(([id, label]) => <button type="button" key={id} className={filter === id ? 'is-active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div>
     <div className="i6-load-error if2-unavailable" data-testid="status-fund-calls-unavailable"><AlertCircle size={14} /><span>Fund-scoped call ledger unavailable. No call total, LP obligation, receipt, or delinquency claim is being made.</span></div>
     <section className="if2-stats"><Stat label="Called to date" note="Fund call source unavailable" /><Stat label="Collected" note="Receipt ledger unavailable" /><Stat label="Outstanding" note="Cannot determine without LP rows" /><Stat label="Current call" note="No fund call schedule recorded" /></section>

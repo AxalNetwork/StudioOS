@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { apiMethodNames, apiCallsIn } from './_apiMethods.mjs';
+import { routeBlock } from './_routes.mjs';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -104,11 +105,18 @@ test('sharing does not promise an invitation', () => {
 test('the page is routed, role-branched, and never a second root', () => {
   const app = read('frontend/src/App.jsx');
   assert.match(app, /path="\/raise\/data-room"/, 'defining the page is not shipping it');
-  // Read the route's own line rather than pinning guard-to-page adjacency: the
+  // Read the route's own BLOCK rather than pinning guard-to-page adjacency: the
   // founder shell wraps this route in FounderWorkspaceTabs (Raise owns the Data
   // room zone), which sits between them. The guard list and the page it renders
   // are what this test is about.
-  const route = app.split('\n').find((l) => l.includes('path="/raise/data-room"'));
+  //
+  // This used to read a single line. `724dfc9f` wrapped the element across six
+  // lines when the investor branch and the ?mode=workspace ternary landed, so
+  // the single-line read stopped seeing a guard list that is still exactly
+  // where it was. routeBlock stops at the next <Route, so widening the read
+  // cannot let a neighbour's markup satisfy these assertions.
+  const route = routeBlock(app, '/raise/data-room');
+  assert.ok(route, 'no /raise/data-room route');
   assert.match(route, /guard\(\['admin', 'founder', 'investor'\],/);
   assert.match(route, /<DataRoomPage/);
   // The persona is a branch inside one route, not a /founder or /investor root.

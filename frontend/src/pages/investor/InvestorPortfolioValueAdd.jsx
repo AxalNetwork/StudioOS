@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ClipboardList, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, ClipboardList, RefreshCw } from 'lucide-react';
 import './investorPortfolioCanvas.css';
 import './investorPortfolioValueAdd.css';
 

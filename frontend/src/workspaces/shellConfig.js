@@ -190,12 +190,26 @@ export const SHELLS = {
       // Axal VC Fund — LP participation in Axal's own fund. Not the GP add-on
       // below it, and not touched by this migration.
       { kind: 'link', label: 'Axal VC Fund', to: '/spinout-lab/investor-workspace', untouched: true },
-      { kind: 'bucket', label: 'Fund', prefix: '/fund', tagline: 'Run the fund',
+      // PLURAL, and deliberately. This bucket was declared at `/fund`, which
+      // documentation/architecture/ROUTE_MAP.md rules out: singular and plural
+      // route correctly but sit one letter apart, so a misread lands somewhere
+      // real. That stopped being hypothetical once `/fund/accounting` and
+      // `/funds/accounting` were both live and rendered different components.
+      //
+      // The zones are the fund OVERVIEW; `/funds/*` already holds the
+      // operations tool (FundOpsWorkspace and its six tabs) and keeps it. The
+      // two are not rivals — InvestorFundAccounting says so itself: "IF3 does
+      // not reconcile, close periods, export a journal… Open the existing Fund
+      // Ops accounting workspace for authorized operations." So `accounting`
+      // is `ledger` here — the page's own section heading — leaving
+      // `/funds/accounting` to the tool it hands off to, which is what the
+      // zone's `legacy` names.
+      { kind: 'bucket', label: 'Fund', prefix: '/funds', tagline: 'Run the fund',
         requiredInvestorTier: 'institutional',
         zones: [
           { slug: 'lps', label: 'LPs', archetype: A.COLLECTION },
           { slug: 'calls', label: 'Calls', archetype: A.LEDGER, legacy: '/funds/capital-calls' },
-          { slug: 'accounting', label: 'Accounting', archetype: A.LEDGER, legacy: '/funds/accounting' },
+          { slug: 'ledger', label: 'Accounting', archetype: A.LEDGER, legacy: '/funds/accounting' },
           { slug: 'reporting', label: 'Reporting', archetype: A.FEED, legacy: '/lp-reports' },
         ] },
       { kind: 'bucket', label: 'Network', prefix: '/network', zones: NETWORK_ZONES },

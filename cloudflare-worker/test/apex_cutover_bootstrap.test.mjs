@@ -113,11 +113,20 @@ test('both deploy targets keep the apex route table to the audited allowlist', a
   // So: an exact allowlist, not a bound in either direction. The floor also
   // carried a hardcoded 68 that was 166 by the time it mattered, which is the
   // other reason it earned no trust.
+  //
+  // CORRECTED 2026-09-01. `e1de44c2` ("Stop apex Pages and Worker asset skew")
+  // finished the cutover in the other direction: it deleted every path route
+  // from wrangler.toml and bound BOTH hosts as Workers Custom Domains, so one
+  // asset build sits behind the apex and app.axal.vc and the two can no longer
+  // drift apart. That commit rewrote this test in the same breath but left the
+  // pre-cutover four-entry table here, so the toml and its guard shipped
+  // disagreeing and this has been red on `main` ever since. The toml is the
+  // deployed truth. `frontend/test/apex_route_coverage.test.mjs` carries the
+  // same correction and additionally pins that each entry is a custom domain
+  // rather than a zone route.
   const ALLOWED = [
-    'app.axal.vc',      // Workers Custom Domain — the Worker serves this whole host
-    'axal.vc/api/*',    // the API
-    'axal.vc/landing/*',// Worker-rendered landing pages
-    'axal.vc/p/*',      // Worker-rendered public pages
+    'axal.vc',      // Workers Custom Domain — the Worker serves this whole host
+    'app.axal.vc',  // Workers Custom Domain — same build, same handlers
   ].sort();
 
   assert.deepEqual(topPatterns, ALLOWED);

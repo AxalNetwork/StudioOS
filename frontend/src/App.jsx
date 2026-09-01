@@ -267,6 +267,7 @@ const FounderBuildThisWeek = lazy(() => import('./pages/founder/FounderBuildThis
 const FounderBuildRoadmap = lazy(() => import('./pages/founder/FounderBuildRoadmap'));
 const FounderBuildKpi = lazy(() => import('./pages/founder/FounderBuildKpi'));
 const FounderBuildCadence = lazy(() => import('./pages/founder/FounderBuildCadence'));
+const FounderRaiseDesk = lazy(() => import('./pages/founder/FounderRaiseDesk'));
 const FounderRaisePitch = lazy(() => import('./pages/founder/FounderRaisePitch'));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
@@ -1303,6 +1304,8 @@ function AppInner() {
   const partnerPrivateWorkspace = (component) => (
     partnerRolePreview ? <Navigate to="/studio" replace /> : component
   );
+  const founderRaiseLanding = effectiveRole === 'founder'
+    && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const founderGrowLanding = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const networkParams = new URLSearchParams(location.search);
@@ -1879,17 +1882,32 @@ function AppInner() {
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/funds/performance" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
       <Route path="/funds/accounting" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
-      <Route path="/fund/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
-      <Route path="/fund/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
-      <Route path="/fund/accounting" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />
-      <Route path="/fund/reporting" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundReporting />))} />
+      <Route path="/funds/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
+      <Route path="/funds/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
+      <Route path="/funds/ledger" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />
+      <Route path="/funds/reporting" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundReporting />))} />
       {/* Task #1 — Contacts merged into the unified Network page. The legacy
           /contacts route now redirects into the Contacts tab. */}
       <Route path="/contacts" element={<Navigate to="/network?tab=contacts" replace />} />
       {/* Raise pipeline — investor contacts promoted from the Contacts hub. */}
       {/* Task #1 — RAISE Workspaces: legacy /raise (Raise Pipeline) now lives in
           the Capital workspace pipeline tab. */}
-      <Route path="/raise" element={<Navigate to="/raise/capital/pipeline" replace />} />
+      {/* Raise zone root — A4's desk.
+          `724dfc9f` rebuilt the Raise SECTIONS as six dedicated pages
+          (Status · Pitch · Capital · Legal · Data room · Liquidity), each
+          rendering the zone's section switcher, and pointed the sidebar row
+          at /raise/pitch. That took over the slot A4's desk had been mounted
+          in, and the desk — a zone OVERVIEW, a different level of the same
+          IA — was left on disk with nothing importing it, while its four
+          siblings (Build at /execution, Grow at /build/team, Network at
+          /network, Research at /signals) all kept theirs.
+          The zone root is where an overview belongs, and it was spending
+          itself on a redirect into a sub-sub-route of Capital. Every section
+          page Replit shipped is untouched; only the redirect is replaced,
+          and only for a founder in landing mode. */}
+      <Route path="/raise" element={founderRaiseLanding
+        ? guard(labRoles(['admin', 'founder']), <FounderRaiseDesk />)
+        : <Navigate to="/raise/capital/pipeline" replace />} />
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
       <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor'], partnerPrivateWorkspace(<ReferralsPage />))} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />

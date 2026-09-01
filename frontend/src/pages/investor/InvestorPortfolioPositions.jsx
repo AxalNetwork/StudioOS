@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import './investorPortfolioCanvas.css';
 import './investorPortfolioPositions.css';

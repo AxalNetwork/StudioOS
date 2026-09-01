@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, ExternalLink, RefreshCw, Rocket, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, RefreshCw, Rocket, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import './founderGrowDesk.css';
 import './founderGrowLaunch.css';

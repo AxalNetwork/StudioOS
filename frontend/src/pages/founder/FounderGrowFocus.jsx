@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BarChart3, CheckCircle2, ChevronRight, Filter, RefreshCw, Sparkles, Target, TrendingUp } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BarChart3, CheckCircle2, ChevronRight, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { api } from '../../lib/api';
 import './founderGrowDesk.css';
 import './founderGrowFocus.css';
