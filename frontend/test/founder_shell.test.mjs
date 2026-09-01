@@ -192,8 +192,15 @@ test('the Research row lands somewhere every founder can actually open', () => {
   // /market-intel's guard is labRoles(['admin','partner','investor']) — it does
   // not list founder at all, so a founder outside the Lab is bounced. That
   // predates this shell; the row must not walk into it.
+  // The row now lands on /research/ask, the shared Research bucket's first
+  // zone. What matters is not WHICH route it is but that a founder can open
+  // it — the literal is what the shell migration changes, the guard below is
+  // the thing that must never change.
   const research = rows.find((r) => r.label === 'Research');
-  assert.equal(research.to, '/signals');
+  const target = app.split('\n').find((l) => l.includes(`path="${research.to}"`));
+  assert.ok(target, `the Research row points at ${research.to}, which has no route`);
+  assert.match(target.slice(target.indexOf('guard(')), /\[[^\]]*'founder'[^\]]*\]/,
+    `${research.to} must admit 'founder' outright, not only Lab-active ones`);
   const mi = app.split('\n').find((l) => l.includes('path="/market-intel"'));
   assert.ok(!/\[[^\]]*'founder'[^\]]*\]/.test(mi.slice(mi.indexOf('guard('))),
     'if /market-intel ever admits founders outright, point Research back at it');

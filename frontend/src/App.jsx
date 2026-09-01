@@ -34,6 +34,13 @@ import NotFoundPage from './pages/NotFoundPage';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
+
+// The four workspace shells, rebuilt from the design canvases. The IA itself
+// lives in src/workspaces/shellConfig.js — the sidebar, the zone nav and a
+// guard test all read that one file, so a row can never advertise a door the
+// router does not open.
+const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
+const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
 const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
@@ -1223,6 +1230,11 @@ function AppInner() {
     isImpersonating, onExitImpersonation: exitImpersonation, realUser, onImpersonate: handleImpersonate,
   };
 
+  // Which shell's Research zone list to render. Admin has no research shell of
+  // its own, so it previews the founder one rather than falling through to a
+  // bucket with no zones.
+  const researchRole = (!effectiveRole || effectiveRole === 'admin') ? 'founder' : effectiveRole;
+
   const guard = (roles, component) => (
     <RequireAuth {...authProps}>
       <RoleGuard user={user} allowedRoles={roles} viewMode={viewMode} realUser={realUser} isImpersonating={isImpersonating} impersonationTargetRef={pendingImpersonationPathRef}>
@@ -1434,6 +1446,33 @@ function AppInner() {
       <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('research', <CompetitorAnalysisPage />))} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FinancialsPage />))} />
       <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), effectiveRole === 'founder' ? <FounderValidatePage /> : <DiscoveryPage />)} />
+
+      {/* ── Validate · the four evidence stages ──────────────────────────────
+          Interviews and Pain map read the SAME records Discovery writes; the
+          two routes are doors onto one log, not a fork of it. Hypotheses and
+          Verdict have no store yet and say so rather than 404-ing behind a
+          sidebar row that promises a page. */}
+      <Route path="/validate" element={<Navigate to="/validate/interviews" replace />} />
+      <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+
+      {/* ── Research · one path, four zone lists ─────────────────────────────
+          Shared like /network already is: the route role-branches its element
+          and the zone row comes from the shell config, so each license sees
+          the zones its own canvas specifies. Markets mounts the live signals
+          feed; Companies revives CompetitorAnalysisPage, which had been
+          reachable only by deep link since it left the sidebar. */}
+      <Route path="/research" element={<Navigate to="/research/ask" replace />} />
+      <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/funds" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/diligence" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
       <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
       <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('build', <FounderBuildRoadmap />))} />
