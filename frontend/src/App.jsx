@@ -34,6 +34,17 @@ import NotFoundPage from './pages/NotFoundPage';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
+
+// The four workspace shells, rebuilt from the design canvases. The IA itself
+// lives in src/workspaces/shellConfig.js — the sidebar, the zone nav and a
+// guard test all read that one file, so a row can never advertise a door the
+// router does not open.
+const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
+const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
+const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
+const AdvisorBucketRoutes = lazy(() => import('./workspaces/advisor/AdvisorBucketRoutes'));
+const PartnerBucketRoutes = lazy(() => import('./workspaces/partner/PartnerBucketRoutes'));
+const NetworkWorkspace = lazy(() => import('./workspaces/NetworkWorkspace'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
 const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
@@ -256,6 +267,7 @@ const FounderBuildThisWeek = lazy(() => import('./pages/founder/FounderBuildThis
 const FounderBuildRoadmap = lazy(() => import('./pages/founder/FounderBuildRoadmap'));
 const FounderBuildKpi = lazy(() => import('./pages/founder/FounderBuildKpi'));
 const FounderBuildCadence = lazy(() => import('./pages/founder/FounderBuildCadence'));
+const FounderRaiseDesk = lazy(() => import('./pages/founder/FounderRaiseDesk'));
 const FounderRaisePitch = lazy(() => import('./pages/founder/FounderRaisePitch'));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
@@ -1258,6 +1270,19 @@ function AppInner() {
   // who the viewer is — which is exactly how an admin previewing Investor View
   // ended up with an "Investor View" chip above the FOUNDER Spin-Out Lab.
   const effectiveRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
+
+  // Which shell's Research zone list to render. Admin has no research shell of
+  // its own, so it previews the founder one rather than falling through to a
+  // bucket with no zones.
+  //
+  // MUST stay below effectiveRole. It was briefly declared above it, which put
+  // the read inside the temporal dead zone of a `const` in the same function
+  // body — a ReferenceError on every render of AppInner, so a blank app. The
+  // build does not catch it because it is a runtime error, not a compile one.
+  const researchRole = (!effectiveRole || effectiveRole === 'admin') ? 'founder' : effectiveRole;
+  // Same rule as researchRole, and the same reason it lives below
+  // effectiveRole rather than above it.
+  const networkRole = researchRole;
   const investorWorkspace = (page, component, options = {}) => (
     effectiveRole === 'investor'
       ? <InvestorWorkspacePage page={page} {...options}>{component}</InvestorWorkspacePage>
@@ -1279,6 +1304,8 @@ function AppInner() {
   const partnerPrivateWorkspace = (component) => (
     partnerRolePreview ? <Navigate to="/studio" replace /> : component
   );
+  const founderRaiseLanding = effectiveRole === 'founder'
+    && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const founderGrowLanding = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const networkParams = new URLSearchParams(location.search);
@@ -1434,6 +1461,33 @@ function AppInner() {
       <Route path="/build/competitors" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('research', <CompetitorAnalysisPage />))} />
       <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FinancialsPage />))} />
       <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), effectiveRole === 'founder' ? <FounderValidatePage /> : <DiscoveryPage />)} />
+
+      {/* ── Validate · the four evidence stages ──────────────────────────────
+          Interviews and Pain map read the SAME records Discovery writes; the
+          two routes are doors onto one log, not a fork of it. Hypotheses and
+          Verdict have no store yet and say so rather than 404-ing behind a
+          sidebar row that promises a page. */}
+      <Route path="/validate" element={<Navigate to="/validate/interviews" replace />} />
+      <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+
+      {/* ── Research · one path, four zone lists ─────────────────────────────
+          Shared like /network already is: the route role-branches its element
+          and the zone row comes from the shell config, so each license sees
+          the zones its own canvas specifies. Markets mounts the live signals
+          feed; Companies revives CompetitorAnalysisPage, which had been
+          reachable only by deep link since it left the sidebar. */}
+      <Route path="/research" element={<Navigate to="/research/ask" replace />} />
+      <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/funds" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/diligence" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
       <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
       <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('build', <FounderBuildRoadmap />))} />
@@ -1617,6 +1671,18 @@ function AppInner() {
       <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], investorWorkspace('deals', <DealsPage />))} />
+
+      {/* ── Deals · the four stages, as four routes ──────────────────────────
+          The zone slugs are InvestorDealsWorkspace's own anchor ids with the
+          prefix stripped — the canvas took them from there. Four deep-linkable
+          URLs replacing five that never said which stage you were on; the
+          workspace still renders all four sections and the route scrolls to
+          one. Splitting it into four pages is a content decision, not a
+          routing one. */}
+      <Route path="/deals/pipeline" element={guard(['admin', 'partner', 'investor'], <InvestorDealsRoutes />)} />
+      <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
+      <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
+      <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
       <Route path="/market-intel" element={guard(labRoles(['admin', 'partner', 'investor']), effectiveRole === 'investor'
         ? <InvestorResearchWorkspace />
@@ -1709,6 +1775,34 @@ function AppInner() {
       <Route path="/advisor/network/introductions" element={<Navigate to="/network?tab=introductions" replace />} />
       <Route path="/advisor/network/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/advisor/network/organizations" element={<Navigate to="/network" replace />} />
+
+      {/* ── Advisor · Practice, Cohorts, Expertise ───────────────────────────
+          Three of Practice's five zones mount the live /advisor/advisory
+          workspace; Sessions and Earnings have no store and say so. Cohorts is
+          entirely new and reads Spin-Out Lab data read-only — it owns no Lab
+          route and writes nothing back. Expertise mounts the live workspace
+          that /office-hours already serves. The legacy /advisor/advisory/* and
+          /office-hours routes stay: Clients and Contracts are working tabs the
+          canvas has no zone for. */}
+      <Route path="/practice" element={<Navigate to="/practice/opportunities" replace />} />
+      <Route path="/practice/opportunities" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/practice/engagements" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/practice/delivery" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/practice/sessions" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/practice/earnings" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts" element={<Navigate to="/cohorts/founders" replace />} />
+      <Route path="/cohorts/founders" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts/guidance" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts/this-week" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts/calendar" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts/outcomes" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise" element={<Navigate to="/expertise/profile" replace />} />
+      <Route path="/expertise/profile" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise/services" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise/proof" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise/thinking" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise/visibility" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+
       <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/opportunities" replace />} />
       <Route path="/advisor/advisory/opportunities" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
@@ -1738,6 +1832,39 @@ function AppInner() {
           misleading one. They return when a data source is licensed. */}
       <Route path="/advisor/research" element={<Navigate to="/signals" replace />} />
       <Route path="/advisor/research/market" element={<Navigate to="/signals" replace />} />
+
+      {/* ── Partner · Pipeline, Delivery, Offers ─────────────────────────────
+          Nine of these fifteen zones already have a live surface, spread over
+          five prefixes that share no logic. The six that do not say what they
+          would hold.
+
+          /pipeline is a SHARED prefix and that is deliberate: the investor
+          shell has held /pipeline, /pipeline/screening, /pipeline/commit and
+          /pipeline/transactions for a long time. The two sets share no slug and
+          bucketForPath is role-scoped, so each licence resolves to its own
+          bucket. Check both lists before adding a sixth slug to either.
+
+          The legacy /partner/operations/*, /needs, /services, /perks and
+          /partner/insights routes all stay mounted — retiring that prefix is an
+          open decision, not this migration's to take. */}
+      <Route path="/pipeline/leads" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/pipeline/proposals" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/pipeline/negotiations" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/pipeline/retainers" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/pipeline/analytics" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery/board" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery/deliverables" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery/capacity" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery/status-reports" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery/health" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/catalog" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/perk-deals" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/visibility" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/proof" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/audience-fit" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery" element={<Navigate to="/delivery/board" replace />} />
+      <Route path="/offers" element={<Navigate to="/offers/catalog" replace />} />
+
       <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
       <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
       <Route path="/partner/operations/capabilities" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
@@ -1755,17 +1882,32 @@ function AppInner() {
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/funds/performance" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
       <Route path="/funds/accounting" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
-      <Route path="/fund/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
-      <Route path="/fund/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
-      <Route path="/fund/accounting" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />
-      <Route path="/fund/reporting" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundReporting />))} />
+      <Route path="/funds/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
+      <Route path="/funds/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
+      <Route path="/funds/ledger" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />
+      <Route path="/funds/reporting" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundReporting />))} />
       {/* Task #1 — Contacts merged into the unified Network page. The legacy
           /contacts route now redirects into the Contacts tab. */}
       <Route path="/contacts" element={<Navigate to="/network?tab=contacts" replace />} />
       {/* Raise pipeline — investor contacts promoted from the Contacts hub. */}
       {/* Task #1 — RAISE Workspaces: legacy /raise (Raise Pipeline) now lives in
           the Capital workspace pipeline tab. */}
-      <Route path="/raise" element={<Navigate to="/raise/capital/pipeline" replace />} />
+      {/* Raise zone root — A4's desk.
+          `724dfc9f` rebuilt the Raise SECTIONS as six dedicated pages
+          (Status · Pitch · Capital · Legal · Data room · Liquidity), each
+          rendering the zone's section switcher, and pointed the sidebar row
+          at /raise/pitch. That took over the slot A4's desk had been mounted
+          in, and the desk — a zone OVERVIEW, a different level of the same
+          IA — was left on disk with nothing importing it, while its four
+          siblings (Build at /execution, Grow at /build/team, Network at
+          /network, Research at /signals) all kept theirs.
+          The zone root is where an overview belongs, and it was spending
+          itself on a redirect into a sub-sub-route of Capital. Every section
+          page Replit shipped is untouched; only the redirect is replaced,
+          and only for a founder in landing mode. */}
+      <Route path="/raise" element={founderRaiseLanding
+        ? guard(labRoles(['admin', 'founder']), <FounderRaiseDesk />)
+        : <Navigate to="/raise/capital/pipeline" replace />} />
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
       <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor'], partnerPrivateWorkspace(<ReferralsPage />))} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />
@@ -1783,9 +1925,18 @@ function AppInner() {
           the Relationships tab. Advisors are included so the Introductions
           feature (and its notification deep links) work for every user type. */}
       <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], partnerPrivateWorkspace(effectiveRole === 'investor' ? <InvestorNetworkWorkspace /> : founderNetworkLanding ? <FounderNetworkDesk /> : founderWorkspace('network', <NetworkPage />, { hideHeader: true })))} />
-      <Route path="/network/relationships" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkRelationships />, { hideHeader: true }))} />
-      <Route path="/network/introductions" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkIntroductions />, { hideHeader: true }))} />
-      <Route path="/network/organizations" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkOrganizations />, { hideHeader: true }))} />
+      {/* ── Network · three zones, every licence ─────────────────────────────
+          These were guarded ['admin','founder'] because they were built for
+          the founder shell and nothing else linked them. All four canvases
+          specify this bucket, so the shell config renders a pill for each zone
+          in every shell — and three of the four licences were being bounced to
+          their default path when they clicked one. Widened and role-branched:
+          founders keep their three dedicated pages, investors get
+          InvestorNetworkWorkspace, advisors and operators get the same
+          NetworkPage /network already gives them. */}
+      <Route path="/network/relationships" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
+      <Route path="/network/introductions" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
+      <Route path="/network/organizations" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
       <Route path="/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
       {/* Task #17 — the investor sidebar no longer surfaces "Investor Portal"

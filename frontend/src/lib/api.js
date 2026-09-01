@@ -2269,7 +2269,12 @@ export const api = {
   dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
   dataRoomDownload: (projectUid, uid) =>
     request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
-  getCapTableByProject: (projectId) => request(`/captable/scenarios/by-project/${projectId}`),
+  // getCapTableByProject is NOT redeclared here. It was, and this copy — the
+  // later of the two in the same object literal — is the one that won, which
+  // meant the `encodeURIComponent` on the definition ~80 lines above was dead
+  // and every caller interpolated the id into the path raw. Both bodies hit
+  // the same route and every caller passes a numeric project id, so nothing
+  // was exploitable in practice, but the surviving form is the encoded one.
   createCapTableVariant: (projectId, data) =>
     request(`/captable/scenarios/by-project/${projectId}/variants`, { method: 'POST', body: JSON.stringify(data) }),
   getCapTableCompare: (projectId) => request(`/captable/scenarios/by-project/${projectId}/compare`),
@@ -2469,7 +2474,15 @@ export const api = {
     const q = qs.toString();
     return request(`/introductions/propositions${q ? `?${q}` : ''}`);
   },
-  networkIntroductionsList: () => request('/network-introductions'),
+  // The founder Introductions ledger (FounderNetworkIntroductions). This
+  // called `/network-introductions`, which the worker does not mount and never
+  // has — the Secure Introductions family was removed and only its comment
+  // survived, which is what this method was written against. It 404'd for
+  // every caller. `/introductions/propositions` is the mounted equivalent and
+  // is the same source IntroductionsPanel reads: `requireAuth` only, scoped to
+  // the caller's own user_id, so every role can open it (unlike
+  // `/introductions/`, which is investor_only and would 403 a founder).
+  networkIntroductionsList: () => request('/introductions/propositions'),
   introAccept: (uid) =>
     request(`/introductions/propositions/${encodeURIComponent(uid)}/accept`, { method: 'POST' }),
   introDecline: (uid) =>
@@ -2486,10 +2499,11 @@ export const api = {
       body: JSON.stringify({ pack, nonce }),
     }),
 
-  // ---------- Secure Introductions (Task #12) ----------
-  // Privacy-preserving intro/matching flow. DISTINCT from the credits-based
-  // /introductions/* system above — this hits /network-introductions/*.
-  // Contact details are never returned by the server until both sides connect.
+  // The Secure Introductions (Task #12) family that used to sit here — a
+  // privacy-preserving flow under its own `/network-introductions/*` prefix —
+  // is gone, worker routes and client methods together, and
+  // network_consolidated.test.mjs holds it gone. The heading is kept only as
+  // this note: the prefix is NOT mounted, so nothing new belongs against it.
 
   // ---------- Trust layer (Task #58) ----------
   // Task #4 (Y-2) — Trust Center v2 endpoints. The legacy

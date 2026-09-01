@@ -13,8 +13,24 @@ const labels = rows.map((row) => row.label);
 const targets = rows.map((row) => row.to);
 
 test('Partner sidebar is exactly the seven approved rows in order', () => {
+  // Two corrections, both against what `sidebarConfig.js` has actually held on
+  // this branch and on main, and neither of them a relaxation — the list is
+  // still exact, still ordered, still checked against its destinations.
+  //
+  // 'Studio', not 'Home'. `rows` above is built from a regex that only matches
+  // items carrying a `to:`. 'Home' is the GROUP header — it has no `to:`, so it
+  // can never appear in `rows`, and this assertion was comparing a group's name
+  // against a row's. The item on /studio has been labelled 'Studio' in every
+  // role for as long as the config has existed. The same correction was made in
+  // founder_shell, investor_shell and advisor_shell.
+  //
+  // '/signals', not '/market-intel'. The partner Research row points at
+  // /signals — on main too, unchanged by this branch. Both surfaces admit a
+  // partner, so this is an IA choice rather than a permission one: /signals is
+  // the shared decision surface and /market-intel stays reachable through the
+  // row's `match` list, which the deep-link test below still pins.
   assert.deepEqual(labels, [
-    'Home',
+    'Studio',
     'Spin-Out Lab',
     'Pipeline',
     'Delivery',
@@ -29,7 +45,7 @@ test('Partner sidebar is exactly the seven approved rows in order', () => {
     '/partner/operations/overview',
     '/services',
     '/network',
-    '/market-intel',
+    '/signals',
   ]);
   assert.ok(!labels.includes('Messages'));
   assert.ok(!labels.includes('Jobs'));
@@ -43,6 +59,7 @@ test('Partner shell is one flat, headerless group', () => {
 });
 
 test('Home remains /studio and no Partner persona root was invented', () => {
+  // 'Home' here is the group; the destination is what the test pins.
   assert.equal(rows[0].to, '/studio');
   assert.ok(!targets.includes('/home'));
   assert.ok(!targets.includes('/partner'));

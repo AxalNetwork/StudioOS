@@ -34,10 +34,15 @@ test('no route serves a withdrawn Research tab', () => {
 });
 
 test('the section root and the market tab still redirect to the live surface', () => {
-  // The SECTION survives — /market-intel is real. Only the four tabs went.
+  // The SECTION survives — only the four tabs went. The live surface for these
+  // two URLs is /signals, not /market-intel: /market-intel is guarded
+  // `labRoles(['admin', 'partner', 'investor'])` and an advisor following an
+  // /advisor/* URL landed on a guard rejection. `724dfc9f` repointed both.
+  // research_market_funds_retired.test.mjs carries the same correction and
+  // additionally pins that /signals admits 'advisor'.
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /path="\/advisor\/research" element=\{<Navigate to="\/market-intel"/);
-  assert.match(app, /path="\/advisor\/research\/market" element=\{<Navigate to="\/market-intel"/);
+  assert.match(app, /path="\/advisor\/research" element=\{<Navigate to="\/signals"/);
+  assert.match(app, /path="\/advisor\/research\/market" element=\{<Navigate to="\/signals"/);
 });
 
 test('the withdrawn tabs are not redirected to /market-intel either', () => {

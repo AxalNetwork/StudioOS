@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BriefcaseBusiness, ChevronRight, Filter, RefreshCw, Sparkles, UserRound, Users } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BriefcaseBusiness, ChevronRight, RefreshCw, Sparkles, UserRound, Users } from 'lucide-react';
 import { api, jobs as jobsApi } from '../../lib/api';
 import './founderGrowDesk.css';
 import './founderGrowTalent.css';

@@ -207,17 +207,38 @@ export const SIDEBAR_GROUPS = {
   // As in the investor shell, the Spin-Out Lab row ships verbatim — it is not
   // a modification target, and the canvas folds it into Home without saying
   // what Home would then be.
+  // Rebuilt from the Founder canvas. Every row now lands on its bucket's FIRST
+  // ZONE rather than on whichever legacy page happened to be that section's
+  // door — so the zone row under the heading is populated on arrival and the
+  // URL says which section you are in. The IA itself lives in
+  // src/workspaces/shellConfig.js; this array is the render of it, and
+  // test/workspace_shell_routes.test.mjs asserts the two agree.
+  //
+  // `match` keeps every legacy path highlighting the right row, because those
+  // URLs are still live and still linked from inside pages. A migration that
+  // leaves old links pointing at a row that no longer lights up has moved the
+  // problem rather than fixed it.
   founder: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
+      // Spin-Out Lab keeps its own tree, untouched by the shell migration.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      { to: '/build/discovery', icon: MessageSquare, label: 'Validate', match: ['/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
-      { to: '/execution', icon: Briefcase, label: 'Build', match: ['/execution', '/projects', '/build/roadmap', '/build/metrics'] },
+      { to: '/validate/interviews', icon: MessageSquare, label: 'Validate',
+        match: ['/validate', '/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
+      { to: '/build/this-week', icon: Briefcase, label: 'Build',
+        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/metrics', '/execution', '/projects'] },
       { to: '/raise/pitch', icon: Sparkles, label: 'Raise', match: ['/raise', '/liquidity'] },
-      { to: '/build/team', icon: TrendingUp, label: 'Grow', match: ['/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/spinout-lab/brand', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
-
-      { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-      { to: '/signals', icon: Radar, label: 'Research', match: ['/signals', '/market-intel'] },
+      { to: '/grow/focus', icon: TrendingUp, label: 'Grow',
+        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/spinout-lab/brand', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
+      // Points at /network, not at the first zone: /network is the one route
+      // that role-branches its element, so it is the landing every license can
+      // open, and it forwards to the zone. The three /network/* zone routes are
+      // still founder-guarded — widening them is the Network half of this
+      // migration and has not landed yet.
+      { to: '/network', icon: Handshake, label: 'Network',
+        match: ['/network', '/relationships', '/contacts'] },
+      { to: '/research/ask', icon: Radar, label: 'Research',
+        match: ['/research', '/signals', '/market-intel'] },
     ]},
   ],
 
@@ -335,13 +356,25 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      { to: '/pipeline', icon: Handshake, label: 'Deals', match: ['/pipeline', '/deals', '/raise/data-room'] },
+      { to: '/deals/pipeline', icon: Handshake, label: 'Deals',
+        match: ['/deals', '/pipeline', '/raise/data-room'] },
+      // Positions is the canvas's word for the holdings view, which is
+      // /portfolio/health today. The literal route /portfolio/positions also
+      // exists and the generic tab bar labels it "Cap Table" — three names
+      // across two pages. Until that is settled the row keeps pointing at the
+      // page that works; the zone row above it carries the canvas's naming.
       { to: '/portfolio/health', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
       { to: '/spinout-lab/investor-workspace', icon: Landmark, label: 'Axal VC Fund' },
       { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds', '/lp-reports'], requiredInvestorTier: 'institutional' },
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-      { to: '/market-intel', icon: Radar, label: 'Research' },
+      { to: '/research/ask', icon: Radar, label: 'Research', match: ['/research', '/market-intel'] },
       { to: '/trust', icon: ShieldCheck, label: 'Trust' },
+      // NO Company Settings row. The canvas asks for one; the shipped decision
+      // is that /company-settings is the sidebar's PINNED FOOTER for every
+      // role, because it used to be a row as well and rendered twice. The
+      // footer carries no role gate, so dropping the row strands nobody. The
+      // canvas and that decision disagree, and the decision holds until
+      // somebody overturns it deliberately.
     ]},
   ],
 
@@ -352,14 +385,27 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+      // Practice and Expertise keep their shipped destinations. The canvas
+      // moves them to /practice/* and /expertise/*, and those routes now exist
+      // and work — but two decisions already point these rows elsewhere:
+      // Practice owns the whole /advisor/advisory subtree, and Expertise is
+      // the canonical advisor profile destination at /office-hours. Retargeting
+      // a row against a decision is not this migration's call to make alone.
       { to: '/advisor/advisory/opportunities', icon: Briefcase, label: 'Practice',
         match: ['/advisor/advisory'] },
+      // Cohorts is the one new row that conflicts with nothing: the canvas asks
+      // for it, no decision speaks against it, and it reads Spin-Out Lab data
+      // read-only rather than owning any of it.
+      { to: '/cohorts/founders', icon: Users, label: 'Cohorts', match: ['/cohorts'] },
       { to: '/office-hours', icon: UserCircle, label: 'Expertise',
         match: ['/office-hours', '/advisors'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts', '/advisor/network'] },
       { to: '/signals', icon: Radar, label: 'Research',
         match: ['/signals', '/market-intel'] },
+      // NO Trust row (it belongs to the user dropdown) and NO Practice Settings
+      // row (the pinned footer is the single entry point). The canvas asks for
+      // both; both are decisions already made against it.
     ]},
   ],
 

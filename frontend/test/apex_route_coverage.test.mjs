@@ -9,12 +9,34 @@ const wrangler = readFileSync(resolve(root, 'wrangler.toml'), 'utf8');
 
 const APEX = 'axal.vc/';
 const TABLES = ['routes', 'env.production.routes'];
+
+/**
+ * The whole production surface, as two Workers Custom Domains.
+ *
+ * This list used to read `app.axal.vc` plus three `axal.vc/...` path routes,
+ * which was the table from BEFORE the apex cutover. `e1de44c2` ("Stop apex
+ * Pages and Worker asset skew") completed that cutover: it deleted every
+ * path route from `wrangler.toml`, leaving `axal.vc` and `app.axal.vc` as
+ * whole-host custom domains, and rewrote this file in the same commit — but
+ * the rewrite kept the old four-entry allowlist, so the toml and the guard
+ * shipped disagreeing with each other and this test has been red on `main`
+ * ever since. The toml is the deployed truth; this list now matches it.
+ *
+ * The cutover is the point, not an implementation detail. Serving the apex
+ * and `app.axal.vc` from one Worker means one asset build behind both, which
+ * is what ends the skew where each host sat at a different `docs/` bundle.
+ * `custom_domain = true` binds the whole host, so the SPA asset binding
+ * answers every unmatched path; a path-scoped route would take those URLs
+ * away from the assets binding and break the SPA fallback, which is why the
+ * third test below still refuses `axal.vc/*` and `axal.vc/assets/*`.
+ */
 const EXPECTED = [
+  'axal.vc',
   'app.axal.vc',
-  'axal.vc/api/*',
-  'axal.vc/landing/*',
-  'axal.vc/p/*',
 ];
+
+/** No path-scoped apex route survives the cutover — derived, not hardcoded. */
+const EXPECTED_APEX_PATHS = EXPECTED.filter((p) => p.startsWith(APEX));
 
 /**
  * Every `pattern` in every array-of-tables, keyed by header.
@@ -57,23 +79,45 @@ test('the two route tables are identical', () => {
   );
 });
 
-test('only the three durable apex path routes are Worker-routed', () => {
+test('both hosts are bound as custom domains and nothing else is Worker-routed', () => {
   for (const t of TABLES) {
     assert.deepEqual(
       patterns(t),
       EXPECTED,
-      `${t} must contain only the custom domain and durable apex route allowlist`,
+      `${t} must contain only the two production custom domains`,
     );
     const apexPaths = patterns(t).filter((p) => p.startsWith(APEX));
     assert.deepEqual(
       apexPaths,
-      EXPECTED.slice(1),
+      EXPECTED_APEX_PATHS,
       `${t} contains an unexpected axal.vc path route`,
     );
   }
 });
 
-test('the apex wildcard and assets prefix remain on Cloudflare Pages', () => {
+test('every entry is a whole-host custom domain, never a path route', () => {
+  // The pairing matters as much as the pattern list: a `pattern` without
+  // `custom_domain = true` is a zone route, and a zone route on either host
+  // is what steals URLs from the assets binding.
+  let current = null;
+  let pending = null;
+  const kinds = new Map();
+  for (const raw of wrangler.split('\n')) {
+    const line = raw.trim();
+    const arrayHeader = /^\[\[([^\]]+)\]\]$/.exec(line);
+    if (arrayHeader) { current = arrayHeader[1]; pending = null; continue; }
+    if (line.startsWith('[')) { current = null; pending = null; continue; }
+    if (!current || !TABLES.includes(current)) continue;
+    const pat = /^pattern\s*=\s*"([^"]+)"/.exec(line);
+    if (pat) { pending = `${current}:${pat[1]}`; kinds.set(pending, false); continue; }
+    if (pending && /^custom_domain\s*=\s*true\b/.test(line)) kinds.set(pending, true);
+  }
+  for (const [entry, isCustomDomain] of kinds) {
+    assert.equal(isCustomDomain, true, `${entry} is a zone route, not a custom domain`);
+  }
+});
+
+test('the apex wildcard and assets prefix remain off the route table', () => {
   for (const table of TABLES) {
     assert.equal(patterns(table).includes('axal.vc/*'), false);
     assert.equal(patterns(table).includes('axal.vc/assets/*'), false);

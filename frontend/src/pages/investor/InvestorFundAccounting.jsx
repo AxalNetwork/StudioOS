@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AlertCircle, Calculator } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useFundAnalytics, fmtCents, fmtRate } from '../../lib/fundAnalytics';
+import { useFundAnalytics, fmtCents } from '../../lib/fundAnalytics';
 import './investorFundLanding.css';
 import './investorFundAccounting.css';
 
@@ -34,7 +34,7 @@ export default function InvestorFundAccounting() {
   const unsupported = filter !== 'summary';
 
   return <div className="i6-fund if3-shell"><main className="i6-main if3-main" data-testid="investor-fund-accounting"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>Accounting</b></div><h1><Calculator size={19} /> Fund accounting</h1><p>NAV, fees, expenses, journal and audit trail.</p></div></header>
-    <nav className="if3-zones" aria-label="Fund sections"><Link to="/fund/lps">LPs</Link><Link to="/fund/calls">Calls</Link><Link className="is-active" to="/fund/accounting">Accounting</Link><Link to="/fund/reporting">Reporting</Link></nav>
+    <nav className="if3-zones" aria-label="Fund sections"><Link to="/funds/lps">LPs</Link><Link to="/funds/calls">Calls</Link><Link className="is-active" to="/funds/ledger">Accounting</Link><Link to="/funds/reporting">Reporting</Link></nav>
     <div className="if3-filters">{FILTERS.map(([id, label]) => <button type="button" key={id} className={filter === id ? 'is-active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div>
     {error && <div className="i6-load-error if3-unavailable"><AlertCircle size={14} /> <span>Fund accounting source unavailable. No accounting totals are being treated as zero.</span></div>}
     {!loading && !error && !hasSource && <div className="i6-load-error if3-unavailable" data-testid="status-fund-accounting-unavailable"><AlertCircle size={14} /> <span>No fund accounting record is available in this environment. Committed, called, deployed, distributed, NAV, and fee values remain unavailable.</span></div>}

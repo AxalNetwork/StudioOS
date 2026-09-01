@@ -12,22 +12,23 @@ canvas behind it still shows up here.
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Home | Home | `/studio` | Founder Studio |
+| Home | Studio | `/studio` | Founder Studio |
 | Home | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab Workspace |
-| Home | Validate | `/build/discovery` | Customer Discovery |
-| Home | Build | `/execution` | Pages · Founder Build |
+| Home | Validate | `/validate/interviews` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Build | `/build/this-week` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Raise | `/raise/pitch` | Pages · Founder Raise |
-| Home | Grow | `/build/team` | Team |
+| Home | Grow | `/grow/focus` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Network | `/network` | Founder Workspaces Canvas, Pages · Founder Network |
-| Home | Research | `/signals` | Signals |
+| Home | Research | `/research/ask` | — (no canvas; shipped ahead of the design corpus) |
 
-## `advisor` — 6 destinations in 1 group
+## `advisor` — 7 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Home | Home | `/studio` | Advisor Canvas |
+| Home | Studio | `/studio` | Advisor Canvas |
 | Home | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Practice | `/advisor/advisory/opportunities` | Advisor Detail · Practice |
+| Home | Cohorts | `/cohorts/founders` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Expertise | `/office-hours` | Advisor Canvas, Advisory Practice |
 | Home | Network | `/network` | Advisor Canvas |
 | Home | Research | `/signals` | Advisor Canvas, Signals |
@@ -36,27 +37,27 @@ canvas behind it still shows up here.
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Home | Home | `/studio` | Investor LP Canvas |
+| Home | Studio | `/studio` | Investor LP Canvas |
 | Home | Spin-Out Lab | `/spinout-lab` | Explore the Spin-Out Lab, Fund Brief One-Pager |
-| Home | Deals | `/pipeline` | Deal Flow |
+| Home | Deals | `/deals/pipeline` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Portfolio | `/portfolio/health` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Axal VC Fund | `/spinout-lab/investor-workspace` | Fund Brief One-Pager, LP Investor Workspace |
 | Home | Fund | `/funds` | Pages · Investor Fund |
 | Home | Network | `/network` | Pages · Investor Network |
-| Home | Research | `/market-intel` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Research | `/research/ask` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Trust | `/trust` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `partner` — 7 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
-| Headerless | Home | `/studio` | Partner Operator Canvas |
+| Headerless | Studio | `/studio` | Partner Operator Canvas |
 | Headerless | Spin-Out Lab | `/spinout-lab` | Partner Operator Canvas |
 | Headerless | Pipeline | `/needs` | BD Console, Pages · Partner Pipeline, Partner Operator Canvas |
 | Headerless | Delivery | `/partner/operations/overview` | BD Console |
 | Headerless | Offers | `/services` | Partner Operator Canvas |
 | Headerless | Network | `/network` | Partner Operator Canvas |
-| Headerless | Research | `/market-intel` | Partner Operator Canvas |
+| Headerless | Research | `/signals` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `admin` — 48 destinations in 6 groups
 
@@ -122,16 +123,23 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-50 of the 82 sidebar rows above are not claimed
+57 of the 83 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
 rather than merely absent.
 
+- founder · Home · Validate (`/validate/interviews`)
+- founder · Home · Build (`/build/this-week`)
+- founder · Home · Grow (`/grow/focus`)
+- founder · Home · Research (`/research/ask`)
 - advisor · Home · Spin-Out Lab (`/spinout-lab`)
+- advisor · Home · Cohorts (`/cohorts/founders`)
+- investor · Home · Deals (`/deals/pipeline`)
 - investor · Home · Portfolio (`/portfolio/health`)
-- investor · Home · Research (`/market-intel`)
+- investor · Home · Research (`/research/ask`)
 - investor · Home · Trust (`/trust`)
+- partner · Headerless · Research (`/signals`)
 - admin · Home · Studio (`/studio`)
 - admin · Home · Messages (`/messages`)
 - admin · Admin · Due Diligence (`/admin/due-diligence`)

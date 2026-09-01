@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarDays, ChevronRight, CircleDollarSign, Clock3, ExternalLink, Eye,
-  Loader2, MapPin, RefreshCw, ShieldCheck, Sparkles, Store, Users,
+  RefreshCw, ShieldCheck, Sparkles, Store, Users,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';

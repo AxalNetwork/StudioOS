@@ -44,12 +44,12 @@ it, where in their nav, and how do they get there.*
 | Compliance | `/spinout-lab/compliance` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Customer Acquisition Landing Page | `/spinout-lab/brand` | Home | Full page | Sidebar → Home → Spin-Out Lab | CURRENT | High |
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Home | Full page | Sidebar → Home → Spin-Out Lab | CURRENT | High |
-| Customer Discovery | `/spinout-lab/discovery` · `/build/discovery` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Validate | OUT OF SCOPE | High |
+| Customer Discovery | `/spinout-lab/discovery` · `/build/discovery` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Customer Templates | `/spinout-lab/brand` · `/build/brand` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Data Room | `/raise/data-room` | Home | Full page (proposed) | Sidebar → Home → Raise | NEW | Low |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Founder Studio | `/studio` | Home | Full page | Sidebar → Home → Home | DEFERRED | High |
+| Founder Studio | `/studio` | Home | Full page | Sidebar → Home → Studio | DEFERRED | High |
 | Founder Wellbeing | `/wellbeing` · `/wellbeing/expert-dashboard` · `/wellbeing/expert/:uid` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Founder Workspaces Canvas | `/build/*` · `/raise/*` · `/founder/growth/*` · `/network` | Home | Full page | Sidebar → Home → Network | NEW | High |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
@@ -57,30 +57,30 @@ it, where in their nav, and how do they get there.*
 | Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Liquidity & Secondaries | `/liquidity` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
-| Metrics | `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
+| Metrics | `/build/metrics` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Office Hours | `/spinout-lab/office-hours` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Pages · Founder Build | `/execution` · `/build/metrics` | Home | Full page | Sidebar → Home → Build | UPGRADE | High |
+| Pages · Founder Build | `/execution` · `/build/metrics` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Pages · Founder Grow | `/founder/growth/{talent` | — (not routed) | Full page (proposed) | Not reachable yet | RESKIN | Low |
 | Pages · Founder Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
 | Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` | Home | Full page (proposed) | Sidebar → Home → Raise | UPGRADE | Low |
-| Pages · Founder Research | `/market-intel` | Home | Full page | Sidebar → Home → Research | RESKIN | High |
-| Perks & Products | `/perks` | Home | Full page | Sidebar → Home → Grow | NEW | High |
+| Pages · Founder Research | `/market-intel` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
+| Perks & Products | `/perks` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Pitch Deck Builder | `/spinout-lab/pitch-deck` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Profiling | `/spinout-lab/profiling` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Revenue | `/spinout-lab/revenue` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Round Manager | `/raise/capital/pipeline` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
 | Scoring Engine | `/spinout-lab/scoring` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
-| Signals | `/signals` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
+| Signals | `/signals` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Spin-Out Lab Workspace | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
-| Team | `/build/team` | Home | Full page | Sidebar → Home → Grow | UPGRADE | High |
+| Team | `/build/team` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Use of Funds | `/spinout-lab/use-of-funds` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 
 ## Advisor — 7 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Advisor Canvas | `/studio` · `/advisor/advisory/*` · `/office-hours` · `/network` · `/signals` | Home | Full page | Sidebar → Home → Home | UPGRADE | High |
+| Advisor Canvas | `/studio` · `/advisor/advisory/*` · `/office-hours` · `/network` · `/signals` | Home | Full page | Sidebar → Home → Studio | UPGRADE | High |
 | Advisor Detail · Practice | `/advisor/advisory/opportunities` · `/clients` · `/engagements` · `/delivery` · `/contracts` | Home | Full page | Sidebar → Home → Practice | UPGRADE | High |
 | Advisor Studio | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Advisory Practice | `/office-hours` | Home | Full page | Sidebar → Home → Expertise | UPGRADE | High |
@@ -92,17 +92,17 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Data Room | `/raise/data-room` | Home | Full page (proposed) | Sidebar → Home → Deals | NEW | Low |
-| Deal Flow | `/pipeline` · `/pipeline/screening\\|commit\\|transactions` · `/deals` · `/deals/:dealId` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
+| Data Room | `/raise/data-room` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
+| Deal Flow | `/pipeline` · `/pipeline/screening\\|commit\\|transactions` · `/deals` · `/deals/:dealId` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Explore the Spin-Out Lab | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Fund Brief One-Pager | `/spinout-lab` · `/spinout-lab/investor-workspace` | Home | Full page + print stylesheet | Sidebar → Home → Spin-Out Lab | CURRENT | High |
-| Investor LP Canvas | `/studio` | Home | Full page | Sidebar → Home → Home | DEFERRED | High |
+| Investor LP Canvas | `/studio` | Home | Full page | Sidebar → Home → Studio | DEFERRED | High |
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Liquidity & Secondaries | `/liquidity` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Home | Full page | Sidebar → Home → Axal VC Fund | DEFERRED | High |
-| Pages · Investor Deals | `/pipeline/active` | Home | Full page | Sidebar → Home → Deals | UPGRADE | High |
+| Pages · Investor Deals | `/pipeline/active` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Pages · Investor Fund | `/funds` · `/funds/capital-calls` · `/funds/accounting` · `/lp-reports` | Home | Full page (proposed) | Sidebar → Home → Fund | UPGRADE | Low |
 | Pages · Investor Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
 | Pages · Investor Portfolio | `/portfolio/positions` · `/portfolio/updates` | Home | Full page (proposed) | Sidebar → Home → Portfolio | UPGRADE | Low |
@@ -120,7 +120,7 @@ it, where in their nav, and how do they get there.*
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
 | Pages · Partner Pipeline | `/needs` · `/partner/operations/*` | Headerless | Full page | Sidebar → Headerless → Pipeline | UPGRADE | High |
-| Partner Operator Canvas | `/studio` · `/spinout-lab` · `/needs` · `/matches` · `/partner/insights` · `/partner/operations/*` · `/services` · `/perks` · `/comarketing` · `/partner/office-hours` · `/network` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Home | UPGRADE | High |
+| Partner Operator Canvas | `/studio` · `/spinout-lab` · `/needs` · `/matches` · `/partner/insights` · `/partner/operations/*` · `/services` · `/perks` · `/comarketing` · `/partner/office-hours` · `/network` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | Perks & Products | `/perks` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
@@ -207,8 +207,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 65 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 33 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 57 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 41 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 28 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { routeBlock } from './_routes.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const app = read('frontend/src/App.jsx');
@@ -17,16 +18,42 @@ test('investor workspace routes branch on the active role', () => {
     ['/portfolio/health', 'portfolio'],
     ['/trust', 'trust'],
   ]) {
-    const escaped = path.replaceAll('/', '\\/');
-    assert.match(app, new RegExp(`path=\"${escaped}\"[^\\n]+investorWorkspace\\('${key}'`));
+    // routeBlock + `includes` rather than a hand-escaped constructed regex.
+    // Escaping `/` does nothing inside `new RegExp` — the delimiter only
+    // matters in `/literal/` syntax — so the escape was ineffective while `.`
+    // and the rest stayed live, which is exactly the shape CodeQL flags. The
+    // block is bounded by the next <Route, so reading a window instead of one
+    // line cannot let a neighbour satisfy this.
+    assert.ok(routeBlock(app, path)?.includes(`investorWorkspace('${key}'`),
+      `${path} does not mount the ${key} investor workspace`);
   }
   assert.match(app, /path="\/network"[\s\S]{0,180}effectiveRole === 'investor'[\s\S]{0,100}<InvestorNetworkWorkspace \/>/);
   assert.match(app, /path="\/market-intel"[\s\S]{0,220}effectiveRole === 'investor'[\s\S]{0,100}<InvestorResearchWorkspace \/>/);
 });
 
 test('investor Research implements I8 without fabricated diligence claims', () => {
-  for (const label of ['Go deep before money moves', 'Diligence pull', 'Source library', 'Fund & manager benchmarking', 'Market deep-dives', 'Company profiles', 'Worker AI · Research']) {
-    assert.match(research, new RegExp(label.replace('&', '&amp;|&')));
+  // Each label is the exact text the workspace renders, so each is checked
+  // with a plain `includes`. Two earlier forms are worth not going back to.
+  //
+  // It began as `new RegExp(label.replace('&', '&amp;|&'))`, which put the
+  // alternation at TOP level: 'Fund & manager benchmarking' compiled to
+  // `Fund &amp;|& manager benchmarking` and was satisfied by EITHER HALF —
+  // 'Fund &amp;' alone passed it.
+  //
+  // Replacing that with `includes(label) || includes(label.replaceAll('&',
+  // '&amp;'))` fixed the halves but kept a transformation to serve a single
+  // string: exactly one of these seven labels contains `&`, and the source
+  // spells it `&amp;`. Semgrep read that replaceAll as hand-rolled HTML
+  // escaping (detect-replaceall-sanitization). Its premise does not hold here
+  // — these are literal needles in a source-text assertion, with no untrusted
+  // input and no HTML sink — but the rule pointed at something true anyway:
+  // the transformation was doing no work that writing the entity could not.
+  //
+  // So the entity is written out. This pins the encoding that actually ships;
+  // if the JSX ever switches to a bare `&`, this failing is the right outcome
+  // rather than something a tolerant matcher should absorb silently.
+  for (const label of ['Go deep before money moves', 'Diligence pull', 'Source library', 'Fund &amp; manager benchmarking', 'Market deep-dives', 'Company profiles', 'Worker AI · Research']) {
+    assert.ok(research.includes(label), `investor Research is missing "${label}"`);
   }
   assert.match(research, /api\.miSources\(\)/);
   assert.match(research, /api\.miWatchlistList\(\)/);
@@ -39,21 +66,30 @@ test('investor Research implements I8 without fabricated diligence claims', () =
 });
 
 test('investor-owned deep links keep the investor workspace shell', () => {
+  // Each of these reads the route's own block, bounded by the next <Route, so
+  // it cannot be satisfied by a neighbouring route's markup. The last two used
+  // `[^\n]+` and a single flat ternary against the whole file: `724dfc9f`
+  // wrapped /raise/data-room across six lines and both stopped matching, with
+  // nothing about the routing having changed. The branch order they were
+  // pinning — investor first, founder second — is still exactly what ships.
   assert.match(
-    app,
-    /path="\/deals\/:dealId"[^\n]+investorWorkspace\('deals', <DealRoomPage \/>/,
+    routeBlock(app, '/deals/:dealId'),
+    /investorWorkspace\('deals', <DealRoomPage \/>/,
   );
   assert.match(
-    app,
-    /path="\/lp-portal"[^\n]+investorWorkspace\('axal-vc-fund', <LPPortalPage \/>/,
+    routeBlock(app, '/lp-portal'),
+    /investorWorkspace\('axal-vc-fund', <LPPortalPage \/>/,
+  );
+  const dataRoom = routeBlock(app, '/raise/data-room');
+  assert.match(dataRoom, /investorWorkspace\('deals'/);
+  assert.match(
+    dataRoom,
+    /effectiveRole === 'investor'\s*\?\s*investorWorkspace\('deals', <DataRoomPage user=\{user\} \/>\)/,
+    'the investor branch must be the first arm, ahead of any founder shell',
   );
   assert.match(
-    app,
-    /path="\/raise\/data-room"[^\n]+investorWorkspace\('deals'/,
-  );
-  assert.match(
-    app,
-    /effectiveRole === 'investor' \? investorWorkspace\('deals', <DataRoomPage user=\{user\} \/>\) : founderWorkspace\('raise', <FounderWorkspaceTabs/,
+    dataRoom,
+    /founderWorkspace\('raise', <FounderWorkspaceTabs/,
     'investor Data Room must not inherit the founder workspace tab bar',
   );
 });
@@ -98,7 +134,10 @@ test('investor Deals implements the I3 hierarchy with live sources', () => {
 
 test('investor Deals does not ship illustrative canvas data as live data', () => {
   for (const sample of ['Novacraft', 'Meridian Labs', 'Halverton', 'DeepSeek', 'Llama 3.3', '$0.0149', '$4.2M allocated']) {
-    assert.doesNotMatch(deals, new RegExp(sample.replace('$', '\\$')));
+    // Literal, so `$` needs no escaping and `.` cannot wildcard: the old form
+    // escaped only the FIRST `$` and left every `.` live, so '$0.0149' would
+    // have been satisfied by '$0X0149'.
+    assert.ok(!deals.includes(sample), `investor Deals still ships the sample value ${sample}`);
   }
   assert.match(deals, /never invents a memo, cost, model, or result/);
 });
