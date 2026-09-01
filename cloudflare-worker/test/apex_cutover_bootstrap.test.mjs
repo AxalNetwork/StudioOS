@@ -30,7 +30,9 @@ test('static, health, and verified anonymous public reads bypass blocking role-s
     '/api/public/verify',
     '/api/public/team',
   ]) {
-    assert.match(source, new RegExp(endpoint.replaceAll('/', '\\/')));
+    // A literal path needs no pattern; escaping `/` inside `new RegExp` was a
+    // no-op that left `.` and the rest unescaped.
+    assert.ok(source.includes(endpoint), `${endpoint} is no longer referenced`);
   }
   assert.match(
     source,

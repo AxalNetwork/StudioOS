@@ -18,8 +18,14 @@ test('investor workspace routes branch on the active role', () => {
     ['/portfolio/health', 'portfolio'],
     ['/trust', 'trust'],
   ]) {
-    const escaped = path.replaceAll('/', '\\/');
-    assert.match(app, new RegExp(`path=\"${escaped}\"[^\\n]+investorWorkspace\\('${key}'`));
+    // routeBlock + `includes` rather than a hand-escaped constructed regex.
+    // Escaping `/` does nothing inside `new RegExp` — the delimiter only
+    // matters in `/literal/` syntax — so the escape was ineffective while `.`
+    // and the rest stayed live, which is exactly the shape CodeQL flags. The
+    // block is bounded by the next <Route, so reading a window instead of one
+    // line cannot let a neighbour satisfy this.
+    assert.ok(routeBlock(app, path)?.includes(`investorWorkspace('${key}'`),
+      `${path} does not mount the ${key} investor workspace`);
   }
   assert.match(app, /path="\/network"[\s\S]{0,180}effectiveRole === 'investor'[\s\S]{0,100}<InvestorNetworkWorkspace \/>/);
   assert.match(app, /path="\/market-intel"[\s\S]{0,220}effectiveRole === 'investor'[\s\S]{0,100}<InvestorResearchWorkspace \/>/);
@@ -27,7 +33,14 @@ test('investor workspace routes branch on the active role', () => {
 
 test('investor Research implements I8 without fabricated diligence claims', () => {
   for (const label of ['Go deep before money moves', 'Diligence pull', 'Source library', 'Fund & manager benchmarking', 'Market deep-dives', 'Company profiles', 'Worker AI · Research']) {
-    assert.match(research, new RegExp(label.replace('&', '&amp;|&')));
+    // JSX may write `&` either literally or as `&amp;`, so both encodings pass.
+    // This used to build `new RegExp(label.replace('&', '&amp;|&'))`, which put
+    // the alternation at TOP level: 'Fund & manager benchmarking' compiled to
+    // `Fund &amp;|& manager benchmarking` and was satisfied by either HALF.
+    // Two literal containment checks want the whole label, so this is stricter
+    // than what it replaces as well as being free of constructed patterns.
+    assert.ok(research.includes(label) || research.includes(label.replaceAll('&', '&amp;')),
+      `investor Research is missing "${label}"`);
   }
   assert.match(research, /api\.miSources\(\)/);
   assert.match(research, /api\.miWatchlistList\(\)/);
@@ -108,7 +121,10 @@ test('investor Deals implements the I3 hierarchy with live sources', () => {
 
 test('investor Deals does not ship illustrative canvas data as live data', () => {
   for (const sample of ['Novacraft', 'Meridian Labs', 'Halverton', 'DeepSeek', 'Llama 3.3', '$0.0149', '$4.2M allocated']) {
-    assert.doesNotMatch(deals, new RegExp(sample.replace('$', '\\$')));
+    // Literal, so `$` needs no escaping and `.` cannot wildcard: the old form
+    // escaped only the FIRST `$` and left every `.` live, so '$0.0149' would
+    // have been satisfied by '$0X0149'.
+    assert.ok(!deals.includes(sample), `investor Deals still ships the sample value ${sample}`);
   }
   assert.match(deals, /never invents a memo, cost, model, or result/);
 });
