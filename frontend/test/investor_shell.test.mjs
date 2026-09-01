@@ -16,8 +16,9 @@ test('investor sidebar matches the canvas rows exactly', () => {
   // Two corrections to what this used to assert. The first row has been
   // labelled 'Studio' in the live config all along, not 'Home' — the test was
   // pinning a label that never shipped, and had been failing on it. The second
-  // is Firm Settings: the canvas has that row and the live shell did not, so
-  // adding it is the migration doing its job rather than an extra row.
+  // is that the canvas's Firm Settings row is deliberately NOT here:
+  // /company-settings is the sidebar's pinned footer for every role, and a row
+  // as well would render it twice — which is why the row was removed.
   //
   // Spin-Out Lab stays. The canvas drops it as a top-level row, but removing a
   // licence's door into the Lab is exactly the kind of change this migration
@@ -32,9 +33,8 @@ test('investor sidebar matches the canvas rows exactly', () => {
     'Network',
     'Research',
     'Trust',
-    'Firm Settings',
   ]);
-  assert.equal(rows.length, 10);
+  assert.equal(rows.length, 9);
   assert.doesNotMatch(investor, /label:\s*'Workspace'/);
   assert.ok(!labels.includes('Messages'));
 });
@@ -55,7 +55,6 @@ test('investor rows use the approved destinations', () => {
     '/network',
     '/research/ask',
     '/trust',
-    '/company-settings',
   ]);
 
   const app = read('frontend/src/App.jsx');

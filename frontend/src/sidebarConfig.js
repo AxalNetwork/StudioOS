@@ -23,7 +23,7 @@ import {
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   Gamepad2, ShieldAlert,
   Inbox, Radar, Wallet, Landmark,
-  Mail, Gift, Map, Building2,
+  Mail, Gift, Map,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -369,10 +369,12 @@ export const SIDEBAR_GROUPS = {
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/research/ask', icon: Radar, label: 'Research', match: ['/research', '/market-intel'] },
       { to: '/trust', icon: ShieldCheck, label: 'Trust' },
-      // Firm Settings was the one row the canvas has and the live shell did
-      // not. /company-settings has been investor-guarded all along — this was
-      // an array edit, not a build.
-      { to: '/company-settings', icon: Building2, label: 'Firm Settings' },
+      // NO Company Settings row. The canvas asks for one; the shipped decision
+      // is that /company-settings is the sidebar's PINNED FOOTER for every
+      // role, because it used to be a row as well and rendered twice. The
+      // footer carries no role gate, so dropping the row strands nobody. The
+      // canvas and that decision disagree, and the decision holds until
+      // somebody overturns it deliberately.
     ]},
   ],
 
@@ -383,14 +385,27 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
+      // Practice and Expertise keep their shipped destinations. The canvas
+      // moves them to /practice/* and /expertise/*, and those routes now exist
+      // and work — but two decisions already point these rows elsewhere:
+      // Practice owns the whole /advisor/advisory subtree, and Expertise is
+      // the canonical advisor profile destination at /office-hours. Retargeting
+      // a row against a decision is not this migration's call to make alone.
       { to: '/advisor/advisory/opportunities', icon: Briefcase, label: 'Practice',
         match: ['/advisor/advisory'] },
+      // Cohorts is the one new row that conflicts with nothing: the canvas asks
+      // for it, no decision speaks against it, and it reads Spin-Out Lab data
+      // read-only rather than owning any of it.
+      { to: '/cohorts/founders', icon: Users, label: 'Cohorts', match: ['/cohorts'] },
       { to: '/office-hours', icon: UserCircle, label: 'Expertise',
         match: ['/office-hours', '/advisors'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts', '/advisor/network'] },
       { to: '/signals', icon: Radar, label: 'Research',
         match: ['/signals', '/market-intel'] },
+      // NO Trust row (it belongs to the user dropdown) and NO Practice Settings
+      // row (the pinned footer is the single entry point). The canvas asks for
+      // both; both are decisions already made against it.
     ]},
   ],
 

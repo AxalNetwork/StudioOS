@@ -42,6 +42,7 @@ const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
+const AdvisorBucketRoutes = lazy(() => import('./workspaces/advisor/AdvisorBucketRoutes'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
 const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
@@ -1766,6 +1767,34 @@ function AppInner() {
       <Route path="/advisor/network/introductions" element={<Navigate to="/network?tab=introductions" replace />} />
       <Route path="/advisor/network/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/advisor/network/organizations" element={<Navigate to="/network" replace />} />
+
+      {/* ── Advisor · Practice, Cohorts, Expertise ───────────────────────────
+          Three of Practice's five zones mount the live /advisor/advisory
+          workspace; Sessions and Earnings have no store and say so. Cohorts is
+          entirely new and reads Spin-Out Lab data read-only — it owns no Lab
+          route and writes nothing back. Expertise mounts the live workspace
+          that /office-hours already serves. The legacy /advisor/advisory/* and
+          /office-hours routes stay: Clients and Contracts are working tabs the
+          canvas has no zone for. */}
+      <Route path="/practice" element={<Navigate to="/practice/opportunities" replace />} />
+      <Route path="/practice/opportunities" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/practice/engagements" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/practice/delivery" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/practice/sessions" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/practice/earnings" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts" element={<Navigate to="/cohorts/founders" replace />} />
+      <Route path="/cohorts/founders" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts/guidance" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts/this-week" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts/calendar" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts/outcomes" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise" element={<Navigate to="/expertise/profile" replace />} />
+      <Route path="/expertise/profile" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise/services" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise/proof" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise/thinking" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise/visibility" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+
       <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/opportunities" replace />} />
       <Route path="/advisor/advisory/opportunities" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />
       <Route path="/advisor/advisory/clients" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />

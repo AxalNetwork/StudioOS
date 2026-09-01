@@ -117,12 +117,15 @@ test('a shell is only claimed migrated once its sidebar points at the new IA', (
     assert.match(sidebar, /to: '\/research\/ask'/,
       'founder is claimed migrated but Research still points at a legacy landing');
   }
+  // Advisor is deliberately NOT claimed migrated. All fifteen of its zone
+  // routes exist and its pills navigate, but three of its rows are pinned
+  // elsewhere by decisions this migration will not overturn on its own:
+  // Practice owns the /advisor/advisory subtree, Expertise is /office-hours,
+  // and neither Trust nor Company Settings may be a nav row. Claiming it
+  // migrated would mean asserting a sidebar that contradicts those.
   if (MIGRATED.includes('investor')) {
     assert.match(sidebar, /to: '\/deals\/pipeline'/,
       'investor is claimed migrated but Deals still points at /pipeline');
-    // Firm Settings is the row the canvas has and the live shell lacked.
-    assert.match(sidebar, /to: '\/company-settings', icon: \w+, label: 'Firm Settings'/,
-      'investor is claimed migrated but has no Firm Settings row');
   }
 });
 
