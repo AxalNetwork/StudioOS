@@ -124,8 +124,19 @@ test('Your companies reads the shape the worker actually returns', () => {
   // ARRAY and names the caller's role `my_role`.
   const w = read('cloudflare-worker/src/routes/company.ts');
   const i = w.indexOf("r.get('/company/memberships'");
-  const body = w.slice(i, i + 1200);
-  assert.match(body, /my_role: link\.role_in_company/, 'the worker exposes the role as my_role');
+  assert.notEqual(i, -1, 'the memberships handler is gone');
+  // Read to the NEXT route registration, not a fixed byte count. This was
+  // `w.slice(i, i + 1200)`, which is a bet that the handler stays under 1200
+  // characters — a bet lost the moment a comment was added above the line
+  // being asserted, with nothing about the response shape having changed.
+  // Route registrations sit at column 0, so the next one is an exact bound and
+  // the window can never run into a neighbouring handler either.
+  const next = w.slice(i + 1).search(/\nr\.(get|post|put|patch|delete)\(/);
+  const body = next === -1 ? w.slice(i) : w.slice(i, i + 1 + next);
+  // Anchored on the trailing comma: without it the pattern is a PREFIX match
+  // and `link.role_in_company_WRONG` satisfies it, which is exactly what a
+  // canary of this line demonstrated.
+  assert.match(body, /my_role: link\.role_in_company,/, 'the worker exposes the role as my_role');
   assert.match(body, /return c\.json\(out\)/, 'the worker returns a bare array, not {items}');
 
   const s = read('frontend/src/pages/SettingsPage.jsx');
