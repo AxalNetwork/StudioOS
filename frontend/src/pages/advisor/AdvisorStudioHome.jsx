@@ -39,12 +39,14 @@ function Status({ children, tone = 'neutral' }) {
   return <span className={`advisor-status advisor-status--${tone}`} data-testid={`status-${String(children).toLowerCase().replace(/\s+/g, '-')}`}>{children}</span>;
 }
 
-function Module({ title, action, to, children, testid, className = '' }) {
+function Module({ title, action, to, children, testid, className = '', disabled = false }) {
   return (
     <section className={`advisor-module ${className}`} data-testid={testid}>
       <header className="advisor-module__header">
         <h2>{title}</h2>
-        {to && <Link to={to} data-testid={`link-${testid}`}>{action || 'Open'} <ChevronRight size={13} /></Link>}
+        {to && (disabled
+          ? <span className="advisor-disabled-link" data-testid={`link-${testid}`}>{action || 'Open'} <ShieldCheck size={12} /></span>
+          : <Link to={to} data-testid={`link-${testid}`}>{action || 'Open'} <ChevronRight size={13} /></Link>)}
       </header>
       {children}
     </section>
@@ -128,7 +130,7 @@ export default function AdvisorStudioHome({
     if (bookings.state !== 'ready') return [];
     const map = new Map();
     bookings.data.forEach((b) => {
-      const key = b.founder_user_id || b.client_user_id || b.client_email || b.founder_email || bookingIdentity(b);
+      const key = b.client_user_id || b.founder_user_id || b.requester_user_id || b.client_email || b.founder_email || bookingIdentity(b);
       const current = map.get(key) || { key, name: bookingIdentity(b), total: 0, completed: 0, upcoming: 0, latest: null };
       current.total += 1;
       if (b.status === 'completed') current.completed += 1;
@@ -149,10 +151,22 @@ export default function AdvisorStudioHome({
     && Number(payouts.data?.lifetime_cents) === 0
     && asItems(payouts.data?.commissions).length === 0
     && asItems(payouts.data?.payouts).length === 0;
+  const publicProfileLive = profile?.listed === true || profile?.is_active === true;
   const storefrontRows = profile ? [
-    ['Public profile', profile.listed === true ? 'Listed' : profile.listed === false ? 'Not listed' : 'Not recorded', profile.listed === true ? 'good' : 'neutral'],
+    ['Public profile', publicProfileLive ? 'Listed' : profile.listed === false || profile.is_active === false ? 'Not listed' : 'Not recorded', publicProfileLive ? 'good' : 'neutral'],
     ['Bookings', profile.accepting_bookings === true ? 'Accepting' : profile.accepting_bookings === false ? 'Not accepting' : 'Not recorded', profile.accepting_bookings === true ? 'good' : 'neutral'],
   ] : [];
+  const todayOpenSlots = useMemo(() => {
+    if (slots.state !== 'ready') return [];
+    const now = new Date();
+    const end = new Date(now); end.setHours(23, 59, 59, 999);
+    return slots.data.filter((slot) => {
+      const start = new Date(slot.start_at || slot.starts_at);
+      const remaining = slot.remaining ?? slot.available ?? Math.max(0, Number(slot.capacity || 0) - Number(slot.taken || 0));
+      const active = slot.status ? slot.status === 'open' : !slot.is_cancelled;
+      return active && remaining > 0 && start >= now && start <= end;
+    }).sort((a, b) => new Date(a.start_at || a.starts_at) - new Date(b.start_at || b.starts_at));
+  }, [slots]);
 
   return (
     <main className="advisor-studio" data-testid="advisor-studio-home">
@@ -168,9 +182,9 @@ export default function AdvisorStudioHome({
       </header>
 
       <div className="advisor-evidence-strip">
-        <span>Intro call filter</span><Link to="/office-hours" data-testid="link-storefront-filter">Open storefront <ExternalLink size={12} /></Link>
-        <span>Consent to show client outcomes</span><Link to="/advisor/advisory/clients" data-testid="link-client-consent">Open clients <ExternalLink size={12} /></Link>
-        <span>Session-note auto-send</span><Link to="/settings" data-testid="link-session-settings">Open settings <ExternalLink size={12} /></Link>
+        <span>Intro call filter</span>{previewing ? <span className="advisor-disabled-link">Storefront withheld</span> : <Link to="/office-hours" data-testid="link-storefront-filter">Open storefront <ExternalLink size={12} /></Link>}
+        <span>Consent to show client outcomes</span>{previewing ? <span className="advisor-disabled-link">Clients withheld</span> : <Link to="/advisor/advisory/clients" data-testid="link-client-consent">Open clients <ExternalLink size={12} /></Link>}
+        <span>Session-note auto-send</span>{previewing ? <span className="advisor-disabled-link">Settings withheld</span> : <Link to="/settings" data-testid="link-session-settings">Open settings <ExternalLink size={12} /></Link>}
       </div>
 
       <section className="advisor-assistant-shell" data-testid="module-eadwyn">
@@ -193,29 +207,29 @@ export default function AdvisorStudioHome({
       {previewing && <section className="advisor-preview-fit" data-testid="module-assessment"><Sparkles size={18} /><div><strong>Assessment profile</strong><p>Skills, values, and archetype are withheld in this visual role preview.</p></div></section>}
 
       <div className="advisor-practice-grid">
-        <Module title="Today" action="Open calendar" to="/calendar" testid="module-today" className="advisor-module--today">
+        <Module title="Today" action="Open calendar" to="/calendar" testid="module-today" className="advisor-module--today" disabled={previewing}>
           {calendar.state === 'loading' || bookings.state === 'loading' ? <Pending lines={3} /> : (calendar.state === 'unavailable' && bookings.state === 'unavailable') ? <StateNote text="Today’s schedule could not be loaded." icon={CalendarDays} /> : (
             <div className="advisor-list">
               {todayItems.map((item, index) => <div className="advisor-row" key={item.id || index}><div><strong>{item.topic || item.title || 'Advisor session'}</strong><span>{formatWhen(item.scheduled_start || item.start_at || item.start)} · {item.duration_min ? `${item.duration_min} min` : 'Duration not recorded'}</span></div><Status tone={item.status === 'confirmed' ? 'good' : 'neutral'}>{item.status || 'Scheduled'}</Status></div>)}
-              {slots.state === 'ready' && slots.data.filter((s) => !s.taken && new Date(s.start_at) >= new Date()).slice(0, 2).map((slot) => <div className="advisor-row advisor-row--open" key={slot.id}><div><strong>Open slot</strong><span>{formatWhen(slot.start_at)} · {slot.duration_min || 'Duration not recorded'} min · date-specific</span></div><Status>Open</Status></div>)}
-              {todayItems.length === 0 && !(slots.state === 'ready' && slots.data.length) && <StateNote text="No sessions or open slots are scheduled for today." icon={Clock3} />}
+               {todayOpenSlots.slice(0, 2).map((slot) => <div className="advisor-row advisor-row--open" key={slot.id}><div><strong>Open slot</strong><span>{formatWhen(slot.start_at || slot.starts_at)} · {slot.duration_min || 'Duration not recorded'} min · date-specific</span></div><Status>Open</Status></div>)}
+               {todayItems.length === 0 && todayOpenSlots.length === 0 && <StateNote text="No sessions or open slots are scheduled for today." icon={Clock3} />}
             </div>
           )}
         </Module>
 
-        <Module title="Storefront" action="Open storefront" to="/office-hours" testid="module-storefront">
+        <Module title="Storefront" action="Open storefront" to="/office-hours" testid="module-storefront" disabled={previewing}>
           {advisor.state === 'loading' ? <Pending /> : profile ? <div className="advisor-keyvalues">{storefrontRows.map(([label, value, tone]) => <div key={label}><span>{label}</span><Status tone={tone}>{value}</Status></div>)}<div><span>Visibility</span><b>{profile.status || 'Not recorded'}</b></div></div> : <StateNote text={advisor.message || 'Storefront details are not available.'} icon={Store} />}
         </Module>
 
-        <Module title="Engagements" action="Open clients" to="/advisor/advisory/engagements" testid="module-engagements">
+        <Module title="Engagements" action="Open clients" to="/advisor/advisory/engagements" testid="module-engagements" disabled={previewing}>
           {bookings.state === 'loading' ? <Pending /> : bookings.state === 'unavailable' ? <StateNote text={bookings.message} icon={Users} /> : engagements.length ? <div className="advisor-list">{engagements.slice(0, 3).map((client) => <div className="advisor-row" key={client.key}><div><strong>{client.name}</strong><span>{client.total} session{client.total === 1 ? '' : 's'} · {client.completed} held{client.upcoming ? ` · ${client.upcoming} upcoming` : ''}</span></div><Status tone={client.upcoming ? 'good' : 'neutral'}>{client.upcoming ? 'Active' : 'History'}</Status></div>)}</div> : <StateNote text="Engagements appear once someone books a session with you." icon={Users} />}
         </Module>
 
-        <Module title="Consented proof" action="Open clients" to="/advisor/advisory/clients" testid="module-consented-proof" className="advisor-module--proof">
-          <StateNote text="No consented proof connected yet. Self-reported metrics are never shown as proof. When a client grants consent to share an outcome, it appears here and on your storefront." icon={ShieldCheck} />
+        <Module title="Consented proof" action="Open clients" to="/advisor/advisory/clients" testid="module-consented-proof" className="advisor-module--proof" disabled={previewing}>
+          <StateNote text="Consented client outcomes are unavailable because no authoritative proof source is connected yet. Self-reported metrics are never shown as proof." icon={ShieldCheck} />
         </Module>
 
-        <Module title="Earnings" action="Open payout settings" to="/wellbeing/expert-dashboard" testid="module-earnings">
+        <Module title="Earnings" action="Open payout settings" to="/wellbeing/expert-dashboard" testid="module-earnings" disabled={previewing}>
           {payouts.state === 'loading' ? <Pending /> : payouts.state === 'unavailable' || isDevPayoutShim ? <StateNote text={isDevPayoutShim ? 'Advisor earnings are not recorded in the local development service.' : payouts.message} icon={CircleDollarSign} /> : <div className="advisor-keyvalues"><div><span>Available balance</span><b>{formatMoney(payouts.data.balance_cents, profile?.currency)}</b></div><div><span>Lifetime paid</span><b>{formatMoney(payouts.data.lifetime_cents, profile?.currency)}</b></div><div><span>Payout account</span><b>{profile?.stripe_account_status || profile?.stripe?.account_status || 'Not recorded'}</b></div></div>}
         </Module>
       </div>

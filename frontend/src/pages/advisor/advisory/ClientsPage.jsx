@@ -129,8 +129,8 @@ export default function ClientsPage() {
                       <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{b.topic || 'Session'}</span>
                       <StatusBadge status={b.status} />
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{formatDateTime(b.slot_starts_at)}</div>
-                    {b.notes && <p className="text-xs text-gray-600 dark:text-gray-400 mt-1.5">{b.notes}</p>}
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{formatDateTime(b.scheduled_start || b.slot_starts_at)}</div>
+                    {(b.client_message || b.questions || b.notes) && <p className="text-xs text-gray-600 dark:text-gray-400 mt-1.5">{b.client_message || b.questions || b.notes}</p>}
                   </div>
                 ))}
               </div>

@@ -15,6 +15,7 @@ import VentureNextStep from '../components/VentureNextStep';
 import FounderStudioHome from './founder/FounderStudioHome';
 import InvestorStudioHome from './investor/InvestorStudioHome';
 import AdvisorStudioHome from './advisor/AdvisorStudioHome';
+import PartnerStudioHome from './partner/PartnerStudioHome';
 // Task #81 — reuse the founder command-center lifecycle rail for the investor
 // deal desk (rendered read-only: canEdit={false}).
 import LifecycleModule from '../components/command-center/LifecycleModule';
@@ -165,6 +166,21 @@ export default function Dashboard({ activeRole, authUser }) {
       </div>
     );
   }
+  if (error && activeRole === 'partner' && authUser) {
+    const previewingPartner = authUser.role !== 'partner';
+    return (
+      <div className="space-y-6">
+        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <PartnerStudioHome
+          user={authUser}
+          dashboard={null}
+          previewing={previewingPartner}
+          dashboardUnavailable={error}
+          onRetryDashboard={() => { setLoading(true); load(); }}
+        />
+      </div>
+    );
+  }
   if (error) return (
     <DashboardFallback
       title="We couldn't load your dashboard"
@@ -240,6 +256,26 @@ export default function Dashboard({ activeRole, authUser }) {
           user={user}
           dashboard={previewingAdvisor ? null : data}
           previewing={previewingAdvisor}
+          onRetryDashboard={() => { setLoading(true); load(); }}
+        />
+      </div>
+    );
+  }
+
+  if ((activeRole || role_view) === 'partner') {
+    const previewingPartner = user.role !== 'partner';
+    return (
+      <div className="space-y-6">
+        {googleNotice && (
+          <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
+            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/settings/security" className="underline">Settings → Security</Link>.
+          </InfoStrip>
+        )}
+        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <PartnerStudioHome
+          user={user}
+          dashboard={previewingPartner ? null : data}
+          previewing={previewingPartner}
           onRetryDashboard={() => { setLoading(true); load(); }}
         />
       </div>

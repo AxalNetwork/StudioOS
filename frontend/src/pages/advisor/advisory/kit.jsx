@@ -182,18 +182,19 @@ export function formatRelativeDay(iso) {
  * Group advisor bookings by counterparty. The advisor's "clients" are not a
  * table — they are whoever has booked them — so this derivation IS the client
  * list. Keyed on founder_user_id so two people sharing a display name stay
- * distinct.
+ * distinct. Both runtimes expose neutral client_* aliases; founder_* remains
+ * supported for older Worker responses.
  */
 export function clientsFromBookings(bookings) {
   const byId = new Map();
   for (const b of bookings || []) {
-    const key = b.founder_user_id;
+    const key = b.client_user_id ?? b.founder_user_id ?? b.requester_user_id;
     if (key == null) continue;
     if (!byId.has(key)) {
       byId.set(key, {
         id: key,
-        name: b.founder_name || b.founder_email || `Member #${key}`,
-        email: b.founder_email || null,
+        name: b.client_name || b.founder_name || b.client_email || b.founder_email || `Member #${key}`,
+        email: b.client_email || b.founder_email || null,
         bookings: [],
       });
     }
@@ -203,8 +204,8 @@ export function clientsFromBookings(bookings) {
     c.bookings.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
     c.total = c.bookings.length;
     c.completed = c.bookings.filter((b) => b.status === 'completed').length;
-    c.upcoming = c.bookings.filter((b) => ['pending', 'confirmed'].includes(b.status)).length;
-    c.lastSeen = c.bookings[0]?.slot_starts_at || c.bookings[0]?.created_at || null;
+    c.upcoming = c.bookings.filter((b) => ['requested', 'pending', 'confirmed'].includes(b.status)).length;
+    c.lastSeen = c.bookings[0]?.scheduled_start || c.bookings[0]?.slot_starts_at || c.bookings[0]?.created_at || null;
     c.topics = [...new Set(c.bookings.map((b) => b.topic).filter(Boolean))];
   }
   return [...byId.values()].sort((a, b) => String(b.lastSeen || '').localeCompare(String(a.lastSeen || '')));

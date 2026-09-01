@@ -100,6 +100,10 @@ export default function FounderBuildDesk() {
   if (workspace) return <ExecutionPage />;
   const roadmapLink = `/build/roadmap${projectId ? `?project_id=${projectId}` : ''}`;
   const metricsLink = `/build/metrics${projectId ? `?project_id=${projectId}` : ''}`;
+  const kpiLink = `/build/kpi${projectId ? `?project_id=${projectId}` : ''}`;
+  const cadenceLink = `/build/cadence${projectId ? `?project_id=${projectId}` : ''}`;
+  const weekLink = `/build/this-week${projectId ? `?project_id=${projectId}` : ''}`;
+  const boardLink = `/build/board${projectId ? `?project_id=${projectId}` : ''}`;
   const executionLink = `/execution?mode=workspace${projectId ? `&project_id=${projectId}` : ''}`;
 
   return <main className="build-desk" data-testid="founder-build-desk">
@@ -115,28 +119,37 @@ export default function FounderBuildDesk() {
             </div>
           </div>
           <nav aria-label="Operating desk sections" className="build-anchors">
-            {['This week', 'Board', 'Cadence', 'Roadmap', 'KPI entry'].map((label, index) => <a data-testid={`link-build-anchor-${index}`} key={label} href={`#build-${index}`}>{label}</a>)}
+            {['This week', 'Board', 'Cadence', 'Roadmap', 'KPI entry'].map((label, index) => label === 'This week'
+              ? <Link data-testid={`link-build-anchor-${index}`} key={label} to={weekLink}>{label}</Link>
+              : label === 'Roadmap'
+                ? <Link data-testid={`link-build-anchor-${index}`} key={label} to={roadmapLink}>{label}</Link>
+              : label === 'KPI entry'
+                ? <Link data-testid={`link-build-anchor-${index}`} key={label} to={kpiLink}>{label}</Link>
+              : label === 'Cadence'
+                ? <Link data-testid={`link-build-anchor-${index}`} key={label} to={cadenceLink}>{label}</Link>
+              : <a data-testid={`link-build-anchor-${index}`} key={label} href={`#build-${index}`}>{label}</a>)}
           </nav>
         </header>
         {state === 'error' && <div className="build-error" data-testid="status-build-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-build" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
-        <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} roadmapLink={roadmapLink} metricsLink={metricsLink} executionLink={executionLink} navigationState={navigationState} />
+        <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} weekLink={weekLink} roadmapLink={roadmapLink} metricsLink={metricsLink} boardLink={boardLink} executionLink={executionLink} navigationState={navigationState} />
       </div>
       <BuildRail commitments={data.commitments} boardTotal={data.boardTotal} executionLink={executionLink} navigationState={navigationState} />
     </section>
   </main>;
 }
 
-function BuildSections({ loading, hasProjects, data, snapshots, summary, roadmapLink, metricsLink, executionLink, navigationState }) {
+function BuildSections({ loading, hasProjects, data, snapshots, summary, weekLink, roadmapLink, metricsLink, boardLink, executionLink, navigationState }) {
   const latest = snapshots[0];
   return <div className="build-sections">
-    <section className="build-card build-week" id="build-0"><SectionHead icon={ClipboardCheck} title={`This week · ${dateRange()}`} meta={loading ? 'Reading source records' : `${data.commitments.length} stored current key result${data.commitments.length === 1 ? '' : 's'}`} />
+     <section className="build-card build-week" id="build-0"><SectionHead icon={ClipboardCheck} title={`This week · ${dateRange()}`} meta={loading ? 'Reading source records' : `${data.commitments.length} stored current key result${data.commitments.length === 1 ? '' : 's'}`} />
       {loading ? <Skeleton rows={4} /> : !hasProjects ? <Empty icon={Target} text="No startup is available to this view yet." detail="Create or select a startup before setting operating commitments." link={executionLink} state={navigationState} /> : data.commitments.length ? <><p className="build-source">Current key results from Now roadmap items. Weekly assignment and ownership are not recorded.</p><div className="commitments">{data.commitments.map((item) => <div className="commitment" key={item.id}><i /><strong>{item.text}</strong><span>{item.target !== null && item.target !== undefined ? `${item.current ?? 0} / ${item.target}${item.unit ? ` ${item.unit}` : ''}` : 'Progress not recorded'}</span></div>)}</div></> : <Empty icon={ClipboardCheck} text="No current commitments are recorded." detail="This desk does not invent a Monday plan. Add Now OKRs and key results in Roadmap." link={roadmapLink} state={navigationState} />}
-      <Link data-testid="link-manage-roadmap" className="manage-link" to={roadmapLink} state={navigationState}>Manage commitments in Roadmap <ChevronRight size={14} /></Link>
+       <Link data-testid="link-open-this-week" className="manage-link" to={weekLink} state={navigationState}>Open detailed weekly view <ChevronRight size={14} /></Link>
+       <Link data-testid="link-manage-roadmap" className="manage-link" to={roadmapLink} state={navigationState}>Manage commitments in Roadmap <ChevronRight size={14} /></Link>
     </section>
     <div className="build-pair">
       <section className="build-card" id="build-1"><SectionHead icon={KanbanSquare} title="Execution board" meta={loading ? 'Reading board' : `${data.boardTotal} stored card${data.boardTotal === 1 ? '' : 's'}`} />
-        {loading ? <Skeleton rows={2} /> : data.selectedDeal && data.boardTotal > 0 ? <div className="stage-grid">{data.board.map(([stage, count]) => <div key={stage}><span>{stage}</span><strong>{count}</strong><small>stored cards</small></div>)}</div> : <Empty icon={KanbanSquare} text="No execution cards are recorded." detail="The board remains unchanged here; open it to create or move cards." link={executionLink} state={navigationState} />}
-        <Link data-testid="link-open-board-workspace" className="manage-link" to={executionLink} state={navigationState}>Open board workspace <ChevronRight size={14} /></Link>
+        {loading ? <Skeleton rows={2} /> : data.selectedDeal && data.boardTotal > 0 ? <div className="stage-grid">{data.board.map(([stage, count]) => <div key={stage}><span>{stage}</span><strong>{count}</strong><small>stored cards</small></div>)}</div> : <Empty icon={KanbanSquare} text="No execution cards are recorded." detail="Open the detailed board to review the selected startup's stored task record." link={boardLink} state={navigationState} />}
+        <Link data-testid="link-open-board-workspace" className="manage-link" to={boardLink} state={navigationState}>Open detailed board <ChevronRight size={14} /></Link>
       </section>
       <section className="build-card" id="build-2"><SectionHead icon={Route} title="Operating cadence" meta="Not recorded" /><div className="cadence-empty"><Route size={20} /><strong>No operating cadence recorded</strong><p>There is no cadence store connected to this operating desk. No schedule is assumed.</p></div></section>
     </div>
@@ -146,7 +159,8 @@ function BuildSections({ loading, hasProjects, data, snapshots, summary, roadmap
     </section>
     <section className="build-card" id="build-4"><SectionHead icon={LineChart} title="KPI entry" meta={latest?.snapshot_date ? `Latest snapshot · ${latest.snapshot_date}` : 'Not recorded'} />
       {loading ? <Skeleton rows={2} /> : <><div className="kpi-grid">{[{ label: 'MRR', value: latest?.mrr, unit: '$' }, { label: 'Active users', value: latest?.active_users }, { label: 'Net burn', value: summary?.net_burn ?? latest?.net_burn, unit: '$' }, { label: 'Runway', value: summary?.runway_months, unit: ' mo' }].map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.unit === ' mo' ? (item.value == null ? 'Not recorded' : `${Number(item.value).toFixed(1)} mo`) : metricValue(item.value, item.unit)}</strong></div>)}</div><p className="build-source">Only values in the latest stored snapshot and server-derived summary are shown.</p></>}
-      <Link data-testid="link-enter-metrics" className="manage-link" to={metricsLink} state={navigationState}>Enter or review metrics <ChevronRight size={14} /></Link>
+         <Link data-testid="link-open-kpi-ledger" className="manage-link" to={kpiLink} state={navigationState}>Open KPI ledger <ChevronRight size={14} /></Link>
+         <Link data-testid="link-enter-metrics" className="manage-link" to={metricsLink} state={navigationState}>Enter or review metrics <ChevronRight size={14} /></Link>
     </section>
   </div>;
 }

@@ -392,6 +392,8 @@ def booking_dto(b: AdvisorBooking) -> dict:
         "project_id": b.project_id,
         "topic": b.topic,
         "questions": b.questions,
+        "notes": b.questions,
+        "client_message": b.questions,
         "scheduled_start": b.scheduled_start.isoformat(),
         "scheduled_end": b.scheduled_end.isoformat(),
         "status": b.status,
@@ -400,6 +402,8 @@ def booking_dto(b: AdvisorBooking) -> dict:
         "cancelled_at": b.cancelled_at.isoformat() if b.cancelled_at else None,
         "cancel_reason": b.cancel_reason,
         "meeting_uri": b.meeting_uri,
+        "created_at": b.created_at.isoformat(),
+        "updated_at": b.updated_at.isoformat(),
     }
 
 

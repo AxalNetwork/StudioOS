@@ -16,6 +16,9 @@ import PortfolioPositionsPage from './PortfolioPositionsPage';
 import PortfolioPerformancePage from './PortfolioPerformancePage';
 import PortfolioGrowthPage from './PortfolioGrowthPage';
 import InvestorPortfolioCanvas from './investor/InvestorPortfolioCanvas';
+import InvestorPortfolioPositions from './investor/InvestorPortfolioPositions';
+import InvestorPortfolioUpdates from './investor/InvestorPortfolioUpdates';
+import InvestorPortfolioValueAdd from './investor/InvestorPortfolioValueAdd';
 
 export default function PortfolioWorkspace({ activeRole }) {
   const { pathname } = useLocation();
@@ -26,7 +29,7 @@ export default function PortfolioWorkspace({ activeRole }) {
       ? 'positions'
       : pathname.includes('/performance')
         ? 'performance'
-        : pathname.includes('/growth')
+        : pathname.includes('/growth') || pathname.includes('/value-add')
           ? 'growth'
           : 'health';
 
@@ -40,6 +43,15 @@ export default function PortfolioWorkspace({ activeRole }) {
 
   if ((activeRole || role) === 'investor' && active === 'health') {
     return <InvestorPortfolioCanvas active={active} />;
+  }
+  if ((activeRole || role) === 'investor' && active === 'positions') {
+    return <InvestorPortfolioPositions />;
+  }
+  if ((activeRole || role) === 'investor' && active === 'updates') {
+    return <InvestorPortfolioUpdates />;
+  }
+  if ((activeRole || role) === 'investor' && active === 'growth') {
+    return <InvestorPortfolioValueAdd />;
   }
 
   return (

@@ -52,7 +52,7 @@ export default function FounderNetworkDesk() {
   const state = { founderNetworkSeed: { records } };
   return <main className="a6-network" data-testid="founder-network-desk"><div className="a6-canvas"><div className="a6-main">
     <header className="a6-hero"><span>Founder / Network</span><h1>Work my relationships</h1><p>Who you know, what you last said, and the introductions recorded across your network.</p>
-      <nav aria-label="Network desk sections"><a data-testid="link-network-relationships-anchor" href="#a6-relationships">Relationships</a><a data-testid="link-network-introductions-anchor" href="#a6-introductions">Introductions</a><a data-testid="link-network-organizations-anchor" href="#a6-organizations">Organizations</a></nav>
+      <nav aria-label="Network desk sections"><Link data-testid="link-network-relationships-anchor" to="/network/relationships">Relationships</Link><Link data-testid="link-network-introductions-anchor" to="/network/introductions">Introductions</Link><Link data-testid="link-network-organizations-anchor" to="/network/organizations">Organizations</Link></nav>
     </header>
     {error && <div className="a6-error" data-testid="status-network-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-network" type="button" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>}
     <NetworkSections data={data} loading={initialLoading} state={state} />

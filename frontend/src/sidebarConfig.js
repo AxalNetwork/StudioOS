@@ -324,7 +324,7 @@ export const SIDEBAR_GROUPS = {
                 '/partner/operations/capabilities'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts'] },
-      { to: '/market-intel', icon: Radar, label: 'Research' },
+      { to: '/signals', icon: Radar, label: 'Research', match: ['/signals', '/market-intel'] },
     ]},
   ],
 

@@ -2187,6 +2187,7 @@ export const api = {
   simulateCapTable: (inputs) =>
     request('/captable/simulate', { method: 'POST', body: JSON.stringify({ inputs }) }),
   listCapTableScenarios: () => request('/captable/scenarios'),
+  getCapTableByProject: (projectId) => request(`/captable/scenarios/by-project/${encodeURIComponent(projectId)}`),
   // Wave 2 — option pools + vesting grants, both populated by the Carta sync
   // (migration 057) and read by nothing until now. Shares, not money.
   getEquityPlan: () => request('/captable/equity-plan'),
@@ -2468,6 +2469,7 @@ export const api = {
     const q = qs.toString();
     return request(`/introductions/propositions${q ? `?${q}` : ''}`);
   },
+  networkIntroductionsList: () => request('/network-introductions'),
   introAccept: (uid) =>
     request(`/introductions/propositions/${encodeURIComponent(uid)}/accept`, { method: 'POST' }),
   introDecline: (uid) =>
@@ -2635,7 +2637,33 @@ export const api = {
   getMyAdvisor: () => request('/advisors/me'),
   listAdvisorSlots: (uid, upcomingOnly = true) =>
     request(`/advisors/${uid}/slots?upcoming_only=${upcomingOnly ? 'true' : 'false'}`),
-  createAdvisorSlot: (data) => request('/advisors/me/slots', { method: 'POST', body: JSON.stringify(data) }),
+  createAdvisorSlot: (data) => {
+    const startsAt = data.starts_at || data.start_at;
+    const endsAt = data.ends_at || (
+      startsAt && data.duration_min
+        ? new Date(new Date(startsAt).getTime() + Number(data.duration_min) * 60000).toISOString()
+        : undefined
+    );
+    const durationMin = data.duration_min || (
+      startsAt && endsAt
+        ? Math.max(1, Math.round((new Date(endsAt).getTime() - new Date(startsAt).getTime()) / 60000))
+        : undefined
+    );
+    const meetingUrl = data.meeting_url ?? data.location_uri ?? null;
+    return request('/advisors/me/slots', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...data,
+        starts_at: startsAt,
+        ends_at: endsAt,
+        start_at: startsAt,
+        duration_min: durationMin,
+        meeting_url: meetingUrl,
+        location_kind: data.location_kind || 'video',
+        location_uri: meetingUrl,
+      }),
+    });
+  },
   cancelAdvisorSlot: (slotId) => request(`/advisors/me/slots/${slotId}`, { method: 'DELETE' }),
   bookAdvisorSlot: (slotId, data) =>
     request(`/advisors/slots/${slotId}/book`, { method: 'POST', body: JSON.stringify(data) }),

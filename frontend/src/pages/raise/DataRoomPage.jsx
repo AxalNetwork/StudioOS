@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   FolderPlus, Upload, Trash2, ShieldCheck, ShieldAlert, Users, Download,
   FileText, Folder, Loader2, X,
@@ -72,8 +73,8 @@ function fmtWhen(iso) {
  * Founder                                                             *
  * ------------------------------------------------------------------ */
 
-function FounderRoom({ projects }) {
-  const [projectUid, setProjectUid] = useState(projects[0]?.uid || '');
+function FounderRoom({ projects, initialProjectUid }) {
+  const [projectUid, setProjectUid] = useState(initialProjectUid || projects[0]?.uid || '');
   const [room, setRoom] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -379,6 +380,7 @@ export default function DataRoomPage({ user }) {
   const role = String(user?.role || '').toLowerCase();
   const isFounder = role === 'founder' || role === 'admin';
   const [projects, setProjects] = useState(null);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     if (!isFounder) { setProjects([]); return; }
@@ -393,8 +395,10 @@ export default function DataRoomPage({ user }) {
     if (projects.length === 0) {
       return <Empty title="No project yet." body="A data room belongs to a venture — create one first." />;
     }
-    return <FounderRoom projects={projects} />;
-  }, [isFounder, projects]);
+    const requested = projects.find((project) => String(project.id) === searchParams.get('project_id'));
+    const initialProjectUid = requested?.uid || projects[0]?.uid || '';
+    return <FounderRoom key={initialProjectUid} projects={projects} initialProjectUid={initialProjectUid} />;
+  }, [isFounder, projects, searchParams]);
 
   return (
     <div className="space-y-6">

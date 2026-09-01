@@ -83,6 +83,7 @@ export default function FounderRaiseDesk() {
   }, [records]);
   const query = projectId ? `?project_id=${projectId}` : '';
   const state = { founderRaiseSeed: { projects, projectId, records } };
+  const statusLink = `/raise/status${query}`;
 
   return <main className="raise-desk" data-testid="founder-raise-desk">
     <section className="raise-canvas">
@@ -92,7 +93,19 @@ export default function FounderRaiseDesk() {
           <div className="raise-heading"><div><h1>Get capital, stay legal</h1><p>Pitch, capital planning, legal readiness, data room, and liquidity in one fundraising workspace.</p></div>
             {projects.length > 1 && <select data-testid="select-raise-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
           </div>
-          <nav className="raise-anchors" aria-label="Raise desk sections">{['Status', 'Pitch', 'Capital', 'Legal', 'Data room', 'Liquidity'].map((label) => <a data-testid={`link-raise-anchor-${label.toLowerCase().replace(' ', '-')}`} href={`#raise-${label.toLowerCase().replace(' ', '-')}`} key={label}>{label}</a>)}</nav>
+          <nav className="raise-anchors" aria-label="Raise desk sections">{['Status', 'Pitch', 'Capital', 'Legal', 'Data room', 'Liquidity'].map((label) => label === 'Status'
+            ? <Link data-testid="link-raise-anchor-status" to={statusLink} key={label}>{label}</Link>
+            : label === 'Pitch'
+              ? <Link data-testid="link-raise-anchor-pitch" to={`/raise/pitch${query}`} key={label}>{label}</Link>
+            : label === 'Capital'
+              ? <Link data-testid="link-raise-anchor-capital" to={`/raise/capital${query}`} key={label}>{label}</Link>
+            : label === 'Legal'
+              ? <Link data-testid="link-raise-anchor-legal" to={`/raise/legal${query}`} key={label}>{label}</Link>
+            : label === 'Data room'
+              ? <Link data-testid="link-raise-anchor-data-room" to={`/raise/data-room${query}`} key={label}>{label}</Link>
+            : label === 'Liquidity'
+              ? <Link data-testid="link-raise-anchor-liquidity" to={`/raise/liquidity${query}`} key={label}>{label}</Link>
+            : <a data-testid={`link-raise-anchor-${label.toLowerCase().replace(' ', '-')}`} href={`#raise-${label.toLowerCase().replace(' ', '-')}`} key={label}>{label}</a>)}</nav>
         </header>
         {(projectError || Object.keys(errors).length > 0) && <div className="raise-error" data-testid="status-raise-partial"><AlertCircle size={16} /><span>{projectError || 'Some selected-project records are unavailable.'}</span><button data-testid="button-retry-raise" type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></div>}
         <RaiseSections loading={loading} project={project} data={data} errors={errors} query={query} state={state} />
@@ -115,7 +128,7 @@ function RaiseSections({ loading, project, data, errors, query, state }) {
     </section>
     <div className="raise-pair">
       <section className="raise-card" id="raise-capital"><Head icon={Landmark} title="Capital · dilution" meta="Selected-project round" />{loading ? <Skeleton rows={3} /> : errors.round ? <Unavailable /> : <><div className="capital-figures"><Metric label="Round target" value={money(target)} /><Metric label="Committed" value={money(raised)} /><Metric label="Prospect coverage" value={`${prospects.length} stored`} /></div><p className="source-note">No dilution calculation is shown because no current response provides one.</p><DeskLink testid="link-open-capital" to={`/raise/capital${query}`} state={state}>Open capital planner</DeskLink></>}</section>
-      <section className="raise-card" id="raise-legal"><Head icon={Scale} title="Legal engine" meta={loading ? 'Reading documents' : `${docs.length} stored document${docs.length === 1 ? '' : 's'}`} />{loading ? <Skeleton rows={3} /> : errors.legal ? <Unavailable /> : <><div className="legal-list">{docs.slice(0, 4).map((doc, index) => <div key={doc.id || index}><FileText size={14} /><span>{clean(doc.title || doc.name || doc.doc_type) || 'Untitled document'}</span><small>{status(doc.status)}</small></div>)}{!docs.length && <Empty icon={FileText} title="No legal documents are recorded." body="Stored legal documents appear here." />}</div><p className="source-note">Clause analysis and term-sheet warnings: Not recorded.</p><DeskLink testid="link-open-legal" to={`/raise/legal-engine${query}`} state={state}>Open legal engine</DeskLink></>}</section>
+      <section className="raise-card" id="raise-legal"><Head icon={Scale} title="Legal engine" meta={loading ? 'Reading documents' : `${docs.length} stored document${docs.length === 1 ? '' : 's'}`} />{loading ? <Skeleton rows={3} /> : errors.legal ? <Unavailable /> : <><div className="legal-list">{docs.slice(0, 4).map((doc, index) => <div key={doc.id || index}><FileText size={14} /><span>{clean(doc.title || doc.name || doc.doc_type) || 'Untitled document'}</span><small>{status(doc.status)}</small></div>)}{!docs.length && <Empty icon={FileText} title="No legal documents are recorded." body="Stored legal documents appear here." />}</div><p className="source-note">Clause analysis and term-sheet warnings: Not recorded.</p><DeskLink testid="link-open-legal" to={`/raise/legal${query}`} state={state}>Open legal collection</DeskLink></>}</section>
     </div>
     <section className="raise-card" id="raise-data-room"><Head icon={Folder} title="Data room" meta={loading ? 'Reading room' : `${files.length} files · ${folders.length} folders · ${grants.length} grants`} />{loading ? <Skeleton rows={3} /> : errors.room ? <Unavailable /> : <><div className="artifact-grid">{[...folders.map((item) => ({ ...item, kind: 'Folder' })), ...files.map((item) => ({ ...item, kind: 'File' }))].slice(0, 8).map((item, index) => <article key={item.uid || index}><span>{item.kind}</span><strong>{clean(item.name) || 'Unnamed artifact'}</strong><small>{status(item.visibility)}</small></article>)}{!files.length && !folders.length && <Empty icon={Folder} title="No artifacts are recorded in this room." body="This workspace does not create placeholders." />}</div><DeskLink testid="link-open-data-room" to={`/raise/data-room${query}`} state={state}>Open data room</DeskLink></>}</section>
     <section className="raise-card" id="raise-pitch"><Head icon={Sparkles} title="Pitch" meta={loading ? 'Reading versions' : `${versions.length} stored version${versions.length === 1 ? '' : 's'}`} />{loading ? <Skeleton rows={2} /> : errors.deck ? <Unavailable /> : <><div className="deck-list">{versions.slice(0, 4).map((deck, index) => <div key={deck.id || index}><strong>{clean(deck.name || deck.title) || `Version ${deck.version ?? index + 1}`}</strong><span>{Array.isArray(deck.slides) ? `${deck.slides.length} slides` : 'Slide count not recorded'}</span><small>{status(deck.status || deck.updated_at || deck.created_at)}</small></div>)}{!versions.length && <Empty icon={Sparkles} title="No deck version is recorded." body="Create or edit a deck in the detailed workspace." />}</div><DeskLink testid="link-open-pitch-workspace" to={`/raise/pitch?mode=workspace${project ? `&project_id=${project.id}` : ''}`} state={state}>Open pitch workspace</DeskLink></>}</section>

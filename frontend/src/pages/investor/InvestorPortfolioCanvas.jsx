@@ -98,7 +98,7 @@ export default function InvestorPortfolioCanvas({ active = 'health' }) {
       </header>
 
       <nav className="i4-tabs" aria-label="Portfolio sections">
-        {[['health', 'Positions', '/portfolio/health'], ['updates', 'Updates', '/portfolio/updates'], ['growth', 'Value-add', '/portfolio/growth']].map(([id, text, to]) => (
+        {[['health', 'Positions', '/portfolio/health'], ['updates', 'Updates', '/portfolio/updates'], ['growth', 'Value-add', '/portfolio/value-add']].map(([id, text, to]) => (
           <Link key={id} to={to} className={active === id || (active === 'health' && id === 'health') ? 'is-active' : ''} data-testid={`link-investor-portfolio-${id}`}>{text}</Link>
         ))}
       </nav>
@@ -135,7 +135,7 @@ export default function InvestorPortfolioCanvas({ active = 'health' }) {
                <div className="i4-health-line"><Activity size={14} /><span>{state.unavailable.health ? 'Health signals are temporarily unavailable.' : interventionCount ? `${interventionCount} position${interventionCount === 1 ? '' : 's'} need attention.` : 'No intervention flags in the latest health sweep.'}</span><button type="button" onClick={load} data-testid="button-refresh-investor-health">Refresh signals</button></div>
             </article>
             <article className="i4-card i4-value-add">
-              <div className="i4-section-head"><div><h2>Value-add desk</h2><p>Support recorded against this investor relationship</p></div><Link to="/portfolio/growth" data-testid="link-investor-value-add-detail">Open desk <ArrowUpRight size={13} /></Link></div>
+            <div className="i4-section-head"><div><h2>Value-add desk</h2><p>Support recorded against this investor relationship</p></div><Link to="/portfolio/value-add" data-testid="link-investor-value-add-detail">Open desk <ArrowUpRight size={13} /></Link></div>
                <div className="i4-value-row"><UsersRound size={15} /><div><b>Introductions</b><p>{state.unavailable.intros ? 'Introduction records unavailable' : `${state.intros.length} recorded · ${acceptedIntros} accepted or meeting set`}</p></div><strong>{state.unavailable.intros ? '—' : state.intros.length}</strong></div>
                <div className="i4-value-row"><TrendingUp size={15} /><div><b>Portfolio health</b><p>{state.unavailable.health ? 'Health source unavailable' : `${state.health?.totals?.green ?? 0} currently healthy in the latest sweep`}</p></div><strong>{state.unavailable.health ? '—' : (state.health?.totals?.green ?? 0)}</strong></div>
                <div className="i4-value-row"><TrendingDown size={15} /><div><b>Needs attention</b><p>{state.unavailable.health ? 'Health source unavailable' : 'Open the health register for reasons and source signals'}</p></div><strong>{state.unavailable.health ? '—' : interventionCount}</strong></div>

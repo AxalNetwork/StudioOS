@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#4f46e5;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#4338ca;background:#f5f5ff;border-color:#c7d2fe;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#f5f5ff;border-color:#c7d2fe;color:#4338ca;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#f5f5ff;border:1px solid #c7d2fe;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4338ca;background:#e8e8ff;border:1px solid #c7d2fe;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #4338ca;background:#4338ca;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .lock{font-size:9px;font-weight:800;letter-spacing:.05em;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:3px;padding:2px 5px}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="4">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /fund</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#4338ca;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="9">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span><sc-if value="{{ n.tier }}"><span class="lock">{{ n.tier }}</span></sc-if></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Fund</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="4">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="6"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="7">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                <span class="td">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#4338ca;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="indigo" page="Fund" hint-size="100%,600px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const N = { ink:'#4f46e5', deep:'#4338ca', tint:'#f5f5ff' };
+    // CANONICAL Investor shell — 9 rows, matching Detail Layer Canvas I_ROWS. Here 'Fund' is the
+    // active row and the tier tag reads as owned: the viewer holds the Institutional add-on.
+    const ROWS = ['Home','Deals','Portfolio','Axal VC Fund','Fund','Network','Research','Trust','Firm Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Fund' ? 'nav on' : 'nav',
+      tier: label === 'Fund' ? 'Inst.' : null,
+      style: label === 'Fund' ? 'color:'+N.deep+';background:'+N.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+N.ink : '' }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['LPs','Calls','Accounting','Reporting'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Calls' }));
+
+    const pill = (t) => {
+      const M = { 'Paid':['#ecfdf5','#047857','#a7f3d0'], 'Cleared':['#ecfdf5','#047857','#a7f3d0'],
+        'Published':['#ecfdf5','#047857','#a7f3d0'],
+        'Drafted':['#f5f5ff','#3730a3','#c7d2fe'], 'In review':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Late':['#fffbeb','#92400e','#fde68a'], 'Pending':['#fffbeb','#92400e','#fde68a'],
+        'Accrued':['#fffbeb','#92400e','#fde68a'],
+        'Delinquent':['#fef2f2','#b91c1c','#fecaca'],
+        'Not sent':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Not sent'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => Object.assign({ text, pill:null, pillStyle:'' },
+      opt || {}, opt && opt.pill ? { pillStyle: pill(opt.pill) } : {});
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const m2 = (n) => '$' + (n / 1e6).toFixed(2) + 'M';
+    const pctS = (n) => (n * 100).toFixed(1) + '%';
+    // Counts landing mid-sentence become words, never bare numerals.
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven'][n] || String(n);
+    const bothOrAll = (n) => n === 2 ? 'Both' : 'All ' + nWord(n);
+    // nWord returns lowercase, so a count opening a sentence needs capitalising.
+    const Cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+    // ══ Fund curation rate — DeepSeek V4 Pro, as the rail declares. ══
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout) => tin / 1e6 * 1.320 + tout / 1e6 * 3.960;
+
+    // ══ ONE LP register. Every total, call amount, delinquency and NAV line derives from it.
+    // `paid` is the fraction of commitment actually received to date. ══
+    const TARGET = 10000000;
+    const CALLED_PCT = 0.35;   // three calls: 15% + 10% + 10%
+    const LPS = [
+      { lp:'Meridian Family Office', type:'Family office', commit:2500000, paid:0.35, kyc:'Cleared' },
+      { lp:'Ashcombe Endowment', type:'Endowment', commit:2000000, paid:0.35, kyc:'Cleared' },
+      { lp:'R. Okonkwo', type:'HNW', commit:1000000, paid:0.35, kyc:'Cleared' },
+      { lp:'Delacroix Partners', type:'Fund of funds', commit:1000000, paid:0.35, kyc:'Cleared' },
+      { lp:'Tessellate Capital', type:'Micro-VC', commit:750000, paid:0.35, kyc:'Cleared' },
+      { lp:'J. Halvorsen', type:'HNW', commit:750000, paid:0.25, kyc:'Cleared' },
+      { lp:'Brackenridge Trust', type:'Family office', commit:500000, paid:0.35, kyc:'Cleared' },
+      { lp:'S. Mwangi', type:'HNW', commit:500000, paid:0.00, kyc:'Pending' },
+      { lp:'Corvid Ventures SPV', type:'SPV', commit:400000, paid:0.35, kyc:'Cleared' },
+      { lp:'L. Zhang', type:'HNW', commit:250000, paid:0.35, kyc:'Cleared' },
+      { lp:'GP commitment', type:'GP', commit:250000, paid:0.35, kyc:'Cleared' },
+      { lp:'Windermere Trust', type:'Family office', commit:100000, paid:0.35, kyc:'Cleared' }
+    ];
+    const committed = LPS.reduce((a, l) => a + l.commit, 0);
+    const called = committed * CALLED_PCT;
+    const collected = LPS.reduce((a, l) => a + l.commit * l.paid, 0);
+    const outstanding = called - collected;
+    const short = LPS.filter(l => l.paid < CALLED_PCT);
+    const kycPending = LPS.filter(l => l.kyc === 'Pending');
+    const stateOf = (l) => l.paid >= CALLED_PCT ? 'Paid' : (l.paid === 0 ? 'Delinquent' : 'Late');
+    const lpRows = LPS.slice(0, 7).map(l => ({ cells:[
+      cell(l.lp), cell(l.type), cell(usd(l.commit)), cell(pctS(l.commit / committed)),
+      cell(usd(l.commit * l.paid)), cell('', { pill:stateOf(l) }), cell('', { pill:l.kyc })
+    ]}));
+
+    // Deployment reconciles to the positions book on the Portfolio pages.
+    const DEPLOYED = 2385000, DISTRIBUTED = 0;
+    const dryPowder = collected - DEPLOYED;
+    const FEE_RATE = 0.02, MONTHS = 8;
+    const feeAccrued = committed * FEE_RATE * (MONTHS / 12);
+    const feeDrawn = feeAccrued * 0.75;
+
+    // ══ Call 3: each LP owes commitment × the call fraction, so no row can drift from the total.
+    const CALL3 = 0.10;
+    const call3Total = committed * CALL3;
+    const call3Collected = LPS.filter(l => l.paid >= CALLED_PCT).reduce((a, l) => a + l.commit * CALL3, 0);
+    const call3Rows = LPS.slice(0, 8).map(l => {
+      const owedNow = l.commit * CALL3, isPaid = l.paid >= CALLED_PCT;
+      return { cells:[ cell(l.lp), cell(usd(l.commit)), cell(usd(owedNow)),
+        cell(isPaid ? usd(owedNow) : usd(0)), cell('', { pill:stateOf(l) }),
+        cell(isPaid ? '—' : (l.paid === 0 ? '19 days overdue' : '6 days overdue')) ]};
+    });
+
+    const ACCT = [
+      { line:'Committed capital', amt:committed, state:'Cleared', note:pctS(committed / TARGET) + ' of the ' + m2(TARGET) + ' target.' },
+      { line:'Capital called', amt:called, state:'Cleared', note:'Three calls: 15%, 10%, 10% of commitments.' },
+      { line:'Capital collected', amt:collected, state: outstanding > 0 ? 'Pending' : 'Cleared', note:usd(outstanding) + ' outstanding across ' + nWord(short.length) + ' LPs.' },
+      { line:'Deployed to portfolio', amt:DEPLOYED, state:'Cleared', note:'Six positions. Reconciles to the positions book.' },
+      { line:'Dry powder', amt:dryPowder, state:'Cleared', note:'Collected less deployed — not called less deployed.' },
+      { line:'Management fee accrued', amt:feeAccrued, state:'Accrued', note:pctS(FEE_RATE) + ' of committed, ' + MONTHS + ' months.' },
+      { line:'Fee drawn to date', amt:feeDrawn, state:'Pending', note:usd(feeAccrued - feeDrawn) + ' still to draw.' },
+      { line:'Distributions to LPs', amt:DISTRIBUTED, state:'Not sent', note:'Nothing realised. DPI 0.00×.' }
+    ];
+    const acctRows = ACCT.map(a => ({ cells:[ cell(a.line), cell(usd(a.amt)), cell('', { pill:a.state }), cell(a.note) ]}));
+
+    const PACKS = [
+      { per:'Q3 2026', state:'Drafted', sent:'0 of ' + LPS.length, note:'Due Oct 15. Awaiting the Sep 30 marks.' },
+      { per:'Q2 2026', state:'Published', sent:LPS.length + ' of ' + LPS.length, note:'NAV, positions, one write-down disclosed.' },
+      { per:'Q1 2026', state:'Published', sent:(LPS.length - 1) + ' of ' + (LPS.length - 1), note:'First report. Windermere had not closed yet.' },
+      { per:'Annual 2026', state:'Not sent', sent:'—', note:'Audited. Due Mar 2027.' }
+    ];
+    const packRows = PACKS.map(p => ({ cells:[ cell(p.per), cell('', { pill:p.state }), cell(p.sent), cell(p.note) ]}));
+
+    const PAGES = [
+      { id:'if1', badge:'IF1', route:'/fund/lps', zone:'LPs', arch:'COLLECTION',
+        title:'Fund · LPs', h1:'LP registry',
+        blurb:'Compressed shows the commitment total. The full registry adds every LP with its share of the fund, KYC state, documents and comms log — the record that has to be right before a single call goes out.',
+        sub:'Registry, KYC state, documents and comms log.',
+        cmpTitle:'LPs · ' + LPS.length + ' committed',
+        cmpBody:m2(committed) + ' of ' + m2(TARGET) + ' target. ' + Cap(nWord(kycPending.length)) + ' KYC outstanding.',
+        viewMore:'View more · ' + LPS.length + ' LPs, documents and comms →',
+        filters: fil(['All LPs','Behind','KYC pending','By type'], 0), ops:['Add LP','Export register','Comms log'],
+        adds:[ { label:'Committed', value:m2(committed), note:pctS(committed / TARGET) + ' of target' },
+          { label:'LPs', value:String(LPS.length), note:'incl. the GP commitment' },
+          { label:'Largest position', value:pctS(LPS[0].commit / committed), note:LPS[0].lp },
+          { label:'KYC outstanding', value:String(kycPending.length), note:'blocks their capital call' } ],
+        instTitle:'LP register', instMeta:'Top 7 by commitment · share of fund derived',
+        cols:'1.4fr 1fr .9fr .7fr .9fr .9fr .9fr',
+        head:['LP','Type','Commitment','Share','Paid to date','State','KYC'],
+        rows: lpRows,
+        instNote:'Share of fund is computed from the register rather than stored, so it cannot drift as LPs are added — Windermere closing after Q1 changed every other LP\u2019s percentage, and nothing had to be re-typed. The one LP with KYC pending is also the one that has paid nothing: the sequence is deliberate, since a call to an unverified LP is a call you cannot bank.',
+        aiLabel:'Proposal · LP comms summary', aiCost:c4(runCost(11200, 900)),
+        aiBody:'Per LP: what they committed, what they have paid, when they last heard from you, and whether anything is outstanding on either side. Written so the next quarterly call needs no preparation beyond reading it.',
+        aiAccept:'Accept summary', aiFoot:'Every figure links to its register row.' },
+
+      { id:'if2', badge:'IF2', route:'/fund/calls', zone:'Calls', arch:'LEDGER',
+        title:'Fund · Calls', h1:'Capital calls',
+        blurb:'Compressed shows the call total. The full ledger adds the schedule builder, the notice letters, wire tracking and delinquency — the page where the fund is most exposed to arithmetic error, and therefore the one with the least room for a typed number.',
+        sub:'Schedule builder, letters, wire tracking and delinquency.',
+        cmpTitle:'Call 3 · ' + usd(call3Total) + ' called',
+        cmpBody:usd(call3Collected) + ' received. ' + Cap(nWord(short.length)) + ' LPs outstanding.',
+        viewMore:'View more · ' + LPS.length + ' LPs, wire trail, notices →',
+        filters: fil(['Call 3','All calls','Outstanding','Notices'], 0), ops:['New call','Send reminders','Export wires'],
+        adds:[ { label:'Called to date', value:m2(called), note:pctS(CALLED_PCT) + ' of commitments' },
+          { label:'Collected', value:m2(collected), note:pctS(collected / called) + ' of called' },
+          { label:'Outstanding', value:usd(outstanding), note:'across ' + nWord(short.length) + ' LPs' },
+          { label:'Call 3', value:usd(call3Total), note:pctS(CALL3) + ' pro-rata' } ],
+        instTitle:'Call 3 · pro-rata and receipts', instMeta:'Owed is commitment × ' + pctS(CALL3) + ', never entered by hand',
+        cols:'1.4fr .9fr .9fr .9fr 1fr 1.1fr',
+        head:['LP','Commitment','Owed','Received','State','Age'],
+        rows: call3Rows,
+        instNote:'Each LP\u2019s obligation is its commitment multiplied by the call fraction, so the rows always sum to ' + usd(call3Total)
+          + ' — a call sheet where a line has been typed is a call sheet that can be wrong by a rounding error nobody notices for a quarter. '
+          + bothOrAll(short.length) + ' LPs behind are visible here rather than folded into a total, because a delinquency is a relationship problem before it is an accounting one.',
+        aiLabel:'Proposal · ' + nWord(short.length) + ' reminder letters', aiCost:c4(runCost(short.length * 5200, short.length * 780)),
+        aiBody:'One per LP behind on Call 3, each stating their commitment, the pro-rata owed, what has been received and the days elapsed — every figure traceable to the row above. The tone differs by case: six days late is an oversight, nineteen days with KYC still pending is a conversation.',
+        aiAccept:'Review the letters', aiFoot:'Screened, and the ledger records what was sent.' },
+
+      { id:'if3', badge:'IF3', route:'/fund/accounting', zone:'Accounting', arch:'LEDGER',
+        title:'Fund · Accounting', h1:'Fund accounting',
+        blurb:'Compressed shows NAV. The full ledger adds every line — calls, collections, deployment, fees, expenses — with the journal and audit trail behind each, so a figure in the LP report can be traced to the entry that produced it.',
+        sub:'NAV, fees, expenses, journal and audit trail.',
+        cmpTitle:'NAV · ' + m2(collected - DEPLOYED + 3375000),
+        cmpBody:m2(collected) + ' collected, ' + m2(DEPLOYED) + ' deployed, ' + usd(dryPowder) + ' dry powder.',
+        viewMore:'View more · 8 ledger lines, journal, audit trail →',
+        filters: fil(['Summary','Journal','Fees','Audit trail'], 0), ops:['Export journal','Reconcile','Period close'],
+        adds:[ { label:'Collected', value:m2(collected), note:'not the same as called' },
+          { label:'Deployed', value:m2(DEPLOYED), note:'six positions' },
+          { label:'Dry powder', value:usd(dryPowder), note:'collected less deployed' },
+          { label:'Fee accrued', value:usd(feeAccrued), note:usd(feeAccrued - feeDrawn) + ' undrawn' } ],
+        instTitle:'Ledger', instMeta:'Every line derives from the register or the positions book',
+        cols:'1.5fr 1fr 1fr 2fr', head:['Line','Amount','State','Note'],
+        rows: acctRows,
+        instNote:'Dry powder is collected less deployed, not called less deployed — the distinction matters by exactly the ' + usd(outstanding)
+          + ' still outstanding, and a fund that reports the looser figure is reporting money it does not hold. Deployment reconciles to the positions book rather than being entered here, so the two pages cannot disagree.',
+        aiLabel:'Proposal · fee reconciliation note', aiCost:c4(runCost(8600, 1100)),
+        aiBody:'Shows the ' + pctS(FEE_RATE) + ' management fee accrued across ' + MONTHS + ' months, what has been drawn, and what remains — with the arithmetic stated rather than asserted, since an undrawn accrual is the line auditors ask about first.',
+        aiAccept:'Attach to the journal', aiFoot:'Reasoning model — the arithmetic is shown.' },
+
+      { id:'if4', badge:'IF4', route:'/fund/reporting', zone:'Reporting', arch:'COLLECTION',
+        title:'Fund · Reporting', h1:'LP reporting',
+        blurb:'Compressed shows the current pack. The full collection adds the pack builder, the archive and per-LP delivery state — the record of what each LP was told and when, which is the only defence against a dispute about what was disclosed.',
+        sub:'Pack builder, archive and per-LP delivery status.',
+        cmpTitle:'Q3 2026 · drafted', cmpBody:'Due Oct 15. Q2 published to all ' + LPS.length + ' LPs.',
+        viewMore:'View more · ' + PACKS.length + ' periods, per-LP delivery →',
+        filters: fil(['All periods','Published','Drafted','Delivery'], 0), ops:['Build pack','Export archive','Delivery log'],
+        adds:[ { label:'Periods', value:String(PACKS.length), note:'2 published' },
+          { label:'Current pack', value:'Q3 2026', note:'drafted, due Oct 15' },
+          { label:'Delivery', value:LPS.length + ' of ' + LPS.length, note:'Q2, all reached' },
+          { label:'Next audited', value:'Mar 2027', note:'annual 2026' } ],
+        instTitle:'Report archive', instMeta:'Delivery counted per LP, not per send',
+        cols:'1.1fr 1.1fr 1fr 2.2fr', head:['Period','State','Delivered','Contents'],
+        rows: packRows,
+        instNote:'Q1 was sent to eleven LPs and Q2 to twelve, because Windermere closed in between — the archive records the count as it was rather than back-filling, since a report an LP never received is not a report they were shown. The Q3 draft waits on the Sep 30 marks rather than being published with stale ones.',
+        aiLabel:'Proposal · assemble the Q3 pack', aiCost:c4(runCost(24800, 3200)),
+        aiBody:'Built from the register, the ledger and the positions book: NAV, per-position marks, the fee note and the ' + nWord(short.length)
+          + ' outstanding calls. Disclosures included rather than omitted — the Kelp Bio write-down and the two unmade portfolio commitments both appear, because an LP report that only carries good news is not a report.',
+        aiAccept:'Open the draft', aiFoot:'Every figure traces to its source page.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({}, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

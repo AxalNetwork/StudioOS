@@ -116,15 +116,15 @@ export default function EngagementsPage() {
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     <StatusBadge status={b.status} />
-                    <Chip>{b.founder_name || b.founder_email || `Member #${b.founder_user_id}`}</Chip>
+                    <Chip>{b.client_name || b.founder_name || b.client_email || b.founder_email || `Member #${b.client_user_id ?? b.founder_user_id ?? b.requester_user_id}`}</Chip>
                   </div>
                   {b.cancel_reason && (
                     <p className="text-xs text-rose-500 dark:text-rose-400 mt-1.5">Reason: {b.cancel_reason}</p>
                   )}
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <div className="text-xs text-gray-600 dark:text-gray-400">{formatDateTime(b.slot_starts_at)}</div>
-                  <div className="text-[11px] text-gray-400 mt-0.5">{formatRelativeDay(b.slot_starts_at)}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">{formatDateTime(b.scheduled_start || b.slot_starts_at)}</div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">{formatRelativeDay(b.scheduled_start || b.slot_starts_at)}</div>
                 </div>
               </div>
             </RowCard>
@@ -136,7 +136,7 @@ export default function EngagementsPage() {
         open={!!open}
         onClose={() => setOpen(null)}
         title={open?.topic || 'Session'}
-        subtitle={open ? `${open.founder_name || open.founder_email || ''} · ${formatDateTime(open.slot_starts_at)}` : ''}
+        subtitle={open ? `${open.client_name || open.founder_name || open.client_email || open.founder_email || ''} · ${formatDateTime(open.scheduled_start || open.slot_starts_at)}` : ''}
       >
         {open && (
           <div className="space-y-4">
@@ -144,10 +144,10 @@ export default function EngagementsPage() {
               <StatusBadge status={open.status} />
               <Chip>Booked {formatRelativeDay(open.created_at)}</Chip>
             </div>
-            {open.notes && (
+            {(open.client_message || open.questions || open.notes) && (
               <div>
                 <div className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Their note</div>
-                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{open.notes}</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{open.client_message || open.questions || open.notes}</p>
               </div>
             )}
 

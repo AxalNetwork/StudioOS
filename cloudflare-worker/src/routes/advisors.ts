@@ -87,7 +87,7 @@ function bookingDto(b: BookingRow, extras: any = {}): any {
   return {
     id: b.id, uid: b.uid, slot_id: b.slot_id, advisor_id: b.advisor_id,
     founder_user_id: b.founder_user_id,
-    topic: b.topic, notes: b.notes, status: b.status,
+    topic: b.topic, notes: b.notes, questions: b.notes, client_message: b.notes, status: b.status,
     cancel_reason: b.cancel_reason,
     created_at: b.created_at, updated_at: b.updated_at,
     ...extras,
@@ -558,6 +558,9 @@ advisors.get('/me/bookings', async (c) => {
       items: (rows.results || []).map((r: any) => bookingDto(r, {
         founder_name: r.founder_name ?? null,
         founder_email: r.founder_email ?? null,
+        client_user_id: r.founder_user_id,
+        client_name: r.founder_name ?? null,
+        client_email: r.founder_email ?? null,
         slot_starts_at: r.slot_starts_at ?? null,
         slot_ends_at: r.slot_ends_at ?? null,
       })),

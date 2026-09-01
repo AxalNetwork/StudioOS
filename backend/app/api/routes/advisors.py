@@ -331,7 +331,26 @@ def list_my_advisor_bookings(
     if status_filter:
         stmt = stmt.where(AdvisorBooking.status == status_filter)
     rows = session.exec(stmt.order_by(AdvisorBooking.scheduled_start.desc())).all()
-    return {"items": [svc.booking_dto(b) for b in rows]}
+    requester_ids = {b.requester_user_id for b in rows}
+    requesters = session.exec(select(User).where(User.id.in_(requester_ids))).all() if requester_ids else []
+    requester_by_id = {u.id: u for u in requesters}
+    items = []
+    for booking in rows:
+        dto = svc.booking_dto(booking)
+        requester = requester_by_id.get(booking.requester_user_id)
+        dto.update({
+            "client_user_id": booking.requester_user_id,
+            "client_name": requester.name if requester else None,
+            "client_email": requester.email if requester else None,
+            # Worker aliases retained for the existing Advisory workspace.
+            "founder_user_id": booking.requester_user_id,
+            "founder_name": requester.name if requester else None,
+            "founder_email": requester.email if requester else None,
+            "slot_starts_at": dto["scheduled_start"],
+            "slot_ends_at": dto["scheduled_end"],
+        })
+        items.append(dto)
+    return {"items": items}
 
 
 @router.get("/bookings/me")

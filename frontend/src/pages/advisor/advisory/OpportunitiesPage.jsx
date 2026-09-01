@@ -11,7 +11,8 @@ import {
 //
 // Wave 1b: this tab previously rendered a fixture pipeline of invented deals
 // with invented values and probabilities. An advisor's real inbound is
-// `advisor_bookings` in `pending` — someone has asked for time and is waiting
+// `advisor_bookings` in `pending` (Worker) or `requested` (FastAPI) — someone
+// has asked for time and is waiting
 // on an answer. Confirming or declining here is the actual decision, and the
 // slots panel is where supply comes from, so an advisor with no pending
 // requests is told whether the reason is that they have published no
@@ -36,8 +37,8 @@ export default function OpportunitiesPage() {
       if (!me) setNoProfile(true);
     } catch { setNoProfile(true); }
     try {
-      const r = await api.listMyAdvisorBookings('pending');
-      setPending(r.items || []);
+      const r = await api.listMyAdvisorBookings();
+      setPending((r.items || []).filter((booking) => ['requested', 'pending'].includes(booking.status)));
     } catch (e) { setError(e?.message || 'Could not load requests.'); }
     if (me?.uid) {
       try {
@@ -102,7 +103,11 @@ export default function OpportunitiesPage() {
     );
   }
 
-  const openSlots = slots.filter((s) => !s.is_cancelled && s.available > 0);
+  const slotStart = (slot) => slot.start_at || slot.starts_at;
+  const slotAvailable = (slot) => slot.remaining ?? slot.available ?? Math.max(0, Number(slot.capacity || 0) - Number(slot.taken || 0));
+  const slotTaken = (slot) => slot.taken ?? Math.max(0, Number(slot.capacity || 0) - slotAvailable(slot));
+  const slotCancelled = (slot) => slot.status ? slot.status === 'cancelled' : Boolean(slot.is_cancelled);
+  const openSlots = slots.filter((slot) => !slotCancelled(slot) && slotAvailable(slot) > 0);
 
   return (
     <div className="space-y-6">
@@ -115,7 +120,7 @@ export default function OpportunitiesPage() {
         <StatCard label="Open slots" value={openSlots.length} hint="published and not full" />
         <StatCard
           label="Seats free"
-          value={openSlots.reduce((a, s) => a + (s.available || 0), 0)}
+          value={openSlots.reduce((a, slot) => a + slotAvailable(slot), 0)}
           hint="across open slots"
         />
       </div>
@@ -139,12 +144,12 @@ export default function OpportunitiesPage() {
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <StatusBadge status={b.status} />
-                      <Chip>{b.founder_name || b.founder_email || `Member #${b.founder_user_id}`}</Chip>
+                      <Chip>{b.client_name || b.founder_name || b.client_email || b.founder_email || `Member #${b.client_user_id ?? b.founder_user_id ?? b.requester_user_id}`}</Chip>
                     </div>
-                    {b.notes && <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 line-clamp-2">{b.notes}</p>}
+                    {(b.client_message || b.questions || b.notes) && <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 line-clamp-2">{b.client_message || b.questions || b.notes}</p>}
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <div className="text-xs text-gray-600 dark:text-gray-400">{formatDateTime(b.slot_starts_at)}</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">{formatDateTime(b.scheduled_start || b.slot_starts_at)}</div>
                     <div className="text-[11px] text-gray-400 mt-0.5">asked {formatRelativeDay(b.created_at)}</div>
                   </div>
                 </div>
@@ -209,10 +214,10 @@ export default function OpportunitiesPage() {
               <div key={s.id} className="flex items-center justify-between gap-3 p-3">
                 <div className="min-w-0">
                   <div className="text-sm text-gray-900 dark:text-gray-100 inline-flex items-center gap-1.5">
-                    <Calendar size={13} className="text-violet-500" /> {formatDateTime(s.starts_at)}
+                    <Calendar size={13} className="text-violet-500" /> {formatDateTime(slotStart(s))}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    {s.taken}/{s.capacity} booked · {formatRelativeDay(s.starts_at)}
+                     {slotTaken(s)}/{s.capacity} booked · {formatRelativeDay(slotStart(s))}
                   </div>
                 </div>
                 <button
@@ -232,14 +237,14 @@ export default function OpportunitiesPage() {
         open={!!open}
         onClose={() => setOpen(null)}
         title={open?.topic || 'Session request'}
-        subtitle={open ? `${open.founder_name || open.founder_email || ''} · ${formatDateTime(open.slot_starts_at)}` : ''}
+        subtitle={open ? `${open.client_name || open.founder_name || open.client_email || open.founder_email || ''} · ${formatDateTime(open.scheduled_start || open.slot_starts_at)}` : ''}
       >
         {open && (
           <div className="space-y-4">
-            {open.notes ? (
+            {(open.client_message || open.questions || open.notes) ? (
               <div>
                 <div className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">What they wrote</div>
-                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{open.notes}</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{open.client_message || open.questions || open.notes}</p>
               </div>
             ) : (
               <p className="text-sm text-gray-500 dark:text-gray-400">They did not add a note.</p>

@@ -65,7 +65,7 @@ function SkillsRadarCard({ state, className, audience = 'founder' }) {
 
       body = (
         <>
-          <div className="text-[11.5px] text-[#a1a1aa] dark:text-gray-400 mb-[14px]">Radar of {audience === 'investor' ? 'investment' : audience === 'advisor' ? 'advisory' : 'founder'} skill dimensions</div>
+          <div className="text-[11.5px] text-[#a1a1aa] dark:text-gray-400 mb-[14px]">Radar of {audience === 'investor' ? 'investment' : audience === 'advisor' ? 'advisory' : audience === 'partner' ? 'operator' : 'founder'} skill dimensions</div>
           <div className="flex justify-center mb-4">
             <SkillRadar skillVector={skillVector} height={210} />
           </div>
@@ -220,6 +220,8 @@ function ArchetypeCard({ state, fitState, className, audience = 'founder' }) {
     ? 'Investor archetype'
     : audience === 'advisor'
       ? 'Advisor archetype'
+      : audience === 'partner'
+        ? 'Partner/Operator archetype'
       : 'Founder archetype';
   return <CardShell title={archetypeTitle} className={className}>{body}</CardShell>;
 }
