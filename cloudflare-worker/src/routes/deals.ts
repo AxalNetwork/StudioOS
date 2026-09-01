@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
+import { investorActiveCompany } from './_investorProjectScope';
 import { requireAuth, requireRole, requireAdmin, canAccessFounderResource } from '../auth';
 import { buildZip } from '../util/zip';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
@@ -70,12 +71,30 @@ deals.get('/', async (c) => {
     // the optional scope=mine relationship filter.
     if (user.role === 'investor') {
       await ensureInvestorPaywallSchema(c.env);
-      const memberRows = await sql`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ${user.id}`;
+      // Company scoping, stage 6. The deal LIST above is deliberately NOT
+      // narrowed — browsing open deals is a marketplace, and an investor is
+      // meant to see deals they have no relationship with yet. What narrows is
+      // every claim about THIS firm: whether they are in the room, and the
+      // `scope=mine` filter. A dealroom joined under their other company must
+      // read as "Join room" here, not as membership.
+      //
+      // `companyId === null` (no company selected, or a forged header) leaves
+      // all three reads unnarrowed, and a relationship row with
+      // `company_id IS NULL` stays visible under every company — the same
+      // reading `projectInActiveCompany` uses.
+      const companyId = await investorActiveCompany(c, user);
+      const memberRows = companyId === null
+        ? await sql`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ${user.id}`
+        : await sql`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ${user.id} AND (company_id = ${companyId} OR company_id IS NULL)`;
       const memberSet = new Set<number>((memberRows as any[]).map((r) => Number(r.deal_id)));
       rows = (rows as any[]).map((d) => ({ ...d, is_member: memberSet.has(Number(d.id)) ? 1 : 0 }));
       if (scope === 'mine') {
-        const invitedRows = await sql`SELECT deal_id FROM deal_invitations WHERE investor_user_id = ${user.id}`;
-        const committedRows = await sql`SELECT deal_id FROM commitments WHERE investor_user_id = ${user.id}`;
+        const invitedRows = companyId === null
+          ? await sql`SELECT deal_id FROM deal_invitations WHERE investor_user_id = ${user.id}`
+          : await sql`SELECT deal_id FROM deal_invitations WHERE investor_user_id = ${user.id} AND (company_id = ${companyId} OR company_id IS NULL)`;
+        const committedRows = companyId === null
+          ? await sql`SELECT deal_id FROM commitments WHERE investor_user_id = ${user.id}`
+          : await sql`SELECT deal_id FROM commitments WHERE investor_user_id = ${user.id} AND (company_id = ${companyId} OR company_id IS NULL)`;
         const readable = new Set<number>([
           ...(invitedRows as any[]).map((r) => Number(r.deal_id)),
           ...(committedRows as any[]).map((r) => Number(r.deal_id)),
@@ -85,9 +104,18 @@ deals.get('/', async (c) => {
     }
   } else {
     if (!user.founder_id) { await sql.end(); return c.json([]); }
+    // The founder branch is an inlined ownership query, so it carries the
+    // company clause directly — the same `(p.company_id = ? OR p.company_id IS
+    // NULL)` the five loaders and the project picker use. Without it a founder
+    // would see deals for projects the picker had already stopped showing.
+    const founderCompanyId = await investorActiveCompany(c, user);
     rows = status
-      ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} AND p.deleted_at IS NULL ORDER BY d.created_at DESC`
-      : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND p.deleted_at IS NULL ORDER BY d.created_at DESC`;
+      ? (founderCompanyId === null
+        ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} AND p.deleted_at IS NULL ORDER BY d.created_at DESC`
+        : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`)
+      : (founderCompanyId === null
+        ? await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND p.deleted_at IS NULL ORDER BY d.created_at DESC`
+        : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`);
   }
   await sql.end();
   return c.json((rows as any[]).map(enrichDeal));
