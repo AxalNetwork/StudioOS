@@ -3,6 +3,7 @@ import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
 import { getSQL } from '../db';
 import { requireAuth, requireRole, generateToken } from '../auth';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import {
   canAccessProject,
   getProjectMembershipRole,
@@ -220,9 +221,36 @@ async function listProjectsHandler(c: any) {
     const memberIds = await getMemberProjectIds(c.env, user.id);
     const ownsFounder = !!user.founder_id;
     if (!ownsFounder && memberIds.length === 0) { await sql.end(); return c.json([]); }
+    // Company scoping, stage 4. This handler feeds the project picker on every
+    // founder surface, so it is the one that makes the switcher visibly do
+    // something — and the one place the ownership/membership split matters.
+    //
+    // ONLY THE OWNERSHIP ARM IS NARROWED. The union below is "projects I own"
+    // OR "projects I am an accepted member of (co-founder / advisor)". Those
+    // member projects belong to ANOTHER founder, so their `company_id` is that
+    // founder's company, which mine can never equal. Narrowing the whole WHERE
+    // would erase every project a co-founder works on the moment they select
+    // one of their own companies, and they cannot fix it by switching — they
+    // are not a member of the owning founder's company at all.
+    //
+    // That is the same rule the other five files follow, stated in SQL rather
+    // than in a predicate: company narrows what you reach BY OWNING it, and
+    // nothing else. The clause is `companyScope`'s, verbatim, so the ownership
+    // arm here and the loaders elsewhere cannot drift.
+    const companyId = await resolveActiveCompany(
+      c.env, user, c.req.header(ACTIVE_COMPANY_HEADER),
+    );
     const conds: string[] = [];
     const params: any[] = [];
-    if (ownsFounder) { conds.push('founder_id = ?'); params.push(user.founder_id); }
+    if (ownsFounder) {
+      if (companyId === null) {
+        conds.push('founder_id = ?');
+        params.push(user.founder_id);
+      } else {
+        conds.push('(founder_id = ? AND (company_id = ? OR company_id IS NULL))');
+        params.push(user.founder_id, companyId);
+      }
+    }
     if (memberIds.length) {
       conds.push(`id IN (${memberIds.map(() => '?').join(',')})`);
       params.push(...memberIds);
