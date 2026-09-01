@@ -41,6 +41,7 @@ const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 // router does not open.
 const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
+const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
 const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
@@ -1656,6 +1657,18 @@ function AppInner() {
       <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />
       <Route path="/deals" element={guard(['admin', 'partner', 'investor'], investorWorkspace('deals', <DealsPage />))} />
+
+      {/* ── Deals · the four stages, as four routes ──────────────────────────
+          The zone slugs are InvestorDealsWorkspace's own anchor ids with the
+          prefix stripped — the canvas took them from there. Four deep-linkable
+          URLs replacing five that never said which stage you were on; the
+          workspace still renders all four sections and the route scrolls to
+          one. Splitting it into four pages is a content decision, not a
+          routing one. */}
+      <Route path="/deals/pipeline" element={guard(['admin', 'partner', 'investor'], <InvestorDealsRoutes />)} />
+      <Route path="/deals/screening" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
+      <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
+      <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
       <Route path="/market-intel" element={guard(labRoles(['admin', 'partner', 'investor']), effectiveRole === 'investor'
         ? <InvestorResearchWorkspace />

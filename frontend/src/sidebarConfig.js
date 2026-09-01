@@ -23,7 +23,7 @@ import {
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   Gamepad2, ShieldAlert,
   Inbox, Radar, Wallet, Landmark,
-  Mail, Gift, Map,
+  Mail, Gift, Map, Building2,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -356,13 +356,23 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      { to: '/pipeline', icon: Handshake, label: 'Deals', match: ['/pipeline', '/deals', '/raise/data-room'] },
+      { to: '/deals/pipeline', icon: Handshake, label: 'Deals',
+        match: ['/deals', '/pipeline', '/raise/data-room'] },
+      // Positions is the canvas's word for the holdings view, which is
+      // /portfolio/health today. The literal route /portfolio/positions also
+      // exists and the generic tab bar labels it "Cap Table" — three names
+      // across two pages. Until that is settled the row keeps pointing at the
+      // page that works; the zone row above it carries the canvas's naming.
       { to: '/portfolio/health', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
       { to: '/spinout-lab/investor-workspace', icon: Landmark, label: 'Axal VC Fund' },
       { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds', '/lp-reports'], requiredInvestorTier: 'institutional' },
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-      { to: '/market-intel', icon: Radar, label: 'Research' },
+      { to: '/research/ask', icon: Radar, label: 'Research', match: ['/research', '/market-intel'] },
       { to: '/trust', icon: ShieldCheck, label: 'Trust' },
+      // Firm Settings was the one row the canvas has and the live shell did
+      // not. /company-settings has been investor-guarded all along — this was
+      // an array edit, not a build.
+      { to: '/company-settings', icon: Building2, label: 'Firm Settings' },
     ]},
   ],
 

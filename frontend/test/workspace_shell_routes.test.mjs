@@ -87,7 +87,7 @@ test('the shell config declares zones at all', () => {
  * The list is asserted against the sidebar itself below: a shell cannot be
  * claimed migrated here while its nav still points at legacy landings.
  */
-const MIGRATED = ['founder'];
+const MIGRATED = ['founder', 'investor'];
 
 const PREFIXES = {
   founder: ['/validate', '/build', '/raise', '/grow', '/network', '/research'],
@@ -116,6 +116,13 @@ test('a shell is only claimed migrated once its sidebar points at the new IA', (
       'founder is claimed migrated but Validate still points at a legacy landing');
     assert.match(sidebar, /to: '\/research\/ask'/,
       'founder is claimed migrated but Research still points at a legacy landing');
+  }
+  if (MIGRATED.includes('investor')) {
+    assert.match(sidebar, /to: '\/deals\/pipeline'/,
+      'investor is claimed migrated but Deals still points at /pipeline');
+    // Firm Settings is the row the canvas has and the live shell lacked.
+    assert.match(sidebar, /to: '\/company-settings', icon: \w+, label: 'Firm Settings'/,
+      'investor is claimed migrated but has no Firm Settings row');
   }
 });
 
