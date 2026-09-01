@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { AssistLayout } from '../ui';
 import ZoneNav from './ZoneNav';
-import { ACCENT, bucketForPath, zoneForPath } from './shellConfig';
+import { bucketForPath, zoneForPath } from './shellConfig';
 
 /**
  * The chrome every workspace subpage sits in — one component, four shells.
@@ -43,7 +43,11 @@ export default function WorkspaceShell({
   const location = useLocation();
   const bucket = bucketForPath(role, location.pathname);
   const zone = zoneForPath(bucket, location.pathname);
-  const accent = ACCENT[role] || ACCENT.founder;
+  // No accent is read here on purpose. In the canvases the shell chrome —
+  // crumb, title, divider — is neutral in all four roles; the accent lives on
+  // the zone pills (ZoneNav) and the AI rail, which is where a reader looks to
+  // tell one licence from another. An earlier draft computed one here and
+  // never used it, which CodeQL caught.
   const arch = zone?.archetype;
 
   return (
