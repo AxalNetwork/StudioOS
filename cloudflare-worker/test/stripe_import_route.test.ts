@@ -79,8 +79,11 @@ function freshDb() {
       id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER,
       is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER
     );
+    -- company_id: migration 189. progress.ts's loadProject selects it to
+    -- narrow the founder's view to the active company; a schema without the
+    -- column makes that SELECT fail before any handler logic runs.
     CREATE TABLE projects (
-      id INTEGER PRIMARY KEY, name TEXT NOT NULL, founder_id INTEGER
+      id INTEGER PRIMARY KEY, name TEXT NOT NULL, founder_id INTEGER, company_id INTEGER
     );
     -- getCurrentUser best-effort hydrates MI Pro state; an empty table keeps the
     -- lookup quiet (a missing table would only log a warning, never fail).

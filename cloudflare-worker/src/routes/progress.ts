@@ -32,6 +32,9 @@
  * Gotchas for the rationale.
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
+import { projectInActiveCompany } from '../services/tenancyScope';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import type { Env, User } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { hashEmail } from '../util/hashEmail';
@@ -59,13 +62,51 @@ const progress = new Hono<{ Bindings: Env }>();
 // ---------------------------------------------------------------------------
 // Authorization helpers (mirror financials.ts).
 // ---------------------------------------------------------------------------
-type Project = { id: number; name: string; founder_id: number | null };
+type Project = { id: number; name: string; founder_id: number | null; company_id: number | null };
 
-async function loadProject(env: Env, projectId: number): Promise<Project | null> {
-  const row = await env.DB.prepare(
-    'SELECT id, name, founder_id FROM projects WHERE id = ?',
+/**
+ * The caller's active company for THIS request, resolved once.
+ *
+ * `resolveActiveCompany` checks the client's header against
+ * `user_company_links`, which is a DB round trip. Several handlers load more
+ * than one project, so the answer is memoised on the Hono context rather than
+ * re-verified per project.
+ */
+async function activeCompanyFor(c: Context<{ Bindings: Env }>, user: User): Promise<number | null> {
+  const cached = (c as any).get?.(ACTIVE_COMPANY_KEY);
+  if (cached !== undefined) return cached as number | null;
+  const id = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  (c as any).set?.(ACTIVE_COMPANY_KEY, id);
+  return id;
+}
+const ACTIVE_COMPANY_KEY = '__activeCompanyId';
+
+/**
+ * Load a project, narrowed to the caller's active company.
+ *
+ * WHY NULL RATHER THAN A THROW. Every one of this file's ~30 call sites already
+ * reads `if (!project) return 404`, and a `companyScope` query would simply not
+ * return the row — so returning null makes the load-then-gate shape behave
+ * exactly as the SQL shape does, with no new error string and no edit to a
+ * single handler's control flow. 404 is also the honest status: the project is
+ * the caller's own, it is just not in the workspace they have selected, and
+ * "forbidden" would claim otherwise.
+ *
+ * WHY PRIVILEGED CALLERS ARE EXEMPT. `projects.company_id` is the FOUNDER's
+ * company. `isPrivileged` admits admins and partners to every project, and a
+ * partner's own active company is their agency — an id this column never
+ * carries. Narrowing them by it would return nothing for every project, which
+ * is why the exemption is here and not left to each caller to remember.
+ */
+async function loadProject(
+  c: Context<{ Bindings: Env }>, projectId: number, user: User,
+): Promise<Project | null> {
+  const row = await c.env.DB.prepare(
+    'SELECT id, name, founder_id, company_id FROM projects WHERE id = ?',
   ).bind(projectId).first<Project>();
-  return row || null;
+  if (!row) return null;
+  if (isPrivileged(user.role)) return row;
+  return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
 }
 
 function isPrivileged(role: User['role']): boolean {
@@ -251,7 +292,7 @@ progress.get('/discovery/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
 
@@ -275,7 +316,7 @@ progress.post('/discovery/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -357,7 +398,7 @@ progress.put('/discovery/interview/:id', async (c) => {
     .bind(id).first<InterviewRow>();
   if (!existing) return c.json({ detail: 'Interview not found' }, 404);
 
-  const project = await loadProject(c.env, existing.project_id);
+  const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -427,7 +468,7 @@ progress.delete('/discovery/interview/:id', async (c) => {
   ).bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'Interview not found' }, 404);
 
-  const project = await loadProject(c.env, existing.project_id);
+  const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -549,7 +590,7 @@ progress.get('/discovery/:projectId/waitlist', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
 
@@ -588,7 +629,7 @@ progress.post('/discovery/:projectId/waitlist/:signupId/promote', async (c) => {
     return c.json({ detail: 'Invalid id' }, 400);
   }
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -692,7 +733,7 @@ async function handleWaitlistOutreach(c: any, kind: 'invite' | 'follow_up') {
     return c.json({ detail: 'Invalid id' }, 400);
   }
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -793,7 +834,7 @@ progress.get('/pain-groups/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
 
@@ -811,7 +852,7 @@ progress.post('/pain-groups/:projectId/assign', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -877,7 +918,7 @@ progress.patch('/pain-groups/:groupId', async (c) => {
   const g = await loadPainGroup(c.env, groupId);
   if (!g) return c.json({ detail: 'Group not found' }, 404);
 
-  const project = await loadProject(c.env, g.project_id);
+  const project = await loadProject(c, g.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -909,7 +950,7 @@ progress.delete('/pain-groups/:groupId', async (c) => {
   const g = await loadPainGroup(c.env, groupId);
   if (!g) return c.json({ detail: 'Group not found' }, 404);
 
-  const project = await loadProject(c.env, g.project_id);
+  const project = await loadProject(c, g.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -1001,7 +1042,7 @@ progress.get('/roadmap/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
 
@@ -1022,7 +1063,7 @@ progress.post('/roadmap/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -1081,7 +1122,7 @@ progress.put('/roadmap/okr/:id', async (c) => {
   ).bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'OKR not found' }, 404);
 
-  const project = await loadProject(c.env, existing.project_id);
+  const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -1127,7 +1168,7 @@ progress.delete('/roadmap/okr/:id', async (c) => {
   ).bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'OKR not found' }, 404);
 
-  const project = await loadProject(c.env, existing.project_id);
+  const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -1145,7 +1186,7 @@ progress.post('/roadmap/okr/:id/move', async (c) => {
   ).bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'OKR not found' }, 404);
 
-  const project = await loadProject(c.env, existing.project_id);
+  const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -1281,7 +1322,7 @@ progress.get('/mvp-scope/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
 
@@ -1298,7 +1339,7 @@ progress.post('/mvp-scope/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -1335,7 +1376,7 @@ progress.put('/mvp-scope/feature/:id', async (c) => {
   ).bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'Feature not found' }, 404);
 
-  const project = await loadProject(c.env, existing.project_id);
+  const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -1369,7 +1410,7 @@ progress.delete('/mvp-scope/feature/:id', async (c) => {
   ).bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'Feature not found' }, 404);
 
-  const project = await loadProject(c.env, existing.project_id);
+  const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -1424,7 +1465,7 @@ progress.get('/signals/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
 
@@ -1603,7 +1644,7 @@ progress.get('/metrics/:projectId', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
   await ensureMetricsSnapshotsSchema(c.env);
@@ -1624,7 +1665,7 @@ progress.post('/metrics/:projectId', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
   await ensureMetricsSnapshotsSchema(c.env);
@@ -1684,7 +1725,7 @@ progress.put('/metrics/snapshot/:id', async (c) => {
   const existing = await c.env.DB.prepare('SELECT id, project_id FROM metrics_snapshots WHERE id = ?')
     .bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'Snapshot not found' }, 404);
-  const project = await loadProject(c.env, existing.project_id);
+  const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
@@ -1739,7 +1780,7 @@ progress.delete('/metrics/:id', async (c) => {
   const existing = await c.env.DB.prepare('SELECT id, project_id FROM metrics_snapshots WHERE id = ?')
     .bind(id).first<{ id: number; project_id: number }>();
   if (!existing) return c.json({ detail: 'Snapshot not found' }, 404);
-  const project = await loadProject(c.env, existing.project_id);
+  const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
   await c.env.DB.prepare('DELETE FROM metrics_snapshots WHERE id = ?').bind(id).run();
@@ -1753,7 +1794,7 @@ progress.get('/metrics/:projectId/series', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
   await ensureMetricsSnapshotsSchema(c.env);
@@ -1797,7 +1838,7 @@ progress.get('/metrics/:projectId/summary', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
   await ensureMetricsSnapshotsSchema(c.env);
@@ -1824,7 +1865,7 @@ progress.post('/metrics/:projectId/import-stripe', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
@@ -2091,7 +2132,7 @@ progress.get('/lifecycle/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanView(project, user);
 
@@ -2104,7 +2145,7 @@ progress.put('/lifecycle/:projectId', async (c) => {
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
 
-  const project = await loadProject(c.env, projectId);
+  const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 

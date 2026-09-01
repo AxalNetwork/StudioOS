@@ -290,6 +290,56 @@ export function projectOwnerScope(actor: Actor | null | undefined, alias = 'p'):
 }
 
 /**
+ * Whether one already-loaded project is visible under the active company.
+ *
+ * The in-code twin of the clause `companyScope` appends:
+ *
+ *     (p.company_id = ? OR p.company_id IS NULL)
+ *
+ * Both forms exist because routes reach projects two ways. Some compose a
+ * scope into their WHERE (data_room.ts); many more load the row by id and then
+ * gate on it (`loadProject` + `ensureCanView`, which progress.ts, financials.ts,
+ * captable.ts, compliance.ts and crunchbase.ts each have their own copy of).
+ * The second shape cannot use a SQL fragment, and rewriting all of them to the
+ * first is a much larger change than adding company scoping. So: one predicate,
+ * kept deliberately identical to the clause, with a test that pins the two
+ * agreeing on every case.
+ *
+ * TAKES NO ACTOR, ON PURPOSE. This is the whole safety property, so it is worth
+ * stating plainly. `projects.company_id` is the FOUNDER's company. A caller who
+ * reaches a project some other way has an active company of their own — under
+ * the model agreed for this rollout, an investor's fund, a partner's agency, an
+ * advisor's practice — and that id will never match this column. Narrowing such
+ * a caller by it does not restrict them, it erases their access entirely.
+ *
+ * That is not hypothetical: `companyScope(partner, 5, 'p')` evaluates to `1=0`
+ * today, because it layers on `projectOwnerScope` and a partner has no
+ * `founder_id`. progress.ts's `isPrivileged` deliberately admits partners to
+ * every project, so a handler that swapped its ownership check for a
+ * companyScope query would silently drop partner reads across all 31 of its
+ * endpoints — and the same mistake was queued to repeat in the four other files
+ * carrying their own `loadProject`.
+ *
+ * Refusing an actor parameter makes that misuse structurally impossible: there
+ * is nothing to pass, so the CALLER must already have decided it is on the
+ * ownership path before it can ask this question at all.
+ *
+ * `companyId === null` means "no company selected", not "no access" — the same
+ * reading `companyScope` documents. Unassigned projects (`company_id IS NULL`)
+ * stay visible under every company, because migration 189 backfills only
+ * founders who have a primary company and invents nothing for the rest.
+ */
+export function projectInActiveCompany(
+  companyId: number | null,
+  project: { company_id?: number | null } | null | undefined,
+): boolean {
+  if (!project) return false;
+  if (companyId === null) return true;
+  const owning = project.company_id ?? null;
+  return owning === null || owning === companyId;
+}
+
+/**
  * A founder's projects, narrowed to ONE company.
  *
  * This is the scope the CompanySwitcher was always implying and never had.

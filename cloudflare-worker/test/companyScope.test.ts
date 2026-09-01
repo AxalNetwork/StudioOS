@@ -110,3 +110,54 @@ test('an unauthenticated caller resolves to null without querying', async () => 
 test('the header name is the one the client sends', () => {
   assert.equal(ACTIVE_COMPANY_HEADER, 'X-Company-Id');
 });
+
+// ---------- the in-code predicate agrees with the SQL clause ----------
+
+/**
+ * `projectInActiveCompany` exists because most routes load a project by id and
+ * then gate on it, and cannot compose a WHERE fragment. It is only safe if it
+ * says exactly what `companyScope`'s clause says, so this evaluates BOTH
+ * against the same rows — the SQL by hand-applying its predicate, since D1 is
+ * not in the room — and requires them to agree on every combination.
+ */
+import { projectInActiveCompany } from '../src/services/tenancyScope';
+
+/** Apply `(p.company_id = ? OR p.company_id IS NULL)` the way SQLite would. */
+function sqlClauseAdmits(companyId: number | null, row: { company_id: number | null }): boolean {
+  const scope = companyScope(founder, companyId, 'p');
+  if (!scope.sql.includes('company_id')) return true;          // no narrowing appended
+  const bound = scope.binds[scope.binds.length - 1];            // the company bind
+  return row.company_id === null || row.company_id === bound;  // NULL passes the OR
+}
+
+test('the predicate and the SQL clause admit exactly the same rows', () => {
+  const rows = [{ company_id: null }, { company_id: 3 }, { company_id: 9 }];
+  for (const companyId of [null, 3, 9]) {
+    for (const row of rows) {
+      assert.equal(
+        projectInActiveCompany(companyId, row),
+        sqlClauseAdmits(companyId, row),
+        `companyId=${companyId} row.company_id=${row.company_id}: predicate and clause disagree`,
+      );
+    }
+  }
+});
+
+test('the predicate takes no actor — the caller has already decided it is on the ownership path', () => {
+  // `companyScope(partner, 5)` is `1=0`: a partner has no founder_id, so the
+  // ownership predicate it layers on admits nothing. progress.ts's
+  // isPrivileged admits partners to every project regardless, and the
+  // predicate must not be able to undo that. The guarantee is structural — a
+  // two-argument signature — and this pins the arity so an "improvement" that
+  // adds an actor parameter is a visible change.
+  assert.equal(projectInActiveCompany.length, 2);
+  assert.equal(companyScope({ id: 2, role: 'partner' }, 5, 'p').sql, NO_ROWS.sql,
+    'the reason the predicate must not consult the actor');
+});
+
+test('a missing project is never visible, whatever the company', () => {
+  for (const companyId of [null, 3]) {
+    assert.equal(projectInActiveCompany(companyId, null), false);
+    assert.equal(projectInActiveCompany(companyId, undefined), false);
+  }
+});
