@@ -21,7 +21,8 @@ import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, todayIso, 
 import { computeRadar } from '../services/radar';
 import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../services/skillsTaxonomySchema';
 import { ensureSkillProfileSchema } from '../services/skillProfileSchema';
-import { investorProjectIds } from './_investorProjectScope';
+import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
+import { projectInActiveCompany } from '../services/tenancyScope';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -35,14 +36,30 @@ function canViewDashboard(u: User): boolean {
   return isAdmin(u) || isFounder(u) || isInvestor(u) || isPartner(u);
 }
 
-async function visibleProjectIds(env: Env, user: User): Promise<number[] | null> {
+/**
+ * Company scoping, stage 5. Both narrowed branches take the company from
+ * `investorActiveCompany`, which verifies the header against
+ * `user_company_links` once per request.
+ *
+ * The FOUNDER branch is narrowed too, and that is not incidental. It inlines
+ * its own ownership query, so leaving it alone would mean portfolio health
+ * listed projects that the project picker, Validate, Raise and everything else
+ * had already stopped showing — an overview disagreeing with every view
+ * beneath it. Filtered with `projectInActiveCompany`, the same predicate the
+ * five loaders use, so it cannot drift from them.
+ *
+ * Admin and partner still return null ("portfolio-wide"), untouched.
+ */
+async function visibleProjectIds(c: any, user: User): Promise<number[] | null> {
+  const env: Env = c.env;
   if (isAdmin(user) || isPartner(user)) return null;
-  if (isInvestor(user)) return investorProjectIds(env, user);
+  if (isInvestor(user)) return investorProjectIds(env, user, await investorActiveCompany(c, user));
   if (isFounder(user)) {
     if (!user.founder_id) return [];
-    const rows = await env.DB.prepare('SELECT id FROM projects WHERE founder_id = ? AND deleted_at IS NULL')
-      .bind(user.founder_id).all<{ id: number }>();
-    return (rows.results || []).map((r) => r.id);
+    const companyId = await investorActiveCompany(c, user);
+    const rows = await env.DB.prepare('SELECT id, company_id FROM projects WHERE founder_id = ? AND deleted_at IS NULL')
+      .bind(user.founder_id).all<{ id: number; company_id: number | null }>();
+    return (rows.results || []).filter((r) => projectInActiveCompany(companyId, r)).map((r) => r.id);
   }
   return [];
 }
@@ -135,7 +152,7 @@ r.get('/health', async (c) => {
     if (!canViewDashboard(user)) return c.json({ detail: 'Forbidden' }, 403);
     const badge = c.req.query('badge');
     const interventionOnly = (c.req.query('intervention_only') || '').toLowerCase() === 'true';
-    const visible = await visibleProjectIds(c.env, user);
+    const visible = await visibleProjectIds(c, user);
     let projects: any[];
     if (visible == null) {
       projects = ((await c.env.DB.prepare('SELECT * FROM projects WHERE deleted_at IS NULL').all<any>()).results || []) as any[];
@@ -178,7 +195,7 @@ r.get('/health/:uid', async (c) => {
     const days = Math.max(1, Math.min(365, Number(c.req.query('history_days') || 30)));
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE uid = ? AND deleted_at IS NULL').bind(projectUid).first<any>();
     if (!project) return c.json({ detail: 'Project not found' }, 404);
-    const visible = await visibleProjectIds(c.env, user);
+    const visible = await visibleProjectIds(c, user);
     if (visible != null && !visible.includes(project.id)) return c.json({ detail: 'Forbidden' }, 403);
     const rows = await c.env.DB.prepare(
       'SELECT * FROM portfolio_health_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC LIMIT ?'
@@ -211,7 +228,7 @@ r.post('/health/recompute/:uid', async (c) => {
     }
     const project = await c.env.DB.prepare('SELECT * FROM projects WHERE uid = ? AND deleted_at IS NULL').bind(c.req.param('uid')).first<any>();
     if (!project) return c.json({ detail: 'Project not found' }, 404);
-    const visible = await visibleProjectIds(c.env, user);
+    const visible = await visibleProjectIds(c, user);
     if (visible != null && !visible.includes(Number(project.id))) return c.json({ detail: 'Forbidden' }, 403);
     const row = await upsertSnapshot(c.env, project);
     return c.json(snapDto(row, project));

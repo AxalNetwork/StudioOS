@@ -14,7 +14,7 @@ import { requireAuth, canAccessFounderResource } from '../auth';
 import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, newUid, jload } from './_t13t14t15_helpers';
 import { notify } from '../services/notify';
 import { ensureFollowsSchema } from './follows';
-import { investorProjectIds } from './_investorProjectScope';
+import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -85,7 +85,7 @@ r.get('/', async (c) => {
     if (isInvestorSide(user)) {
       where += " AND status = 'submitted'";
       if (isInvestor(user)) {
-        const visible = await investorProjectIds(c.env, user);
+        const visible = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
         const ids = visible || [];
         if (ids.length === 0) where += ' AND 1 = 0';
         else {
@@ -155,7 +155,7 @@ async function loadOwned(c: any, user: User): Promise<UpdateRow | null | { _forb
     // Investor side may only read submitted updates.
     if (u.status !== 'submitted' && !isAdmin(user)) return { _forbidden: true };
     if (isInvestor(user)) {
-      const visible = await investorProjectIds(c.env, user);
+      const visible = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
       if (!visible?.includes(Number(u.project_id))) return { _forbidden: true };
     }
     return u;
