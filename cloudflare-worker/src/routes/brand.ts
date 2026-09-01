@@ -22,6 +22,8 @@ import { ensureLandingPageBrandKitColumns } from '../services/landingPageSchema'
 import { renderLandingTemplate, TEMPLATE_REGISTRY, TEMPLATE_KEYS, TEMPLATE_SIGNATURE_PALETTES, sanitizeLandingContent, LANDING_CONTENT_SCHEMA, HONEYPOT_FIELD } from '../services/landingTemplates';
 import type { TemplateKey } from '../services/landingTemplates';
 import { requireAuth } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { ingestContact } from './contacts';
 
@@ -291,12 +293,32 @@ async function aiLogo(env: Env, prompt: string): Promise<string | null> {
   }
 }
 
-async function projectOwned(env: Env, user: any, projectId: number): Promise<any> {
-  const row = await env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?').bind(projectId).first<any>();
+/**
+ * The project behind a brand page, or a throw. Byte-for-byte the gate
+ * `decks.ts` has, down to the exemption set, and narrowed the same way: admin,
+ * partner and investor are exempt because a landing page is shown to people
+ * who do not own the project; only the founder branch consults the company,
+ * and only after ownership is established.
+ *
+ * Takes the context rather than the env for the same reason `decks.ts` does —
+ * the active company is a property of the REQUEST, and resolving it at
+ * seventeen call sites is the arrangement that lets one of them forget.
+ */
+async function projectOwned(
+  c: { env: Env; req: { header: (n: string) => string | undefined } },
+  user: any,
+  projectId: number,
+): Promise<any> {
+  const row = await c.env.DB.prepare(
+    'SELECT id, founder_id, company_id FROM projects WHERE id = ?',
+  ).bind(projectId).first<any>();
   if (!row) throw new Error('NotFound');
   const role = String(user?.role || '').toLowerCase();
   if (role === 'admin' || role === 'partner' || role === 'investor') return row;
-  if (role === 'founder' && user.founder_id && row.founder_id === user.founder_id) return row;
+  if (role === 'founder' && user.founder_id && row.founder_id === user.founder_id) {
+    if (!projectInActiveCompany(await activeCompanyFor(c, user), row)) throw new Error('NotFound');
+    return row;
+  }
   throw new Error('Forbidden');
 }
 
@@ -962,7 +984,7 @@ brand.post('/tagline/suggest', async (c) => {
 brand.get('/landing/by-project/:pid', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
     return c.json({ error: 'forbidden' }, 403);
@@ -978,7 +1000,7 @@ brand.get('/landing/by-project/:pid', async (c) => {
 brand.put('/landing/by-project/:pid', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
     return c.json({ error: 'forbidden' }, 403);
@@ -1008,7 +1030,7 @@ brand.put('/landing/by-project/:pid', async (c) => {
 brand.post('/landing/by-project/:pid/publish', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const flag = body?.published === false ? 0 : 1;
@@ -1024,7 +1046,7 @@ brand.post('/landing/by-project/:pid/publish', async (c) => {
 brand.get('/landing/by-project/:pid/waitlist', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const audienceFilter = VALID_AUDIENCE(c.req.query('audience'));
@@ -1046,7 +1068,7 @@ brand.get('/landing/by-project/:pid/waitlist', async (c) => {
 brand.get('/landing/by-project/:pid/preview-url', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare('SELECT id, preview_token FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
@@ -1065,7 +1087,7 @@ brand.get('/landing/by-project/:pid/preview-url', async (c) => {
 brand.get('/site/by-project/:pid', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
     return c.json({ error: 'forbidden' }, 403);
@@ -1086,7 +1108,7 @@ brand.get('/site/by-project/:pid', async (c) => {
 brand.put('/site/by-project/:pid', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
     return c.json({ error: 'forbidden' }, 403);
@@ -1118,7 +1140,7 @@ brand.put('/site/by-project/:pid', async (c) => {
 brand.get('/landing/by-project/:pid/pages', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
     return c.json({ error: 'forbidden' }, 403);
@@ -1142,7 +1164,7 @@ brand.get('/landing/by-project/:pid/pages', async (c) => {
 brand.post('/landing/by-project/:pid/pages', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
     return c.json({ error: 'forbidden' }, 403);
@@ -1226,7 +1248,7 @@ brand.get('/landing/pages/:id', async (c) => {
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(id).first<any>();
   if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c.env, user, row.project_id); }
+  try { await projectOwned(c, user, row.project_id); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   return c.json(rowToLanding(row));
 });
@@ -1238,7 +1260,7 @@ brand.put('/landing/pages/:id', async (c) => {
   await ensureSchema(c.env);
   const existing = await c.env.DB.prepare('SELECT id, project_id, preview_token FROM landing_pages WHERE id = ?').bind(id).first<any>();
   if (!existing) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c.env, user, existing.project_id); }
+  try { await projectOwned(c, user, existing.project_id); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const name = String(body?.name || '').trim();
@@ -1274,7 +1296,7 @@ brand.delete('/landing/pages/:id', async (c) => {
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare('SELECT id, project_id FROM landing_pages WHERE id = ?').bind(id).first<any>();
   if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c.env, user, row.project_id); }
+  try { await projectOwned(c, user, row.project_id); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM landing_pages WHERE project_id = ?').bind(row.project_id).first<any>();
   if (Number(count?.n || 0) <= 1) {
@@ -1291,7 +1313,7 @@ brand.post('/landing/pages/:id/publish', async (c) => {
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare('SELECT id, project_id FROM landing_pages WHERE id = ?').bind(id).first<any>();
   if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c.env, user, row.project_id); }
+  try { await projectOwned(c, user, row.project_id); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const flag = body?.published === false ? 0 : 1;
@@ -1308,7 +1330,7 @@ brand.get('/landing/pages/:id/preview-url', async (c) => {
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare('SELECT id, project_id, preview_token FROM landing_pages WHERE id = ?').bind(id).first<any>();
   if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c.env, user, row.project_id); }
+  try { await projectOwned(c, user, row.project_id); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   let token = row.preview_token;
   if (!token) {
@@ -1336,7 +1358,7 @@ brand.get('/landing/pages/:id/public-url', async (c) => {
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(id).first<any>();
   if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c.env, user, row.project_id); }
+  try { await projectOwned(c, user, row.project_id); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const origin = new URL(c.req.url).origin;
   const url = await canonicalPublicUrl(c.env, row, origin);
@@ -1358,7 +1380,7 @@ brand.get('/landing/pages/:id/public-url', async (c) => {
 brand.get('/landing/by-project/:pid/page-slug-available', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c.env, user, pid); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
     return c.json({ error: 'forbidden' }, 403);
@@ -1426,7 +1448,7 @@ brand.post('/custom-templates', async (c) => {
   if (!fromPageId) return c.json({ error: 'from_page_id required' }, 400);
   const page = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(fromPageId).first<any>();
   if (!page) return c.json({ error: 'page not found' }, 404);
-  try { await projectOwned(c.env, user, page.project_id); }
+  try { await projectOwned(c, user, page.project_id); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM brand_custom_templates WHERE user_id = ?').bind(user.id).first<any>();
   if (Number(count?.n || 0) >= MAX_CUSTOM_TEMPLATES) {

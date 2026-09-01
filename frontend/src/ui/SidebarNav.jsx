@@ -83,7 +83,7 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <CompanySwitcher collapsed={collapsed} />
+      <CompanySwitcher collapsed={collapsed} role={role} />
       <div className="px-3 pb-2 pt-2 flex-none">
         {!collapsed ? (
           <div className="flex items-center gap-1.5">

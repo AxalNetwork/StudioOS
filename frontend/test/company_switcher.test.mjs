@@ -66,34 +66,82 @@ test('the new company becomes the active one', () => {
   assert.match(switcher, /setCompanies\(\[\.\.\.companies, created\]\)/);
 });
 
+/**
+ * Route files that read `projects`, filter on FOUNDER OWNERSHIP, and are still
+ * allowed not to narrow — each with the reason it is exempt.
+ *
+ * The list is deliberately tiny and every entry was checked by reading the
+ * file. An allowlist that grows is a rollout going backwards, so adding to it
+ * should feel like a decision rather than a formality.
+ */
+const WIDE_ON_PURPOSE = {
+  'capital.ts': 'the project read sits inside an admin-only handler',
+  'founder_risk.ts': "keys its payload on founder_id — a risk profile belongs to the person, not to one of their companies; the projects join is only a lookup from a deal to its owner",
+  'pipeline.ts': 'the studio operator board: admin and partner run the studio, and its projects are the studio\'s rather than one founder\'s company',
+  'public.ts': 'the unauthenticated public profile facade — there is no active company to scope by, and the profile is the person\'s',
+};
+
 test('the scope notice stands exactly as long as scoping is incomplete', () => {
-  // The first version of this asked a yes/no question — "does any company
-  // scoping exist?" — and went red the moment the first route adopted it,
-  // demanding the notice be deleted while 50 of 51 route files still ignored
-  // the active company. Adoption is a rollout, so the guard measures the
-  // rollout: the notice stands until every route file that reads `projects`
-  // narrows through `companyScope`, and must be gone once they all do.
+  // THIS GUARD HAS BEEN WRONG TWICE, in opposite directions, and both
+  // corrections are the reason it looks like this.
+  //
+  // First it asked a yes/no question — "does any company scoping exist?" — and
+  // went red the moment the first route adopted it, demanding the notice be
+  // deleted while 50 of 51 route files still ignored the active company.
+  //
+  // Then it measured `companyScope` SPECIFICALLY. But the rollout narrowed
+  // through `projectInActiveCompany`, `activeCompanyFor`, `resolveActiveCompany`
+  // and the investor helpers instead, so the guard could never go green no
+  // matter how complete the scoping became — it would have kept a true-sounding
+  // but false notice on screen forever. A guard that cannot be satisfied is not
+  // a strict guard, it is a broken one.
+  //
+  // It now measures two things that are actually true of a finished rollout:
+  // the real vocabulary, and only the files where company scoping is even the
+  // right question. A file that reads `projects` but never filters on founder
+  // ownership is not a founder-ownership surface — it reaches projects through
+  // a share token, a public listing, an admin console or an investor
+  // relationship — so it is not evidence of an unfinished rollout.
+  const SCOPED = /companyScope|projectInActiveCompany|activeCompanyFor|resolveActiveCompany|investorActiveCompany|investorProjectIds/;
+  const FOUNDER_OWNED = /founder_id\s*=\s*[?$]|user\.founder_id/;
+
   const routes = readdirSync(resolve(root, 'cloudflare-worker/src/routes'))
     .filter((f) => f.endsWith('.ts'))
-    .map((f) => ({ f, src: read(`cloudflare-worker/src/routes/${f}`) }));
-  const queriesProjects = routes.filter(({ src }) => /\b(FROM|JOIN)\s+projects\b/.test(codeOnly(src)));
-  const unscoped = queriesProjects.filter(({ src }) => !/companyScope/.test(codeOnly(src)));
+    .map((f) => ({ f, src: codeOnly(read(`cloudflare-worker/src/routes/${f}`)) }));
+  const queriesProjects = routes.filter(({ src }) => /\b(FROM|JOIN)\s+projects\b/.test(src));
+  const founderOwned = queriesProjects.filter(({ src }) => FOUNDER_OWNED.test(src));
+  const unscoped = founderOwned
+    .filter(({ src }) => !SCOPED.test(src))
+    .filter(({ f }) => !(f in WIDE_ON_PURPOSE));
 
   assert.ok(queriesProjects.length > 0, 'sanity: some route reads projects');
-  const hasNotice = /SCOPE_NOTICE/.test(switcher);
+  assert.ok(founderOwned.length > 0, 'sanity: some route filters projects by founder ownership');
 
+  // The allowlist must not rot: an entry for a file that has since started
+  // narrowing, or stopped reading projects at all, is a stale claim.
+  for (const [f, why] of Object.entries(WIDE_ON_PURPOSE)) {
+    const row = queriesProjects.find((r) => r.f === f);
+    assert.ok(row, `${f} is allowlisted but no longer reads projects — drop the entry (${why})`);
+    assert.ok(!SCOPED.test(row.src), `${f} now narrows by company — drop it from WIDE_ON_PURPOSE`);
+  }
+
+  const hasNotice = /SCOPE_NOTICE|SHARED_NOTICE/.test(switcher);
   if (unscoped.length === 0) {
     assert.equal(
-      hasNotice, false,
-      'every route that reads projects now narrows through companyScope — ' +
-      'delete SCOPE_NOTICE from CompanySwitcher.jsx and this test',
+      /SCOPE_NOTICE/.test(switcher), false,
+      'every founder-ownership surface now narrows by company — the "still rolling out" ' +
+      'notice is no longer true and must be replaced (not simply deleted: shared ' +
+      'marketplaces and account-level data stay the same in every company by design, ' +
+      'and the advisor Practice/Expertise rows really are unseparated because they run ' +
+      'on frozen code — task #124, UNRESOLVED_ITEMS.md U4)',
     );
+    assert.ok(hasNotice, 'the switcher must still say what does NOT move between companies');
   } else {
     assert.ok(
-      hasNotice,
-      `${unscoped.length} of ${queriesProjects.length} route files that read ` +
-      'projects still ignore the active company, so the switcher must keep ' +
-      'saying separation is incomplete',
+      /SCOPE_NOTICE/.test(switcher),
+      `${unscoped.map((r) => r.f).join(', ')} filter projects by founder ownership and ` +
+      'still ignore the active company, so the switcher must keep saying separation ' +
+      'is incomplete',
     );
   }
 });

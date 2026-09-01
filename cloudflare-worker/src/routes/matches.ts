@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { filterOptedInUserIds } from '../services/matchingConsent';
 import { logMatchListGeneration } from '../services/matchAudit';
 import {
@@ -365,12 +366,24 @@ matches.post('/investor-match', async (c) => {
   if (!['founder', 'admin'].includes(userRole)) return c.json({ error: 'founder_required' }, 403);
 
   // Fetch project details with ownership check
-  const projects = await sql`
+  // Company scoping. The same founder-owned single-project load the rest of
+  // this rollout narrows: without it a founder acting for one company can run
+  // investor matching on the other company's project. Admin keeps the bypass
+  // in the disjunct below and is not narrowed. Two full literals.
+  const matchCompanyId = user.role === 'admin' ? null : await activeCompanyFor(c, user);
+  const projects = matchCompanyId === null
+    ? await sql`
     SELECT * FROM projects
     WHERE id = ${projectId}
       -- projects.user_id does not exist; the disjunct took the whole
       -- ownership check down with it. founder_id is the real link.
       AND (founder_id = ${user.founder_id || 0} OR ${user.role === 'admin' ? 1 : 0} = 1)
+  `
+    : await sql`
+    SELECT * FROM projects
+    WHERE id = ${projectId}
+      AND (founder_id = ${user.founder_id || 0} OR ${user.role === 'admin' ? 1 : 0} = 1)
+      AND (company_id = ${matchCompanyId} OR company_id IS NULL)
   `;
   if (!projects.length) return c.json({ error: 'Project not found' }, 404);
   const project: any = projects[0];

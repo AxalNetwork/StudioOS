@@ -231,7 +231,12 @@ test('public-url returns the shareable URL and its published state', () => {
   const body = ep.slice(0, 900);
   assert.match(body, /canonicalPublicUrl\(c\.env, row, origin\)/);
   assert.match(body, /published: !!row\.published/, 'caller must be able to say the link is not live yet');
-  assert.match(body, /projectOwned\(c\.env, user, row\.project_id\)/, 'must stay owner-scoped');
+  // `projectOwned` takes the CONTEXT rather than the env since company scoping
+  // landed — the active company is a property of the request, and resolving it
+  // at seventeen call sites is what lets one of them forget. The claim here is
+  // unchanged and now slightly stronger: the endpoint is owner-scoped, and the
+  // owner check is the one that also narrows by company.
+  assert.match(body, /projectOwned\(c, user, row\.project_id\)/, 'must stay owner-scoped');
 });
 
 test('slug availability mirrors the three verdicts the write enforces', () => {
