@@ -626,7 +626,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
   const fullWidthSurface = (activeRole === 'founder'
-    && ['/build/discovery', '/execution', '/raise/pitch', '/build/team', '/network', '/network/relationships', '/network/introductions', '/network/organizations', '/signals'].includes(location.pathname))
+    && ['/build/discovery', '/execution', '/build/this-week', '/grow/customers', '/grow/talent', '/grow/brand', '/grow/capital-match', '/grow/partnerships', '/grow/launch', '/raise/pitch', '/build/team', '/network', '/network/relationships', '/network/introductions', '/network/organizations', '/signals'].includes(location.pathname))
     || (activeRole === 'investor' && (
       location.pathname.startsWith('/portfolio/')
       || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds', '/network', '/market-intel'].includes(location.pathname)
@@ -635,7 +635,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     || location.pathname === '/spinout-lab'
     || location.pathname.startsWith('/spinout-lab/');
   const flushSurface = activeRole === 'founder'
-    && ['/execution', '/raise/pitch', '/build/discovery', '/build/team', '/network', '/network/relationships', '/network/introductions', '/network/organizations', '/signals'].includes(location.pathname)
+    && ['/execution', '/build/this-week', '/grow/customers', '/grow/talent', '/grow/brand', '/grow/capital-match', '/grow/partnerships', '/grow/launch', '/raise/pitch', '/build/discovery', '/build/team', '/network', '/network/relationships', '/network/introductions', '/network/organizations', '/signals'].includes(location.pathname)
     || (activeRole === 'investor' && (
       location.pathname.startsWith('/portfolio/')
       || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds', '/network', '/market-intel'].includes(location.pathname)
@@ -1266,9 +1266,9 @@ function AppInner() {
   const investorFundWorkspace = (component) => investorWorkspace('fund', component, {
     fundUnlocked: hasInvestorTier(user, 'institutional'),
   });
-  const founderWorkspace = (page, component) => (
+  const founderWorkspace = (page, component, options = {}) => (
     effectiveRole === 'founder'
-      ? <FounderWorkspacePage page={page}>{component}</FounderWorkspacePage>
+      ? <FounderWorkspacePage page={page} {...options}>{component}</FounderWorkspacePage>
       : component
   );
   const advisorRolePreview = user?.role === 'admin' && !isImpersonating && effectiveRole === 'advisor';
@@ -1539,7 +1539,7 @@ function AppInner() {
           Projects / Board / Roadmap views. Standalone routes above stay intact
           for other personas. */}
       <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' ? <FounderBuildDesk /> : founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><ExecutionPage /></FounderWorkspaceTabs>))} />
-      <Route path="/build/this-week" element={guard(['admin', 'founder'], founderWorkspace('build', <FounderBuildThisWeek />))} />
+      <Route path="/build/this-week" element={guard(['admin', 'founder'], founderWorkspace('build', <FounderBuildThisWeek />, { hideHeader: true }))} />
       <Route path="/build/board" element={guard(['admin', 'founder'], founderWorkspace('build', <FounderBuildBoard />))} />
       <Route path="/execution/board" element={guard(['admin', 'founder'], founderWorkspace('build', <ExecutionPage />))} />
       <Route path="/execution/roadmap" element={guard(['admin', 'founder'], founderWorkspace('build', <ExecutionPage />))} />
@@ -1782,10 +1782,10 @@ function AppInner() {
           Relationships tabs). The legacy /relationships route redirects into
           the Relationships tab. Advisors are included so the Introductions
           feature (and its notification deep links) work for every user type. */}
-      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], partnerPrivateWorkspace(effectiveRole === 'investor' ? <InvestorNetworkWorkspace /> : founderNetworkLanding ? <FounderNetworkDesk /> : founderWorkspace('network', <NetworkPage />)))} />
-      <Route path="/network/relationships" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkRelationships />))} />
-      <Route path="/network/introductions" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkIntroductions />))} />
-      <Route path="/network/organizations" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkOrganizations />))} />
+      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], partnerPrivateWorkspace(effectiveRole === 'investor' ? <InvestorNetworkWorkspace /> : founderNetworkLanding ? <FounderNetworkDesk /> : founderWorkspace('network', <NetworkPage />, { hideHeader: true })))} />
+      <Route path="/network/relationships" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkRelationships />, { hideHeader: true }))} />
+      <Route path="/network/introductions" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkIntroductions />, { hideHeader: true }))} />
+      <Route path="/network/organizations" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkOrganizations />, { hideHeader: true }))} />
       <Route path="/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
       {/* Task #17 — the investor sidebar no longer surfaces "Investor Portal"

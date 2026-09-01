@@ -35,7 +35,7 @@ const COPY = {
   },
 };
 
-export default function FounderWorkspacePage({ page = 'validate', children }) {
+export default function FounderWorkspacePage({ page = 'validate', children, hideHeader = false }) {
   const key = useMemo(() => (COPY[page] ? page : 'validate'), [page]);
   const meta = COPY[key];
   const [refreshKey, setRefreshKey] = useState(0);
@@ -43,26 +43,28 @@ export default function FounderWorkspacePage({ page = 'validate', children }) {
   return (
     <main className="founder-workspace" data-testid={`founder-workspace-${key}`}>
       <div className="founder-frame">
-        <header className="founder-head">
-          <div>
-            <div className="founder-kicker">Founder / {key}</div>
-            <h1 className="founder-title" data-testid={`heading-founder-${key}`}>{meta.title}</h1>
-            <p className="founder-subtitle">{meta.description}</p>
-          </div>
-          <div className="founder-badges">
-            <span className="founder-seam" data-testid={`badge-founder-seam-${key}`}>{meta.seam}</span>
-            <span className="founder-product" data-testid="badge-founder-license">Founder</span>
-            <button
-              type="button"
-              title="Refresh workspace"
-              aria-label="Refresh workspace"
-              data-testid={`button-refresh-founder-${key}`}
-              onClick={() => setRefreshKey((value) => value + 1)}
-            >
-              <RefreshCw size={14} />
-            </button>
-          </div>
-        </header>
+        {!hideHeader && (
+          <header className="founder-head">
+            <div>
+              <div className="founder-kicker">Founder / {key}</div>
+              <h1 className="founder-title" data-testid={`heading-founder-${key}`}>{meta.title}</h1>
+              <p className="founder-subtitle">{meta.description}</p>
+            </div>
+            <div className="founder-badges">
+              <span className="founder-seam" data-testid={`badge-founder-seam-${key}`}>{meta.seam}</span>
+              <span className="founder-product" data-testid="badge-founder-license">Founder</span>
+              <button
+                type="button"
+                title="Refresh workspace"
+                aria-label="Refresh workspace"
+                data-testid={`button-refresh-founder-${key}`}
+                onClick={() => setRefreshKey((value) => value + 1)}
+              >
+                <RefreshCw size={14} />
+              </button>
+            </div>
+          </header>
+        )}
         <div className="founder-stage" key={refreshKey} data-testid={`panel-founder-${key}`}>
           {children}
         </div>
