@@ -39,34 +39,23 @@ workers_dev = false
 # parsed as a member of that route entry and rejected by Wrangler 4.x.)
 minify = true
 
-# ---------- Worker Custom Domain ----------
-# Task #36 — `app.axal.vc` is bound to this worker as a Workers Custom
-# Domain (the entire hostname, not a path-scoped zone route). The worker
-# serves BOTH the SPA (via [assets] below) and the `/api/*` routes.
+# ---------- Worker Custom Domains ----------
+# The canonical production app is served by this Worker on both
+# `axal.vc` and `app.axal.vc`. Each is a whole-host custom domain, not a
+# path-scoped zone route, so the same SPA asset binding and API handlers
+# serve every URL on either hostname.
 #
 # `custom_domain = true` makes Wrangler manage the binding through the
 # Workers domains API on deploy, including automatic DNS record creation
-# on the proxied zone. Do NOT use a path-scoped zone route here — that
-# would conflict with the assets binding and break the SPA fallback for
-# unmatched paths.
+# on the proxied zone. Do NOT replace either hostname with path-scoped
+# routes — those conflict with the assets binding and break the SPA
+# fallback for unmatched paths.
+[[routes]]
+pattern        = "axal.vc"
+custom_domain  = true
 [[routes]]
 pattern        = "app.axal.vc"
 custom_domain  = true
-
-# ---------- Apex routing ----------
-# Keep the apex route table deliberately narrow. Cloudflare Pages retains the
-# root, SPA fallback, and static assets; the Worker owns only API requests and
-# the two dynamic content namespaces below. Do not add axal.vc/* or an assets
-# route while Pages remains the apex origin.
-[[routes]]
-pattern    = "axal.vc/api/*"
-zone_name  = "axal.vc"
-[[routes]]
-pattern    = "axal.vc/landing/*"
-zone_name  = "axal.vc"
-[[routes]]
-pattern    = "axal.vc/p/*"
-zone_name  = "axal.vc"
 
 # ---------- Static Assets (SPA) ----------
 # Task #36 — Worker Static Assets binding. The worker serves the
@@ -418,20 +407,13 @@ service = "studioos-tail"
 name = "studioos"
 
 # Mirror the top-level route table. Wrangler environments do not inherit
-# routes, so both deploy paths explicitly bind the app custom domain and the
-# same three narrow apex paths. Cloudflare Pages remains the apex origin.
+# routes, so both deploy paths explicitly bind both whole-host custom domains.
+[[env.production.routes]]
+pattern        = "axal.vc"
+custom_domain  = true
 [[env.production.routes]]
 pattern        = "app.axal.vc"
 custom_domain  = true
-[[env.production.routes]]
-pattern    = "axal.vc/api/*"
-zone_name  = "axal.vc"
-[[env.production.routes]]
-pattern    = "axal.vc/landing/*"
-zone_name  = "axal.vc"
-[[env.production.routes]]
-pattern    = "axal.vc/p/*"
-zone_name  = "axal.vc"
 
 [env.production.vars]
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at

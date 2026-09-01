@@ -29,6 +29,7 @@ const root = path.resolve(here, '..');
 const docsDir = path.join(root, 'docs');
 const assetsDir = path.join(docsDir, 'assets');
 const ledgerPath = path.join(docsDir, '.asset-retention.json');
+const assetsIgnorePath = path.join(docsDir, '.assetsignore');
 
 function listAssetFiles(dir) {
   try {
@@ -115,6 +116,11 @@ fs.rmSync(backupDir, { recursive: true, force: true });
 // LinkedIn and Slack (crawlers do not execute the client-side usePageMeta).
 console.log('[build] prerendering per-route Open Graph metadata …');
 execSync('node scripts/prerender-og.mjs', { cwd: root, stdio: 'inherit' });
+
+// Wrangler's Worker Static Assets upload must not publish the Pages Advanced
+// Mode entry point as a public asset. Vite empties docs/ on every build, so
+// recreate this guard after all build output has been written.
+fs.writeFileSync(assetsIgnorePath, '_worker.js\n');
 
 console.log(
   `[build] done — ${newFiles.length} fresh asset(s); ${restored} prior hash(es) ` +
