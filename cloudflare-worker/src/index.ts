@@ -987,6 +987,10 @@ app.onError((err: any, c) => {
 // JWT_SECRET strength check runs at the very top of every request handler.
 // In prod a weak/missing secret aborts the request with a generic 503.
 import { assertJwtSecretStrength, assertScoringHmacSecret } from './auth';
+// A gate that refuses by THROWING a Response — the tier upsells, the fund
+// 404 — never reached the client without this: Hono re-throws non-Errors
+// past app.onError. See util/thrownResponse.ts.
+import { withThrownResponses } from './util/thrownResponse';
 
 // Phase 0.1 — D1 schema migration for the partner→investor split.
 // Lazy, idempotent, runs at most once per worker isolate. We piggy-back on the
@@ -1206,7 +1210,7 @@ export default {
     // migrations before a document/manifest response made cold traffic contend
     // on the users table and contributed to edge 504s.
     if (!pathname.startsWith('/api/')) {
-      return app.fetch(request, env, ctx);
+      return withThrownResponses(() => app.fetch(request, env, ctx));
     }
     try {
       assertJwtSecretStrength(env);
@@ -1235,7 +1239,7 @@ export default {
         await ensureExploringSchema(env);
       }
     }
-    return app.fetch(request, env, ctx);
+    return withThrownResponses(() => app.fetch(request, env, ctx));
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     const work = (async () => {

@@ -349,7 +349,7 @@ funds.post('/', async (c) => {
   // what every other control here checks. An admin creating a fund on behalf
   // of a GP leaves gp_user_id unset for them to fill in, rather than silently
   // making the operator the fiduciary of record.
-  const { user: creator, viaAdmin } = await requireFundCreator(c);
+  const { user: creator, viaAdmin, companyId } = await requireFundCreator(c);
   const body = await c.req.json<Partial<{
     name: string; vintage_year: number; total_commitment: number;
     fund_size_cents: number; carried_interest: number; management_fee: number;
@@ -368,11 +368,18 @@ funds.post('/', async (c) => {
   // DOCUMENT, signed in a legal capacity, and guessing them would put an
   // unreviewed name on an LP-facing report. They stay unset and render as
   // "not recorded" until the GP enters them.
+  //
+  // The firm is stamped in the SAME statement, company scoping stage 7. One
+  // UPDATE rather than a branch: `company_id = ?` bound to null writes NULL,
+  // which is exactly the state a creator with no company selected should have,
+  // and 195 reads as "this GP's fund under every company". Guessing their
+  // primary company instead would put a firm on a fund they never named.
   if (!viaAdmin) {
     await ensureFundGpColumns(c.env);
-    await c.env.DB.prepare(`UPDATE vc_funds SET gp_user_id = ? WHERE id = ?`)
-      .bind(creator.id, f.id).run();
+    await c.env.DB.prepare(`UPDATE vc_funds SET gp_user_id = ?, company_id = ? WHERE id = ?`)
+      .bind(creator.id, companyId, f.id).run();
     (f as any).gp_user_id = creator.id;
+    (f as any).company_id = companyId;
   }
   // Auto-generate LPA via job queue (non-blocking).
   await enqueueJob(c.env, 'lpa_generation', { fund_id: f.id });

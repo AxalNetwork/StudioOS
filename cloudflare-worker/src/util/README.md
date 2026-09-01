@@ -19,3 +19,4 @@ belongs in `../services/`.
 | `reembedSweep.ts` | Re-embedding sweep for vector search. |
 | `usersRoleRebuild.ts` | Role recomputation. |
 | `webauthn.ts` | Passkey primitives. |
+| `thrownResponse.ts` | `withThrownResponses` — lets a gate that refuses by **throwing** a `Response` produce that Response. Hono re-throws non-`Error` values past `app.onError`, so without this the nine throwing gates (tier upsells, the fund 404) escaped to the runtime as worker exceptions. |
