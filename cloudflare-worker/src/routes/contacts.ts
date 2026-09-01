@@ -1427,19 +1427,25 @@ r.post('/:uid/promote', async (c) => {
       // Advisor profiles are founder-scoped. Derive the owner from the contact's
       // project, falling back to the promoting founder — refuse rather than
       // create an orphan invisible to every directory view.
-      const project = await db.prepare('SELECT name, founder_id FROM projects WHERE id = ?')
-        .bind(row.project_id).first<{ name: string | null; founder_id: number | null }>();
+      const project = await db.prepare('SELECT name, founder_id, company_id FROM projects WHERE id = ?')
+        .bind(row.project_id).first<{ name: string | null; founder_id: number | null; company_id: number | null }>();
       const founderId = project?.founder_id ?? user.founder_id ?? null;
       if (!founderId) return c.json({ detail: 'Cannot resolve an owner for this advisor.' }, 400);
+      // Company scoping, stage 9: the new profile lands in the same company as
+      // the project it came from, falling back to the promoter's active one —
+      // the same order the owner is derived in, two lines up. Neither
+      // available means NULL, which reads as "under every company"; guessing a
+      // company here would file the advisor under a firm nobody named.
+      const advisorCompanyId = project?.company_id ?? await activeCompanyFor(c, user);
 
       const advisorName = (row.name && row.name.trim()) ? row.name.trim() : row.email;
       // Promotion from the Contacts waitlist is the Brand & Landing pipeline, a
       // trusted source — the advisor's email stays visible in the directory.
       const res = await db.prepare(
         `INSERT INTO advisor_profiles
-           (founder_id, name, email, source, status, source_contact_id, created_at, updated_at)
-         VALUES (?, ?, ?, 'brand-landing', 'active', ?, ?, ?)`,
-      ).bind(founderId, advisorName, row.email, row.id, nowIso(), nowIso()).run();
+           (founder_id, name, email, source, status, source_contact_id, created_at, updated_at, company_id)
+         VALUES (?, ?, ?, 'brand-landing', 'active', ?, ?, ?, ?)`,
+      ).bind(founderId, advisorName, row.email, row.id, nowIso(), nowIso(), advisorCompanyId).run();
       const newId = lastInsertId(res);
 
       const upd = await db.prepare(

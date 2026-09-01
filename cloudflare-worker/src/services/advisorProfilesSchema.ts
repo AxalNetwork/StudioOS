@@ -127,7 +127,12 @@ export async function ensureAdvisorProfilesSchema(env: Env): Promise<void> {
     // D1 batches are atomic, so a duplicate-column error inside the batch
     // would roll back the whole schema bootstrap. "duplicate column" is the
     // expected steady-state here, hence the per-statement swallow.
-    for (const col of ['last_session_at TEXT', 'notes TEXT', 'follow_up_at TEXT', 'follow_up_note TEXT']) {
+    //
+    // `company_id INTEGER` is migration 197 rather than 143 — the founder's
+    // company on their advisor roster, company scoping stage 9 — and rides
+    // this list for the same reason the others do: the table may predate it.
+    for (const col of ['last_session_at TEXT', 'notes TEXT', 'follow_up_at TEXT', 'follow_up_note TEXT',
+                       'company_id INTEGER']) {
       try {
         await env.DB.prepare(`ALTER TABLE advisor_profiles ADD COLUMN ${col}`).run();
       } catch { /* column already exists */ }

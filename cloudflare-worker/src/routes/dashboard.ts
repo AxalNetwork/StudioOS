@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { kvGetJSON, kvPutJSON, kvDelete, createL1 } from '../kv';
 import { clampDays } from '../util/pagination';
 import { maskFounderForInvestor } from '../services/trust';
@@ -17,7 +18,22 @@ const dashboard = new Hono<{ Bindings: Env }>();
 const L1_TTL_MS = 10_000;
 const KV_TTL_SEC = 60;
 const l1 = createL1<any>(L1_TTL_MS);
-const kvKey = (userId: number) => `cache:dash:${userId}`;
+/**
+ * The cache key MUST carry the active company.
+ *
+ * Both layers keyed on the user alone, which was correct while the payload was
+ * the same under every company and became a cross-company leak the moment the
+ * project list started narrowing: a founder switches company and is served the
+ * other company's dashboard from L1 or KV for the whole TTL. Scoping a payload
+ * without scoping its cache key is not a smaller version of scoping it.
+ *
+ * `all` rather than an empty segment for "no company selected", so the key is
+ * never ambiguous with a company whose id is somehow blank.
+ */
+const cacheKey = (userId: number, companyId: number | null) =>
+  `${userId}:${companyId ?? 'all'}`;
+const kvKey = (userId: number, companyId: number | null) =>
+  `cache:dash:${cacheKey(userId, companyId)}`;
 
 // Wrap a query so a single missing table or SQL error doesn't 500 the whole dashboard.
 // Returns the fallback value and logs the underlying error for observability.
@@ -39,17 +55,22 @@ dashboard.get('/', async (c) => {
   const days = clampDays(c.req.query('days'), 30, 365);
   const now = Date.now();
 
+  // Resolved BEFORE the cache lookup because it is part of the key. Only a
+  // founder's payload is company-scoped, so nobody else pays for the lookup.
+  const dashCompanyId = user.role === 'founder' ? await activeCompanyFor(c, user) : null;
+  const ck = cacheKey(user.id, dashCompanyId);
+
   // L1 — per-isolate
   if (!fresh) {
-    const l1Hit = l1.map.get(String(user.id));
+    const l1Hit = l1.map.get(ck);
     if (l1Hit && l1Hit.exp > now) {
       return c.json({ ...l1Hit.v, cached: 'l1' });
     }
     // L2 — KV (only attempt if binding exists; falls through to origin otherwise)
     if (c.env.TOKENS) {
-      const kvHit = await kvGetJSON<any>(c.env.TOKENS, kvKey(user.id));
+      const kvHit = await kvGetJSON<any>(c.env.TOKENS, kvKey(user.id, dashCompanyId));
       if (kvHit) {
-        l1.map.set(String(user.id), { v: kvHit, exp: now + L1_TTL_MS });
+        l1.map.set(ck, { v: kvHit, exp: now + L1_TTL_MS });
         return c.json({ ...kvHit, cached: 'kv' });
       }
     }
@@ -61,6 +82,7 @@ dashboard.get('/', async (c) => {
   const isInvestor = user.role === 'investor';
   const isPartner = user.role === 'partner' || isInvestor;
   const isFounder = user.role === 'founder';
+
 
   // Run all queries in parallel for speed (Cloudflare Workers loves this).
   // Each query is wrapped in safeQuery so one missing table cannot 500 the whole dashboard.
@@ -82,7 +104,18 @@ dashboard.get('/', async (c) => {
           // `submitted_by` is a tickets column; projects owns founder_id.
           // The select list above was corrected once already — the WHERE was
           // not, so the founder's own deal list stayed empty.
-          ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE founder_id = ${user.founder_id || 0} AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`
+          // Company scoping. This list is the FIRST thing a founder sees, and
+          // without the clause it disagreed with the project picker two rows
+          // below it: switch company, and Studio still showed the other
+          // company's projects. Only the founder branch narrows — the admin
+          // branch above is oversight, and the investor/partner branches below
+          // are a marketplace of tier_1/tier_2 deals, which must stay whole.
+          //
+          // Two full literals; the tagged template binds its values, but the
+          // clause itself would still be assembled text if it were built.
+          ? (dashCompanyId === null
+              ? sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE founder_id = ${user.founder_id || 0} AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`
+              : sql`SELECT id, name, sector, stage, status, created_at FROM projects WHERE founder_id = ${user.founder_id || 0} AND (company_id = ${dashCompanyId} OR company_id IS NULL) AND status NOT IN ('rejected', 'archived') AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 12`)
           // Task #3 (Y-1) — investors get the founder_user_id JOIN so
           // the Trust Center mask can null sensitive fields when no
           // active pairwise NDA exists. Partners stay un-masked.
@@ -257,10 +290,10 @@ dashboard.get('/', async (c) => {
 
   // Write through both tiers. KV write is fire-and-forget via waitUntil so
   // the response stays fast; KV failure is logged but never blocks.
-  l1.map.set(String(user.id), { v: payload, exp: Date.now() + L1_TTL_MS });
+  l1.map.set(ck, { v: payload, exp: Date.now() + L1_TTL_MS });
   if (c.env.TOKENS) {
     const ctx = (c.executionCtx as any);
-    const writeP = kvPutJSON(c.env.TOKENS, kvKey(user.id), payload, KV_TTL_SEC);
+    const writeP = kvPutJSON(c.env.TOKENS, kvKey(user.id, dashCompanyId), payload, KV_TTL_SEC);
     if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(writeP); else void writeP;
   }
   return c.json(payload);
@@ -268,9 +301,26 @@ dashboard.get('/', async (c) => {
 
 dashboard.post('/refresh-scores', async (c) => {
   const user = await requireAuth(c);
-  // Invalidate both cache tiers for this user.
-  l1.map.delete(String(user.id));
-  if (c.env.TOKENS) await kvDelete(c.env.TOKENS, kvKey(user.id));
+  // Invalidate both cache tiers for this user, under EVERY company.
+  //
+  // Once the key carries the company there is no longer one entry to delete.
+  // Clearing only the caller's current company would leave a stale dashboard
+  // waiting behind the switcher, which is the same bug as not invalidating at
+  // all — just harder to notice, because it appears one click later.
+  const prefix = `${user.id}:`;
+  for (const k of [...l1.map.keys()]) if (k.startsWith(prefix)) l1.map.delete(k);
+
+  if (c.env.TOKENS) {
+    // KV has no prefix delete here, so the companies are read back. `null` is
+    // always included: it is the key a caller who never touched the switcher
+    // has been writing under.
+    const links = await c.env.DB.prepare(
+      'SELECT company_id FROM user_company_links WHERE user_id = ?',
+    ).bind(user.id).all<{ company_id: number }>().catch(() => ({ results: [] }));
+    const companies: Array<number | null> = [null,
+      ...((links.results || []).map((r) => Number(r.company_id)))];
+    await Promise.all(companies.map((cid) => kvDelete(c.env.TOKENS, kvKey(user.id, cid))));
+  }
   return c.json({ ok: true, message: 'Cache cleared. Next fetch will re-aggregate.' });
 });
 
