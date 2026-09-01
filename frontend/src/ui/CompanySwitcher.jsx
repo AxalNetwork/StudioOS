@@ -42,6 +42,15 @@ import { api, setActiveCompanyId } from '../lib/api';
  */
 const SCOPE_NOTICE = 'Company separation is still rolling out. Some sections show all your data regardless of the company selected.';
 
+/** A date a person can compare, or nothing. Never an invented placeholder. */
+function createdOn(value) {
+  if (!value) return 'date not recorded';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? 'date not recorded'
+    : parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 function CompanySwitcher({ collapsed }) {
   const { company, setCompany, companies, setCompanies } = _useActiveCompany();
   const [open, setOpen] = useState(false);
@@ -112,6 +121,11 @@ function CompanySwitcher({ collapsed }) {
   const abbr = (displayName === '…' ? '…' :
     displayName.replace(/\s+/g, ' ').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?');
 
+  // How many entries share each name, so a duplicate can be labelled and a
+  // unique name left alone.
+  const sameName = new Map();
+  for (const co of companies) sameName.set(co.company_name, (sameName.get(co.company_name) || 0) + 1);
+
   const dropdownContent = (
     <div className={
       collapsed
@@ -128,6 +142,15 @@ function CompanySwitcher({ collapsed }) {
       {!loading && companies.map((co) => {
         const coAbbr = (co.company_name || '?').trim().split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
         const isActive = company?.id === co.id;
+        // Only when a name is genuinely ambiguous. `/company/create` now
+        // refuses a name the caller already holds and migration 192 dedupes
+        // repeated LINKS, but neither touches two SEPARATE companies that were
+        // created with the same name before those landed — deleting one would
+        // be deleting a company that may hold projects. So they stay, and the
+        // list stops pretending they are interchangeable: without this the two
+        // rows are pixel-identical and picking the wrong one shows an empty
+        // workspace with no way to tell why. Silent on the normal path.
+        const ambiguous = sameName.get(co.company_name) > 1;
         return (
           <button
             key={co.uid ?? co.id}
@@ -142,7 +165,14 @@ function CompanySwitcher({ collapsed }) {
             <div className="w-5 h-5 rounded bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-[9px] font-bold flex items-center justify-center flex-none">
               {coAbbr}
             </div>
-            <span className="truncate flex-1">{co.company_name}</span>
+            <span className="truncate flex-1">
+              {co.company_name}
+              {ambiguous && (
+                <span className="block text-[10px] font-normal text-gray-500 dark:text-gray-400">
+                  created {createdOn(co.created_at)}
+                </span>
+              )}
+            </span>
             {isActive && <span className="flex-none">✓</span>}
           </button>
         );

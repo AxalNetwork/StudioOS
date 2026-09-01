@@ -166,7 +166,18 @@ r.get('/company/memberships', async (c) => {
        ORDER BY is_primary_admin DESC, created_at ASC`
     ).bind(user.id).all<Link>();
     const out: any[] = [];
+    // One entry per COMPANY, not per link. This loop returned a row per link,
+    // and nothing stopped two links naming the same pair: `user_company_links`
+    // shipped with only `idx_uclink_user` (a plain index on user_id), so the
+    // same company could appear twice in the switcher — the one control whose
+    // whole job is to say unambiguously which company you are looking at.
+    // Migration 192 dedupes the table and adds the unique index; this guard
+    // stays because a client rendering duplicates is the visible failure and
+    // it should not depend on the index having been applied yet.
+    const seen = new Set<number>();
     for (const link of links.results || []) {
+      if (seen.has(link.company_id)) continue;
+      seen.add(link.company_id);
       const company = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?')
         .bind(link.company_id).first<Company>();
       // A link whose company row is gone is skipped rather than surfaced as a
@@ -189,6 +200,38 @@ r.post('/company/create', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     const name = String(body.company_name || '').trim();
     if (!name) return c.json({ detail: 'company_name required' }, 400);
+    const stored = name.slice(0, 200);
+    // Refuse a name this caller already holds.
+    //
+    // `company_profiles.company_name` is not unique and never should be —
+    // two unrelated founders may both run a "Northwind". What must not happen
+    // is ONE user ending up with two of them, which is what a double submit
+    // (retry, second tab, flaky network) produced: two company_profiles rows
+    // and two links, rendering as two identical entries in the switcher with
+    // different ids. Only one of them holds anything, because migration 189
+    // backfilled projects through the PRIMARY link, so selecting the other
+    // shows an empty workspace that reads as data loss.
+    //
+    // 409 rather than returning the existing row: silently handing back a
+    // different company than the one the caller asked to create is the kind
+    // of "helpful" that hides a bug. The switcher surfaces `detail` verbatim,
+    // so the user reads why nothing was created.
+    //
+    // Compared case-insensitively on the trimmed, truncated value — the same
+    // string that would be stored. SQLite's `lower()` is ASCII-only, so this
+    // catches "Acme"/"acme" and not "STRASSE"/"straße"; the narrow form is
+    // preferred over a fabricated collation.
+    const clash = await c.env.DB.prepare(
+      `SELECT cp.company_name
+         FROM company_profiles cp
+         JOIN user_company_links ucl ON ucl.company_id = cp.id
+        WHERE ucl.user_id = ?
+          AND lower(trim(cp.company_name)) = lower(trim(?))
+        LIMIT 1`
+    ).bind(user.id, stored).first<{ company_name: string }>();
+    if (clash) {
+      return c.json({ detail: `You already have a company called "${clash.company_name}".` }, 409);
+    }
     const uid = newUid();
     const ins = await c.env.DB.prepare(
       `INSERT INTO company_profiles
@@ -196,7 +239,7 @@ r.post('/company/create', async (c) => {
           international_presence, expansion_goals, logo_url, website, linkedin_url, description,
           created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(uid, name.slice(0, 200),
+    ).bind(uid, stored,
            body.stage || null, body.revenue_range || null,
            body.employee_count != null ? Number(body.employee_count) : null,
            body.current_products || null, body.international_presence || null,
