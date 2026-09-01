@@ -91,6 +91,15 @@ const KNOWN_DRIFT_ALLOWLIST = new Set([
   '/captable/waterfall',
   // T14 — references audio recording / transcribe / summarize stubbed (501)
   '/references/transcripts',
+  // Task #225 — Secure Introductions has a page but no backend. The SPA page
+  // FounderNetworkIntroductions.jsx calls GET /network-introductions and the
+  // worker has never mounted that path or anything under it, so the page's
+  // fetch 404s in production today. This is DISTINCT from the credits-based
+  // /introductions/* system, which is fully mounted — the two are different
+  // features that share a word. Allowlisted rather than removed because the
+  // page is live and the call is its only data source; removing it would hide
+  // the gap instead of tracking it.
+  '/network-introductions',
 ]);
 
 const HTTP_VERBS = 'get|post|put|patch|delete|all';
