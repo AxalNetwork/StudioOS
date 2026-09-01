@@ -43,6 +43,7 @@ const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/Founder
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
 const AdvisorBucketRoutes = lazy(() => import('./workspaces/advisor/AdvisorBucketRoutes'));
+const PartnerBucketRoutes = lazy(() => import('./workspaces/partner/PartnerBucketRoutes'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
 const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
@@ -1824,6 +1825,39 @@ function AppInner() {
           misleading one. They return when a data source is licensed. */}
       <Route path="/advisor/research" element={<Navigate to="/signals" replace />} />
       <Route path="/advisor/research/market" element={<Navigate to="/signals" replace />} />
+
+      {/* ── Partner · Pipeline, Delivery, Offers ─────────────────────────────
+          Nine of these fifteen zones already have a live surface, spread over
+          five prefixes that share no logic. The six that do not say what they
+          would hold.
+
+          /pipeline is a SHARED prefix and that is deliberate: the investor
+          shell has held /pipeline, /pipeline/screening, /pipeline/commit and
+          /pipeline/transactions for a long time. The two sets share no slug and
+          bucketForPath is role-scoped, so each licence resolves to its own
+          bucket. Check both lists before adding a sixth slug to either.
+
+          The legacy /partner/operations/*, /needs, /services, /perks and
+          /partner/insights routes all stay mounted — retiring that prefix is an
+          open decision, not this migration's to take. */}
+      <Route path="/pipeline/leads" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/pipeline/proposals" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/pipeline/negotiations" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/pipeline/retainers" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/pipeline/analytics" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery/board" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery/deliverables" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery/capacity" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery/status-reports" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery/health" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/catalog" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/perk-deals" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/visibility" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/proof" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/audience-fit" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/delivery" element={<Navigate to="/delivery/board" replace />} />
+      <Route path="/offers" element={<Navigate to="/offers/catalog" replace />} />
+
       <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
       <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
       <Route path="/partner/operations/capabilities" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
