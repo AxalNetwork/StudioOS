@@ -216,3 +216,22 @@ test('researchRole is declared after the effectiveRole it reads', () => {
     `researchRole (line ${research + 1}) reads effectiveRole (line ${effective + 1}) `
     + 'before it is initialised — this crashes AppInner on every render');
 });
+
+test('every shell can actually open the Network zones it advertises', () => {
+  // The shell config declares the same three Network zones in all four shells,
+  // so ZoneNav renders a pill for each in every one. The routes were guarded
+  // ['admin','founder'] — built for the founder shell, linked by nothing else —
+  // so three of the four licences were bounced to their default path when they
+  // clicked their own pill. A guard narrower than the nav that advertises it is
+  // the same class of failure as a route that does not exist.
+  const ROLES = ['founder', 'partner', 'investor', 'advisor'];
+  for (const slug of ['relationships', 'introductions', 'organizations']) {
+    const line = appSrc.split('\n').find((l) => l.includes(`path="/network/${slug}"`));
+    assert.ok(line, `/network/${slug} has no route`);
+    const guardArgs = line.slice(line.indexOf('guard('));
+    for (const role of ROLES) {
+      assert.ok(guardArgs.includes(`'${role}'`),
+        `/network/${slug} advertises a pill to ${role} but its guard excludes them`);
+    }
+  }
+});

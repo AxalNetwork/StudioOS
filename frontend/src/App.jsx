@@ -44,6 +44,7 @@ const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
 const AdvisorBucketRoutes = lazy(() => import('./workspaces/advisor/AdvisorBucketRoutes'));
 const PartnerBucketRoutes = lazy(() => import('./workspaces/partner/PartnerBucketRoutes'));
+const NetworkWorkspace = lazy(() => import('./workspaces/NetworkWorkspace'));
 const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
 const ExecutionPage = lazy(() => import('./pages/ExecutionPage'));
 const PitchWorkspacePage = lazy(() => import('./pages/PitchWorkspacePage'));
@@ -1278,6 +1279,9 @@ function AppInner() {
   // body — a ReferenceError on every render of AppInner, so a blank app. The
   // build does not catch it because it is a runtime error, not a compile one.
   const researchRole = (!effectiveRole || effectiveRole === 'admin') ? 'founder' : effectiveRole;
+  // Same rule as researchRole, and the same reason it lives below
+  // effectiveRole rather than above it.
+  const networkRole = researchRole;
   const investorWorkspace = (page, component, options = {}) => (
     effectiveRole === 'investor'
       ? <InvestorWorkspacePage page={page} {...options}>{component}</InvestorWorkspacePage>
@@ -1903,9 +1907,18 @@ function AppInner() {
           the Relationships tab. Advisors are included so the Introductions
           feature (and its notification deep links) work for every user type. */}
       <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], partnerPrivateWorkspace(effectiveRole === 'investor' ? <InvestorNetworkWorkspace /> : founderNetworkLanding ? <FounderNetworkDesk /> : founderWorkspace('network', <NetworkPage />, { hideHeader: true })))} />
-      <Route path="/network/relationships" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkRelationships />, { hideHeader: true }))} />
-      <Route path="/network/introductions" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkIntroductions />, { hideHeader: true }))} />
-      <Route path="/network/organizations" element={guard(['admin', 'founder'], founderWorkspace('network', <FounderNetworkOrganizations />, { hideHeader: true }))} />
+      {/* ── Network · three zones, every licence ─────────────────────────────
+          These were guarded ['admin','founder'] because they were built for
+          the founder shell and nothing else linked them. All four canvases
+          specify this bucket, so the shell config renders a pill for each zone
+          in every shell — and three of the four licences were being bounced to
+          their default path when they clicked one. Widened and role-branched:
+          founders keep their three dedicated pages, investors get
+          InvestorNetworkWorkspace, advisors and operators get the same
+          NetworkPage /network already gives them. */}
+      <Route path="/network/relationships" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
+      <Route path="/network/introductions" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
+      <Route path="/network/organizations" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
       <Route path="/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
       {/* Task #17 — the investor sidebar no longer surfaces "Investor Portal"
