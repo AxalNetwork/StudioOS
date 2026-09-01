@@ -19,15 +19,32 @@ import { api, setActiveCompanyId } from '../lib/api';
  * this button was disabled, so the feature read as missing when the whole
  * server half already worked.
  *
- * WHAT SWITCHING DOES NOT YET DO. `useActiveCompany` is read by this file and
- * CompanySettingsPage — nothing else. No business table carries a company_id
- * (only `user_company_links` does), and `services/tenancyScope.ts` scopes by
- * user, founder_id, LP email and fund GP, never by company. So the active
- * company selects a PROFILE, not a data space: the rest of the sidebar shows
- * the same rows whichever company is selected. The dropdown says so rather
- * than letting the control imply an isolation that does not exist — a silent
- * no-op here would read as "my data vanished" the first time someone creates
- * a second company. Delete `SCOPE_NOTICE` in the commit that lands scoping.
+ * WHAT SWITCHING DOES. The active company is sent as `X-Company-Id` on every
+ * request and VERIFIED server-side against `user_company_links`, so a forged
+ * value is ignored rather than obeyed. Migrations 189 and 193-198 put a
+ * `company_id` on the rows each role owns, and the worker narrows on it: a
+ * founder's projects and everything hanging off them, the investor's deal-flow
+ * relationships and the funds they run, the partner's quotes, engagements,
+ * catalog, pitches and perks, and the founder's advisor roster. A project
+ * records the company it was created in, so this applies to new work and not
+ * only to what the backfill reached.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DO, which is not the same as unfinished:
+ *
+ *   - SHARED MARKETPLACES stay whole. The deal list, the founder-needs board,
+ *     the service and perk catalogues and syndication exist to show work from
+ *     people you have no relationship with yet; narrowing them would hide the
+ *     thing the page is for.
+ *   - ACCOUNT-LEVEL THINGS stay yours rather than a firm's — your calendar,
+ *     your perk credits, your referral code, your marketplace profile, an LP's
+ *     own positions. A balance belongs to a person.
+ *   - THE ADVISOR'S Practice and Expertise rows genuinely are not separated,
+ *     and that one IS unfinished: both are served by `routes/advisors.ts`, the
+ *     `/office-hours` implementation, which is task #124 and under a
+ *     do-not-touch instruction. See UNRESOLVED_ITEMS.md U4.
+ *
+ * The notice below tells the first two to everyone and the third only to the
+ * people it affects, rather than claiming the whole thing is still landing.
  *
  * No page may show more than one company's data, and no page may change the
  * active company on its own — pages read ActiveCompanyContext, and this
@@ -35,12 +52,26 @@ import { api, setActiveCompanyId } from '../lib/api';
  */
 
 /**
- * Removed by the change that finishes company scoping — not by the one that
- * starts it. The wording is deliberately free of any section name: naming the
- * surfaces already scoped would need an edit every time another lands, and the
- * edit that gets forgotten is the one that leaves a stale claim in the UI.
+ * What the switcher does and does not move, said once, at the point of use.
+ *
+ * The old wording — "company separation is still rolling out" — was true when
+ * nothing was scoped and became a lie as each stage landed: it told a founder
+ * their data might be leaking between companies when it no longer was. It is
+ * REPLACED rather than deleted, because deleting it would leave two real
+ * things unsaid, and a person would read either as a bug:
+ *
+ *   1. Shared marketplaces and account-level data are the SAME in every
+ *      company, by design and permanently.
+ *   2. An advisor's Practice and Expertise rows really are unseparated,
+ *      because they run on frozen code (task #124, UNRESOLVED_ITEMS.md U4).
+ *
+ * Only (2) is a limitation, and only advisors see it. Naming those two rows is
+ * safe in a way the old notice's vagueness was not: if the freeze lifts and
+ * they are scoped, this line goes — and the test pinning `routes/advisors.ts`
+ * as unscoped fails at the same moment, so the claim cannot go stale quietly.
  */
-const SCOPE_NOTICE = 'Company separation is still rolling out. Some sections show all your data regardless of the company selected.';
+const SHARED_NOTICE = 'Marketplaces and your account settings are shared across your companies.';
+const ADVISOR_NOTICE = 'Practice and Expertise are not yet separated by company.';
 
 /** A date a person can compare, or nothing. Never an invented placeholder. */
 function createdOn(value) {
@@ -51,7 +82,13 @@ function createdOn(value) {
     : parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function CompanySwitcher({ collapsed }) {
+/**
+ * @param role  the caller's role, passed straight through from SidebarNav,
+ *              which already has it. Used only to decide whether the advisor
+ *              limitation applies — telling a founder that Practice is
+ *              unseparated would name two rows their sidebar does not have.
+ */
+function CompanySwitcher({ collapsed, role }) {
   const { company, setCompany, companies, setCompanies } = _useActiveCompany();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -220,7 +257,8 @@ function CompanySwitcher({ collapsed }) {
         )}
       </div>
       <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
-        {SCOPE_NOTICE}
+        {SHARED_NOTICE}
+        {role === 'advisor' ? <> {ADVISOR_NOTICE}</> : null}
       </div>
     </div>
   );
