@@ -131,14 +131,14 @@ export default function FounderBuildDesk() {
           </nav>
         </header>
         {state === 'error' && <div className="build-error" data-testid="status-build-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-build" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
-        <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} weekLink={weekLink} roadmapLink={roadmapLink} metricsLink={metricsLink} boardLink={boardLink} executionLink={executionLink} navigationState={navigationState} />
+        <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} weekLink={weekLink} roadmapLink={roadmapLink} kpiLink={kpiLink} metricsLink={metricsLink} boardLink={boardLink} executionLink={executionLink} navigationState={navigationState} />
       </div>
       <BuildRail commitments={data.commitments} boardTotal={data.boardTotal} executionLink={executionLink} navigationState={navigationState} />
     </section>
   </main>;
 }
 
-function BuildSections({ loading, hasProjects, data, snapshots, summary, weekLink, roadmapLink, metricsLink, boardLink, executionLink, navigationState }) {
+function BuildSections({ loading, hasProjects, data, snapshots, summary, weekLink, roadmapLink, kpiLink, metricsLink, boardLink, executionLink, navigationState }) {
   const latest = snapshots[0];
   return <div className="build-sections">
      <section className="build-card build-week" id="build-0"><SectionHead icon={ClipboardCheck} title={`This week · ${dateRange()}`} meta={loading ? 'Reading source records' : `${data.commitments.length} stored current key result${data.commitments.length === 1 ? '' : 's'}`} />
