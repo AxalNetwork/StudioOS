@@ -13,6 +13,8 @@
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { projectInActiveCompany } from '../services/tenancyScope';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { ensureTier } from '../middleware/requireTier';
 import { hashEmail } from '../util/hashEmail';
 import {
@@ -78,15 +80,43 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
   }
 }
 
-async function loadProjectForWrite(c: Context<{ Bindings: Env }>, user: User, projectId: string): Promise<{ id: number; founder_id: number | null } | null> {
-  const row = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? OR uid = ? LIMIT 1')
-    .bind(Number(projectId) || 0, projectId).first<{ id: number; founder_id: number | null }>();
+type ProjectRow = { id: number; founder_id: number | null; company_id?: number | null };
+
+/** The caller's active company for this request, verified once and memoised. */
+async function activeCompanyFor(c: Context<{ Bindings: Env }>, user: User): Promise<number | null> {
+  const cached = (c as any).get?.(ACTIVE_COMPANY_KEY);
+  if (cached !== undefined) return cached as number | null;
+  const id = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  (c as any).set?.(ACTIVE_COMPANY_KEY, id);
+  return id;
+}
+const ACTIVE_COMPANY_KEY = '__activeCompanyId';
+
+/**
+ * Company scoping, stage 3 — the last file carrying its own project loader.
+ *
+ * The exempt set here is ADMIN ONLY, and that is read from the check below
+ * rather than carried over from the earlier stages. progress.ts and
+ * financials.ts exempt admin+partner; compliance.ts and captable.ts also
+ * exempt investor. This gate never admitted either, so widening it to match a
+ * sibling file would hand partners a write path they do not have today.
+ *
+ * The narrowing sits INSIDE the ownership branch, after the founder has been
+ * shown to own the row. That placement is the whole rule: `projects.company_id`
+ * is the founder's company, and a caller who reaches a project any other way
+ * has an active company of their own that this column can never equal.
+ */
+async function loadProjectForWrite(c: Context<{ Bindings: Env }>, user: User, projectId: string): Promise<ProjectRow | null> {
+  const row = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? OR uid = ? LIMIT 1')
+    .bind(Number(projectId) || 0, projectId).first<ProjectRow>();
   if (!row) return null;
   const role = (user.role || '').toLowerCase();
   if (role === 'admin') return row;
   // Founder owner check
   const founderId = (user as User & { founder_id?: number | null }).founder_id || null;
-  if (founderId && row.founder_id === founderId) return row;
+  if (founderId && row.founder_id === founderId) {
+    return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
+  }
   return null;
 }
 

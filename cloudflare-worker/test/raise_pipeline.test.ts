@@ -76,7 +76,12 @@ db.exec(`
     id INTEGER PRIMARY KEY,
     founder_id INTEGER,
     name TEXT,
-    deleted_at TEXT
+    deleted_at TEXT,
+    -- Migration 189. ownedProjectScope selects it to narrow by active company;
+    -- without it every raise handler 400s on "no such column" before any
+    -- assertion runs. Nullable here exactly as in production, so these rows are
+    -- "unassigned" and stay visible under every company.
+    company_id INTEGER
   );
   INSERT INTO users (id, role, founder_id, name) VALUES (1, 'founder', 11, 'Alice');
   INSERT INTO users (id, role, founder_id, name) VALUES (2, 'founder', 22, 'Bob');
