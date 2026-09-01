@@ -103,7 +103,55 @@ test('a fund with no GP of record is owned by nobody, not by everybody', () => {
 
 test('an admin operates any fund, and the alias is configurable', () => {
   assert.equal(fundGpScope({ id: 1, role: 'admin' }).sql, ALL_ROWS.sql);
-  assert.match(fundGpScope({ id: 2, role: 'investor' }, 'vf').sql, /vf\.gp_user_id/);
+  // The alias moved to the THIRD position when `companyId` was added; passing
+  // it second would have silently become a company id.
+  assert.match(fundGpScope({ id: 2, role: 'investor' }, null, 'vf').sql, /vf\.gp_user_id/);
+});
+
+// ---------- funds: the company arm (stage 7) ----------
+
+test('an active company narrows the GP clause without loosening ownership', () => {
+  const s = fundGpScope({ id: 12, role: 'investor' }, 4);
+  assert.deepEqual(s.binds, [12, 4], 'the caller first, then the company');
+  // The whole safety argument for the IS NULL arm below is that ownership is
+  // already proved in the same conjunct. If this ever stops matching, the
+  // clause has become "any fund in my company", which is a different and much
+  // worse predicate.
+  assert.match(s.sql, /gp_user_id = \? AND/);
+});
+
+test('a fund whose GP has no company stays theirs under every company', () => {
+  // 195 leaves company_id NULL when the GP has no primary link. Hiding those
+  // would strand a GP behind a control they never touched — the same reading
+  // companyScope and projectInActiveCompany use for a NULL project company.
+  assert.match(fundGpScope({ id: 12, role: 'investor' }, 4).sql, /company_id IS NULL/);
+});
+
+test('no company selected yields exactly the pre-195 clause', () => {
+  // Every caller written before the parameter existed passes nothing, and the
+  // default must therefore be indistinguishable from the old behaviour.
+  assert.equal(
+    fundGpScope({ id: 12, role: 'investor' }, null).sql,
+    fundGpScope({ id: 12, role: 'investor' }).sql,
+  );
+  assert.doesNotMatch(fundGpScope({ id: 12, role: 'investor' }).sql, /company_id/);
+});
+
+test('an admin is not narrowed by a company', () => {
+  // fundGpScope is an AUTHORISATION predicate, so a company arm reaching the
+  // admin branch would not merely filter their view — it would remove funds
+  // they are meant to administer, and 404 them.
+  assert.equal(fundGpScope({ id: 1, role: 'admin' }, 4).sql, ALL_ROWS.sql);
+  assert.deepEqual(fundGpScope({ id: 1, role: 'admin' }, 4).binds, []);
+});
+
+test('a company cannot substitute for ownership', () => {
+  // The failure that would matter most: a caller with no usable id must own
+  // nothing, whatever company they claim to be acting for.
+  for (const actor of [null, undefined, {}, { id: 0 }] as any[]) {
+    assert.equal(fundGpScope(actor, 4).sql, NO_ROWS.sql);
+    assert.deepEqual(fundGpScope(actor, 4).binds, []);
+  }
 });
 
 test('the two resources are independent — one cannot be used for the other', () => {

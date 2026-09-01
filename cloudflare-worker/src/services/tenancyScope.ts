@@ -107,27 +107,53 @@ export function esignEnvelopeScope(actor: Actor | null | undefined, alias = 'e')
 }
 
 /**
- * Funds an actor may operate, as `f.*`.
+ * Funds an actor may operate, as `f.*`, optionally narrowed to one company.
  *
  * Ownership is `vc_funds.gp_user_id` — the GP of record added by migration
  * 163, whose own header says it exists so the platform can tell "whether the
  * signer is a real user and reach them". That is precisely an ownership key,
- * and it is the only one this table has: there is no company_id and no
- * fund_members join.
+ * and it was the only one this table had until migration 195 added
+ * `company_id` for the GP's firm.
  *
  * Consequence worth stating plainly: a fund with a NULL gp_user_id has no
  * owner, so no non-admin can operate it. That is the correct failure. The
  * alternative — treating unowned funds as open — would hand every
  * institutional-tier account write access to every legacy fund in the table,
  * including capital calls and distributions.
+ *
+ * THIS IS THE ONE SCOPE WHERE COMPANY IS AN AUTHORISATION, NOT A FILTER.
+ * `companyScope` narrows rows the caller may already read, so an error there
+ * shows too little. This clause is what makes `requireFundGp` return 404, so
+ * an error here changes who may run a capital call. What keeps that safe is
+ * that the company predicate is ANDed onto a conjunct that has ALREADY proved
+ * `gp_user_id = ?`: it can only narrow within the caller's own funds and can
+ * never reach another GP's, whatever company id arrives. That is also why the
+ * `company_id IS NULL` arm — a hole in a predicate standing alone — is not
+ * one here, and why callers must still pass a VERIFIED id (the result of
+ * `resolveActiveCompany`) rather than a raw header.
+ *
+ * `companyId === null` means "no company selected" and yields the pre-195
+ * clause exactly, so a caller that has never touched the switcher, and every
+ * caller written before this parameter existed, keeps reading every fund they
+ * are the GP of.
  */
-export function fundGpScope(actor: Actor | null | undefined, alias = 'f'): ScopeClause {
+export function fundGpScope(
+  actor: Actor | null | undefined,
+  companyId: number | null = null,
+  alias = 'f',
+): ScopeClause {
   if (isUnscoped(actor)) return ALL_ROWS;
   const id = actorId(actor);
   if (id === null) return NO_ROWS;
   // `= ?` and not `IS ?`: a NULL gp_user_id must never match, and in SQL
   // `NULL = 5` is NULL rather than true, which is the behaviour wanted here.
-  return { sql: `(${alias}.gp_user_id = ?)`, binds: [id] };
+  // The company arm is the opposite case on purpose — a fund whose GP has no
+  // primary company is theirs under every company, never under none.
+  if (companyId === null) return { sql: `(${alias}.gp_user_id = ?)`, binds: [id] };
+  return {
+    sql: `(${alias}.gp_user_id = ? AND (${alias}.company_id = ? OR ${alias}.company_id IS NULL))`,
+    binds: [id, companyId],
+  };
 }
 
 /**

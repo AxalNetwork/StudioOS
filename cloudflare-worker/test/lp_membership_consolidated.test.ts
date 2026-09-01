@@ -281,7 +281,20 @@ test('andScope is never handed to sql.unsafe, which is why it may interpolate', 
 
 test('every scope call site passes a string-literal alias, or none', () => {
   // The alias is the one interpolated input, so it must never be a variable.
-  const CALL = /\b(?:lpMembershipScope|lpSelfScope|esignEnvelopeScope|fundGpScope)\s*\(/g;
+  //
+  // WHICH ARGUMENT IS THE ALIAS DIFFERS BY FUNCTION. `fundGpScope` gained a
+  // `companyId` in the second position (company scoping, stage 7), so reading
+  // "the second argument" as the alias would flag every company-scoped call
+  // site and, worse, would stop checking the position the alias actually
+  // occupies. The positions are declared here so the guard follows the
+  // signatures rather than assuming they agree.
+  const ALIAS_ARG: Record<string, number> = {
+    lpMembershipScope: 1,
+    lpSelfScope: 1,
+    esignEnvelopeScope: 1,
+    fundGpScope: 2,
+  };
+  const CALL = new RegExp(`\\b(${Object.keys(ALIAS_ARG).join('|')})\\s*\\(`, 'g');
   const bad: string[] = [];
   for (const f of FILES) {
     if (f.rel === 'services/tenancyScope.ts') continue;
@@ -294,23 +307,44 @@ test('every scope call site passes a string-literal alias, or none', () => {
         else if (ch === ')') { depth--; if (depth === 0) break; }
         args += ch;
       }
-      // Split on the top-level comma only.
-      let d = 0, cut = -1;
+      // Split on top-level commas only.
+      const parts: string[] = [];
+      let d = 0, from = 0;
       for (let j = 0; j < args.length; j++) {
         const ch = args[j];
         if (ch === '(' || ch === '{' || ch === '[') d++;
         else if (ch === ')' || ch === '}' || ch === ']') d--;
-        else if (ch === ',' && d === 0) { cut = j; break; }
+        else if (ch === ',' && d === 0) { parts.push(args.slice(from, j)); from = j + 1; }
       }
-      if (cut === -1) continue;               // one argument: default alias
-      const alias = args.slice(cut + 1).trim();
+      parts.push(args.slice(from));
+      const at = ALIAS_ARG[m[1]];
+      if (parts.length <= at) continue;       // alias omitted: the default
+      const alias = parts[at].trim();
       if (!/^'[A-Za-z_][A-Za-z0-9_]*'$|^"[A-Za-z_][A-Za-z0-9_]*"$/.test(alias)) {
-        bad.push(`${f.rel}: alias ${JSON.stringify(alias)}`);
+        bad.push(`${f.rel}: ${m[1]} alias ${JSON.stringify(alias)}`);
       }
     }
   }
   assert.deepEqual(bad, [],
     'a non-literal alias would let a caller shape the SQL text itself');
+});
+
+test('the alias guard reads the position each signature actually uses', () => {
+  // The guard above is only as good as its map. If a producer\'s signature
+  // changes again, this fails rather than the guard silently checking the
+  // wrong argument — which is how a company id came to sit where an alias was
+  // expected in the first place.
+  const sigs: Record<string, number> = {
+    lpMembershipScope: 1, lpSelfScope: 1, esignEnvelopeScope: 1, fundGpScope: 2,
+  };
+  for (const [name, pos] of Object.entries(sigs)) {
+    const at = scopeSrc.indexOf(`export function ${name}(`);
+    assert.notEqual(at, -1, `${name} must exist`);
+    const params = scopeSrc.slice(at + `export function ${name}(`.length);
+    const list = params.slice(0, params.indexOf(')')).split(',').map((p) => p.trim());
+    assert.match(list[pos] ?? '', /^alias\b/,
+      `${name} argument ${pos} is ${JSON.stringify(list[pos])}, not the alias`);
+  }
 });
 
 // ---------- the self/administrative split is real ----------

@@ -28,6 +28,11 @@ export const FUND_GP_COLUMNS: Array<[string, string]> = [
   ['custodian', 'TEXT'],
   ['valuation_policy', 'TEXT'],
   ['slug', 'TEXT'],
+  // Migration 195, not 163 — the GP's firm, for company scoping stage 7. It
+  // rides this list rather than getting a second bootstrap because it lives
+  // on the same table and is read by the same handlers; the list is "columns
+  // vc_funds needs before a GP control runs", which is what it always was.
+  ['company_id', 'INTEGER'],
 ];
 
 // `REFERENCES users(id)` is deliberately dropped from the bootstrap DDL above:

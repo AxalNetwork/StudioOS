@@ -13,9 +13,14 @@ async function read(relativePath) {
 test('static, health, and verified anonymous public reads bypass blocking role-schema repairs', async () => {
   const source = await read('src/index.ts');
 
+  // The claim is the ORDER — the non-API branch returns before any
+  // role-schema work — not the exact spelling of the return. `app.fetch` is
+  // now wrapped by `withThrownResponses` so a gate that refuses by throwing a
+  // Response produces that Response instead of a worker exception; the early
+  // return itself is unchanged and is still what this pins.
   assert.match(
     source,
-    /if \(!pathname\.startsWith\('\/api\/'\)\) \{\s*return app\.fetch\(request, env, ctx\);/s,
+    /if \(!pathname\.startsWith\('\/api\/'\)\) \{\s*return withThrownResponses\(\(\) => app\.fetch\(request, env, ctx\)\);/s,
     'non-API requests must reach the asset/SPA handler before role-schema work',
   );
   assert.match(
