@@ -21,11 +21,25 @@ const targets = rows.map((r) => r.to);
 const labels = rows.map((r) => r.label);
 
 test('the canvas rows are present, in the canvas order', () => {
-  assert.deepEqual(labels, ['Home', 'Spin-Out Lab', 'Practice', 'Expertise', 'Network', 'Research']);
+  // Two corrections, for two different reasons.
+  //
+  // 'Studio', not 'Home'. `rows` only matches items carrying a `to:`, and the
+  // item pointing at /studio is labelled 'Studio' in every role, here and on
+  // main. 'Home' is the GROUP header above it, which has no `to:` and never
+  // appears in `rows`. Same correction as investor_shell.test.mjs.
+  //
+  // 'Cohorts' is a real new row, added by this migration. The Advisor canvas
+  // declares a Cohorts bucket, so the shell grew a row for it and the
+  // enumeration has to say so. Nothing was relaxed: this still pins the exact
+  // list, in order, and the destinations beside it.
+  assert.deepEqual(labels, [
+    'Studio', 'Spin-Out Lab', 'Practice', 'Cohorts', 'Expertise', 'Network', 'Research',
+  ]);
   assert.deepEqual(targets, [
     '/studio',
     '/spinout-lab',
     '/advisor/advisory/opportunities',
+    '/cohorts/founders',
     '/office-hours',
     '/network',
     '/signals',

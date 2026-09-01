@@ -44,7 +44,16 @@ test('the canvas rows are present, in the canvas order', () => {
   // Canvas ROWS: Home · Validate · Build · Raise · Grow · Network · Research.
   // Trust is excluded on purpose (below); Company Settings is the pinned
   // footer in SidebarNav, not a nav row, so it is not in this list.
-  const CANON = ['Home', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
+  //
+  // The first entry is 'Studio', not 'Home'. `rows` is built from a regex that
+  // only matches items carrying a `to:`, and the item pointing at /studio has
+  // been labelled 'Studio' in every role, on this branch and on main, for as
+  // long as the config has existed — 'Home' is the GROUP header above it,
+  // which has no `to:` and so is never in `rows`. This assertion had been
+  // reading the group's name and comparing it against the row's. The same
+  // correction was made in investor_shell.test.mjs; advisor_shell and
+  // partner_shell carry the identical defect.
+  const CANON = ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Network', 'Research'];
   let i = 0;
   for (const l of labels) if (l === CANON[i]) i += 1;
   assert.equal(i, CANON.length, `canonical rows out of order or missing: ${JSON.stringify(labels)}`);
@@ -179,7 +188,9 @@ test('every tab carries the guard its route carries', () => {
 
 test('Home is /studio, no role root invented', () => {
   assert.equal(rows[0].to, '/studio');
-  assert.equal(rows[0].label, 'Home');
+  // 'Studio' is the row's label; 'Home' is the group header. See the note on
+  // CANON above — the destination is what this test is really pinning.
+  assert.equal(rows[0].label, 'Studio');
   assert.ok(!targets.includes('/home'));
   assert.ok(!targets.includes('/founder'), 'no bare /founder root');
 });
