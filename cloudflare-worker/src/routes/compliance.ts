@@ -10,6 +10,9 @@
  * the same jurisdiction is a safe no-op.
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
+import { projectInActiveCompany } from '../services/tenancyScope';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
@@ -209,16 +212,44 @@ type EventRow = {
   created_at: string; updated_at: string;
 };
 
-type Project = { id: number; founder_id: number | null; entity_id: number | null };
+type Project = { id: number; founder_id: number | null; entity_id: number | null; company_id?: number | null };
 
 function role(u: { role: string }): string { return (u.role || '').toLowerCase(); }
 function isPrivilegedReader(r: string): boolean { return r === 'admin' || r === 'partner' || r === 'investor'; }
 function isPrivilegedWriter(r: string): boolean { return r === 'admin' || r === 'partner'; }
 
-async function loadProject(env: Env, id: number): Promise<Project | null> {
-  return env.DB.prepare('SELECT id, founder_id, entity_id FROM projects WHERE id = ?')
-    .bind(id).first<Project>();
+/**
+ * Load a project, narrowed to the caller's active company (company scoping,
+ * stage 2 — the shape progress.ts and financials.ts share).
+ *
+ * Null, not a throw: every call site reads `if (!proj) return 404`, which is
+ * what a `companyScope` query would produce. The exemption follows the READ
+ * privilege, `isPrivilegedReader` — the widest one — because narrowing works
+ * by making the row disappear, and a role that may read any project must not
+ * lose reads to a column that can never name its own firm (an investor's fund,
+ * a partner's agency). Writes are still refused afterwards by `checkWrite`
+ * exactly as before, so exempting the wider set here loosens nothing.
+ */
+async function loadProject(
+  c: Context<{ Bindings: Env }>, id: number, user: { role: string },
+): Promise<Project | null> {
+  const row = await c.env.DB.prepare(
+    'SELECT id, founder_id, entity_id, company_id FROM projects WHERE id = ?',
+  ).bind(id).first<Project>();
+  if (!row) return null;
+  if (isPrivilegedReader(role(user))) return row;
+  return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
 }
+
+/** The caller's active company for this request, verified once and memoised. */
+async function activeCompanyFor(c: Context<{ Bindings: Env }>, user: any): Promise<number | null> {
+  const cached = (c as any).get?.(ACTIVE_COMPANY_KEY);
+  if (cached !== undefined) return cached as number | null;
+  const id = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
+  (c as any).set?.(ACTIVE_COMPANY_KEY, id);
+  return id;
+}
+const ACTIVE_COMPANY_KEY = '__activeCompanyId';
 
 function checkRead(user: { role: string; founder_id?: number | null }, p: Project) {
   if (isPrivilegedReader(role(user))) return;
@@ -276,7 +307,7 @@ compliance.get('/events', async (c) => {
   const params: any[] = [];
   if (projectId != null) {
     if (!Number.isFinite(projectId)) return c.json({ detail: 'project_id must be integer' }, 400);
-    const proj = await loadProject(c.env, projectId);
+    const proj = await loadProject(c, projectId, user);
     if (!proj) return c.json({ detail: 'Project not found' }, 404);
     try { checkRead(user, proj); } catch { return c.json({ detail: 'Forbidden' }, 403); }
     where += ' AND project_id = ?';
@@ -284,9 +315,16 @@ compliance.get('/events', async (c) => {
   } else if (r === 'admin' || r === 'partner') {
     // Privileged operators see everything.
   } else if (r === 'founder') {
-    const own = await c.env.DB.prepare('SELECT id FROM projects WHERE founder_id = ?')
-      .bind(user.founder_id ?? -1).all<{ id: number }>();
-    const ids = (own.results || []).map((p: any) => p.id);
+    // "All my events" must mean all my events IN THIS COMPANY, or switching
+    // the company changes the per-project views and not this one — the same
+    // list under two companies would read as scoping being broken. Filtered
+    // with the same predicate loadProject uses, so the two cannot disagree.
+    const companyId = await activeCompanyFor(c, user);
+    const own = await c.env.DB.prepare('SELECT id, company_id FROM projects WHERE founder_id = ?')
+      .bind(user.founder_id ?? -1).all<{ id: number; company_id: number | null }>();
+    const ids = (own.results || [])
+      .filter((p) => projectInActiveCompany(companyId, p))
+      .map((p) => p.id);
     if (!ids.length) return c.json({ events: [], summary: { total: 0, overdue: 0, due_30d: 0, due_7d: 0, completed: 0 } });
     where += ` AND project_id IN (${ids.map(() => '?').join(',')})`;
     params.push(...ids);
@@ -321,7 +359,7 @@ compliance.post('/events', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const projectId = Number(body?.project_id);
   if (!Number.isFinite(projectId)) return c.json({ detail: 'project_id is required' }, 400);
-  const proj = await loadProject(c.env, projectId);
+  const proj = await loadProject(c, projectId, user);
   if (!proj) return c.json({ detail: 'Project not found' }, 404);
   try { checkWrite(user, proj); } catch { return c.json({ detail: 'Forbidden' }, 403); }
 
@@ -371,7 +409,7 @@ compliance.patch('/events/:id', async (c) => {
   const event = await c.env.DB.prepare('SELECT * FROM compliance_events WHERE id = ?')
     .bind(id).first<EventRow>();
   if (!event) return c.json({ detail: 'Event not found' }, 404);
-  const proj = await loadProject(c.env, event.project_id);
+  const proj = await loadProject(c, event.project_id, user);
   if (!proj) return c.json({ detail: 'Project not found' }, 404);
   try { checkWrite(user, proj); } catch { return c.json({ detail: 'Forbidden' }, 403); }
 
@@ -456,7 +494,7 @@ compliance.delete('/events/:id', async (c) => {
   const event = await c.env.DB.prepare('SELECT * FROM compliance_events WHERE id = ?')
     .bind(id).first<EventRow>();
   if (!event) return c.json({ detail: 'Event not found' }, 404);
-  const proj = await loadProject(c.env, event.project_id);
+  const proj = await loadProject(c, event.project_id, user);
   if (!proj) return c.json({ detail: 'Project not found' }, 404);
   try { checkWrite(user, proj); } catch { return c.json({ detail: 'Forbidden' }, 403); }
   await c.env.DB.prepare('DELETE FROM compliance_events WHERE id = ?').bind(id).run();
