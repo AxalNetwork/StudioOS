@@ -2269,7 +2269,12 @@ export const api = {
   dataRoomShared: (projectUid) => request(`/data-room/shared/${encodeURIComponent(projectUid)}`),
   dataRoomDownload: (projectUid, uid) =>
     request(`/data-room/shared/${encodeURIComponent(projectUid)}/files/${encodeURIComponent(uid)}/download`, { method: 'POST' }),
-  getCapTableByProject: (projectId) => request(`/captable/scenarios/by-project/${projectId}`),
+  // getCapTableByProject is NOT redeclared here. It was, and this copy — the
+  // later of the two in the same object literal — is the one that won, which
+  // meant the `encodeURIComponent` on the definition ~80 lines above was dead
+  // and every caller interpolated the id into the path raw. Both bodies hit
+  // the same route and every caller passes a numeric project id, so nothing
+  // was exploitable in practice, but the surviving form is the encoded one.
   createCapTableVariant: (projectId, data) =>
     request(`/captable/scenarios/by-project/${projectId}/variants`, { method: 'POST', body: JSON.stringify(data) }),
   getCapTableCompare: (projectId) => request(`/captable/scenarios/by-project/${projectId}/compare`),

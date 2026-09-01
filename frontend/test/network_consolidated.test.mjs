@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { duplicateApiMethods } from './_apiMethods.mjs';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -45,6 +46,35 @@ test('every role links the working Network surface exactly once', () => {
   assert.doesNotMatch(sidebar, /'\/advisor\/network\//);
   assert.equal((sidebar.match(/to: '\/network'/g) || []).length, 5,
     'expected one /network row per role (admin + the four that were collapsed)');
+});
+
+test('no api.js method is declared twice inside its object', () => {
+  // Sits beside the other two api.js-wide integrity checks in this file.
+  //
+  // A later duplicate silently wins in an object literal, so the earlier body
+  // becomes dead code that still reads like live code. Not theoretical:
+  // `getCapTableByProject` was declared twice inside `api`, and the copy that
+  // won was the one WITHOUT `encodeURIComponent`, so seven callers
+  // interpolated a project id into the URL path raw while an encoded
+  // definition sat eighty lines above looking correct. It had been that way
+  // since f862ccb1.
+  //
+  // Nothing in the suite could see it: every existing consumer asks only "is
+  // this name defined?", and `apiMethodNames` answers that from a Set — the
+  // one structure guaranteed to discard the evidence.
+  //
+  // Checked per exported object, not per file. api.js exports twenty-three of
+  // them and each one's properties sit at the same indent, so a whole-file
+  // scan would read `news.list`, `events.list` and `jobs.list` as three
+  // declarations of `list` and fail on code that is entirely correct.
+  const src = read('frontend/src/lib/api.js');
+  const exported = [...src.matchAll(/^export const (\w+) = \{/gm)].map((m) => m[1]);
+  assert.ok(exported.length >= 20, `expected api.js's exported objects, found ${exported.length}`);
+  const offenders = exported
+    .map((name) => [name, duplicateApiMethods(src, name)])
+    .filter(([, dupes]) => dupes.length);
+  assert.deepEqual(offenders, [],
+    offenders.map(([name, d]) => `${name} declares ${d.join(', ')} more than once`).join('; '));
 });
 
 test('no client method calls an unmounted network route', () => {
