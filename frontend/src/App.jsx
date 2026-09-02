@@ -1512,7 +1512,9 @@ function AppInner() {
         ? guard(labRoles(['admin', 'founder']), <FounderResearchDesk />)
         : researchRole === 'investor'
           ? guard(labRoles(['admin', 'investor']), <InvestorResearchWorkspace />)
-          : <Navigate to="/research/ask" replace />} />
+          : researchRole === 'advisor' || researchRole === 'partner'
+            ? guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} />)
+            : <Navigate to="/research/ask" replace />} />
       <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
       <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
@@ -1971,7 +1973,13 @@ function AppInner() {
           Relationships tabs). The legacy /relationships route redirects into
           the Relationships tab. Advisors are included so the Introductions
           feature (and its notification deep links) work for every user type. */}
-      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], partnerPrivateWorkspace(effectiveRole === 'investor' ? <InvestorNetworkWorkspace /> : founderNetworkLanding ? <FounderNetworkDesk /> : founderWorkspace('network', <NetworkPage />, { hideHeader: true })))} />
+      {/* The advisor arm renders the zone shell rather than the bare page: the
+          Network row points here, and NetworkPage on its own carries no zone
+          row, no breadcrumb and no Worker AI rail — the advisor's Network was
+          a violet founder-shaped page with an empty right column. The shell
+          resolves the zone to `relationships` on a bare prefix, so the row
+          lands on the bucket and the pills navigate from there. */}
+      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], partnerPrivateWorkspace(effectiveRole === 'investor' ? <InvestorNetworkWorkspace /> : effectiveRole === 'advisor' ? <NetworkWorkspace role="advisor" /> : founderNetworkLanding ? <FounderNetworkDesk /> : founderWorkspace('network', <NetworkPage />, { hideHeader: true })))} />
       {/* ── Network · three zones, every licence ─────────────────────────────
           These were guarded ['admin','founder'] because they were built for
           the founder shell and nothing else linked them. All four canvases

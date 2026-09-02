@@ -423,24 +423,30 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      // Practice and Expertise keep their shipped destinations. The canvas
-      // moves them to /practice/* and /expertise/*, and those routes now exist
-      // and work — but two decisions already point these rows elsewhere:
-      // Practice owns the whole /advisor/advisory subtree, and Expertise is
-      // the canonical advisor profile destination at /office-hours. Retargeting
-      // a row against a decision is not this migration's call to make alone.
-      { to: '/advisor/advisory/opportunities', icon: Briefcase, label: 'Practice',
-        match: ['/advisor/advisory'] },
-      // Cohorts is the one new row that conflicts with nothing: the canvas asks
-      // for it, no decision speaks against it, and it reads Spin-Out Lab data
-      // read-only rather than owning any of it.
-      { to: '/cohorts/founders', icon: Users, label: 'Cohorts', match: ['/cohorts'] },
-      { to: '/office-hours', icon: UserCircle, label: 'Expertise',
-        match: ['/office-hours', '/advisors'] },
+      // EVERY WORKSPACE ROW POINTS AT ITS BUCKET. These five used to point
+      // outside their own buckets — Practice at /advisor/advisory/opportunities,
+      // Expertise at /office-hours, Research at /signals — because two shipped
+      // decisions had claimed those destinations first and retargeting a row
+      // against a decision was left as an open call. The call is made: the
+      // rows land in the buckets the canvases specify, and the legacy routes
+      // stay live, stay linked from inside the buckets, and stay in `match`.
+      //
+      // The two that pointed at /advisor/advisory and /office-hours were worse
+      // than merely off-canvas. Both destinations are wrapped in
+      // `advisorPrivateWorkspace`, which sends an admin previewing the Advisor
+      // role to /studio — so for that viewer the Practice and Expertise rows
+      // did not open a workspace at all. That is the whole of "Practice and
+      // Expertise lands on Studio page".
+      { to: '/practice', icon: Briefcase, label: 'Practice',
+        match: ['/practice', '/advisor/advisory'] },
+      // Cohorts reads Spin-Out Lab data read-only and owns none of it.
+      { to: '/cohorts', icon: Users, label: 'Cohorts', match: ['/cohorts'] },
+      { to: '/expertise', icon: UserCircle, label: 'Expertise',
+        match: ['/expertise', '/office-hours', '/advisors'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts', '/advisor/network'] },
-      { to: '/signals', icon: Radar, label: 'Research',
-        match: ['/signals', '/market-intel'] },
+      { to: '/research', icon: Radar, label: 'Research',
+        match: ['/research', '/signals', '/market-intel'] },
       // NO Trust row (it belongs to the user dropdown) and NO Practice Settings
       // row (the pinned footer is the single entry point). The canvas asks for
       // both; both are decisions already made against it.

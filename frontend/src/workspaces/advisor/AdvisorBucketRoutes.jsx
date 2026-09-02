@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Card, Skeleton } from '../../ui';
+import { Card, Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 
@@ -156,11 +156,61 @@ export default function AdvisorBucketRoutes() {
     '/expertise': 'How the market finds you, and what it finds when it does.',
   };
 
+  // The Worker AI rail, absent from all fifteen of these routes until now: the
+  // shell has taken a `rail` slot since the founder pass and this caller never
+  // filled it, so every Practice, Cohorts and Expertise zone rendered with an
+  // empty right-hand column. That is the report, for the third licence running:
+  // "some pages doesn't have it, it does show anything, it looks blank".
+  //
+  // What it says here is what is true here. A zone with no store behind it
+  // reports exactly that, rather than a coverage count it cannot produce — the
+  // rail is the one component on the page that must never be more confident
+  // than the body beside it.
+  const live = LIVE[prefix]?.has(slug);
+  const RAIL = {
+    '/practice': {
+      workspace: 'Practice',
+      stance: 'Manual practice record',
+      note: 'Opportunities, engagements and delivery read the stored advisory record. Nothing here writes a proposal, sends a message or changes an engagement.',
+      unavailable: [
+        ['Session pricing and payouts', 'No store: the practice has no session price, paid booking or payout record anywhere in the product.'],
+      ],
+    },
+    '/cohorts': {
+      workspace: 'Cohorts',
+      stance: 'Read-only, both ways',
+      note: 'Cohort data belongs to the Lab and to the founder. This bucket owns no Lab route and writes nothing back.',
+      unavailable: [
+        ['Everything on this bucket', 'Nothing in the product links an advisor to a cohort, so there is no batch to read. Each zone says which join is missing.'],
+      ],
+    },
+    '/expertise': {
+      workspace: 'Expertise',
+      stance: 'Manual profile record',
+      note: 'Profile, services and proof read the stored practice record. No positioning line, price or attestation is drafted here.',
+      unavailable: [
+        ['Attestation', 'Consent is asked and recorded, never assumed. An unattested claim stays visibly weaker than an attested one.'],
+      ],
+    },
+  }[prefix];
+
   return (
     <WorkspaceShell
       role="advisor"
       scope={prefix === '/cohorts' ? 'One cohort' : 'One practice'}
       intro={INTRO[prefix]}
+      rail={RAIL && (
+        <WorkerRail
+          workspace={RAIL.workspace}
+          role="advisor"
+          stance={RAIL.stance}
+          note={RAIL.note}
+          coverage={[live
+            ? `${zone?.label || 'This zone'} reads the stored record`
+            : `${zone?.label || 'This zone'} has no store behind it`]}
+          unavailable={RAIL.unavailable}
+        />
+      )}
     >
       {body}
       {prefix === '/practice' && slug === 'opportunities' && (

@@ -27,11 +27,11 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Home | Studio | `/studio` | Advisor Canvas |
 | Home | Spin-Out Lab | `/spinout-lab` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Practice | `/advisor/advisory/opportunities` | Advisor Detail · Practice |
-| Home | Cohorts | `/cohorts/founders` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Expertise | `/office-hours` | Advisor Canvas, Advisory Practice |
+| Home | Practice | `/practice` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Cohorts | `/cohorts` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Expertise | `/expertise` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Network | `/network` | Advisor Canvas |
-| Home | Research | `/signals` | Advisor Canvas, Signals |
+| Home | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `investor` — 9 destinations in 1 group
 
@@ -123,14 +123,17 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-50 of the 83 sidebar rows above are not claimed
+53 of the 83 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
 rather than merely absent.
 
 - advisor · Home · Spin-Out Lab (`/spinout-lab`)
-- advisor · Home · Cohorts (`/cohorts/founders`)
+- advisor · Home · Practice (`/practice`)
+- advisor · Home · Cohorts (`/cohorts`)
+- advisor · Home · Expertise (`/expertise`)
+- advisor · Home · Research (`/research`)
 - investor · Home · Trust (`/trust`)
 - partner · Headerless · Research (`/signals`)
 - admin · Home · Studio (`/studio`)
