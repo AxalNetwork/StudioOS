@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Filter, Landmark, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 
 const asList = (value, ...keys) => {
@@ -157,7 +158,18 @@ function CapitalContent({ project, scenario, result, latestRound, ledger, ledger
 }
 
 function Stat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function WorkerRail({ project, scenario, ledger, variants, waterfall }) { return <aside className="fr-capital-rail"><div className="fr-capital-rail-heading"><span>Worker AI · Raise</span><Sparkles size={14} /></div><div className="fr-capital-rail-callout"><b>Manual capital view</b><p>This page reads the selected project's computed cap table, scenario and 409A records. It does not model, export, or change terms.</p></div><div className="fr-capital-rail-block"><span className="fr-capital-label">Record coverage</span><strong>{project ? `${ledger.length} ownership row${ledger.length === 1 ? '' : 's'}` : 'No project selected'}</strong><p>{project ? `${variants.length} draft scenario${variants.length === 1 ? '' : 's'} · ${waterfall ? 'waterfall returned' : 'waterfall unavailable'}` : 'Select a startup to read its capital records.'}</p></div><div className="fr-capital-rail-block fr-capital-rail-muted"><span>Unavailable here</span><strong>Term modelling</strong><p>No model-round action is enabled on this read-only surface.</p><strong>AI waterfall brief</strong><p>No automated proposal or attach action is enabled.</p></div><div className="fr-capital-rail-foot">Read-only ledger · edit through capital workspace</div></aside>; }
+function WorkerRail({ project, scenario, ledger, variants, waterfall }) {
+  return <FounderWorkerRail
+    workspace="Raise"
+    className="fr-capital-rail"
+    stance="Manual capital view"
+    note="This page reads the selected project's computed cap table, scenario and 409A records. It does not model, export, or change terms."
+    coverage={[project ? `${ledger.length} ownership row${ledger.length === 1 ? '' : 's'}` : 'No project selected']}
+    coverageNote={project ? `${variants.length} draft scenario${variants.length === 1 ? '' : 's'} · ${waterfall ? 'waterfall returned' : 'waterfall unavailable'}` : 'Select a startup to read its capital records.'}
+    unavailable={[['Term modelling', 'No model-round action is enabled on this read-only surface.'], ['AI waterfall brief', 'No automated proposal or attach action is enabled.']]}
+    footer="Read-only ledger · edit through capital workspace"
+  />;
+}
 function EmptyCapital() { return <div className="fr-capital-empty" data-testid="empty-raise-capital"><Landmark size={24} /><h2>No startup is available</h2><p>This founder capital ledger is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/raise/status">Back to raise</Link></div>; }
 function UnavailableCapital({ onRetry }) { return <div className="fr-capital-empty" data-testid="unavailable-raise-capital"><AlertCircle size={24} /><h2>Project source unavailable</h2><p>The selected startup cannot be read right now. No ownership, dilution, or waterfall values are inferred from a failed request.</p><button type="button" onClick={onRetry}><RefreshCw size={13} /> Retry</button></div>; }
 function CapitalSkeleton() { return <div className="fr-capital-loading" data-testid="status-raise-capital-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

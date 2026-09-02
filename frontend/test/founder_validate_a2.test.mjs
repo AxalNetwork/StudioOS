@@ -26,8 +26,14 @@ test('A2 renders every requested evidence surface', () => {
     'Pain map',
     'Hypotheses',
     'Validation summary',
-    'Worker AI · Validate',
   ]) assert.match(page, new RegExp(copy));
+  // The rail's own words moved into ui/FounderWorkerRail.jsx when the
+  // thirty-nine hand-built copies were replaced by one component. What A2 owns
+  // is the MOUNT and the workspace it names; the "Worker AI · " prefix, the
+  // four blocks and the guardrail are the shared component's, asserted once in
+  // founder_shell.test.mjs for all six desks at the same time.
+  assert.match(page, /<FounderWorkerRail\b[\s\S]*?workspace="Validate"/,
+    'A2 must mount the shared Worker AI rail');
 });
 
 test('A2 uses live discovery sources and retains the detailed editor', () => {

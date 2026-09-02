@@ -111,11 +111,26 @@ test('a shell is only claimed migrated once its sidebar points at the new IA', (
   const sidebar = readFileSync(resolve(root, 'src/sidebarConfig.js'), 'utf8');
   // The founder Validate and Research rows are the two the migration moves
   // outright — a legacy target on either means the shell is not migrated.
+  //
+  // The targets are the workspace ROOTS, not the first zone. Pointing a row at
+  // a zone is what lost the overviews in the first place: the root renders the
+  // workspace's overview, the zone row underneath it renders the sections, and
+  // a row aimed one level down skips the overview entirely. Naming the legacy
+  // paths explicitly keeps the original guarantee — /build/discovery and
+  // /signals are still live routes, and a row must never point back at them.
   if (MIGRATED.includes('founder')) {
-    assert.match(sidebar, /to: '\/validate\/interviews'/,
+    // Scoped to the founder block: /signals and /market-intel are still the
+    // advisor's and investor's own Research rows, and must stay theirs.
+    const founder = sidebar.slice(
+      sidebar.indexOf('\n  founder: ['), sidebar.indexOf('\n  partner: ['));
+    assert.match(founder, /to: '\/validate'/,
       'founder is claimed migrated but Validate still points at a legacy landing');
-    assert.match(sidebar, /to: '\/research\/ask'/,
+    assert.match(founder, /to: '\/research'/,
       'founder is claimed migrated but Research still points at a legacy landing');
+    for (const legacy of ['/build/discovery', '/signals', '/market-intel']) {
+      assert.ok(!new RegExp(`to: '${legacy}'`).test(founder),
+        `founder Validate/Research must not point back at the legacy ${legacy}`);
+    }
   }
   // Advisor is deliberately NOT claimed migrated. All fifteen of its zone
   // routes exist and its pills navigate, but three of its rows are pinned

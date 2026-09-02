@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowUpRight, ChevronRight, ClipboardCheck, KanbanSquare, LineChart, PanelRight, Route, Target } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, ChevronRight, ClipboardCheck, KanbanSquare, LineChart, Route, Target } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import ExecutionPage from '../ExecutionPage';
 import './founderBuildDesk.css';
 
@@ -127,13 +128,26 @@ export default function FounderBuildDesk() {
                 ? <Link data-testid={`link-build-anchor-${index}`} key={label} to={kpiLink}>{label}</Link>
               : label === 'Cadence'
                 ? <Link data-testid={`link-build-anchor-${index}`} key={label} to={cadenceLink}>{label}</Link>
-              : <a data-testid={`link-build-anchor-${index}`} key={label} href={`#build-${index}`}>{label}</a>)}
+              // Board was the one pill that never became a link: it fell
+              // through to `href="#build-1"`, an anchor onto a section of this
+              // page, while /build/board sat unreachable from the desk.
+              : <Link data-testid={`link-build-anchor-${index}`} key={label} to={boardLink}>{label}</Link>)}
           </nav>
         </header>
         {state === 'error' && <div className="build-error" data-testid="status-build-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-build" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
         <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} weekLink={weekLink} roadmapLink={roadmapLink} kpiLink={kpiLink} metricsLink={metricsLink} boardLink={boardLink} executionLink={executionLink} navigationState={navigationState} />
       </div>
-      <BuildRail commitments={data.commitments} boardTotal={data.boardTotal} executionLink={executionLink} navigationState={navigationState} />
+      <FounderWorkerRail
+        workspace="Build"
+        className="build-rail"
+        stance="Manual operating view"
+        note="This desk reads stored records. It does not move cards, generate plans, or change commitments."
+        coverage={[
+          `${data.commitments.length} current key result${data.commitments.length === 1 ? '' : 's'}`,
+          `${data.boardTotal} stored execution card${data.boardTotal === 1 ? '' : 's'} for this startup`,
+        ]}
+        action={<Link data-testid="link-rail-open-execution" to={executionLink} state={navigationState}>Open workspace <ChevronRight size={14} /></Link>}
+      />
     </section>
   </main>;
 }
@@ -168,4 +182,3 @@ function SectionHead({ icon: Icon, title, meta }) { return <div className="build
 function Empty({ icon: Icon, text, detail, link, state }) { return <div className="build-empty"><Icon size={21} /><div><strong>{text}</strong><p>{detail}</p>{link && <Link data-testid="link-build-empty-action" to={link} state={state}>Open detailed editor <ChevronRight size={13} /></Link>}</div></div>; }
 function Skeleton({ rows }) { return <div className="build-skeleton">{Array.from({ length: rows }, (_, index) => <i key={index} />)}</div>; }
 function okrsCount(roadmap) { return roadmap.reduce((count, column) => count + column.items.length, 0); }
-function BuildRail({ commitments, boardTotal, executionLink, navigationState }) { return <aside className="build-rail"><div className="rail-title"><span>Worker AI · Build</span><PanelRight size={14} /></div><div className="rail-block"><b>Manual operating view</b><p>This desk reads stored records. It does not move cards, generate plans, or change commitments.</p></div><div className="rail-block rail-status"><span>Record coverage</span><strong>{commitments.length} current key results</strong><p>{boardTotal} stored execution cards for this startup</p></div><div className="rail-block"><span>Next useful action</span><p>{commitments.length ? 'Review the execution workspace to work from the current operating record.' : 'Record a Now objective or key result before setting commitments.'}</p><Link data-testid="link-rail-open-execution" to={executionLink} state={navigationState}>Open workspace <ChevronRight size={14} /></Link></div><div className="rail-safety">Read-only summary · no automated actions</div></aside>; }

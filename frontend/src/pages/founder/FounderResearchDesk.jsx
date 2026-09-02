@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowUpRight, Landmark, PanelRight, Radar, RefreshCw, Search, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, Landmark, Radar, RefreshCw, Search } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderResearchDesk.css';
 
 export const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
@@ -11,6 +12,18 @@ const prettyDate = (value) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
+
+// The row navigates. These five were `#a7-ask` … `#a7-library`, in-page
+// anchors — and two of them, `#a7-companies` and `#a7-library`, named sections
+// that did not exist on the page, so they scrolled nowhere at all. Each now
+// opens the Research zone it names.
+const SECTIONS = [
+  ['Ask', '/research/ask'],
+  ['Markets', '/research/markets'],
+  ['Companies', '/research/companies'],
+  ['Funds', '/research/funds'],
+  ['Library', '/research/library'],
+];
 
 export default function FounderResearchDesk() {
   const location = useLocation();
@@ -97,7 +110,7 @@ export default function FounderResearchDesk() {
         <header className="a7-hero"><div className="a7-kicker">Founder / Research</div><h1>Go deep on a market or company</h1><p>The page opens as a question, not a menu.</p>
           <div className="a7-question"><Search size={16} /><input data-testid="input-research-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question about a market or company" /><Link data-testid="link-explore-evidence" to="/signals?mode=workspace" state={state}>Open signals <ArrowUpRight size={14} /></Link></div>
           <div className="a7-honesty">Question-based briefs are not connected in this overview. Questions remain local here; open Signals to inspect stored evidence.</div>
-          <nav className="a7-anchors" aria-label="Research sections">{[['Ask','#a7-ask'],['Markets','#a7-markets'],['Companies','#a7-companies'],['Funds','#a7-funds'],['Library','#a7-library']].map(([label, href], index) => <a className={index === 0 ? 'active' : ''} key={label} href={href}>{label}</a>)}</nav>
+          <nav className="a7-anchors" aria-label="Research sections">{SECTIONS.map(([label, to], index) => <Link data-testid={`link-research-anchor-${index}`} key={label} to={`${to}${query}`} state={state}>{label}</Link>)}</nav>
         </header>
         {error && <div className="a7-error" data-testid="status-research-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-research" type="button" onClick={() => setRetry((value) => value + 1)}><RefreshCw size={13} />Retry</button></div>}
         <section className="a7-card a7-brief" id="a7-ask"><SectionHead title="Sourced brief" meta={freshness ? `Updated ${prettyDate(freshness)}` : 'Stored market evidence'} />
@@ -111,7 +124,19 @@ export default function FounderResearchDesk() {
           <section className="a7-card" id="a7-library"><SectionHead title="Document library" meta={documentsLoaded ? `${data.docs.length} stored document${data.docs.length === 1 ? '' : 's'}` : projectId ? 'Source unavailable' : 'Startup not selected'} /><p>{selectedProject ? `Legal documents for ${selectedProject.name || `Startup #${projectId}`}.` : 'Select a startup to read its legal documents.'}</p><Link className="a7-link" to={`/raise/data-room${query}`} state={state}>Open data room <ArrowUpRight size={13} /></Link></section>
         </div>
       </div>
-      <aside className="a7-rail"><div className="a7-rail-title"><span>Worker AI · Research</span><PanelRight size={14} /></div><div className="a7-rail-block"><b>Read-only source coverage</b><p>This rail reports manual coverage for stored records. It does not run research, answer questions, or take actions.</p></div><div className="a7-rail-block"><span>Sources returned</span><strong>{data.sources.length ? `${data.sources.length} source records` : 'Source list not recorded'}</strong><strong>{pulseLoaded ? `${data.headlines.length} stored headlines` : 'Headlines unavailable'}</strong><strong>{signalsLoaded ? `${data.signals.length} stored signals` : 'Signals unavailable'}</strong></div><div className="a7-rail-block"><span>Selected startup</span><strong>{selectedProject?.name || (projectId ? `Startup #${projectId}` : 'Not selected')}</strong></div><footer><ShieldCheck size={13} /> Manual view · no automated actions</footer></aside>
+      <FounderWorkerRail
+        workspace="Research"
+        className="a7-rail"
+        stance="Read-only source coverage"
+        note="This rail reports manual coverage for stored records. It does not run research, answer questions, or take actions."
+        coverage={[
+          data.sources.length ? `${data.sources.length} source records` : 'Source list not recorded',
+          pulseLoaded ? `${data.headlines.length} stored headlines` : 'Headlines unavailable',
+          signalsLoaded ? `${data.signals.length} stored signals` : 'Signals unavailable',
+          `Selected startup · ${selectedProject?.name || (projectId ? `Startup #${projectId}` : 'Not selected')}`,
+        ]}
+        footer="Manual view · no automated actions"
+      />
     </div>
   </main>;
 }

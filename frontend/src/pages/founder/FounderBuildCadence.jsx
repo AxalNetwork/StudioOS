@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CalendarClock, CircleDot, Filter, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CalendarClock, CircleDot, Filter, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderBuildCadence.css';
 
 const text = (value, fallback = 'Not recorded') => value === null || value === undefined || String(value).trim() === '' ? fallback : String(value);
@@ -61,6 +62,17 @@ export default function FounderBuildCadence() {
 }
 
 function Stat({ label }) { return <div><span>{label}</span><strong>Unavailable</strong><small>No cadence record source</small></div>; }
-function CadenceRail({ project }) { return <aside className="fb-cadence-rail"><div className="fb-cadence-rail-head"><span>Worker AI · Build</span><Sparkles size={14} /></div><div className="fb-cadence-callout"><strong>Manual cadence view</strong><p>This rail reports source coverage only. It does not draft retros, create rituals, alter templates, or file review summaries.</p></div><div><span>Selected startup</span><strong>{project ? text(project.name) : 'No project selected'}</strong><p>{project ? 'No project-scoped cadence records are exposed.' : 'Select a startup to inspect coverage.'}</p></div><div className="fb-cadence-muted"><span>Unavailable here</span><strong>Retro summary</strong><p>No review archive exists to summarize.</p><strong>Schedule reasoning</strong><p>No ritual scheduler is connected.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function CadenceRail({ project }) {
+  return <FounderWorkerRail
+    workspace="Build"
+    className="fb-cadence-rail"
+    stance="Manual cadence view"
+    note="This rail reports source coverage only. It does not draft retros, create rituals, alter templates, or file review summaries."
+    coverage={[project ? text(project.name) : 'No project selected']}
+    coverageNote={project ? 'No project-scoped cadence records are exposed.' : 'Select a startup to inspect coverage.'}
+    unavailable={[['Retro summary', 'No review archive exists to summarize.'], ['Schedule reasoning', 'No ritual scheduler is connected.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function EmptyCadence() { return <div className="fb-cadence-no-project"><CalendarClock size={24} /><h2>No startup is available</h2><p>Cadence is scoped to an authenticated startup.</p><Link to="/execution">Back to execution</Link></div>; }
 function CadenceSkeleton() { return <div className="fb-cadence-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

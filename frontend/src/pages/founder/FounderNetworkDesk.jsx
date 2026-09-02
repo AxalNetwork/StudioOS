@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowUpRight, Network, PanelRight, UsersRound } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, Network } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderNetworkDesk.css';
 
 export const listFrom = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
@@ -56,7 +57,21 @@ export default function FounderNetworkDesk() {
     </header>
     {error && <div className="a6-error" data-testid="status-network-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-network" type="button" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>}
     <NetworkSections data={data} loading={initialLoading} state={state} />
-  </div><NetworkRail data={data} /></div></main>;
+  </div><FounderWorkerRail
+    workspace="Network"
+    className="a6-rail"
+    stance="Read-only coverage"
+    note="This view summarizes stored relationship records. It does not draft outreach, send messages, or change records."
+    coverage={[
+      `${data.relationships.length} explicit partner relationship${data.relationships.length === 1 ? '' : 's'}`,
+      `${data.contacts.length} authorized contact${data.contacts.length === 1 ? '' : 's'}`,
+      `${data.propositions.length} introduction proposition${data.propositions.length === 1 ? '' : 's'}`,
+      finite(data.summary?.relationships_count ?? data.summary?.relationship_count)
+        ? `${data.summary?.relationships_count ?? data.summary?.relationship_count} relationships reported by source`
+        : 'Aggregate relationship count not recorded',
+    ]}
+    footer="Read-only network coverage"
+  /></div></main>;
 }
 
 function NetworkSections({ data, loading, state }) {
@@ -86,4 +101,3 @@ function Empty({ title, body }) { return <div className="a6-empty"><Network size
 function Skeleton({ rows }) { return <div className="a6-skeleton">{Array.from({ length: rows }, (_, index) => <i key={index} />)}</div>; }
 function DeskLink({ to, state, testid, children }) { return <Link data-testid={testid} className="a6-link" to={to} state={state}>{children}<ArrowUpRight size={13} /></Link>; }
 function countText(n, noun) { return `${n} ${noun}${n === 1 ? '' : 's'}`; }
-function NetworkRail({ data }) { const counts = [data.relationships.length, data.contacts.length, data.propositions.length]; const sourceCount = data.summary?.relationships_count ?? data.summary?.relationship_count; return <aside className="a6-rail"><div className="a6-rail-title"><span>Worker AI · Network</span><PanelRight size={14} /></div><div><b>Read-only coverage</b><p>This view summarizes stored relationship records. It does not draft outreach, send messages, or change records.</p></div><div><span>Recorded sources</span><strong>{counts[0]} explicit partner relationships</strong><strong>{counts[1]} authorized contacts</strong><strong>{counts[2]} introduction propositions</strong></div><div><span>Summary</span><p>{finite(sourceCount) ? `${sourceCount} relationships reported by source.` : 'Aggregate relationship count not recorded.'}</p></div><footer><UsersRound size={13} /> Read-only network coverage</footer></aside>; }

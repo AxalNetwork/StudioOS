@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Clock3, Filter, Layers3, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Clock3, Filter, Layers3, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderBuildBoard.css';
 
 const STAGES = [
@@ -152,7 +153,19 @@ function Stat({ label, value, note, muted }) { return <div className={`fb-stat $
 function TaskRow({ task }) { return <tr data-testid={`row-board-task-${task.id}`}><td><strong>{text(task.title)}</strong>{task.description && <small>{task.description}</small>}{task.ai_generated && <em>AI-generated source flag</em>}</td><td><span className={`fb-status status-${task.status}`}>{pretty(task.status)}</span></td><td>{text(task.assigned_to, 'Unassigned')}</td><td>{date(task.due_date, 'Not due')}</td><td>{date(task.updated_at || task.created_at)}</td></tr>; }
 function StageTimeline({ stages, current }) { return <section className="fb-card fb-timeline"><div className="fb-card-head"><div><Clock3 size={16} /><h2>Stage history</h2></div><span>Pipeline record</span></div>{stages.length ? <div className="fb-stage-list">{stages.map((stage) => <div key={stage.id} className={stage.stage_name === current ? 'is-current' : ''}><span className="fb-stage-dot">{stage.stage_name === current ? <CheckCircle2 size={13} /> : <CircleDot size={13} />}</span><div><strong>{pretty(stage.stage_name)}</strong><small>{stage.status === 'active' ? 'Active stage' : `Recorded ${date(stage.end_date || stage.start_date)}`}</small></div></div>)}</div> : <Unavailable text="Stage history is not recorded for this project." />}</section>; }
 function EvidenceSummary({ detail, unavailable }) { const metrics = detail?.metrics || []; const gates = detail?.gates || []; return <section className="fb-card fb-evidence"><div className="fb-card-head"><div><ShieldCheck size={16} /><h2>Evidence surface</h2></div><span>Available source records</span></div><div className="fb-evidence-row"><span>Metrics</span><strong>{unavailable ? '—' : metrics.length}</strong><small>{unavailable ? 'Detail record unavailable' : metrics.length ? 'Stored pipeline metrics' : 'Not recorded'}</small></div><div className="fb-evidence-row"><span>Decision gates</span><strong>{unavailable ? '—' : gates.length}</strong><small>{unavailable ? 'Detail record unavailable' : gates.length ? 'Stored gate records' : 'Not recorded'}</small></div><p className="fb-note">No score, owner, WIP limit, or automation value is displayed unless it is returned by the authenticated API.</p></section>; }
-function WorkerRail({ taskCount, project }) { const hasTaskDetail = taskCount !== null; return <aside className="fb-worker-rail"><div className="fb-rail-heading"><span>Worker AI · Build</span><Sparkles size={14} /></div><div className="fb-rail-callout"><b>Manual operating view</b><p>This rail reads the same stored project record as the board. It does not generate tasks, move cards, or change commitments.</p></div><div className="fb-rail-block"><span className="fb-label">Record coverage</span><strong>{project ? hasTaskDetail ? `${taskCount} stored task${taskCount === 1 ? '' : 's'}` : 'Task detail unavailable' : 'No project selected'}</strong><p>{project ? hasTaskDetail ? 'Task detail is available for review.' : 'Project context is available; task rows are not exposed here.' : 'Select a startup to read its board.'}</p></div><div className="fb-rail-block fb-unavailable"><span>Unavailable here</span><strong>WIP policy</strong><p>No WIP configuration is returned by the available founder read API.</p><strong>Automations</strong><p>No automation definitions or run history are returned.</p></div><div className="fb-rail-foot">Read-only founder surface · no automated actions</div></aside>; }
+function WorkerRail({ taskCount, project }) {
+  const hasTaskDetail = taskCount !== null;
+  return <FounderWorkerRail
+    workspace="Build"
+    className="fb-worker-rail"
+    stance="Manual operating view"
+    note="This rail reads the same stored project record as the board. It does not generate tasks, move cards, or change commitments."
+    coverage={[project ? hasTaskDetail ? `${taskCount} stored task${taskCount === 1 ? '' : 's'}` : 'Task detail unavailable' : 'No project selected']}
+    coverageNote={project ? hasTaskDetail ? 'Task detail is available for review.' : 'Project context is available; task rows are not exposed here.' : 'Select a startup to read its board.'}
+    unavailable={[['WIP policy', 'No WIP configuration is returned by the available founder read API.'], ['Automations', 'No automation definitions or run history are returned.']]}
+    footer="Read-only founder surface · no automated actions"
+  />;
+}
 function Unavailable({ text: message }) { return <div className="fb-unavailable-state"><CircleDot size={16} /><span>{message}</span></div>; }
 function EmptyBoard() { return <div className="fb-empty" data-testid="empty-board"><Layers3 size={24} /><h2>No startup is available</h2><p>This founder board can only display authenticated pipeline records. There is no project to inspect yet.</p><Link to="/execution" data-testid="link-empty-board-execution">Back to execution</Link></div>; }
 function BoardSkeleton() { return <div className="fb-loading" data-testid="status-board-loading"><i /><i /><i /><div className="fb-loading-table"><i /><i /><i /><i /></div></div>; }

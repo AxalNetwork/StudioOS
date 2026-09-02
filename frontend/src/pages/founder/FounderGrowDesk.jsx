@@ -1,8 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, BriefcaseBusiness, ChevronRight, CircleDot, Handshake, PanelRight, Rocket, Sparkles, Target, Users } from 'lucide-react';
+import { AlertCircle, BriefcaseBusiness, ChevronRight, CircleDot, Handshake, Rocket, Sparkles, Target, Users } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, jobs as jobsApi } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderGrowDesk.css';
+
+// Seven labels, seven routes. This was a seven-deep ternary chain ending in an
+// `<a href="#a5-…">` fallback that no label could reach — every branch already
+// resolved to a Link, so the anchor was dead code the shape still advertised.
+const SECTIONS = [
+  ['Focus', 'focus'], ['Customers', 'customers'], ['Talent', 'talent'],
+  ['Brand', 'brand'], ['Capital match', 'capital-match'],
+  ['Partnerships', 'partnerships'], ['Launch', 'launch'],
+];
 
 const list = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const text = (value) => String(value || '').trim();
@@ -83,11 +93,23 @@ export default function FounderGrowDesk() {
   return <main className="a5-grow" data-testid="founder-grow-desk"><div className="a5-grow-canvas"><div className="a5-grow-main">
      <header className="a5-grow-hero"><span>Founder / Grow</span><div><h1>Get customers, people, reach</h1><p>One metric organizes the work around your startup this month.</p></div>
       {projects.length > 1 && <select data-testid="select-grow-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
-     <nav aria-label="Grow desk sections">{['Focus', 'Customers', 'Talent', 'Brand', 'Capital match', 'Partnerships', 'Launch'].map((item) => item === 'Focus' ? <Link data-testid="link-grow-anchor-focus" to={`/grow/focus${query}`} key={item}>{item}</Link> : item === 'Talent' ? <Link data-testid="link-grow-anchor-talent" to={`/grow/talent${query}`} key={item}>{item}</Link> : item === 'Customers' ? <Link data-testid="link-grow-anchor-customers" to={`/grow/customers${query}`} key={item}>{item}</Link> : item === 'Partnerships' ? <Link data-testid="link-grow-anchor-partnerships" to={`/grow/partnerships${query}`} key={item}>{item}</Link> : item === 'Capital match' ? <Link data-testid="link-grow-anchor-capital-match" to={`/grow/capital-match${query}`} key={item}>{item}</Link> : item === 'Brand' ? <Link data-testid="link-grow-anchor-brand" to={`/grow/brand${query}`} key={item}>{item}</Link> : item === 'Launch' ? <Link data-testid="link-grow-anchor-launch" to={`/grow/launch${query}`} key={item}>{item}</Link> : <a data-testid={`link-grow-anchor-${item.toLowerCase().replace(' ', '-')}`} href={`#a5-${item.toLowerCase().replace(' ', '-')}`} key={item}>{item}</a>)}</nav>
+     <nav aria-label="Grow desk sections">{SECTIONS.map(([label, slug]) => <Link data-testid={`link-grow-anchor-${slug}`} to={`/grow/${slug}${query}`} key={label}>{label}</Link>)}</nav>
     </header>
     {error && <div className="a5-grow-error" data-testid="status-grow-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-grow" type="button" onClick={() => setReload((count) => count + 1)}>Retry</button></div>}
     <GrowSections data={data} project={project} loading={loading} query={query} state={state} />
-  </div><GrowRail data={data} /></div></main>;
+  </div><FounderWorkerRail
+    workspace="Grow"
+    className="a5-rail"
+    stance="Read-only source coverage"
+    note="This rail summarizes records already stored for the selected startup. It takes no action."
+    coverage={[
+      `${data.snapshots.length} metric snapshot${data.snapshots.length === 1 ? '' : 's'}`,
+      `${data.customers.length} customer record${data.customers.length === 1 ? '' : 's'}`,
+      `${data.jobs.length} linked role${data.jobs.length === 1 ? '' : 's'}`,
+      `${data.pages.length} brand page${data.pages.length === 1 ? '' : 's'}`,
+      `${data.pitches.length} partnership record${data.pitches.length === 1 ? '' : 's'} · ${data.attributions.length} launch record${data.attributions.length === 1 ? '' : 's'}`,
+    ]}
+  /></div></main>;
 }
 
 function GrowSections({ data, project, loading, query, state }) {
@@ -109,4 +131,3 @@ function Rows({ rows, empty }) { return rows.length ? <div className="a5-rows">{
 function Skeleton({ rows }) { return <div className="a5-skeleton">{Array.from({ length: rows }, (_, index) => <i key={index} />)}</div>; }
 function Empty({ icon: Icon, title: heading, body }) { return <div className="a5-empty"><Icon size={18} /><div><b>{heading}</b><p>{body}</p></div></div>; }
 function DeskLink({ to, state, testid, children }) { return <Link data-testid={testid} className="a5-link" to={to} state={state}>{children}<ChevronRight size={14} /></Link>; }
-function GrowRail({ data }) { return <aside className="a5-rail"><div className="a5-rail-title"><span>Worker AI · Grow</span><PanelRight size={14} /></div><div><b>Read-only source coverage</b><p>This rail summarizes records already stored for the selected startup. It takes no action.</p></div><div><span>Coverage</span><strong>{data.snapshots.length} metric snapshots</strong><strong>{data.customers.length} customer records</strong><strong>{data.jobs.length} linked roles</strong><strong>{data.pages.length} brand pages</strong></div><div><span>Outside work</span><p>{data.pitches.length} partnership records · {data.attributions.length} launch records</p></div><footer>Read-only summary · no automated actions</footer></aside>; }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Filter, Link2, RefreshCw, Sparkles, SquareStack } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderRaisePitch.css';
 
 const asList = (value, ...keys) => {
@@ -167,7 +168,18 @@ function normalizeAnalytics(value) {
 }
 
 function Stat({ label, value, note, muted }) { return <div className={`fr-pitch-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function WorkerRail({ project, versions, analytics }) { return <aside className="fr-pitch-rail"><div className="fr-pitch-rail-heading"><span>Worker AI · Raise</span><Sparkles size={14} /></div><div className="fr-pitch-rail-callout"><b>Manual pitch collection</b><p>This page reads stored deck versions and returned engagement. It does not rewrite, export, mint, or revoke pitch materials.</p></div><div className="fr-pitch-rail-block"><span className="fr-pitch-label">Record coverage</span><strong>{project ? `${versions.length} stored version${versions.length === 1 ? '' : 's'}` : 'No project selected'}</strong><p>{project ? `${analytics.rows.length} engagement row${analytics.rows.length === 1 ? '' : 's'} returned` : 'Select a startup to read its pitch records.'}</p></div><div className="fr-pitch-rail-block fr-pitch-rail-muted"><span>Unavailable here</span><strong>AI rewrite</strong><p>No automated proposal or draft action is enabled.</p><strong>Variants and exports</strong><p>Not returned by the current read source.</p></div><div className="fr-pitch-rail-foot">Read-only collection · edit through pitch workspace</div></aside>; }
+function WorkerRail({ project, versions, analytics }) {
+  return <FounderWorkerRail
+    workspace="Raise"
+    className="fr-pitch-rail"
+    stance="Manual pitch collection"
+    note="This page reads stored deck versions and returned engagement. It does not rewrite, export, mint, or revoke pitch materials."
+    coverage={[project ? `${versions.length} stored version${versions.length === 1 ? '' : 's'}` : 'No project selected']}
+    coverageNote={project ? `${analytics.rows.length} engagement row${analytics.rows.length === 1 ? '' : 's'} returned` : 'Select a startup to read its pitch records.'}
+    unavailable={[['AI rewrite', 'No automated proposal or draft action is enabled.'], ['Variants and exports', 'Not returned by the current read source.']]}
+    footer="Read-only collection · edit through pitch workspace"
+  />;
+}
 function EmptyPitch() { return <div className="fr-pitch-empty" data-testid="empty-raise-pitch"><FileText size={24} /><h2>No startup is available</h2><p>This founder pitch collection is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/raise/status">Back to raise</Link></div>; }
 function UnavailablePitch({ onRetry }) { return <div className="fr-pitch-empty" data-testid="unavailable-raise-pitch"><AlertCircle size={24} /><h2>Project source unavailable</h2><p>The selected startup cannot be read right now. No pitch versions or share analytics are inferred from a failed request.</p><button type="button" onClick={onRetry}><RefreshCw size={13} /> Retry</button></div>; }
 function PitchSkeleton() { return <div className="fr-pitch-loading" data-testid="status-raise-pitch-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

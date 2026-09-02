@@ -41,6 +41,10 @@ export { default as AssistRail } from './AssistRail';
 // The one place that knows how the rail sits beside a page — see D15 for
 // which surfaces get it and why onboarding does not.
 export { default as AssistLayout } from './AssistLayout';
+// The founder workspaces' own rail. Separate from AssistRail because no founder
+// workspace runs an aiRouter task class, so it has no model or per-run cost to
+// report — see FounderWorkerRail.jsx.
+export { default as FounderWorkerRail } from './FounderWorkerRail';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from './eadwynConfig';
 

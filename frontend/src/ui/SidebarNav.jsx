@@ -180,9 +180,18 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
               // Task #12 — items may declare `match` (path prefixes) so a
               // consolidated destination (e.g. Execution) highlights across
               // all of its sub-views instead of only its exact `to` path.
+              //
+              // When `match` is present it is the COMPLETE statement of what
+              // the row owns. The row's own `to` still matches exactly, but its
+              // SUBTREE does not match implicitly, because one row's `to` can
+              // be a prefix of paths another row owns: `/build` is the Build
+              // overview, while `/build/discovery` is Validate's and
+              // `/build/team` is Grow's. The implicit `${to}/` prefix lit all
+              // three rows at once. Every row that declares `match` already
+              // lists its own subtree there when it wants it, so no other row
+              // loses coverage.
               const manualActive = Array.isArray(match)
                 ? navLocation.pathname === to
-                  || navLocation.pathname.startsWith(`${to}/`)
                   || match.some((p) => navLocation.pathname === p || navLocation.pathname.startsWith(`${p}/`))
                 : null;
               // Task #6 / #7 — items the user can't afford render as a

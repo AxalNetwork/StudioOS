@@ -1,0 +1,103 @@
+/*
+ * The shared Worker AI rail — see ui/FounderWorkerRail.jsx for what the four
+ * blocks say and why.
+ *
+ * SCOPED TO `.fwr`, never to the host's class. The component keeps the page's
+ * own rail class on the same element (`a5-rail`, `fr-pitch-rail`, `a7-rail`, …)
+ * so the page's grid column, border and background continue to place it. That
+ * class is the page's; everything below is the rail's, and the two never
+ * collide because nothing here reaches outside `.fwr`.
+ *
+ * The palette comes from custom properties so a host page that already defines
+ * a rail background does not have to fight this file for it.
+ */
+/*
+ * ONE SPECIFICITY STEP ABOVE THE HOST. The page's own rail class stays on this
+ * element because it draws the frame — padding, background, border-left, and
+ * the responsive rules that flip that border to the top. But some of those
+ * stylesheets also reach the markup this component replaced: `.a5-rail > div`
+ * adds a rule and 14px of padding to every direct child, and `.validate-rail`
+ * becomes a three-column grid below 900px. Both would now land on the rail's
+ * own wrapper. Writing the layout as `aside.fwr` (0,1,1) beats any single-class
+ * host rule regardless of which stylesheet the bundler emits first, and the
+ * child reset below neutralises the descendant rules without deleting the
+ * frame rules that are still doing their job.
+ */
+aside.fwr { display: flex; flex-direction: column; }
+aside.fwr > .fwr-title,
+aside.fwr > .fwr-body { padding: 0; border-top: 0; }
+
+.fwr {
+  --fwr-ink: #29252f;
+  --fwr-muted: #6b6473;
+  --fwr-faint: #8b8494;
+  --fwr-line: #e7e3eb;
+  --fwr-paper: #fff;
+  --fwr-accent: #6d28d9;
+  --fwr-accent-soft: #f5efff;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--fwr-ink);
+}
+
+.fwr-title {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--fwr-faint);
+}
+
+.fwr-body { display: flex; flex-direction: column; min-width: 0; }
+
+.fwr-block { padding: 15px 0; border-top: 1px solid var(--fwr-line); }
+.fwr-block:first-child { padding-top: 18px; border-top: 0; }
+.fwr-block > span {
+  display: block;
+  font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--fwr-faint);
+}
+.fwr-block strong { display: block; margin-top: 8px; font-size: 11.5px; line-height: 1.45; }
+.fwr-block p { margin: 5px 0 0; color: var(--fwr-muted); font-size: 11px; line-height: 1.55; }
+.fwr-block em { font-style: normal; color: var(--fwr-faint); font-weight: 600; }
+
+/* Absent is absent. A figure the platform could not read is greyed and named,
+   never rendered as a zero. */
+.fwr-absent { color: var(--fwr-faint); font-weight: 600; }
+
+.fwr-muted strong { margin-top: 10px; color: var(--fwr-muted); }
+.fwr-muted > div:first-of-type strong { margin-top: 8px; }
+
+.fwr-action { margin-top: 10px; }
+.fwr-action a {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--fwr-accent); font-size: 11px; font-weight: 800; text-decoration: none;
+}
+.fwr-action a:hover { text-decoration: underline; }
+
+.fwr-meter {
+  height: 4px; margin-top: 8px; border-radius: 999px;
+  background: var(--fwr-line); overflow: hidden;
+}
+.fwr-meter i { display: block; height: 100%; background: var(--fwr-accent); }
+.fwr-meter i.fwr-over { background: #b91c1c; }
+
+.fwr-foot {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin-top: auto; padding-top: 14px; border-top: 1px solid var(--fwr-line);
+  color: var(--fwr-muted);
+}
+.fwr-foot svg { flex: none; margin-top: 2px; color: var(--fwr-accent); }
+.fwr-foot strong { display: block; font-size: 11px; color: var(--fwr-ink); }
+.fwr-foot p { margin: 4px 0 0; font-size: 10.5px; line-height: 1.5; }
+.fwr-foot-note { color: var(--fwr-faint); }
+
+.dark .fwr {
+  --fwr-ink: #f4f3f7;
+  --fwr-muted: #a9a4b8;
+  --fwr-faint: #8b849c;
+  --fwr-line: #2e2b38;
+  --fwr-paper: #1a1822;
+  --fwr-accent: #a78bfa;
+  --fwr-accent-soft: #241d38;
+}
+.dark .fwr-meter i.fwr-over { background: #f87171; }

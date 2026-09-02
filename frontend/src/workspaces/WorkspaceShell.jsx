@@ -1,6 +1,5 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { AssistLayout } from '../ui';
 import ZoneNav from './ZoneNav';
 import { bucketForPath, zoneForPath } from './shellConfig';
 
@@ -21,8 +20,20 @@ import { bucketForPath, zoneForPath } from './shellConfig';
  *     belongs here, next to the thing it describes, not in the nav row
  *   · the zone pill row, which navigates to real routes (see ZoneNav)
  *   · the page's own content
- *   · the AI rail, right, via AssistLayout — the single rail component the
- *     canvases all now import as DetailRail with a per-role accent
+ *   · the Worker AI rail, right — passed in as `rail`, because what it reports
+ *     is the PAGE's coverage and only the page knows it
+ *
+ * THE RAIL USED TO COME FROM AssistLayout, and rendered nothing at all. That
+ * wrapper keys a surface to an aiRouter task class through `ASSIST_SURFACES`;
+ * this shell passed `validate`, `research`, `network`, `deals`, `practice`,
+ * `offers` and the rest, and `eadwynConfig` registers none of them. An unknown
+ * surface returns null and AssistLayout renders `<>{children}</>` — so every
+ * workspace subpage in the product had an AI rail in its source and a blank
+ * space on screen, silently, which is the "it looks blank, probably not
+ * connected to anything" report. Registering the keys was not the fix: the
+ * task class decides the model and price the rail reports, and none of these
+ * surfaces runs one. So the shell takes the rail as a slot instead, and the
+ * pages that have something true to show pass `ui/FounderWorkerRail`.
  *
  * SCOPE LINE. `scope` is where a page states whose data it is showing — one
  * company, one client, one fund. It is deliberately a required-feeling prop
@@ -37,7 +48,7 @@ export default function WorkspaceShell({
   scopeHref,
   intro,
   actions,
-  surface,
+  rail = null,
   children,
 }) {
   const location = useLocation();
@@ -51,8 +62,13 @@ export default function WorkspaceShell({
   const arch = zone?.archetype;
 
   return (
-    <AssistLayout surface={surface || bucket?.label?.toLowerCase()}>
-      <div className="min-w-0">
+    // `min-w-0 flex-1` on the content, a fixed column on the rail: the content
+    // shrinks first. Without `min-w-0` a wide table refuses to shrink below its
+    // intrinsic width and shoves the rail off-screen. `hidden xl:flex`: below
+    // 1280px there is no room for a rail beside a working page, and stacking a
+    // meter above the tool puts the least important thing first.
+    <div className={rail ? 'flex items-start gap-6' : ''}>
+      <div className="min-w-0 flex-1">
         {bucket && (
           <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-ink-3">
             <Link to={`${bucket.prefix}/${bucket.zones[0].slug}`} className="hover:underline">
@@ -107,7 +123,8 @@ export default function WorkspaceShell({
           {children}
         </div>
       </div>
-    </AssistLayout>
+      {rail && <div className="hidden w-[280px] shrink-0 xl:block sticky top-20">{rail}</div>}
+    </div>
   );
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, RefreshCw, Rocket, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowLaunch.css';
 
@@ -102,6 +103,16 @@ function UnavailableFeed({ type }) { return <div className="a5-empty"><Rocket si
 function EmptyFeed({ error }) { return <div className="a5-empty"><CalendarDays size={18} /><div><b>{error ? 'Project calendar source unavailable.' : 'No project-linked calendar events are recorded.'}</b><p>FG7 does not infer registrations, readership, publication state, or outcomes.</p></div></div>; }
 function Head({ title, meta }) { return <div className="a5-head"><div><CalendarDays size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-launch-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function LaunchRail({ project, events, attributions, sourceErrors }) { return <aside className="a5-rail"><div className="a5-rail-title"><span>Worker AI · Grow</span><Sparkles size={14} /></div><div className="fg-launch-rail-callout"><b>Read-only launch feed</b><p>This rail summarizes stored project events and attributions. It does not create, publish, export, send, or draft content.</p></div><div><span>Coverage</span><strong>{!project ? 'No project selected' : sourceErrors.includes('calendar') ? 'Calendar source unavailable' : `${events.length} project event${events.length === 1 ? '' : 's'}`}</strong><strong>{!project ? 'No project selected' : sourceErrors.includes('co-marketing attribution') ? 'Attribution source unavailable' : `${attributions.length} attribution event${attributions.length === 1 ? '' : 's'}`}</strong></div><div className="fg-launch-rail-muted"><span>Unavailable here</span><strong>Article pipeline</strong><p>No project-scoped content calendar is connected.</p><strong>Performance outcomes</strong><p>No readership or registration source is connected.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function LaunchRail({ project, events, attributions, sourceErrors }) {
+  return <FounderWorkerRail
+    workspace="Grow"
+    className="a5-rail"
+    stance="Read-only launch feed"
+    note="This rail summarizes stored project events and attributions. It does not create, publish, export, send, or draft content."
+    coverage={[!project ? 'No project selected' : sourceErrors.includes('calendar') ? 'Calendar source unavailable' : `${events.length} project event${events.length === 1 ? '' : 's'}`, !project ? 'No project selected' : sourceErrors.includes('co-marketing attribution') ? 'Attribution source unavailable' : `${attributions.length} attribution event${attributions.length === 1 ? '' : 's'}`]}
+    unavailable={[['Article pipeline', 'No project-scoped content calendar is connected.'], ['Performance outcomes', 'No readership or registration source is connected.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function LaunchSkeleton() { return <div className="a5-skeleton" data-testid="status-grow-launch-loading"><i /><i /><div><i /><i /><i /></div></div>; }
 function EmptyLaunch() { return <div className="a5-empty fg-launch-empty"><Rocket size={20} /><div><b>No startup is available.</b><p>Launch is scoped to an authenticated startup and its project-linked records.</p></div></div>; }

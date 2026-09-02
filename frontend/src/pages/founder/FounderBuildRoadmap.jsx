@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Filter, GitBranch, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Filter, GitBranch, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderBuildRoadmap.css';
 
 const text = (value, fallback = 'Not recorded') => {
@@ -124,6 +125,17 @@ function Stat({ label, value, note, muted }) { return <div className={`fb-roadma
 function RoadmapRow({ item }) { const [label, tone] = stateFor(item); const dependency = item.dependency || item.dependencies || item.blocks; return <tr data-testid={`row-roadmap-item-${item.id}`}><td><strong>{text(item.objective)}</strong><small>{(item.key_results || []).length} key result{(item.key_results || []).length === 1 ? '' : 's'}</small></td><td>{text(item.quarter, 'Quarter not recorded')}</td><td><span className={`fb-roadmap-status status-${tone}`}>{label}</span></td><td>{text(dependency, 'Not recorded')}</td></tr>; }
 function DependencySummary({ dependencies }) { return <section className="fb-roadmap-card fb-roadmap-unavailable-card"><div className="fb-roadmap-card-head"><div><GitBranch size={16} /><h2>Dependency chain</h2></div><span>{dependencies.length ? `${dependencies.length} stored` : 'Unavailable'}</span></div><strong>{dependencies.length ? 'Stored links returned by the roadmap' : 'Dependency links are unavailable'}</strong><p>{dependencies.length ? 'Only explicit dependency fields are shown in the timeline; unresolved state is not inferred.' : 'The current roadmap source returns objectives and key results, but no dependency graph or downstream blocks.'}</p></section>; }
 function SourceSummary({ okrCount, quarterCount }) { return <section className="fb-roadmap-card"><div className="fb-roadmap-card-head"><div><CheckCircle2 size={16} /><h2>Source coverage</h2></div><span>Read-only view</span></div><div className="fb-roadmap-source-row"><span>Stored roadmap items</span><strong>{okrCount}</strong></div><div className="fb-roadmap-source-row"><span>Recorded quarters</span><strong>{quarterCount || 'Unavailable'}</strong></div><p className="fb-roadmap-note">Scenario snapshots, risk assessment, and timeline dependencies require separate stored records.</p></section>; }
-function WorkerRail({ project, itemCount }) { return <aside className="fb-roadmap-rail"><div className="fb-roadmap-rail-heading"><span>Worker AI · Build</span><Sparkles size={14} /></div><div className="fb-roadmap-rail-callout"><b>Manual operating view</b><p>This rail reads the roadmap source. It does not reorder items, create scenarios, or write dependencies.</p></div><div className="fb-roadmap-rail-block"><span className="fb-roadmap-label">Record coverage</span><strong>{project ? `${itemCount} stored roadmap item${itemCount === 1 ? '' : 's'}` : 'No project selected'}</strong><p>{project ? 'Objectives and key results are available for review.' : 'Select a startup to read its roadmap.'}</p></div><div className="fb-roadmap-rail-block fb-roadmap-rail-muted"><span>Unavailable here</span><strong>Scenario comparison</strong><p>No saved scenario source is connected.</p><strong>Dependency reasoning</strong><p>No graph or AI reorder action is enabled on this read-only surface.</p></div><div className="fb-roadmap-rail-foot">Read-only summary · edit through roadmap editor</div></aside>; }
+function WorkerRail({ project, itemCount }) {
+  return <FounderWorkerRail
+    workspace="Build"
+    className="fb-roadmap-rail"
+    stance="Manual operating view"
+    note="This rail reads the roadmap source. It does not reorder items, create scenarios, or write dependencies."
+    coverage={[project ? `${itemCount} stored roadmap item${itemCount === 1 ? '' : 's'}` : 'No project selected']}
+    coverageNote={project ? 'Objectives and key results are available for review.' : 'Select a startup to read its roadmap.'}
+    unavailable={[['Scenario comparison', 'No saved scenario source is connected.'], ['Dependency reasoning', 'No graph or AI reorder action is enabled on this read-only surface.']]}
+    footer="Read-only summary · edit through roadmap editor"
+  />;
+}
 function EmptyRoadmap() { return <div className="fb-roadmap-empty" data-testid="empty-roadmap"><GitBranch size={24} /><h2>No startup is available</h2><p>This founder roadmap is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/execution">Back to execution</Link></div>; }
 function RoadmapSkeleton() { return <div className="fb-roadmap-loading" data-testid="status-roadmap-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

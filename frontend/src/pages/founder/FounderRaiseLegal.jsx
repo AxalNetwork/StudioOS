@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, FileSignature, FileText, Filter, RefreshCw, Scale, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseLegal.css';
 
@@ -168,7 +169,18 @@ function LegalContent({ project, documents, compliance, trackers, entities, sign
 
 function LegalStat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function Coverage({ label, value }) { return <div className="fr-capital-coverage-row"><span>{label}</span><strong>{value}</strong></div>; }
-function WorkerRail({ project, documents, compliance, trackers, errors }) { return <aside className="fr-capital-rail"><div className="fr-capital-rail-heading"><span>Worker AI · Raise</span><Sparkles size={14} /></div><div className="fr-capital-rail-callout"><b>Manual legal collection</b><p>This view reads selected-project legal and compliance records. It does not send documents, file forms, or provide legal advice.</p></div><div className="fr-capital-rail-block"><span className="fr-capital-label">Record coverage</span><strong>{project ? `${documents.length} document${documents.length === 1 ? '' : 's'}` : 'No project selected'}</strong><p>{project ? `${compliance.length} compliance event${compliance.length === 1 ? '' : 's'} · ${trackers.length} 83(b) tracker${trackers.length === 1 ? '' : 's'}` : 'Select a startup to read its legal records.'}</p></div><div className="fr-capital-rail-block fr-capital-rail-muted"><span>Unavailable here</span><strong>Gap analysis</strong><p>{Object.keys(errors).length ? 'One or more source reads are unavailable.' : 'No diligence scoring source is connected.'}</p><strong>AI legal brief</strong><p>No generate, save, accept, or attach action is enabled.</p></div><div className="fr-capital-rail-foot">Read-only collection · source records only</div></aside>; }
+function WorkerRail({ project, documents, compliance, trackers, errors }) {
+  return <FounderWorkerRail
+    workspace="Raise"
+    className="fr-capital-rail"
+    stance="Manual legal collection"
+    note="This view reads selected-project legal and compliance records. It does not send documents, file forms, or provide legal advice."
+    coverage={[project ? `${documents.length} document${documents.length === 1 ? '' : 's'}` : 'No project selected']}
+    coverageNote={project ? `${compliance.length} compliance event${compliance.length === 1 ? '' : 's'} · ${trackers.length} 83(b) tracker${trackers.length === 1 ? '' : 's'}` : 'Select a startup to read its legal records.'}
+    unavailable={[['Gap analysis', '{Object.keys(errors).length ? \'One or more source reads are unavailable.\' : \'No diligence scoring source is connected.\'}'], ['AI legal brief', 'No generate, save, accept, or attach action is enabled.']]}
+    footer="Read-only collection · source records only"
+  />;
+}
 function EmptyLegal() { return <div className="fr-capital-empty" data-testid="empty-raise-legal"><Scale size={24} /><h2>No startup is available</h2><p>This legal collection is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/raise/status">Back to raise</Link></div>; }
 function UnavailableLegal({ onRetry }) { return <div className="fr-capital-empty" data-testid="unavailable-raise-legal"><AlertCircle size={24} /><h2>Project source unavailable</h2><p>The selected startup cannot be read right now. No document or compliance totals are inferred from a failed request.</p><button type="button" onClick={onRetry}><RefreshCw size={13} /> Retry</button></div>; }
 function LegalSkeleton() { return <div className="fr-capital-loading" data-testid="status-raise-legal-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

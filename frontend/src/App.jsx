@@ -23,7 +23,7 @@ import {
   ChevronDown, Eye, ArrowLeft, Sparkles,
   Gift
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
 import { api } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -650,8 +650,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   }, []);
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
-  const fullWidthSurface = (activeRole === 'founder'
-    && ['/build/discovery', '/execution', '/build/this-week', '/grow/customers', '/grow/talent', '/grow/brand', '/grow/capital-match', '/grow/partnerships', '/grow/launch', '/raise/pitch', '/build/team', '/network', '/network/relationships', '/network/introductions', '/network/organizations', '/signals'].includes(location.pathname))
+  const fullWidthSurface = (activeRole === 'founder' && FOUNDER_FULL_BLEED.includes(location.pathname))
     || (activeRole === 'investor' && (
       location.pathname.startsWith('/portfolio/')
       || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds', '/network', '/market-intel'].includes(location.pathname)
@@ -659,8 +658,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     || activeRole === 'advisor'
     || location.pathname === '/spinout-lab'
     || location.pathname.startsWith('/spinout-lab/');
-  const flushSurface = activeRole === 'founder'
-    && ['/execution', '/build/this-week', '/grow/customers', '/grow/talent', '/grow/brand', '/grow/capital-match', '/grow/partnerships', '/grow/launch', '/raise/pitch', '/build/discovery', '/build/team', '/network', '/network/relationships', '/network/introductions', '/network/organizations', '/signals'].includes(location.pathname)
+  const flushSurface = (activeRole === 'founder' && FOUNDER_FULL_BLEED.includes(location.pathname))
     || (activeRole === 'investor' && (
       location.pathname.startsWith('/portfolio/')
       || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds', '/network', '/market-intel'].includes(location.pathname)
@@ -1321,6 +1319,15 @@ function AppInner() {
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const founderGrowLanding = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
+  // Validate and Build are the last two workspaces whose ROOT did not own its
+  // overview: /validate redirected straight past A2 to Interviews, and /build
+  // was not a route at all, so the sidebar had to point at a section page. The
+  // test is the one Raise, Grow and Network already use — founder, and not
+  // asking for the editor — so all six roots now branch identically.
+  const founderValidateLanding = effectiveRole === 'founder'
+    && new URLSearchParams(location.search).get('mode') !== 'workspace';
+  const founderBuildLanding = effectiveRole === 'founder'
+    && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const networkParams = new URLSearchParams(location.search);
   const founderNetworkLanding = effectiveRole === 'founder'
     && networkParams.get('mode') !== 'workspace'
@@ -1480,7 +1487,9 @@ function AppInner() {
           two routes are doors onto one log, not a fork of it. Hypotheses and
           Verdict have no store yet and say so rather than 404-ing behind a
           sidebar row that promises a page. */}
-      <Route path="/validate" element={<Navigate to="/validate/interviews" replace />} />
+      <Route path="/validate" element={founderValidateLanding
+        ? guard(labRoles(['admin', 'founder']), <FounderValidatePage />)
+        : <Navigate to="/validate/interviews" replace />} />
       <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
@@ -1492,7 +1501,9 @@ function AppInner() {
           the zones its own canvas specifies. Markets mounts the live signals
           feed; Companies revives CompetitorAnalysisPage, which had been
           reachable only by deep link since it left the sidebar. */}
-      <Route path="/research" element={<Navigate to="/research/ask" replace />} />
+      <Route path="/research" element={founderResearchLanding
+        ? guard(labRoles(['admin', 'founder']), <FounderResearchDesk />)
+        : <Navigate to="/research/ask" replace />} />
       <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
       <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
@@ -1503,9 +1514,9 @@ function AppInner() {
       <Route path="/research/client-prep" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
       <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
-      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('build', <FounderBuildRoadmap />))} />
-      <Route path="/build/cadence" element={guard(labRoles(['admin', 'founder']), founderWorkspace('build', <FounderBuildCadence />))} />
-      <Route path="/build/kpi" element={guard(labRoles(['admin', 'founder']), founderWorkspace('build', <FounderBuildKpi />))} />
+      <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <FounderBuildRoadmap />)} />
+      <Route path="/build/cadence" element={guard(labRoles(['admin', 'founder']), <FounderBuildCadence />)} />
+      <Route path="/build/kpi" element={guard(labRoles(['admin', 'founder']), <FounderBuildKpi />)} />
       <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><MetricsPage /></FounderWorkspaceTabs>))} />
       {/* Signals — founder decision engine over public-market evidence. Shared
           by Founder + Advisor modes (mode changes ordering + copy only). */}
@@ -1605,9 +1616,12 @@ function AppInner() {
       {/* Task #12 — Founder Execution area: one deep-linkable shell wrapping the
           Projects / Board / Roadmap views. Standalone routes above stay intact
           for other personas. */}
+      <Route path="/build" element={founderBuildLanding
+        ? guard(['admin', 'founder'], <FounderBuildDesk />)
+        : <Navigate to="/build/this-week" replace />} />
       <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' ? <FounderBuildDesk /> : founderWorkspace('build', <FounderWorkspaceTabs set="build" user={user}><ExecutionPage /></FounderWorkspaceTabs>))} />
-      <Route path="/build/this-week" element={guard(['admin', 'founder'], founderWorkspace('build', <FounderBuildThisWeek />, { hideHeader: true }))} />
-      <Route path="/build/board" element={guard(['admin', 'founder'], founderWorkspace('build', <FounderBuildBoard />))} />
+      <Route path="/build/this-week" element={guard(['admin', 'founder'], <FounderBuildThisWeek />)} />
+      <Route path="/build/board" element={guard(['admin', 'founder'], <FounderBuildBoard />)} />
       <Route path="/execution/board" element={guard(['admin', 'founder'], founderWorkspace('build', <ExecutionPage />))} />
       <Route path="/execution/roadmap" element={guard(['admin', 'founder'], founderWorkspace('build', <ExecutionPage />))} />
       {/* Task #1 — RAISE Workspaces. Three founder workspaces compose the
@@ -1707,6 +1721,9 @@ function AppInner() {
           role but redirect a founder into the matching tab so old deep links
           keep resolving. */}
       <Route path="/build/team" element={guard(['admin', 'founder'], founderGrowLanding ? <FounderGrowDesk /> : founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><TeamBuildingPage /></FounderWorkspaceTabs>))} />
+      <Route path="/grow" element={founderGrowLanding
+        ? guard(['admin', 'founder'], <FounderGrowDesk />)
+        : <Navigate to="/grow/focus" replace />} />
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />

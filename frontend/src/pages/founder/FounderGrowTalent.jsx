@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BriefcaseBusiness, ChevronRight, RefreshCw, Sparkles, UserRound, Users } from 'lucide-react';
 import { api, jobs as jobsApi } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowTalent.css';
 
@@ -97,6 +98,16 @@ function CandidateTable({ rows }) {
 function EmptyTable({ error }) { return <div className="a5-empty"><UserRound size={18} /><div><b>{error ? 'Talent source unavailable.' : 'No selected-project applicants are recorded.'}</b><p>FG2 does not infer candidates, scores, screening times, or role reservations.</p></div></div>; }
 function Head({ icon: Icon, title, meta }) { return <div className="a5-head"><div><Icon size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-talent-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function TalentRail({ project, jobs, applications, error }) { return <aside className="a5-rail"><div className="a5-rail-title"><span>Worker AI · Grow</span><Sparkles size={14} /></div><div className="fg-talent-rail-callout"><b>Read-only matching</b><p>This rail summarizes stored roles and applications. It does not rank candidates, reject applicants, or send email.</p></div><div><span>Coverage</span><strong>{!project ? 'No project selected' : error ? 'Role source unavailable' : `${jobs.length} linked role${jobs.length === 1 ? '' : 's'}`}</strong><strong>{!project || error ? 'Applicant source unavailable' : `${applications.length} application${applications.length === 1 ? '' : 's'}`}</strong></div><div className="fg-talent-rail-muted"><span>Unavailable here</span><strong>Fit scoring</strong><p>No match score or rationale source is connected.</p><strong>Screening analytics</strong><p>No screening-event or reservation source is connected.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function TalentRail({ project, jobs, applications, error }) {
+  return <FounderWorkerRail
+    workspace="Grow"
+    className="a5-rail"
+    stance="Read-only matching"
+    note="This rail summarizes stored roles and applications. It does not rank candidates, reject applicants, or send email."
+    coverage={[!project ? 'No project selected' : error ? 'Role source unavailable' : `${jobs.length} linked role${jobs.length === 1 ? '' : 's'}`, !project || error ? 'Applicant source unavailable' : `${applications.length} application${applications.length === 1 ? '' : 's'}`]}
+    unavailable={[['Fit scoring', 'No match score or rationale source is connected.'], ['Screening analytics', 'No screening-event or reservation source is connected.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function TalentSkeleton() { return <div className="a5-skeleton" data-testid="status-grow-talent-loading"><i /><i /><div><i /><i /><i /></div></div>; }
 function EmptyTalent() { return <div className="a5-empty fg-talent-empty"><Users size={20} /><div><b>No startup is available.</b><p>Talent is scoped to an authenticated startup and its stored roles.</p></div></div>; }
