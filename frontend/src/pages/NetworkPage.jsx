@@ -16,7 +16,11 @@ import PartnerWorkspaceShell from './partner/PartnerWorkspaceShell';
 // Introductions — curated warm-intro propositions for EVERY user type,
 // deliberately a tab here (not a sidebar entry) so the feature lives under
 // Network only. Notification deep links land on ?tab=introductions&intro=<uid>.
-export default function NetworkPage() {
+// `embedded`: set by NetworkWorkspace, which already wraps this page in
+// `workspaces/WorkspaceShell` — breadcrumb, h1, zone pills and Worker AI rail.
+// Without it the advisor branch below drew a second header and a second rail
+// inside the first. The investor arm has had this seam since #391.
+export default function NetworkPage({ embedded = false }) {
   const { role } = useAuth();
   const [params, setParams] = useSearchParams();
   const canContacts = role === 'admin' || role === 'founder';
@@ -94,6 +98,7 @@ export default function NetworkPage() {
         description="Keep warm introductions, relationships, and consented contact context in one scoped workspace."
         icon={Network}
         rail
+        embedded={embedded}
       >
         {content}
       </AdvisorWorkspaceShell>

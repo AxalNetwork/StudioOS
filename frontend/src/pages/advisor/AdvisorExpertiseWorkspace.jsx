@@ -3,9 +3,15 @@ import { Award, BookOpen, Eye, Store, UserCircle } from 'lucide-react';
 import OfficeHoursPage from '../OfficeHoursPage';
 import { AdvisorEmptyPanel, AdvisorWorkspaceShell } from './AdvisorWorkspaceShell';
 
-export default function AdvisorExpertiseWorkspace() {
+// `embedded`: AdvisorBucketRoutes renders this inside `workspaces/WorkspaceShell`
+// on all five `/expertise/*` zones, and that shell already supplies the
+// breadcrumb, h1, zone pills and Worker AI rail. Without this the page drew a
+// second header and a second rail inside the first. `/office-hours` mounts the
+// same component with no outer shell, so it keeps its own chrome.
+export default function AdvisorExpertiseWorkspace({ embedded = false }) {
   return (
     <AdvisorWorkspaceShell
+      embedded={embedded}
       eyebrow="Expertise"
       title="Package what I know"
       description="Your storefront. Proof is fed from client outcomes across the seam — never a number you typed about yourself."

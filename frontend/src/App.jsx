@@ -126,6 +126,7 @@ const InvestorFundAccounting = lazy(() => import('./pages/investor/InvestorFundA
 const InvestorFundReporting = lazy(() => import('./pages/investor/InvestorFundReporting'));
 const InvestorNetworkWorkspace = lazy(() => import('./pages/investor/InvestorNetworkWorkspace'));
 const InvestorResearchWorkspace = lazy(() => import('./pages/investor/InvestorResearchWorkspace'));
+const AdvisorPreviewNotice = lazy(() => import('./pages/advisor/AdvisorPreviewNotice'));
 const SpinoutLabStartupPage = lazy(() => import('./pages/SpinoutLabStartupPage'));
 const SpinoutLabDiscoveryPage = lazy(() => import('./pages/SpinoutLabDiscoveryPage'));
 const SpinoutLabMarketPage = lazy(() => import('./pages/SpinoutLabMarketPage'));
@@ -1304,9 +1305,15 @@ function AppInner() {
       ? <FounderWorkspacePage page={page} {...options}>{component}</FounderWorkspacePage>
       : component
   );
+  // An admin who has switched View mode to Advisor has selected a ROLE, not a
+  // person, so the surfaces that render one advisor's clients, bookings and
+  // engagements have nothing to scope to. That boundary is right; the silent
+  // <Navigate to="/studio"> that used to enforce it was not — clicking Practice
+  // and landing on Studio with no explanation reads as a broken link, and was
+  // reported as one. The notice says which boundary was hit and how to cross it.
   const advisorRolePreview = user?.role === 'admin' && !isImpersonating && effectiveRole === 'advisor';
   const advisorPrivateWorkspace = (component) => (
-    advisorRolePreview ? <Navigate to="/studio" replace /> : component
+    advisorRolePreview ? <AdvisorPreviewNotice /> : component
   );
   const partnerRolePreview = effectiveRole === 'partner' && user?.role !== 'partner';
   const partnerPrivateWorkspace = (component) => (
@@ -1834,11 +1841,11 @@ function AppInner() {
           /office-hours routes stay: Clients and Contracts are working tabs the
           canvas has no zone for. */}
       <Route path="/practice" element={<Navigate to="/practice/opportunities" replace />} />
-      <Route path="/practice/opportunities" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/practice/engagements" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/practice/delivery" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/practice/sessions" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/practice/earnings" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/practice/opportunities" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/practice/engagements" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/practice/delivery" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/practice/sessions" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/practice/earnings" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/cohorts" element={<Navigate to="/cohorts/founders" replace />} />
       <Route path="/cohorts/founders" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
       <Route path="/cohorts/guidance" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
@@ -1846,11 +1853,11 @@ function AppInner() {
       <Route path="/cohorts/calendar" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
       <Route path="/cohorts/outcomes" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
       <Route path="/expertise" element={<Navigate to="/expertise/profile" replace />} />
-      <Route path="/expertise/profile" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/expertise/services" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/expertise/proof" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/expertise/thinking" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/expertise/visibility" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/expertise/profile" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/expertise/services" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/expertise/proof" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/expertise/thinking" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/expertise/visibility" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
 
       <Route path="/advisor/advisory" element={<Navigate to="/advisor/advisory/opportunities" replace />} />
       <Route path="/advisor/advisory/opportunities" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(<AdvisorAdvisoryWorkspace />))} />

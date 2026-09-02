@@ -212,3 +212,61 @@ test('nothing under pages/advisor hand-builds a rail of its own', () => {
   walk(dir);
   assert.deepEqual(own, [], 'these pages hand-build a rail instead of using the shared one');
 });
+
+test('an advisor never gets two headers or two rails on one page', () => {
+  // PR #392 gave AdvisorBucketRoutes the shell's rail, which was the fix — and
+  // missed that AdvisorWorkspaceShell defaults `rail = true` and draws its own
+  // header too. So /expertise/* and advisor /network/* rendered two of each
+  // inside one another. `embedded` is how an inner shell says the outer one
+  // owns the chrome; the investor pages have had this seam since #391.
+  const inner = codeOnly(read('frontend/src/pages/advisor/AdvisorWorkspaceShell.jsx'));
+  assert.match(inner, /embedded = false,/, 'AdvisorWorkspaceShell must accept an embedded flag');
+  assert.match(inner, /if \(embedded\) return/, 'embedded must suppress the header and the rail');
+
+  // Every component the bucket routes mount inside WorkspaceShell must pass it
+  // through, and every mount site must set it.
+  for (const [file, msg] of [
+    ['frontend/src/pages/advisor/AdvisorExpertiseWorkspace.jsx', 'Expertise'],
+    ['frontend/src/pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx', 'Practice'],
+    ['frontend/src/pages/NetworkPage.jsx', 'Network'],
+  ]) {
+    const src = codeOnly(read(file));
+    assert.match(src, /\{ embedded = false \}/, `${msg} must accept embedded`);
+    assert.match(src, /embedded=\{embedded\}/, `${msg} must pass embedded to its inner shell`);
+  }
+  assert.match(codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx')),
+    /<Live embedded \/>/, 'the bucket routes must mount their live components embedded');
+  assert.match(codeOnly(read('frontend/src/workspaces/NetworkWorkspace.jsx')),
+    /<NetworkPage embedded \/>/, 'the shared network shell must mount NetworkPage embedded');
+});
+
+test('the advisor preview boundary is stated, and covers every surface that renders a practice', () => {
+  // The boundary is right — an admin in View-as-Advisor has picked a role, not
+  // a person, so there is no practice to scope to. Two things were wrong with
+  // how it was enforced: it redirected to /studio with no explanation, which is
+  // indistinguishable from a broken link and was reported as one; and it
+  // covered /advisor/advisory/* and /office-hours while /practice/* and
+  // /expertise/* rendered the same two components ungated.
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /advisorRolePreview \? <AdvisorPreviewNotice \/> : component/,
+    'the gate must state its reason rather than redirect to /studio');
+  assert.doesNotMatch(app, /advisorRolePreview \? <Navigate to="\/studio"/,
+    'the silent redirect is back');
+
+  // Every Practice and Expertise zone route carries it. Cohorts deliberately
+  // does not: it renders no personal practice, only Lab-sourced empties.
+  const gated = (app.match(/<AdvisorBucketRoutes preview=\{advisorRolePreview\} \/>/g) || []).length;
+  assert.equal(gated, 10, 'all five Practice and five Expertise zone routes must carry the gate');
+  for (const cohortZone of ['/cohorts/founders', '/cohorts/guidance', '/cohorts/this-week',
+    '/cohorts/calendar', '/cohorts/outcomes']) {
+    const line = app.split('\n').find((l) => l.includes(`path="${cohortZone}"`));
+    assert.ok(line && !line.includes('preview='),
+      `${cohortZone} renders no personal practice and must not be gated`);
+  }
+
+  // And the notice keeps the shell around it, so the reader can still see which
+  // workspace they are in — the thing the redirect destroyed.
+  assert.match(codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx')),
+    /if \(preview\) return <AdvisorPreviewNotice \/>;/,
+    'the notice must replace the body, not the whole page');
+});
