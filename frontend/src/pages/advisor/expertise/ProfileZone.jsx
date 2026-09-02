@@ -15,17 +15,17 @@ import {
  * undifferentiated component as the other four, and the canvas's profile facts
  * had nowhere to go.
  *
- * THE SAVE MERGES, and that is not an implementation detail. `/office-hours`
- * posts `headline` and `timezone` to the same endpoint and knows nothing about
- * the other five. The worker only writes the keys the body actually carries,
- * so the two surfaces cannot blank each other. This page sends the whole set
- * it owns, which is why every field below is loaded before it is editable —
- * sending a form that had not finished loading would post empty strings over
- * stored values.
+ * THE SAVE MERGES, and that is not an implementation detail. The worker only
+ * writes the keys the body actually carries, so a caller that knows about some
+ * fields cannot blank the rest — the property that let this page and the old
+ * `/office-hours` form coexist over one row, and that still protects any
+ * future caller. This page sends the whole set it owns, which is why every
+ * field below is loaded before it is editable: posting a form that had not
+ * finished loading would write empty strings over stored values.
  *
- * `/office-hours` IS NOT TOUCHED. It renders `AdvisorExpertiseWorkspace`, which
- * this file does not import, modify or replace. This is a second surface over
- * the same store, not a rewrite of the frozen one.
+ * THIS IS NOW THE ONLY PROFILE SURFACE. `/office-hours` carried a second,
+ * older form over the same columns and has been retired; that page's save
+ * reported success while discarding most of what it sent.
  */
 
 const LIST_HINT = 'Comma separated. Leave blank to leave unrecorded.';

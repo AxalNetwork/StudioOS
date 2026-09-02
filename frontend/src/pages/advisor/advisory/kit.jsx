@@ -179,6 +179,102 @@ export function formatRelativeDay(iso) {
 }
 
 /**
+ * THE SLOT AND BOOKING SHAPES THE WORKER ACTUALLY EMITS.
+ *
+ * WHY THESE EXIST, and it is a live defect rather than tidiness. Several pages
+ * read keys the DTOs have never emitted, and each one fails silently:
+ *
+ *   `slotDto`    (routes/advisors.ts:106) emits starts_at, ends_at, capacity,
+ *                taken, available, meeting_url, notes, is_cancelled.
+ *                It does NOT emit start_at, duration_min, location_kind,
+ *                status, or remaining.
+ *   `bookingDto` (routes/advisors.ts:117) emits slot_starts_at (on
+ *                /me/bookings) and a status born as 'pending'.
+ *                It does NOT emit scheduled_start, and never 'requested'.
+ *
+ * The damage: `AdvisorsPage.jsx` filtered slots on `s.status === 'open' &&
+ * s.remaining > 0`, which matches nothing, so **no founder could ever see an
+ * advisor's availability** and native booking was unreachable. `/office-hours`
+ * rendered "Invalid Date · undefined min" on every slot, never showed its
+ * cancel button, and gated Confirm/Decline on a status the worker does not
+ * write — so an advisor could not accept a booking there either.
+ *
+ * The Advisory pages were the only ones defended, with private copies of these
+ * adapters. Private is how the other callers stayed broken, so they move here.
+ *
+ * WORKER-OUT, per the convention `documentation/audits/PARTNER_UX_AUDIT.md:66`
+ * states: the frontend moves to the worker's contract, not the reverse. The
+ * legacy key is still read FIRST where one exists, because the FastAPI dev
+ * backend emits some of them and a dev session should not break.
+ */
+export function slotView(slot) {
+  const s = slot || {};
+  const capacity = Number(s.capacity || 0);
+  const available = s.remaining ?? s.available ?? Math.max(0, capacity - Number(s.taken || 0));
+  return {
+    ...s,
+    startsAt: s.start_at || s.starts_at || null,
+    endsAt: s.ends_at || null,
+    capacity,
+    available,
+    taken: s.taken ?? Math.max(0, capacity - available),
+    // `is_cancelled` is the worker's word; `status` is the dev backend's.
+    cancelled: s.status ? s.status === 'cancelled' : Boolean(s.is_cancelled),
+    meetingUrl: s.meeting_url ?? s.location_uri ?? null,
+  };
+}
+
+/** A slot a founder can actually book: published, not cancelled, not full. */
+export function isBookableSlot(slot) {
+  const v = slotView(slot);
+  return !v.cancelled && v.available > 0;
+}
+
+/**
+ * How long a slot runs, derived from the window rather than read off a key.
+ *
+ * `duration_min` is an INPUT to slot creation — `api.createAdvisorSlot` turns
+ * it into `ends_at` before POSTing — and is not something `slotDto` ever
+ * returns. Reading it back printed "undefined min". Returns null rather than a
+ * guess when either end is missing.
+ */
+export function slotMinutes(slot) {
+  const v = slotView(slot);
+  if (!v.startsAt || !v.endsAt) return null;
+  const ms = new Date(v.endsAt).getTime() - new Date(v.startsAt).getTime();
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  return Math.round(ms / 60000);
+}
+
+/**
+ * Booking statuses that mean "the advisor has not decided yet".
+ *
+ * BOTH WORDS, and that is not defensive padding. The worker's only INSERT
+ * (routes/advisors.ts:530) writes 'pending' and its confirm handler
+ * (:709) allows 'pending'; nothing in the worker has ever written
+ * 'requested'. The FastAPI dev backend uses the other word. A page that picks
+ * one is broken against the other runtime — which is exactly how Confirm and
+ * Decline came to never render on `/office-hours`.
+ */
+export const AWAITING_DECISION = ['requested', 'pending'];
+
+export function bookingView(booking) {
+  const b = booking || {};
+  return {
+    ...b,
+    // Time lives on the SLOT. `/me/bookings` joins it in as slot_starts_at;
+    // `scheduled_start` is the dev backend's key. Neither is `bookingDto`'s.
+    startsAt: b.scheduled_start || b.slot_starts_at || null,
+    endsAt: b.slot_ends_at || null,
+    awaitingDecision: AWAITING_DECISION.includes(b.status),
+    counterpartyId: b.client_user_id ?? b.founder_user_id ?? b.requester_user_id ?? null,
+    counterpartyName: b.client_name || b.founder_name || b.client_email || b.founder_email || null,
+    counterpartyEmail: b.client_email || b.founder_email || null,
+    note: b.client_message || b.questions || b.notes || null,
+  };
+}
+
+/**
  * Group advisor bookings by counterparty. The advisor's "clients" are not a
  * table — they are whoever has booked them — so this derivation IS the client
  * list. Keyed on founder_user_id so two people sharing a display name stay

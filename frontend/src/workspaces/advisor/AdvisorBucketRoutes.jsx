@@ -6,6 +6,8 @@ import { bucketForPath, zoneForPath } from '../shellConfig';
 import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
+const PracticeSessionsZone = lazy(() => import('../../pages/advisor/practice/SessionsZone'));
+const PracticeEarningsZone = lazy(() => import('../../pages/advisor/practice/EarningsZone'));
 const ExpertiseProfileZone = lazy(() => import('../../pages/advisor/expertise/ProfileZone'));
 const ExpertiseServicesZone = lazy(() => import('../../pages/advisor/expertise/ServicesZone'));
 const ExpertiseProofZone = lazy(() => import('../../pages/advisor/expertise/ProofZone'));
@@ -41,13 +43,11 @@ const ExpertiseProofZone = lazy(() => import('../../pages/advisor/expertise/Proo
  * undifferentiated component. Thinking and Visibility keep a NoStoreYet card
  * naming exactly which store is absent.
  *
- * /office-hours IS UNCHANGED, deliberately. It still renders
- * `AdvisorExpertiseWorkspace` — the component is not edited, moved or
- * replaced, and nothing in this file imports it any more. The canvas splits
- * booking (Practice·Sessions) from storefront (Expertise) while that page
- * couples them; which reading wins is task #124's to settle, and it is frozen.
- * Until then the two surfaces coexist over one store rather than one being
- * rewritten under the other.
+ * /office-hours IS RETIRED. It coupled the storefront to booking and was
+ * broken at both — it read five keys the DTOs never emitted, so an advisor
+ * could not accept a booking there and every slot showed "Invalid Date".
+ * Expertise owns the storefront now and Practice owns booking, which is the
+ * split the canvas asked for; the old path redirects to Opportunities.
  */
 
 function Loading() {
@@ -82,34 +82,33 @@ function NoStoreYet({ heading, what, why, links = [], seam }) {
   );
 }
 
-// Zones whose content is already live, and the component that serves them.
+// Zones served by the legacy five-tab Advisory workspace, which carries its
+// own shell and must therefore be mounted `embedded`.
 const LIVE = {
   '/practice': new Set(['opportunities', 'engagements', 'delivery']),
-  '/expertise': new Set(['profile', 'services', 'proof']),
 };
 
-// One page per Expertise zone, each over the store its migration created.
-const EXPERTISE_ZONE = {
-  profile: ExpertiseProfileZone,
-  services: ExpertiseServicesZone,
-  proof: ExpertiseProofZone,
+// One page per zone, each over the store its migration created. These render a
+// BODY only — the shell below draws the crumb, h1, pills and rail — so unlike
+// the Advisory workspace they need no `embedded` prop.
+const ZONE = {
+  '/practice': {
+    sessions: PracticeSessionsZone,
+    earnings: PracticeEarningsZone,
+  },
+  '/expertise': {
+    profile: ExpertiseProfileZone,
+    services: ExpertiseServicesZone,
+    proof: ExpertiseProofZone,
+  },
 };
 
 const COPY = {
-  '/practice': {
-    sessions: {
-      heading: 'Booked sessions are not a surface yet',
-      what: 'Every session on the calendar, who it is with, what was agreed, and what is owed for it.',
-      why: 'Booking lives inside the Expertise workspace at /office-hours today, coupled to the profile rather than to the practice. Whether sessions belong here or there is the open question, and building a second booking surface before it is answered would guarantee two.',
-      links: [{ to: '/office-hours', label: 'Where booking lives today →' }],
-    },
-    earnings: {
-      heading: 'Earnings is not built yet',
-      what: 'What the practice billed, what has been collected, and what is outstanding — per engagement and per session.',
-      why: 'This is the zone that turns an advisory shell into a business, and it has no store at all: no session pricing, no paid booking, no payout record. It is the same gap tracked as the Advisory Practice integration.',
-      links: [{ to: '/practice/engagements', label: 'Engagements →' }],
-    },
-  },
+  // Practice has no unbacked zone left. Sessions and Earnings had cards here
+  // saying they had "no store at all" — true when they were written, false the
+  // moment migration 205 and its two routes shipped. A card that describes a
+  // closed gap is worse than no card: it tells an advisor a working feature is
+  // missing.
   '/expertise': {
     thinking: {
       heading: 'Published thinking is not advisor-scoped yet',
@@ -172,11 +171,7 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     // and keeps the shell — the crumb, zone row and rail still say where you
     // are, which a redirect to /studio did not.
     if (preview) return <AdvisorPreviewNotice />;
-    // Expertise is one page per zone, each over its own store. They are
-    // written to render a BODY only — the shell below draws the crumb, h1,
-    // zone pills and rail — so unlike the Practice workspace they need no
-    // `embedded` prop to suppress chrome they never had.
-    const Zone = prefix === '/expertise' ? EXPERTISE_ZONE[slug] : null;
+    const Zone = ZONE[prefix]?.[slug];
     if (Zone) return <Suspense fallback={<Loading />}><Zone /></Suspense>;
 
     if (LIVE[prefix]?.has(slug)) {
@@ -215,9 +210,10 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     '/practice': {
       workspace: 'Practice',
       stance: 'Manual practice record',
-      note: 'Opportunities, engagements and delivery read the stored advisory record. Nothing here writes a proposal, sends a message or changes an engagement.',
+      note: 'Opportunities, engagements, delivery, sessions and earnings read and write the stored advisory record. Nothing here writes a proposal, sends a message, or decides what a session was worth.',
       unavailable: [
-        ['Session pricing and payouts', 'No store: the practice has no session price, paid booking or payout record anywhere in the product.'],
+        ['Money movement', 'A session amount is your own bookkeeping note. Axal issues no invoice, runs no checkout, holds nothing on your behalf and takes no cut. Nothing on this bucket settles anything.'],
+        ['Pricing suggestions', 'No rate is proposed, benchmarked or inferred from your other sessions. Every amount here is one you typed.'],
       ],
     },
     '/cohorts': {

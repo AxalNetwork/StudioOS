@@ -386,6 +386,12 @@ is the Advisory Practice work against `partner_office_hours.ts`, which is task
 list. Withdrawing it now and rebuilding it there would be churn, so it stays as
 it is, labelled, until #124 unblocks.
 
+**UPDATE 2026-09-02 — #124 is unblocked and this was wrong twice.** D31 below
+corrected the first error (the backend is `advisors.ts`, not
+`partner_office_hours.ts`). The second is here: the tabs' real home was never
+`/office-hours`. That page is now retired and `/practice/*` is minted, with the
+same five tabs plus Sessions and Earnings. See UNRESOLVED_ITEMS U4.
+
 ### D13. The model menu is removed, not disabled
 
 `AssistRail` drew a model picker in all eight source canvases. It has nowhere
@@ -1167,7 +1173,12 @@ decision about which surfaces the rule governs before it can be written.
 
 ### D31. `advisors.ts` was the advisor practice backend all along — D12 checked the wrong router
 
-**RESOLVED — the five `/advisor/advisory/*` tabs are wired; `/office-hours` (#124) stays frozen.**
+**RESOLVED — the five `/advisor/advisory/*` tabs are wired.**
+**UPDATE 2026-09-02: `/office-hours` (#124) is no longer frozen — it is retired.**
+The freeze lifted, and the page was not worth upgrading: it read five keys the
+DTOs never emitted and gated Confirm/Decline on a status the worker has never
+written, so an advisor could not accept a booking there. Storefront moved to
+`/expertise/*`, booking to `/practice/*`. See UNRESOLVED_ITEMS U4.
 
 D12 scoped these tabs out with a claim that was half right:
 

@@ -91,21 +91,42 @@ integration tasks and none can be settled by reading the repository.
 
 ---
 
-## U4 — Advisory Practice needs `/office-hours` to change, and `/office-hours` is frozen
+## U4 — RESOLVED 2026-09-02 — the `/office-hours` freeze is lifted, and the page is retired
 
-**Evidence.** Two standing instructions point opposite ways. One: *"Keep
+**What it was.** Two standing instructions pointed opposite ways. One: *"Keep
 `/studio`, `/office-hours` untouched."* The other: the Advisory Practice canvas
-(`design/canvases/integrated/Advisory Practice.dc.html`, ROUTE_MAP status
-`UPGRADE`) is routed to `/office-hours` and adds a session-type/pricing catalog
-with per-type take-rate, the founder-side four-step booking-and-pay flow, an
-earnings ledger, a client roster with private notes, and weekly capacity.
+(`design/canvases/integrated/Advisory Practice.dc.html`) is routed to
+`/office-hours` and adds a session-type/pricing catalog with per-type
+take-rate, the founder-side booking-and-pay flow, an earnings ledger, a client
+roster with private notes, and weekly capacity. Neither was guessable from the
+code, and the work read as a payments flow — money movement on a surface that
+had been explicitly fenced off.
 
-**Why it is a blocker and not a judgement call.** This is not design ambiguity —
-it is a conflict between two things the same person asked for. Neither is
-guessable from the code, and the work is a payments flow: shipping it against a
-freeze would put money movement on a surface that was explicitly fenced off.
+**How it resolved.** The owner lifted the freeze. Two things then made the
+conflict smaller than it looked:
 
-**Blocks:** #124.
+- **The payments objection was already answered.** The decision taken before
+  any of this was built is *record only, no money moves through Axal*: prices
+  and billing states are the advisor's own bookkeeping, in integer cents, with
+  no payment provider, no invoice and no payout obligation. There is no
+  take-rate to ship, so nothing here puts money movement anywhere.
+- **`/office-hours` was not worth upgrading.** It read five keys the DTOs have
+  never emitted — `start_at`, `duration_min`, `location_kind`, `status`,
+  `scheduled_start` — and gated Confirm/Decline on `'requested'`, a booking
+  status the worker has never written. Every slot rendered "Invalid Date", the
+  cancel button never appeared, and **an advisor could not accept a booking
+  there at all.** Upgrading it would have meant fixing it first.
+
+So it was retired rather than upgraded. The storefront half is `/expertise/*`
+(profile, services, proof — migrations 202-204) and the booking half is
+`/practice/*`, both of which already read the real contract. `/office-hours`
+redirects to `/practice/opportunities`; its one capability that lived nowhere
+else, the advisor's own review of a session, moved to Practice · Delivery.
+
+**Still not modeled, and named so it stays visible:** the client roster's
+private notes.
+
+**Unblocked:** #124.
 
 ---
 

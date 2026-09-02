@@ -11,6 +11,12 @@ import { useAuth } from '../hooks/useAuthSync';
 import UserTrustBadge from '../components/UserTrustBadge';
 import PageExplainer from '../components/PageExplainer';
 import { markMilestone } from '../lib/spinoutLabHooks';
+// The shapes the worker actually emits. These adapters were private to the
+// Advisory workspace, which is exactly why this page stayed broken against the
+// same DTOs — see their header in that file.
+import {
+  bookingView, formatDateTime, isBookableSlot, slotMinutes, slotView,
+} from './advisor/advisory/kit';
 
 function StarRow({ rating, onChange }) {
   const stars = [1, 2, 3, 4, 5];
@@ -135,7 +141,8 @@ function BookingForm({ slot, advisor, onClose, onBooked }) {
           <div>
             <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">Book {advisor.name}</div>
             <div className="text-xs text-gray-500 mt-0.5">
-              {new Date(slot.start_at).toLocaleString()} · {slot.duration_min} min
+              {formatDateTime(slot.startsAt)}
+              {slotMinutes(slot) != null && ` · ${slotMinutes(slot)} min`}
             </div>
           </div>
           <button onClick={onClose}><X size={18} className="text-gray-500" /></button>
@@ -161,10 +168,24 @@ function BookingForm({ slot, advisor, onClose, onBooked }) {
 
 function AdvisorDetail({ advisor, onClose, onBooked }) {
   const [slots, setSlots] = useState(null);
+  const [slotsError, setSlotsError] = useState('');
   const [bookSlot, setBookSlot] = useState(null);
   useEffect(() => {
-    api.listAdvisorSlots(advisor.uid).then((d) => setSlots(d.items)).catch(() => setSlots([]));
+    let live = true;
+    setSlots(null);
+    setSlotsError('');
+    api.listAdvisorSlots(advisor.uid)
+      .then((d) => { if (live) setSlots(d.items || []); })
+      // A failed read used to fall through to `setSlots([])`, which renders
+      // "No open slots — check back later": a positive claim about this
+      // advisor's availability that the page never actually read.
+      .catch((e) => { if (live) setSlotsError(e?.message || 'Availability could not be loaded.'); });
+    return () => { live = false; };
   }, [advisor.uid]);
+  // What the worker calls bookable. `s.status === 'open' && s.remaining > 0`
+  // stood here and matched nothing — `slotDto` emits neither key — so every
+  // advisor looked fully booked and native booking was unreachable.
+  const bookable = (slots || []).filter(isBookableSlot).map(slotView);
   return (
     <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto dark:bg-gray-900">
@@ -189,22 +210,32 @@ function AdvisorDetail({ advisor, onClose, onBooked }) {
           {advisor.calcom_username && <div><span className="text-gray-500">Cal.com:</span> @{advisor.calcom_username}</div>}
         </div>
         <h3 className="text-sm font-semibold text-gray-900 mb-2 mt-4 dark:text-gray-100">Open office hours</h3>
-        {slots === null ? (
+        {slotsError ? (
+          <div className="text-sm text-amber-700 dark:text-amber-300">
+            {slotsError} Nothing is listed rather than an empty schedule — this advisor may well
+            have open times.
+          </div>
+        ) : slots === null ? (
           <div className="text-sm text-gray-500">Loading…</div>
-        ) : slots.length === 0 ? (
+        ) : bookable.length === 0 ? (
           <div className="text-sm text-gray-500">No open slots — check back later.</div>
         ) : (
           <div className="space-y-2">
-            {slots.filter((s) => s.status === 'open' && s.remaining > 0).map((s) => (
+            {bookable.map((s) => (
               <div key={s.id} className="flex items-center justify-between border border-gray-200 rounded p-3 dark:border-gray-800">
                 <div className="text-sm">
                   <div className="font-medium text-gray-900 flex items-center gap-2 dark:text-gray-100">
-                    <Calendar size={14} /> {new Date(s.start_at).toLocaleString()}
+                    <Calendar size={14} /> {formatDateTime(s.startsAt)}
                   </div>
                   <div className="text-xs text-gray-500 flex items-center gap-3 mt-1">
-                    <span className="flex items-center gap-1"><Clock size={12} /> {s.duration_min} min</span>
-                    {s.location_kind === 'video' && <span className="flex items-center gap-1"><Video size={12} /> video</span>}
-                    {s.capacity > 1 && <span>group · {s.remaining}/{s.capacity} left</span>}
+                    {/* Duration is derived from the window the worker sends.
+                        `duration_min` is an input to slot CREATION, not a key
+                        `slotDto` returns — reading it printed "undefined min". */}
+                    {slotMinutes(s) != null && (
+                      <span className="flex items-center gap-1"><Clock size={12} /> {slotMinutes(s)} min</span>
+                    )}
+                    {s.meetingUrl && <span className="flex items-center gap-1"><Video size={12} /> video</span>}
+                    {s.capacity > 1 && <span>group · {s.available}/{s.capacity} left</span>}
                   </div>
                 </div>
                 <button onClick={() => setBookSlot(s)}
@@ -287,10 +318,26 @@ function ReviewModal({ booking, onClose, onSubmitted }) {
 
 function MyBookings({ refreshKey }) {
   const [bookings, setBookings] = useState(null);
+  const [error, setError] = useState('');
   const [reviewing, setReviewing] = useState(null);
   useEffect(() => {
-    api.listMyMenteeBookings().then((d) => setBookings(d.items)).catch(() => setBookings([]));
+    let live = true;
+    setBookings(null);
+    setError('');
+    api.listMyMenteeBookings()
+      .then((d) => { if (live) setBookings((d.items || []).map(bookingView)); })
+      // Was `.catch(() => setBookings([]))`, which rendered "No bookings yet"
+      // — a claim about the reader's own history that the page never read.
+      .catch((e) => { if (live) setError(e?.message || 'Your bookings could not be loaded.'); });
+    return () => { live = false; };
   }, [refreshKey]);
+  if (error) {
+    return (
+      <div className="text-sm text-amber-700 dark:text-amber-300">
+        {error} Nothing is listed rather than an empty history.
+      </div>
+    );
+  }
   if (bookings === null) return <div className="text-sm text-gray-500">Loading…</div>;
   if (bookings.length === 0) return <div className="text-sm text-gray-500">No bookings yet.</div>;
   return (
@@ -301,7 +348,8 @@ function MyBookings({ refreshKey }) {
             <div>
               <div className="font-medium text-gray-900 dark:text-gray-100">{b.topic}</div>
               <div className="text-xs text-gray-500 mt-0.5">
-                {new Date(b.scheduled_start).toLocaleString()} · status: <span className="font-medium">{b.status}</span>
+                {b.startsAt ? formatDateTime(b.startsAt) : 'Time not recorded'} · status:{' '}
+                <span className="font-medium">{b.status}</span>
               </div>
             </div>
             <div className="flex gap-2">
@@ -311,7 +359,9 @@ function MyBookings({ refreshKey }) {
                   Review
                 </button>
               )}
-              {(b.status === 'requested' || b.status === 'confirmed') && (
+              {/* `requested` alone left a founder unable to cancel a booking
+                  the worker had just created as `pending`. */}
+              {(b.awaitingDecision || b.status === 'confirmed') && (
                 <button
                   onClick={async () => {
                     if (!confirm('Cancel this booking?')) return;

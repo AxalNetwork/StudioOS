@@ -7,7 +7,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
@@ -92,12 +92,36 @@ test('canonical deep links remain registered even when not sidebar rows', () => 
 });
 
 test('Expertise owns the canonical advisor profile destination', () => {
-  // The row points at its bucket; /office-hours keeps its route, keeps
-  // rendering AdvisorExpertiseWorkspace for an advisor, and stays in `match`.
+  // The row points at its bucket. `/office-hours` used to be the second half
+  // of this row's ownership and is now retired — it coupled the storefront to
+  // booking and was broken at both, so the two halves went to the buckets that
+  // work: storefront to Expertise, booking to Practice.
+  const app = read('frontend/src/App.jsx');
   assert.match(advisor, /\{ to: '\/expertise', icon: UserCircle, label: 'Expertise'/);
-  assert.match(advisor, /match: \['\/expertise', '\/office-hours', '\/advisors'\]/);
-  assert.match(read('frontend/src/App.jsx'), /effectiveRole === 'advisor' \? <AdvisorExpertiseWorkspace \/> : <OfficeHoursPage \/>/);
-  assert.match(read('frontend/src/pages/advisor/AdvisorExpertiseWorkspace.jsx'), /OfficeHoursPage embedded/);
+  assert.match(advisor, /match: \['\/expertise', '\/advisors'\]/,
+    'the Expertise row no longer claims a path that redirects elsewhere');
+
+  const line = app.split('\n').find((l) => l.includes('path="/office-hours"'));
+  assert.ok(line, 'the path must still resolve — bookmarks outlive pages');
+  assert.match(line, /<Navigate to="\/practice\/opportunities" replace \/>/,
+    'and it redirects to where booking actually lives');
+
+  // Both components are gone, not merely unmounted. Dead code that is also
+  // broken is worse than removed code.
+  for (const gone of [
+    'frontend/src/pages/OfficeHoursPage.jsx',
+    'frontend/src/pages/advisor/AdvisorExpertiseWorkspace.jsx',
+  ]) {
+    assert.ok(!existsSync(resolve(process.cwd(), gone)), `${gone} should have been deleted`);
+  }
+  assert.doesNotMatch(app, /\bOfficeHoursPage\b|\bAdvisorExpertiseWorkspace\b/,
+    'and nothing still imports them');
+  // Neither of the two surfaces that merely share the name is touched:
+  // /partner/office-hours is a different licence, /spinout-lab/office-hours a
+  // different tool. Both carry the identical DTO defects and are named as out
+  // of scope rather than quietly swept in.
+  assert.match(app, /path="\/partner\/office-hours"/);
+  assert.match(app, /path="\/spinout-lab\/office-hours"/);
 });
 
 test('Advisor-only framing is isolated from shared roles', () => {
@@ -225,8 +249,9 @@ test('an advisor never gets two headers or two rails on one page', () => {
 
   // Every component the bucket routes mount inside WorkspaceShell must pass it
   // through, and every mount site must set it.
+  // Expertise is absent from this list because it no longer has an inner shell
+  // to suppress: its five zones are their own body-only pages, checked below.
   for (const [file, msg] of [
-    ['frontend/src/pages/advisor/AdvisorExpertiseWorkspace.jsx', 'Expertise'],
     ['frontend/src/pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx', 'Practice'],
     ['frontend/src/pages/NetworkPage.jsx', 'Network'],
   ]) {
@@ -246,17 +271,21 @@ test('an advisor never gets two headers or two rails on one page', () => {
   // a later zone page that reached for AdvisorWorkspaceShell would bring the
   // double chrome straight back, and it would be mounted with no `embedded`
   // to catch it.
-  const zoneDir = 'frontend/src/pages/advisor/expertise';
-  const zonePages = readdirSync(resolve(process.cwd(), zoneDir))
-    .filter((f) => f.endsWith('.jsx'));
-  assert.ok(zonePages.length >= 3, 'the backed Expertise zones each have their own page');
-  for (const f of zonePages) {
-    const src = codeOnly(read(`${zoneDir}/${f}`));
-    assert.doesNotMatch(src, /AdvisorWorkspaceShell/,
-      `${f} must render a body only — WorkspaceShell above it already draws the chrome`);
-    assert.doesNotMatch(src, /<WorkerRail/,
-      `${f} must not draw a second Worker AI rail`);
+  let zoneCount = 0;
+  for (const zoneDir of [
+    'frontend/src/pages/advisor/expertise',
+    'frontend/src/pages/advisor/practice',
+  ]) {
+    for (const f of readdirSync(resolve(process.cwd(), zoneDir)).filter((x) => x.endsWith('.jsx'))) {
+      zoneCount += 1;
+      const src = codeOnly(read(`${zoneDir}/${f}`));
+      assert.doesNotMatch(src, /AdvisorWorkspaceShell/,
+        `${f} must render a body only — WorkspaceShell above it already draws the chrome`);
+      assert.doesNotMatch(src, /<WorkerRail/,
+        `${f} must not draw a second Worker AI rail`);
+    }
   }
+  assert.ok(zoneCount >= 6, 'every backed zone has its own page, plus their shared kits');
 });
 
 test('the advisor preview boundary is stated, and covers every surface that renders a practice', () => {

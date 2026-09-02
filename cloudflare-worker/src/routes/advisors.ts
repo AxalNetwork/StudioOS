@@ -657,13 +657,43 @@ advisors.get('/bookings/me', async (c) => {
   try {
     const user = await requireAuth(c);
     const status = c.req.query('status');
+    // The slot join is the mirror of `/me/bookings` above, and it closes a
+    // hole rather than adding a nicety: the booking row carries no time of its
+    // own — the window lives on the slot — so without this a founder's own
+    // list could not say WHEN any of their sessions was. The frontend read
+    // `b.scheduled_start` and rendered "Invalid Date" for every row.
+    //
+    // The counterparty is the ADVISOR here, not the founder, which is the one
+    // asymmetry with `/me/bookings`. Both joins are LEFT: a deleted advisor or
+    // a removed slot must not make the booking disappear from the list of the
+    // person who made it.
+    //
+    // Additive keys only — every existing consumer of the bare booking shape
+    // is unaffected.
     const sql = status
-      ? 'SELECT * FROM advisor_bookings WHERE founder_user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 200'
-      : 'SELECT * FROM advisor_bookings WHERE founder_user_id = ? ORDER BY created_at DESC LIMIT 200';
+      ? `SELECT b.*, a.display_name AS advisor_name, a.uid AS advisor_uid,
+                s.starts_at AS slot_starts_at, s.ends_at AS slot_ends_at
+           FROM advisor_bookings b
+           LEFT JOIN advisors a ON a.id = b.advisor_id
+           LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+          WHERE b.founder_user_id = ? AND b.status = ? ORDER BY b.created_at DESC LIMIT 200`
+      : `SELECT b.*, a.display_name AS advisor_name, a.uid AS advisor_uid,
+                s.starts_at AS slot_starts_at, s.ends_at AS slot_ends_at
+           FROM advisor_bookings b
+           LEFT JOIN advisors a ON a.id = b.advisor_id
+           LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+          WHERE b.founder_user_id = ? ORDER BY b.created_at DESC LIMIT 200`;
     const rows = status
       ? await c.env.DB.prepare(sql).bind(user.id, status).all<BookingRow>()
       : await c.env.DB.prepare(sql).bind(user.id).all<BookingRow>();
-    return c.json({ items: (rows.results || []).map((r) => bookingDto(r)) });
+    return c.json({
+      items: (rows.results || []).map((r: any) => bookingDto(r, {
+        advisor_name: r.advisor_name ?? null,
+        advisor_uid: r.advisor_uid ?? null,
+        slot_starts_at: r.slot_starts_at ?? null,
+        slot_ends_at: r.slot_ends_at ?? null,
+      })),
+    });
   } catch (e) { return mapError(c, e); }
 });
 
