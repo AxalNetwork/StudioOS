@@ -14,7 +14,14 @@ import EngagementsPage from './EngagementsPage';
 import DeliveryPage from './DeliveryPage';
 import ContractsPage from './ContractsPage';
 
-export default function AdvisorAdvisoryWorkspace() {
+// `embedded`: AdvisorBucketRoutes renders this inside `workspaces/WorkspaceShell`
+// on /practice/{opportunities,engagements,delivery}. That shell draws the crumb,
+// the h1, the zone pills and the rail, so the AdvisorWorkspaceShell below drops
+// its own — including `advisorTabs`, whose Clients and Contracts entries have no
+// zone and are linked instead from the "Still here, still working" card that
+// AdvisorBucketRoutes renders on the Opportunities zone.
+// `/advisor/advisory/*` mounts this with no outer shell and keeps its tabs.
+export default function AdvisorAdvisoryWorkspace({ embedded = false }) {
   const { pathname } = useLocation();
   const active = pathname.includes('/clients')
     ? 'clients'
@@ -28,6 +35,7 @@ export default function AdvisorAdvisoryWorkspace() {
 
   return (
     <AdvisorWorkspaceShell
+      embedded={embedded}
       eyebrow="Practice"
       title="Run my advisory business"
       description="From inbound opportunities and clients to engagements, delivery, and contracts — all backed by your live advisory records."

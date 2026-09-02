@@ -85,7 +85,7 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     if (role === 'investor') {
       return <Suspense fallback={<Loading />}><InvestorNetworkWorkspace embedded /></Suspense>;
     }
-    return <Suspense fallback={<Loading />}><NetworkPage /></Suspense>;
+    return <Suspense fallback={<Loading />}><NetworkPage embedded /></Suspense>;
   }, [sharedSurface, role, slug]);
 
   const INTRO = {

@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
 import { bucketForPath, zoneForPath } from '../shellConfig';
+import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 const AdvisorExpertiseWorkspace = lazy(() => import('../../pages/advisor/AdvisorExpertiseWorkspace'));
@@ -129,7 +130,7 @@ const COPY = {
   },
 };
 
-export default function AdvisorBucketRoutes() {
+export default function AdvisorBucketRoutes({ preview = false }) {
   const location = useLocation();
   const bucket = bucketForPath('advisor', location.pathname);
   const zone = zoneForPath(bucket, location.pathname);
@@ -137,9 +138,17 @@ export default function AdvisorBucketRoutes() {
   const slug = zone?.slug;
 
   const body = useMemo(() => {
+    // An admin previewing the Advisor ROLE has selected no person, so Practice
+    // and Expertise have no practice to render. The notice replaces the BODY
+    // and keeps the shell — the crumb, zone row and rail still say where you
+    // are, which a redirect to /studio did not.
+    if (preview) return <AdvisorPreviewNotice />;
     if (LIVE[prefix]?.has(slug)) {
+      // `embedded`: the WorkspaceShell below already draws the crumb, the h1,
+      // the zone pills and the rail. Both live components carry their own
+      // AdvisorWorkspaceShell, which would draw a second of each inside it.
       const Live = prefix === '/practice' ? AdvisorAdvisoryWorkspace : AdvisorExpertiseWorkspace;
-      return <Suspense fallback={<Loading />}><Live /></Suspense>;
+      return <Suspense fallback={<Loading />}><Live embedded /></Suspense>;
     }
     const copy = COPY[prefix]?.[slug];
     if (copy) return <NoStoreYet {...copy} />;
@@ -148,7 +157,7 @@ export default function AdvisorBucketRoutes() {
       what="This zone is named by the canvas and has no surface behind it."
       why="It ships empty rather than as a placeholder that could be mistaken for real data."
     />;
-  }, [prefix, slug]);
+  }, [prefix, slug, preview]);
 
   const INTRO = {
     '/practice': 'One practice. What is coming in, what is committed, and what has been delivered.',
@@ -213,7 +222,7 @@ export default function AdvisorBucketRoutes() {
       )}
     >
       {body}
-      {prefix === '/practice' && slug === 'opportunities' && (
+      {!preview && prefix === '/practice' && slug === 'opportunities' && (
         <Card className="mt-4 p-4">
           <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
             Still here, still working

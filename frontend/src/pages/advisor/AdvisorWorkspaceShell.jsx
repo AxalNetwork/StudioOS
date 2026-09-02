@@ -15,6 +15,17 @@ export const advisorTabs = [
   { to: '/advisor/advisory/contracts', label: 'Contracts' },
 ];
 
+/**
+ * `embedded` is set when this shell is rendered INSIDE `workspaces/WorkspaceShell`
+ * — which happens on every `/practice/*`, `/cohorts/*`, `/expertise/*` and
+ * advisor `/network/*` route. That outer shell already draws a breadcrumb, an
+ * h1, the zone pills and the Worker AI rail, so drawing them again here gave
+ * the advisor two headers and two rails on one page. It suppresses the chrome
+ * and keeps the body; the outer shell owns the frame.
+ *
+ * This is the same seam the investor pages use (`InvestorDealsWorkspace`,
+ * `InvestorNetworkWorkspace`), for the same reason.
+ */
 export function AdvisorWorkspaceShell({
   eyebrow = 'Advisor workspace',
   title,
@@ -24,8 +35,10 @@ export function AdvisorWorkspaceShell({
   tabs = [],
   children,
   rail = true,
+  embedded = false,
 }) {
   const { pathname } = useLocation();
+  if (embedded) return <div className="advisor-workspace min-w-0 text-gray-900 dark:text-gray-100">{children}</div>;
   return (
     <div className="advisor-workspace mx-auto w-full max-w-[1500px] pb-10 text-gray-900 dark:text-gray-100">
       <div className="mb-5 flex flex-col gap-4 border-b border-gray-200 pb-5 dark:border-gray-800">
