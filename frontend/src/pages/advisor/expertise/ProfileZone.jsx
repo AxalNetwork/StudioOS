@@ -33,6 +33,29 @@ const LIST_HINT = 'Comma separated. Leave blank to leave unrecorded.';
 const splitList = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 const joinList = (v) => (Array.isArray(v) ? v.join(', ') : '');
 
+/** Canvas-aligned completeness: which fields a match surface reads, and which are missing. */
+function profileCompleteness(profile) {
+  if (!profile) return { pct: 0, gaps: [], complete: 0, total: 0 };
+  // ONE ROW PER FIELD. `headline` was counted twice — once as "Positioning
+  // statement" and again as "Match one-liner", the same value re-tested for
+  // length — so a single field was worth 2 of 8, and an advisor with a
+  // 79-character headline was told to go and write a "match one-liner" that is
+  // the box they had already filled. A meter that names a gap the advisor
+  // cannot close is worse than a shorter meter.
+  const fields = [
+    ['Positioning statement', profile.headline],
+    ['Sectors', profile.sectors?.length ? profile.sectors : null],
+    ['Stages', profile.stages?.length ? profile.stages : null],
+    ['Languages', profile.languages?.length ? profile.languages : null],
+    ['Geography', profile.country],
+    ['Availability window', profile.availability_note],
+    ['Headshot', profile.headshot_url],
+  ];
+  const complete = fields.filter(([, v]) => v != null && v !== '').length;
+  const gaps = fields.filter(([, v]) => v == null || v === '').map(([k]) => k.toLowerCase());
+  return { pct: Math.round((complete / fields.length) * 100), gaps, complete, total: fields.length };
+}
+
 export default function ProfileZone() {
   const [state, setState] = useState({ loading: true, error: '', profile: null });
   const [draft, setDraft] = useState(null);
@@ -108,61 +131,93 @@ export default function ProfileZone() {
   return (
     <ZoneBody loading={state.loading || !draft} error={state.error} onRetry={load} isEmpty={false}>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Card padding="lg">
-          <ZoneHeading
-            title="Your profile"
-            blurb="What a founder reads before deciding whether to book you. Every field is yours to state; nothing here is inferred, scored or written for you."
-          />
-          <form onSubmit={save} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Name">
-              <input className={inputClass} value={draft.display_name} onChange={set('display_name')} />
-            </Field>
-            <Field label="Headline" hint="One line. e.g. “ex-Stripe payments PM”.">
-              <input className={inputClass} value={draft.headline} onChange={set('headline')} />
-            </Field>
-            <div className="sm:col-span-2">
-              <Field label="Bio">
-                <textarea rows={4} className={inputClass} value={draft.bio} onChange={set('bio')} />
+        <div className="space-y-4">
+          {/* Canvas completeness meter — computed from the fields, not asserted. */}
+          <Card padding="lg">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+                Profile completeness · what every match surface reads
+              </span>
+              <span className="text-[13px] font-extrabold text-emerald-700 tabular-nums">
+                {profileCompleteness(state.profile).pct}%
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-axal-hairline">
+              <div
+                className="h-full rounded-full bg-emerald-700 transition-all"
+                style={{ width: `${profileCompleteness(state.profile).pct}%` }}
+              />
+            </div>
+            {profileCompleteness(state.profile).gaps.length > 0 && (
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {profileCompleteness(state.profile).gaps.map((g) => (
+                  <span key={g} className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9.5px] font-bold text-amber-800">
+                    Missing · {g}
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-ink-3">
+              The meter counts only fields a match surface actually reads. Availability window is the costly gap: without it, a founder browsing the cohort surface cannot tell whether this practice takes new work this month.
+            </p>
+          </Card>
+
+          <Card padding="lg">
+            <ZoneHeading
+              title="Your profile"
+              blurb="What a founder reads before deciding whether to book you. Every field is yours to state; nothing here is inferred, scored or written for you."
+            />
+            <form onSubmit={save} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Name">
+                <input className={inputClass} value={draft.display_name} onChange={set('display_name')} />
               </Field>
-            </div>
-            <Field label="Expertise" hint={LIST_HINT}>
-              <input className={inputClass} value={draft.expertise} onChange={set('expertise')} />
-            </Field>
-            <Field label="Sectors" hint={LIST_HINT}>
-              <input className={inputClass} value={draft.sectors} onChange={set('sectors')} />
-            </Field>
-            <Field label="Stages" hint={LIST_HINT}>
-              <input className={inputClass} value={draft.stages} onChange={set('stages')} placeholder="pre-seed, seed" />
-            </Field>
-            <Field label="Languages" hint={LIST_HINT}>
-              <input className={inputClass} value={draft.languages} onChange={set('languages')} placeholder="English, French" />
-            </Field>
-            <Field label="Country">
-              <input className={inputClass} value={draft.country} onChange={set('country')} />
-            </Field>
-            <Field label="Time zone" hint="IANA name, e.g. America/Toronto.">
-              <input className={inputClass} value={draft.timezone} onChange={set('timezone')} />
-            </Field>
-            <div className="sm:col-span-2">
-              <Field label="Availability" hint="In your own words. This is a note, not a calendar — your bookable slots live under Practice.">
-                <input className={inputClass} value={draft.availability_note} onChange={set('availability_note')}
-                  placeholder="Two mornings a week, usually Tuesday and Thursday" />
+              <Field label="Headline" hint="One line. e.g. “ex-Stripe payments PM”.">
+                <input className={inputClass} value={draft.headline} onChange={set('headline')} />
               </Field>
-            </div>
-            <Field label="Headshot URL">
-              <input className={inputClass} value={draft.headshot_url} onChange={set('headshot_url')} />
-            </Field>
-            <Field label="LinkedIn">
-              <input className={inputClass} value={draft.linkedin_url} onChange={set('linkedin_url')} />
-            </Field>
-            <div className="sm:col-span-2">
-              <button type="submit" className={buttonClass} disabled={saving}>
-                {saving ? 'Saving…' : 'Save profile'}
-              </button>
-              <SaveNote note={note} />
-            </div>
-          </form>
-        </Card>
+              <div className="sm:col-span-2">
+                <Field label="Bio">
+                  <textarea rows={4} className={inputClass} value={draft.bio} onChange={set('bio')} />
+                </Field>
+              </div>
+              <Field label="Expertise" hint={LIST_HINT}>
+                <input className={inputClass} value={draft.expertise} onChange={set('expertise')} />
+              </Field>
+              <Field label="Sectors" hint={LIST_HINT}>
+                <input className={inputClass} value={draft.sectors} onChange={set('sectors')} />
+              </Field>
+              <Field label="Stages" hint={LIST_HINT}>
+                <input className={inputClass} value={draft.stages} onChange={set('stages')} placeholder="pre-seed, seed" />
+              </Field>
+              <Field label="Languages" hint={LIST_HINT}>
+                <input className={inputClass} value={draft.languages} onChange={set('languages')} placeholder="English, French" />
+              </Field>
+              <Field label="Country">
+                <input className={inputClass} value={draft.country} onChange={set('country')} />
+              </Field>
+              <Field label="Time zone" hint="IANA name, e.g. America/Toronto.">
+                <input className={inputClass} value={draft.timezone} onChange={set('timezone')} />
+              </Field>
+              <div className="sm:col-span-2">
+                <Field label="Availability" hint="In your own words. This is a note, not a calendar — your bookable slots live under Practice.">
+                  <input className={inputClass} value={draft.availability_note} onChange={set('availability_note')}
+                    placeholder="Two mornings a week, usually Tuesday and Thursday" />
+                </Field>
+              </div>
+              <Field label="Headshot URL">
+                <input className={inputClass} value={draft.headshot_url} onChange={set('headshot_url')} />
+              </Field>
+              <Field label="LinkedIn">
+                <input className={inputClass} value={draft.linkedin_url} onChange={set('linkedin_url')} />
+              </Field>
+              <div className="sm:col-span-2">
+                <button type="submit" className={buttonClass} disabled={saving}>
+                  {saving ? 'Saving…' : 'Save profile'}
+                </button>
+                <SaveNote note={note} />
+              </div>
+            </form>
+          </Card>
+        </div>
 
         <Card variant="sunken" padding="lg">
           <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">

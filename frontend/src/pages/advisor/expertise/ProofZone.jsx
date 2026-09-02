@@ -180,6 +180,10 @@ export default function ProofZone() {
     }
   };
 
+  const attested = state.items.filter((p) => p.attested);
+  const selfStated = state.items.filter((p) => !p.attested);
+  const awaiting = state.items.filter((p) => (p.consents || []).some((c) => !c.consent_given && !c.withdrawn_at));
+
   const empty = (
     <NothingYet
       title="Nothing claimed yet"
@@ -189,6 +193,24 @@ export default function ProofZone() {
 
   return (
     <div className="space-y-4">
+      {/* Canvas stats strip — attested vs self-stated is the contrast the page is built on. */}
+      {state.items.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: 'Attested', value: String(attested.length), note: 'named client, dated' },
+            { label: 'Awaiting consent', value: String(awaiting.length), note: 'asked, no answer yet' },
+            { label: 'Self-stated', value: String(selfStated.length), note: 'no external attestation' },
+            { label: 'Credential verified', value: '—', note: 'no verifying body connected' },
+          ].map((s) => (
+            <Card key={s.label} padding="md">
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{s.label}</div>
+              <div className="mt-1 text-[15px] font-extrabold tabular-nums">{s.value}</div>
+              <div className="mt-0.5 text-[10px] text-axal-ink-3">{s.note}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+
       <Card padding="lg">
         <ZoneHeading
           title="Add a claim"
