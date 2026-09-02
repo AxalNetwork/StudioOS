@@ -100,6 +100,17 @@ export default function ServicesZone() {
     }
   };
 
+  const priced = state.items.filter((s) => s.price_cents != null);
+  const unpriced = state.items.filter((s) => s.price_cents == null);
+  // Sum only priced services. An unpriced row contributes nothing to the total,
+  // which is the honest reading of "not recorded" — it is not a zero price.
+  const bookedCents = priced.reduce((a, s) => a + s.price_cents * (s.sold ?? 0), 0);
+  const unitsSold = state.items.reduce((a, s) => a + (s.sold ?? 0), 0);
+  const mostSold = state.items.length
+    ? state.items.reduce((a, b) => ((b.sold ?? 0) > (a.sold ?? 0) ? b : a), state.items[0])
+    : null;
+  const mostSoldUnits = mostSold?.sold ?? 0;
+
   const empty = (
     <NothingYet
       title="No services recorded yet"
@@ -109,6 +120,24 @@ export default function ServicesZone() {
 
   return (
     <div className="space-y-4">
+      {/* Canvas stats strip — computed from the ledger, not asserted. */}
+      {state.items.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: 'Services', value: String(state.items.length), note: `${priced.length} priced, ${unpriced.length} not` },
+            { label: 'Booked', value: money(bookedCents) || '—', note: `from ${unitsSold} units` },
+            { label: 'Most sold', value: mostSold?.title || '—', note: `${mostSoldUnits} units` },
+            { label: 'Unpriced', value: String(unpriced.length), note: unpriced.length ? 'scope settled, price is not' : 'all priced' },
+          ].map((s) => (
+            <Card key={s.label} padding="md">
+              <div className="text-[9px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{s.label}</div>
+              <div className="mt-1 text-[15px] font-extrabold tabular-nums">{s.value}</div>
+              <div className="mt-0.5 text-[10px] text-axal-ink-3">{s.note}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+
       <Card padding="lg">
         <ZoneHeading
           title="Add a service"
