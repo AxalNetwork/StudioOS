@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 import { track } from '../lib/funnel';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { loadTurnstile } from '../lib/turnstile';
+import AxalLogo from '../components/AxalLogo';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -329,9 +330,8 @@ export default function RegisterPage() {
         </Link>
 
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <div className="flex items-center justify-center gap-2.5 mb-6">
-            <img src="/axal-mark.png" alt="Axal VC" className="h-9 w-9 rounded-lg object-contain" />
-            <span style={{fontFamily:"'Space Grotesk', sans-serif"}} className="text-lg font-bold text-gray-900">Axal VC</span>
+          <div className="flex items-center justify-center mb-6">
+            <AxalLogo size="lg" />
           </div>
 
           {/* Task #11 — 2-step progress bar (details → check your email).

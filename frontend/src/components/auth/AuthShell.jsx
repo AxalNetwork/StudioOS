@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import AxalLogo from '../AxalLogo';
 
 /**
  * Auth & Onboarding v2 — shared chrome for sign-in, register, and onboarding
@@ -34,14 +35,7 @@ export default function AuthShell({
   return (
     <div className="min-h-screen flex flex-col" style={shellStyle}>
       <header className="flex items-center justify-between gap-3 px-6 py-5 sm:px-8">
-        <div className="flex items-center gap-2.5">
-          <img
-            src="/axal-mark.png"
-            alt="Axal VC"
-            className="h-7 w-7 rounded-md object-cover flex-shrink-0"
-          />
-          <span className="text-sm font-extrabold tracking-tight text-white">Axal VC</span>
-        </div>
+        <AxalLogo size="sm" onDark={!!backgroundSrc} />
         {email ? (
           <span className="font-mono text-[11px] text-white/80 truncate max-w-[220px]">{email}</span>
         ) : (

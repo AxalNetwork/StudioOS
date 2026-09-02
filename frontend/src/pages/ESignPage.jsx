@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { Check, AlertCircle, FileText, Shield, Clock, Eraser, X } from 'lucide-react';
 import DocumentBody from '../components/DocumentBody';
+import AxalLogo from '../components/AxalLogo';
 import { normalizeLegalBody } from '../lib/legalDocFormat';
 
 /**
@@ -360,12 +361,9 @@ function PageShell({ children }) {
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-6">
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-2 mb-6">
-          <img src="/axal-mark.png" alt="Axal VC" className="w-8 h-8 rounded-lg" onError={(e) => { e.target.style.display = 'none'; }} />
-          <div>
-            <div className="text-base font-bold text-gray-900 leading-none dark:text-gray-100">Axal VC Deals</div>
-            <div className="text-[11px] text-gray-500 mt-0.5">Secure electronic signature</div>
-          </div>
+        <div className="mb-6">
+          <AxalLogo size="md" />
+          <div className="text-[11px] text-gray-500 mt-2 dark:text-gray-400">Secure electronic signature</div>
         </div>
         {children}
       </div>
