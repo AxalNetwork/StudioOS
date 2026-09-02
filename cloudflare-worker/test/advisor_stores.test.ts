@@ -83,10 +83,17 @@ function freshDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, year INTEGER NOT NULL, month INTEGER NOT NULL,
       start_at TEXT NOT NULL, end_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'scheduled'
     );
+    CREATE TABLE week_windows (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, cohort_cycle_id INTEGER NOT NULL,
+      week_number INTEGER NOT NULL, unlock_at TEXT NOT NULL, deadline_at TEXT NOT NULL,
+      UNIQUE(cohort_cycle_id, week_number)
+    );
     CREATE TABLE company_week_status (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
       cohort_cycle_id INTEGER NOT NULL, week_number INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending'
+      status TEXT NOT NULL DEFAULT 'pending',
+      deliverables_done INTEGER NOT NULL DEFAULT 0,
+      deliverables_required INTEGER NOT NULL DEFAULT 0
     );
     -- advisor_office_hour_slots and advisor_bookings in the LIVE (t13) shape:
     -- scripts/sqlite-table-collisions-baseline.json records that schema.sql's
@@ -139,6 +146,16 @@ function freshDb() {
   w.run(FOUNDER_USER, CYCLE, 1);
   w.run(FOUNDER_USER, CYCLE, 2);   // same founder twice — DISTINCT must collapse it
   w.run(ADVISOR_USER, OTHER_CYCLE, 1);
+
+  // Two windows already unlocked, two still ahead — so `current_week` has a
+  // real answer to compute rather than a trivial one.
+  const past = new Date(Date.now() - 86400000).toISOString();
+  const future = new Date(Date.now() + 86400000).toISOString();
+  const ww = db.prepare(
+    'INSERT INTO week_windows (cohort_cycle_id, week_number, unlock_at, deadline_at) VALUES (?,?,?,?)');
+  ww.run(CYCLE, 1, past, past);
+  ww.run(CYCLE, 2, past, future);
+  ww.run(CYCLE, 3, future, future);
 
   return db;
 }
@@ -437,6 +454,71 @@ test('an admin assigns; the advisor then reads that batch and no other', async (
     'and it is not an assignment for another advisor');
 });
 
+test('a user who is not an advisor cannot be assigned a batch', async () => {
+  const e = env(freshDb());
+  // The parameter is named `advisor_user_id`. It used to accept any existing
+  // user id — `role` was SELECTed and never read — so a mistyped id that
+  // happened to exist became a grant of another cohort's founder names and
+  // emails. 400, not 403: the admin IS authorised; the subject is ineligible.
+  const r = await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: FOUNDER_USER, cohort_cycle_id: CYCLE,
+  });
+  assert.equal(r.status, 400);
+  assert.match(r.body.detail, /advisor role/);
+
+  // And nothing was written, so the founder gained nothing.
+  assert.deepEqual((await call(e, 'GET', '/me/cohort', fran)).body.items, []);
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, fran)).status, 403);
+  assert.equal((await call(e, 'GET', '/admin/cohort-assignments', root)).body.items.length, 0);
+});
+
+test('an assignment written before the check still cannot open a batch', async () => {
+  // THE LOAD-BEARING TEST. The write-side check is point-in-time and cannot
+  // see rows that already exist — including any written by hand before it
+  // landed. This inserts one directly, bypassing the route entirely, and the
+  // read must still refuse. Without this test, someone reads the two checks,
+  // concludes the second is redundant, and deletes the one that actually holds.
+  const db = freshDb();
+  db.prepare(`INSERT INTO advisor_cohort_assignments
+                (uid, advisor_user_id, cohort_cycle_id, is_active)
+              VALUES ('legacy', ?, ?, 1)`).run(FOUNDER_USER, CYCLE);
+  const e = env(db);
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, fran)).status, 403);
+});
+
+test('a demoted advisor loses the batch without anyone ending the assignment', async () => {
+  // `requireAuth` reloads the user row on every request, so the role check at
+  // read time is the CURRENT role — which makes the refusal continuous rather
+  // than point-in-time. A check only at assignment would leave a demoted
+  // advisor reading founder names and emails indefinitely.
+  const db = freshDb();
+  const e = env(db);
+  const made = await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: ADVISOR_USER, cohort_cycle_id: CYCLE,
+  });
+  assert.equal(made.status, 200);
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, ada)).status, 200);
+
+  db.prepare('UPDATE users SET role = ? WHERE id = ?').run('founder', ADVISOR_USER);
+  const demoted = { user: ADVISOR_USER, role: 'founder' };
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, demoted)).status, 403,
+    'access ends the moment the role does, with no admin action');
+
+  // But the row is still THERE and still active, and the admin can see both
+  // that fact and the reason — otherwise nobody would ever come and end it.
+  const admin = await call(e, 'GET', '/admin/cohort-assignments', root);
+  assert.equal(admin.body.items.length, 1);
+  assert.equal(admin.body.items[0].is_active, true);
+  assert.equal(admin.body.items[0].advisor_role, 'founder',
+    'the list reports the CURRENT role, so a stale grant is visible');
+});
+
+test('a malformed cycle id is refused with a sentence, not an error path', async () => {
+  const e = env(freshDb());
+  const r = await call(e, 'GET', '/me/cohort/not-a-number/founders', ada);
+  assert.equal(r.status, 400);
+});
+
 test('only an admin may assign', async () => {
   const e = env(freshDb());
   for (const who of [ada, fran, grace]) {
@@ -487,6 +569,60 @@ test('assigning to a user or cycle that does not exist fails with a sentence', a
 // ---------------------------------------------------------------------------
 // The Lab is not touched
 // ---------------------------------------------------------------------------
+test('the weeks read is refused without an assignment, and by a non-advisor with one', async () => {
+  const db = freshDb();
+  const e = env(db);
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/weeks`, ada)).status, 403,
+    'the same two-part gate as founders — this returns the same people');
+
+  // A hand-written row for someone ineligible must not open it either.
+  db.prepare(`INSERT INTO advisor_cohort_assignments
+                (uid, advisor_user_id, cohort_cycle_id, is_active)
+              VALUES ('legacy-w', ?, ?, 1)`).run(FOUNDER_USER, CYCLE);
+  assert.equal((await call(e, 'GET', `/me/cohort/${CYCLE}/weeks`, fran)).status, 403);
+});
+
+test('the weeks read reports the cycle, its windows and each founder’s week', async () => {
+  const e = env(freshDb());
+  await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: ADVISOR_USER, cohort_cycle_id: CYCLE,
+  });
+  const r = await call(e, 'GET', `/me/cohort/${CYCLE}/weeks`, ada);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.available, true);
+  assert.equal(r.body.source, 'spinout_lab', 'seam-marked on the wire');
+  assert.equal(r.body.windows_recorded, true);
+  // Computed server-side, once — two pages must never disagree about which
+  // week it is. Weeks 1 and 2 have unlocked; 3 has not.
+  assert.equal(r.body.current_week, 2);
+  assert.equal(r.body.weeks.length, 3);
+  assert.equal(r.body.founders.length, 1, 'one founder, two week rows');
+  assert.ok(r.body.founders[0].weeks['1']);
+  assert.ok(r.body.founders[0].weeks['2']);
+});
+
+test('a cycle with no recorded windows says so rather than defaulting to week one', async () => {
+  const db = freshDb();
+  db.prepare('DELETE FROM week_windows WHERE cohort_cycle_id = ?').run(CYCLE);
+  const e = env(db);
+  await call(e, 'POST', '/admin/cohort-assignments', root, {
+    advisor_user_id: ADVISOR_USER, cohort_cycle_id: CYCLE,
+  });
+  const r = await call(e, 'GET', `/me/cohort/${CYCLE}/weeks`, ada);
+  assert.equal(r.body.windows_recorded, false);
+  assert.equal(r.body.current_week, null, 'not 1 — nobody recorded which week it is');
+});
+
+test('the assignable list offers advisors and nobody else', async () => {
+  const e = env(freshDb());
+  const r = await call(e, 'GET', '/admin/cohort-assignments/assignable', root);
+  assert.equal(r.status, 200);
+  const ids = r.body.items.map((x: any) => x.id).sort();
+  assert.deepEqual(ids, [ADVISOR_USER, OTHER_ADVISOR_USER].sort(),
+    'the picker can only ever offer what the POST will accept');
+  assert.equal((await call(e, 'GET', '/admin/cohort-assignments/assignable', ada)).status, 403);
+});
+
 test('the cohort read writes nothing to the Spin-Out Lab', async () => {
   const db = freshDb();
   const e = env(db);
@@ -496,9 +632,12 @@ test('the cohort read writes nothing to the Spin-Out Lab', async () => {
   const before = {
     cycles: db.prepare('SELECT * FROM cohort_cycles ORDER BY id').all(),
     weeks: db.prepare('SELECT * FROM company_week_status ORDER BY id').all(),
+    windows: db.prepare('SELECT * FROM week_windows ORDER BY id').all(),
   };
   await call(e, 'GET', '/me/cohort', ada);
   await call(e, 'GET', `/me/cohort/${CYCLE}/founders`, ada);
+  await call(e, 'GET', `/me/cohort/${CYCLE}/weeks`, ada);
   assert.deepEqual(db.prepare('SELECT * FROM cohort_cycles ORDER BY id').all(), before.cycles);
   assert.deepEqual(db.prepare('SELECT * FROM company_week_status ORDER BY id').all(), before.weeks);
+  assert.deepEqual(db.prepare('SELECT * FROM week_windows ORDER BY id').all(), before.windows);
 });

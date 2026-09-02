@@ -1607,6 +1607,17 @@ export const api = {
   // callers show a fallback). Timeline of monthly cycles + week windows,
   // review queue (failed/grace/at-risk), grace extensions and pass/fail
   // overrides (reason required, audited), impersonation session audit.
+  // Advisor↔cohort assignment (migration 206). Admin-only, and deliberately
+  // NOT beside the advisor's own `me/cohort` helpers: these grant access to
+  // another person's batch, and a zone page must never be one import away from
+  // calling them.
+  adminAdvisorCohortAssignments: () => request('/advisors/admin/cohort-assignments'),
+  adminAssignableAdvisors: () => request('/advisors/admin/cohort-assignments/assignable'),
+  adminAssignAdvisorCohort: (data) =>
+    request('/advisors/admin/cohort-assignments', { method: 'POST', body: JSON.stringify(data) }),
+  adminEndAdvisorCohortAssignment: (id) =>
+    request(`/advisors/admin/cohort-assignments/${id}`, { method: 'DELETE' }),
+
   adminCohortTimeline: () => request('/admin/cohort/timeline'),
   adminCohortReview: (cycleId) => request(`/admin/cohort/review${cycleId ? `?cycle_id=${cycleId}` : ''}`),
   adminCohortGrace: (payload) => request('/admin/cohort/grace', { method: 'POST', body: JSON.stringify(payload) }),
@@ -2733,6 +2744,7 @@ export const api = {
 
   listMyAdvisorCohorts: () => request('/advisors/me/cohort'),
   listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),
+  listMyAdvisorCohortWeeks: (cycleId) => request(`/advisors/me/cohort/${cycleId}/weeks`),
 
   // ---------- Unified calendar (Task #56) ----------
   listCalendarEvents: (opts = {}) => {

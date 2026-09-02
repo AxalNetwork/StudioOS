@@ -31,7 +31,7 @@ function dispatchMap() {
   );
   const out = {};
   for (const m of block.matchAll(/'(\/[a-z]+)': \{([^}]*)\}/g)) {
-    out[m[1]] = [...m[2].matchAll(/^\s*([a-z-]+):/gm)].map((x) => x[1]);
+    out[m[1]] = [...m[2].matchAll(/^\s*'?([a-z-]+)'?:/gm)].map((x) => x[1]);
   }
   return out;
 }
@@ -49,10 +49,13 @@ test('every Expertise zone the shell declares is either backed or honestly empty
   assert.deepEqual(backed, ['profile', 'services', 'proof'],
     'exactly the three zones migrations 202-204 gave a store');
 
+  const copyStart = bucketRoutes.indexOf("  '/expertise': {\n    thinking:");
+  assert.ok(copyStart > -1, 'the Expertise COPY block must still start with thinking');
   const expertiseCopy = bucketRoutes.slice(
-    bucketRoutes.indexOf("  '/expertise': {\n    thinking:"),
-    bucketRoutes.indexOf("  '/cohorts': {"),
+    copyStart,
+    bucketRoutes.indexOf("  '/cohorts': {", copyStart),
   );
+  assert.ok(expertiseCopy.length > 0, 'the slice must not invert');
   for (const z of zones.filter((x) => !backed.includes(x))) {
     assert.ok(expertiseCopy.includes(`    ${z}: {`),
       `${z} has no store and must say which one is missing`);

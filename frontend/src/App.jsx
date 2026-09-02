@@ -163,6 +163,7 @@ const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
 const AttestConsentPage = lazy(() => import('./pages/AttestConsentPage'));
+const AdvisorCohortAssignments = lazy(() => import('./pages/admin/AdvisorCohortAssignments'));
 const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage'));
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
@@ -1850,12 +1851,27 @@ function AppInner() {
       <Route path="/practice/delivery" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/sessions" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/earnings" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      {/* Admin: which advisor may read which Lab cohort's founders. Its own
+          page rather than a tab on the Spin-Out Lab console — that console is
+          Lab-owned and under a do-not-touch instruction, and the split matches
+          the backend, which put these endpoints under /api/advisors/admin/
+          rather than /api/admin/cohort/. The assignment is advisor-domain; the
+          cohort it points at is the Lab's. */}
+      <Route path="/admin/advisor-cohorts" element={guard(['admin'], <AdvisorCohortAssignments />)} />
+
+      {/* Cohorts now carries the preview gate, which it deliberately did not
+          before. It used to render only Lab-sourced empty cards — nothing
+          personal, so nothing to scope. Founders, This week and Outcomes read
+          the signed-in user's own assignments, and an admin previewing the
+          Advisor ROLE has selected no person, so they would see "no batch
+          assigned" — a boundary rendered as an absence, which is the exact
+          defect this whole pass exists to remove. */}
       <Route path="/cohorts" element={<Navigate to="/cohorts/founders" replace />} />
-      <Route path="/cohorts/founders" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/cohorts/guidance" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/cohorts/this-week" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/cohorts/calendar" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
-      <Route path="/cohorts/outcomes" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes />)} />
+      <Route path="/cohorts/founders" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/cohorts/guidance" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/cohorts/this-week" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/cohorts/calendar" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
+      <Route path="/cohorts/outcomes" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/expertise" element={<Navigate to="/expertise/profile" replace />} />
       <Route path="/expertise/profile" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/expertise/services" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
