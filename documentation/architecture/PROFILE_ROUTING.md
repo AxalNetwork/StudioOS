@@ -51,7 +51,7 @@ it, where in their nav, and how do they get there.*
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Founder Studio | `/studio` | Home | Full page | Sidebar → Home → Studio | DEFERRED | High |
 | Founder Wellbeing | `/wellbeing` · `/wellbeing/expert-dashboard` · `/wellbeing/expert/:uid` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Founder Workspaces Canvas | `/build/*` · `/raise/*` · `/founder/growth/*` · `/network` | Home | Full page | Sidebar → Home → Network | NEW | High |
+| Founder Workspaces Canvas | `/validate` · `/build` · `/raise` · `/grow` · `/network` · `/research` | Home | Full page | Sidebar → Home → Validate | UPGRADE | High |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
 | Graduation Certificate | `/spinout-lab/certificate` · `/verify/:token` | Home | Full page + print stylesheet | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
