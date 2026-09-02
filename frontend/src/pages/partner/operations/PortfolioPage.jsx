@@ -59,6 +59,7 @@ export default function PortfolioPage() {
         <StatCard label="Completed engagements" value={done.length} />
         <StatCard label="Clients served" value={clients.size} />
         <StatCard label="Delivered value" value={moneyUsd(deliveredValue)} />
+        <StatCard label="Reviewed" value={done.filter((e) => e.status === 'reviewed').length} hint="founder review recorded" />
       </div>
 
       <Section title="Completed work">

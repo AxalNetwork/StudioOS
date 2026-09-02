@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { safeReadJSON } from '../lib/storage';
 import { storePendingNext, sanitizeNextPath } from '../lib/pendingNext';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Copy, Check, Mail, RefreshCw } from 'lucide-react';
+import { Copy, Check, Mail, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { track } from '../lib/funnel';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { loadTurnstile } from '../lib/turnstile';
 import AxalLogo from '../components/AxalLogo';
+import AuthShell, { AuthCard } from '../components/auth/AuthShell';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -323,26 +324,21 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4 py-8">
-      <div className="w-full max-w-md">
-        <Link to="/" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-8">
-          <ArrowLeft size={14} /> Back to Axal VC
-        </Link>
+    <AuthShell platformNote="Create your account" backgroundSrc="/auth/login-background.webp">
+      <AuthCard>
+        <div className="flex items-center justify-center mb-6">
+          <AxalLogo size="lg" />
+        </div>
 
-        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <div className="flex items-center justify-center mb-6">
-            <AxalLogo size="lg" />
-          </div>
-
-          {/* Task #11 — 2-step progress bar (details → check your email).
-              Steps 2 (inline chatbot) and 4 (mandatory TOTP enrolment) are
-              gone: the chatbot runs post-login at /onboarding/chat, and
-              authenticator setup is now optional (verify page / Settings). */}
-          <div className="flex gap-2 mb-6">
-            {[1, 3].map(n => (
-              <div key={n} className={`flex-1 h-1 rounded-full ${step >= n ? 'bg-violet-600' : 'bg-gray-300'}`} />
-            ))}
-          </div>
+        {/* Task #11 — 2-step progress bar (details → check your email).
+            Steps 2 (inline chatbot) and 4 (mandatory TOTP enrolment) are
+            gone: the chatbot runs post-login at /onboarding/chat, and
+            authenticator setup is now optional (verify page / Settings). */}
+        <div className="flex gap-2 mb-6">
+          {[1, 3].map(n => (
+            <div key={n} className={`flex-1 h-1 rounded-full ${step >= n ? 'bg-violet-600' : 'bg-gray-300'}`} />
+          ))}
+        </div>
 
           {step === 1 && (
             <>
@@ -538,8 +534,7 @@ export default function RegisterPage() {
             </>
           )}
 
-        </div>
-      </div>
-    </div>
+      </AuthCard>
+    </AuthShell>
   );
 }
