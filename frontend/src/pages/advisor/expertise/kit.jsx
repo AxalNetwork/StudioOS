@@ -106,6 +106,26 @@ export function NothingYet({ title, body, action }) {
   );
 }
 
+/**
+ * What a zone cannot answer, said on the zone rather than left as a blank.
+ *
+ * Every advisor zone built on this kit can answer less than its canvas asked
+ * for, and in each case the gap is a missing store rather than an oversight.
+ * A reader who is not told that reads the blank as their own data being empty,
+ * which is the same absent-is-not-empty failure `ZoneBody` exists to prevent —
+ * one level up, about the shape of the page instead of the state of a fetch.
+ */
+export function StatedLimit({ title, children }) {
+  return (
+    <Card variant="sunken" padding="md" className="mt-3">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        {title}
+      </div>
+      <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">{children}</p>
+    </Card>
+  );
+}
+
 export function Field({ label, hint, children }) {
   return (
     <label className="block">

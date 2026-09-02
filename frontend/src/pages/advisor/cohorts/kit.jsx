@@ -1,8 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Card } from '../../../ui';
 import { SeamChip } from '../../../workspaces/WorkspaceShell';
 import { NothingYet } from '../expertise/kit';
+
+// `StatedLimit` moved into the shared kit beside `ZoneBody` when Network needed
+// it too. Re-exported rather than re-imported at four call sites, and never
+// re-implemented: two copies of a sentence is how two versions of it appear.
+export { StatedLimit } from '../expertise/kit';
 
 /**
  * Bucket-local pieces for Cohorts. Composition only — the four-state body,
@@ -77,24 +81,6 @@ export function cohortLabel(cohort) {
   if (!cohort) return 'Cohort';
   const month = MONTHS[Number(cohort.month) - 1];
   return `${month || `Month ${cohort.month}`} ${cohort.year}`;
-}
-
-/**
- * A limit the page states about itself.
- *
- * Every one of these zones can answer less than the canvas asked for, and the
- * gap is a missing store rather than an oversight. Saying so on the page is
- * what stops a reader assuming the blank is their own data being empty.
- */
-export function StatedLimit({ title, children }) {
-  return (
-    <Card variant="sunken" padding="md" className="mt-3">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
-        {title}
-      </div>
-      <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">{children}</p>
-    </Card>
-  );
 }
 
 export const WEEK_TONE = {

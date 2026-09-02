@@ -1307,3 +1307,105 @@ Recorded so they are not re-raised:
 
 Both remain correct as forward rules for new code. Neither describes the
 existing tree.
+
+---
+
+### D32. A Network zone renders its own zone, and the tab follows the path
+
+**RESOLVED.** `/network/relationships`, `/network/introductions` and
+`/network/organizations` became real routes when the four shells were wired, and
+all three rendered the same component. `NetworkPage` reads its active tab from
+`?tab=` and **never from the pathname**, and its fallback for a role that cannot
+see Contacts is Introductions — so an advisor clicking **Relationships** got the
+Introductions tab under a heading saying Relationships, and Organizations did
+the same. A founder got Contacts under all three. The route said one thing and
+the body showed another, on two licences at once.
+
+Two changes, deliberately different in kind:
+
+- **Advisors get three real bodies** (`pages/advisor/network/`), dispatched on
+  the slug the shell has already resolved. Relationships reads
+  `partner_relationships` and, beside it, the referral pipeline; Introductions
+  reads the propositions an advisor may actually answer; Organizations is an
+  honest card. They compose `pages/advisor/expertise/kit.jsx` — the one
+  four-state body — rather than a fourth copy of it.
+- **`NetworkPage`'s tab now falls back to the pathname**, beneath `?tab=` and
+  above the hardcoded default. `?tab=` still leads because notification deep
+  links (`?tab=introductions&intro=<uid>`) depend on it. This fixes founders and
+  operators too; it was not scoped to advisors because the bug was not.
+
+**The rail was wrong in the other direction, which is the same defect.** It said
+*"This view … does not draft outreach, send messages, or change records"* above
+a relationship editor and an Accept button that spends an introduction credit,
+and it called Organizations covered on licences with no organisation store at
+all. A rail must never be more confident than the body beside it, and never less
+— #399 fixed the *less* on five Expertise and Practice zones for the same
+reason. The stance now separates the rail (which acts on nothing) from the page
+(which acts on a click), and Organizations reports its gap.
+
+**Referral state is a count, not a per-row chip.** The advisor canvas draws
+referral state on the relationship card. `referral_submissions` (migration 175)
+stores `referred_name` and `referred_org` as **free text** and carries no
+referred-user id — checked against the migration and every later ALTER — so
+there is no join key to a relationship. Matching on a typed name would sooner or
+later credit one person's referral to another. The counts are real and ship; the
+attribution is not drawn, and the page says why.
+
+**`/referrals` was opened to advisors, and that is a guard change worth naming.**
+Network · Relationships reads `referral_submissions`, and the only surface that
+creates one guarded `['admin','founder','partner','investor']`. That was not a
+policy: `ReferralsPage` has no role branch anywhere in its 779 lines, and every
+endpoint it calls (`/refer-earn/overview`, `/submissions`, `/submissions/:uid`,
+`/strategic-access`) is `requireAuth` and scoped to `referrer_user_id`. Leaving
+it shut would have made the new section permanently empty with no way to fill
+it. A guard test now fails if that page ever grows a role branch, because the
+reasoning for opening it would no longer hold.
+
+**Deliberately not built: an organisations store.** The zone needs one edge —
+person to organisation — and no advisor-reachable source has it.
+`/api/contacts` is `requireRole(c, 'founder')` and `'advisor'` is not a member
+of that guard's parameter union, so the role is unrepresentable in it rather
+than merely excluded. `GET /api/companies` is readable but is a global directory
+of self-registered profiles with no connection to the reader; pointing the zone
+at it would answer "which organisations do I know?" with "all of them" — the
+reasoning D12 gave for removing the withdrawn Research tabs rather than
+redirecting them at the nearest page.
+
+---
+
+### D33. `chromeless` is a layout flag; `embedded` is a lock. They are not the same prop
+
+**RESOLVED.** `workspaces/ResearchWorkspace` mounted `<SignalsPage embedded />`
+and `<CompetitorAnalysisPage embedded />`. `SignalsPage` destructures
+`{ user }`, so **both** props were dropped; `CompetitorAnalysisPage` took no
+props at all. React reports neither.
+
+The consequence on Markets was not cosmetic. `SignalsPage` derives `mode` from
+`user?.role`, and `user` was `undefined`, so **`mode` resolved to `'founder'`
+for every role on that route** — including a real advisor. The advisor ordering
+(`?mode=advisor`), the advisor helper strip and `signals.advisor_note` never
+rendered, and `advisor_note` is a field the engine has been returning all along,
+seed corpus included. `isAdmin` was false for admins on the same route, hiding
+Refresh. Only `/signals` passed `user`, which is why the advisor view appeared
+to work whenever anyone checked it.
+
+`SignalsPage` now takes `user` **and** an explicit `mode`, because they answer
+different questions and re-deriving one from the other is wrong in a real case:
+an admin previewing the Advisor role has `user.role === 'admin'`, so the shell
+would be advisor and the body underneath would order itself for a founder.
+
+**Forwarding `embedded` to `CompetitorAnalysis` would have been a regression,
+which is why `chromeless` exists.** On that component `embedded` means "locked
+to the startup I was handed": it skips the project fetch, defaults the mode to
+`startup` and hides the mode toggle. Passing it from a workspace that has no
+project would leave an advisor — whose project list is empty by design, since
+`projects.ts` excludes advisors from the privileged read — with a picker of
+nothing and no way back to the custom-market box they get today. `chromeless`
+drops the page furniture and nothing else.
+
+A guard scans every `embedded`/`chromeless` mount **inside
+`frontend/src/workspaces/`** — the components that provably draw the chrome —
+and fails if the target never reads the prop. It is deliberately not repo-wide:
+ten other mounts pass `embedded` to children that draw no shell, h1 or rail, so
+the prop is inert there rather than dropped, and failing them would flag a
+tidiness issue in the words of a correctness one.

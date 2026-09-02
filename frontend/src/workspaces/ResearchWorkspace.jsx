@@ -27,6 +27,28 @@ import { bucketForPath, zoneForPath } from './shellConfig';
  * Companies revives `CompetitorAnalysisPage`, which has existed all along and
  * was reachable only by deep link after being dropped from the sidebar — worth
  * reviving rather than rebuilding.
+ *
+ * THE ZONE PAGES GET THEIR PROPS NOW, AND FOR A LONG TIME THEY DID NOT.
+ * `SignalsPage` was mounted with `embedded` alone; it destructures `{ user }`,
+ * so BOTH props were dropped. `user` being undefined meant `mode` resolved to
+ * `'founder'` for every role on this route — no advisor ordering, no advisor
+ * strip, no `advisor_note` — while the founder hero rendered a second h1 inside
+ * this shell's own. `CompetitorAnalysisPage` took no props at all and swallowed
+ * its `embedded` the same way. Both are fixed at the source; `Markets` now
+ * receives `user`, and `Companies` a `chromeless` flag that is deliberately not
+ * `embedded` (see `components/CompetitorAnalysis.jsx` for why).
+ *
+ * ASK, LIBRARY AND COMPANIES CARRY A HISTORY WORTH KNOWING. Decisions D9 and
+ * D12 withdrew four `/advisor/research/*` tabs — companies, AI research, news,
+ * documents — because each rendered a fixture with no API behind it, and set
+ * one condition for their return: a licensed PitchBook/Crunchbase-class source.
+ * `frontend/test/research_tabs_withdrawn.test.mjs` exists because a later
+ * reader sees an empty Research group and "restores" it. Nothing here restores
+ * them. The distinction that matters, and that D12 did not have to consider:
+ * the advisor canvas asks for a FIRST-PARTY surface — Ask over a client's own
+ * shared documents, a library of client histories and the advisor's playbooks.
+ * That is not third-party research data, so D12's licensing condition does not
+ * govern it. It is unbuilt, not forbidden, and the cards below say which.
  */
 
 const SignalsPage = lazy(() => import('../pages/SignalsPage'));
@@ -61,6 +83,33 @@ function NoStoreYet({ heading, what, why, link, accentClass = 'text-axal-violet'
   );
 }
 
+/**
+ * Whose competitor analyses these are — stated, because the page cannot show it.
+ *
+ * `competitor_analyses` is scoped to `user_id`. It has no company column, so an
+ * advisor with six clients has one shared workspace, not six. The startup
+ * picker is filled from the caller's own projects, and an advisor's list is
+ * normally empty — so what they actually get is the custom-market box. That is
+ * the honest shape of the store; the alternative (a client selector wired to
+ * nothing) would promise per-client research the data model cannot hold.
+ */
+function CompanyScopeNote({ role }) {
+  if (role !== 'advisor') return null;
+  return (
+    <Card variant="sunken" padding="md" className="mb-4">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        These analyses are yours, not a client&rsquo;s
+      </div>
+      <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">
+        An analysis is stored against the person who ran it and carries no company, so there is no
+        client to switch between and no per-client history to open. Describe the market you are
+        researching; if a startup picker below is empty, that is because company records are not
+        shared with advisors, not because the analysis failed.
+      </p>
+    </Card>
+  );
+}
+
 // The two zones with a live source behind them. Everything else in ZONE_COPY
 // renders NoStoreYet, and the rail says so rather than implying a source.
 const LIVE_ZONES = new Set(['markets', 'companies']);
@@ -68,14 +117,14 @@ const LIVE_ZONES = new Set(['markets', 'companies']);
 const ASK = {
   heading: 'Ask has no library to read',
   what: 'Ask answers questions over a cache of documents and cites the specific sources each answer drew on. The cache, the index, and the retrieval step do not exist in the product yet.',
-  why: 'An Ask box wired to nothing would still answer — from general knowledge, in the same voice a cited answer uses. That is worse than no page, so this one waits for the library rather than faking the citation.',
+  why: 'An Ask box wired to nothing would still answer — from general knowledge, in the same voice a cited answer uses. That is worse than no page, so this one waits for the library rather than faking the citation. A previous Ask tab was withdrawn for exactly that (decision D12): it rendered analyses from a fixture. What is missing here is a store, not a licence — the questions this zone is for are about your own clients’ documents.',
   link: { to: '/research/library', label: 'What the library would hold →' },
 };
 
 const LIBRARY = {
   heading: 'The document library is not built yet',
   what: 'The library is the cache Ask reads from, plus your own reusable material. Its most important column is the last one: whether a document is indexed, because that is precisely Ask’s reach.',
-  why: 'Nothing in the product stores documents for retrieval today. Adding a document and making it answerable are two acts, and neither has a store behind it yet.',
+  why: 'Nothing in the product stores documents for retrieval today — the one document endpoint is a signed download, not a listable store. Adding a document and making it answerable are two acts, and neither has a store behind it yet. The earlier Documents tab was withdrawn on the same finding (decision D12).',
   link: { to: '/research/ask', label: 'Why Ask is empty too →' },
 };
 
@@ -104,11 +153,11 @@ const ZONE_COPY = {
   'client-prep': {
     heading: 'The client brief is not built yet',
     what: 'One client per brief: what they asked for, what the engagement record says, what changed on their side, and what is still open.',
-    why: 'It would draw on the engagement record and — where the client is a founder on the platform — on their own record, read-only. Neither join exists yet, and a brief assembled from one side only would be half a brief presented as a whole one.',
+    why: 'Half of it exists: a booking already carries the topic and the questions the client wrote when they booked, and that half is on Practice · Sessions. What is missing is the other side — nothing joins a booking to the client’s own record, and the project read that would reach it excludes advisors. A brief assembled from one side only would be half a brief presented as a whole one.',
   },
 };
 
-export default function ResearchWorkspace({ role = 'founder' }) {
+export default function ResearchWorkspace({ role = 'founder', user = null }) {
   const location = useLocation();
   const bucket = bucketForPath(role, location.pathname);
   const zone = zoneForPath(bucket, location.pathname);
@@ -123,20 +172,37 @@ export default function ResearchWorkspace({ role = 'founder' }) {
     if (slug === 'markets') {
       return (
         <Suspense fallback={<Loading />}>
-          <SignalsPage embedded />
+          <SignalsPage user={user} mode={role === 'advisor' ? 'advisor' : 'founder'} embedded />
         </Suspense>
       );
     }
     if (slug === 'companies') {
       return (
         <Suspense fallback={<Loading />}>
-          <CompetitorAnalysisPage embedded />
+          {/* Whose analyses these are is not obvious from the page, and for an
+              advisor it is the first question. `competitor_analyses` is keyed on
+              `user_id` with no company column at all, so an analysis belongs to
+              the person who ran it and to nobody else — there is no client
+              dimension to switch between, which is why no company selector
+              appears here and why one must not be invented. */}
+          <CompanyScopeNote role={role} />
+          <CompetitorAnalysisPage chromeless />
         </Suspense>
       );
     }
     const copy = ZONE_COPY[slug] || ZONE_COPY.ask;
     return <NoStoreYet {...copy} accentClass={copy.accentClass || accentClass} />;
-  }, [slug, accentClass]);
+  }, [slug, accentClass, role, user]);
+
+  // Companies has a live store for everyone, but for an advisor the store holds
+  // only what they ran themselves — saying it "reads a live source" and stopping
+  // there implies a client book that does not exist.
+  const ownAnalysesOnly = slug === 'companies' && role === 'advisor';
+  const coverageLine = LIVE_ZONES.has(slug)
+    ? (ownAnalysesOnly
+      ? 'Companies · your own analyses, not a client book'
+      : `${zone?.label || 'This zone'} reads a live source`)
+    : `${zone?.label || 'This zone'} has no store behind it yet`;
 
   const INTRO = {
     ask: 'Cited answers over your own documents. Every answer names the sources it drew on.',
@@ -158,10 +224,13 @@ export default function ResearchWorkspace({ role = 'founder' }) {
           role={role}
           stance="Read-only source coverage"
           note="This rail reports which zones have a store behind them. It does not run research, answer questions, or take actions."
-          coverage={[LIVE_ZONES.has(slug)
-            ? `${zone?.label || 'This zone'} reads a live source`
-            : `${zone?.label || 'This zone'} has no store behind it yet`]}
-          unavailable={[['Cited answers', 'No document cache, index or retrieval step exists in the product, so nothing here can cite.']]}
+          coverage={[coverageLine]}
+          unavailable={[
+            ['Cited answers', 'No document cache, index or retrieval step exists in the product, so nothing here can cite.'],
+            ...(ownAnalysesOnly
+              ? [['Client-scoped research', 'An analysis is stored against you, not against a company, so nothing here can be filed under a client or reopened per client.']]
+              : []),
+          ]}
         />
       )}
       intro={INTRO[slug] || INTRO.ask}

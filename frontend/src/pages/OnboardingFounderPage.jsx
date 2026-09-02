@@ -95,7 +95,7 @@ export default function OnboardingFounderPage() {
                   placeholder="e.g. Delft University of Technology"
                 />
                 <div>
-                  <div className="text-xs font-medium text-gray-700 mb-2">IP status</div>
+                  <div className="text-xs font-medium text-gray-700 mb-2 dark:text-gray-300">IP status</div>
                   <div className="flex flex-wrap gap-2">
                     {IP_STATUSES.map((chip) => {
                       const on = (values.ip_status || []).includes(chip);
@@ -130,8 +130,8 @@ export default function OnboardingFounderPage() {
                 className="rounded-xl border px-4 py-3 space-y-3"
                 style={{ background: '#fffdf5', borderColor: '#fcd34d' }}
               >
-                <div className="text-sm font-bold text-gray-900">Spin-Out Lab · eligible, not enrolled</div>
-                <p className="text-xs text-gray-700 leading-relaxed">
+                <div className="text-sm font-bold text-gray-900 dark:text-gray-100">Spin-Out Lab · eligible, not enrolled</div>
+                <p className="text-xs text-gray-700 leading-relaxed dark:text-gray-300">
                   A 28-day programme for companies not yet formed. Applying does not stop you working — Validate opens either way.
                 </p>
                 <ChoiceField

@@ -266,8 +266,12 @@ export const SHELLS = {
           { slug: 'thinking', label: 'Thinking', archetype: A.FEED },
           { slug: 'visibility', label: 'Visibility', archetype: A.ANALYTICS },
         ] },
-      { kind: 'bucket', label: 'Network', prefix: '/network', zones: NETWORK_ZONES },
-      { kind: 'bucket', label: 'Research', prefix: '/research', zones: RESEARCH_ZONES.advisor },
+      // The canvas titles these two ("Work my relationships", "Know more than
+      // the room") and the other three advisor buckets already carry theirs.
+      { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work my relationships',
+        zones: NETWORK_ZONES },
+      { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Know more than the room',
+        zones: RESEARCH_ZONES.advisor },
       { kind: 'link', label: 'Trust', to: '/trust' },
       { kind: 'link', label: 'Practice Settings', to: '/company-settings' },
     ],
