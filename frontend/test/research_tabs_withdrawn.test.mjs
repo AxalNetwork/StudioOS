@@ -126,11 +126,19 @@ test('the Advisory tabs are deliberately still here', () => {
   }
 });
 
-test('#124 stays frozen — wiring the Advisory tabs did not touch /office-hours', () => {
-  // D31's boundary, made checkable. The two were conflated by the shared word
-  // "advisory": /advisor/advisory/* reads advisors.ts, while the Advisory
-  // Practice canvas (#124) is /office-hours against partner_office_hours.ts and
-  // is on the do-not-touch list.
+test('#124 is unfrozen and /office-hours is retired — the licence boundary is not', () => {
+  // WHAT THIS USED TO PIN, and why it changed. #124 froze `/office-hours`, so
+  // this asserted the Advisory tabs never reached into it. The freeze is
+  // lifted and the page is retired: its storefront half is /expertise/* and
+  // its booking half is /practice/*, both of which work against the DTOs that
+  // page never read correctly.
+  //
+  // WHAT HAS NOT CHANGED is the boundary D31 actually drew, which was never
+  // about the freeze: /advisor/advisory/* reads `advisors.ts`, and the PARTNER
+  // office-hours engine is a different licence with its own table. Those two
+  // were conflated by the shared word "advisory" once and must not be again —
+  // partner_office_hours.ts carries the identical DTO defects and is
+  // deliberately out of scope, not quietly swept in.
   for (const p of [
     'frontend/src/pages/advisor/advisory/OpportunitiesPage.jsx',
     'frontend/src/pages/advisor/advisory/ClientsPage.jsx',
@@ -139,8 +147,12 @@ test('#124 stays frozen — wiring the Advisory tabs did not touch /office-hours
     'frontend/src/pages/advisor/advisory/ContractsPage.jsx',
   ]) {
     const s = read(p);
-    assert.ok(!/office-hours/.test(s), `${p} reaches into /office-hours — #124 is frozen`);
     assert.ok(!/partner-portal\/office/.test(s), `${p} calls a partner office-hours endpoint`);
+    assert.ok(!/partner_office_hours/.test(s), `${p} reaches the partner office-hours engine`);
+    // A LINK to the retired path would be a dead end; a comment naming it as
+    // history is not, and the retirement is worth explaining where it landed.
+    assert.ok(!/to="\/office-hours"|to='\/office-hours'/.test(s),
+      `${p} links to /office-hours, which is retired`);
   }
   assert.match(read('documentation/architecture/DECISIONS.md'), /### D31\./, 'D31 must record why D12 was corrected');
 });

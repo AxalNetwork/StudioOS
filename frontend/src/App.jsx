@@ -162,7 +162,6 @@ const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
-const OfficeHoursPage = lazy(() => import('./pages/OfficeHoursPage'));
 const AttestConsentPage = lazy(() => import('./pages/AttestConsentPage'));
 const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage'));
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
@@ -302,7 +301,6 @@ const EmailChangeConfirmPage = lazy(() => import('./pages/EmailChangeConfirmPage
 const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage'));
 // Advisor sections shell — tabbed workspaces (Network, Advisory, Research).
 const AdvisorAdvisoryWorkspace = lazy(() => import('./pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
-const AdvisorExpertiseWorkspace = lazy(() => import('./pages/advisor/AdvisorExpertiseWorkspace'));
 // Partner Operations shell — tabbed workspace (Overview, Capabilities, Portfolio,
 // Engagements, Performance).
 const PartnerOperationsWorkspace = lazy(() => import('./pages/partner/operations/PartnerOperationsWorkspace'));
@@ -1754,7 +1752,18 @@ function AppInner() {
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}
       <Route path="/mentors" element={<Navigate to="/advisors" replace />} />
       <Route path="/advisors" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), user?.role === 'founder' ? <Navigate to="/build/team?tab=advisor" replace /> : <AdvisorsPage />)} />
-      <Route path="/office-hours" element={guard(['admin', 'advisor'], advisorPrivateWorkspace(effectiveRole === 'advisor' ? <AdvisorExpertiseWorkspace /> : <OfficeHoursPage />))} />
+      {/* /office-hours is RETIRED (task #124's freeze lifted; UNRESOLVED_ITEMS
+          U4 resolved). It coupled the storefront to booking and was broken at
+          both jobs: it read five keys the DTOs never emitted, so every slot
+          showed "Invalid Date", its cancel button never rendered, and
+          Confirm/Decline were gated on a status the worker has never written —
+          an advisor could not accept a booking there, ever.
+
+          Both halves now have a working home. The storefront is /expertise/*
+          and booking is /practice/*, which were already immune to the same
+          contract breaks. This redirect keeps every bookmark alive; it points
+          at Opportunities because availability is what "office hours" meant. */}
+      <Route path="/office-hours" element={<Navigate to="/practice/opportunities" replace />} />
       <Route path="/partner/office-hours" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><PartnerOfficeHoursPage /></PartnerWorkspaceTabs>))} />
       <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], partnerPrivateWorkspace(effectiveRole === 'founder' ? founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><CoMarketingPage user={user} /></FounderWorkspaceTabs>) : <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>))} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />

@@ -7,7 +7,32 @@ import {
 import { api } from '../../lib/api';
 import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
+import { AWAITING_DECISION, isBookableSlot, slotMinutes, slotView } from './advisory/kit';
 import './advisorStudioHome.css';
+
+/**
+ * " · 45 min", or nothing at all.
+ *
+ * These rows read `duration_min` and printed "Duration not recorded" on every
+ * one of them, forever: it is an INPUT to slot creation and no DTO returns it.
+ * The window is what the worker sends, so the length is derived from it —
+ * and when only one end is present the label is omitted rather than guessed.
+ */
+/**
+ * When a row on the "today" list happens, across the two sources it mixes.
+ * A booking's time lives on its slot; a calendar event carries its own.
+ */
+function itemStart(row) {
+  return row.scheduled_start || row.slot_starts_at || row.start_at || row.start || null;
+}
+
+function minutesLabel(row) {
+  const mins = slotMinutes({
+    starts_at: row.starts_at || row.start_at || row.slot_starts_at || row.scheduled_start,
+    ends_at: row.ends_at || row.slot_ends_at,
+  });
+  return mins == null ? '' : ` · ${mins} min`;
+}
 
 const unavailable = (message = 'Unavailable in this environment') => ({ state: 'unavailable', message });
 const loading = { state: 'loading' };
@@ -112,18 +137,23 @@ export default function AdvisorStudioHome({
     const dayEnd = new Date(now); dayEnd.setHours(23, 59, 59, 999);
     const events = calendar.state === 'ready' ? calendar.data : [];
     const bookingEvents = events.filter((event) => {
-      const start = event.start_at || event.start || event.scheduled_start;
+      const start = itemStart(event);
       return (event.kind === 'advisor_booking' || event.type === 'advisor_booking') && new Date(start) >= now && new Date(start) <= dayEnd;
     });
     const bookingRows = bookings.state === 'ready' ? bookings.data.filter((b) => {
-      const d = new Date(b.scheduled_start || b.slot_starts_at);
+      const d = new Date(itemStart(b));
       return d >= now && d <= dayEnd && !['cancelled', 'no_show'].includes(b.status);
     }) : [];
     const seen = new Set();
     return [...bookingRows, ...bookingEvents].filter((item) => {
       const id = item.booking_id || item.id;
       if (seen.has(id)) return false; seen.add(id); return true;
-    }).sort((a, b) => new Date(a.scheduled_start || a.start_at || a.start) - new Date(b.scheduled_start || b.start_at || b.start));
+    // This list MIXES two sources: advisor bookings, whose time is
+    // `slot_starts_at` from the worker (or `scheduled_start` from the dev
+    // backend), and calendar events, whose time is genuinely `start_at`. The
+    // chain omitted `slot_starts_at`, so every worker booking sorted as
+    // Invalid Date — NaN — and the order was undefined.
+    }).sort((a, b) => new Date(itemStart(a)) - new Date(itemStart(b)));
   }, [bookings, calendar]);
 
   const engagements = useMemo(() => {
@@ -134,7 +164,7 @@ export default function AdvisorStudioHome({
       const current = map.get(key) || { key, name: bookingIdentity(b), total: 0, completed: 0, upcoming: 0, latest: null };
       current.total += 1;
       if (b.status === 'completed') current.completed += 1;
-      if (['requested', 'confirmed'].includes(b.status)) current.upcoming += 1;
+      if ([...AWAITING_DECISION, 'confirmed'].includes(b.status)) current.upcoming += 1;
       const at = b.scheduled_start || b.slot_starts_at;
       if (!current.latest || new Date(at) > new Date(current.latest)) current.latest = at;
       map.set(key, current);
@@ -160,12 +190,14 @@ export default function AdvisorStudioHome({
     if (slots.state !== 'ready') return [];
     const now = new Date();
     const end = new Date(now); end.setHours(23, 59, 59, 999);
+    // This block carried a sixth private copy of the slot adapter — correct,
+    // but private, which is precisely how the other five copies drifted and
+    // how AdvisorsPage stayed broken. One implementation, in ./advisory/kit.
     return slots.data.filter((slot) => {
-      const start = new Date(slot.start_at || slot.starts_at);
-      const remaining = slot.remaining ?? slot.available ?? Math.max(0, Number(slot.capacity || 0) - Number(slot.taken || 0));
-      const active = slot.status ? slot.status === 'open' : !slot.is_cancelled;
-      return active && remaining > 0 && start >= now && start <= end;
-    }).sort((a, b) => new Date(a.start_at || a.starts_at) - new Date(b.start_at || b.starts_at));
+      if (!isBookableSlot(slot)) return false;
+      const start = new Date(slotView(slot).startsAt);
+      return start >= now && start <= end;
+    }).sort((a, b) => new Date(slotView(a).startsAt) - new Date(slotView(b).startsAt));
   }, [slots]);
 
   return (
@@ -182,7 +214,7 @@ export default function AdvisorStudioHome({
       </header>
 
       <div className="advisor-evidence-strip">
-        <span>Intro call filter</span>{previewing ? <span className="advisor-disabled-link">Storefront withheld</span> : <Link to="/office-hours" data-testid="link-storefront-filter">Open storefront <ExternalLink size={12} /></Link>}
+        <span>Intro call filter</span>{previewing ? <span className="advisor-disabled-link">Storefront withheld</span> : <Link to="/expertise/profile" data-testid="link-storefront-filter">Open storefront <ExternalLink size={12} /></Link>}
         <span>Consent to show client outcomes</span>{previewing ? <span className="advisor-disabled-link">Clients withheld</span> : <Link to="/advisor/advisory/clients" data-testid="link-client-consent">Open clients <ExternalLink size={12} /></Link>}
         <span>Session-note auto-send</span>{previewing ? <span className="advisor-disabled-link">Settings withheld</span> : <Link to="/settings" data-testid="link-session-settings">Open settings <ExternalLink size={12} /></Link>}
       </div>
@@ -210,14 +242,14 @@ export default function AdvisorStudioHome({
         <Module title="Today" action="Open calendar" to="/calendar" testid="module-today" className="advisor-module--today" disabled={previewing}>
           {calendar.state === 'loading' || bookings.state === 'loading' ? <Pending lines={3} /> : (calendar.state === 'unavailable' && bookings.state === 'unavailable') ? <StateNote text="Today’s schedule could not be loaded." icon={CalendarDays} /> : (
             <div className="advisor-list">
-              {todayItems.map((item, index) => <div className="advisor-row" key={item.id || index}><div><strong>{item.topic || item.title || 'Advisor session'}</strong><span>{formatWhen(item.scheduled_start || item.start_at || item.start)} · {item.duration_min ? `${item.duration_min} min` : 'Duration not recorded'}</span></div><Status tone={item.status === 'confirmed' ? 'good' : 'neutral'}>{item.status || 'Scheduled'}</Status></div>)}
-               {todayOpenSlots.slice(0, 2).map((slot) => <div className="advisor-row advisor-row--open" key={slot.id}><div><strong>Open slot</strong><span>{formatWhen(slot.start_at || slot.starts_at)} · {slot.duration_min || 'Duration not recorded'} min · date-specific</span></div><Status>Open</Status></div>)}
+              {todayItems.map((item, index) => <div className="advisor-row" key={item.id || index}><div><strong>{item.topic || item.title || 'Advisor session'}</strong><span>{formatWhen(itemStart(item))}{minutesLabel(item)}</span></div><Status tone={item.status === 'confirmed' ? 'good' : 'neutral'}>{item.status || 'Scheduled'}</Status></div>)}
+               {todayOpenSlots.slice(0, 2).map((slot) => <div className="advisor-row advisor-row--open" key={slot.id}><div><strong>Open slot</strong><span>{formatWhen(slotView(slot).startsAt)}{minutesLabel(slot)} · date-specific</span></div><Status>Open</Status></div>)}
                {todayItems.length === 0 && todayOpenSlots.length === 0 && <StateNote text="No sessions or open slots are scheduled for today." icon={Clock3} />}
             </div>
           )}
         </Module>
 
-        <Module title="Storefront" action="Open storefront" to="/office-hours" testid="module-storefront" disabled={previewing}>
+        <Module title="Storefront" action="Open storefront" to="/expertise/profile" testid="module-storefront" disabled={previewing}>
           {advisor.state === 'loading' ? <Pending /> : profile ? <div className="advisor-keyvalues">{storefrontRows.map(([label, value, tone]) => <div key={label}><span>{label}</span><Status tone={tone}>{value}</Status></div>)}<div><span>Visibility</span><b>{profile.status || 'Not recorded'}</b></div></div> : <StateNote text={advisor.message || 'Storefront details are not available.'} icon={Store} />}
         </Module>
 

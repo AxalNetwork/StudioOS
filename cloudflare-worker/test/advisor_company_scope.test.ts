@@ -255,17 +255,34 @@ test('an admin is never narrowed', async () => {
 
 // ---------- what stage 9 deliberately did NOT scope ----------
 
-test('the Advisor role\'s own rows are left alone, and the reason is on record', () => {
-  // Practice and Expertise are two rows over ONE frozen API. If a later change
-  // scopes advisors.ts, this fails and whoever did it has to confront #124
-  // rather than discover the freeze afterwards.
+test('the Advisor role\'s own rows are not company-scoped, and the reason is on record', () => {
+  // THE INVARIANT SURVIVED ITS ORIGINAL REASON. This used to say "advisors.ts
+  // serves /office-hours (task #124) and is under a do-not-touch instruction".
+  // The freeze is lifted and that page is retired, so that reason is gone —
+  // but the rule is not, and its real justification was always the better one:
+  //
+  // AN ADVISOR'S PRACTICE IS NOT A COMPANY'S DATA. Every other scoped surface
+  // narrows a founder's or a firm's records to the company being viewed.
+  // `advisors.ts` serves the advisor's OWN profile, availability, bookings,
+  // services, proof and earnings — records that belong to a person and follow
+  // them across every company they advise. Narrowing them by active company
+  // would hide an advisor's own book from them depending on a switcher they
+  // do not control. `197_advisor_profile_company.sql` records the same finding
+  // from the schema side.
   const advisorsSrc = readFileSync(
     resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors.ts'), 'utf8');
   assert.doesNotMatch(advisorsSrc, /activeCompanyFor|X-Company-Id/,
-    'routes/advisors.ts serves /office-hours (task #124) and is under a do-not-touch instruction');
+    "an advisor's own practice is theirs, not the active company's");
 
-  // And the blocker is documented, not folklore.
+  // Every read is still scoped — to the PERSON, which is the correct axis.
+  assert.match(advisorsSrc, /WHERE b\.advisor_id = \?/);
+  assert.match(advisorsSrc, /WHERE advisor_id = \?\s*\n?\s*ORDER BY is_active DESC/,
+    'the services read scopes on the resolved advisor, not on a path parameter');
+
+  // And U4 is closed, not folklore in the other direction.
   const u4 = readFileSync(
     resolve(process.cwd(), 'documentation/architecture/UNRESOLVED_ITEMS.md'), 'utf8');
-  assert.match(u4, /U4 — Advisory Practice needs `\/office-hours` to change/);
+  assert.match(u4, /U4 — RESOLVED [\d-]+ — the `\/office-hours` freeze is lifted/);
+  assert.doesNotMatch(u4, /\*\*Blocks:\*\* #124\./,
+    '#124 is unblocked; U4 must not still claim it');
 });

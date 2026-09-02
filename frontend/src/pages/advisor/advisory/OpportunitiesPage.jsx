@@ -4,6 +4,7 @@ import { api } from '../../../lib/api';
 import {
   Chip, Section, SlideOver, EmptyState, StatCard, StatusBadge, RowCard,
   formatDateTime, formatRelativeDay,
+  AWAITING_DECISION, isBookableSlot, slotView,
 } from './kit';
 
 // Opportunities — inbound session requests awaiting the advisor's decision,
@@ -38,7 +39,7 @@ export default function OpportunitiesPage() {
     } catch { setNoProfile(true); }
     try {
       const r = await api.listMyAdvisorBookings();
-      setPending((r.items || []).filter((booking) => ['requested', 'pending'].includes(booking.status)));
+      setPending((r.items || []).filter((booking) => AWAITING_DECISION.includes(booking.status)));
     } catch (e) { setError(e?.message || 'Could not load requests.'); }
     if (me?.uid) {
       try {
@@ -103,11 +104,10 @@ export default function OpportunitiesPage() {
     );
   }
 
-  const slotStart = (slot) => slot.start_at || slot.starts_at;
-  const slotAvailable = (slot) => slot.remaining ?? slot.available ?? Math.max(0, Number(slot.capacity || 0) - Number(slot.taken || 0));
-  const slotTaken = (slot) => slot.taken ?? Math.max(0, Number(slot.capacity || 0) - slotAvailable(slot));
-  const slotCancelled = (slot) => slot.status ? slot.status === 'cancelled' : Boolean(slot.is_cancelled);
-  const openSlots = slots.filter((slot) => !slotCancelled(slot) && slotAvailable(slot) > 0);
+  // These four adapters used to live here, privately, which is precisely why
+  // every other caller stayed broken against the same DTOs. They are in
+  // ./kit now; this page reads them like everyone else.
+  const openSlots = slots.filter(isBookableSlot);
 
   return (
     <div className="space-y-6">
@@ -120,7 +120,7 @@ export default function OpportunitiesPage() {
         <StatCard label="Open slots" value={openSlots.length} hint="published and not full" />
         <StatCard
           label="Seats free"
-          value={openSlots.reduce((a, slot) => a + slotAvailable(slot), 0)}
+          value={openSlots.reduce((a, slot) => a + slotView(slot).available, 0)}
           hint="across open slots"
         />
       </div>
@@ -214,10 +214,10 @@ export default function OpportunitiesPage() {
               <div key={s.id} className="flex items-center justify-between gap-3 p-3">
                 <div className="min-w-0">
                   <div className="text-sm text-gray-900 dark:text-gray-100 inline-flex items-center gap-1.5">
-                    <Calendar size={13} className="text-violet-500" /> {formatDateTime(slotStart(s))}
+                    <Calendar size={13} className="text-violet-500" /> {formatDateTime(slotView(s).startsAt)}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                     {slotTaken(s)}/{s.capacity} booked · {formatRelativeDay(slotStart(s))}
+                     {slotView(s).taken}/{slotView(s).capacity} booked · {formatRelativeDay(slotView(s).startsAt)}
                   </div>
                 </div>
                 <button

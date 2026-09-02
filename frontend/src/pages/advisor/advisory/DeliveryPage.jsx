@@ -140,8 +140,7 @@ export default function DeliveryPage() {
             <Section title="Reviews">
               {(reviewsByBooking[open.id] || []).length === 0 ? (
                 <EmptyState>
-                  No review filed for this session. Reviews are written by the
-                  person you met — they cannot be authored here.
+                  No review filed for this session yet — by either side.
                 </EmptyState>
               ) : (
                 <div className="space-y-2.5">
@@ -157,6 +156,14 @@ export default function DeliveryPage() {
                           />
                         ))}
                       </div>
+                      {/* Two reviews per session are possible and mean
+                          different things — `advisor_reviews` is UNIQUE on
+                          (booking_id, reviewer_role). Rendering them
+                          identically would let the advisor's own words read as
+                          the client's. */}
+                      <div className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 mt-1.5">
+                        {r.reviewer_role === 'advisor' ? 'Your review of them' : 'Their review of you'}
+                      </div>
                       {r.comment && <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">“{r.comment}”</p>}
                       <div className="text-[11px] text-gray-400 mt-2">{formatRelativeDay(r.created_at)}</div>
                     </div>
@@ -164,10 +171,97 @@ export default function DeliveryPage() {
                 </div>
               )}
             </Section>
+
+            {/* The advisor's own review of the session. It used to live only on
+                /office-hours, where the copy here claimed it could not be
+                authored at all — untrue: the worker derives `reviewer_role`
+                from the caller (routes/advisors.ts:770) and has always accepted
+                an advisor's. This tab already sorts sessions into reviewed and
+                awaiting; it just had no way to move one between them. */}
+            {!(reviewsByBooking[open.id] || []).some((r) => r.reviewer_role === 'advisor') && (
+              <AdvisorReviewForm
+                booking={open}
+                onFiled={(review) => setReviewsByBooking((m) => ({
+                  ...m, [open.id]: [...(m[open.id] || []), review],
+                }))}
+              />
+            )}
           </div>
         )}
       </SlideOver>
     </div>
+  );
+}
+
+/**
+ * The advisor's own review of a session they held.
+ *
+ * Moved here from `/office-hours` when that page was retired. This is the
+ * surface that was already built around the gap it fills — the tab counts
+ * "N without a review" and lists them — and the only thing it lacked was a
+ * control.
+ *
+ * The worker refuses anything but a completed booking (409) and refuses a
+ * second review from the same side (UNIQUE on booking_id + reviewer_role), so
+ * both are reported as sentences rather than swallowed.
+ */
+function AdvisorReviewForm({ booking, onFiled }) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      await api.fileAdvisorReview(booking.id, { rating, comment: comment.trim() });
+      onFiled({
+        id: `local-${booking.id}`, reviewer_role: 'advisor',
+        rating, comment: comment.trim(), created_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      const msg = (err?.message || '').toLowerCase();
+      if (msg.includes('already reviewed')) {
+        setError('You have already reviewed this session.');
+      } else if (msg.includes('completed')) {
+        setError('Only a session marked as held can be reviewed. Mark it held under Engagements first.');
+      } else {
+        setError(err?.message || 'The review could not be filed. Nothing was saved.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Your review of them">
+      <form onSubmit={submit}>
+        <div className="flex items-center gap-1">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <button key={i} type="button" onClick={() => setRating(i)}
+              aria-label={`${i} star${i === 1 ? '' : 's'}`}>
+              <Star size={20}
+                className={i <= rating ? 'text-amber-400' : 'text-gray-300 dark:text-gray-600'}
+                fill={i <= rating ? 'currentColor' : 'none'} />
+            </button>
+          ))}
+        </div>
+        <textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)}
+          placeholder="Were they prepared? Would you take another session?"
+          className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900" />
+        {error && <p className="mt-2 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
+        <button type="submit" disabled={busy}
+          className="mt-3 rounded-lg bg-violet-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:bg-gray-300">
+          {busy ? 'Filing…' : 'File review'}
+        </button>
+        <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+          Yours and theirs are separate records. Filing this does not show you theirs, and does not
+          prompt them for one.
+        </p>
+      </form>
+    </Section>
   );
 }
 

@@ -3,9 +3,8 @@
  *
  * WHAT THESE PIN, and each is something that could plausibly go the other way:
  *
- *   * the frozen surface stays frozen — /office-hours still renders
- *     AdvisorExpertiseWorkspace, and that component is neither edited nor
- *     imported by the new pages;
+ *   * /office-hours is retired without dropping anything — its one capability
+ *     that lived nowhere else moved to the tab already built around it;
  *   * a zone with a store gets its own page, and a zone without one keeps a
  *     card that names the missing store rather than borrowing a page that
  *     would render someone's guess;
@@ -24,6 +23,19 @@ const bucketRoutes = codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucke
 const app = read('frontend/src/App.jsx');
 const api = codeOnly(read('frontend/src/lib/api.js'));
 
+/** The `ZONE` dispatch map, as a `{prefix: [slug…]}` object. */
+function dispatchMap() {
+  const block = bucketRoutes.slice(
+    bucketRoutes.indexOf('const ZONE = {'),
+    bucketRoutes.indexOf('const COPY = {'),
+  );
+  const out = {};
+  for (const m of block.matchAll(/'(\/[a-z]+)': \{([^}]*)\}/g)) {
+    out[m[1]] = [...m[2].matchAll(/^\s*([a-z-]+):/gm)].map((x) => x[1]);
+  }
+  return out;
+}
+
 test('every Expertise zone the shell declares is either backed or honestly empty', () => {
   const zones = allZoneRoutes('advisor')
     .filter((r) => r.startsWith('/expertise/'))
@@ -33,11 +45,7 @@ test('every Expertise zone the shell declares is either backed or honestly empty
   // The dispatch map and the COPY block must together cover the whole zone
   // list. A zone in neither would fall through to the generic "Nothing here
   // yet" card — which is honest, but says nothing useful about WHY.
-  const dispatch = bucketRoutes.slice(
-    bucketRoutes.indexOf('const EXPERTISE_ZONE = {'),
-    bucketRoutes.indexOf('const COPY = {'),
-  );
-  const backed = zones.filter((z) => dispatch.includes(`${z}:`));
+  const backed = dispatchMap()['/expertise'] || [];
   assert.deepEqual(backed, ['profile', 'services', 'proof'],
     'exactly the three zones migrations 202-204 gave a store');
 
@@ -51,6 +59,30 @@ test('every Expertise zone the shell declares is either backed or honestly empty
   }
 });
 
+test('every Practice zone is served — none is left claiming a store that exists', () => {
+  const zones = allZoneRoutes('advisor')
+    .filter((r) => r.startsWith('/practice/'))
+    .map((r) => r.slice('/practice/'.length));
+  assert.deepEqual(zones, ['opportunities', 'engagements', 'delivery', 'sessions', 'earnings']);
+
+  // Three come from the legacy Advisory workspace, two from their own pages.
+  // Together that must be all five: Practice has no unbacked zone left.
+  const live = bucketRoutes.slice(bucketRoutes.indexOf('const LIVE = {'),
+    bucketRoutes.indexOf('const ZONE = {'));
+  const fromWorkspace = zones.filter((z) => live.includes(`'${z}'`));
+  const fromOwnPage = dispatchMap()['/practice'] || [];
+  assert.deepEqual(fromWorkspace, ['opportunities', 'engagements', 'delivery']);
+  assert.deepEqual(fromOwnPage, ['sessions', 'earnings']);
+  assert.deepEqual([...fromWorkspace, ...fromOwnPage].sort(), [...zones].sort());
+
+  // And the copy that said they had "no store at all" is gone. It was true
+  // when written and false the moment migration 205 shipped; a card naming a
+  // closed gap tells an advisor a working feature is missing.
+  assert.doesNotMatch(bucketRoutes, /Earnings is not built yet/);
+  assert.doesNotMatch(bucketRoutes, /Booked sessions are not a surface yet/);
+  assert.doesNotMatch(bucketRoutes, /no session price, paid booking or payout record/);
+});
+
 test('the two unbacked zones name the store that is absent, not a vague "coming soon"', () => {
   // The whole value of the empty card is that it is specific. "Not built yet"
   // is indistinguishable from a bug; "the articles table has no advisor owner"
@@ -59,23 +91,25 @@ test('the two unbacked zones name the store that is absent, not a vague "coming 
   assert.match(bucketRoutes, /no impression or profile-view counter anywhere in the product/);
 });
 
-test('/office-hours is untouched — the frozen surface still renders its own component', () => {
-  // Task #124 freezes /office-hours, and UNRESOLVED_ITEMS U4 records that
-  // Practice and Expertise sit over one API with it. The new zones are a
-  // SECOND surface over the same store, never a rewrite of the first.
+test('/office-hours is retired, and its one unique capability moved rather than vanished', () => {
+  // This test previously pinned the opposite — that the frozen surface still
+  // rendered its own component. Task #124's freeze is lifted, so it pins the
+  // retirement instead. UNRESOLVED_ITEMS U4 is resolved with it.
   const line = app.split('\n').find((l) => l.includes('path="/office-hours"'));
-  assert.ok(line, '/office-hours must still be routed');
-  assert.match(line, /AdvisorExpertiseWorkspace/,
-    'an advisor at /office-hours still gets the component that was there');
+  assert.ok(line, 'the path must still resolve — a retired page is not a 404');
+  assert.match(line, /<Navigate to="\/practice\/opportunities" replace \/>/);
 
-  assert.doesNotMatch(bucketRoutes, /AdvisorExpertiseWorkspace/,
-    'the bucket routes no longer mount it — /expertise/* has its own pages now');
-
-  // And the component itself still carries the embedded seam it was given in
-  // #393, because /office-hours is not the only thing that could mount it.
-  const workspace = codeOnly(read('frontend/src/pages/advisor/AdvisorExpertiseWorkspace.jsx'));
-  assert.match(workspace, /\{ embedded = false \}/);
-  assert.match(workspace, /embedded=\{embedded\}/);
+  // RETIRING IS NOT THE SAME AS DROPPING. Of everything that page rendered,
+  // exactly one thing lived nowhere else: the advisor's own review of a
+  // session. ProfileFitSection was already on the advisor's studio home, and
+  // the profile form, slot publishing and the booking list all have working
+  // equivalents under /expertise and /practice — which is the point, since the
+  // ones on that page were broken against the DTOs.
+  const delivery = codeOnly(read('frontend/src/pages/advisor/advisory/DeliveryPage.jsx'));
+  assert.match(delivery, /api\.fileAdvisorReview\(/,
+    'the advisor review moved to Delivery, the tab already built around it');
+  assert.match(codeOnly(read('frontend/src/pages/advisor/AdvisorStudioHome.jsx')),
+    /ProfileFitSection/, 'the fit profile was already here — nothing to move');
 });
 
 test('an unpriced service is never rendered as free', () => {

@@ -18,7 +18,10 @@ const MILESTONE_ROUTE_PREFIXES = [
   '/build/captable',
   '/scoring',
   '/advisors',
-  '/office-hours',
+  // /office-hours is retired and redirects to /practice/opportunities, which
+  // is listed here in its place. A prefix that no longer resolves would stop
+  // refreshing lab state on the surface that replaced it.
+  '/practice',
   '/cofounder',
   '/incorporate',
 ];

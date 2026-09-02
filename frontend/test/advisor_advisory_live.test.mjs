@@ -107,13 +107,50 @@ test('Delivery keeps stating that deliverables are not tracked', () => {
   );
 });
 
-test('reviews are never authored by the advisor', () => {
-  // An advisor writing their own review is fabricated proof. The worker only
-  // exposes filing a review as the counterparty; these pages must read.
-  for (const f of ['DeliveryPage.jsx', 'ClientsPage.jsx', 'EngagementsPage.jsx']) {
+test('an advisor reviews their counterparty, never themselves', () => {
+  // THIS TEST'S PREMISE WAS WRONG and is corrected rather than deleted. It
+  // asserted "the worker only exposes filing a review as the counterparty" —
+  // it does not. `routes/advisors.ts:770` derives
+  // `reviewer_role = isAdvisor && !isOwner ? 'advisor' : 'founder'` from the
+  // caller and stores it, `advisor_reviews` is UNIQUE on
+  // (booking_id, reviewer_role) so both sides get one, and `/office-hours`
+  // filed the advisor's for as long as it existed. The assertion held only
+  // because these three files had no control, not because the rule was real.
+  //
+  // THE ACTUAL RULE, which is what fabricated proof means: an advisor may say
+  // what they thought of the person they met — that is a note about someone
+  // else — but nothing an advisor writes may be aggregated into a number
+  // presented as THEIR rating. Those are different claims and the schema can
+  // already tell them apart.
+  const advisors = readFileSync(
+    resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors.ts'), 'utf8',
+  );
+  assert.match(advisors, /reviewer_role = isAdvisor && !isOwner \? 'advisor' : 'founder'/,
+    'the worker must decide the reviewer role from the caller, never from the body');
+
+  // Nothing aggregates `advisor_reviews` into a public figure today — the only
+  // read is per-booking. If that changes, the aggregate must exclude the
+  // advisor's own row, and this is where that gets caught.
+  const reads = [...advisors.matchAll(/FROM advisor_reviews([^`]*)/g)].map((m) => m[1]);
+  for (const q of reads) {
+    if (/AVG|COUNT|SUM/i.test(q)) {
+      assert.match(q, /reviewer_role\s*=\s*'founder'/,
+        'an aggregate over advisor_reviews must exclude advisor-authored rows');
+    }
+  }
+
+  // Delivery is where an advisor files theirs — it is the tab that already
+  // sorts held sessions into reviewed and awaiting. The other two read only.
+  assert.ok(src('DeliveryPage.jsx').includes('api.fileAdvisorReview('),
+    'Delivery is where the advisor files their own review of the session');
+  assert.match(src('DeliveryPage.jsx'), /Your review of them/,
+    'and it must be labelled as being about the counterparty, not about the advisor');
+  assert.match(src('DeliveryPage.jsx'), /r\.reviewer_role === 'advisor' \? 'Your review of them' : 'Their review of you'/,
+    'the two directions must never render identically');
+  for (const f of ['ClientsPage.jsx', 'EngagementsPage.jsx']) {
     assert.ok(
       !src(f).includes('api.fileAdvisorReview('),
-      `${f} files a review — reviews must come from the person who was advised`,
+      `${f} files a review — filing belongs on Delivery, in one place`,
     );
   }
 });

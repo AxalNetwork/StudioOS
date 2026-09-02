@@ -442,7 +442,7 @@ export const SIDEBAR_GROUPS = {
       // Cohorts reads Spin-Out Lab data read-only and owns none of it.
       { to: '/cohorts', icon: Users, label: 'Cohorts', match: ['/cohorts'] },
       { to: '/expertise', icon: UserCircle, label: 'Expertise',
-        match: ['/expertise', '/office-hours', '/advisors'] },
+        match: ['/expertise', '/advisors'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts', '/advisor/network'] },
       { to: '/research', icon: Radar, label: 'Research',
