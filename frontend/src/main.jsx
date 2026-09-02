@@ -18,8 +18,18 @@ try {
   if (_diag) _diag.remove();
   const _root = document.getElementById('root');
   if (_root) _root.style.paddingTop = '';
+  // `?__reboot=` is the boot watchdog's STORAGE-FREE loop guard. Tidying it out
+  // of the URL is only safe when the watchdog's other guard — sessionStorage —
+  // actually works; where writes throw, stripping it leaves the watchdog with
+  // no bound at all and the next failed boot reloads forever.
+  let _storageWorks = false;
+  try {
+    sessionStorage.setItem('axal:probe', '1');
+    sessionStorage.removeItem('axal:probe');
+    _storageWorks = true;
+  } catch { /* blocked — keep the URL marker as the only remaining guard */ }
   const _u = new URL(window.location.href);
-  if (_u.searchParams.has('__reboot')) {
+  if (_storageWorks && _u.searchParams.has('__reboot')) {
     _u.searchParams.delete('__reboot');
     window.history.replaceState(null, '', _u.pathname + _u.search + _u.hash);
   }
@@ -40,14 +50,49 @@ function isChunkLoadError(reason) {
     /Importing a module script failed/i.test(msg)
   );
 }
-// One-shot, SW-cache-clearing hard reload. sessionStorage guards against a
-// reload loop if the failure is permanent (CDN broken, etc.); the guard is
-// cleared on a successful load (below).
-function reloadOnceForStaleChunk() {
+// SW-cache-clearing hard reload, bounded to MAX_CHUNK_RELOADS per tab.
+//
+// THIS USED TO LOOP FOREVER, in two independent ways, and both produced
+// Safari's "This webpage was reloaded because a problem occurred".
+//
+// 1. The guard was a single flag that a `load` handler CLEARED five seconds
+//    later (see below). A chunk that failed more than five seconds after load —
+//    which is every lazily-imported route chunk — therefore found the guard
+//    clear, reloaded, booted, had the guard cleared again, failed again, and
+//    reloaded again. "Once" only ever meant "once per five-second window", so a
+//    permanently missing chunk (the stale-deploy case this code exists for) was
+//    an unbounded reload loop.
+//
+// 2. The reload sat AFTER the try/catch, so when `sessionStorage.setItem` threw
+//    — Safari Private Browsing, and any profile with site data blocked — the
+//    write failed, the throw was swallowed, and the reload ran with no guard at
+//    all. `RouteErrorBoundary` already had this right: its reload is inside the
+//    try, so a blocked write falls through to the error card instead.
+//
+// So: a counter rather than a flag, never cleared on a timer, with a URL marker
+// as the storage-free half. A tab that survives two deploys still recovers from
+// both; a genuinely broken chunk stops after MAX_CHUNK_RELOADS and lets the
+// error boundary render something a person can act on.
+const CHUNK_KEY = 'axal:chunk-reload-attempts';
+const MAX_CHUNK_RELOADS = 2;
+
+function chunkReloadAttempts() {
   try {
-    if (sessionStorage.getItem('axal:chunk-reload') === '1') return;
-    sessionStorage.setItem('axal:chunk-reload', '1');
-  } catch { /* sessionStorage blocked — still safer to reload than to blank */ }
+    const n = parseInt(sessionStorage.getItem(CHUNK_KEY) || '0', 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  } catch { /* storage blocked — fall through to the URL marker */ }
+  try {
+    const m = /[?&]__chunk=(\d+)/.exec(window.location.search);
+    if (m) return parseInt(m[1], 10) || 0;
+  } catch { /* location unreadable */ }
+  return 0;
+}
+
+function reloadOnceForStaleChunk() {
+  const attempts = chunkReloadAttempts();
+  if (attempts >= MAX_CHUNK_RELOADS) return;
+  const next = attempts + 1;
+  try { sessionStorage.setItem(CHUNK_KEY, String(next)); } catch { /* URL marker below carries it */ }
   // Drop SW caches first so the next load isn't fed another stale chunk.
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations()
@@ -57,12 +102,24 @@ function reloadOnceForStaleChunk() {
         if (window.caches && caches.keys) {
           caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k).catch(() => {}))))
             .catch(() => {})
-            .finally(() => window.location.reload());
+            .finally(() => reloadCarryingCount(next));
         } else {
-          window.location.reload();
+          reloadCarryingCount(next);
         }
       });
   } else {
+    reloadCarryingCount(next);
+  }
+}
+
+// The attempt count rides in the URL as well as in sessionStorage, so the bound
+// still holds in a browser that refuses the write.
+function reloadCarryingCount(n) {
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.set('__chunk', String(n));
+    window.location.replace(u.toString());
+  } catch {
     window.location.reload();
   }
 }
@@ -82,17 +139,26 @@ window.addEventListener('vite:preloadError', (e) => {
   try { e.preventDefault(); } catch { /* ignore */ }
   reloadOnceForStaleChunk();
 });
-// Clear both chunk-reload guard flags once the app successfully renders,
-// so the next real chunk failure can trigger a fresh auto-recovery.
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    try { sessionStorage.removeItem('axal:chunk-reload'); } catch {}
-    try { sessionStorage.removeItem('axal:chunk-reload-boundary'); } catch {}
-    // Task #37 — the app booted, so clear the boot-watchdog guard too; the
-    // next real entry-chunk failure (e.g. a future deploy) can recover again.
-    try { sessionStorage.removeItem('axal:boot-reboot'); } catch {}
-  }, 5000);
-});
+// THE GUARDS ARE NOT CLEARED ON A TIMER, and that removal is the fix.
+//
+// This used to wipe all three five seconds after `load`, so that "the next real
+// chunk failure can trigger a fresh auto-recovery". The cost was that the
+// guards only bounded failures occurring within those five seconds. A lazy
+// route chunk that 404s when the user clicks — the ordinary case after a deploy
+// — always found them cleared, so every reload restored the conditions for the
+// next one and the tab reloaded until the browser gave up.
+//
+// The bound is now a per-tab attempt count instead (see above), which is the
+// right lifetime: sessionStorage dies with the tab, so a new tab gets a fresh
+// budget without any timer resetting one mid-session.
+//
+// The boundary's own guard is cleared only by its explicit Reload button
+// (`RouteErrorBoundary.handleChunkReload`), which is a person deciding to try
+// again rather than a timer deciding for them.
+//
+// `axal:boot-reboot` is likewise left alone. Clearing it while `main.jsx` also
+// strips `?__reboot=` from the URL removed BOTH of the boot watchdog's loop
+// guards at once, which is the same unbounded-reload shape one layer down.
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

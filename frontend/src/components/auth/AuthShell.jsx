@@ -35,7 +35,13 @@ export default function AuthShell({
   return (
     <div className="min-h-screen flex flex-col" style={shellStyle}>
       <header className="flex items-center justify-between gap-3 px-6 py-5 sm:px-8">
-        <AxalLogo size="sm" onDark={!!backgroundSrc} />
+        {/* Clickable: this is a signed-out page, and `/` is where PublicNav's
+            logo goes, so the destination is the same wherever you meet it.
+            The link lives here rather than inside AxalLogo because PublicNav
+            already wraps it — a link inside a link is invalid HTML. */}
+        <Link to="/" aria-label="Axal VC home" className="rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70">
+          <AxalLogo size="sm" onDark={!!backgroundSrc} />
+        </Link>
         {email ? (
           <span className="font-mono text-[11px] text-white/80 truncate max-w-[220px]">{email}</span>
         ) : (
