@@ -85,7 +85,7 @@ it, where in their nav, and how do they get there.*
 | Advisor Studio | `/spinout-lab/advisors` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Advisory Practice | `/expertise/*` · `/practice/*` | Home | Full page | Sidebar → Home → Expertise | DONE | High |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Pages · Advisor Cohorts | `/advisor/cohorts/{founders` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
+| Pages · Advisor Cohorts | `/cohorts/founders` · `/this-week` · `/outcomes` · `/guidance` · `/calendar` · `/admin/advisor-cohorts` | Home | Full page | Sidebar → Home → Cohorts | PARTIAL | High |
 | Signals | `/signals` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
 
 ## LP / Investor — 18 canvases
@@ -207,9 +207,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 67 | Live route, reachable from that workspace’s sidebar. |
+| High | 68 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 31 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 28 | Not routed. Proposed route only. |
+| Low | 27 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

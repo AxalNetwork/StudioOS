@@ -59,7 +59,7 @@ canvas behind it still shows up here.
 | Headerless | Network | `/network` | Partner Operator Canvas |
 | Headerless | Research | `/signals` | — (no canvas; shipped ahead of the design corpus) |
 
-## `admin` — 48 destinations in 6 groups
+## `admin` — 49 destinations in 6 groups
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
@@ -72,6 +72,7 @@ canvas behind it still shows up here.
 | Admin | Event Admin | `/admin/events` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Job Board Admin | `/admin/jobs` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Communities Admin | `/admin/circles` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Advisor Cohort Access | `/admin/advisor-cohorts` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Exploring Users | `/admin/exploring` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | LP Applications | `/admin/lp-applications` | GP Application Review |
 | Admin | Monitoring | `/monitoring` | Support Security · Super |
@@ -123,7 +124,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-53 of the 83 sidebar rows above are not claimed
+54 of the 84 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -144,6 +145,7 @@ rather than merely absent.
 - admin · Admin · Event Admin (`/admin/events`)
 - admin · Admin · Job Board Admin (`/admin/jobs`)
 - admin · Admin · Communities Admin (`/admin/circles`)
+- admin · Admin · Advisor Cohort Access (`/admin/advisor-cohorts`)
 - admin · Admin · Exploring Users (`/admin/exploring`)
 - admin · Admin · Telegram Channels (`/admin/telegram`)
 - admin · Admin · Content Queue (`/admin/articles`)

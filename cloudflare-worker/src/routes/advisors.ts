@@ -1438,6 +1438,156 @@ advisors.get('/me/cohort/:cycleId/founders', async (c) => {
 });
 
 /**
+ * The batch's week, as the Lab records it. READ ONLY, and Lab-sourced entirely.
+ *
+ * SAME TWO-PART GATE AS FOUNDERS — eligibility then grant. This returns the
+ * same founders' progress, so it must be no easier to reach.
+ *
+ * ONE ROUTE FOR THE WEEK VIEW, not two. `current_week` has to be computed in
+ * one place or two pages eventually disagree about which week it is, and
+ * "which week is it" is the sort of thing that looks obviously derivable right
+ * up until a cycle has no `week_windows` rows at all.
+ *
+ * `windows_recorded: false` IS THE HONEST ANSWER for such a cycle. 156 created
+ * `week_windows` and older cycles predate it. Rendering "week 1" for a cycle
+ * whose windows nobody recorded would be inventing the one fact this page is
+ * for. The client must treat `available: false` as unavailable, never as
+ * empty — the same rule as everywhere else in this bucket.
+ *
+ * NO ADVISOR SLOTS ARE JOINED IN HERE, deliberately. The Cohorts · Calendar
+ * card says nothing joins the Lab's dates to the advisor's own availability,
+ * and that is still true. Joining them here would make that card false and
+ * commit us to building the calendar; keeping this strictly Lab-sourced keeps
+ * the boundary honest.
+ */
+advisors.get('/me/cohort/:cycleId/weeks', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    if (!mayHoldCohortAssignment(user)) {
+      return c.json({ detail: 'Only an advisor can open a cohort batch' }, 403);
+    }
+    const cycleId = Number(c.req.param('cycleId'));
+    if (!Number.isInteger(cycleId)) {
+      return c.json({ detail: 'cycleId must be a cohort cycle id' }, 400);
+    }
+    const assignment = await c.env.DB.prepare(
+      `SELECT id FROM advisor_cohort_assignments
+        WHERE advisor_user_id = ? AND cohort_cycle_id = ? AND is_active = 1`
+    ).bind(user.id, cycleId).first<{ id: number }>();
+    if (!assignment) {
+      return c.json({ detail: 'You are not assigned to this cohort' }, 403);
+    }
+
+    // Lab tables. A missing one answers `available: false` rather than
+    // throwing — the precedent `/spinout-lab/fund-metrics` sets — because an
+    // advisor cannot act on a stack trace and an empty list would be a lie.
+    try {
+      const cycle = await c.env.DB.prepare(
+        'SELECT year, month, start_at, end_at, status FROM cohort_cycles WHERE id = ?'
+      ).bind(cycleId).first<{
+        year: number; month: number; start_at: string; end_at: string; status: string;
+      }>();
+      if (!cycle) return c.json({ detail: 'No such cohort cycle' }, 404);
+
+      const windows = await c.env.DB.prepare(
+        `SELECT week_number, unlock_at, deadline_at FROM week_windows
+          WHERE cohort_cycle_id = ? ORDER BY week_number ASC`
+      ).bind(cycleId).all<{ week_number: number; unlock_at: string; deadline_at: string }>();
+      const weeks = windows.results || [];
+
+      const statuses = await c.env.DB.prepare(
+        `SELECT w.user_id AS user_id, w.week_number AS week_number, w.status AS status,
+                w.deliverables_done AS deliverables_done,
+                w.deliverables_required AS deliverables_required,
+                u.name AS name
+           FROM company_week_status w
+           LEFT JOIN users u ON u.id = w.user_id
+          WHERE w.cohort_cycle_id = ?
+          ORDER BY u.name ASC, w.week_number ASC
+          LIMIT 1000`
+      ).bind(cycleId).all<{
+        user_id: number; week_number: number; status: string;
+        deliverables_done: number; deliverables_required: number; name: string | null;
+      }>();
+
+      const byFounder = new Map<number, any>();
+      for (const r of statuses.results || []) {
+        if (!byFounder.has(r.user_id)) {
+          byFounder.set(r.user_id, { user_id: r.user_id, name: r.name ?? null, weeks: {} });
+        }
+        byFounder.get(r.user_id).weeks[r.week_number] = {
+          status: r.status,
+          deliverables_done: r.deliverables_done,
+          deliverables_required: r.deliverables_required,
+        };
+      }
+
+      // Which week the batch is in, computed once, server-side, from the
+      // windows the Lab actually recorded. `null` when there are none — see
+      // the header.
+      const now = Date.now();
+      let currentWeek: number | null = null;
+      for (const w of weeks) {
+        if (new Date(w.unlock_at).getTime() <= now) currentWeek = w.week_number;
+      }
+
+      return c.json({
+        available: true,
+        cohort_cycle_id: cycleId,
+        // Seam-marked on the wire, the way the founders read already is.
+        source: 'spinout_lab',
+        server_time: nowIso(),
+        cycle,
+        windows_recorded: weeks.length > 0,
+        current_week: currentWeek,
+        weeks,
+        founders: [...byFounder.values()],
+      });
+    } catch (e) {
+      console.error('[advisors] cohort weeks read failed:', (e as Error).message);
+      return c.json({
+        available: false,
+        cohort_cycle_id: cycleId,
+        detail: 'The Lab\u2019s week record could not be read.',
+      });
+    }
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Admin: the users who may actually be assigned.
+ *
+ * Same predicate as the write, so the picker can only ever offer what the POST
+ * will accept. Putting the eligibility rule in the UI instead would give two
+ * answers to one question.
+ */
+advisors.get('/admin/cohort-assignments/assignable', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!isAdmin(user)) return c.json({ detail: 'Admin required' }, 403);
+    await ensureAdvisorStoresSchema(c.env);
+    const rows = await c.env.DB.prepare(
+      `SELECT u.id AS id, u.name AS name, u.email AS email, a.id AS advisor_profile_id
+         FROM users u
+         LEFT JOIN advisors a ON a.user_id = u.id
+        WHERE LOWER(u.role) = 'advisor'
+        ORDER BY u.name ASC
+        LIMIT 500`
+    ).all<{ id: number; name: string | null; email: string | null; advisor_profile_id: number | null }>();
+    return c.json({
+      items: (rows.results || []).map((r) => ({
+        id: r.id, name: r.name ?? null, email: r.email ?? null,
+        // An advisor with no profile row can still hold an assignment — 206
+        // keys on users(id) precisely so a newly created account is
+        // assignable. Reported so an admin knows what they are looking at.
+        has_advisor_profile: r.advisor_profile_id != null,
+      })),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
  * Admin: who is assigned to which cohort.
  *
  * Registered under `/admin/...` — two segments with a literal first — so the
