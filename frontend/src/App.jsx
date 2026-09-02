@@ -15,6 +15,7 @@ import ViewModeContext from './contexts/ViewModeContext';
 import { resolveActiveRole } from './lib/activeRole';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
 import SafeMount from './components/SafeMount';
+import AxalLogo from './components/AxalLogo';
 import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
@@ -707,8 +708,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             >
               <Menu size={18} />
             </button>
-            <img src="/axal-mark.png" alt="Axal VC" className="h-7 w-7 rounded-md object-cover flex-shrink-0" />
-            <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 hidden sm:block">Axal VC</span>
+            <div className="flex items-center gap-2.5 dark:rounded-lg dark:bg-white/95 dark:px-2 dark:py-1">
+              <AxalLogo size="sm" />
+            </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
             {isImpersonating && (
