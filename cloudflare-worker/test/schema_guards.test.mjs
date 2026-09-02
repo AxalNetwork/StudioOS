@@ -468,8 +468,17 @@ test('a money word is not the same as an amount of money', () => {
 
 test('every *_cents column is an integer, and the legacy dollar list is closed', () => {
   assert.deepEqual(nonIntegerCents(), [], 'a REAL cents column promises what it cannot deliver');
-  // 52 legacy REAL dollar columns are on record. The gate fails on a 53rd, and
-  // equally on one of the 52 that has since been converted.
+  // 50 legacy REAL dollar columns are on record. The gate fails on a 51st, and
+  // equally on one of the 50 that has since been converted.
+  //
+  // It was 52 until `capital_calls_new.amount` and `deals_new.amount` came off.
+  // Those are the SCRATCH tables of two rebuilds (039 and the capital
+  // consolidation): created, copied into, then renamed over the real table in
+  // the same file. They named the same columns as `capital_calls.amount` and
+  // `deals.amount`, which are on the list in their own right, under table names
+  // that stopped existing the moment the migration finished — so they could
+  // never be converted and would never have come off. `check-money-cents` skips
+  // rebuild scratch tables now, which is what took them off.
   const baseline = JSON.parse(
     fs.readFileSync(new URL('../../scripts/money-cents-baseline.json', import.meta.url), 'utf8'),
   ).columns;

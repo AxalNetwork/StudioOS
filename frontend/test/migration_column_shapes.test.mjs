@@ -20,6 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
 import {
   referencedColumns,
   alteredColumns,
@@ -91,4 +92,79 @@ test('the Super Admin migration is reachable behind a sequence that can apply', 
   assert.match(read('frontend/src/App.jsx'),
     /role === 'admin' && Number\(user\?\.is_super_admin \?\? 0\) === 1 \? 'super_admin' : role/,
     'the HQ shell must still key on the flag 199 adds');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Migration 200 — the rebuild that moves production onto the shape the code
+ * reads. A rebuild is the one migration shape that can lose data silently, so
+ * the properties that stop it doing so are pinned rather than trusted.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const M200 = `${M}/200_service_offerings_shape.sql`;
+const codeOf = (p) => read(p).replace(/--.*$/gm, '');
+
+test('200 fails before it mutates anything on a database already in the target shape', () => {
+  const first = codeOf(M200).trim().split(';')[0].trim();
+  assert.match(first, /SELECT\s+partner_id\s+FROM\s+service_offerings\s+WHERE\s+0/i,
+    'the preflight must be the FIRST statement — a database built from migrations '
+    + 'alone has no partner_id, and it must fail there rather than part-way through');
+});
+
+test('200 preserves the ids the service_engagements foreign key points at', () => {
+  const insert = /INSERT INTO service_offerings_new\s*\(([^)]*)\)/i.exec(codeOf(M200));
+  assert.ok(insert, 'the copy INSERT must name its columns explicitly');
+  assert.match(insert[1], /\bid\b/,
+    'id must be copied, not regenerated — service_engagements.offering_id references it');
+  assert.match(read('cloudflare-worker/sql/schema.sql'),
+    /offering_id INTEGER NOT NULL REFERENCES service_offerings\(id\)/,
+    'if this reference ever moves, the id-preservation rule above moves with it');
+});
+
+test('200 archives the rows it cannot migrate instead of dropping them', () => {
+  const code = codeOf(M200);
+  assert.match(code, /CREATE TABLE IF NOT EXISTS service_offerings_orphans_pre200/,
+    'rows whose partner_id resolves to no user cannot enter a NOT NULL owner_user_id '
+    + 'and must be parked, not discarded');
+  assert.ok(
+    code.indexOf('service_offerings_orphans_pre200') < code.indexOf('DROP TABLE service_offerings'),
+    'the archive has to be written while the source table still exists',
+  );
+  assert.ok(
+    code.indexOf('DROP TABLE service_offerings') < code.indexOf('RENAME TO service_offerings'),
+    'drop-then-rename: a RENAME TO rewrites the REFERENCES clause in '
+    + 'service_engagements, so renaming the old table aside repoints the FK at it',
+  );
+});
+
+test('the shape 200 builds is the shape routes/services.ts writes', () => {
+  // The drift behind all of this was a route and a table disagreeing with
+  // nothing in the build to notice. This is that check.
+  const created = /CREATE TABLE service_offerings_new \(([\s\S]*?)\n\);/.exec(codeOf(M200));
+  assert.ok(created, 'could not read the target shape out of 200');
+  const columns = new Set(
+    created[1].split('\n')
+      .map((l) => /^\s*([a-z_]\w*)\s+\w/i.exec(l))
+      .filter(Boolean)
+      .map((m) => m[1].toLowerCase()),
+  );
+  assert.ok(columns.has('owner_user_id') && columns.has('company_id'),
+    'the rebuild must carry both the target owner column and 196’s company_id');
+
+  const route = read('cloudflare-worker/src/routes/services.ts');
+  const inserted = /INSERT INTO service_offerings \(([^)]*)\)/.exec(route);
+  assert.ok(inserted, 'services.ts must still have its INSERT');
+  for (const col of inserted[1].split(',').map((c) => c.trim().toLowerCase())) {
+    assert.ok(columns.has(col), `services.ts inserts ${col}, which 200 does not create`);
+  }
+});
+
+test('the op.service checklist item queries a table and column that exist', () => {
+  // Comment-stripped: the header deliberately still narrates the old typo, and
+  // a test that cannot tell a query from a comment is how the typo survived.
+  const src = codeOnly(read('cloudflare-worker/src/services/onboardingChecklist.ts'));
+  assert.ok(!/services_offerings/.test(src),
+    'services_offerings is a typo for a table that has never existed');
+  assert.ok(!/FROM service_offerings WHERE user_id/.test(src),
+    'service_offerings.user_id exists in neither declared shape');
+  assert.match(src, /FROM service_offerings WHERE owner_user_id = \?/);
 });

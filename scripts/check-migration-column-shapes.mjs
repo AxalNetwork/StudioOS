@@ -41,8 +41,14 @@
  * A bare column inside `UPDATE t SET … WHERE …` belongs to `t` too, but
  * attributing unqualified names needs a parser, and a checker that guesses is
  * worse than one with a stated blind spot. Migrations that reach a collided
- * table's columns unqualified are not covered; say so rather than imply
- * coverage.
+ * table's columns unqualified are not covered, and neither is a column reached
+ * through a table ALIAS (`FROM service_offerings o … o.partner_id`); say so
+ * rather than imply coverage.
+ *
+ * A migration that CREATES a table, or REBUILDS one by renaming a table it
+ * created into that name, is exempt for that table — it has just declared the
+ * shape it then reads, so the repo's disagreeing definitions no longer describe
+ * what is there.
  *
  * Pre-existing offenders live in `scripts/migration-column-shapes-baseline.json`
  * so this fails on NEW ones only. A baseline entry is a debt with a name, not
@@ -129,10 +135,23 @@ export function violations() {
     const sql = fs.readFileSync(path.join(MIGRATIONS, file), 'utf8');
     // A migration that CREATES the table settles its own shape: the columns it
     // declares are the ones it may index and read, whatever else exists.
+    //
+    // A table REBUILD settles it too, and that is not the same statement. The
+    // SQLite rebuild idiom creates the new shape under a temporary name, copies
+    // rows into it, drops the original and renames the temporary into the freed
+    // name — so by the time the file indexes `service_offerings`, that name
+    // holds the table this migration just declared, not the one the repo's
+    // CREATE TABLEs disagree about. Reading the rename is what tells the two
+    // apart; without it migration 200 reports a false positive on the very
+    // column it exists to introduce.
+    const body = stripComments(sql);
     const selfDefined = new Set(
-      [...stripComments(sql).matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+)/gi)]
+      [...body.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+)/gi)]
         .map((m) => m[1].toLowerCase()),
     );
+    for (const m of body.matchAll(/ALTER\s+TABLE\s+[`"[]?(\w+)[`"\]]?\s+RENAME\s+TO\s+[`"[]?(\w+)/gi)) {
+      if (selfDefined.has(m[1].toLowerCase())) selfDefined.add(m[2].toLowerCase());
+    }
     for (const [table, cols] of referencedColumns(sql)) {
       if (selfDefined.has(table)) continue;
       const list = defs.get(table);

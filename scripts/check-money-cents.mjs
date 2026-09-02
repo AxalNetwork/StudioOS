@@ -121,7 +121,33 @@ export function declaredColumns() {
   for (const f of files) {
     const src = fs.readFileSync(f, 'utf8');
     const rel = path.relative(ROOT, f);
+    // A table rebuild's SCRATCH table is not a new declaration. The SQLite
+    // rebuild idiom creates the target shape under a temporary name, copies
+    // rows in, drops the original and renames the temporary into the freed
+    // name — so `service_offerings_new.price_usd` is `service_offerings`'s
+    // own column mid-flight, not a fifty-third float money column. Counting
+    // it as new asks the baseline to record a table name that exists for the
+    // length of one migration and can never be converted, which is a ledger
+    // entry that outlives the thing it records.
+    //
+    // Both halves are matched with STATIC patterns and compared as sets. The
+    // first draft built one regex per rename by interpolating the table name,
+    // which Semgrep flagged as a non-literal RegExp: the name is a `\w+`
+    // capture out of a repo SQL file, so no metacharacter can reach it and
+    // there was no real ReDoS here — but a set intersection is simpler, does
+    // one pass instead of one compile per rename, and leaves nothing to argue
+    // about.
+    const createdHere = new Set(
+      [...src.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+)/gi)]
+        .map((m) => m[1].toLowerCase()),
+    );
+    const scratch = new Set(
+      [...src.matchAll(/ALTER\s+TABLE\s+[`"[]?(\w+)[`"\]]?\s+RENAME\s+TO\s+[`"[]?(\w+)/gi)]
+        .map((m) => m[1].toLowerCase())
+        .filter((t) => createdHere.has(t)),
+    );
     for (const m of src.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+)[`"\]]?\s*\(/gi)) {
+      if (scratch.has(m[1].toLowerCase())) continue;
       let depth = 0, i = m.index + m[0].length - 1;
       const start = i + 1;
       for (; i < src.length; i += 1) {
