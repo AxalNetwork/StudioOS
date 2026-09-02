@@ -345,7 +345,7 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthShell showApplyCard applyLabel="Apply to Axal VC →">
+    <AuthShell showApplyCard applyLabel="Apply to Axal VC →" backgroundSrc="/auth/login-background.png">
       <AuthCard>
         <h1 className="m-0 text-[25px] font-extrabold tracking-tight leading-tight text-[#241f38]">
           Sign in
