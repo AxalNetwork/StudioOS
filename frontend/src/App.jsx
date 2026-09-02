@@ -163,6 +163,7 @@ const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
 const OfficeHoursPage = lazy(() => import('./pages/OfficeHoursPage'));
+const AttestConsentPage = lazy(() => import('./pages/AttestConsentPage'));
 const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage'));
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
@@ -2039,6 +2040,12 @@ function AppInner() {
       <Route path="/jobs" element={<PublicJobsPage />} />
       <Route path="/jobs/:slug" element={<PublicJobDetailPage />} />
       <Route path="/invite/:token" element={<InviteRsvpPage />} />
+      {/* The attester's side of an advisor's proof claim (migration 204). No
+          auth: the token is the credential, and an attester is usually not a
+          user of this product. `isPublicPath` lists /attest/ for the same
+          reason /esign/ is there — a background settings 401 must not bounce
+          someone who came to answer a question. */}
+      <Route path="/attest/:token" element={<AttestConsentPage />} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />
