@@ -14,9 +14,19 @@
  *    without us touching the Stripe provider code.
  *  - Every detect SELECT is wrapped in try/catch returning false because
  *    several auxiliary tables (`compliance_records`, `pairwise_ndas`,
- *    `match_scores`, `services_offerings`, etc.) may not exist on every
- *    deploy (older migrations or feature-gated). A missing table never
- *    fails the dashboard.
+ *    `match_scores`, etc.) may not exist on every deploy (older migrations
+ *    or feature-gated). A missing table never fails the dashboard.
+ *
+ *    THAT TOLERANCE HAS A COST, and `op.service` paid it. This list used to
+ *    name `services_offerings` among the tables that "may not exist", which
+ *    read as a feature gate and was in fact a typo for `service_offerings` —
+ *    a table that exists everywhere. Its detect query, and the fallback
+ *    beside it naming a `user_id` column no declared shape of that table has,
+ *    both threw; the catch turned both into `false`; and the item read "not
+ *    done" for every operator, forever, with nothing anywhere to notice.
+ *    A swallowed query is indistinguishable from an honest zero, so a name in
+ *    this list has to be a table that genuinely might be absent — never a
+ *    guess, and never a typo.
  *  - Item keys are NEVER renamed; new items append to the end of a role.
  */
 
@@ -358,8 +368,13 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
         `SELECT COUNT(*) FROM kyc_records WHERE user_id = ? AND (LOWER(kind) = 'kyb' OR LOWER(record_type) = 'kyb')`,
         userId)) > 0;
     case 'op.service':
-      return (await num(env, `SELECT COUNT(*) FROM services_offerings WHERE owner_user_id = ?`, userId)) > 0
-          || (await num(env, `SELECT COUNT(*) FROM service_offerings WHERE user_id = ?`, userId)) > 0;
+      // Both arms of this used to be wrong, and `num()` swallowing the error is
+      // why nobody noticed: the first named `services_offerings`, a table that
+      // has never existed, and the second `service_offerings.user_id`, a column
+      // present in neither declared shape of that table. The item therefore read
+      // "not done" for every operator forever. Migration 200 settles the shape;
+      // this is the one query that matches it.
+      return (await num(env, `SELECT COUNT(*) FROM service_offerings WHERE owner_user_id = ?`, userId)) > 0;
     case 'op.refs':
       return (await num(env, `SELECT COUNT(*) FROM references_records WHERE user_id = ?`, userId)) >= 2;
     case 'op.referral':
