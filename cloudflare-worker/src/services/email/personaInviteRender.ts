@@ -5,7 +5,6 @@
  * from `canvasEmailParts.ts`. The variant fixes EmailKind; callers cannot
  * override the footer unsubscribe rule.
  */
-import { escapeHtml } from '../email';
 import {
   bulletBox,
   ctaButton,
