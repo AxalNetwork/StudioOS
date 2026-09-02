@@ -134,7 +134,7 @@ export default function FounderRaiseCapital() {
         {Object.keys(errors).length > 0 && <div className="fr-capital-alert" role="alert" data-testid="status-capital-partial"><AlertCircle size={16} /><span>{errors.projects || errors.capTable || 'Some capital sources are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <CapitalSkeleton /> : errors.projects ? <UnavailableCapital onRetry={load} /> : !project ? <EmptyCapital /> : <CapitalContent project={project} scenario={scenario} result={result} latestRound={latestRound} ledger={ledger} ledgerTotal={ledgerTotal} foundersNow={foundersNow} safes={safes} safeTotal={safeTotal} variants={variants} waterfall={waterfall} safeHarbour={safeHarbour} errors={errors} query={query} />}
       </section>
-      <WorkerRail project={project} scenario={scenario} ledger={ledger} variants={variants} waterfall={waterfall} />
+      <PageRail project={project} scenario={scenario} ledger={ledger} variants={variants} waterfall={waterfall} />
     </div>
   </main>;
 }
@@ -158,7 +158,7 @@ function CapitalContent({ project, scenario, result, latestRound, ledger, ledger
 }
 
 function Stat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function WorkerRail({ project, scenario, ledger, variants, waterfall }) {
+function PageRail({ project, scenario, ledger, variants, waterfall }) {
   return <WorkerRail
     workspace="Raise"
     className="fr-capital-rail"

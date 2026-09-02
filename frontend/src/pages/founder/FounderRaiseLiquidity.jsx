@@ -69,7 +69,7 @@ export default function FounderRaiseLiquidity() {
     <header className="fr-capital-header"><div className="fr-capital-crumb"><Link to={`/raise/status${query}`}><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Liquidity</strong></div><div className="fr-capital-title-row"><div><p className="fr-capital-kicker">Founder / Raise</p><h1>Liquidity &amp; exits</h1><p className="fr-capital-subtitle">Secondaries, ROFR, tender state and the exit waterfall.</p></div>{projects.length > 1 && <label className="fr-capital-picker"><span>Startup</span><select value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div><nav className="fr-capital-zone-nav" aria-label="Raise sections"><Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><Link to={`/raise/liquidity${query}`} className="is-active">Liquidity</Link></nav></header>
     {error && <div className="fr-capital-alert" role="alert"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {loading ? <div className="fr-capital-loading"><i /><i /><div><i /><i /><i /></div></div> : !project ? <EmptyState /> : <LiquidityContent project={project} result={result} scenario={scenario} rounds={rounds} finalLedger={finalLedger} waterfall={waterfall} preferenceOverhang={preferenceOverhang} view={view} setView={setView} workspaceQuery={workspaceQuery} error={error} />}
-  </section><WorkerRail project={project} result={result} error={error} /></div></main>;
+  </section><PageRail project={project} result={result} error={error} /></div></main>;
 }
 
 function LiquidityContent({ project, result, scenario, rounds, finalLedger, waterfall, preferenceOverhang, view, setView, workspaceQuery, error }) {
@@ -90,7 +90,7 @@ function Waterfall({ waterfall, rounds, finalLedger, error }) {
 function UnavailablePanel({ view, error }) { const label = view === 'restrictions' ? 'transfer restriction source' : view === 'tender' ? 'tender-event source' : 'liquidity-history source'; return <div className="fr-capital-inline-empty"><Clock3 size={18} /><div><strong>{error ? `${label} unavailable.` : `No ${label} is connected.`}</strong><p>FR6 does not infer seed-stage events, ROFR windows, or historical activity from another workspace.</p></div></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function Coverage({ label, value }) { return <div className="fr-capital-coverage-row"><span>{label}</span><strong>{value}</strong></div>; }
-function WorkerRail({ project, result, error }) {
+function PageRail({ project, result, error }) {
   return <WorkerRail
     workspace="Raise"
     className="fr-capital-rail"

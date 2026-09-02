@@ -122,7 +122,7 @@ export default function FounderRaisePitch() {
         {Object.keys(errors).length > 0 && <div className="fr-pitch-alert" role="alert" data-testid="status-pitch-partial"><AlertCircle size={16} /><span>{errors.projects || errors.versions || 'Some pitch sources are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <PitchSkeleton /> : errors.projects ? <UnavailablePitch onRetry={load} /> : !project ? <EmptyPitch /> : <PitchContent project={project} versions={versions} current={current} analytics={analytics} engagementError={errors.engagement} query={query} />}
       </section>
-      <WorkerRail project={project} versions={versions} analytics={analytics} />
+      <PageRail project={project} versions={versions} analytics={analytics} />
     </div>
   </main>;
 }
@@ -168,7 +168,7 @@ function normalizeAnalytics(value) {
 }
 
 function Stat({ label, value, note, muted }) { return <div className={`fr-pitch-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function WorkerRail({ project, versions, analytics }) {
+function PageRail({ project, versions, analytics }) {
   return <WorkerRail
     workspace="Raise"
     className="fr-pitch-rail"

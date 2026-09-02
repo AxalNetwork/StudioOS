@@ -149,7 +149,7 @@ export default function FounderBuildKpi() {
             </>
           )}
         </section>
-        <WorkerRail project={selectedProject} snapshotCount={orderedSnapshots.length} />
+        <PageRail project={selectedProject} snapshotCount={orderedSnapshots.length} />
       </div>
     </main>
   );
@@ -159,7 +159,7 @@ function Stat({ label, value, note, muted }) { return <div className={`fb-kpi-st
 function KpiRow({ row }) { return <tr data-testid={`row-kpi-${row.key}`}><td><strong>{row.label}</strong><small>{row.key === 'runway_months' ? 'Server-derived summary' : 'Stored snapshot field'}</small></td><td className={row.value === null || row.value === undefined ? 'is-empty' : ''}>{formatValue(row.value, row.unit)}</td><td className="is-empty">Not recorded</td><td className="is-empty">—</td><td><span className={`fb-kpi-source ${row.source === 'stripe' ? 'source-stripe' : row.source === 'Derived' ? 'source-derived' : ''}`}>{row.source ? row.source : 'Not recorded'}</span></td></tr>; }
 function HistoryCard({ snapshots, total }) { return <section className="fb-kpi-card"><div className="fb-kpi-card-head"><div><Database size={16} /><h2>Snapshot history</h2></div><span>{total} total</span></div>{snapshots.length ? <div className="fb-kpi-history">{snapshots.slice(0, 6).map((snapshot) => <div className="fb-kpi-history-row" key={snapshot.id}><span>{formatDate(snapshot.snapshot_date)}</span><strong>{snapshot.source || 'Not recorded'}</strong><span>{FIELDS.filter((field) => snapshot[field.key] !== null && snapshot[field.key] !== undefined && snapshot[field.key] !== '').length} fields populated</span></div>)}</div> : <p className="fb-kpi-muted-copy">No snapshots match this filter.</p>}<p className="fb-kpi-note">History is read-only here. Use the editor for manual entry or imports.</p></section>; }
 function CoverageCard({ latest, summary }) { return <section className="fb-kpi-card"><div className="fb-kpi-card-head"><div><CheckCircle2 size={16} /><h2>Ledger coverage</h2></div><span>Truthful fields only</span></div><div className="fb-kpi-coverage-row"><span>Latest recorded snapshot</span><strong>{latest ? formatDate(latest.snapshot_date) : 'Unavailable'}</strong></div><div className="fb-kpi-coverage-row"><span>Server-derived runway</span><strong>{formatValue(summary?.runway_months, 'mo')}</strong></div><p className="fb-kpi-note">Runway appears only when the server can derive it from its available records. No cash, burn, or target value is filled in from assumptions.</p></section>; }
-function WorkerRail({ project, snapshotCount }) {
+function PageRail({ project, snapshotCount }) {
   return <WorkerRail
     workspace="Build"
     className="fb-kpi-rail"

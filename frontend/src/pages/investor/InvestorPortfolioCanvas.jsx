@@ -157,6 +157,9 @@ export default function InvestorPortfolioCanvas() {
       )}
       <footer className="i4-boundary">Investor workspace. Data shown is governed by your existing access and permissions.</footer>
     </main>
+    {/* The zone row above covers Positions, Updates and Value-add.
+        /portfolio/performance is not a zone of the Portfolio bucket, so the
+        rail keeps the only door to it. */}
     <WorkerRail
       workspace="Portfolio"
       role="investor"
@@ -173,9 +176,6 @@ export default function InvestorPortfolioCanvas() {
         ['Estimated marks', 'No figure here is modelled. A position with no mark reads as absent rather than being carried at cost.'],
         ['Outbound', 'Nothing is sent to a founder from this page.'],
       ]}
-      {/* The zone row above covers Positions, Updates and Value-add.
-          /portfolio/performance is not a zone, so the rail keeps the only
-          door to it. */}
       action={<Link to="/portfolio/performance" data-testid="link-rail-portfolio-performance">Open performance methodology <ArrowUpRight size={13} /></Link>}
     />
     </div>

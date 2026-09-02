@@ -22,6 +22,7 @@ represents a bug that reached production once:
 | `check-money-cents.mjs` | Money parsed as a float. |
 | `check-wrangler-binding-parity.mjs` | A binding added to one `wrangler.toml` table but not the other — the worker then boots without it in production only. |
 | `check-docs-fresh.mjs` | A committed `docs/` older than `frontend/src`, i.e. a deploy that would ship a stale bundle. |
+| `check-frontend-builds.mjs` | A frontend that does not build. Every other check here reads the source as TEXT, so a parse error passes the whole suite and surfaces one push later in CI. Runs the real bundler into a temp directory — never `docs/`. |
 | `check-folder-docs.mjs` | A folder that carries weight without explaining itself, or a README naming a file that does not exist. |
 | `check-dark-mode.mjs` | A surface with no dark variant. |
 

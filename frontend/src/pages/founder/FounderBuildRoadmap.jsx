@@ -115,7 +115,7 @@ export default function FounderBuildRoadmap() {
             </>
           )}
         </section>
-        <WorkerRail project={selectedProject} itemCount={sortedOkrs.length} />
+        <PageRail project={selectedProject} itemCount={sortedOkrs.length} />
       </div>
     </main>
   );
@@ -125,7 +125,7 @@ function Stat({ label, value, note, muted }) { return <div className={`fb-roadma
 function RoadmapRow({ item }) { const [label, tone] = stateFor(item); const dependency = item.dependency || item.dependencies || item.blocks; return <tr data-testid={`row-roadmap-item-${item.id}`}><td><strong>{text(item.objective)}</strong><small>{(item.key_results || []).length} key result{(item.key_results || []).length === 1 ? '' : 's'}</small></td><td>{text(item.quarter, 'Quarter not recorded')}</td><td><span className={`fb-roadmap-status status-${tone}`}>{label}</span></td><td>{text(dependency, 'Not recorded')}</td></tr>; }
 function DependencySummary({ dependencies }) { return <section className="fb-roadmap-card fb-roadmap-unavailable-card"><div className="fb-roadmap-card-head"><div><GitBranch size={16} /><h2>Dependency chain</h2></div><span>{dependencies.length ? `${dependencies.length} stored` : 'Unavailable'}</span></div><strong>{dependencies.length ? 'Stored links returned by the roadmap' : 'Dependency links are unavailable'}</strong><p>{dependencies.length ? 'Only explicit dependency fields are shown in the timeline; unresolved state is not inferred.' : 'The current roadmap source returns objectives and key results, but no dependency graph or downstream blocks.'}</p></section>; }
 function SourceSummary({ okrCount, quarterCount }) { return <section className="fb-roadmap-card"><div className="fb-roadmap-card-head"><div><CheckCircle2 size={16} /><h2>Source coverage</h2></div><span>Read-only view</span></div><div className="fb-roadmap-source-row"><span>Stored roadmap items</span><strong>{okrCount}</strong></div><div className="fb-roadmap-source-row"><span>Recorded quarters</span><strong>{quarterCount || 'Unavailable'}</strong></div><p className="fb-roadmap-note">Scenario snapshots, risk assessment, and timeline dependencies require separate stored records.</p></section>; }
-function WorkerRail({ project, itemCount }) {
+function PageRail({ project, itemCount }) {
   return <WorkerRail
     workspace="Build"
     className="fb-roadmap-rail"
