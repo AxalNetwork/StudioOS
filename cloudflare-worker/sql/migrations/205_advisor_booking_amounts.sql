@@ -1,0 +1,46 @@
+-- 205 — what a session was worth, and whether the advisor was paid for it.
+--
+-- WHAT IS ALREADY TRUE, and was understated when this work was planned.
+-- Sessions are NOT an empty store. `advisor_office_hour_slots`,
+-- `advisor_bookings` and `advisor_reviews` have existed since T13,
+-- `GET /api/advisors/me/bookings` (`routes/advisors.ts:530`) already returns an
+-- advisor's own bookings with counterparty and slot window, and
+-- `/practice/engagements` already renders them. Pricing partly exists too:
+-- `advisors.hourly_rate_usd` is a real column an advisor can already set.
+--
+-- WHAT IS GENUINELY ABSENT is per-session money. A rate on a profile does not
+-- say what any particular session cost, and nothing anywhere says whether it
+-- was ever collected. Those two columns are the whole of what the Practice
+-- canvas's Sessions and Earnings zones need that the schema cannot currently
+-- express.
+--
+-- RECORD ONLY. NO MONEY MOVES THROUGH AXAL. `billing_state` is the advisor's
+-- own bookkeeping note about their own arrangement — there is no payment
+-- provider behind it, no invoice is issued, no payout is owed, and Axal takes
+-- no position on collection. This is the reason the column is a state and not a
+-- transaction: a transaction implies a counterparty settling, and there is
+-- none. Migration 175 deliberately retired the payout ledger; this does not
+-- reopen it.
+--
+-- 'unpriced' IS THE DEFAULT BECAUSE IT IS THE TRUTH. Every booking that exists
+-- today was made with no amount attached, and backfilling them to 0 would
+-- assert that a few hundred sessions were free. CLAUDE.md's rule is that an
+-- unset fact reads as absent — so `amount_cents` stays NULL and the state says
+-- `unpriced` until an advisor says otherwise.
+--
+-- INTEGER CENTS. Same rule as 203, same reason: `scripts/check-money-cents.mjs`
+-- exists so the float half of this schema stops growing.
+--
+-- NO INDEX ON THIS TABLE. `advisor_bookings` carries TWO definitions —
+-- `sql/schema.sql:1002`'s six-column version and the live `t13_t14_t15.sql`
+-- one, recorded in `scripts/sqlite-table-collisions-baseline.json` — and
+-- `advisor_id` exists only in the second. An index naming it would be a column
+-- that only one lineage has, which is precisely what
+-- `scripts/check-migration-column-shapes.mjs` was written to stop after
+-- migration 196 shipped exactly that mistake. `idx_advisor_bookings_advisor`
+-- already covers the advisor scan, and the per-advisor row count is small
+-- enough that filtering `billing_state` in memory costs nothing.
+
+ALTER TABLE advisor_bookings ADD COLUMN amount_cents INTEGER;
+ALTER TABLE advisor_bookings ADD COLUMN billing_state TEXT NOT NULL DEFAULT 'unpriced'
+  CHECK (billing_state IN ('unpriced', 'billed', 'collected', 'written_off'));
