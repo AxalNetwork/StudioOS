@@ -70,7 +70,15 @@ import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
  * they are scoped, this line goes — and the test pinning `routes/advisors.ts`
  * as unscoped fails at the same moment, so the claim cannot go stale quietly.
  */
-const SHARED_NOTICE = 'Everything below is dedicated to the selected company. Marketplaces and account settings stay shared across your companies.';
+/**
+ * It also does not say "everything below is dedicated to the selected company".
+ * That wording was tried and it contradicts the contract above: the shared
+ * marketplaces and the account-level rows SIT BELOW this switcher and stay the
+ * same in every company by design. The positive claim is made only about what
+ * is actually scoped — the rows a person owns — and the shared half is named
+ * beside it, so neither sentence can be read as the other's bug.
+ */
+const SHARED_NOTICE = 'Projects, deals, funds and quotes belong to the company selected here. Marketplaces and your account settings are shared across your companies.';
 const ADVISOR_NOTICE = 'Practice and Expertise are not yet separated by company.';
 
 /** A date a person can compare, or nothing. Never an invented placeholder. */

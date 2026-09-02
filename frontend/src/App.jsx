@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, SHARED_FULL_BLEED } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
-import { api } from './lib/api';
+import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
 // renders synchronously on first paint. It marks itself a no-auth-redirect
 // surface on mount; a lazy chunk could load AFTER the background settings 401
@@ -584,6 +584,14 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // Active-company context state — owned here so descendants (CompanySwitcher,
   // CompanySettingsPage, etc.) share the same reference without prop drilling.
   const [activeCompany, setActiveCompany] = useState(null);
+  // Restore the saved company BEFORE any page effect can fire, so the first
+  // wave of requests already carries it. Doing this inside the switcher's own
+  // effect was too late: sibling page effects run in the same commit, so their
+  // first requests went out with no company (or a stale one) and the page
+  // showed the wrong rows until something else happened to refetch. The
+  // switcher confirms this id against the caller's memberships once they load
+  // and corrects it if it is stale.
+  const [savedCompanyId] = useState(() => initActiveCompanyId());
   const [companyList, setCompanyList] = useState([]);
 
   // Task #31 — Honor the user's "Sidebar default" appearance preference on
@@ -758,7 +766,15 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           )}
 
           <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
-            <div data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto'}`}>
+            {/* Keyed on the active company so a switch REMOUNTS every page
+                below the sidebar. Pages do not read the company from context —
+                it rides in the X-Company-Id header on each request — so
+                without this a page fetched under one company kept showing it
+                after the switcher moved to another, until the next navigation
+                happened to refetch. `savedCompanyId` is the id restored before
+                first render, so a reload that lands on the same company does
+                not remount once the switcher confirms it. */}
+            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto'}`}>
               {children}
             </div>
             <footer className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
@@ -1177,6 +1193,13 @@ function AppInner() {
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     localStorage.removeItem('viewMode');
+    // The active company is a per-BROWSER memory (localStorage), not a
+    // per-account one. Left in place, the next account to sign in on this
+    // browser would send the previous account's company on its first
+    // requests. The worker ignores a company the caller does not belong to,
+    // so nothing leaks — but that first paint would be unscoped rather than
+    // the new account's own company.
+    setActiveCompanyId(null);
     // Sweep any per-tab sensitive state (drafts, in-flight wizards, etc.).
     try { sessionStorage.clear(); } catch (e) { /* ignore */ }
     setUser(null);
