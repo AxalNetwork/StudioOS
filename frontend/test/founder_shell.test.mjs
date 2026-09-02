@@ -441,8 +441,9 @@ test('the founder full-bleed list covers every desk and section page', () => {
   const required = [
     ...Object.values(WORKSPACES).map(([root]) => root),
     '/build/discovery', '/execution', '/build/team', '/signals',
+    '/validate/interviews', '/validate/pain-map', '/validate/hypotheses', '/validate/verdict',
     '/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi',
-    '/raise/pitch',
+    '/raise/status', '/raise/pitch', '/raise/capital', '/raise/legal', '/raise/data-room', '/raise/liquidity',
     '/grow/focus', '/grow/talent', '/grow/customers', '/grow/partnerships',
     '/grow/capital-match', '/grow/brand', '/grow/launch',
     '/network/relationships', '/network/introductions', '/network/organizations',

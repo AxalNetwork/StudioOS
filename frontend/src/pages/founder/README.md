@@ -12,4 +12,7 @@ This folder contains the founder-specific workspace shell and the dedicated canv
 - `FounderResearchDesk.jsx` owns the A7 Research overview at bare `/signals` for founders. It reads approved market, signal, company, project, and legal-document sources without running AI or mutations; `/signals?mode=workspace` and signal deep links retain the detailed Signals workspace.
 - The CSS files beside those components are intentionally route-scoped so the dense canvas layouts do not leak into legacy tools.
 
-New founder canvas pages should use stored records only, preserve their complete hierarchy in empty and unavailable states, and keep detailed editing behavior in the existing backed tools.
+**Chrome rule:** the app `SidebarNav` owns licence navigation. Canvas pages here
+render **main column + `WorkerRail` only** — never the design's `.side` column.
+Horizontal zone pills on each desk replace in-page `#anchors`. See
+[`documentation/architecture/SHELL_MIGRATION.md`](../../../documentation/architecture/SHELL_MIGRATION.md).

@@ -7,6 +7,7 @@ disagrees with the code, the document is the thing to fix.
 | --- | --- |
 | `CODEBASE_MAP.md` | Where does anything live? |
 | `ROUTE_MAP.md` | Which design canvas maps to which route, what shipped from it, and what deliberately did not. One row per canvas. |
+| `SHELL_MIGRATION.md` | The four workspace shell migrations (Founder, Investor/LP, Advisor, Partner): IA rules, zone inventory, shipped vs open, verification commands. |
 | `PROFILE_ROUTING.md` | **Generated.** Which workspace sees each canvas, under which nav section, as what surface, and how it is reached. |
 | `PAGE_INVENTORY.md` | **Generated.** The same projection from the nav side: every destination each role sidebar can reach, and which canvas is behind it. |
 | `UNRESOLVED_ITEMS.md` | The routing decisions that cannot be made from the code, what each blocks, and what a wrong guess would cost. |
