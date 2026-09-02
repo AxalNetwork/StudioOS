@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ARCHETYPE, SHELLS } from '../src/workspaces/shellConfig.js';
+import { SHELLS } from '../src/workspaces/shellConfig.js';
 
 const investor = SHELLS.investor;
 
