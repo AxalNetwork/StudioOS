@@ -188,9 +188,17 @@ test('every mutation is admin-only and recorded', () => {
   const s = read(ROUTE);
   const handlers = [...s.matchAll(/r\.(post|put|patch|delete)\('([^']+)'/g)].map((m) => m[2]);
   assert.ok(handlers.length >= 9, 'the flow should have several mutations');
-  // requireAdmin appears once per handler plus the two GETs.
-  const admins = (s.match(/requireAdmin\(c\)/g) || []).length;
-  assert.ok(admins >= handlers.length, `every mutation must call requireAdmin (${admins} vs ${handlers.length})`);
+  // The gate is now `requireSuperAdmin` (migration 199): this is the
+  // FRANCHISOR's console, and an admin who can issue licences is not a
+  // subsidiary of anything. That is strictly stronger than what this test
+  // originally asserted — `requireSuperAdmin` calls `requireAdmin` and then
+  // narrows — so the claim here is unchanged in kind and tighter in degree.
+  // Matching either keeps the original property (no ungated mutation) as the
+  // floor; the second assertion pins the ceiling for THIS file.
+  const gated = (s.match(/require(?:Super)?Admin\(c\)/g) || []).length;
+  assert.ok(gated >= handlers.length, `every mutation must be gated (${gated} vs ${handlers.length})`);
+  assert.doesNotMatch(s, /\brequireAdmin\b/,
+    'a plain requireAdmin on the franchise console is a franchisee who can franchise');
   assert.match(s, /async function logEvent/, 'state changes must be recorded');
   for (const ev of ['created', 'territory_changed', 'seats_changed', 'terms_changed',
     'activated', 'suspended', 'reinstated', 'renewed', 'terminated']) {
