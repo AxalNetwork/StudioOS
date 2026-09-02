@@ -418,6 +418,9 @@ export interface User {
   partner_id: number | null;
   is_active: boolean;
   email_verified: boolean;
+  // Super Admin elevation lives in user_super_admins because D1 caps users at
+  // 100 columns; getCurrentUser hydrates this optional field from the sidecar.
+  is_super_admin?: number | null;
   verification_token: string | null;
   verification_token_expires: string | null;
   kyc_status: string | null;
