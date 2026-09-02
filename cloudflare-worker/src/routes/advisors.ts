@@ -12,7 +12,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import {
-  isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull,
+  isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull, role,
 } from './_t13t14t15_helpers';
 import {
   loadUserVectors,
@@ -1315,6 +1315,22 @@ advisors.get('/me/earnings', async (c) => {
 // batch, because founder data in a cohort is not theirs to open. That matches
 // how every other Lab decision is made.
 // ---------------------------------------------------------------------------
+/**
+ * Who may hold a cohort assignment, and therefore read a batch's founders.
+ *
+ * ONE PREDICATE, THREE CALLERS — the write that grants, the read that spends,
+ * and the admin picker that offers. Three copies is how one of them drifts,
+ * and the one that drifts is the one nobody notices.
+ *
+ * `advisor` ONLY. Not `admin`: an admin already has the Lab's own review and
+ * impersonation surfaces, both audited, and letting them hold a founders-read
+ * row would blur which of the two they used. Not `exploring` with an advisor
+ * overlay, which is a suggestion rather than a grant.
+ */
+export function mayHoldCohortAssignment(u: { role: string } | null | undefined): boolean {
+  return !!u && role(u) === 'advisor';
+}
+
 type CohortAssignmentRow = {
   id: number; uid: string; advisor_user_id: number; cohort_cycle_id: number;
   assigned_by_admin_id: number | null; assigned_at: string;
@@ -1362,9 +1378,19 @@ advisors.get('/me/cohort', async (c) => {
 /**
  * The founders in a cohort this advisor was assigned to.
  *
- * THE ASSIGNMENT IS THE AUTHORISATION. Without a row in
- * `advisor_cohort_assignments` this returns 403, whatever the advisor's role
- * is — reading a role is not the same as being given a batch.
+ * BOTH ARE NECESSARY, NEITHER IS SUFFICIENT — and that phrasing is deliberate,
+ * because the sentence it replaces invited exactly the deletion that would
+ * reopen the hole. It used to read "this returns 403 whatever the advisor's
+ * role is", which reads as "the role check would be redundant". It is not.
+ *
+ * The ASSIGNMENT is the grant: an admin decided this person should see this
+ * batch. The ROLE is the eligibility that grant presumes, and it must be
+ * re-checked HERE rather than only where the row was written, because a
+ * point-in-time check cannot see the future. `requireAuth` reloads the user
+ * row on every request, so `user.role` is the CURRENT role — which makes this
+ * check free and, more importantly, continuous. Without it an advisor who is
+ * later demoted keeps an active row and keeps reading founder names and
+ * emails indefinitely, with nothing anywhere recording that they still can.
  *
  * ONE COHORT AT A TIME, by cycle id, because a page must not show two batches
  * merged into one list. It reads `company_week_status`, which is the Lab's own
@@ -1374,7 +1400,16 @@ advisors.get('/me/cohort/:cycleId/founders', async (c) => {
   try {
     const user = await requireAuth(c);
     await ensureAdvisorStoresSchema(c.env);
+    // Eligibility first, then the grant. See the header.
+    if (!mayHoldCohortAssignment(user)) {
+      return c.json({ detail: 'Only an advisor can open a cohort batch' }, 403);
+    }
     const cycleId = Number(c.req.param('cycleId'));
+    // Fails closed today — a NaN bind matches no assignment — but through an
+    // error path nobody has read. Say what is wrong instead.
+    if (!Number.isInteger(cycleId)) {
+      return c.json({ detail: 'cycleId must be a cohort cycle id' }, 400);
+    }
     const assignment = await c.env.DB.prepare(
       `SELECT id FROM advisor_cohort_assignments
         WHERE advisor_user_id = ? AND cohort_cycle_id = ? AND is_active = 1`
@@ -1415,10 +1450,16 @@ advisors.get('/admin/cohort-assignments', async (c) => {
     if (!isAdmin(user)) return c.json({ detail: 'Admin required' }, 403);
     await ensureAdvisorStoresSchema(c.env);
     const rows = await c.env.DB.prepare(
+      // `advisor_role` is the target's CURRENT role, not the one they had when
+      // the row was written. That is what turns this list from a log into
+      // something that can answer "who has access who should not": a still
+      // active row beside a role that is no longer advisor is exactly the case
+      // the read now refuses, and an admin needs to see it to end it.
       `SELECT a.id AS id, a.uid AS uid, a.advisor_user_id AS advisor_user_id,
               a.cohort_cycle_id AS cohort_cycle_id, a.assigned_at AS assigned_at,
               a.unassigned_at AS unassigned_at, a.is_active AS is_active,
-              a.note AS note, u.name AS advisor_name, u.email AS advisor_email
+              a.note AS note, u.name AS advisor_name, u.email AS advisor_email,
+              u.role AS advisor_role
          FROM advisor_cohort_assignments a
          LEFT JOIN users u ON u.id = a.advisor_user_id
         ORDER BY a.assigned_at DESC
@@ -1427,6 +1468,7 @@ advisors.get('/admin/cohort-assignments', async (c) => {
       id: number; uid: string; advisor_user_id: number; cohort_cycle_id: number;
       assigned_at: string; unassigned_at: string | null; is_active: number;
       note: string | null; advisor_name: string | null; advisor_email: string | null;
+      advisor_role: string | null;
     }>();
     return c.json({
       items: (rows.results || []).map((r) => ({
@@ -1452,6 +1494,20 @@ advisors.post('/admin/cohort-assignments', async (c) => {
     const target = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
       .bind(advisorUserId).first<{ id: number; role: string }>();
     if (!target) return c.json({ detail: 'No such user' }, 404);
+    // `role` was SELECTed here from the day this shipped and never read, so the
+    // only check was that the id existed. The parameter is named
+    // `advisor_user_id`; accepting any user made that name a lie, and removed
+    // the one thing that would catch a mistyped id that happens to exist — a
+    // typo becoming a grant of another cohort's founder names and emails.
+    //
+    // 400 rather than 403: the caller IS authorised — they are an admin. What
+    // is wrong is the subject they named, which is a bad request, and matches
+    // the 400 this handler already returns for a malformed id.
+    if (!mayHoldCohortAssignment(target)) {
+      return c.json({
+        detail: 'Only a user with the advisor role can be assigned a cohort',
+      }, 400);
+    }
     const cycle = await c.env.DB.prepare('SELECT id FROM cohort_cycles WHERE id = ?')
       .bind(cycleId).first<{ id: number }>();
     if (!cycle) return c.json({ detail: 'No such cohort cycle' }, 404);
