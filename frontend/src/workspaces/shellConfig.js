@@ -74,8 +74,8 @@ const A = ARCHETYPE;
  * archetypes and the consent-gate semantics, so it is defined once.
  */
 const NETWORK_ZONES = [
-  { slug: 'relationships', label: 'Relationships', archetype: A.COLLECTION },
-  { slug: 'introductions', label: 'Introductions', archetype: A.MATCH_ENGINE },
+  { slug: 'relationships', label: 'Relationships', archetype: A.MATCH_ENGINE },
+  { slug: 'introductions', label: 'Introductions', archetype: A.FEED },
   { slug: 'organizations', label: 'Organizations', archetype: A.COLLECTION },
 ];
 
@@ -94,7 +94,7 @@ const RESEARCH_ZONES = {
     { slug: 'ask', label: 'Ask', archetype: A.FEED },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
     { slug: 'companies', label: 'Companies', archetype: A.COLLECTION },
-    { slug: 'funds', label: 'Funds', archetype: A.COLLECTION },
+    { slug: 'funds', label: 'Funds', archetype: A.MATCH_ENGINE },
     { slug: 'library', label: 'Library', archetype: A.COLLECTION },
   ],
   investor: [
@@ -136,40 +136,43 @@ export const SHELLS = {
       { kind: 'link', label: 'Home', to: '/studio' },
       // Spin-Out Lab keeps its own tree. One row, one target, nothing below it.
       { kind: 'link', label: 'Spin-Out Lab', to: '/spinout-lab', untouched: true },
-      { kind: 'bucket', label: 'Validate', prefix: '/validate', tagline: 'Know it is real',
+      { kind: 'bucket', label: 'Validate', prefix: '/validate', tagline: 'Prove someone wants this',
         zones: [
           { slug: 'interviews', label: 'Interviews', archetype: A.COLLECTION, legacy: '/build/discovery?tab=interviews' },
           { slug: 'pain-map', label: 'Pain map', archetype: A.ANALYTICS, legacy: '/build/discovery?tab=insights' },
           { slug: 'hypotheses', label: 'Hypotheses', archetype: A.WORK_BOARD },
           { slug: 'verdict', label: 'Verdict', archetype: A.LEDGER },
         ] },
-      { kind: 'bucket', label: 'Build', prefix: '/build', tagline: 'Ship it',
+      { kind: 'bucket', label: 'Build', prefix: '/build', tagline: 'Operate the company this week',
         zones: [
           { slug: 'this-week', label: 'This week', archetype: A.WORK_BOARD },
           { slug: 'board', label: 'Board', archetype: A.WORK_BOARD },
           { slug: 'roadmap', label: 'Roadmap', archetype: A.WORK_BOARD },
           { slug: 'cadence', label: 'Cadence', archetype: A.FEED },
-          { slug: 'metrics', label: 'Metrics', archetype: A.ANALYTICS },
+          { slug: 'kpi', label: 'KPI entry', archetype: A.LEDGER, legacy: '/build/metrics' },
         ] },
-      { kind: 'bucket', label: 'Raise', prefix: '/raise', tagline: 'Fund it',
+      { kind: 'bucket', label: 'Raise', prefix: '/raise', tagline: 'Get capital, stay legal',
         zones: [
-          { slug: 'pitch', label: 'Pitch', archetype: A.COLLECTION },
-          { slug: 'data-room', label: 'Data room', archetype: A.COLLECTION },
-          { slug: 'capital', label: 'Capital', archetype: A.LEDGER },
-          { slug: 'legal', label: 'Legal', archetype: A.LEDGER, legacy: '/raise/legal-engine' },
           { slug: 'status', label: 'Status', archetype: A.ANALYTICS },
+          { slug: 'pitch', label: 'Pitch', archetype: A.COLLECTION },
+          { slug: 'capital', label: 'Capital', archetype: A.LEDGER },
+          { slug: 'legal', label: 'Legal', archetype: A.COLLECTION, legacy: '/raise/legal-engine' },
+          { slug: 'data-room', label: 'Data room', archetype: A.COLLECTION },
+          { slug: 'liquidity', label: 'Liquidity', archetype: A.LEDGER, legacy: '/liquidity' },
         ] },
-      { kind: 'bucket', label: 'Grow', prefix: '/grow', tagline: 'Compound it',
+      { kind: 'bucket', label: 'Grow', prefix: '/grow', tagline: 'Get customers, people, reach',
         zones: [
-          { slug: 'focus', label: 'Focus', archetype: A.WORK_BOARD },
-          { slug: 'customers', label: 'Customers', archetype: A.MATCH_ENGINE },
-          { slug: 'talent', label: 'Talent', archetype: A.MATCH_ENGINE },
-          { slug: 'partnerships', label: 'Partnerships', archetype: A.MATCH_ENGINE },
-          { slug: 'brand', label: 'Brand', archetype: A.COLLECTION },
+          { slug: 'focus', label: 'Focus', archetype: A.ANALYTICS },
+          { slug: 'talent', label: 'Talent', archetype: A.MATCH_ENGINE, legacy: '/build/team' },
+          { slug: 'customers', label: 'Customers', archetype: A.WORK_BOARD },
+          { slug: 'partnerships', label: 'Partnerships', archetype: A.WORK_BOARD },
+          { slug: 'capital-match', label: 'Capital match', archetype: A.MATCH_ENGINE },
+          { slug: 'brand', label: 'Brand', archetype: A.COLLECTION, legacy: '/spinout-lab/brand' },
+          { slug: 'launch', label: 'Launch', archetype: A.FEED },
         ] },
-      { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work the room',
+      { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work my relationships',
         zones: NETWORK_ZONES },
-      { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Know the field',
+      { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Go deep on a market or company',
         zones: RESEARCH_ZONES.founder },
     ],
   },
@@ -178,16 +181,16 @@ export const SHELLS = {
     accent: 'investor',
     rows: [
       { kind: 'link', label: 'Home', to: '/studio' },
-      { kind: 'bucket', label: 'Deals', prefix: '/deals', tagline: 'Find and decide',
+      { kind: 'bucket', label: 'Deals', prefix: '/deals', tagline: 'Find and close investments',
         zones: [
           { slug: 'pipeline', label: 'Pipeline', archetype: A.WORK_BOARD, legacy: '/pipeline' },
-          { slug: 'screening', label: 'Screening', archetype: A.MATCH_ENGINE, legacy: '/pipeline/screening' },
-          { slug: 'commit', label: 'Commit', archetype: A.WORK_BOARD, legacy: '/pipeline/commit' },
+          { slug: 'screening', label: 'Screening', archetype: A.ANALYTICS, legacy: '/pipeline/screening' },
+          { slug: 'commit', label: 'Commit', archetype: A.LEDGER, legacy: '/pipeline/commit' },
           // The route said "transactions"; InvestorDealsWorkspace's own nav has
           // always said "Closing". The component wins — it is what renders.
-          { slug: 'closing', label: 'Closing', archetype: A.LEDGER, legacy: '/pipeline/transactions' },
+          { slug: 'closing', label: 'Closing', archetype: A.COLLECTION, legacy: '/pipeline/transactions' },
         ] },
-      { kind: 'bucket', label: 'Portfolio', prefix: '/portfolio', tagline: 'Hold and help',
+      { kind: 'bucket', label: 'Portfolio', prefix: '/portfolio', tagline: 'Know how my investments are doing',
         zones: [
           // Three names still point at two pages — "Positions" (canvas),
           // "Health" (route) and "Cap Table" (the generic tab bar) — and
@@ -198,7 +201,7 @@ export const SHELLS = {
           // `/portfolio/health`, which is the overview, not this zone.
           { slug: 'positions', label: 'Positions', archetype: A.LEDGER },
           { slug: 'updates', label: 'Updates', archetype: A.FEED },
-          { slug: 'value-add', label: 'Value-add', archetype: A.WORK_BOARD, legacy: '/portfolio/growth' },
+          { slug: 'value-add', label: 'Value-add', archetype: A.FEED, legacy: '/portfolio/growth' },
         ] },
       // Axal VC Fund — LP participation in Axal's own fund. Not the GP add-on
       // below it, and not touched by this migration.
@@ -217,16 +220,18 @@ export const SHELLS = {
       // is `ledger` here — the page's own section heading — leaving
       // `/funds/accounting` to the tool it hands off to, which is what the
       // zone's `legacy` names.
-      { kind: 'bucket', label: 'Fund', prefix: '/funds', tagline: 'Run the fund',
+      { kind: 'bucket', label: 'Fund', prefix: '/funds', tagline: 'Run my fund',
         requiredInvestorTier: 'institutional',
         zones: [
           { slug: 'lps', label: 'LPs', archetype: A.COLLECTION },
           { slug: 'calls', label: 'Calls', archetype: A.LEDGER, legacy: '/funds/capital-calls' },
           { slug: 'ledger', label: 'Accounting', archetype: A.LEDGER, legacy: '/funds/accounting' },
-          { slug: 'reporting', label: 'Reporting', archetype: A.FEED, legacy: '/lp-reports' },
+          { slug: 'reporting', label: 'Reporting', archetype: A.COLLECTION, legacy: '/lp-reports' },
         ] },
-      { kind: 'bucket', label: 'Network', prefix: '/network', zones: NETWORK_ZONES },
-      { kind: 'bucket', label: 'Research', prefix: '/research', zones: RESEARCH_ZONES.investor },
+      { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work my relationships',
+        zones: NETWORK_ZONES },
+      { kind: 'bucket', label: 'Research', prefix: '/research', tagline: 'Go deep before money moves',
+        zones: RESEARCH_ZONES.investor },
       { kind: 'link', label: 'Trust', to: '/trust' },
       { kind: 'link', label: 'Firm Settings', to: '/company-settings' },
     ],
