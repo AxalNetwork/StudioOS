@@ -370,17 +370,14 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   // are needed for support/analytics.
   const regEmailHash = await hashEmail(email);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('user_registered', ${`registered (lane=${role || 'partner'}) — holding in exploring pending admin review — pending email verification (email_hash=${regEmailHash})`}, ${regEmailHash}, ${user.id})`;
-  // Task #66 — seed the onboarding-chatbot gate row. The frontend
-  // RequireAuth guard pins this user to /onboarding/chat until the
-  // chatbot save flips completed_at. INSERT OR IGNORE so this is safe
-  // to re-run (the row's UNIQUE on user_id makes a second pass a no-op).
-  // Task #24 — only seed for genuinely new (non-admin) signups. Admins
-  // are exempt from the chatbot, so they must never get a chat gate row.
+  // Auth v2 — seed the licence-picker gate row. RequireAuth pins new users to
+  // /onboarding/licence until POST /onboarding/licence advances them into the
+  // role wizard. Legacy accounts may still have flow='chat'.
   if ((role || 'partner') !== 'admin') {
     try {
       await c.env.DB.prepare(
         `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
-         VALUES (?, 'chat', 0, 0, NULL)`
+         VALUES (?, 'licence', 0, 0, NULL)`
       ).bind(user.id).run();
     } catch (e) { console.error('[auth] onboarding_progress seed failed', e); }
   }
@@ -1106,7 +1103,7 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
       try {
         await c.env.DB.prepare(
           `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
-           VALUES (?, 'chat', 0, 0, NULL)`
+           VALUES (?, 'licence', 0, 0, NULL)`
         ).bind(user.id).run();
       } catch (e) { console.error('[AUTH:magic-verify] onboarding_progress seed failed', e); }
     }

@@ -232,6 +232,7 @@ const DocsPage = lazy(() => import('./pages/DocsPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
 const AcademyLessonPage = lazy(() => import('./pages/AcademyLessonPage'));
 const OnboardingFounderPage = lazy(() => import('./pages/OnboardingFounderPage'));
+const ChooseLicencePage = lazy(() => import('./pages/ChooseLicencePage'));
 // Template landing pages — audience-specific conversion surfaces.
 const FounderHomePage = lazy(() => import('./pages/templates/FounderHomePage'));
 const CustomerDiscoveryHomePage = lazy(() => import('./pages/templates/CustomerDiscoveryHomePage'));
@@ -798,6 +799,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // later promoted to admin keeps a stale client role. The onboarding-chat
   // bypass below must evaluate against this fresh role, not `user.role`.
   const [serverRole, setServerRole] = useState(user?.role || null);
+  const [suggestedRole, setSuggestedRole] = useState(user?.suggested_role || null);
   const [primaryPersonaId, setPrimaryPersonaId] = useState(null);
   const [onboardingFlow, setOnboardingFlow] = useState(null);
   const [onboardingComplete, setOnboardingComplete] = useState(true);
@@ -830,17 +832,20 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
         setKycStatus(me.kyc_status || 'not_started');
         setAccessLevel(me.access_level || null);
         setServerRole(me.role || null);
+        setSuggestedRole(me.suggested_role || null);
         const stored = safeReadJSON('user', {});
         if (
           stored.kyc_status !== me.kyc_status ||
           stored.access_level !== me.access_level ||
-          stored.role !== me.role
+          stored.role !== me.role ||
+          stored.suggested_role !== me.suggested_role
         ) {
           localStorage.setItem('user', JSON.stringify({
             ...stored,
             role: me.role,
             kyc_status: me.kyc_status,
             access_level: me.access_level || null,
+            suggested_role: me.suggested_role || null,
           }));
         }
       } catch {}
@@ -897,26 +902,9 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     return <Navigate to={pendingNext} replace />;
   }
 
-  // Task #66 — onboarding-chatbot gate.
-  // Every new account (email + Google signup) gets an `onboarding_progress`
-  // row written with `flow='chat'` and `completed_at=NULL` at signup time.
-  // The profiling /save endpoint flips `completed_at` once the chatbot is
-  // finished. While that row exists and is unfinished, this gate pins the
-  // user to /onboarding/chat — accidentally clicking any sidebar link or
-  // typing a URL directly bounces them back. This makes the chatbot the
-  // single arbiter of role assignment.
-  //
-  // Bypassed for admins, impersonation sessions, and admin-granted
-  // `access_level='limited'` accounts. Existing pre-Task-#66 users have no
-  // chat row, so `onboardingFlow !== 'chat'` and this gate does nothing
-  // for them.
-  //
-  // Task #24 — evaluate the admin bypass against `serverRole` (the live
-  // role from /api/me), not `user.role` (the stale login-token role). An
-  // account created as a partner and later promoted to admin would
-  // otherwise keep being pinned to the chatbot. While impersonating,
-  // `realUser` is the admin and `user`/serverRole is the impersonated
-  // persona, so `!isImpersonating` already short-circuits that case.
+  // Task #66 — legacy onboarding-chatbot gate (pre–Auth v2 accounts).
+  // New signups seed flow='licence' instead; this gate remains for rows
+  // already in flight with flow='chat'.
   const chatGateRole = serverRole || user.role;
   const onChatPath = location.pathname === '/onboarding/chat';
   if (
@@ -924,7 +912,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     onboardingFlow === 'chat' &&
     !onboardingComplete &&
     !onChatPath &&
-    !atPendingNext && // Task #1 — invite target outranks the chat gate
+    !atPendingNext &&
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
@@ -933,38 +921,47 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     return <Navigate to="/onboarding/chat" replace />;
   }
 
-  // Task #51 follow-up — fresh Google signups land on /onboarding/chat
-  // via the auth_google callback redirect (newSignup branch). The users
-  // row is created with role='partner' (CHECK-compliant default); admin
-  // assigns the final role from partner_profiles review.
+  // Auth v2 — licence picker gate (A2). Fresh signups must choose a licence
+  // before entering a role wizard or the exploring holding state.
+  const onLicencePath = location.pathname === '/onboarding/licence';
+  if (
+    onboardingLoaded &&
+    onboardingFlow === 'licence' &&
+    !onboardingComplete &&
+    !onLicencePath &&
+    !atPendingNext &&
+    chatGateRole !== 'admin' &&
+    realUser?.role !== 'admin' &&
+    !isImpersonating &&
+    accessLevel !== 'limited'
+  ) {
+    return <Navigate to="/onboarding/licence" replace />;
+  }
 
   // Phase 0.2 / Task #23 — wizard resume gate.
   // Roles that have a dedicated wizard land back on it until completion.
-  // Admins are exempt; persona-only flows (/onboarding/persona) and the
-  // wizard pages themselves are always reachable so the user can finish.
-  // Two redirect cases:
-  //   • brand-new user (no progress row → flow=null, completed=false)
-  //   • returning user with a saved-but-incomplete row for their role
-  // Cross-role rows (e.g. role-changed mid-flow) are ignored — those
-  // users keep their default landing path until they re-enter onboarding.
-  // Partners (including Advisor / Operator / Counsel / Technical / Liquidity
-  // sub-personas that fold into role='partner' for the CHECK constraint)
-  // onboard via the AI chatbot at /onboarding/chat — not the legacy
-  // /onboarding/partner "Your firm" form. The chatbot saves the persona
-  // into partner_profiles for admin review, which is everything the form
-  // used to collect plus more. Founders and investors keep their existing
-  // wizards (founders' 28-day Spin-Out Lab is gated separately via
-  // users.spinout_lab_active and is unaffected by this map).
-  const wizardForRole = { founder: '/onboarding/founder', investor: '/onboarding/investor' };
-  const myWizard = wizardForRole[user.role];
+  // Exploring users may run the wizard for their chosen licence while
+  // membership is under review (suggested_role from /me).
+  const WIZARD_FOR_LICENCE = {
+    founder: '/onboarding/founder',
+    investor: '/onboarding/investor',
+    partner: '/onboarding/partner',
+  };
+  const wizardRole = (serverRole === 'exploring' ? (suggestedRole || user?.suggested_role) : (serverRole || user.role));
+  const myWizard = WIZARD_FOR_LICENCE[wizardRole] || null;
   const onWizardPath = location.pathname.startsWith('/onboarding/');
-  const needsWizard = !onboardingComplete && (onboardingFlow === null || onboardingFlow === user.role);
+  const needsWizard = !onboardingComplete && (
+    onboardingFlow === null ||
+    onboardingFlow === user.role ||
+    (serverRole === 'exploring' && onboardingFlow === wizardRole)
+  );
   if (
     myWizard &&
     !isImpersonating &&
     onboardingLoaded &&
     needsWizard &&
-    !onWizardPath
+    !onWizardPath &&
+    chatGateRole !== 'admin'
   ) {
     return <Navigate to={myWizard} replace />;
   }
@@ -994,13 +991,9 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     return <Navigate to="/kyc" replace />;
   }
 
-  // Task #66 — render the onboarding chatbot full-screen, without the
-  // app sidebar / topbar. The chatbot must be the single visible surface
-  // until the user finishes it; rendering it inside ProtectedLayout used
-  // to expose sidebar nav links (notably "Identity Verification" → /kyc)
-  // that an accidental click would follow, tripping the KYC gate before
-  // the chat row's completed_at flipped.
-  if (onChatPath) {
+  // Task #66 / Auth v2 — render onboarding gates full-screen, without the
+  // app sidebar / topbar.
+  if (onChatPath || onLicencePath) {
     return children;
   }
 
@@ -1473,10 +1466,11 @@ function AppInner() {
       <Route path="/exploring" element={guard(['admin', 'exploring'], <ExploringDashboard />)} />
       <Route path="/dashboard" element={<DashboardRedirect />} />
       <Route path="/onboarding/chat" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending', 'exploring'], <OnboardingChatPage />)} />
+      <Route path="/onboarding/licence" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'pending', 'exploring'], <ChooseLicencePage />)} />
       <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
-      <Route path="/onboarding/founder" element={guard(['admin', 'founder'], <OnboardingFounderPage />)} />
-      <Route path="/onboarding/investor" element={guard(['admin', 'investor'], <OnboardingInvestorPage />)} />
-      <Route path="/onboarding/partner" element={guard(['admin', 'partner'], <OnboardingPartnerPage />)} />
+      <Route path="/onboarding/founder" element={guard(['admin', 'founder', 'exploring'], <OnboardingFounderPage />)} />
+      <Route path="/onboarding/investor" element={guard(['admin', 'investor', 'exploring'], <OnboardingInvestorPage />)} />
+      <Route path="/onboarding/partner" element={guard(['admin', 'partner', 'exploring'], <OnboardingPartnerPage />)} />
       <Route path="/build/brand" element={guard(labRoles(['admin', 'founder']), founderWorkspace('grow', <BrandBuilderPage />))} />
       {/* Task #1 — RAISE Workspaces: founder-exclusive Pitch Deck / Reviewer
           routes now live inside the Pitch workspace; redirect to the right tab. */}

@@ -608,7 +608,7 @@ authGoogle.get('/callback', async (c) => {
         try {
           await c.env.DB.prepare(
             `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
-             VALUES (?, 'chat', 0, 0, NULL)`
+             VALUES (?, 'licence', 0, 0, NULL)`
           ).bind(user.id).run();
         } catch (e) { console.error('[auth_google] onboarding_progress seed failed', e); }
         newSignup = true;
@@ -662,19 +662,17 @@ authGoogle.get('/callback', async (c) => {
     const csrf = generateCsrfToken();
     setAuthCookies(c, token, csrf);
 
-    // Fresh Google signups land on the onboarding chatbot (Workers AI
-    // Llama 3.1 8B via /api/profiling/chat) which classifies persona and
-    // saves a partner_profiles row for admin review. Existing users honour
-    // the sanitized redirect target the caller passed to /start.
+    // Fresh Google signups land on the licence picker (Auth v2). Existing users
+    // honour the sanitized redirect target the caller passed to /start.
     //
     // Task #1 — invite/deep-link continuity: when the caller passed an
     // EXPLICIT redirect (e.g. /register?next=… → an invitation acceptance
     // page), honour it for new signups too instead of hard-routing them to
-    // the chat. Only the default '/dashboard' falls through to the chatbot
-    // landing; the client-side gate still nudges un-profiled users there
+    // onboarding. Only the default '/dashboard' falls through to the licence
+    // picker; the client-side gate still nudges un-profiled users there
     // on their next navigation.
     const requested = sanitizeRedirect(state.redirect);
-    const landing = newSignup && requested === '/dashboard' ? '/onboarding/chat' : requested;
+    const landing = newSignup && requested === '/dashboard' ? '/onboarding/licence' : requested;
     const url = `${appUrl(c.env)}${landing}${landing.includes('?') ? '&' : '?'}google=ok${newSignup ? '&google_signup=1' : ''}`;
     return c.redirect(url, 302);
   } catch (e: any) {

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield, LogIn, KeyRound, Mail } from 'lucide-react';
+import { Shield, LogIn, KeyRound, Mail, ChevronDown, ChevronUp } from 'lucide-react';
 import { startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import { api } from '../lib/api';
 import { track } from '../lib/funnel';
 import { storePendingNext } from '../lib/pendingNext';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { loadTurnstile } from '../lib/turnstile';
+import AuthShell, { AuthCard, authV2 } from '../components/auth/AuthShell';
 
 // Single-page sign-in: email + authenticator code + Cloudflare Turnstile.
 // SMS is intentionally NOT offered as a primary sign-in factor — it lives
@@ -76,6 +77,7 @@ export default function LoginPage() {
   // e.g. partners created by deal activation. We swap the raw error for
   // friendly copy and steer them to the magic link.
   const [totpMissing, setTotpMissing] = useState(false);
+  const [showAltFactors, setShowAltFactors] = useState(false);
   // Task #10 — fail-visible Turnstile: true once the 50-attempt (~10s) poll
   // gives up, so we can explain the disabled button instead of staying silent.
   const [turnstileFailed, setTurnstileFailed] = useState(false);
@@ -343,193 +345,175 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <Link to="/" className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-8">
-          <ArrowLeft size={14} /> Back to Axal VC
-        </Link>
+    <AuthShell showApplyCard applyLabel="Apply to Axal VC →">
+      <AuthCard>
+        <h1 className="m-0 text-[25px] font-extrabold tracking-tight leading-tight text-[#241f38]">
+          Sign in
+        </h1>
+        <p className="mt-2 text-[13.5px] leading-relaxed text-[#6b6577]">
+          Passwordless by default — we email you a one-time link. Google, passkey, and authenticator codes are also available.
+        </p>
 
-        <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
-          <div className="flex items-center gap-3 mb-6">
-            <img src="/axal-mark.png" alt="Axal VC" className="h-10 w-10 rounded-lg object-contain flex-shrink-0" />
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-lg font-bold text-gray-900">Axal VC</span>
+        {error && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+        )}
+
+        <div className="mt-6 space-y-4">
+          <div>
+            <label className={authV2.label}>Email</label>
+            <input
+              type="email"
+              value={email}
+              autoComplete="email"
+              inputMode="email"
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !showAltFactors && sendMagicLink()}
+              placeholder="you@company.com"
+              className={`${authV2.input} mt-1.5`}
+              style={{ borderColor: authV2.hair }}
+            />
           </div>
 
-          <h2 className="text-xl font-bold text-gray-900 mb-1">Welcome Back</h2>
-          <p className="text-sm text-gray-600 mb-6">
-            Sign in with your authenticator code — or just request an email sign-in link.
-          </p>
-
-          {error && (
-            <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{error}</div>
+          {TURNSTILE_SITE_KEY && (
+            <div ref={turnstileRef} className="flex justify-center" />
           )}
 
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs text-gray-600 block mb-1">Email</label>
-              <input type="email" value={email} autoComplete="email" inputMode="email"
-                onChange={e => setEmail(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && submit()}
-                placeholder="john@company.com"
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-base sm:text-sm" />
+          {TURNSTILE_SITE_KEY && turnstileFailed && (
+            <div className="text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+              Human verification could not load — usually an ad blocker or strict network.
+              You can still request a sign-in link; the server applies its own rate limits.
             </div>
+          )}
 
-            <div>
-              <label className="text-xs text-gray-600 block mb-1">Authenticator code</label>
-              <input type="text" value={totpCode} inputMode="numeric" autoComplete="one-time-code"
-                onChange={e => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                onKeyDown={e => e.key === 'Enter' && submit()}
-                placeholder="000000" maxLength={6}
-                className="w-full bg-gray-50 border border-gray-300 rounded-lg px-4 py-2.5 text-2xl text-center tracking-[0.5em] font-mono" />
-              <p className="text-[10px] text-gray-500 mt-1">
-                6-digit code from Google Authenticator, Authy, 1Password, etc. Recovery codes also work here.
+          {magicSentTo ? (
+            <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 space-y-2">
+              <p className="text-xs text-emerald-800">
+                <strong>Sign-in link sent to {magicSentTo}.</strong> Tap the link in the email — it expires in 15 minutes and works once.
               </p>
-            </div>
-
-            {/* Cloudflare Turnstile — required. Do not remove. */}
-            {TURNSTILE_SITE_KEY && (
-              <div ref={turnstileRef} className="flex justify-center" />
-            )}
-
-            {/* Task #10 — fail-visible fallback when the Turnstile script
-                never loads (ad blocker, strict network). The code sign-in
-                stays disabled (server enforces the token) but we say so and
-                point at the magic link, which has its own rate limits. */}
-            {TURNSTILE_SITE_KEY && turnstileFailed && (
-              <div className="text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
-                Human verification couldn't load — usually an ad blocker or strict network.
-                Code sign-in is unavailable, but you can still use <strong>Email me a sign-in link</strong> below.
-              </div>
-            )}
-
-            <button onClick={submit}
-              disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken) || totpCode.length !== 6}
-              className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white flex items-center justify-center gap-2">
-              {loading ? 'Signing in…' : <>Sign in <LogIn size={14} /></>}
-            </button>
-
-            {/* Task #10 — passwordless email sign-in link (BLOCK-AUTH-01 UI). */}
-            {magicSentTo ? (
-              <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-3 space-y-2">
-                <p className="text-xs text-emerald-800">
-                  <strong>Sign-in link sent to {magicSentTo}.</strong> Tap the link in the email and you're in — it expires in 15 minutes and works once.
-                </p>
-                <p className="text-[11px] text-emerald-700">
-                  It can take a minute. Check spam for mail from <strong>support@axal.vc</strong>.
-                </p>
-                <div className="flex gap-2">
-                  <a href="https://mail.google.com" target="_blank" rel="noopener noreferrer"
-                    className="flex-1 text-center text-xs font-medium text-emerald-900 bg-white border border-emerald-300 hover:bg-emerald-100 rounded-md py-1.5 transition-colors">
-                    Open Gmail
-                  </a>
-                  <a href="https://outlook.live.com/mail" target="_blank" rel="noopener noreferrer"
-                    className="flex-1 text-center text-xs font-medium text-emerald-900 bg-white border border-emerald-300 hover:bg-emerald-100 rounded-md py-1.5 transition-colors">
-                    Open Outlook
-                  </a>
-                </div>
-                <button type="button" onClick={sendMagicLink} disabled={magicBusy || magicCooldown > 0}
-                  className="w-full text-xs text-emerald-800 hover:text-emerald-900 disabled:opacity-60 py-1 font-medium">
-                  {magicCooldown > 0 ? `Resend available in ${magicCooldown}s` : magicBusy ? 'Sending…' : 'Resend link'}
-                </button>
-              </div>
-            ) : (
-              <div>
-                <button type="button" onClick={sendMagicLink} disabled={magicBusy}
-                  className={`w-full disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-                    totpMissing
-                      ? 'bg-violet-600 hover:bg-violet-700 text-white ring-2 ring-violet-300'
-                      : 'bg-white hover:bg-gray-50 border border-gray-300 text-gray-700'
-                  }`}>
-                  <Mail size={14} /> {magicBusy ? 'Sending link…' : 'Email me a sign-in link'}
-                </button>
-                <p className="text-[10px] text-gray-500 text-center mt-1">
-                  No password or authenticator needed — we'll email you a one-time link.
-                </p>
-              </div>
-            )}
-
-            {/* BLOCK-AUTH-02 — passkey sign-in (Face ID / Touch ID / security key). */}
-            {passkeySupported && (
-              <button type="button" onClick={signInWithPasskey} disabled={passkeyBusy}
-                className="w-full bg-white hover:bg-gray-50 border border-gray-300 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-gray-700 flex items-center justify-center gap-2">
-                <KeyRound size={14} /> {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
+              <button
+                type="button"
+                onClick={sendMagicLink}
+                disabled={magicBusy || magicCooldown > 0}
+                className="w-full text-xs text-emerald-800 hover:text-emerald-900 disabled:opacity-60 py-1 font-medium"
+              >
+                {magicCooldown > 0 ? `Resend available in ${magicCooldown}s` : magicBusy ? 'Sending…' : 'Resend link'}
               </button>
-            )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={sendMagicLink}
+              disabled={magicBusy}
+              className={authV2.btnPrimary}
+              style={{ background: authV2.purple, borderColor: authV2.purple }}
+            >
+              <Mail size={14} className="inline mr-2 align-text-bottom" />
+              {magicBusy ? 'Sending link…' : 'Email me a sign-in link'}
+            </button>
+          )}
 
-            {googleAvailable && (
-              <>
-                <div className="flex items-center gap-3 my-1">
-                  <div className="flex-1 h-px bg-gray-200" />
-                  <span className="text-[10px] uppercase tracking-wider text-gray-500">or</span>
-                  <div className="flex-1 h-px bg-gray-200" />
-                </div>
+          {googleAvailable && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px" style={{ background: authV2.hair }} />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-[#6b6577]">or</span>
+                <div className="flex-1 h-px" style={{ background: authV2.hair }} />
+              </div>
+              <button
+                type="button"
+                onClick={continueWithGoogle}
+                disabled={googleBusy}
+                className={authV2.btnSecondary}
+                style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
+              >
+                <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+                  <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+                  <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
+                  <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
+                  <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
+                </svg>
+                {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+              </button>
+            </>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowAltFactors((v) => !v)}
+            className="w-full text-[13px] font-semibold text-[#6b6577] flex items-center justify-center gap-1 py-1"
+          >
+            {showAltFactors ? <>Hide other sign-in options <ChevronUp size={14} /></> : <>Passkey or authenticator code <ChevronDown size={14} /></>}
+          </button>
+
+          {showAltFactors && (
+            <div className="space-y-4 pt-1 border-t" style={{ borderColor: authV2.hair }}>
+              {passkeySupported && (
                 <button
                   type="button"
-                  onClick={continueWithGoogle}
-                  disabled={googleBusy}
-                  className="w-full bg-white hover:bg-gray-50 border border-gray-300 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-gray-700 flex items-center justify-center gap-2"
+                  onClick={signInWithPasskey}
+                  disabled={passkeyBusy}
+                  className={authV2.btnSecondary}
+                  style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
-                    <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
-                    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
-                    <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
-                    <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
-                  </svg>
-                  {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+                  <KeyRound size={14} /> {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
                 </button>
-                <p className="text-[10px] text-gray-500 text-center">
-                  Google is one factor — sensitive actions still ask for your authenticator.
-                </p>
-              </>
-            )}
+              )}
 
-            {showDemoQuickLogin && (
-              <div className="pt-2 border-t border-gray-200 space-y-2">
-                <button
-                  onClick={() => demoLogin()}
-                  disabled={!!demoLoading}
-                  data-testid="demo-investor-login"
-                  className="w-full bg-amber-100 hover:bg-amber-200 border border-amber-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-amber-900 flex items-center justify-center gap-2"
-                >
-                  {demoLoading === 'investor' ? 'Signing in…' : 'Sign in as demo investor (dev only)'}
-                </button>
-                <button
-                  onClick={() => demoLogin({ email: 'demo-admin@axal.test', landing: '/admin' })}
-                  disabled={!!demoLoading}
-                  data-testid="demo-admin-login"
-                  className="w-full bg-violet-100 hover:bg-violet-200 border border-violet-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-violet-900 flex items-center justify-center gap-2"
-                >
-                  {demoLoading === 'demo-admin@axal.test' ? 'Signing in…' : 'Sign in as demo admin (dev only)'}
-                </button>
-                <button
-                  onClick={() => demoLogin({ email: 'demo-exploring@axal.test', landing: '/exploring' })}
-                  disabled={!!demoLoading}
-                  data-testid="demo-exploring-login"
-                  className="w-full bg-sky-100 hover:bg-sky-200 border border-sky-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-sky-900 flex items-center justify-center gap-2"
-                >
-                  {demoLoading === 'demo-exploring@axal.test' ? 'Signing in…' : 'Sign in as demo explorer (dev only)'}
-                </button>
-                <p className="text-[10px] text-gray-500 mt-1 text-center">
-                  Skips TOTP &amp; Turnstile. Admin lands on <code>/admin</code>, explorer on <code>/exploring</code>. Disabled in production builds.
-                </p>
+              <div>
+                <label className={authV2.label}>Authenticator code</label>
+                <input
+                  type="text"
+                  value={totpCode}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={(e) => e.key === 'Enter' && submit()}
+                  placeholder="000000"
+                  maxLength={6}
+                  className={`${authV2.input} mt-1.5 text-center text-xl tracking-[0.4em] font-mono`}
+                  style={{ borderColor: authV2.hair }}
+                />
               </div>
-            )}
-          </div>
 
-          <div className="flex items-start gap-2 bg-violet-50 rounded-lg p-3 mt-5 border border-violet-300">
-            <Shield size={14} className="text-violet-600 shrink-0 mt-0.5" />
-            <p className="text-[10px] text-violet-700">
-              Lost your authenticator? Use one of your recovery codes here, or visit{' '}
-              <Link to="/auth/recover" className="font-medium underline">account recovery</Link>{' '}
-              for SMS / email / trusted-contact / admin-review options.
-            </p>
-          </div>
+              <button
+                onClick={submit}
+                disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken && !turnstileFailed) || totpCode.length !== 6}
+                className={authV2.btnSecondary}
+                style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
+              >
+                {loading ? 'Signing in…' : <>Sign in with code <LogIn size={14} /></>}
+              </button>
 
-          <p className="text-xs text-gray-600 text-center mt-4">
-            Don't have an account? <Link to="/register" className="text-violet-600 hover:underline font-medium">Register here</Link>
+              {totpMissing && (
+                <p className="text-[11px] text-[#6b6577]">
+                  No authenticator yet? Use the email sign-in link above — that is the normal path for new members.
+                </p>
+              )}
+            </div>
+          )}
+
+          {showDemoQuickLogin && (
+            <div className="pt-2 border-t space-y-2" style={{ borderColor: authV2.hair }}>
+              <button
+                onClick={() => demoLogin()}
+                disabled={!!demoLoading}
+                data-testid="demo-investor-login"
+                className="w-full bg-amber-100 hover:bg-amber-200 border border-amber-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-amber-900"
+              >
+                {demoLoading === 'investor' ? 'Signing in…' : 'Sign in as demo investor (dev only)'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-start gap-2 rounded-lg p-3 mt-5 border" style={{ background: authV2.purpleTint, borderColor: '#ddd0fb' }}>
+          <Shield size={14} className="text-violet-600 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-violet-800 leading-relaxed">
+            Lost your authenticator? Use a recovery code, or visit{' '}
+            <Link to="/auth/recover" className="font-medium underline">account recovery</Link>.
           </p>
         </div>
-      </div>
-    </div>
+      </AuthCard>
+    </AuthShell>
   );
 }
