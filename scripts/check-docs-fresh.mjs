@@ -51,13 +51,53 @@ const git = (args) => {
   }
 };
 
+const strict = process.argv.includes('--strict');
+
+/**
+ * A check that cannot answer the question must not answer yes.
+ *
+ * Under `--strict` every skip becomes a FAILURE. Skipping is right for a
+ * developer running the suite in a tarball or a fresh clone with no history —
+ * it is wrong for the gate whose entire job is to assert freshness, because
+ * there a silent exit 0 is indistinguishable from a pass.
+ */
 const skip = (why) => {
-  console.log(`• check-docs-fresh: skipped — ${why}`);
+  if (strict) {
+    console.error(`\u2716 check-docs-fresh: cannot verify freshness — ${why}.`);
+    console.error('  Refusing to pass: this check exists to assert the committed');
+    console.error('  docs/ build is current, and it cannot see enough to say so.');
+    process.exit(1);
+  }
+  console.log(`\u2022 check-docs-fresh: skipped — ${why}`);
   process.exit(0);
 };
 
 if (!existsSync(join(ROOT, '.git'))) skip('not a git checkout');
 if (!existsSync(join(ROOT, 'docs'))) skip('no docs/ directory');
+
+// A SHALLOW CHECKOUT CANNOT ANSWER THIS, AND USED TO PASS ANYWAY.
+//
+// `actions/checkout` defaults to `fetch-depth: 1`. In a depth-1 clone there is
+// exactly ONE commit, so both `git log -1` calls below resolve to that same
+// commit and `docsTs >= srcTs` is trivially true. The gate exited 0 on every
+// run regardless of the real state — which is how docs/ came to sit four
+// frontend commits behind with a green check on each one. Measured, on this
+// repository, with identical content in both checkouts:
+//
+//   depth-1 clone:                  src ts == docs ts   ->  passed, exit 0
+//   full clone, same content:       src != docs         ->  failed, exit 1
+//
+// Depth-N is unsafe in a subtler way: a path whose newest commit falls outside
+// the window returns nothing, and the `skip` above exited 0 for that too. With
+// a truncated history you cannot know whether the newest commit you can see is
+// the real newest, so the honest answer is to refuse rather than guess.
+//
+// The `og-tags` job passes `fetch-depth: 0` for exactly this reason. The two
+// changes must land together: without the workflow change this fails on every
+// PR, and without this the workflow change buys nothing.
+if (git(['rev-parse', '--is-shallow-repository']) === 'true') {
+  skip('the checkout is shallow, so the newest commit touching each path is not knowable (set fetch-depth: 0)');
+}
 
 // Commit timestamps (epoch seconds) of the newest commit touching each path.
 const srcTs = Number(git(['log', '-1', '--format=%ct', '--', 'frontend/src']));
@@ -76,7 +116,6 @@ const docsInfo = git(['log', '-1', '--format=%h %ad %s', '--date=short', '--', '
 // Source commits since the last docs rebuild — the size of the drift.
 const behind = git(['rev-list', '--count', `${git(['log', '-1', '--format=%H', '--', 'docs'])}..HEAD`, '--', 'frontend/src']);
 
-const strict = process.argv.includes('--strict');
 const mark = strict ? '✖' : '⚠';
 const write = strict ? console.error : console.warn;
 
