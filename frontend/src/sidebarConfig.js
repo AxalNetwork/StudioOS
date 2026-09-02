@@ -23,7 +23,7 @@ import {
   MessageSquare, Package, Calendar, Heart, Bookmark, Megaphone, Send,
   Gamepad2, ShieldAlert,
   Inbox, Radar, Wallet, Landmark,
-  Mail, Gift, Map,
+  Mail, Gift, Map, UserCog,
 } from 'lucide-react';
 
 // Task #6 — Real subscription-tier check. Bypass roles
@@ -104,6 +104,10 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/events', icon: Ticket, label: 'Event Admin' },
       { to: '/admin/jobs', icon: Briefcase, label: 'Job Board Admin' },
       { to: '/admin/circles', icon: Network, label: 'Communities Admin' },
+      // Which advisor may read which Lab cohort's founders. Its own row rather
+      // than a Spin-Out Lab tab: that console is Lab-owned, and this grant is
+      // advisor-domain — the backend already draws the same line.
+      { to: '/admin/advisor-cohorts', icon: UserCog, label: 'Advisor Cohort Access' },
       // Task #9 — chat-onboarded users awaiting binding agreement + role assignment.
       { to: '/admin/exploring', icon: UserCircle, label: 'Exploring Users' },
       // GP review queue for Spin-Out Fund I LP applications (migration 165).

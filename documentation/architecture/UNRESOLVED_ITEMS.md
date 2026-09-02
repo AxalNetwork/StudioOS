@@ -7,7 +7,7 @@ structural damage across multiple workspaces?"* Everything that cleared that bar
 is below; everything that did not was decided and written down in
 `ASSUMPTIONS_LOG.md` instead.
 
-Five items. Each names the evidence, what is actually blocked, and what a wrong
+Six items. Each names the evidence, what is actually blocked, and what a wrong
 guess would cost — because "blocked" without a cost is just a to-do.
 
 ---
@@ -127,6 +127,36 @@ else, the advisor's own review of a session, moved to Practice · Delivery.
 private notes.
 
 **Unblocked:** #124.
+
+---
+
+## U6 — A cohort's founders never learn that an advisor can read them
+
+**Evidence.** `advisor_cohort_assignments` (migration 206) lets an admin grant
+one advisor read access to the **names and email addresses** of every founder
+in a Lab cohort, through `GET /api/advisors/me/cohort/:cycleId/founders`. The
+grant is audited on the advisor's side — who assigned it, when, and it survives
+being ended — but there is **no notice to the founder and no consent record
+anywhere**. A founder cannot discover that an advisor can see them, cannot
+object, and is not told when the access ends.
+
+**Why it is a blocker and not a judgement call.** It is the most sensitive
+thing this bucket does, and the answer is a product and possibly a legal
+decision rather than a missing table. Three readings are all defensible and
+they build differently:
+
+| Reading | Consequence |
+|---|---|
+| The Lab's terms already cover it | Nothing to build; write it down so the next reader stops asking. |
+| Founders are notified, not asked | A notification on grant, and the access list on the founder's own surface. |
+| Founders consent per advisor | The grant becomes a request, and `advisor_proof_consents` (204) is the shape to copy. |
+
+Guessing wrong is expensive in both directions: building consent nobody wanted
+delays every cohort, and shipping silent access that should have been consented
+is not something a later migration undoes.
+
+**Blocks:** nothing today — the access works. It is recorded here because it
+shipped without the question being asked, not because a surface is waiting.
 
 ---
 

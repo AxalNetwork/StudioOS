@@ -6,6 +6,9 @@ import { bucketForPath, zoneForPath } from '../shellConfig';
 import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
+const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/FoundersZone'));
+const CohortsThisWeekZone = lazy(() => import('../../pages/advisor/cohorts/ThisWeekZone'));
+const CohortsOutcomesZone = lazy(() => import('../../pages/advisor/cohorts/OutcomesZone'));
 const PracticeSessionsZone = lazy(() => import('../../pages/advisor/practice/SessionsZone'));
 const PracticeEarningsZone = lazy(() => import('../../pages/advisor/practice/EarningsZone'));
 const ExpertiseProfileZone = lazy(() => import('../../pages/advisor/expertise/ProfileZone'));
@@ -31,11 +34,12 @@ const ExpertiseProofZone = lazy(() => import('../../pages/advisor/expertise/Proo
  * no seat for a working tab is a gap in the canvas, not permission to delete
  * the tab.
  *
- * COHORTS IS ENTIRELY NEW, and it is the one bucket that reads Spin-Out Lab
- * data. Read-only, both ways: it owns no Lab route, writes nothing back, and
- * every founder-sourced object on it carries the seam mark. There is no
- * advisor↔cohort assignment table in the product today, so it ships as an
- * honest empty rather than a board of plausible-looking founders.
+ * COHORTS READS SPIN-OUT LAB DATA, read-only both ways: it owns no Lab route,
+ * writes nothing back, and every founder-sourced object carries the seam mark.
+ * Migration 206 added the advisor↔cohort assignment this bucket waited on, so
+ * Founders, This week and Outcomes are real pages now. The assignment is the
+ * authorisation — an admin grants it, the worker refuses without it, and a
+ * refusal renders as a stated boundary rather than an empty cohort.
  *
  * EXPERTISE NOW HAS THREE REAL ZONES, and two that still say what is missing.
  * Migrations 202, 203 and 204 gave Profile, Services and Proof stores of their
@@ -92,6 +96,11 @@ const LIVE = {
 // BODY only — the shell below draws the crumb, h1, pills and rail — so unlike
 // the Advisory workspace they need no `embedded` prop.
 const ZONE = {
+  '/cohorts': {
+    founders: CohortsFoundersZone,
+    'this-week': CohortsThisWeekZone,
+    outcomes: CohortsOutcomesZone,
+  },
   '/practice': {
     sessions: PracticeSessionsZone,
     earnings: PracticeEarningsZone,
@@ -123,37 +132,24 @@ const COPY = {
       links: [{ to: '/expertise/profile', label: 'What a founder would see →' }],
     },
   },
+  // Founders, This week and Outcomes are pages now — migration 206 and the
+  // public Lab reads closed those gaps. The two that remain are corrected
+  // rather than carried forward: each said its gap was the missing cohort
+  // assignment, and that is no longer what is absent.
   '/cohorts': {
-    founders: {
-      heading: 'Cohort assignment does not exist yet',
-      what: 'The founders in the batch you are assigned to — company, stage, one live signal each, and your own next action beside it.',
-      why: 'Nothing in the product links an advisor to a cohort. The Lab knows its founders and the practice knows its clients; no table joins them. A board of founders drawn without that join would be a guess about who you advise.',
-      seam: true,
-      links: [{ to: '/practice/opportunities', label: 'Your actual client list →' }],
-    },
     guidance: {
       heading: 'Cohort guidance has no store',
       what: 'The same guidance delivered to a whole batch, and which founders have acted on it.',
-      why: 'It reads from the cohort assignment above, which does not exist. One gap, not two.',
+      why: 'The cohort assignment this used to blame now exists — Founders reads it. What is genuinely missing is a store of its own: nothing records a piece of guidance addressed to a batch, and nothing records a founder acting on one. Migrations 201-206 gave the practice a profile, services, proof, consents, session amounts and a cohort link; none of them is this.',
       seam: true,
-    },
-    'this-week': {
-      heading: 'The weekly view has nothing to aggregate',
-      what: 'What is due from you across the whole batch this week, rather than per client.',
-      why: 'Same dependency: without a cohort assignment there is no batch to aggregate over.',
-      seam: true,
+      links: [{ to: '/cohorts/founders', label: 'The batch itself →' }],
     },
     calendar: {
       heading: 'The cohort calendar is not built yet',
       what: 'The batch’s shared schedule — sessions, milestones and Lab dates in one place.',
-      why: 'Lab milestone dates exist and are read-only to the practice; the advisor’s own slots exist under Expertise. Nothing joins them into one calendar.',
+      why: 'Both halves exist and nothing joins them. The Lab’s week windows are readable per batch under This week; your own bookable slots are published from Practice · Opportunities. No surface puts them on one calendar, and the batch read is deliberately kept Lab-only so this stays true rather than half-true.',
       seam: true,
-    },
-    outcomes: {
-      heading: 'Outcomes are the Lab’s to record, and it does not expose them',
-      what: 'How the batch ended — graduated, active, withdrawn — with the advisor’s own read alongside.',
-      why: 'Outcome status is written by the Lab, never by the practice, which is exactly why this page can only ever read it. There is no read path today.',
-      seam: true,
+      links: [{ to: '/practice/opportunities', label: 'Where your slots are published →' }],
     },
   },
 };
@@ -205,7 +201,14 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   // reports exactly that, rather than a coverage count it cannot produce — the
   // rail is the one component on the page that must never be more confident
   // than the body beside it.
-  const live = LIVE[prefix]?.has(slug);
+  // LIVE ∪ ZONE, and the union is the fix. `live` drives the rail's coverage
+  // line, and it used to read `LIVE` alone — which holds only the three legacy
+  // Advisory tabs. Every zone served through `ZONE` therefore rendered
+  // "<Zone> has no store behind it" while reading a real store: five shipped
+  // pages saying the opposite of the truth, on the rail, which is the one
+  // component on the page that must never be more confident than the body
+  // beside it. It was the opposite failure and just as wrong.
+  const live = Boolean(LIVE[prefix]?.has(slug) || ZONE[prefix]?.[slug]);
   const RAIL = {
     '/practice': {
       workspace: 'Practice',
@@ -221,7 +224,8 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       stance: 'Read-only, both ways',
       note: 'Cohort data belongs to the Lab and to the founder. This bucket owns no Lab route and writes nothing back.',
       unavailable: [
-        ['Everything on this bucket', 'Nothing in the product links an advisor to a cohort, so there is no batch to read. Each zone says which join is missing.'],
+        ['Assigning yourself a batch', 'An admin decides which cohort you advise. Nothing on this bucket can grant, extend or end your own access, and a refusal is shown as a boundary rather than as an empty cohort.'],
+        ['Writing to the Lab', 'Every founder row here is the Lab’s record read as-is. Nothing edits a week result, a deadline, an admission or a graduation.'],
       ],
     },
     '/expertise': {

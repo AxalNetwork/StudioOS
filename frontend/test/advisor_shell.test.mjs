@@ -275,6 +275,7 @@ test('an advisor never gets two headers or two rails on one page', () => {
   for (const zoneDir of [
     'frontend/src/pages/advisor/expertise',
     'frontend/src/pages/advisor/practice',
+    'frontend/src/pages/advisor/cohorts',
   ]) {
     for (const f of readdirSync(resolve(process.cwd(), zoneDir)).filter((x) => x.endsWith('.jsx'))) {
       zoneCount += 1;
@@ -285,7 +286,7 @@ test('an advisor never gets two headers or two rails on one page', () => {
         `${f} must not draw a second Worker AI rail`);
     }
   }
-  assert.ok(zoneCount >= 6, 'every backed zone has its own page, plus their shared kits');
+  assert.ok(zoneCount >= 10, 'every backed zone has its own page, plus their shared kits');
 });
 
 test('the advisor preview boundary is stated, and covers every surface that renders a practice', () => {
@@ -304,12 +305,19 @@ test('the advisor preview boundary is stated, and covers every surface that rend
   // Every Practice and Expertise zone route carries it. Cohorts deliberately
   // does not: it renders no personal practice, only Lab-sourced empties.
   const gated = (app.match(/<AdvisorBucketRoutes preview=\{advisorRolePreview\} \/>/g) || []).length;
-  assert.equal(gated, 10, 'all five Practice and five Expertise zone routes must carry the gate');
+  assert.equal(gated, 15, 'every Practice, Expertise and Cohorts zone route must carry the gate');
+
+  // COHORTS JOINED THE GATE, and the reason it did not before has expired.
+  // It used to render only Lab-sourced empty cards — nothing personal, so
+  // nothing to scope. Founders, This week and Outcomes read the signed-in
+  // user's OWN assignments, and an admin previewing the Advisor role has
+  // selected no person, so they would see "no batch assigned": a boundary
+  // rendered as an absence, which is the defect this whole pass removes.
   for (const cohortZone of ['/cohorts/founders', '/cohorts/guidance', '/cohorts/this-week',
     '/cohorts/calendar', '/cohorts/outcomes']) {
     const line = app.split('\n').find((l) => l.includes(`path="${cohortZone}"`));
-    assert.ok(line && !line.includes('preview='),
-      `${cohortZone} renders no personal practice and must not be gated`);
+    assert.ok(line && line.includes('preview={advisorRolePreview}'),
+      `${cohortZone} reads the signed-in advisor's own assignments and must be gated`);
   }
 
   // And the notice keeps the shell around it, so the reader can still see which
