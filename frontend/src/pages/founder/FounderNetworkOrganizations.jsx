@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
 import './founderNetworkOrganizations.css';
 
@@ -100,7 +100,7 @@ function OrganizationTable({ groups, filter }) {
 }
 function Stat({ label, value, note, muted }) { return <div className={muted ? 'is-muted' : ''}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function OrganizationRail({ project, contacts, groups, dormant, errors }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Network"
     className="fn-rel-rail"
     stance="Read-only organization lens"

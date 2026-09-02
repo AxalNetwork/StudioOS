@@ -386,18 +386,26 @@ export const SIDEBAR_GROUPS = {
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      { to: '/deals/pipeline', icon: Handshake, label: 'Deals',
+      // EVERY ROW POINTS AT ITS WORKSPACE ROOT, not at the first zone. Deals,
+      // Portfolio and Research each pointed one level down — at
+      // /deals/pipeline, /portfolio/health and /research/ask — and that is the
+      // whole of "Deals land on Pipeline and not on the Deals overview". The
+      // root renders the workspace's overview; the zone row underneath it
+      // renders the sections. A row aimed at a zone skips the overview, which
+      // is precisely how the founder overviews were lost the first time.
+      { to: '/deals', icon: Handshake, label: 'Deals',
         match: ['/deals', '/pipeline', '/raise/data-room'] },
-      // Positions is the canvas's word for the holdings view, which is
-      // /portfolio/health today. The literal route /portfolio/positions also
-      // exists and the generic tab bar labels it "Cap Table" — three names
-      // across two pages. Until that is settled the row keeps pointing at the
-      // page that works; the zone row above it carries the canvas's naming.
-      { to: '/portfolio/health', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
+      // Positions is the canvas's word for the holdings view. /portfolio is the
+      // overview; /portfolio/positions is the book; /portfolio/health is the
+      // legacy alias that still renders the overview, and the generic tab bar
+      // labels the book "Cap Table" — three names across two pages, and
+      // settling that vocabulary is a content decision. What the row owes is
+      // the root.
+      { to: '/portfolio', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
       { to: '/spinout-lab/investor-workspace', icon: Landmark, label: 'Axal VC Fund' },
       { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds', '/lp-reports'], requiredInvestorTier: 'institutional' },
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
-      { to: '/research/ask', icon: Radar, label: 'Research', match: ['/research', '/market-intel'] },
+      { to: '/research', icon: Radar, label: 'Research', match: ['/research', '/market-intel'] },
       { to: '/trust', icon: ShieldCheck, label: 'Trust' },
       // NO Company Settings row. The canvas asks for one; the shipped decision
       // is that /company-settings is the sidebar's PINNED FOOTER for every
@@ -501,4 +509,46 @@ export const FOUNDER_FULL_BLEED = [
   '/grow/focus', '/grow/talent', '/grow/customers', '/grow/partnerships',
   '/grow/capital-match', '/grow/brand', '/grow/launch',
   '/network/relationships', '/network/introductions', '/network/organizations',
+];
+
+/**
+ * The same list for the Investor & LP shell, and it exists for the same reason.
+ *
+ * `App.jsx` carried the investor half of `fullWidthSurface` and `flushSurface`
+ * as one hand-typed expression written out TWICE, identically — the exact shape
+ * the founder half was collapsed out of. It matched the prefix `/portfolio/`
+ * plus eight literal paths, which meant the four `/funds/*` zone pages were in
+ * neither list even though each of their shells declares `min-height:100vh`
+ * (`investorFundLPs.css` `.ip1-fund-shell` and its three siblings). That is the
+ * `/grow/focus` omission again, four times over, and it is why the LP registry,
+ * capital calls, accounting and reporting pages sat in a centred column inside
+ * a page that had already drawn its own frame.
+ *
+ * WHAT IS NOT HERE, deliberately: `/research/ask` and its four sibling zones.
+ * Those render `WorkspaceShell` around a plain card — the same treatment the
+ * founder shell gives them, and the same reason `/research/*` is absent from
+ * `FOUNDER_FULL_BLEED`. A page that does not draw its own canvas does not want
+ * the canvas layout.
+ */
+export const INVESTOR_FULL_BLEED = [
+  // The five workspace roots — each renders that workspace's overview canvas.
+  '/deals', '/portfolio', '/funds', '/network', '/research',
+  // Deals — four zone routes, plus the legacy `/pipeline*` mounts that render
+  // the same canvas and have always been full-bleed.
+  '/deals/pipeline', '/deals/screening', '/deals/commit', '/deals/closing',
+  '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions',
+  // Portfolio — three zone routes, the `/portfolio/health` legacy alias for the
+  // overview, and the remaining `/portfolio/*` pages that the old `startsWith`
+  // covered. They are listed rather than dropped so this change moves nothing
+  // that was already sized correctly.
+  '/portfolio/positions', '/portfolio/updates', '/portfolio/value-add',
+  '/portfolio/health', '/portfolio/growth', '/portfolio/performance',
+  '/portfolio/risk-matrix', '/portfolio/reserves', '/portfolio/waterfall',
+  // Fund — the four that were missing from both arrays.
+  '/funds/lps', '/funds/calls', '/funds/ledger', '/funds/reporting',
+  // Network — the three zone routes, matching what the founder shell already
+  // does with the same three.
+  '/network/relationships', '/network/introductions', '/network/organizations',
+  // Research — the legacy mount of the investor overview.
+  '/market-intel',
 ];

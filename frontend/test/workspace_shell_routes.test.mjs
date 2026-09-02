@@ -139,8 +139,23 @@ test('a shell is only claimed migrated once its sidebar points at the new IA', (
   // and neither Trust nor Company Settings may be a nav row. Claiming it
   // migrated would mean asserting a sidebar that contradicts those.
   if (MIGRATED.includes('investor')) {
-    assert.match(sidebar, /to: '\/deals\/pipeline'/,
-      'investor is claimed migrated but Deals still points at /pipeline');
+    // Scoped to the investor block for the same reason the founder one is:
+    // `/deals` is also the Deal Flow row of another role, and a whole-file
+    // grep would let that row satisfy this. The three targets below were
+    // `/deals/pipeline`, `/portfolio/health` and `/research/ask` — one level
+    // below each overview, which is the shape stated above as the thing that
+    // lost the overviews in the first place. The assertion used to require
+    // exactly that, contradicting its own comment.
+    const investor = sidebar.slice(
+      sidebar.indexOf('\n  investor: ['), sidebar.indexOf('\n  advisor: ['));
+    for (const root of ['/deals', '/portfolio', '/research']) {
+      assert.ok(new RegExp(`to: '${root}'`).test(investor),
+        `investor is claimed migrated but its ${root} row does not point at the root`);
+    }
+    for (const zone of ['/deals/pipeline', '/portfolio/health', '/research/ask', '/market-intel']) {
+      assert.ok(!new RegExp(`to: '${zone}'`).test(investor),
+        `an investor row points back at ${zone}, one level below its overview`);
+    }
   }
 });
 

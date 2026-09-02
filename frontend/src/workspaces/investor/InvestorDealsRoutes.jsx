@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Skeleton } from '../../ui';
+import { Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell from '../WorkspaceShell';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 
@@ -66,9 +66,25 @@ export default function InvestorDealsRoutes() {
       role="investor"
       scope="One fund"
       intro={INTRO[zone?.slug] || INTRO.pipeline}
+      rail={(
+        <WorkerRail
+          workspace="Deals"
+          role="investor"
+          stance="Manual workspace"
+          note="Your pipeline, deal rooms, votes and invitations work without AI. Scores and recommendations appear only when they exist in the live deal record. This view never invents a memo, cost, model, or result."
+          coverage={[`${zone?.label || 'Pipeline'} · live deal records only`]}
+          coverageNote="Founder-sourced and shared objects retain their provenance. Existing server access controls remain authoritative."
+          unavailable={[
+            ['Memos and scoring runs', 'Nothing on this page drafts a memo or produces a score.'],
+          ]}
+        />
+      )}
     >
+      {/* `embedded`: the shell above already draws the heading, the zone row
+          and the rail. Without it the workspace drew all three again inside
+          them — two h1s, two pill rows and two Worker AI rails on one page. */}
       <Suspense fallback={<div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-64" /></div>}>
-        <InvestorDealsWorkspace />
+        <InvestorDealsWorkspace embedded />
       </Suspense>
     </WorkspaceShell>
   );

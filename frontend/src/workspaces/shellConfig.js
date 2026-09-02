@@ -46,11 +46,19 @@ export const ARCHETYPE = {
 // reserved system-wide for founder-sourced objects — the seam — so a product
 // accent can never be mistaken for provenance. ANALYTICS owns that hue as an
 // archetype badge only, which is why that badge never carries a seam legend.
+//
+// `deepDark`/`tintDark` are the same accent on a dark ground, and they are not
+// a lightness flip of the light pair. The Investor canvas states the reason:
+// "Indigo lifts to indigo-400 on dark. Violet-600 and indigo-600 are
+// indistinguishable at low luminance, so the accent has to move for the two
+// licences to stay legible apart." Each is the 400 weight of its own hue, which
+// is what `ui/workerRail.css` and every investor page's `.dark` block already
+// use independently — this table is now the single place they come from.
 export const ACCENT = {
-  founder:  { ink: '#7c3aed', deep: '#6d28d9', tint: '#f5f3ff', border: '#ddd6fe' },
-  investor: { ink: '#4f46e5', deep: '#4338ca', tint: '#eef2ff', border: '#c7d2fe' },
-  advisor:  { ink: '#047857', deep: '#065f46', tint: '#f0fdf6', border: '#a7f3d0' },
-  partner:  { ink: '#b45309', deep: '#92400e', tint: '#fffbf2', border: '#fde68a' },
+  founder:  { ink: '#7c3aed', deep: '#6d28d9', tint: '#f5f3ff', border: '#ddd6fe', deepDark: '#a78bfa', tintDark: '#241d38' },
+  investor: { ink: '#4f46e5', deep: '#4338ca', tint: '#eef2ff', border: '#c7d2fe', deepDark: '#818cf8', tintDark: '#211f3d' },
+  advisor:  { ink: '#047857', deep: '#065f46', tint: '#f0fdf6', border: '#a7f3d0', deepDark: '#34d399', tintDark: '#0d2b22' },
+  partner:  { ink: '#b45309', deep: '#92400e', tint: '#fffbf2', border: '#fde68a', deepDark: '#fbbf24', tintDark: '#2b210d' },
 };
 
 export const SEAM = { ink: '#0e7490', tint: '#f0fdff', border: '#a5edf5' };
@@ -181,9 +189,14 @@ export const SHELLS = {
         ] },
       { kind: 'bucket', label: 'Portfolio', prefix: '/portfolio', tagline: 'Hold and help',
         zones: [
-          // Three names pointed at two pages. "Positions" is the canvas's word
-          // for the holdings view, which is /portfolio/health today.
-          { slug: 'positions', label: 'Positions', archetype: A.LEDGER, legacy: '/portfolio/health' },
+          // Three names still point at two pages — "Positions" (canvas),
+          // "Health" (route) and "Cap Table" (the generic tab bar) — and
+          // settling that vocabulary is a content decision. What is settled:
+          // `/portfolio` is the OVERVIEW, `/portfolio/positions` is the book,
+          // and `/portfolio/health` is the overview's legacy alias. So
+          // `positions` carries no `legacy` — it used to name
+          // `/portfolio/health`, which is the overview, not this zone.
+          { slug: 'positions', label: 'Positions', archetype: A.LEDGER },
           { slug: 'updates', label: 'Updates', archetype: A.FEED },
           { slug: 'value-add', label: 'Value-add', archetype: A.WORK_BOARD, legacy: '/portfolio/growth' },
         ] },

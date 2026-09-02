@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Filter, GitBranch, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderBuildRoadmap.css';
 
 const text = (value, fallback = 'Not recorded') => {
@@ -126,7 +126,7 @@ function RoadmapRow({ item }) { const [label, tone] = stateFor(item); const depe
 function DependencySummary({ dependencies }) { return <section className="fb-roadmap-card fb-roadmap-unavailable-card"><div className="fb-roadmap-card-head"><div><GitBranch size={16} /><h2>Dependency chain</h2></div><span>{dependencies.length ? `${dependencies.length} stored` : 'Unavailable'}</span></div><strong>{dependencies.length ? 'Stored links returned by the roadmap' : 'Dependency links are unavailable'}</strong><p>{dependencies.length ? 'Only explicit dependency fields are shown in the timeline; unresolved state is not inferred.' : 'The current roadmap source returns objectives and key results, but no dependency graph or downstream blocks.'}</p></section>; }
 function SourceSummary({ okrCount, quarterCount }) { return <section className="fb-roadmap-card"><div className="fb-roadmap-card-head"><div><CheckCircle2 size={16} /><h2>Source coverage</h2></div><span>Read-only view</span></div><div className="fb-roadmap-source-row"><span>Stored roadmap items</span><strong>{okrCount}</strong></div><div className="fb-roadmap-source-row"><span>Recorded quarters</span><strong>{quarterCount || 'Unavailable'}</strong></div><p className="fb-roadmap-note">Scenario snapshots, risk assessment, and timeline dependencies require separate stored records.</p></section>; }
 function WorkerRail({ project, itemCount }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Build"
     className="fb-roadmap-rail"
     stance="Manual operating view"

@@ -98,7 +98,7 @@ it, where in their nav, and how do they get there.*
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Explore the Spin-Out Lab | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Fund Brief One-Pager | `/spinout-lab` · `/spinout-lab/investor-workspace` | Home | Full page + print stylesheet | Sidebar → Home → Spin-Out Lab | CURRENT | High |
-| Investor LP Canvas | `/studio` | Home | Full page | Sidebar → Home → Studio | DEFERRED | High |
+| Investor LP Canvas | `/studio` · `/deals` · `/portfolio` · `/funds` · `/network` · `/research` | Home | Full page | Sidebar → Home → Studio | UPGRADE | High |
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Liquidity & Secondaries | `/liquidity` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Home | Full page | Sidebar → Home → Axal VC Fund | DEFERRED | High |

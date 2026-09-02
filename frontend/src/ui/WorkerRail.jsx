@@ -2,19 +2,30 @@ import { PanelRight, ShieldCheck } from 'lucide-react';
 import useAiSpend from '../hooks/useAiSpend';
 import { formatSpend, spendMeter } from './assistCost';
 import { EADWYN_GUARDRAIL } from './eadwynConfig';
-import './founderWorkerRail.css';
+import { ACCENT } from '../workspaces/shellConfig';
+import './workerRail.css';
 
 /**
- * The Worker AI rail the six founder workspaces share.
+ * The Worker AI rail. One component, every licence.
  *
- * ONE RAIL, NOT TWENTY-SEVEN. Every founder page had built its own: a local
+ * ONE RAIL, NOT THIRTY-NINE. Every founder page had built its own: a local
  * `WorkerRail` / `BuildRail` / `RaiseRail` / `ValidateRail` / `CadenceRail`
  * function at the bottom of the file — twenty-six of them under seventeen
  * distinct names, plus one written inline on the Research desk — each with its
- * own props and its own CSS class names. They
- * agreed on the shape by coincidence and drifted in the details, and the pages
- * that never grew one simply had no rail — which is the report this component
- * answers: "some pages doesn't have it, it does show anything, it looks blank".
+ * own props and its own CSS class names. Then the investor shell turned out to
+ * hold twelve more, under four different HEADINGS (one said "Deals AI", not
+ * "Worker AI"), none of which read the spend endpoint at all: no meter, no cap,
+ * every string a literal. They agreed on the shape by coincidence and drifted
+ * in the details, and the pages that never grew one simply had no rail — which
+ * is the report this component answers, filed twice, once per licence: "some
+ * pages doesn't have it, it does show anything, it looks blank".
+ *
+ * IT WAS CALLED `FounderWorkerRail`. Nothing it RENDERS was ever founder-
+ * specific — the title is `Worker AI · {workspace}`, the blocks are Mode,
+ * Coverage, Unavailable here and Usage this month, the footer is the shared
+ * `EADWYN_GUARDRAIL` — so the rename cost nothing and the name was the last
+ * thing claiming the rail belonged to one licence. What IS per-licence is the
+ * accent, and that now comes from `role`.
  *
  * WHAT THE FOUR BLOCKS SAY, and why they are these four. The canvas (artboard
  * A1, `Founder_Workspaces_Canvas.dc.html`) specifies a rail identical on all six
@@ -58,10 +69,12 @@ import './founderWorkerRail.css';
  * STYLING. `className` takes the host page's own rail class — `a5-rail`,
  * `fr-pitch-rail`, `a7-rail` — so the page's grid column, border and background
  * still place it exactly where its layout expects. Everything inside is
- * `founderWorkerRail.css`, which is why the blocks look the same on all six.
+ * `workerRail.css`, which is why the blocks look the same on every one of
+ * them — six founder desks and twenty-four investor surfaces.
  */
-export default function FounderWorkerRail({
+export default function WorkerRail({
   workspace,
+  role = 'founder',
   className = '',
   stance,
   note,
@@ -70,7 +83,7 @@ export default function FounderWorkerRail({
   unavailable = [],
   action = null,
   footer = 'Read-only summary · no automated actions',
-  'data-testid': testId = 'founder-worker-rail',
+  'data-testid': testId = 'worker-rail',
 }) {
   const { spend, loading } = useAiSpend();
 
@@ -80,11 +93,30 @@ export default function FounderWorkerRail({
   const cap = spend?.month?.cap_usd ?? 0;
   const meter = spendMeter(known ? spend.month.spend_usd : 0, cap);
 
+  // The accent is the LICENCE's, not the page's, and it comes from the one
+  // table that already holds all four — `ACCENT` in the shell config, the same
+  // source ZoneNav reads. Canvas I1 is explicit that this is not decoration:
+  // "Indigo, not violet: side by side with the founder product these read as
+  // two licenses, not two personas." Writing the hexes into workerRail.css
+  // would be a fourth copy of them, free to drift from the pills beside it.
+  //
+  // Four variables, not two: an inline `--fwr-accent` would beat `.dark .fwr`
+  // and pin the light accent onto the dark ground. The stylesheet picks between
+  // the light and dark pair, so the cascade still decides the theme and this
+  // only supplies the values.
+  const accent = ACCENT[role] || ACCENT.founder;
+
   return (
     <aside
       className={`fwr ${className}`.trim()}
       aria-label={`Worker AI controls · ${workspace}`}
       data-testid={testId}
+      style={{
+        '--fwr-accent-light': accent.deep,
+        '--fwr-accent-soft-light': accent.tint,
+        '--fwr-accent-dark': accent.deepDark,
+        '--fwr-accent-soft-dark': accent.tintDark,
+      }}
     >
       <div className="fwr-title">
         <span>Worker AI · {workspace}</span>

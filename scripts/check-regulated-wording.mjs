@@ -48,6 +48,13 @@ const SURFACES = [
   ['copy', 'frontend/src/ui/eadwynConfig.js', 'every string on the AI rail: mode notes, guardrail, footers'],
   ['copy', 'frontend/src/ui/AssistRail.jsx', 'the rail itself — headings, buttons, empty states'],
   ['copy', 'frontend/src/ui/AssistLayout.jsx', 'the shell that mounts the rail beside a page'],
+  // The workspace rail, on every founder desk and every investor workspace.
+  // LIMIT, stated rather than implied: `stance`, `note`, `coverage` and
+  // `unavailable` are written by the CALLING page, so scanning this file covers
+  // the rail's own chrome and not the strings passed into it. Adding the
+  // callers means scanning two dozen page files for four prop values, which is
+  // a scanner change rather than a list entry.
+  ['copy', 'frontend/src/ui/WorkerRail.jsx', 'the workspace AI rail — headings, guardrail, usage meter'],
   ['copy', 'frontend/src/components/advisor/PersonalAdvisor.jsx', 'the chatbot UI — header, placeholder, empty states'],
   ['copy', 'frontend/src/components/advisor/AdvisorFilledBanner.jsx', 'tells the user the model filled their fields'],
   ['copy', 'frontend/src/components/advisor/AdvisorProgressWidget.jsx', 'the chatbot progress rail'],

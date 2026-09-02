@@ -1,5 +1,5 @@
 /*
- * The shared Worker AI rail — see ui/FounderWorkerRail.jsx for what the four
+ * The shared Worker AI rail — see ui/WorkerRail.jsx for what the four
  * blocks say and why.
  *
  * SCOPED TO `.fwr`, never to the host's class. The component keeps the page's
@@ -33,8 +33,11 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
   --fwr-faint: #8b8494;
   --fwr-line: #e7e3eb;
   --fwr-paper: #fff;
-  --fwr-accent: #6d28d9;
-  --fwr-accent-soft: #f5efff;
+  /* The role supplies both pairs inline (see ui/WorkerRail.jsx); these
+     fallbacks are the founder accent, so a rail mounted without a role still
+     renders the licence it was built for rather than an unset colour. */
+  --fwr-accent: var(--fwr-accent-light, #6d28d9);
+  --fwr-accent-soft: var(--fwr-accent-soft-light, #f5efff);
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -97,7 +100,7 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
   --fwr-faint: #8b849c;
   --fwr-line: #2e2b38;
   --fwr-paper: #1a1822;
-  --fwr-accent: #a78bfa;
-  --fwr-accent-soft: #241d38;
+  --fwr-accent: var(--fwr-accent-dark, #a78bfa);
+  --fwr-accent-soft: var(--fwr-accent-soft-dark, #241d38);
 }
 .dark .fwr-meter i.fwr-over { background: #f87171; }

@@ -56,7 +56,12 @@ test('no nav still points at the retired research/market URL', () => {
   // twenty fixture rows and admin's emptied Research group, but deliberately
   // left all five of these standing — a role losing its one live research
   // surface would be a regression hiding inside a withdrawal.
-  assert.equal((sidebar.match(/'\/market-intel'/g) || []).length, 5,
+  //
+  // Counted inside SIDEBAR_GROUPS only. The file also lists `/market-intel` in
+  // INVESTOR_FULL_BLEED — a layout list, not a nav — and a whole-file count
+  // read that as a sixth role linking it.
+  const navs = sidebar.slice(0, sidebar.indexOf('export const FOUNDER_FULL_BLEED'));
+  assert.equal((navs.match(/'\/market-intel'/g) || []).length, 5,
     'expected all five role navs to link /market-intel');
 });
 

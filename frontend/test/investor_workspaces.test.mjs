@@ -52,9 +52,13 @@ test('investor Research implements I8 without fabricated diligence claims', () =
   // So the entity is written out. This pins the encoding that actually ships;
   // if the JSX ever switches to a bare `&`, this failing is the right outcome
   // rather than something a tolerant matcher should absorb silently.
-  for (const label of ['Go deep before money moves', 'Diligence pull', 'Source library', 'Fund &amp; manager benchmarking', 'Market deep-dives', 'Company profiles', 'Worker AI · Research']) {
+  // "Worker AI · Research" is no longer a literal here — the shared rail
+  // composes that heading from `workspace`, so the mount is asserted below.
+  for (const label of ['Go deep before money moves', 'Diligence pull', 'Source library', 'Fund &amp; manager benchmarking', 'Market deep-dives', 'Company profiles']) {
     assert.ok(research.includes(label), `investor Research is missing "${label}"`);
   }
+  assert.match(research, /<WorkerRail[\s\S]*?workspace="Research"[\s\S]*?role="investor"/,
+    'investor Research must mount the shared Worker AI rail');
   assert.match(research, /api\.miSources\(\)/);
   assert.match(research, /api\.miWatchlistList\(\)/);
   assert.match(research, /\['rows', 'watchlist', 'items', 'data'\]/);
@@ -118,9 +122,16 @@ test('investor visual system includes source provenance, responsive layout, and 
 });
 
 test('investor Deals implements the I3 hierarchy with live sources', () => {
-  for (const label of ['Find and close investments', 'Pipeline', 'Screening', 'Commit', 'Closing', 'Deals AI']) {
+  for (const label of ['Find and close investments', 'Pipeline', 'Screening', 'Commit', 'Closing']) {
     assert.match(deals, new RegExp(label));
   }
+  // The heading here read "Deals AI" — one of four different headings across
+  // twelve bespoke investor rails, and the only one that did not say "Worker
+  // AI" at all. It now comes from the shared component, so every licence and
+  // every workspace says the same thing.
+  assert.match(deals, /<WorkerRail[\s\S]*?workspace="Deals"[\s\S]*?role="investor"/,
+    'investor Deals must mount the shared Worker AI rail');
+  assert.ok(!deals.includes('Deals AI'), 'the bespoke "Deals AI" heading is back');
   for (const stage of ['Sourcing', 'Screening', 'Diligence', 'Commit', 'Closing']) {
     assert.match(deals, new RegExp(`label: '${stage}'`));
   }
@@ -146,7 +157,9 @@ test('investor Deals exposes only canonical deal-room IDs and partial source fai
   assert.match(deals, /navigate\(`\/deals\/\$\{id\}`\)/);
   assert.match(deals, /invitations could not be loaded/);
   assert.match(deals, /if \(dealsResult\.status === 'rejected'\)/);
-  assert.match(deals, /navigate\('\/raise\/data-room'\)/);
+  // A real Link, not an imperative navigate: it is middle-clickable and
+  // copyable, which a button calling navigate() is not.
+  assert.match(deals, /<Link to="\/raise\/data-room"/);
 });
 
 test('only canonical investor deal routes replace their child with I3', () => {

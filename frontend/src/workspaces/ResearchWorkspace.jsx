@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Card, FounderWorkerRail, Skeleton } from '../ui';
+import { Card, WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import { bucketForPath, zoneForPath } from './shellConfig';
 
@@ -153,8 +153,9 @@ export default function ResearchWorkspace({ role = 'founder' }) {
     <WorkspaceShell
       role={role}
       rail={(
-        <FounderWorkerRail
+        <WorkerRail
           workspace="Research"
+          role={role}
           stance="Read-only source coverage"
           note="This rail reports which zones have a store behind them. It does not run research, answer questions, or take actions."
           coverage={[LIVE_ZONES.has(slug)

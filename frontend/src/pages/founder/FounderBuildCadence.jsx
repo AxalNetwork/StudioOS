@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarClock, CircleDot, Filter, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderBuildCadence.css';
 
 const text = (value, fallback = 'Not recorded') => value === null || value === undefined || String(value).trim() === '' ? fallback : String(value);
@@ -63,7 +63,7 @@ export default function FounderBuildCadence() {
 
 function Stat({ label }) { return <div><span>{label}</span><strong>Unavailable</strong><small>No cadence record source</small></div>; }
 function CadenceRail({ project }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Build"
     className="fb-cadence-rail"
     stance="Manual cadence view"

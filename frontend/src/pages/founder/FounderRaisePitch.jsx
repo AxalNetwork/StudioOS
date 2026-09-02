@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Filter, Link2, RefreshCw, Sparkles, SquareStack } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderRaisePitch.css';
 
 const asList = (value, ...keys) => {
@@ -169,7 +169,7 @@ function normalizeAnalytics(value) {
 
 function Stat({ label, value, note, muted }) { return <div className={`fr-pitch-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function WorkerRail({ project, versions, analytics }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Raise"
     className="fr-pitch-rail"
     stance="Manual pitch collection"

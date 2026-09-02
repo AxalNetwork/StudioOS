@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Clock3, Filter, Layers3, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderBuildBoard.css';
 
 const STAGES = [
@@ -155,7 +155,7 @@ function StageTimeline({ stages, current }) { return <section className="fb-card
 function EvidenceSummary({ detail, unavailable }) { const metrics = detail?.metrics || []; const gates = detail?.gates || []; return <section className="fb-card fb-evidence"><div className="fb-card-head"><div><ShieldCheck size={16} /><h2>Evidence surface</h2></div><span>Available source records</span></div><div className="fb-evidence-row"><span>Metrics</span><strong>{unavailable ? '—' : metrics.length}</strong><small>{unavailable ? 'Detail record unavailable' : metrics.length ? 'Stored pipeline metrics' : 'Not recorded'}</small></div><div className="fb-evidence-row"><span>Decision gates</span><strong>{unavailable ? '—' : gates.length}</strong><small>{unavailable ? 'Detail record unavailable' : gates.length ? 'Stored gate records' : 'Not recorded'}</small></div><p className="fb-note">No score, owner, WIP limit, or automation value is displayed unless it is returned by the authenticated API.</p></section>; }
 function WorkerRail({ taskCount, project }) {
   const hasTaskDetail = taskCount !== null;
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Build"
     className="fb-worker-rail"
     stance="Manual operating view"

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, ClipboardCheck, Filter, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderBuildThisWeek.css';
 
 const text = (value, fallback = 'Not recorded') => {
@@ -132,7 +132,7 @@ function CommitmentRow({ item }) { const [label, tone] = commitmentState(item); 
 function HistoryUnavailable() { return <section className="fb-week-card fb-week-unavailable-card"><div className="fb-week-card-head"><div><CircleDot size={16} /><h2>Commitment history</h2></div><span>Not recorded</span></div><strong>Weekly history is unavailable</strong><p>Carry-overs, skipped commitments, streaks, and retro notes require a cadence history source that is not connected to this desk.</p></section>; }
 function SourceSummary({ objectiveCount, commitmentCount }) { return <section className="fb-week-card"><div className="fb-week-card-head"><div><CheckCircle2 size={16} /><h2>Source coverage</h2></div><span>Read-only</span></div><div className="fb-week-source-row"><span>Now objectives</span><strong>{objectiveCount}</strong></div><div className="fb-week-source-row"><span>Key results</span><strong>{commitmentCount}</strong></div><p className="fb-week-note">Progress is shown only when it is stored on the key result. No completion rate is inferred from missing values.</p></section>; }
 function WorkerRail({ project, commitmentCount }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Build"
     className="fb-week-rail"
     stance="Manual operating view"

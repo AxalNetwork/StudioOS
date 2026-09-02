@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { Card, EmptyState, ErrorState, FounderWorkerRail, Skeleton } from '../../ui';
+import { Card, EmptyState, ErrorState, WorkerRail, Skeleton } from '../../ui';
 import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 
@@ -319,7 +319,7 @@ export default function FounderValidateWorkspace() {
     <WorkspaceShell
       role="founder"
       rail={(
-        <FounderWorkerRail
+        <WorkerRail
           workspace="Validate"
           stance="Evidence-led view"
           note="This workspace does not generate, transcribe, or change records. It keeps the evidence surface readable."

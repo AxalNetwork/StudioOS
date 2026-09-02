@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Filter, Landmark, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 
 const asList = (value, ...keys) => {
@@ -159,7 +159,7 @@ function CapitalContent({ project, scenario, result, latestRound, ledger, ledger
 
 function Stat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function WorkerRail({ project, scenario, ledger, variants, waterfall }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Raise"
     className="fr-capital-rail"
     stance="Manual capital view"

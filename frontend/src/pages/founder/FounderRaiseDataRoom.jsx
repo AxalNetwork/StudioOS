@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Eye, FileText, Filter, FolderOpen, RefreshCw, ShieldCheck, Sparkles, Users } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseDataRoom.css';
 
@@ -148,7 +148,7 @@ function prettyAction(value) { return display(value).replace(/[_-]/g, ' ').repla
 function RoomStat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function Coverage({ label, value }) { return <div className="fr-capital-coverage-row"><span>{label}</span><strong>{value}</strong></div>; }
 function WorkerRail({ project, files, grants, fileActivity, roomError }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Raise"
     className="fr-capital-rail"
     stance="Manual room collection"

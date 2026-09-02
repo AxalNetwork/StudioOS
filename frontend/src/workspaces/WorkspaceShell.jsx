@@ -33,7 +33,7 @@ import { bucketForPath, zoneForPath } from './shellConfig';
  * connected to anything" report. Registering the keys was not the fix: the
  * task class decides the model and price the rail reports, and none of these
  * surfaces runs one. So the shell takes the rail as a slot instead, and the
- * pages that have something true to show pass `ui/FounderWorkerRail`.
+ * pages that have something true to show pass `ui/WorkerRail`.
  *
  * SCOPE LINE. `scope` is where a page states whose data it is showing — one
  * company, one client, one fund. It is deliberately a required-feeling prop

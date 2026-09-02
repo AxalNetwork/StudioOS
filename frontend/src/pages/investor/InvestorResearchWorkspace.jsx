@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Landmark, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, RefreshCw, Search } from 'lucide-react';
 import { api } from '../../lib/api';
+import { WorkerRail } from '../../ui';
+import ZoneNav from '../../workspaces/ZoneNav';
+import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorResearchWorkspace.css';
 
 const arrayOf = (value, keys = []) => Array.isArray(value) ? value : keys.reduce((found, key) => found.length ? found : (Array.isArray(value?.[key]) ? value[key] : []), []);
@@ -56,9 +59,10 @@ export default function InvestorResearchWorkspace() {
             <input value={question} onChange={(event) => setQuestion(event.target.value)} aria-label="Research question" data-testid="input-research-question" />
             <button className="ir-button" type="submit" data-testid="button-submit-research-question">Find evidence</button>
           </form>
-          <nav className="ir-anchors" aria-label="Research sections">
-            <a href="#research-ask" data-testid="link-research-ask">Ask</a><a href="#research-evidence" data-testid="link-research-evidence">Diligence</a><a href="#research-benchmarks" data-testid="link-research-benchmarks">Benchmarking</a><a href="#research-markets" data-testid="link-research-markets">Markets</a><a href="#research-library" data-testid="link-research-library">Library</a>
-          </nav>
+          {/* Five real links. These were `href="#research-ask"` and four more —
+              anchors onto this page, while /research/ask and its four siblings
+              are registered routes nothing linked. */}
+          <ZoneNav bucket={bucketForPath('investor', '/research')} role="investor" activeSlug={null} className="mt-2.5" />
         </header>
 
         {submitted && <section className="ir-card">
@@ -85,14 +89,27 @@ export default function InvestorResearchWorkspace() {
           <section className="ir-mini" id="research-companies"><h2>Company profiles</h2><p>Comparable context comes from the existing project and private-round services; no company identity is inferred.</p><span data-testid="text-research-company-status">{errors.projects ? 'Project context unavailable' : data ? `${projects.length} project records` : 'Loading project context'}</span></section>
         </div>
       </section>
-      <aside className="ir-rail" aria-label="Worker AI Research">
-        <div className="ir-rail-label">Worker AI · Research <button type="button" className="ir-refresh" onClick={() => load(true)} disabled={refreshing} aria-label="Refresh research workspace" data-testid="button-refresh-investor-research"><RefreshCw size={13} className={refreshing ? 'ir-spin' : ''} /></button></div>
-        <section><h2>Manual by default</h2><p>Tables, sources, and evidence records remain useful without an automated research run.</p></section>
-        <section className="ir-advisor"><h2>Advisor fills the blanks</h2><p>Guidance can point to available evidence. It does not invent a sourced answer, change a deal, or claim access to a data room.</p></section>
-        <section className="ir-boundary"><h2>Permission &amp; freshness</h2><p>Use only records whose source and permission are explicit. Re-check dated evidence before relying on it in diligence.</p></section>
-        <section><h2>Privacy boundary</h2><p>Private or founder-shared evidence is labeled only when the returned record provides that provenance.</p></section>
-        <footer><Landmark size={12} />Research respects the access and source metadata supplied by each service.</footer>
-      </aside>
+      <WorkerRail
+        workspace="Research"
+        role="investor"
+        className="ir-rail"
+        stance="Manual by default"
+        note="Tables, sources and evidence records remain useful without an automated research run. Nothing here invents a sourced answer, changes a deal, or claims access to a data room."
+        coverage={[
+          errors.sources ? 'Source library unavailable'
+            : data ? `${totalSources} source record${totalSources === 1 ? '' : 's'} readable` : 'Reading the source library',
+        ]}
+        coverageNote="Use only records whose source and permission are explicit. Re-check dated evidence before relying on it in diligence."
+        unavailable={[
+          ['Sourced answers', 'There is no scoped research-chat service on this route. The question desk states that rather than answering from general knowledge.'],
+          ['Inferred provenance', 'Private or founder-shared evidence is labelled only when the returned record supplies that provenance.'],
+        ]}
+        action={(
+          <button type="button" onClick={() => load(true)} disabled={refreshing} data-testid="button-refresh-investor-research">
+            <RefreshCw size={13} className={refreshing ? 'ir-spin' : ''} /> Refresh evidence
+          </button>
+        )}
+      />
     </div>
   </main>;
 }

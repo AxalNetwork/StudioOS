@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowUpRight, Landmark, Radar, RefreshCw, Search } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderResearchDesk.css';
 
 export const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
@@ -124,7 +124,7 @@ export default function FounderResearchDesk() {
           <section className="a7-card" id="a7-library"><SectionHead title="Document library" meta={documentsLoaded ? `${data.docs.length} stored document${data.docs.length === 1 ? '' : 's'}` : projectId ? 'Source unavailable' : 'Startup not selected'} /><p>{selectedProject ? `Legal documents for ${selectedProject.name || `Startup #${projectId}`}.` : 'Select a startup to read its legal documents.'}</p><Link className="a7-link" to={`/raise/data-room${query}`} state={state}>Open data room <ArrowUpRight size={13} /></Link></section>
         </div>
       </div>
-      <FounderWorkerRail
+      <WorkerRail
         workspace="Research"
         className="a7-rail"
         stance="Read-only source coverage"

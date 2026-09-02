@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
 
 const list = (value, ...keys) => {
@@ -92,7 +92,7 @@ function RelationshipTable({ rows }) {
 }
 function Stat({ label, value, note, muted }) { return <div className={muted ? 'is-muted' : ''}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function RelationshipRail({ project, contacts, cold, errors }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Network"
     className="fn-rel-rail"
     stance="Read-only relationship coverage"

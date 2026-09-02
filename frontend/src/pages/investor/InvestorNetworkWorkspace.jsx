@@ -1,8 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, CircleAlert, Landmark, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { Check, CircleAlert, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { WorkerRail } from '../../ui';
+import ZoneNav from '../../workspaces/ZoneNav';
+import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorNetworkWorkspace.css';
+
+/**
+ * A section heading's right-hand detail, in the order the body already reads
+ * its state: error, then loading, then the fact.
+ *
+ * WHAT THIS FIXES. `null` meant both "not fetched yet" and "fetch failed" —
+ * `setIntroductions` is only called on a fulfilled result — so a rejection left
+ * the heading printing "Loading propositions" forever, directly above the alert
+ * saying the propositions were unavailable. Both statements on screen at once,
+ * one of them false. Same shape on all three sections, which is why this is one
+ * helper rather than three ternaries.
+ */
+const detailFor = (error, value, describe) => {
+  if (error) return 'Source unavailable';
+  if (value === null || value === undefined) return 'Loading records';
+  return describe();
+};
 
 const typeLabel = (value) => String(value || 'relationship').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 const personName = (relationship) => relationship?.other?.name || relationship?.other?.email || 'Unidentified relationship';
@@ -52,7 +72,11 @@ function Alert({ children }) {
   return <div className="inw-alert" role="status" data-testid="status-network-error"><CircleAlert size={14} />{children}</div>;
 }
 
-export default function InvestorNetworkWorkspace() {
+// `embedded`: on /network/{relationships,introductions,organizations} the
+// WorkspaceShell already draws the heading, the zone row and the rail. This
+// page drew all three again, which is why an investor saw two Worker AI rails
+// side by side on those routes.
+export default function InvestorNetworkWorkspace({ embedded = false }) {
   const [params] = useSearchParams();
   const highlightedIntro = params.get('intro') || '';
   const requestedTab = params.get('tab') || '';
@@ -142,6 +166,7 @@ export default function InvestorNetworkWorkspace() {
     } finally { setBusyUid(''); }
   };
 
+  const bucket = bucketForPath('investor', '/network');
   const touchCoverage = (relationships || []).filter((item) => lastTouchAt(item)).length;
   const coldCount = (relationships || []).filter((item) => {
     const touched = new Date(String(lastTouchAt(item) || '').replace(' ', 'T'));
@@ -153,19 +178,25 @@ export default function InvestorNetworkWorkspace() {
     <main className="investor-network-workspace" data-testid="investor-network-workspace">
       <div className="inw-layout">
         <section className="inw-main">
-          <header className="inw-hero">
+          {!embedded && <header className="inw-hero">
             <div className="inw-title-row">
               <div><h1 data-testid="heading-investor-network">Work my relationships</h1><p>Typed for this side of the table: founders met, co-investors, LPs, service partners — each tie carrying the deal or fund context it belongs to.</p></div>
             </div>
-            <nav className="inw-anchors" aria-label="Network sections">
-              <a href="#relationship-book" data-testid="link-network-relationship-book">Relationship book</a>
-              <a href="#introductions-desk" data-testid="link-network-introductions">Introductions desk</a>
-              <a href="#organizations" data-testid="link-network-organizations">Organizations</a>
-            </nav>
-          </header>
+            {/* Real links. These were three `href="#…"` anchors that scrolled
+                and never opened /network/relationships, /introductions or
+                /organizations. */}
+            <ZoneNav bucket={bucket} role="investor" activeSlug={null} className="mt-2.5" />
+          </header>}
 
           <section className="inw-card" aria-labelledby="relationship-book">
-            <SectionHeading id="relationship-book" title="Relationship book" detail={relationships ? `${summary?.active_relationships ?? summary?.relationships_count ?? relationships.length} ties · ${touchCoverage ? `${coldCount} going cold` : 'last-touch coverage unavailable'}` : 'Loading relationship records'} />
+            <SectionHeading id="relationship-book" title="Relationship book" detail={detailFor(errors.relationships, relationships, () => {
+              const ties = summary?.active_relationships ?? summary?.relationships_count ?? relationships.length;
+              // A book with no last-touch dates and an EMPTY book are different
+              // facts. Only the first is a coverage gap.
+              const touch = relationships.length === 0 ? 'no ties recorded'
+                : touchCoverage ? `${coldCount} going cold` : 'last-touch coverage unavailable';
+              return `${ties} ties · ${touch}`;
+            })} />
             {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : (
               <div className="inw-table" data-testid="table-relationship-book">
                 <div className="inw-table-head"><span>Person</span><span>Type</span><span>Strength</span><span>Context</span><span>Last touch</span></div>
@@ -181,7 +212,7 @@ export default function InvestorNetworkWorkspace() {
 
           <div className="inw-lower">
             <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={introductions ? `${pending.length} awaiting your decision · ${propositionRows.length} shown` : 'Loading propositions'} />
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} />
               {errors.introductions ? <Alert>{errors.introductions}</Alert> : introductions === null ? <Skeleton rows={4} /> : propositionRows.length === 0 ? <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div> : <>
                 {actionError && <Alert>{actionError}</Alert>}
                 <div className="inw-proposition-list">{visiblePropositions.map((prop) => {
@@ -197,21 +228,42 @@ export default function InvestorNetworkWorkspace() {
             </section>
 
             <section className="inw-card" aria-labelledby="organizations">
-              <SectionHeading id="organizations" title="Organizations" detail={relationships ? `${organizations.length} relationship-backed organizations` : 'Loading attributed context'} />
+              <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => `${organizations.length} relationship-backed organizations`)} />
               {errors.organizations ? <Alert>{errors.organizations}</Alert> : relationships === null ? <Skeleton rows={4} /> : organizations.length === 0 ? <div className="inw-empty" data-testid="empty-organizations">No organization identity is recorded on your relationship records yet.</div> : <div className="inw-org-list">{organizations.slice(0, 6).map((org) => <div className="inw-org" key={org.name} data-testid={`row-organization-${safeKey(org.name)}`}><div><strong>{org.name}</strong><span>{[...org.types].join(' · ') || 'Attributed relationship'}</span></div><b>{org.people.size} known</b></div>)}</div>}
               <p className="inw-footnote">Organizations appear only when explicitly attached to a relationship record. Names and email domains are never used to infer a firm.</p>
             </section>
           </div>
         </section>
 
-        <aside className="inw-rail" aria-label="Worker AI Network">
-          <div className="inw-rail-label">Worker AI · Network <button type="button" onClick={() => load(true)} disabled={refreshing} aria-label="Refresh network workspace" title="Refresh network workspace" data-testid="button-refresh-network"><RefreshCw size={13} className={refreshing ? 'inw-spin' : ''} /></button></div>
-          <section><h2>Manual by default</h2><p>Tables and relationship records work alone. No automated outreach is sent from this page.</p></section>
-          <section className="inw-rail-accent"><h2>Advisor fills the blanks</h2><p>Advisory guidance can surface attributable context and cold ties. It does not create a relationship, send an introduction, or infer consent.</p></section>
-          <section><h2>Screening boundary</h2><p>Any accepted introduction remains a reviewed proposition. Both parties’ consent and the recorded scope govern what can be shared.</p></section>
-          <section className="inw-usage"><div><b>{introductions?.credits?.balance ?? '—'}</b><span>intro credits available</span></div><p>Credit availability is supplied by the introductions service. Declining a proposition uses no credit.</p></section>
-          <footer><Landmark size={12} /> Investor workspace. Data shown is governed by your existing access and permissions.</footer>
-        </aside>
+        {!embedded && (
+          <WorkerRail
+            workspace="Network"
+            role="investor"
+            className="inw-rail"
+            stance="Manual by default"
+            note="Tables and relationship records work alone. No automated outreach is sent from this page, and nothing here creates a relationship, sends an introduction, or infers consent."
+            coverage={[
+              errors.relationships ? 'Relationship book unavailable'
+                : relationships === null ? 'Reading the relationship book'
+                  : `${relationships.length} attributed tie${relationships.length === 1 ? '' : 's'}`,
+              // The credits balance is whatever the introductions service
+              // reports. A missing balance renders as absent, never as zero.
+              introductions?.credits?.balance == null
+                ? 'Intro credits not recorded'
+                : `${introductions.credits.balance} intro credits available`,
+            ]}
+            coverageNote="Credit availability is supplied by the introductions service. Declining a proposition uses no credit."
+            unavailable={[
+              ['Outreach drafting', 'No message, sequence or introduction is written here. Every send is a human click.'],
+              ['Consent', 'An accepted introduction stays a reviewed proposition. Both parties’ consent and the recorded scope govern what can be shared.'],
+            ]}
+            action={(
+              <button type="button" onClick={() => load(true)} disabled={refreshing} data-testid="button-refresh-network">
+                <RefreshCw size={13} className={refreshing ? 'inw-spin' : ''} /> Refresh records
+              </button>
+            )}
+          />
+        )}
       </div>
     </main>
   );

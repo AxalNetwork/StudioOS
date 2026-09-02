@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, Database, Download, FileText, Filter, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderBuildKpi.css';
 
 const FIELDS = [
@@ -160,7 +160,7 @@ function KpiRow({ row }) { return <tr data-testid={`row-kpi-${row.key}`}><td><st
 function HistoryCard({ snapshots, total }) { return <section className="fb-kpi-card"><div className="fb-kpi-card-head"><div><Database size={16} /><h2>Snapshot history</h2></div><span>{total} total</span></div>{snapshots.length ? <div className="fb-kpi-history">{snapshots.slice(0, 6).map((snapshot) => <div className="fb-kpi-history-row" key={snapshot.id}><span>{formatDate(snapshot.snapshot_date)}</span><strong>{snapshot.source || 'Not recorded'}</strong><span>{FIELDS.filter((field) => snapshot[field.key] !== null && snapshot[field.key] !== undefined && snapshot[field.key] !== '').length} fields populated</span></div>)}</div> : <p className="fb-kpi-muted-copy">No snapshots match this filter.</p>}<p className="fb-kpi-note">History is read-only here. Use the editor for manual entry or imports.</p></section>; }
 function CoverageCard({ latest, summary }) { return <section className="fb-kpi-card"><div className="fb-kpi-card-head"><div><CheckCircle2 size={16} /><h2>Ledger coverage</h2></div><span>Truthful fields only</span></div><div className="fb-kpi-coverage-row"><span>Latest recorded snapshot</span><strong>{latest ? formatDate(latest.snapshot_date) : 'Unavailable'}</strong></div><div className="fb-kpi-coverage-row"><span>Server-derived runway</span><strong>{formatValue(summary?.runway_months, 'mo')}</strong></div><p className="fb-kpi-note">Runway appears only when the server can derive it from its available records. No cash, burn, or target value is filled in from assumptions.</p></section>; }
 function WorkerRail({ project, snapshotCount }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Build"
     className="fb-kpi-rail"
     stance="Manual ledger view"

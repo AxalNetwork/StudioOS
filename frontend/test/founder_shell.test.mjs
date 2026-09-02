@@ -398,7 +398,7 @@ test('the Worker AI rail is one component, and every founder workspace has it', 
   // nothing at all — "it looks blank, probably not connected to anything".
   for (const [label, [, desk]] of Object.entries(WORKSPACES)) {
     const src = codeOnly(read(`frontend/src/pages/founder/${desk}.jsx`));
-    assert.match(src, new RegExp(`<FounderWorkerRail[\\s\\S]*?workspace="${label}"`),
+    assert.match(src, new RegExp(`<WorkerRail[\\s\\S]*?workspace="${label}"`),
       `${desk} must mount the shared rail`);
   }
   // And nothing declares its own again.
@@ -414,7 +414,7 @@ test('the Worker AI rail is one component, and every founder workspace has it', 
   // safety; there is deliberately no model block, because ASSIST_SURFACES keys
   // a surface to an aiRouter task class and no founder workspace runs one — a
   // model named here would be a model on a page that never calls one.
-  const rail = codeOnly(read('frontend/src/ui/FounderWorkerRail.jsx'));
+  const rail = codeOnly(read('frontend/src/ui/WorkerRail.jsx'));
   for (const block of ['>Mode<', '>Coverage<', '>Usage this month<']) {
     assert.ok(rail.includes(block), `the rail lost its ${block} block`);
   }
@@ -449,7 +449,14 @@ test('the founder full-bleed list covers every desk and section page', () => {
   ];
   assert.deepEqual(required.filter((p) => !listed.has(p)), [],
     'these founder surfaces draw their own full-bleed canvas but sit in the shell’s centred column');
-  // And both flags read the one list rather than re-typing it.
-  assert.equal((app.match(/FOUNDER_FULL_BLEED\.includes\(location\.pathname\)/g) || []).length, 2,
-    'fullWidthSurface and flushSurface must both read the single list');
+  // And both flags read the one list rather than re-typing it. They now share
+  // a single `fullBleedSurface` const — which is the same guarantee held one
+  // step tighter, since the list cannot be consulted twice with two different
+  // sets of paths if it is only consulted once.
+  assert.match(app, /const fullBleedSurface = \(activeRole === 'founder' && FOUNDER_FULL_BLEED\.includes\(location\.pathname\)\)/,
+    'the founder half of the full-bleed test must read FOUNDER_FULL_BLEED');
+  assert.match(app, /const fullWidthSurface = fullBleedSurface/,
+    'fullWidthSurface must derive from the shared full-bleed test');
+  assert.match(app, /const flushSurface = fullBleedSurface;/,
+    'flushSurface must derive from the same one, not a second hand-typed list');
 });

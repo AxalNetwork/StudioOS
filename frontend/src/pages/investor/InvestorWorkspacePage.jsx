@@ -81,6 +81,11 @@ export default function InvestorWorkspacePage({ page = 'deals', children, fundUn
   // rail. Rendering the generic workspace chrome around it duplicates the
   // canvas header and is the mismatch the I4 correction removes.
   if (key === 'portfolio' && children) return children;
+  // The four Fund zone pages own theirs too — each draws its own breadcrumb,
+  // h1, zone row and rail — so wrapping them in this chrome put "Investor & LP
+  // / fund · Fund operations" above a page already titled "LP registry". The
+  // chrome still frames the LOCKED notice below, which has no page of its own.
+  if (key === 'fund' && fundUnlocked && children) return children;
   const ownsDealsRoute = key === 'deals' && (
     pathname === '/deals'
     || pathname === '/pipeline'

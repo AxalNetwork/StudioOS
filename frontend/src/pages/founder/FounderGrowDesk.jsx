@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BriefcaseBusiness, ChevronRight, CircleDot, Handshake, Rocket, Sparkles, Target, Users } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api, jobs as jobsApi } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 
 // Seven labels, seven routes. This was a seven-deep ternary chain ending in an
@@ -97,7 +97,7 @@ export default function FounderGrowDesk() {
     </header>
     {error && <div className="a5-grow-error" data-testid="status-grow-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-grow" type="button" onClick={() => setReload((count) => count + 1)}>Retry</button></div>}
     <GrowSections data={data} project={project} loading={loading} query={query} state={state} />
-  </div><FounderWorkerRail
+  </div><WorkerRail
     workspace="Grow"
     className="a5-rail"
     stance="Read-only source coverage"

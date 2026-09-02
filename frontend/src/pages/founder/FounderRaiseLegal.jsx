@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, FileSignature, FileText, Filter, RefreshCw, Scale, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseLegal.css';
 
@@ -170,7 +170,7 @@ function LegalContent({ project, documents, compliance, trackers, entities, sign
 function LegalStat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function Coverage({ label, value }) { return <div className="fr-capital-coverage-row"><span>{label}</span><strong>{value}</strong></div>; }
 function WorkerRail({ project, documents, compliance, trackers, errors }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Raise"
     className="fr-capital-rail"
     stance="Manual legal collection"

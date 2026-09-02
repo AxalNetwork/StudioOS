@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Folder, Landmark, Scale, Sparkles, Target } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderRaiseDesk.css';
 
 // Six labels, six routes. This was a six-deep ternary chain ending in an
@@ -106,7 +106,7 @@ export default function FounderRaiseDesk() {
         {(projectError || Object.keys(errors).length > 0) && <div className="raise-error" data-testid="status-raise-partial"><AlertCircle size={16} /><span>{projectError || 'Some selected-project records are unavailable.'}</span><button data-testid="button-retry-raise" type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></div>}
         <RaiseSections loading={loading} project={project} data={data} errors={errors} query={query} state={state} />
       </div>
-      <FounderWorkerRail
+      <WorkerRail
         workspace="Raise"
         className="raise-rail"
         stance="Manual raise view"

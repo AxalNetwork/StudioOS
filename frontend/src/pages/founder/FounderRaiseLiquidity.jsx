@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, Clock3, FileText, Filter, LockKeyhole, RefreshCw, ShieldCheck, Sparkles, Waves } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseLiquidity.css';
 
@@ -91,7 +91,7 @@ function UnavailablePanel({ view, error }) { const label = view === 'restriction
 function Stat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function Coverage({ label, value }) { return <div className="fr-capital-coverage-row"><span>{label}</span><strong>{value}</strong></div>; }
 function WorkerRail({ project, result, error }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Raise"
     className="fr-capital-rail"
     stance="Inherited from Raise"

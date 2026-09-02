@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BriefcaseBusiness, ChevronRight, RefreshCw, Sparkles, UserRound, Users } from 'lucide-react';
 import { api, jobs as jobsApi } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowTalent.css';
 
@@ -99,7 +99,7 @@ function EmptyTable({ error }) { return <div className="a5-empty"><UserRound siz
 function Head({ icon: Icon, title, meta }) { return <div className="a5-head"><div><Icon size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-talent-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function TalentRail({ project, jobs, applications, error }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Grow"
     className="a5-rail"
     stance="Read-only matching"

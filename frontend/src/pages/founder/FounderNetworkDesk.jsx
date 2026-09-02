@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowUpRight, Network } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderNetworkDesk.css';
 
 export const listFrom = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
@@ -57,7 +57,7 @@ export default function FounderNetworkDesk() {
     </header>
     {error && <div className="a6-error" data-testid="status-network-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-network" type="button" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>}
     <NetworkSections data={data} loading={initialLoading} state={state} />
-  </div><FounderWorkerRail
+  </div><WorkerRail
     workspace="Network"
     className="a6-rail"
     stance="Read-only coverage"
