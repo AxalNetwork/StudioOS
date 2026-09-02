@@ -660,8 +660,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const fullWidthSurface = fullBleedSurface
     || activeRole === 'advisor'
     || location.pathname === '/spinout-lab'
-    || location.pathname.startsWith('/spinout-lab/');
-  const flushSurface = fullBleedSurface;
+    || location.pathname.startsWith('/spinout-lab/')
+    || location.pathname === '/referrals';
+  const flushSurface = fullBleedSurface || location.pathname === '/referrals';
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
