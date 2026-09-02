@@ -196,7 +196,7 @@ export async function send(
     ? await buildUnsubscribeUrl(env, opts.userId, appUrl)
     : null;
 
-  const rendered = wrap(tmpl, vars, { appUrl, unsubscribeUrl });
+  const rendered = wrap(tmpl, vars, { appUrl, unsubscribeUrl, to });
   const notificationId = await mirrorToInbox(env, tmpl, rendered, vars, opts);
 
   // Log row first so the queue consumer can find + update it by id.
