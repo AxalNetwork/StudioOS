@@ -441,13 +441,32 @@ function PartnerConsole() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <section>
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Submit a perk</h3>
-        <p className="mt-1 text-xs text-gray-500">
-          Every submission is reviewed before founders see it. Editing a live listing sends it
-          back for review — the terms founders were shown are the terms that were approved.
-        </p>
+    <div className="space-y-6">
+      {/* Canvas stats strip — computed from submissions, not asserted. */}
+      {items && items.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: 'Listings', value: String(items.length), note: `${items.filter((i) => i.status === 'live').length} live` },
+            { label: 'In review', value: String(items.filter((i) => i.status === 'in_review').length), note: 'awaiting approval' },
+            { label: 'Claims', value: String(items.reduce((a, i) => a + (i.claims_count || 0), 0)), note: 'total redemptions' },
+            { label: 'Paused', value: String(items.filter((i) => i.status === 'paused').length), note: 'not visible to founders' },
+          ].map((s) => (
+            <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+              <div className="text-[9.5px] font-extrabold uppercase tracking-[.09em] text-gray-500 dark:text-gray-400">{s.label}</div>
+              <div className="mt-1 text-lg font-extrabold tabular-nums text-gray-900 dark:text-gray-100">{s.value}</div>
+              <div className="mt-0.5 text-[10.5px] text-gray-500 dark:text-gray-400">{s.note}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section>
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Submit a perk</h3>
+          <p className="mt-1 text-xs text-gray-500">
+            Every submission is reviewed before founders see it. Editing a live listing sends it
+            back for review — the terms founders were shown are the terms that were approved.
+          </p>
         <form onSubmit={submit} className="mt-3 space-y-3">
           <input className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm dark:border-gray-700" placeholder="Your company name"
             value={form.partner_name} onChange={set('partner_name')} required />
@@ -527,6 +546,7 @@ function PartnerConsole() {
           )}
       </section>
     </div>
+  </div>
   );
 }
 

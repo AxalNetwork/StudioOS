@@ -60,6 +60,13 @@ export default function EngagementsPage() {
   const wrapped = engagements.filter((e) => ['delivered', 'reviewed'].includes(e.status));
   const invoiced = engagements.filter((e) => e.status === 'invoiced');
 
+  // Canvas-aligned stats: computed from the pipeline record, not asserted.
+  const openNeeds = needs.length;
+  const myQuotes = quotes.length;
+  const acceptedQuotes = quotes.filter((x) => x.status === 'accepted').length;
+  const winRate = myQuotes > 0 ? Math.round((acceptedQuotes / myQuotes) * 100) : null;
+  const activeValue = active.reduce((a, e) => a + (e.agreed_price || 0), 0);
+
   const startProposal = (n) => {
     setOpenNeed(n);
     setProposal({
@@ -131,6 +138,22 @@ export default function EngagementsPage() {
       )}
 
       <FilterChips options={VIEWS} value={view} onChange={setView} />
+
+      {/* Canvas stats strip — computed from the pipeline record. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { label: 'Open requests', value: String(openNeeds), note: 'founder needs accepting proposals' },
+          { label: 'My proposals', value: String(myQuotes), note: `${acceptedQuotes} accepted` },
+          { label: 'Win rate', value: winRate != null ? `${winRate}%` : '—', note: myQuotes ? `${acceptedQuotes} of ${myQuotes} decided` : 'no proposals yet' },
+          { label: 'Active value', value: moneyUsd(activeValue), note: `${active.length} engagement${active.length === 1 ? '' : 's'} in flight` },
+        ].map((s) => (
+          <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+            <div className="text-[9.5px] font-extrabold uppercase tracking-[.09em] text-gray-500 dark:text-gray-400">{s.label}</div>
+            <div className="mt-1 text-lg font-extrabold tabular-nums text-gray-900 dark:text-gray-100">{s.value}</div>
+            <div className="mt-0.5 text-[10.5px] text-gray-500 dark:text-gray-400">{s.note}</div>
+          </div>
+        ))}
+      </div>
 
       {view === 'requests' && (
         <>
