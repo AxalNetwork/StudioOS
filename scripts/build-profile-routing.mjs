@@ -99,7 +99,23 @@ export function routesIn(cell) {
  * (there is one — the X broadcaster) is not reported as a live nav entry.
  */
 export function parseSidebar(src) {
-  const lines = src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l));
+  const raw = src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l));
+  // An item object may wrap across lines, and `match:` is usually the part
+  // that wraps. Reading only the first line silently produced an empty match
+  // list for every wrapped row — which is how /build/team, owned by Grow, was
+  // reported under Build. Join each `{ to: …` line to the lines that follow
+  // until its closing brace, so the whole object is parsed.
+  const lines = [];
+  for (let i = 0; i < raw.length; i += 1) {
+    let line = raw[i];
+    if (/\{\s*to:\s*'/.test(line)) {
+      while (!/\}\s*,?\s*$/.test(line.trim()) && i + 1 < raw.length) {
+        i += 1;
+        line = `${line.trimEnd()} ${raw[i].trim()}`;
+      }
+    }
+    lines.push(line);
+  }
   const roles = {};
   let role = null, group = null;
   for (const line of lines) {
@@ -204,10 +220,20 @@ function navFor(roles, roleKey, liveRoutes) {
       if (item.to === route) return item;
     }
   }
+  // `match` is the complete statement of what a row owns, and an explicit
+  // claim outranks every row's implicit `to` prefix — one row's `to` can be a
+  // prefix of paths another row owns (`/build` is the Build overview, while
+  // `/build/discovery` is Validate's and `/build/team` is Grow's). Same rule
+  // as `manualActive` in ui/SidebarNav.jsx, so the doc reports the row that
+  // actually highlights.
   for (const route of liveRoutes) {
     for (const item of roles[roleKey]) {
       if (item.match.some((m) => route === m || route.startsWith(m + '/'))) return item;
-      if (route.startsWith(item.to + '/')) return item;
+    }
+  }
+  for (const route of liveRoutes) {
+    for (const item of roles[roleKey]) {
+      if (!item.match.length && route.startsWith(item.to + '/')) return item;
     }
   }
   return null;

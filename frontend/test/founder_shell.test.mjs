@@ -135,12 +135,24 @@ test('each row that owns sections is actually wrapped at its routes', () => {
   // across lines). So routeBlock reads a bounded WINDOW of lines starting at
   // the route and stops at the next <Route, so it cannot walk into a
   // neighbour's markup and false-positive.
-  // A third mechanism, and the only one that needs naming: a row whose canvas
-  // gave it a single dedicated landing page renders that page directly, with
-  // no shell wrapper, because the page IS the row. Exactly one route is in
-  // that position, and it is spelled out here rather than skipped so that
-  // repointing it at anything else fails.
-  const OWN_LANDING = { '/build/discovery': '<FounderValidatePage />' };
+  // A third mechanism: a route whose page draws its own full-bleed canvas and
+  // carries its own section row renders that page directly, with no shell
+  // wrapper, because the page IS the surface. Every such route is spelled out
+  // here rather than skipped, so repointing one at a different component
+  // still fails.
+  //
+  // /build/roadmap joined the list when the Build sections stopped being
+  // wrapped in `founderWorkspace('build', …)`. That wrapper mounts
+  // FounderWorkspacePage, whose `.founder-frame` caps the page at 1440px and
+  // pads it 22/24/34px, then draws `.founder-stage`'s border around it. Around
+  // a page that already sets `min-height: 100dvh` that is a card inside a card
+  // which cannot fit the dashboard — the "Build doesn't fit full width and
+  // height" report. Raise's and Grow's section pages never had it; Build's no
+  // longer do either.
+  const OWN_LANDING = {
+    '/build/discovery': '<FounderValidatePage />',
+    '/build/roadmap': '<FounderBuildRoadmap />',
+  };
 
   const rendersBar = new Set();
   for (const [set, paths] of Object.entries(SITES)) {
@@ -278,8 +290,12 @@ test('the Research row lands somewhere every founder can actually open', () => {
   // zone. What matters is not WHICH route it is but that a founder can open
   // it — the literal is what the shell migration changes, the guard below is
   // the thing that must never change.
+  // Read the route BLOCK, not the line the route starts on: /research now
+  // branches across three lines (founder → the A7 desk, everyone else → the
+  // first zone), exactly as /raise already did, so the guard is not on the
+  // line carrying `path=`.
   const research = rows.find((r) => r.label === 'Research');
-  const target = app.split('\n').find((l) => l.includes(`path="${research.to}"`));
+  const target = routeBlock(app, research.to);
   assert.ok(target, `the Research row points at ${research.to}, which has no route`);
   assert.match(target.slice(target.indexOf('guard(')), /\[[^\]]*'founder'[^\]]*\]/,
     `${research.to} must admit 'founder' outright, not only Lab-active ones`);

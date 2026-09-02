@@ -248,12 +248,17 @@ export const SIDEBAR_GROUPS = {
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       // Spin-Out Lab keeps its own tree, untouched by the shell migration.
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      { to: '/validate/interviews', icon: MessageSquare, label: 'Validate',
+      // Each row points at the workspace ROOT, which renders that workspace's
+      // overview. Pointing a row at a section page is how the overviews were
+      // lost: a rebuild took the desk's slot, the desk was re-mounted on
+      // whatever path was free, and the row was never pointed back. `match`
+      // keeps every legacy and section URL highlighting the right row.
+      { to: '/validate', icon: MessageSquare, label: 'Validate',
         match: ['/validate', '/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
-      { to: '/build/this-week', icon: Briefcase, label: 'Build',
-        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/metrics', '/execution', '/projects'] },
-      { to: '/raise/pitch', icon: Sparkles, label: 'Raise', match: ['/raise', '/liquidity'] },
-      { to: '/grow/focus', icon: TrendingUp, label: 'Grow',
+      { to: '/build', icon: Briefcase, label: 'Build',
+        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution', '/projects'] },
+      { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/liquidity'] },
+      { to: '/grow', icon: TrendingUp, label: 'Grow',
         match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/spinout-lab/brand', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
       // Points at /network, not at the first zone: /network is the one route
       // that role-branches its element, so it is the landing every license can
@@ -262,7 +267,7 @@ export const SIDEBAR_GROUPS = {
       // migration and has not landed yet.
       { to: '/network', icon: Handshake, label: 'Network',
         match: ['/network', '/relationships', '/contacts'] },
-      { to: '/research/ask', icon: Radar, label: 'Research',
+      { to: '/research', icon: Radar, label: 'Research',
         match: ['/research', '/signals', '/market-intel'] },
     ]},
   ],
@@ -467,3 +472,33 @@ export function defaultOpenGroups(role) {
 export function filterItemsByTier(items /* , user */) {
   return items || [];
 }
+
+
+/**
+ * Founder surfaces that own the full dashboard: no `max-w-7xl mx-auto`, no
+ * `p-4 md:p-6`. Every page here draws its own full-bleed canvas and sets its
+ * own `min-height: 100dvh`, so the shell's centred column and padding would
+ * put a card inside a card and push the page past the viewport.
+ *
+ * THIS WAS TWO ARRAYS. `App.jsx` held `fullWidthSurface` and `flushSurface` as
+ * separate hand-typed lists of the same 16 paths, matched with an exact
+ * `.includes(location.pathname)` — no prefix matching, so every new route had
+ * to be added to both by hand. `/grow/focus` was the one `/grow/*` route
+ * missing from both, and it was the whole of "Grow doesn't fit full width and
+ * height". One list makes that omission impossible rather than fixed once;
+ * `frontend/test/founder_shell.test.mjs` asserts every founder desk and
+ * section route is in it.
+ */
+export const FOUNDER_FULL_BLEED = [
+  // The six workspace roots — each renders that workspace's overview.
+  '/validate', '/build', '/raise', '/grow', '/network', '/research',
+  // The legacy paths the overviews were rescued onto. Still live, still linked
+  // from inside pages, so they keep rendering the same desk at the same width.
+  '/build/discovery', '/execution', '/build/team', '/signals',
+  // Section pages, one group per workspace.
+  '/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi',
+  '/raise/pitch',
+  '/grow/focus', '/grow/talent', '/grow/customers', '/grow/partnerships',
+  '/grow/capital-match', '/grow/brand', '/grow/launch',
+  '/network/relationships', '/network/introductions', '/network/organizations',
+];

@@ -14,12 +14,12 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Home | Studio | `/studio` | Founder Studio |
 | Home | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab Workspace |
-| Home | Validate | `/validate/interviews` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Build | `/build/this-week` | — (no canvas; shipped ahead of the design corpus) |
-| Home | Raise | `/raise/pitch` | Pages · Founder Raise |
-| Home | Grow | `/grow/focus` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Validate | `/validate` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Build | `/build` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Raise | `/raise` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Grow | `/grow` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Network | `/network` | Founder Workspaces Canvas, Pages · Founder Network |
-| Home | Research | `/research/ask` | — (no canvas; shipped ahead of the design corpus) |
+| Home | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `advisor` — 7 destinations in 1 group
 
@@ -123,16 +123,17 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-57 of the 83 sidebar rows above are not claimed
+58 of the 83 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
 rather than merely absent.
 
-- founder · Home · Validate (`/validate/interviews`)
-- founder · Home · Build (`/build/this-week`)
-- founder · Home · Grow (`/grow/focus`)
-- founder · Home · Research (`/research/ask`)
+- founder · Home · Validate (`/validate`)
+- founder · Home · Build (`/build`)
+- founder · Home · Raise (`/raise`)
+- founder · Home · Grow (`/grow`)
+- founder · Home · Research (`/research`)
 - advisor · Home · Spin-Out Lab (`/spinout-lab`)
 - advisor · Home · Cohorts (`/cohorts/founders`)
 - investor · Home · Deals (`/deals/pipeline`)
