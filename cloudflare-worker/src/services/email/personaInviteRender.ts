@@ -1,25 +1,23 @@
 /**
- * Renders a persona invitation — broadcast or the GP's personal note.
+ * Renders a persona invitation — broadcast (Set A) or GP personal note (Set B).
  *
- * Content comes from `personaInvites.ts`, chrome from `inviteChrome.ts`, and
- * this file is only the join. Keeping the three apart is what lets the
- * unsubscribe rule be checked once: `variant` decides `EmailKind`, `EmailKind`
- * decides the footer, and no caller gets to pass a footer of its own.
- *
- * WHY THE GP NOTE DROPS THE BULLETS. The broadcast leads with five labelled
- * benefits. The personal note opens "I am writing personally because a template
- * would undersell this" and then, in the canvas, does NOT list benefits — it is
- * three short paragraphs and one link. Rendering the bullet block under that
- * sentence would make the note disprove itself, so the two variants share the
- * shell and almost nothing else.
+ * Content from `personaInvites.ts`, chrome from `inviteChrome.ts`, fragments
+ * from `canvasEmailParts.ts`. The variant fixes EmailKind; callers cannot
+ * override the footer unsubscribe rule.
  */
-import { escapeHtml } from '../email';
+import {
+  bulletBox,
+  ctaButton,
+  greetingBand,
+  h1,
+  inviterBlock,
+  paragraph,
+} from './canvasEmailParts';
 import { PERSONA_INVITES, type PersonaKey } from './personaInvites';
 import { footerFor, shell, type EmailKind } from './inviteChrome';
 
 export type InviteVariant = 'broadcast' | 'personal';
 
-/** The variant fixes the kind — a personal note can never be a broadcast. */
 export function kindFor(variant: InviteVariant): EmailKind {
   return variant === 'broadcast' ? 'broadcast' : 'personal';
 }
@@ -29,57 +27,64 @@ export interface RenderInviteOpts {
   variant: InviteVariant;
   to: string;
   ctaUrl: string;
-  /** Required for a broadcast; `footerFor` throws without it. */
   unsubscribeUrl?: string;
   prefsUrl?: string;
-  /** Why this address received it, e.g. "because you hold a Founder licence". */
   reason?: string;
-  /** Shown above the note so a personal note reads as from a person. */
-  gpName?: string;
+  /** First name for Set B greeting band — required for personal variant. */
+  firstName?: string;
 }
 
-function button(label: string, url: string): string {
-  return `<a href="${escapeHtml(url)}" style="display:inline-block;background:#6d28d9;color:#ffffff;`
-    + `text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:8px;">`
-    + `${escapeHtml(label)}</a>`;
+function broadcastSubject(persona: PersonaKey): string {
+  if (persona === 'advisor') return 'You\u2019re invited to join Axal VC as an advisor';
+  if (persona === 'investor') return 'You\u2019re invited to join Axal VC as an investor';
+  return `You\u2019re invited to join Axal VC as a ${persona}`;
+}
+
+function broadcastReason(): string {
+  return 'You received this because someone at Axal VC invited you. This is a one-time invitation, not a subscription.';
 }
 
 export function renderInvite(o: RenderInviteOpts): { subject: string; html: string; text: string } {
   const p = PERSONA_INVITES[o.persona];
   const kind = kindFor(o.variant);
+
+  if (o.variant === 'personal') {
+    const first = (o.firstName || o.to.split('@')[0] || 'there').trim();
+    const footer = footerFor(kind, {
+      to: o.to,
+      reason: o.reason,
+      prefsUrl: o.prefsUrl,
+    });
+    const paras = p.gpNote.map((t, i) => paragraph(t, i === 0 ? 0 : 14)).join('\n');
+    const body = `${greetingBand(first)}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+<tr><td>
+${paras}
+<div style="margin-top:20px;">${ctaButton(p.gpCta, o.ctaUrl)}</div>
+${inviterBlock({ includePostal: true })}
+</td></tr></table>`;
+    const html = shell(body, footer);
+    const text = `Hi ${first},\n\n${p.gpNote.join('\n\n')}\n\n${p.gpCta}: ${o.ctaUrl}\n\n— ${p.label}\n`;
+    return { subject: 'A note about Axal VC', html, text };
+  }
+
   const footer = footerFor(kind, {
     to: o.to,
-    reason: o.reason,
+    reason: o.reason || broadcastReason(),
     prefsUrl: o.prefsUrl,
     unsubscribeUrl: o.unsubscribeUrl,
   });
-
-  if (o.variant === 'personal') {
-    const paras = p.gpNote.map(
-      (t) => `<p style="margin:0 0 14px;">${escapeHtml(t)}</p>`,
-    ).join('\n');
-    const sig = o.gpName ? `<p style="margin:18px 0 0;">— ${escapeHtml(o.gpName)}</p>` : '';
-    const html = shell(`${paras}\n<p style="margin:20px 0 0;">${button(p.gpCta, o.ctaUrl)}</p>${sig}`, footer);
-    const text = `${p.gpNote.join('\n\n')}\n\n${p.gpCta}: ${o.ctaUrl}${o.gpName ? `\n\n— ${o.gpName}` : ''}\n`;
-    // A personal note with a marketing subject is the tell that it is not one.
-    return { subject: p.gpNote[0].slice(0, 72), html, text };
-  }
-
-  const bullets = p.bullets.map(([label, detail]) =>
-    `<tr><td style="padding:0 0 10px;font-size:14px;line-height:1.6;">`
-    + `<strong style="color:#18181b;">${escapeHtml(label)}</strong>`
-    + `<span style="color:#6b7280;"> — ${escapeHtml(detail)}</span></td></tr>`).join('\n');
-  const html = shell(
-    `<h1 style="font-size:21px;font-weight:700;color:#18181b;margin:0 0 10px;letter-spacing:-0.02em;">${escapeHtml(p.h1)}</h1>
-<p style="margin:0 0 18px;color:#3f3f46;">${escapeHtml(p.line)}</p>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-${bullets}
-</table>
-<p style="margin:20px 0 0;">${button(p.cta, o.ctaUrl)}</p>`,
-    footer,
-  );
+  const body = `${h1(p.h1)}
+${paragraph(p.line)}
+${bulletBox(p.bullets)}
+<div style="margin-top:24px;">${ctaButton(p.cta, o.ctaUrl)}</div>
+${inviterBlock({ showInvitedBy: true })}`;
+  const html = shell(body, footer);
   const text = `${p.h1}\n\n${p.line}\n\n`
     + p.bullets.map(([l, d]) => `• ${l} — ${d}`).join('\n')
     + `\n\n${p.cta}: ${o.ctaUrl}\n`;
-  return { subject: p.h1, html, text };
+  return { subject: broadcastSubject(o.persona), html, text };
 }
+
+/** Convenience for routes — enqueue a persona invite through the send pipeline. */
+export { broadcastSubject, broadcastReason };
