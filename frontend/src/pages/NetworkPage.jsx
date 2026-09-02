@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { Network, Inbox, Users, Sparkles } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { ContactsPanel } from './ContactsPage';
@@ -20,8 +20,19 @@ import PartnerWorkspaceShell from './partner/PartnerWorkspaceShell';
 // `workspaces/WorkspaceShell` — breadcrumb, h1, zone pills and Worker AI rail.
 // Without it the advisor branch below drew a second header and a second rail
 // inside the first. The investor arm has had this seam since #391.
+//
+// THE TAB FOLLOWS THE PATH. `?tab=` was the ONLY input for years, which was
+// fine while `/network` was the single URL. Once `/network/relationships`,
+// `/network/introductions` and `/network/organizations` became real routes,
+// every one of them landed on this page's default tab — Contacts for a
+// founder, Introductions for anyone who cannot see Contacts. So the route said
+// Relationships and the body showed something else, on two licences at once.
+// The query param still wins where it is set, because notification deep links
+// (`?tab=introductions&intro=<uid>`) depend on it; the path is the fallback
+// beneath it, and the hardcoded default is the fallback beneath that.
 export default function NetworkPage({ embedded = false }) {
   const { role } = useAuth();
+  const location = useLocation();
   const [params, setParams] = useSearchParams();
   const canContacts = role === 'admin' || role === 'founder';
 
@@ -31,12 +42,23 @@ export default function NetworkPage({ embedded = false }) {
     { id: 'relationships', label: 'Relationships', icon: Users },
   ];
 
-  const requested = params.get('tab');
+  const fromPath = location.pathname.startsWith('/network/')
+    ? location.pathname.slice('/network/'.length).split('/')[0]
+    : null;
+  const requested = params.get('tab') || fromPath;
   let activeTab;
   if (requested === 'relationships') activeTab = 'relationships';
   else if (requested === 'introductions') activeTab = 'introductions';
   else if (requested === 'contacts' && canContacts) activeTab = 'contacts';
   else activeTab = canContacts ? 'contacts' : 'introductions';
+
+  // A zone this page has no tab for. `organizations` is the live case: the
+  // route exists for every licence, but the roll-up needs an edge from a person
+  // to an organisation and this page has none — so rather than silently
+  // showing a different tab under the Organizations heading, it says so.
+  const unservedZone = fromPath && !params.get('tab')
+    && !['relationships', 'introductions', 'contacts'].includes(fromPath)
+    ? fromPath : null;
 
   const selectTab = (id) => {
     const next = new URLSearchParams(params);
@@ -55,6 +77,19 @@ export default function NetworkPage({ embedded = false }) {
           <p className="text-sm text-gray-600 dark:text-gray-400">Contacts, curated introductions, partner relationships, and your network graph in one place.</p>
         </div>
       </div>
+
+      {unservedZone && (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/40">
+          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-gray-500">
+            No store behind this yet
+          </div>
+          <p className="mt-1.5 max-w-2xl text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
+            Grouping your network by company, fund or firm needs a link from a person you know to
+            the organisation they are in, and nothing on this licence records one. The tabs below
+            are what this page actually holds — they are not a stand-in for it.
+          </p>
+        </div>
+      )}
 
       {tabs.length > 1 && (
         <div className="flex gap-1 border-b border-gray-200 overflow-x-auto no-scrollbar [&>button]:whitespace-nowrap dark:border-gray-800">

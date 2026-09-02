@@ -1,7 +1,8 @@
 export const BRAND_KIT = {
   name: 'Axal VC',
   tagline: 'Where venture builders meet capital, globally.',
-  logo: '/axal-mark.png',
+  logo: '/axal-wordmark.png',
+  mark: '/axal-mark.png',
 };
 
 export const DISPLAY_FONT = { fontFamily: "'Space Grotesk', sans-serif" };

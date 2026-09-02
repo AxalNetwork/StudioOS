@@ -29,3 +29,7 @@ split into two — see the comment above each `<Route>` in `App.jsx` before
 changing either branch; `frontend/test/founder_network_a6_contract.test.mjs`
 and `frontend/test/founder_shell.test.mjs` both pin the founder side of these
 same lines.
+
+Shell migration status and the investor zone inventory live in
+[`documentation/architecture/SHELL_MIGRATION.md`](../../../documentation/architecture/SHELL_MIGRATION.md).
+Guard tests: `investor_shell.test.mjs`, `investor_shell_canvas.test.mjs`.

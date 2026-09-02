@@ -15,6 +15,7 @@ import ViewModeContext from './contexts/ViewModeContext';
 import { resolveActiveRole } from './lib/activeRole';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
 import SafeMount from './components/SafeMount';
+import AxalLogo from './components/AxalLogo';
 import CookieConsent from './components/CookieConsent';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import {
@@ -707,8 +708,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             >
               <Menu size={18} />
             </button>
-            <img src="/axal-mark.png" alt="Axal VC" className="h-7 w-7 rounded-md object-cover flex-shrink-0" />
-            <span className="font-semibold text-sm text-gray-900 dark:text-gray-100 hidden sm:block">Axal VC</span>
+            <div className="flex items-center gap-2.5 dark:rounded-lg dark:bg-white/95 dark:px-2 dark:py-1">
+              <AxalLogo size="sm" />
+            </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
             {isImpersonating && (
@@ -1515,16 +1517,16 @@ function AppInner() {
         : researchRole === 'investor'
           ? guard(labRoles(['admin', 'investor']), <InvestorResearchWorkspace />)
           : researchRole === 'advisor' || researchRole === 'partner'
-            ? guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} />)
+            ? guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} user={user} />)
             : <Navigate to="/research/ask" replace />} />
-      <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
-      <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
-      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
-      <Route path="/research/funds" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
-      <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
-      <Route path="/research/diligence" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
-      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
-      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
+      <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/funds" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/library" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/diligence" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
+      <Route path="/research/client-prep" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
       <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
       <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), <FounderBuildRoadmap />)} />
@@ -1986,7 +1988,15 @@ function AppInner() {
         ? guard(labRoles(['admin', 'founder']), <FounderRaiseDesk />)
         : <Navigate to="/raise/capital/pipeline" replace />} />
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
-      <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor'], partnerPrivateWorkspace(<ReferralsPage />))} />
+      {/* Advisors were the one signed-in licence this guard omitted, and the
+          omission was not a policy: `ReferralsPage` has no role branch at all,
+          and every endpoint it calls (`/refer-earn/overview`, `/submissions`,
+          `/submissions/:uid`, `/strategic-access`) is `requireAuth` and scoped
+          to `referrer_user_id`. The referral programme's own category list even
+          names advisors as referrers. Network · Relationships reads these rows,
+          so leaving the page unreachable made that section permanently empty
+          with no way to fill it. */}
+      <Route path="/referrals" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], partnerPrivateWorkspace(<ReferralsPage />))} />
       <Route path="/refer" element={guard(['admin', 'founder', 'partner', 'investor'], <ReferRedirect />)} />
       <Route path="/company-settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Suspense fallback={null}><CompanySettingsPage /></Suspense>)} />
       {/* Integrations now lives inside Settings; /integrations redirects there
@@ -2015,8 +2025,9 @@ function AppInner() {
           in every shell — and three of the four licences were being bounced to
           their default path when they clicked one. Widened and role-branched:
           founders keep their three dedicated pages, investors get
-          InvestorNetworkWorkspace, advisors and operators get the same
-          NetworkPage /network already gives them. */}
+          InvestorNetworkWorkspace, advisors get their own three zones under
+          pages/advisor/network/, and operators get NetworkPage — whose tab now
+          follows the path, so none of them lands on a zone it did not name. */}
       <Route path="/network/relationships" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
       <Route path="/network/introductions" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
       <Route path="/network/organizations" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />

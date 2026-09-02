@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { openCookiePreferences } from '../lib/cookieConsent';
 import { PRODUCT_FOOTER_LINKS } from '../data/productPages';
+import AxalLogo from './AxalLogo';
 
 const socials = [
   {
@@ -72,11 +73,8 @@ export default function PublicFooter() {
       <div className="max-w-7xl mx-auto px-6 py-12">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12">
           <div className="md:col-span-2">
-            <div className="flex items-center gap-2 mb-4">
-              <img src="/axal-mark.png" alt="Axal VC" className="h-8" />
-              <span style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-lg font-bold text-gray-900">
-                Axal VC
-              </span>
+            <div className="mb-4">
+              <AxalLogo size="md" />
             </div>
             <p className="text-sm text-gray-600 mb-5">
               A global venture partner network connecting founders, partners, and capital.

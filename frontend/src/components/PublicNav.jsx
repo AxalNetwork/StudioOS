@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
+import AxalLogo from './AxalLogo';
 
 const LINKS = [
   { label: 'Platform', href: '/#platform' },
@@ -17,14 +18,8 @@ export default function PublicNav() {
   return (
     <nav className="fixed top-0 w-full z-50 bg-white/90 backdrop-blur border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <img src="/axal-mark.png" alt="Axal VC" className="h-8" />
-          <span
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            className="text-lg font-bold text-gray-900"
-          >
-            Axal VC
-          </span>
+        <Link to="/" className="flex items-center">
+          <AxalLogo size="md" />
         </Link>
 
         <div className="hidden md:flex items-center gap-7">

@@ -12,10 +12,18 @@ import { api } from '../lib/api';
 // editable and exportable (JSON / markdown). See cloudflare-worker/src/routes/
 // competitors.ts + services/competitorAnalysis.ts + services/webFetch.ts.
 //
-// Renders in two modes:
+// Renders in two modes, plus one layout flag:
 //   • standalone (default)  — full page with startup/custom mode toggle + picker.
 //   • embedded ({ project, embedded }) — locked to a single startup, no toggle
 //     or picker; used as an in-page section on the startup detail page.
+//   • chromeless — SEPARATE from `embedded`, and separate on purpose. It drops
+//     only the page furniture (back link, h1, intro banner, page padding) for a
+//     caller whose shell already drew them; everything else — the project
+//     fetch, the mode toggle, the picker — stays. `embedded` could not be
+//     reused for this: it also means "locked to the project I was handed", so
+//     passing it from a workspace that has no project skips the project fetch
+//     and defaults the mode to `startup` with nothing to select. Research ·
+//     Companies mounts this flag; the startup detail page keeps `embedded`.
 
 // Class constants keep dark-mode pairs in one place (and out of raw className
 // literals, which the drift dark-mode guard scans).
@@ -57,7 +65,9 @@ async function fetchMarkdown(url) {
   return res.text();
 }
 
-export default function CompetitorAnalysis({ project = null, embedded = false }) {
+export default function CompetitorAnalysis({ project = null, embedded = false, chromeless = false }) {
+  // Page furniture only. Never gate data or controls on this.
+  const bare = embedded || chromeless;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const sectionRef = useRef(null);
@@ -265,8 +275,8 @@ export default function CompetitorAnalysis({ project = null, embedded = false })
     : saved;
 
   return (
-    <div ref={sectionRef} className={embedded ? '' : 'max-w-5xl mx-auto py-6 px-4'}>
-      {!embedded && (
+    <div ref={sectionRef} className={bare ? '' : 'max-w-5xl mx-auto py-6 px-4'}>
+      {!bare && (
         <>
           <button onClick={() => navigate(-1)} className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-3">
             <ArrowLeft size={16} /> Back
