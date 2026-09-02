@@ -77,7 +77,6 @@ test('the new company becomes the active one', () => {
 const WIDE_ON_PURPOSE = {
   'capital.ts': 'the project read sits inside an admin-only handler',
   'founder_risk.ts': "keys its payload on founder_id — a risk profile belongs to the person, not to one of their companies; the projects join is only a lookup from a deal to its owner",
-  'pipeline.ts': 'the studio operator board: admin and partner run the studio, and its projects are the studio\'s rather than one founder\'s company',
   'public.ts': 'the unauthenticated public profile facade — there is no active company to scope by, and the profile is the person\'s',
 };
 
