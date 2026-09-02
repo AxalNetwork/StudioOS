@@ -66,6 +66,31 @@ export function hasInvestorTier(user, required) {
 // learning curve drops without losing reachability. Advisor is already lean
 // and is left unchanged.
 export const SIDEBAR_GROUPS = {
+  // ── Super Admin ──────────────────────────────────────────────────────────
+  //
+  // The franchisor's shell. Same product as `admin` — a super admin IS an
+  // admin (migration 199 makes it an elevation, not a separate role), so every
+  // admin destination stays reachable; this group is the eight-row HQ canvas
+  // laid over the top, and `resolveShellRole` picks it when the flag is set.
+  //
+  // ROWS ARE ADDED AS THEIR PAGES LAND. The approved canvas has eight rows —
+  // Home, Licences, Funds, Contracts, Team, Support, Security, Settings — and
+  // four of them have no page yet. A row pointing at a route that does not
+  // exist is worse than a missing row: it looks shipped and 404s. So the four
+  // whose destinations resolve today are here, the rest arrive with their
+  // pages, and `super_admin_shell.test.mjs` fails if a row is added whose
+  // route is not registered in App.jsx.
+  super_admin: [
+    { key: 'hq', label: 'HQ', items: [
+      { to: '/admin', icon: Shield, label: 'Home' },
+      // The one row this tier exists for. Every route behind it is
+      // super-admin-only server-side (routes/admin_licences.ts).
+      { to: '/admin/licences', icon: Map, label: 'Licences' },
+      { to: '/admin/team', icon: Users, label: 'Team' },
+      { to: '/tickets', icon: Inbox, label: 'Support' },
+    ]},
+  ],
+
   admin: [
     { key: 'home', label: 'Home', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },

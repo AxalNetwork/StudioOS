@@ -381,8 +381,21 @@ function IntegrationsRedirect() {
 }
 
 
+/**
+ * The shell a super admin sees.
+ *
+ * `super_admin` is an elevation on `admin` rather than a role beside it
+ * (migration 199), so `user.role` is still `'admin'` here and the shell has to
+ * be chosen on the flag. Only when the caller is genuinely acting as an admin:
+ * an admin using the "view as" switch to check a founder's experience must get
+ * the FOUNDER shell, or the switch shows them their own console back.
+ */
+function shellRoleFor(role, user) {
+  return role === 'admin' && Number(user?.is_super_admin ?? 0) === 1 ? 'super_admin' : role;
+}
+
 function getSidebarGroups(role, primaryPersonaId, user) {
-  const base = SIDEBAR_GROUPS[role] || SIDEBAR_GROUPS.founder;
+  const base = SIDEBAR_GROUPS[shellRoleFor(role, user)] || SIDEBAR_GROUPS.founder;
   // Apply tier gating per group (stub passes everything through today;
   // Phase C will swap `hasTier` for the real subscription check).
   const groups = base

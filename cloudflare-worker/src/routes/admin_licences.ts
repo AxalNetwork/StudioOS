@@ -1,6 +1,16 @@
 /**
  * Territory licences — the HQ ledger behind the subsidiary model.
  *
+ * SUPER ADMIN ONLY, every route including the reads (migration 199). This is
+ * the franchisor's console: it issues, re-terms, suspends, renews and
+ * terminates other people's licences, and its lists are every licensee's
+ * commercial terms side by side. An admin who can operate it is not a
+ * subsidiary of anything.
+ *
+ * The licensee's own view is `routes/licence.ts` (`GET /licence/mine`), which
+ * stays on plain auth — a subsidiary admin reads their licence there and
+ * cannot reach anyone else's from here.
+ *
  * Mounted at /api/admin/licences BEFORE the catch-all /api/admin in index.ts,
  * the same mount-precedence trick admin_billing and admin_promos use. Schema:
  * migration 187.
@@ -41,7 +51,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireSuperAdmin } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -166,7 +176,7 @@ async function activationBlockers(env: Env, licence: LicenceRow): Promise<string
 
 r.get('/', async (c) => {
   try {
-    await requireAdmin(c);
+    await requireSuperAdmin(c);
     const rows = await c.env.DB.prepare(
       `SELECT * FROM territory_licences ORDER BY
          CASE status WHEN 'active' THEN 0 WHEN 'suspended' THEN 1
@@ -188,7 +198,7 @@ r.get('/', async (c) => {
 // Who holds what, for the step-2 picker. A country not listed here is free.
 r.get('/territories', async (c) => {
   try {
-    await requireAdmin(c);
+    await requireSuperAdmin(c);
     const rows = await c.env.DB.prepare(
       `SELECT lt.country_code, l.uid AS licence_uid, l.licence_ref, l.brand_name, l.status
          FROM licence_territories lt
@@ -202,7 +212,7 @@ r.get('/territories', async (c) => {
 // Step 1 — the entity.
 r.post('/', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const b = await c.req.json().catch(() => ({} as any));
     const ref = str(b?.licence_ref, 40).toUpperCase();
     const legalName = str(b?.legal_entity_name, 200);
@@ -235,7 +245,7 @@ r.post('/', async (c) => {
 // Step 2 — territory. Refuses an overlap rather than recording one.
 r.put('/:uid/territories', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     if (licence.status === 'terminated') {
@@ -298,7 +308,7 @@ r.put('/:uid/territories', async (c) => {
 // Step 3 — seats.
 r.put('/:uid/seats', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const b = await c.req.json().catch(() => ({} as any));
@@ -324,7 +334,7 @@ r.put('/:uid/seats', async (c) => {
 // Step 4 — commercial terms.
 r.patch('/:uid/terms', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const b = await c.req.json().catch(() => ({} as any));
@@ -362,7 +372,7 @@ r.patch('/:uid/terms', async (c) => {
 // Step 5 — what blocks activation, before trying it.
 r.get('/:uid/activation', async (c) => {
   try {
-    await requireAdmin(c);
+    await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const blockers = await activationBlockers(c.env, licence);
@@ -378,7 +388,7 @@ r.get('/:uid/activation', async (c) => {
 
 r.post('/:uid/activate', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const blockers = await activationBlockers(c.env, licence);
@@ -393,7 +403,7 @@ r.post('/:uid/activate', async (c) => {
 
 r.post('/:uid/suspend', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const note = str(c.req.query('note') || (await c.req.json().catch(() => ({} as any)))?.note, 1000);
@@ -410,7 +420,7 @@ r.post('/:uid/suspend', async (c) => {
 
 r.post('/:uid/reinstate', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     if (licence.status !== 'suspended') {
@@ -426,7 +436,7 @@ r.post('/:uid/reinstate', async (c) => {
 
 r.post('/:uid/renew', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const b = await c.req.json().catch(() => ({} as any));
@@ -451,7 +461,7 @@ r.post('/:uid/renew', async (c) => {
 
 r.post('/:uid/terminate', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const note = str((await c.req.json().catch(() => ({} as any)))?.note, 1000);
@@ -481,7 +491,7 @@ r.post('/:uid/terminate', async (c) => {
 // every other one.
 r.get('/:uid/admins', async (c) => {
   try {
-    await requireAdmin(c);
+    await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const rows = await c.env.DB.prepare(
@@ -495,7 +505,7 @@ r.get('/:uid/admins', async (c) => {
 
 r.post('/:uid/admins', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const b = await c.req.json().catch(() => ({} as any));
@@ -536,7 +546,7 @@ r.post('/:uid/admins', async (c) => {
 
 r.delete('/:uid/admins/:userId{[0-9]+}', async (c) => {
   try {
-    const admin = await requireAdmin(c);
+    const admin = await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const userId = Number(c.req.param('userId'));
@@ -554,7 +564,7 @@ r.delete('/:uid/admins/:userId{[0-9]+}', async (c) => {
 
 r.get('/:uid', async (c) => {
   try {
-    await requireAdmin(c);
+    await requireSuperAdmin(c);
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const [full] = await hydrate(c.env, [licence]);

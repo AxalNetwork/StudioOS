@@ -963,6 +963,10 @@ app.notFound((c) => c.json({ detail: 'Not found' }, 404));
 const AUTH_ERROR_STATUSES: Record<string, 401 | 403> = {
   Unauthorized: 401,
   'Admin required': 403,
+  // Migration 199. Without an entry here the throw falls through to the
+  // generic 500 below, so a subsidiary admin trying to franchise would see a
+  // server error instead of a refusal — the gate would work and say nothing.
+  'Super admin required': 403,
   Forbidden: 403,
   'KYC required': 403,
   'TOTP required': 403,

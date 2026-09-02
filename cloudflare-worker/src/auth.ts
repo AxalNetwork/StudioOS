@@ -418,6 +418,39 @@ export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<User>
 }
 
 /**
+ * Is this admin also the franchisor?
+ *
+ * `super_admin` is an ELEVATION on `admin`, not a role beside it — see
+ * migration 199. The role stays `admin` so all 468 existing `role === 'admin'`
+ * checks keep passing; this column adds the one power on top.
+ *
+ * D1 hands integers back as numbers and some fixtures use booleans, so the
+ * check is on truthiness of a coerced number rather than `=== 1`: a column
+ * that is missing entirely (a partial DB, a test fixture predating 199) reads
+ * as 0 and the answer is NO. Failing closed is the whole point of the gate.
+ */
+export function isSuperAdmin(user: Pick<User, 'role'> & { is_super_admin?: unknown }): boolean {
+  if (String((user as any)?.role ?? '').toLowerCase() !== 'admin') return false;
+  return Number((user as any)?.is_super_admin ?? 0) === 1;
+}
+
+/**
+ * The gate for franchising: issuing, re-terming, suspending, renewing and
+ * terminating a territory licence, and naming who administers one.
+ *
+ * Deliberately layered on `requireAdmin` rather than replacing it, so the
+ * error a non-admin sees is unchanged and only the last step is new. A
+ * subsidiary admin gets "Super admin required" — a different sentence from
+ * "Admin required", because it is a different fact about them and the support
+ * queue should not have to guess which one happened.
+ */
+export async function requireSuperAdmin(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAdmin(c);
+  if (!isSuperAdmin(user as any)) throw new Error('Super admin required');
+  return user;
+}
+
+/**
  * RBAC: ensure the authenticated user has one of the allowed roles.
  * Throws "Forbidden" (mapped to 403 by the global error handler) otherwise.
  * Admin always passes.
