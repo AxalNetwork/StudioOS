@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, RefreshCw, Rocket, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowLaunch.css';
 
@@ -104,7 +104,7 @@ function EmptyFeed({ error }) { return <div className="a5-empty"><CalendarDays s
 function Head({ title, meta }) { return <div className="a5-head"><div><CalendarDays size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-launch-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function LaunchRail({ project, events, attributions, sourceErrors }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Grow"
     className="a5-rail"
     stance="Read-only launch feed"

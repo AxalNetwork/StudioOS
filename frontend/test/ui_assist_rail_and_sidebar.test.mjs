@@ -474,6 +474,30 @@ test('every mounted surface is one eadwynConfig knows', () => {
   assert.deepEqual(dynamic, [], 'a computed surface cannot be checked; name it literally');
 });
 
+test('no page hand-builds an AI rail of its own', () => {
+  // WHAT THE CHECK ABOVE CANNOT SEE, said plainly so the next person does not
+  // add a third grep that also cannot see it. That check reads
+  // `<AssistLayout surface="…">` occurrences and validates the NAME against
+  // ASSIST_SURFACES. It is a spelling check on mounts that exist. It cannot
+  // see a page that declares `<aside className="i4-rail">` at the bottom of
+  // its own file — there is no AssistLayout in that file to walk — and it
+  // cannot see a page with no rail at all, because there is nothing to walk.
+  //
+  // Both are how thirty-nine hand-built rails accumulated: twenty-seven on the
+  // founder desks under seventeen names, then twelve more under
+  // pages/investor under four different HEADINGS, one of which said "Deals AI"
+  // rather than "Worker AI". None of the twelve read the spend endpoint, so
+  // none had a meter, a cap or a figure of any kind — "it does show anything,
+  // it looks blank, probably not connected to anything", filed once per
+  // licence. This is a SHAPE check on the file, which is what sees them.
+  const offenders = [];
+  for (const f of walkJs('frontend/src/pages')) {
+    if (/<aside[^>]*className="[^"]*rail/.test(scan(read(f)))) offenders.push(f);
+  }
+  assert.deepEqual(offenders, [],
+    'these pages declare their own AI rail instead of mounting the shared WorkerRail');
+});
+
 test('an embedded page does not mount a second rail', () => {
   // DeckReviewerPage renders inside another page when `embedded`. Wrapping it
   // unconditionally would put two rails on one screen, both showing the same

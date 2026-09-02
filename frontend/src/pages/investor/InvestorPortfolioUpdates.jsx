@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { WorkerRail } from '../../ui';
+import ZoneNav from '../../workspaces/ZoneNav';
+import { bucketForPath } from '../../workspaces/shellConfig';
 import { AlertCircle, Inbox, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import './investorPortfolioCanvas.css';
@@ -68,7 +70,7 @@ export default function InvestorPortfolioUpdates() {
   const partial = Object.values(state.unavailable).some(Boolean);
 
   return <div className="i4-shell ip2-shell"><main className="i4-portfolio ip2-updates" data-testid="investor-portfolio-updates"><header className="i4-heading"><div><div className="i4-eyebrow">Portfolio / Updates</div><h1>Updates &amp; KPI collection</h1><p>Inbox, cadence compliance and source-preserved founder updates from the investor-accessible portfolio.</p></div><button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh portfolio updates"><RefreshCw size={15} /></button></header>
-    <nav className="i4-tabs" aria-label="Portfolio sections"><Link to="/portfolio/positions">Positions</Link><Link className="is-active" to="/portfolio/updates">Updates</Link><Link to="/portfolio/value-add">Value-add</Link></nav>
+    <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
     {state.error && <div className="i4-error" data-testid="status-investor-updates-error"><span>{String(state.error).toLowerCase() === 'not found' ? 'Portfolio update source unavailable in local development. No empty inbox claim is being made.' : state.error}</span><button type="button" onClick={load}>Retry</button></div>}
     {partial && !state.loading && <div className="i4-partial" data-testid="status-investor-updates-partial">Some portfolio sources are temporarily unavailable. Affected metrics and cells are labelled rather than treated as zero.</div>}
     {state.loading ? <Skeleton /> : <><div className="ip2-filters"><div><button className={filter === 'period' ? 'is-active' : ''} onClick={() => setFilter('period')}>This period</button><button className={filter === 'overdue' ? 'is-active' : ''} onClick={() => setFilter('overdue')}>Overdue</button><button className={filter === 'parse' ? 'is-active' : ''} onClick={() => setFilter('parse')}>Parse review</button><button className={filter === 'rules' ? 'is-active' : ''} onClick={() => setFilter('rules')}>Rules</button></div></div>
@@ -86,5 +88,23 @@ function UpdateTable({ rows, updatesUnavailable, complianceUnavailable, filter }
   return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Arrived</th><th>State</th><th>What came in</th></tr></thead><tbody>{rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-update-${row.project_id}`}><td><strong>{row.project?.name || `Startup ${row.project_id}`}</strong><small>{row.project?.stage || 'Stage not recorded'}</small></td><td>{row.arrived ? dateLabel(row.arrived) : '—'}{row.update && !row.current && !complianceUnavailable && <small>Last stored update: {dateLabel(row.update.submitted_at || row.update.updated_at)}</small>}</td><td><span className={`ip2-state is-${row.status.toLowerCase().replace(/\s+/g, '-')}`}>{row.status}</span></td><td>{row.update ? <><strong>{row.update.title || 'Untitled update'}</strong><small>{kpiText(row.update) || 'No KPI values recorded'}</small></> : <span className="ip2-muted">{complianceUnavailable ? 'Cadence status unavailable' : 'No current update recorded'}</span>}</td></tr>)}</tbody></table></div>;
 }
 function Stat({ label, value, note, muted }) { return <article className={`i4-stat${muted ? ' ip2-muted-stat' : ''}`}><div><span>{label}</span><b>{value}</b><small>{note}</small></div></article>; }
-function UpdatesRail({ rows, unavailable }) { return <aside className="i4-rail" aria-label="Portfolio assistance"><div className="i4-rail-label">Worker AI · Portfolio</div><section><strong>Read-only update feed</strong><p>Source-preserved KPI values and narratives are shown without parsing, editing, chasing, or submitting.</p></section><section className="i4-rail-accent"><strong>Advisor fills the blanks</strong><p>Any extraction or follow-up proposal remains off on IP2.</p></section><div className="i4-rail-label">Feed coverage</div><section><strong>{unavailable.updates ? 'Update source unavailable' : `${rows.length} accessible company records`}</strong><p>{unavailable.compliance ? 'Cadence compliance unavailable.' : 'Current-period reporting status is read from cadence compliance.'}</p></section><section><strong>Parse review</strong><p>No parse-review or extraction-rule fields are returned by the source.</p></section><div className="i4-rail-trust"><span>Screened</span> Nothing is sent to a founder from this page.</div></aside>; }
+function UpdatesRail({ rows, unavailable }) {
+  return (
+    <WorkerRail
+      workspace="Portfolio"
+      role="investor"
+      className="i4-rail"
+      stance="Read-only update feed"
+      note="Source-preserved KPI values and narratives, shown without parsing, editing, chasing or submitting."
+      coverage={[
+        unavailable.updates ? 'Update source unavailable' : `${rows.length} accessible company record${rows.length === 1 ? '' : 's'}`,
+        unavailable.compliance ? 'Cadence compliance unavailable' : 'Reporting status read from cadence compliance',
+      ]}
+      unavailable={[
+        ['Parse review', 'No parse-review or extraction-rule fields are returned by the source.'],
+        ['Outbound', 'Nothing is sent to a founder from this page.'],
+      ]}
+    />
+  );
+}
 function Skeleton() { return <div className="i4-skeleton" aria-busy="true"><i /><i /><i /><i /></div>; }

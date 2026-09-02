@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { FounderWorkerRail, Skeleton } from '../ui';
+import { WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import { bucketForPath, zoneForPath } from './shellConfig';
 
@@ -78,8 +78,14 @@ export default function NetworkWorkspace({ role = 'founder' }) {
       const Zone = FOUNDER_ZONE[slug] || FounderNetworkRelationships;
       return <Suspense fallback={<Loading />}><Zone /></Suspense>;
     }
-    const Shared = role === 'investor' ? InvestorNetworkWorkspace : NetworkPage;
-    return <Suspense fallback={<Loading />}><Shared /></Suspense>;
+    // `embedded`: this shell already supplies the heading, the zone row and
+    // the rail. InvestorNetworkWorkspace draws all three of its own on
+    // /network, so without this an investor got two of each here — including
+    // two Worker AI rails side by side.
+    if (role === 'investor') {
+      return <Suspense fallback={<Loading />}><InvestorNetworkWorkspace embedded /></Suspense>;
+    }
+    return <Suspense fallback={<Loading />}><NetworkPage /></Suspense>;
   }, [sharedSurface, role, slug]);
 
   const INTRO = {
@@ -92,8 +98,9 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     <WorkspaceShell
       role={role}
       rail={(
-        <FounderWorkerRail
+        <WorkerRail
           workspace="Network"
+          role={role}
           stance="Read-only coverage"
           note="This view summarizes stored relationship records. It does not draft outreach, send messages, or change records."
           coverage={[`${zone?.label || 'Relationships'} · stored records only`]}

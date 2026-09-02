@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Layers3, MessageSquare, Quote, Target } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import DiscoveryPage from '../DiscoveryPage';
 import './founderValidate.css';
 import './founderValidateWorkspace.css';
@@ -168,7 +168,7 @@ export default function FounderValidatePage() {
           {state === 'error' && <div className="validate-error" data-testid="status-validate-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-validate" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
           <EvidenceCards loading={state === 'loading'} projects={projects} featured={featured} interviews={interviews} evidence={evidence} signals={signals} dateFormat={dateFormat} detailLink={detailLink} workspaceNavigationState={workspaceNavigationState} />
         </div>
-        <FounderWorkerRail
+        <WorkerRail
           workspace="Validate"
           className="validate-rail"
           stance="Evidence-led view"

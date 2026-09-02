@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, CircleDot, FileText, Filter, RefreshCw, Target } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderRaiseStatus.css';
 
 const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
@@ -142,7 +142,7 @@ export default function FounderRaiseStatus() {
         {(errors.projects || Object.keys(errors).length > 0) && <div className="fr-status-alert" role="alert" data-testid="status-raise-status-partial"><AlertCircle size={16} /><span>{errors.projects || 'Some selected-project raise records are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <StatusSkeleton /> : errors.projects ? <UnavailableStatus onRetry={load} /> : !project ? <EmptyStatus /> : <StatusContent project={project} round={round} roundInfo={roundInfo} target={target} raised={raised} coverage={coverage} rows={visibleRows} allRows={rows} blockerCount={blockerCount} openDate={openDate} documents={documents} prospects={prospects} errors={errors} filter={filter} setFilter={setFilter} query={query} />}
       </section>
-      <WorkerRail project={project} rows={rows} target={target} raised={raised} errors={errors} />
+      <PageRail project={project} rows={rows} target={target} raised={raised} errors={errors} />
     </div>
   </main>;
 }
@@ -167,8 +167,8 @@ function StatusContent({ project, round, roundInfo, target, raised, coverage, ro
 }
 
 function Stat({ label, value, note, muted }) { return <div className={`fr-status-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function WorkerRail({ project, rows, target, raised, errors }) {
-  return <FounderWorkerRail
+function PageRail({ project, rows, target, raised, errors }) {
+  return <WorkerRail
     workspace="Raise"
     className="fr-status-rail"
     stance="Manual war-room view"

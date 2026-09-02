@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
 import './founderNetworkIntroductions.css';
 
@@ -98,7 +98,7 @@ function IntroductionTable({ rows, filter }) {
 }
 function Stat({ label, value, note }) { return <div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function IntroductionRail({ rows, landed, stalled, error }) {
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Network"
     className="fn-rel-rail"
     stance="Read-only introduction ledger"

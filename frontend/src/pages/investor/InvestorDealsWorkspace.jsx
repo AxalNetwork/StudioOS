@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowUpRight, Bot, CheckCircle2, Circle, Database,
-  Loader2, RefreshCw, ShieldCheck, ThumbsDown, ThumbsUp,
+  AlertTriangle, ArrowUpRight, CheckCircle2, Circle, Database,
+  Loader2, RefreshCw, ThumbsDown, ThumbsUp,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { WorkerRail } from '../../ui';
+import ZoneNav from '../../workspaces/ZoneNav';
+import { bucketForPath } from '../../workspaces/shellConfig';
 
 const STAGES = [
   { id: 'sourcing', label: 'Sourcing' },
@@ -69,7 +72,11 @@ function DealCard({ deal, onOpen }) {
   );
 }
 
-export default function InvestorDealsWorkspace() {
+// `embedded` is set by InvestorDealsRoutes on /deals/{pipeline,screening,
+// commit,closing}, where WorkspaceShell is already drawing the heading, the
+// zone row and the rail. Without it the page draws a second h1, a second pill
+// row and a second rail inside the first — the doubled chrome the user saw.
+export default function InvestorDealsWorkspace({ embedded = false }) {
   const navigate = useNavigate();
   const [state, setState] = useState({ deals: [], invitations: [] });
   const [loading, setLoading] = useState(true);
@@ -109,6 +116,7 @@ export default function InvestorDealsWorkspace() {
   }, [load]);
 
   const deals = state.deals;
+  const bucket = bucketForPath('investor', '/deals');
 
   const grouped = useMemo(
     () => Object.fromEntries(STAGES.map((stage) => [stage.id, deals.filter((deal) => deal.stage === stage.id)])),
@@ -148,16 +156,15 @@ export default function InvestorDealsWorkspace() {
   return (
     <div className="investor-deals-layout" data-testid="investor-deals-i3">
       <div className="investor-deals-main">
-        <header className="investor-deals-hero">
+        {!embedded && <header className="investor-deals-hero">
           <h1 data-testid="heading-investor-deals">Find and close investments</h1>
           <p>One board, five stages. Each deal remains governed by its existing ownership and permissions.</p>
-          <nav aria-label="Deals sections">
-            <a href="#deals-pipeline">Pipeline</a>
-            <a href="#deals-screening">Screening</a>
-            <a href="#deals-commit">Commit</a>
-            <a href="#deals-closing">Closing</a>
-          </nav>
-        </header>
+          {/* Four real links. These were `<a href="#deals-pipeline">` and three
+              more: anchors that scrolled the page rather than opening the
+              stage routes they name. ZoneNav takes its targets from the shell
+              config, so a label can no longer drift from its route. */}
+          <ZoneNav bucket={bucket} role="investor" activeSlug={null} className="mt-2.5" />
+        </header>}
 
         {error && <div className="investor-deals-inline-error"><AlertTriangle size={13} />{error}</div>}
 
@@ -238,33 +245,31 @@ export default function InvestorDealsWorkspace() {
         </div>
       </div>
 
-      <aside className="investor-ai-rail" aria-label="Deals AI">
-        <div className="investor-ai-label"><Bot size={13} /> Deals AI</div>
-        <section>
-          <h2>Manual workspace</h2>
-          <p>Your pipeline, deal rooms, votes, and invitations work without AI.</p>
-        </section>
-        <section className="investor-ai-accent">
-          <h2>Evidence stays attached</h2>
-          <p>Scores and recommendations appear only when they exist in the live deal record. This view never invents a memo, cost, model, or result.</p>
-        </section>
-        <section>
-          <h2>Permission boundary</h2>
-          <p><ShieldCheck size={14} /> Founder-sourced and shared objects retain their provenance. Existing server access controls remain authoritative.</p>
-        </section>
-        <section>
-          <h2>Deal tools</h2>
-          <p>Open a deal card for its documents, commitments, activity, and invitation actions.</p>
-          <button type="button" className="investor-rail-link" onClick={() => navigate('/raise/data-room')}>Open shared data rooms</button>
-        </section>
-        {invitationError && (
-          <section className="investor-ai-warning">
-            <h2>Invitations unavailable</h2>
-            <p>Deals are current, but invitations could not be loaded.</p>
-            <button type="button" className="investor-rail-link" onClick={load}>Retry invitations</button>
-          </section>
-        )}
-      </aside>
+      {!embedded && (
+        <WorkerRail
+          workspace="Deals"
+          role="investor"
+          className="investor-ai-rail"
+          stance="Manual workspace"
+          note="Your pipeline, deal rooms, votes and invitations work without AI. Scores and recommendations appear only when they exist in the live deal record. This view never invents a memo, cost, model, or result."
+          coverage={[
+            `${deals.length} deal${deals.length === 1 ? '' : 's'} readable`,
+            invitationError ? 'Invitations unavailable' : `${invited.length} invitation${invited.length === 1 ? '' : 's'} awaiting you`,
+          ]}
+          coverageNote="Founder-sourced and shared objects retain their provenance. Existing server access controls remain authoritative."
+          unavailable={[
+            ['Memos and scoring runs', 'Nothing on this page drafts a memo or produces a score. Open a deal card for its documents, commitments, activity and invitation actions.'],
+            // A failed invitations read is named rather than folded into the
+            // count above it — deals can be current while invitations are not.
+            ...(invitationError
+              ? [['Invitations', 'Deals are current, but invitations could not be loaded.']]
+              : []),
+          ]}
+          action={invitationError
+            ? <button type="button" onClick={load} data-testid="button-retry-invitations">Retry invitations</button>
+            : <Link to="/raise/data-room" data-testid="link-rail-data-rooms">Open shared data rooms <ArrowUpRight size={13} /></Link>}
+        />
+      )}
     </div>
   );
 }

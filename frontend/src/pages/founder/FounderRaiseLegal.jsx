@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, FileSignature, FileText, Filter, RefreshCw, Scale, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseLegal.css';
 
@@ -146,7 +146,7 @@ export default function FounderRaiseLegal() {
         {Object.keys(errors).length > 0 && <div className="fr-capital-alert" role="alert" data-testid="status-legal-partial"><AlertCircle size={16} /><span>{errors.projects || 'Some selected-project legal sources are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <LegalSkeleton /> : errors.projects ? <UnavailableLegal onRetry={load} /> : !project ? <EmptyLegal /> : <LegalContent project={project} documents={documents} compliance={compliance} trackers={trackers} entities={entities} signed={signed} awaiting={awaiting} openCompliance={openCompliance} overdue={overdue} nextDeadline={nextDeadline} rows={visibleRows} allRows={rows} errors={errors} filter={filter} setFilter={setFilter} query={query} />}
       </section>
-      <WorkerRail project={project} documents={documents} compliance={compliance} trackers={trackers} errors={errors} />
+      <PageRail project={project} documents={documents} compliance={compliance} trackers={trackers} errors={errors} />
     </div>
   </main>;
 }
@@ -169,8 +169,8 @@ function LegalContent({ project, documents, compliance, trackers, entities, sign
 
 function LegalStat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function Coverage({ label, value }) { return <div className="fr-capital-coverage-row"><span>{label}</span><strong>{value}</strong></div>; }
-function WorkerRail({ project, documents, compliance, trackers, errors }) {
-  return <FounderWorkerRail
+function PageRail({ project, documents, compliance, trackers, errors }) {
+  return <WorkerRail
     workspace="Raise"
     className="fr-capital-rail"
     stance="Manual legal collection"

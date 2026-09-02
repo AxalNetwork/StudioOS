@@ -101,12 +101,12 @@ export default function InvestorStudioHome({
           {previewing ? <Status>Investor-scoped opportunities are withheld in administrator preview.</Status> : dashboardUnavailable ? <Status error>Deal-flow opportunities are temporarily unavailable.</Status> : !dashboard ? <Loading /> : opportunities.length ? <div className="is-opportunity-list">{opportunities.map((item, index) => <Opportunity key={item.id || item.deal_id || index} item={item} index={index} />)}</div> : <Status>No scored opportunities are recorded against your thesis.</Status>}
           <p className="is-card-note">Scores are match signals against your thesis answers — Eadwyn proposes; it never places a deal.</p>
         </article>
-        <article className="is-card" data-testid="card-investor-quick-stats"><CardHead title="Quick stats" to="/portfolio/positions" label="Open portfolio" />
+        <article className="is-card" data-testid="card-investor-quick-stats"><CardHead title="Quick stats" to="/portfolio" label="Open portfolio" />
           <Row label="Deals in flow" value={previewing || dashboardUnavailable ? null : dealCount} /><Row label="Avg AI match" value={previewing || dashboardUnavailable ? null : number(dashboard?.quick_stats?.ai_score_avg)} /><Row label="Watching" value={previewing ? null : counts.watching} /><Row label="Active deal rooms" value={previewing ? null : counts.dealrooms} />
         </article>
       </div>
       <div className="is-bottom-grid">
-        <article className="is-card" data-testid="card-investor-portfolio"><CardHead title="Portfolio glance" to="/portfolio/performance" label="Open portfolio" />
+        <article className="is-card" data-testid="card-investor-portfolio"><CardHead title="Portfolio glance" to="/portfolio/performance" label="Open performance" />
           {previewing ? <Status>Investor-scoped performance is withheld in administrator preview.</Status> : portfolio === undefined ? <Loading /> : failures.portfolio ? <Status error>Portfolio performance is unavailable.</Status> : <PortfolioRows data={portfolio} />}
           <p className="is-card-note">IRR reads “Not recorded” until enough dated cash flows exist to calculate it honestly.</p>
         </article>

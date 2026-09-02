@@ -42,7 +42,7 @@ export default function PortfolioWorkspace({ activeRole }) {
   ].filter((t) => !role || t.roles.includes(role));
 
   if ((activeRole || role) === 'investor' && active === 'health') {
-    return <InvestorPortfolioCanvas active={active} />;
+    return <InvestorPortfolioCanvas />;
   }
   if ((activeRole || role) === 'investor' && active === 'positions') {
     return <InvestorPortfolioPositions />;

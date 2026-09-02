@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, ClipboardCheck, KanbanSquare, LineChart, Route, Target } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import ExecutionPage from '../ExecutionPage';
 import './founderBuildDesk.css';
 
@@ -137,7 +137,7 @@ export default function FounderBuildDesk() {
         {state === 'error' && <div className="build-error" data-testid="status-build-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-build" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
         <BuildSections loading={state === 'loading'} hasProjects={projects.length > 0} data={data} snapshots={snapshots} summary={summary} weekLink={weekLink} roadmapLink={roadmapLink} kpiLink={kpiLink} metricsLink={metricsLink} boardLink={boardLink} executionLink={executionLink} navigationState={navigationState} />
       </div>
-      <FounderWorkerRail
+      <WorkerRail
         workspace="Build"
         className="build-rail"
         stance="Manual operating view"

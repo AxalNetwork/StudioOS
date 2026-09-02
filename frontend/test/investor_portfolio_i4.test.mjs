@@ -13,7 +13,7 @@ const styles = read('frontend/src/pages/investor/investorPortfolioCanvas.css');
 test('investor Portfolio uses the I4 landing page for the active role', () => {
   assert.match(app, /<PortfolioWorkspace activeRole=\{effectiveRole\} \/>/);
   assert.match(workspace, /\(activeRole \|\| role\) === 'investor' && active === 'health'/);
-  assert.match(workspace, /<InvestorPortfolioCanvas active=\{active\} \/>/);
+  assert.match(workspace, /<InvestorPortfolioCanvas \/>/);
   assert.match(shell, /key === 'portfolio' && children\) return children/);
 });
 
@@ -30,9 +30,17 @@ test('I4 renders the requested portfolio decision surfaces', () => {
   for (const metric of ['TVPI · gross', 'MOIC · gross', 'DPI', 'RVPI']) {
     assert.ok(portfolio.includes(metric), `the canvas does not show ${metric}`);
   }
-  for (const section of ['Positions', 'Updates &amp; KPI collection', 'Value-add desk', 'Worker AI · Portfolio']) {
+  for (const section of ['Positions', 'Updates &amp; KPI collection', 'Value-add desk']) {
     assert.ok(portfolio.includes(section), `the canvas is missing the ${section} section`);
   }
+  // The rail is no longer written here. "Worker AI · Portfolio" used to be a
+  // literal in this file, one of twelve bespoke investor rails that agreed on
+  // their shape by coincidence and none of which read the spend endpoint. It
+  // is now the shared component, which composes that heading from `workspace`
+  // — so what this asserts is the mount, and `ui/WorkerRail.jsx` owns the
+  // heading for every licence.
+  assert.match(portfolio, /<WorkerRail[\s\S]*?workspace="Portfolio"[\s\S]*?role="investor"/,
+    'the canvas must mount the shared Worker AI rail');
 });
 
 test('I4 is wired to real portfolio sources and preserves detailed tools', () => {
@@ -52,9 +60,20 @@ test('I4 is wired to real portfolio sources and preserves detailed tools', () =>
   // the canonical path and growth is its legacy alias. `724dfc9f` repointed
   // the canvas onto the canonical path — this assertion was still naming the
   // legacy one, which is the alias a canvas should be the LAST thing linking.
-  for (const route of ['/portfolio/positions', '/portfolio/updates', '/portfolio/value-add', '/portfolio/performance']) {
-    assert.ok(portfolio.includes(route), `the canvas keeps no door to ${route}`);
-  }
+  // /portfolio/performance is not a zone of the Portfolio bucket, so the
+  // canvas has to carry its own door to it — and does, from the rail.
+  assert.ok(portfolio.includes('/portfolio/performance'),
+    'the canvas keeps no door to /portfolio/performance');
+  // The other three ARE zones. They used to be a hand-rolled `i4-tabs` row
+  // whose "Positions" pill linked /portfolio/health — the page it was already
+  // on — so the positions book was reachable only from a "View dilution" link
+  // further down. They now come from ZoneNav, which composes every target from
+  // shellConfig; asserting the literals again would re-pin the copy that
+  // drifted. What matters is that the row is the real one.
+  assert.match(portfolio, /<ZoneNav bucket=\{bucketForPath\('investor', '\/portfolio'\)\}/,
+    'the canvas must take its zone row from the shell config, not hand-roll it');
+  assert.ok(portfolio.includes('/portfolio/positions'),
+    'the canvas keeps no door to the positions book');
   // The alias still has to resolve, or every link that predates the rename
   // 404s. Read the declaration rather than restating it, so renaming the slug
   // in one place cannot leave this test asserting a path nothing routes.

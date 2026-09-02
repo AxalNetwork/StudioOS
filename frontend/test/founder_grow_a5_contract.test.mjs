@@ -33,7 +33,7 @@ test('A5 has all detailed handoffs and a read-only rail', () => {
   // boundary statement ("no automated actions") is the shared rail's default
   // footer now, so it is asserted against the component rather than pasted
   // into every desk — see founder_shell.test.mjs.
-  assert.match(page, /<FounderWorkerRail\b[\s\S]*?workspace="Grow"/,
+  assert.match(page, /<WorkerRail\b[\s\S]*?workspace="Grow"/,
     'A5 must mount the shared Worker AI rail');
   assert.match(page, /stance="Read-only source coverage"/);
 });

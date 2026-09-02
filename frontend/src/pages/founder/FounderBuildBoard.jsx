@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Clock3, Filter, Layers3, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderBuildBoard.css';
 
 const STAGES = [
@@ -143,7 +143,7 @@ export default function FounderBuildBoard() {
             </>
           )}
         </section>
-        <WorkerRail taskCount={detailUnavailable ? null : counts.total} project={selectedProject} />
+        <PageRail taskCount={detailUnavailable ? null : counts.total} project={selectedProject} />
       </div>
     </main>
   );
@@ -153,9 +153,9 @@ function Stat({ label, value, note, muted }) { return <div className={`fb-stat $
 function TaskRow({ task }) { return <tr data-testid={`row-board-task-${task.id}`}><td><strong>{text(task.title)}</strong>{task.description && <small>{task.description}</small>}{task.ai_generated && <em>AI-generated source flag</em>}</td><td><span className={`fb-status status-${task.status}`}>{pretty(task.status)}</span></td><td>{text(task.assigned_to, 'Unassigned')}</td><td>{date(task.due_date, 'Not due')}</td><td>{date(task.updated_at || task.created_at)}</td></tr>; }
 function StageTimeline({ stages, current }) { return <section className="fb-card fb-timeline"><div className="fb-card-head"><div><Clock3 size={16} /><h2>Stage history</h2></div><span>Pipeline record</span></div>{stages.length ? <div className="fb-stage-list">{stages.map((stage) => <div key={stage.id} className={stage.stage_name === current ? 'is-current' : ''}><span className="fb-stage-dot">{stage.stage_name === current ? <CheckCircle2 size={13} /> : <CircleDot size={13} />}</span><div><strong>{pretty(stage.stage_name)}</strong><small>{stage.status === 'active' ? 'Active stage' : `Recorded ${date(stage.end_date || stage.start_date)}`}</small></div></div>)}</div> : <Unavailable text="Stage history is not recorded for this project." />}</section>; }
 function EvidenceSummary({ detail, unavailable }) { const metrics = detail?.metrics || []; const gates = detail?.gates || []; return <section className="fb-card fb-evidence"><div className="fb-card-head"><div><ShieldCheck size={16} /><h2>Evidence surface</h2></div><span>Available source records</span></div><div className="fb-evidence-row"><span>Metrics</span><strong>{unavailable ? '—' : metrics.length}</strong><small>{unavailable ? 'Detail record unavailable' : metrics.length ? 'Stored pipeline metrics' : 'Not recorded'}</small></div><div className="fb-evidence-row"><span>Decision gates</span><strong>{unavailable ? '—' : gates.length}</strong><small>{unavailable ? 'Detail record unavailable' : gates.length ? 'Stored gate records' : 'Not recorded'}</small></div><p className="fb-note">No score, owner, WIP limit, or automation value is displayed unless it is returned by the authenticated API.</p></section>; }
-function WorkerRail({ taskCount, project }) {
+function PageRail({ taskCount, project }) {
   const hasTaskDetail = taskCount !== null;
-  return <FounderWorkerRail
+  return <WorkerRail
     workspace="Build"
     className="fb-worker-rail"
     stance="Manual operating view"

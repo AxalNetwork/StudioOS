@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, ArrowUpRight, Inbox, RefreshCw, TrendingDown, TrendingUp, UsersRound } from 'lucide-react';
 import { api } from '../../lib/api';
+import { WorkerRail } from '../../ui';
+import ZoneNav from '../../workspaces/ZoneNav';
+import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorPortfolioCanvas.css';
 
 const money = (value) => {
@@ -19,7 +22,7 @@ function Skeleton() {
   return <div className="i4-skeleton" aria-busy="true"><i /><i /><i /><i /><i /></div>;
 }
 
-export default function InvestorPortfolioCanvas({ active = 'health' }) {
+export default function InvestorPortfolioCanvas() {
   const [state, setState] = useState({
     loading: true, error: '', positions: [], analytics: null, health: null, updates: [], intros: [], compliance: null,
     unavailable: { analytics: false, health: false, updates: false, intros: false, compliance: false },
@@ -97,11 +100,13 @@ export default function InvestorPortfolioCanvas({ active = 'health' }) {
         <button type="button" className="i4-icon-button" onClick={load} data-testid="button-refresh-investor-portfolio" aria-label="Refresh direct book"><RefreshCw size={15} /></button>
       </header>
 
-      <nav className="i4-tabs" aria-label="Portfolio sections">
-        {[['health', 'Positions', '/portfolio/health'], ['updates', 'Updates', '/portfolio/updates'], ['growth', 'Value-add', '/portfolio/value-add']].map(([id, text, to]) => (
-          <Link key={id} to={to} className={active === id || (active === 'health' && id === 'health') ? 'is-active' : ''} data-testid={`link-investor-portfolio-${id}`}>{text}</Link>
-        ))}
-      </nav>
+      {/* This row used to be hand-rolled, and its "Positions" pill linked
+          /portfolio/health — the page it was already on — while the actual
+          positions book at /portfolio/positions was reachable only from a
+          "View dilution" link further down. ZoneNav takes all three targets
+          from the shell config. `activeSlug={null}`: the overview sits above
+          the zones, so no pill is current here. */}
+      <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" activeSlug={null} className="my-3.5" />
 
       {state.error && <div className="i4-error" data-testid="status-investor-portfolio-error">{state.error}<button type="button" onClick={load} data-testid="button-retry-investor-portfolio">Retry</button></div>}
       {hasPartialFailure && <div className="i4-partial" data-testid="status-investor-portfolio-partial">Some portfolio sources are temporarily unavailable. Affected sections are labelled below.</div>}
@@ -152,29 +157,27 @@ export default function InvestorPortfolioCanvas({ active = 'health' }) {
       )}
       <footer className="i4-boundary">Investor workspace. Data shown is governed by your existing access and permissions.</footer>
     </main>
-    <aside className="i4-rail" aria-label="Portfolio assistance" data-testid="investor-portfolio-rail">
-      <div className="i4-rail-label">Worker AI · Portfolio</div>
-      <section>
-        <strong>Manual</strong>
-        <p>Tables, updates, health sweeps, and portfolio tools work without AI.</p>
-      </section>
-      <section className="i4-rail-accent">
-        <strong>Founder records stay attributable</strong>
-        <p>Updates and cap-table ownership remain linked to the company records they came from.</p>
-      </section>
-      <div className="i4-rail-label">This page</div>
-      <section>
-        <strong>Live portfolio metrics</strong>
-        <p>Returns are computed from recorded positions, marks, and distributions. Missing values stay blank rather than being estimated.</p>
-        <Link to="/portfolio/performance">Open performance methodology</Link>
-      </section>
-      <section>
-        <strong>Reporting review</strong>
-        <p>Review founder-submitted KPIs and narratives in their original update records.</p>
-        <Link to="/portfolio/updates">Open company updates</Link>
-      </section>
-      <div className="i4-rail-trust"><span>Screened</span> Nothing is sent to a founder from this page.</div>
-    </aside>
+    {/* The zone row above covers Positions, Updates and Value-add.
+        /portfolio/performance is not a zone of the Portfolio bucket, so the
+        rail keeps the only door to it. */}
+    <WorkerRail
+      workspace="Portfolio"
+      role="investor"
+      className="i4-rail"
+      data-testid="investor-portfolio-rail"
+      stance="Manual"
+      note="Tables, updates, health sweeps and portfolio tools work without AI. Returns are computed from recorded positions, marks and distributions. Missing values stay blank rather than being estimated."
+      coverage={[
+        `${rows.length} position${rows.length === 1 ? '' : 's'} readable`,
+        state.analytics?.as_of ? `Marks as of ${state.analytics.as_of}` : 'Mark date not recorded',
+      ]}
+      coverageNote="Updates and cap-table ownership stay linked to the company records they came from."
+      unavailable={[
+        ['Estimated marks', 'No figure here is modelled. A position with no mark reads as absent rather than being carried at cost.'],
+        ['Outbound', 'Nothing is sent to a founder from this page.'],
+      ]}
+      action={<Link to="/portfolio/performance" data-testid="link-rail-portfolio-performance">Open performance methodology <ArrowUpRight size={13} /></Link>}
+    />
     </div>
   );
 }

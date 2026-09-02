@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Eye, FileText, Filter, FolderOpen, RefreshCw, ShieldCheck, Sparkles, Users } from 'lucide-react';
 import { api } from '../../lib/api';
-import { FounderWorkerRail } from '../../ui';
+import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseDataRoom.css';
 
@@ -120,7 +120,7 @@ export default function FounderRaiseDataRoom() {
         {(projectError || roomError) && <div className="fr-capital-alert" role="alert" data-testid="status-data-room-partial"><AlertCircle size={16} /><span>{projectError || roomError}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <RoomSkeleton /> : projectError ? <UnavailableRoom onRetry={load} /> : !project ? <EmptyRoom /> : <RoomContent project={project} files={files} folders={folders} grants={grants} activeGrants={activeGrants} access={access} fileActivity={fileActivity} mostViewed={mostViewed} roomError={roomError} view={view} setView={setView} query={query} />}
       </section>
-      <WorkerRail project={project} files={files} grants={activeGrants} fileActivity={fileActivity} roomError={roomError} />
+      <PageRail project={project} files={files} grants={activeGrants} fileActivity={fileActivity} roomError={roomError} />
     </div>
   </main>;
 }
@@ -147,8 +147,8 @@ function GapState({ roomError }) { return <div className="fr-capital-inline-empt
 function prettyAction(value) { return display(value).replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 function RoomStat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function Coverage({ label, value }) { return <div className="fr-capital-coverage-row"><span>{label}</span><strong>{value}</strong></div>; }
-function WorkerRail({ project, files, grants, fileActivity, roomError }) {
-  return <FounderWorkerRail
+function PageRail({ project, files, grants, fileActivity, roomError }) {
+  return <WorkerRail
     workspace="Raise"
     className="fr-capital-rail"
     stance="Manual room collection"

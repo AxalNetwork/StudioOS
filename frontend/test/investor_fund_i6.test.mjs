@@ -15,18 +15,34 @@ test('I6 renders the requested institutional fund surfaces', () => {
     'Capital calls &amp; distributions',
     'Fund accounting',
     'LP reporting',
-    'Worker AI · Fund',
   ]) assert.match(page, new RegExp(copy));
+  // "Worker AI · Fund" was a literal here, in one of twelve bespoke investor
+  // rails — none of which read the spend endpoint, and four of which claimed
+  // "Mode and model are set on the workspace" while this page set neither. The
+  // heading now belongs to the shared component, composed from `workspace`, so
+  // what this file asserts is the mount.
+  assert.match(page, /<WorkerRail[\s\S]*?workspace="Fund"[\s\S]*?role="investor"/,
+    'the landing must mount the shared Worker AI rail');
   assert.match(page, /function EmptyFundDetail/);
-  assert.match(page, /items\.length === 0 \? <EmptyFundDetail \/>/);
+  assert.match(page, /items\.length === 0\s*\?\s*<EmptyFundDetail \/>/);
 });
 
 test('I6 composes live fund sources and preserves detailed tools', () => {
   for (const source of ['useFundAnalytics', 'fundsLpsList', 'fundsLpPortal', 'capitalCalls', 'fundsReportPeriods']) {
     assert.match(page, new RegExp(source));
   }
+  // The four ZONE routes are what the section row and the card arrows now
+  // open. They existed all along and were reachable from no control in the
+  // product: the row was `<a href="#lps">` and three more, and the card arrows
+  // pointed at the legacy ops tool — the LP registry card's arrow opened
+  // /funds/accounting.
+  for (const route of ['/funds/lps', '/funds/calls', '/funds/ledger', '/funds/reporting']) {
+    assert.ok(page.includes(route), `the landing opens no door to ${route}`);
+  }
+  // And the legacy ops tool keeps its own doors, named as handoffs in the card
+  // bodies rather than sitting where a zone link belongs.
   for (const route of ['/funds/accounting', '/funds/capital-calls', '/lp-reports']) {
-    assert.match(page, new RegExp(route.replaceAll('/', '\\/')));
+    assert.ok(page.includes(route), `the landing dropped the handoff to ${route}`);
   }
   assert.match(app, /path="\/funds\/performance"[^\n]+<FundOpsWorkspace \/>/);
 });

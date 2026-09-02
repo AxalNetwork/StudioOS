@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { WorkerRail } from '../../ui';
+import ZoneNav from '../../workspaces/ZoneNav';
+import { bucketForPath } from '../../workspaces/shellConfig';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import './investorPortfolioCanvas.css';
@@ -81,7 +83,7 @@ export default function InvestorPortfolioPositions() {
 
   return <div className="i4-shell ip1-shell"><main className="i4-portfolio ip1-positions" data-testid="investor-portfolio-positions">
     <header className="i4-heading"><div><div className="i4-eyebrow">Portfolio / Positions</div><h1>Positions book</h1><p>Lots, marks history and ownership changes from the investor-accessible portfolio ledger.</p></div><button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh positions book"><RefreshCw size={15} /></button></header>
-    <nav className="i4-tabs" aria-label="Portfolio sections"><Link className="is-active" to="/portfolio/positions">Positions</Link><Link to="/portfolio/updates">Updates</Link><Link to="/portfolio/value-add">Value-add</Link></nav>
+    <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
     {state.error && <div className="i4-error" data-testid="status-investor-positions-error"><span>{String(state.error).toLowerCase() === 'not found' ? 'Position source unavailable in local development. No empty portfolio claim is being made.' : state.error}</span><button type="button" onClick={load}>Retry</button></div>}
     {anyPartial && !state.loading && <div className="i4-partial" data-testid="status-investor-positions-partial">Some supporting portfolio sources are unavailable. Affected metrics and cells are labelled rather than treated as zero.</div>}
     {state.loading ? <Skeleton /> : !state.error && <><div className="ip1-filters"><div><button className={filter === 'attention' ? 'is-active' : ''} onClick={() => setFilter('attention')}>Needs attention</button><button className={filter === 'all' ? 'is-active' : ''} onClick={() => setFilter('all')}>All</button><button className={filter === 'stage' ? 'is-active' : ''} onClick={() => setFilter('stage')}>By stage</button><button className={filter === 'marked' ? 'is-active' : ''} onClick={() => setFilter('marked')}>Marked down</button></div>{filter === 'stage' && <label>Stage<select value={stage} onChange={(event) => setStage(event.target.value)}><option value="all">All recorded stages</option>{stages.map((item) => <option key={item} value={item}>{title(item)}</option>)}</select></label>}</div>
@@ -99,5 +101,28 @@ function PositionsTable({ rows, healthUnavailable, updatesUnavailable, filter })
   return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Stage</th><th>Invested</th><th>FMV</th><th>Multiple</th><th>Health</th><th>Last update</th></tr></thead><tbody>{rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-position-ledger-${row.project_id}`}><td><strong>{row.project?.name || `Startup ${row.project_id}`}</strong><small>{row.marked_down ? 'Marked down' : row.unmarked ? 'Carried at cost' : row.mark_basis ? `Mark basis: ${title(row.mark_basis)}` : 'Mark basis not recorded'}</small></td><td>{title(row.project?.stage)}</td><td>{money(row.total_invested)}</td><td>{money(row.fmv)}{row.unmarked && <small>At cost</small>}</td><td className={Number(row.multiple) < 1 ? 'i4-down' : 'i4-up'}>{ratio(row.multiple)}</td><td>{healthUnavailable ? <span className="ip1-health">Unavailable</span> : <span className={`ip1-health is-${row.health?.badge || 'unknown'}`}>{healthLabel(row.health?.badge)}</span>}</td><td>{updatesUnavailable ? 'Unavailable' : row.updateDays === null ? 'Not recorded' : <>{row.updateDays} d{row.overdue && <span className="ip1-overdue">Overdue</span>}</>}</td></tr>)}</tbody></table></div>;
 }
 function Stat({ label, value, note }) { return <article className="i4-stat"><div><span>{label}</span><b>{value}</b><small>{note}</small></div></article>; }
-function PositionsRail({ rows, analytics, unavailable, sourceError }) { return <aside className="i4-rail" aria-label="Portfolio assistance"><div className="i4-rail-label">Worker AI · Portfolio</div><section><strong>Read-only positions ledger</strong><p>Figures come from stored lots, marks, distributions, health snapshots, and founder-submitted updates.</p></section><section className="i4-rail-accent"><strong>Advisor fills the blanks</strong><p>Suggestions stay off on IP1. Nothing changes cost basis, FMV, ownership, or narrative from this page.</p></section><div className="i4-rail-label">Book coverage</div><section><strong>{sourceError ? 'Position source unavailable' : `${rows.length} accessible position${rows.length === 1 ? '' : 's'}`}</strong><p>{sourceError ? 'The local backend does not expose the positions ledger, so IP1 does not present an empty book as fact.' : unavailable.analytics ? 'Return analytics unavailable.' : analytics?.mark_coverage == null ? 'Mark coverage not available.' : `${Math.round(analytics.mark_coverage * 100)}% have explicit current marks.`}</p></section><section><strong>Mark history and follow-ons</strong><p>These remain governed write workflows and are not exposed by this read-only collection.</p></section><div className="i4-rail-trust"><span>Screened</span> No marks, ownership records, or founder updates are changed here.</div></aside>; }
+function PositionsRail({ rows, analytics, unavailable, sourceError }) {
+  return (
+    <WorkerRail
+      workspace="Portfolio"
+      role="investor"
+      className="i4-rail"
+      stance="Read-only positions ledger"
+      note="Figures come from stored lots, marks, distributions, health snapshots and founder-submitted updates. Nothing here changes cost basis, FMV, ownership or narrative."
+      coverage={[
+        sourceError ? 'Position source unavailable' : `${rows.length} accessible position${rows.length === 1 ? '' : 's'}`,
+        unavailable.analytics ? 'Return analytics unavailable'
+          : analytics?.mark_coverage == null ? 'Mark coverage not recorded'
+            : `${Math.round(analytics.mark_coverage * 100)}% carry an explicit current mark`,
+      ]}
+      coverageNote={sourceError
+        ? 'The backend does not expose the positions ledger, so this page does not present an empty book as fact.'
+        : undefined}
+      unavailable={[
+        ['Mark history and follow-ons', 'Governed write workflows, not exposed by this read-only collection.'],
+        ['Outbound', 'No marks, ownership records or founder updates are changed here.'],
+      ]}
+    />
+  );
+}
 function Skeleton() { return <div className="i4-skeleton" aria-busy="true"><i /><i /><i /><i /></div>; }

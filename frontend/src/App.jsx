@@ -23,7 +23,7 @@ import {
   ChevronDown, Eye, ArrowLeft, Sparkles,
   Gift
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
 import { api } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -650,19 +650,16 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   }, []);
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
-  const fullWidthSurface = (activeRole === 'founder' && FOUNDER_FULL_BLEED.includes(location.pathname))
-    || (activeRole === 'investor' && (
-      location.pathname.startsWith('/portfolio/')
-      || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds', '/network', '/market-intel'].includes(location.pathname)
-    ))
+  // Both flags read the same two lists. They used to hold the investor
+  // expression written out twice, identically, and the four `/funds/*` zone
+  // pages were in neither — see INVESTOR_FULL_BLEED for what that cost.
+  const fullBleedSurface = (activeRole === 'founder' && FOUNDER_FULL_BLEED.includes(location.pathname))
+    || (activeRole === 'investor' && INVESTOR_FULL_BLEED.includes(location.pathname));
+  const fullWidthSurface = fullBleedSurface
     || activeRole === 'advisor'
     || location.pathname === '/spinout-lab'
     || location.pathname.startsWith('/spinout-lab/');
-  const flushSurface = (activeRole === 'founder' && FOUNDER_FULL_BLEED.includes(location.pathname))
-    || (activeRole === 'investor' && (
-      location.pathname.startsWith('/portfolio/')
-      || ['/deals', '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions', '/funds', '/network', '/market-intel'].includes(location.pathname)
-    ));
+  const flushSurface = fullBleedSurface;
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
@@ -1500,10 +1497,22 @@ function AppInner() {
           and the zone row comes from the shell config, so each license sees
           the zones its own canvas specifies. Markets mounts the live signals
           feed; Companies revives CompetitorAnalysisPage, which had been
-          reachable only by deep link since it left the sidebar. */}
+          reachable only by deep link since it left the sidebar.
+
+          THE ROOT BRANCHES TOO. `/research` used to be founder-only, and every
+          other licence was redirected past it to `/research/ask` — so an
+          investor could never reach their own Research overview, which was
+          mounted at `/market-intel` alone. Worse, `/research/ask` is one of the
+          zones that deliberately renders "No store behind this yet", so the
+          first screen a licence saw was an honest empty state standing in for
+          a page that exists. The root now serves the investor overview, and
+          `/market-intel` keeps rendering the same component for its inbound
+          links. */}
       <Route path="/research" element={founderResearchLanding
         ? guard(labRoles(['admin', 'founder']), <FounderResearchDesk />)
-        : <Navigate to="/research/ask" replace />} />
+        : researchRole === 'investor'
+          ? guard(labRoles(['admin', 'investor']), <InvestorResearchWorkspace />)
+          : <Navigate to="/research/ask" replace />} />
       <Route path="/research/ask" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
       <Route path="/research/markets" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
       <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} />)} />
@@ -1755,6 +1764,14 @@ function AppInner() {
           routes redirect here (underlying data stores kept intact). */}
       <Route path="/skills" element={<Navigate to="/studio" replace />} />
       <Route path="/values" element={<Navigate to="/studio" replace />} />
+      {/* The Portfolio ROOT. It had no route at all, so an investor clicking
+          Portfolio landed on NotFoundPage unless the sidebar row aimed one
+          level down at a zone — which is exactly how the founder overviews
+          were lost. `PortfolioWorkspace` derives its tab from the pathname and
+          falls through to 'health' when no segment matches, so the bare root
+          yields the I4 overview for an investor and the generic tab shell for
+          everyone else. `/portfolio/health` stays live as its legacy alias. */}
+      <Route path="/portfolio" element={guard(['admin', 'founder', 'partner', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Task #18 — Partner Coverage Analytics (admin/partner-only internal dashboard). */}
       <Route path="/portfolio/coverage" element={guard(['admin', 'partner'], <PortfolioCoveragePage />)} />

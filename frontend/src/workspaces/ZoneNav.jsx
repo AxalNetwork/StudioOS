@@ -23,13 +23,22 @@ import { ACCENT, zonePath, zoneForPath } from './shellConfig';
  * page it opens, so it belongs in that page's header beside its own title —
  * putting six of them in a nav row would say six things about a page the
  * reader has not opened yet.
+ *
+ * `activeSlug={null}` IS THE OVERVIEW MODE, and it exists because
+ * `zoneForPath` defaults to the FIRST zone for any path it cannot resolve —
+ * which is right for `WorkspaceShell` (a zone route always has a zone) and
+ * wrong on a bucket ROOT, where it would light "LPs" while the reader is
+ * looking at the Fund overview. On a root, no pill is current: the overview is
+ * above the zones, not one of them.
  */
-export default function ZoneNav({ bucket, role = 'founder', className = '' }) {
+export default function ZoneNav({ bucket, role = 'founder', activeSlug, className = '' }) {
   const location = useLocation();
   if (!bucket || !bucket.zones?.length) return null;
 
   const accent = ACCENT[role] || ACCENT.founder;
-  const active = zoneForPath(bucket, location.pathname);
+  const active = activeSlug === undefined
+    ? zoneForPath(bucket, location.pathname)
+    : (activeSlug === null ? null : bucket.zones.find((z) => z.slug === activeSlug) || null);
 
   return (
     <nav
