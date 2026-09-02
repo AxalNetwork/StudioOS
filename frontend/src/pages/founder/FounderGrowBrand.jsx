@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ChevronRight, ExternalLink, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowBrand.css';
 
@@ -95,6 +96,16 @@ function BrandTable({ rows, signups, pageAttributionAvailable }) {
 function EmptyTable({ error }) { return <div className="a5-empty"><Sparkles size={18} /><div><b>{error ? 'Brand source unavailable.' : 'No project-scoped pages are recorded.'}</b><p>FG6 does not infer page traffic, conversion, or dead-page status.</p></div></div>; }
 function Head({ title, meta }) { return <div className="a5-head"><div><Sparkles size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-brand-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function BrandRail({ project, pages, signups, error }) { return <aside className="a5-rail"><div className="a5-rail-title"><span>Worker AI · Grow</span><Sparkles size={14} /></div><div className="fg-brand-rail-callout"><b>Read-only brand collection</b><p>This rail summarizes stored landing pages and leads. It does not create, edit, publish, export, or rewrite content.</p></div><div><span>Coverage</span><strong>{!project ? 'No project selected' : error ? 'Brand source unavailable' : `${pages.length} stored page${pages.length === 1 ? '' : 's'}`}</strong><strong>{!project || error ? 'Lead source unavailable' : `${signups.length} captured lead${signups.length === 1 ? '' : 's'}`}</strong></div><div className="fg-brand-rail-muted"><span>Unavailable here</span><strong>Template outcomes</strong><p>No template-performance source is connected.</p><strong>Dead-page age</strong><p>No page activity timeline is connected.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function BrandRail({ project, pages, signups, error }) {
+  return <FounderWorkerRail
+    workspace="Grow"
+    className="a5-rail"
+    stance="Read-only brand collection"
+    note="This rail summarizes stored landing pages and leads. It does not create, edit, publish, export, or rewrite content."
+    coverage={[!project ? 'No project selected' : error ? 'Brand source unavailable' : `${pages.length} stored page${pages.length === 1 ? '' : 's'}`, !project || error ? 'Lead source unavailable' : `${signups.length} captured lead${signups.length === 1 ? '' : 's'}`]}
+    unavailable={[['Template outcomes', 'No template-performance source is connected.'], ['Dead-page age', 'No page activity timeline is connected.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function BrandSkeleton() { return <div className="a5-skeleton" data-testid="status-grow-brand-loading"><i /><i /><div><i /><i /><i /></div></div>; }
 function EmptyBrand() { return <div className="a5-empty fg-brand-empty"><Sparkles size={20} /><div><b>No startup is available.</b><p>Brand is scoped to an authenticated startup and its stored landing-page records.</p></div></div>; }

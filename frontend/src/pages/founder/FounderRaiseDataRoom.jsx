@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Eye, FileText, Filter, FolderOpen, RefreshCw, ShieldCheck, Sparkles, Users } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseDataRoom.css';
 
@@ -146,7 +147,18 @@ function GapState({ roomError }) { return <div className="fr-capital-inline-empt
 function prettyAction(value) { return display(value).replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 function RoomStat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function Coverage({ label, value }) { return <div className="fr-capital-coverage-row"><span>{label}</span><strong>{value}</strong></div>; }
-function WorkerRail({ project, files, grants, fileActivity, roomError }) { return <aside className="fr-capital-rail"><div className="fr-capital-rail-heading"><span>Worker AI · Raise</span><Sparkles size={14} /></div><div className="fr-capital-rail-callout"><b>Manual room collection</b><p>This page reads project files, room grants, NDA state, and recent access. It does not share, revoke, upload, or create gaps.</p></div><div className="fr-capital-rail-block"><span className="fr-capital-label">Record coverage</span><strong>{project ? `${files.length} staged file${files.length === 1 ? '' : 's'}` : 'No project selected'}</strong><p>{project ? (roomError ? 'The room source is unavailable.' : `${grants.length} active grant${grants.length === 1 ? '' : 's'} · ${fileActivity.length} recent file event${fileActivity.length === 1 ? '' : 's'}`) : 'Select a startup to read its data room.'}</p></div><div className="fr-capital-rail-block fr-capital-rail-muted"><span>Unavailable here</span><strong>Stage gap analysis</strong><p>No expected-artifact or investor-request source is connected.</p><strong>AI placeholder proposal</strong><p>No generate, accept, or mutation action is enabled.</p></div><div className="fr-capital-rail-foot">Read-only permissions · source records only</div></aside>; }
+function WorkerRail({ project, files, grants, fileActivity, roomError }) {
+  return <FounderWorkerRail
+    workspace="Raise"
+    className="fr-capital-rail"
+    stance="Manual room collection"
+    note="This page reads project files, room grants, NDA state, and recent access. It does not share, revoke, upload, or create gaps."
+    coverage={[project ? `${files.length} staged file${files.length === 1 ? '' : 's'}` : 'No project selected']}
+    coverageNote={project ? (roomError ? 'The room source is unavailable.' : `${grants.length} active grant${grants.length === 1 ? '' : 's'} · ${fileActivity.length} recent file event${fileActivity.length === 1 ? '' : 's'}`) : 'Select a startup to read its data room.'}
+    unavailable={[['Stage gap analysis', 'No expected-artifact or investor-request source is connected.'], ['AI placeholder proposal', 'No generate, accept, or mutation action is enabled.']]}
+    footer="Read-only permissions · source records only"
+  />;
+}
 function EmptyRoom() { return <div className="fr-capital-empty" data-testid="empty-raise-data-room"><FolderOpen size={24} /><h2>No startup is available</h2><p>This data-room collection is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/raise/status">Back to raise</Link></div>; }
 function UnavailableRoom({ onRetry }) { return <div className="fr-capital-empty" data-testid="unavailable-raise-data-room"><AlertCircle size={24} /><h2>Project source unavailable</h2><p>The selected startup cannot be read right now. No staged, grant, or view totals are inferred.</p><button type="button" onClick={onRetry}><RefreshCw size={13} /> Retry</button></div>; }
 function RoomSkeleton() { return <div className="fr-capital-loading" data-testid="status-raise-data-room-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

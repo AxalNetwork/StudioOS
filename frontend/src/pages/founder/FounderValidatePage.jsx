@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Layers3, MessageSquare, PanelRight, Quote, Target } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Layers3, MessageSquare, Quote, Target } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import DiscoveryPage from '../DiscoveryPage';
 import './founderValidate.css';
 import './founderValidateWorkspace.css';
@@ -14,6 +15,13 @@ const quoteFrom = (notes) => {
   const quoted = text.match(/[“"]([^”"]{18,260})[”"]/);
   return quoted ? quoted[1] : text.slice(0, 240);
 };
+
+const SECTIONS = [
+  ['Interviews', '/validate/interviews'],
+  ['Pain map', '/validate/pain-map'],
+  ['Hypotheses', '/validate/hypotheses'],
+  ['Verdict', '/validate/verdict'],
+];
 
 export default function FounderValidatePage() {
   const location = useLocation();
@@ -123,6 +131,11 @@ export default function FounderValidatePage() {
     );
   }
   const detailLink = `/build/discovery?mode=workspace${projectId ? `&project_id=${projectId}&tab=interviews` : ''}`;
+  // The row navigates. These four were `href="#validate-0"` … `#validate-3`,
+  // anchors onto sections of this page — so the buttons that name the four
+  // evidence stages did nothing but scroll, and the stage pages they name were
+  // reachable only from the sidebar row that used to point at one of them.
+  const query = projectId ? `?project_id=${projectId}` : '';
   const workspaceNavigationState = {
     founderValidateSeed: {
       projects,
@@ -149,13 +162,25 @@ export default function FounderValidatePage() {
               </div>
             </div>
             <nav aria-label="Evidence sections" className="validate-anchors">
-              {['Interviews', 'Pain map', 'Hypotheses', 'Verdict'].map((label, index) => <a data-testid={`link-anchor-${index}`} key={label} href={`#validate-${index}`}>{label}</a>)}
+              {SECTIONS.map(([label, to], index) => <Link data-testid={`link-anchor-${index}`} key={label} to={`${to}${query}`}>{label}</Link>)}
             </nav>
           </header>
           {state === 'error' && <div className="validate-error" data-testid="status-validate-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-validate" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}
           <EvidenceCards loading={state === 'loading'} projects={projects} featured={featured} interviews={interviews} evidence={evidence} signals={signals} dateFormat={dateFormat} detailLink={detailLink} workspaceNavigationState={workspaceNavigationState} />
         </div>
-        <ValidateRail interviews={interviews} evidence={evidence} detailLink={detailLink} workspaceNavigationState={workspaceNavigationState} />
+        <FounderWorkerRail
+          workspace="Validate"
+          className="validate-rail"
+          stance="Evidence-led view"
+          note="This desk does not generate, transcribe, or change records. It keeps the evidence surface readable."
+          coverage={[
+            `${interviews.length} interview${interviews.length === 1 ? '' : 's'}`,
+            `${evidence.hypotheses.length} hypothesis record${evidence.hypotheses.length === 1 ? '' : 's'}`,
+            `${evidence.pains.length} pain theme${evidence.pains.length === 1 ? '' : 's'}`,
+          ]}
+          action={<Link data-testid="link-rail-open-workspace" to={detailLink} state={workspaceNavigationState}>Open workspace <ChevronRight size={14} /></Link>}
+          footer="Traceable surface · no unsupported automated actions"
+        />
       </section>
     </main>
   );
@@ -185,4 +210,3 @@ function Verdict({ evidence, interviews, signals }) {
   if (evidence.counts.inconclusive) parts.push(`${evidence.counts.inconclusive} inconclusive record${evidence.counts.inconclusive === 1 ? '' : 's'}`);
   return <div className="verdict"><p>{parts.length ? <>Current evidence contains <strong>{parts.join(', ')}</strong>, sourced across <strong>{interviews.length} interview{interviews.length === 1 ? '' : 's'}</strong>. This is a record summary, not an inferred market verdict.</> : 'There is not enough stored hypothesis evidence to state a verdict yet.'}</p>{signals?.factors?.signals && <small>Discovery signal: {signals.factors.signals.points} / {signals.factors.signals.max} points from the current project.</small>}<div className="provenance">Provenance · all statements above resolve to stored interview, pain, and hypothesis records.</div></div>;
 }
-function ValidateRail({ interviews, evidence, detailLink, workspaceNavigationState }) { return <aside className="validate-rail"><div className="rail-title"><span>Worker AI · Validate</span><PanelRight size={14} /></div><div className="rail-block"><b>Evidence-led view</b><p>This desk does not generate, transcribe, or change records. It keeps the evidence surface readable.</p></div><div className="rail-block rail-status"><span>Record coverage</span><strong>{interviews.length} interviews</strong><p>{evidence.hypotheses.length} hypothesis records · {evidence.pains.length} pain themes</p></div><div className="rail-block"><span>Next useful action</span><p>{interviews.length ? 'Review source notes and update evidence in the detailed workspace.' : 'Log an interview before drawing conclusions.'}</p><Link data-testid="link-rail-open-workspace" to={detailLink} state={workspaceNavigationState}>Open workspace <ChevronRight size={14} /></Link></div><div className="rail-safety">Traceable surface · no unsupported automated actions</div></aside>; }

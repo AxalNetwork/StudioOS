@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, Filter, RefreshCw, Sparkles, Users } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowCustomers.css';
 
@@ -97,6 +98,16 @@ function EmptyTable({ error }) { return <div className="a5-empty"><Users size={1
 function UnavailableTable() { return <div className="a5-empty"><Filter size={18} /><div><b>Stalled filtering is unavailable.</b><p>No activity timeline or last-contact source is connected, so signup dates are not treated as stalled age.</p></div></div>; }
 function Head({ icon: Icon, title, meta }) { return <div className="a5-head"><div><Icon size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-customers-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function CustomersRail({ project, customers, grouped, error }) { return <aside className="a5-rail"><div className="a5-rail-title"><span>Worker AI · Grow</span><Sparkles size={14} /></div><div className="fg-customers-rail-callout"><b>Read-only work board</b><p>This rail summarizes stored customer records. It does not sequence, message, score, or modify accounts.</p></div><div><span>Coverage</span><strong>{!project ? 'No project selected' : error ? 'Customer source unavailable' : `${customers.length} customer record${customers.length === 1 ? '' : 's'}`}</strong><strong>{!project || error ? 'Source grouping unavailable' : `${grouped.length} recorded source${grouped.length === 1 ? '' : 's'}`}</strong></div><div className="fg-customers-rail-muted"><span>Unavailable here</span><strong>Step conversion</strong><p>No funnel event source is connected.</p><strong>Sequences</strong><p>No outbound sequence or outcome source is connected.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function CustomersRail({ project, customers, grouped, error }) {
+  return <FounderWorkerRail
+    workspace="Grow"
+    className="a5-rail"
+    stance="Read-only work board"
+    note="This rail summarizes stored customer records. It does not sequence, message, score, or modify accounts."
+    coverage={[!project ? 'No project selected' : error ? 'Customer source unavailable' : `${customers.length} customer record${customers.length === 1 ? '' : 's'}`, !project || error ? 'Source grouping unavailable' : `${grouped.length} recorded source${grouped.length === 1 ? '' : 's'}`]}
+    unavailable={[['Step conversion', 'No funnel event source is connected.'], ['Sequences', 'No outbound sequence or outcome source is connected.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function CustomersSkeleton() { return <div className="a5-skeleton" data-testid="status-grow-customers-loading"><i /><i /><div><i /><i /><i /></div></div>; }
 function EmptyCustomers() { return <div className="a5-empty fg-customers-empty"><Users size={20} /><div><b>No startup is available.</b><p>Customers is scoped to an authenticated startup and its stored discovery records.</p></div></div>; }

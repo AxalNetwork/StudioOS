@@ -13,6 +13,8 @@ write a bordered white box with a title, it already exists here.
 | `CompanySwitcher.jsx` | **The only place active-company context changes.** |
 | `AssistRail.jsx` | The single AI rail that replaced eight separate ones. |
 | `AssistLayout.jsx` | Page shell that hosts the rail. |
+| `FounderWorkerRail.jsx` | The Worker AI rail the six founder workspaces share, and the CSS beside it. It replaced a local rail function re-declared in every founder page file. |
+| `founderWorkerRail.css` | Styles for `FounderWorkerRail`, scoped to `.fwr`. |
 | `assistCost.js` | Spend accounting for the rail. |
 | `eadwynConfig.js` | Naming and copy for the assistant. |
 | `index.js` | The public entry point — import from here. |

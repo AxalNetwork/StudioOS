@@ -64,7 +64,6 @@ export default function InvestorDealsRoutes() {
   return (
     <WorkspaceShell
       role="investor"
-      surface="deals"
       scope="One fund"
       intro={INTRO[zone?.slug] || INTRO.pipeline}
     >

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ChevronRight, Handshake, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowPartnerships.css';
 
@@ -103,6 +104,16 @@ function UnavailableTable() { return <div className="a5-empty"><Handshake size={
 function EmptyTable({ error }) { return <div className="a5-empty"><Handshake size={18} /><div><b>{error ? 'Partnership source unavailable.' : 'No project-linked partnership records are recorded.'}</b><p>FG4 does not infer partner delivery, value, referrals, or dormant age.</p></div></div>; }
 function Head({ icon: Icon, title, meta }) { return <div className="a5-head"><div><Icon size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-partnerships-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function PartnershipsRail({ project, pitches, attributions, error }) { return <aside className="a5-rail"><div className="a5-rail-title"><span>Worker AI · Grow</span><Sparkles size={14} /></div><div className="fg-partnerships-rail-callout"><b>Read-only partner board</b><p>This rail summarizes stored partnership records. It does not propose, send, export terms, or modify partner data.</p></div><div><span>Coverage</span><strong>{!project ? 'No project selected' : error ? 'Partnership source unavailable' : `${pitches.length} tracked record${pitches.length === 1 ? '' : 's'}`}</strong><strong>{!project || error ? 'Attribution source unavailable' : `${attributions.length} attribution record${attributions.length === 1 ? '' : 's'}`}</strong></div><div className="fg-partnerships-rail-muted"><span>Unavailable here</span><strong>Contract value</strong><p>No signed-value source is connected.</p><strong>Partner delivery</strong><p>No referral or delivery source is connected.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function PartnershipsRail({ project, pitches, attributions, error }) {
+  return <FounderWorkerRail
+    workspace="Grow"
+    className="a5-rail"
+    stance="Read-only partner board"
+    note="This rail summarizes stored partnership records. It does not propose, send, export terms, or modify partner data."
+    coverage={[!project ? 'No project selected' : error ? 'Partnership source unavailable' : `${pitches.length} tracked record${pitches.length === 1 ? '' : 's'}`, !project || error ? 'Attribution source unavailable' : `${attributions.length} attribution record${attributions.length === 1 ? '' : 's'}`]}
+    unavailable={[['Contract value', 'No signed-value source is connected.'], ['Partner delivery', 'No referral or delivery source is connected.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function PartnershipsSkeleton() { return <div className="a5-skeleton" data-testid="status-grow-partnerships-loading"><i /><i /><div><i /><i /><i /></div></div>; }
 function EmptyPartnerships() { return <div className="a5-empty fg-partnerships-empty"><Handshake size={20} /><div><b>No startup is available.</b><p>Partnerships is scoped to an authenticated startup and its stored co-marketing records.</p></div></div>; }

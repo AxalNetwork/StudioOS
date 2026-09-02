@@ -159,7 +159,6 @@ export default function AdvisorBucketRoutes() {
   return (
     <WorkspaceShell
       role="advisor"
-      surface={bucket?.label?.toLowerCase()}
       scope={prefix === '/cohorts' ? 'One cohort' : 'One practice'}
       intro={INTRO[prefix]}
     >

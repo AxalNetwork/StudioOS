@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, Sparkles, UsersRound } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
 import './founderNetworkIntroductions.css';
 
@@ -96,5 +97,16 @@ function IntroductionTable({ rows, filter }) {
   return <div className="fn-rel-table-wrap"><table><thead><tr><th>Introduction</th><th>Direction</th><th>State</th><th>Via</th><th>Outcome</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || row.uid || index} data-testid={`row-network-introduction-${row.id || index}`}><td><strong>{introductionLabel(row)}</strong><small>{text(counterpart(row).company, text(counterpart(row).role, 'Counterpart context not recorded'))}</small></td><td>{direction(row)}</td><td><span className={`intro-${String(row.status || 'unknown').toLowerCase()}`}>{stateLabel(row)}</span></td><td>Not recorded</td><td className="fn-intro-outcome">{outcome(row)}</td></tr>)}</tbody></table></div>;
 }
 function Stat({ label, value, note }) { return <div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function IntroductionRail({ rows, landed, stalled, error }) { return <aside className="fn-rel-rail"><div className="fn-rel-rail-head"><span>Worker AI · Network</span><Sparkles size={14} /></div><div className="fn-rel-callout"><b>Read-only introduction ledger</b><p>This view does not request, offer, accept, decline, message, export, or draft introductions.</p></div><div><span>Ledger coverage</span><strong>{error ? 'Source unavailable' : `${rows.length} tracked introduction${rows.length === 1 ? '' : 's'}`}</strong><p>{error ? 'The secure introductions source could not be read.' : `${landed} accepted or connected · ${stalled} explicitly stalled.`}</p></div><div className="fn-rel-rail-muted"><span>Unavailable here</span><strong>Double-opt-in draft</strong><p>No AI writing or send action is enabled.</p><strong>Downstream outcome</strong><p>The ledger does not record calls, hires, or referrals.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function IntroductionRail({ rows, landed, stalled, error }) {
+  return <FounderWorkerRail
+    workspace="Network"
+    className="fn-rel-rail"
+    stance="Read-only introduction ledger"
+    note="This view does not request, offer, accept, decline, message, export, or draft introductions."
+    coverage={[error ? 'Source unavailable' : `${rows.length} tracked introduction${rows.length === 1 ? '' : 's'}`]}
+    coverageNote={error ? 'The secure introductions source could not be read.' : `${landed} accepted or connected · ${stalled} explicitly stalled.`}
+    unavailable={[['Double-opt-in draft', 'No AI writing or send action is enabled.'], ['Downstream outcome', 'The ledger does not record calls, hires, or referrals.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function IntroductionSkeleton() { return <div className="fn-rel-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

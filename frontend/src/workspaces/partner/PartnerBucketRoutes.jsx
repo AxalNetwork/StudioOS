@@ -161,7 +161,6 @@ export default function PartnerBucketRoutes() {
   return (
     <WorkspaceShell
       role="partner"
-      surface={bucket?.label?.toLowerCase()}
       scope="One firm"
       intro={INTRO[prefix]}
     >

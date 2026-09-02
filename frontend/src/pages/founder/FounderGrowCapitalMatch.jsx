@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ChevronRight, CircleDot, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowCapitalMatch.css';
 
@@ -89,6 +90,16 @@ function ProspectTable({ rows }) {
 function EmptyTable({ error }) { return <div className="a5-empty"><CircleDot size={18} /><div><b>{error ? 'Capital prospect source unavailable.' : 'No project-scoped prospects are recorded.'}</b><p>FG5 does not infer fit, warm paths, ranking, or commitments.</p></div></div>; }
 function Head({ icon: Icon, title, meta }) { return <div className="a5-head"><div><Icon size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function CapitalRail({ project, prospects, error }) { return <aside className="a5-rail"><div className="a5-rail-title"><span>Worker AI · Grow</span><Sparkles size={14} /></div><div className="fg-capital-rail-callout"><b>Read-only match board</b><p>This rail summarizes stored raise prospects. It does not score funds, draft outreach, or record commitments.</p></div><div><span>Coverage</span><strong>{!project ? 'No project selected' : error ? 'Capital source unavailable' : `${prospects.length} stored prospect${prospects.length === 1 ? '' : 's'}`}</strong><strong>{!project || error ? 'Match signals unavailable' : 'Fit and path not recorded'}</strong></div><div className="fg-capital-rail-muted"><span>Unavailable here</span><strong>Fit scoring</strong><p>No score or ranking rationale source is connected.</p><strong>Warm paths</strong><p>No network connector source is connected.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function CapitalRail({ project, prospects, error }) {
+  return <FounderWorkerRail
+    workspace="Grow"
+    className="a5-rail"
+    stance="Read-only match board"
+    note="This rail summarizes stored raise prospects. It does not score funds, draft outreach, or record commitments."
+    coverage={[!project ? 'No project selected' : error ? 'Capital source unavailable' : `${prospects.length} stored prospect${prospects.length === 1 ? '' : 's'}`, !project || error ? 'Match signals unavailable' : 'Fit and path not recorded']}
+    unavailable={[['Fit scoring', 'No score or ranking rationale source is connected.'], ['Warm paths', 'No network connector source is connected.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function CapitalSkeleton() { return <div className="a5-skeleton" data-testid="status-grow-capital-loading"><i /><i /><div><i /><i /><i /></div></div>; }
 function EmptyCapital() { return <div className="a5-empty fg-capital-empty"><CircleDot size={20} /><div><b>No startup is available.</b><p>Capital match is scoped to an authenticated startup and its stored raise prospects.</p></div></div>; }

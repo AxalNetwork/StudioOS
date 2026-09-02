@@ -445,17 +445,33 @@ test('the rail is secondary in the layout, and cannot push the page off-screen',
 test('every mounted surface is one eadwynConfig knows', () => {
   // A typo'd surface renders no rail at all (eadwynConfig returns null), which
   // is silent. This makes it loud.
+  //
+  // IT USED TO SCAN `pages/` ONLY, and every offender was in `workspaces/`.
+  // WorkspaceShell passed `validate`, `research`, `network`, `deals` and each
+  // bucket's own label straight into AssistLayout; eadwynConfig defines four
+  // surfaces and none of those is one of them. So every workspace subpage in
+  // the product rendered an empty right column, in silence, for as long as the
+  // shell has existed — reported as "some pages doesn't have it, it looks
+  // blank, probably not connected to anything". The shell takes a `rail` slot
+  // now; this walk is widened so the next such mount fails here instead.
   const surfaces = new Set(
     [...read('frontend/src/ui/eadwynConfig.js').matchAll(/^  (\w+):\s*\{$/gm)].map((m) => m[1]),
   );
   assert.ok(surfaces.size >= 4, 'ASSIST_SURFACES must have been parsed');
   const bad = [];
-  for (const f of walkJs('frontend/src/pages')) {
+  for (const f of [...walkJs('frontend/src/pages'), ...walkJs('frontend/src/workspaces')]) {
     for (const m of scan(read(f)).matchAll(/<AssistLayout\s+surface="([^"]+)"/g)) {
       if (!surfaces.has(m[1])) bad.push(`${f}: surface="${m[1]}"`);
     }
   }
   assert.deepEqual(bad, [], 'these mounts name a surface eadwynConfig does not define');
+  // And nothing passes a surface it computes at runtime, which no static check
+  // can verify and which is how the four literals above hid for so long.
+  const dynamic = [];
+  for (const f of [...walkJs('frontend/src/pages'), ...walkJs('frontend/src/workspaces')]) {
+    if (/<AssistLayout\s+surface=\{/.test(scan(read(f)))) dynamic.push(f);
+  }
+  assert.deepEqual(dynamic, [], 'a computed surface cannot be checked; name it literally');
 });
 
 test('an embedded page does not mount a second rail', () => {

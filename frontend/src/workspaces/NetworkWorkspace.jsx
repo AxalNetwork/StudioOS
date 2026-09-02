@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Skeleton } from '../ui';
+import { FounderWorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import { bucketForPath, zoneForPath } from './shellConfig';
 
@@ -91,7 +91,15 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   return (
     <WorkspaceShell
       role={role}
-      surface="network"
+      rail={(
+        <FounderWorkerRail
+          workspace="Network"
+          stance="Read-only coverage"
+          note="This view summarizes stored relationship records. It does not draft outreach, send messages, or change records."
+          coverage={[`${zone?.label || 'Relationships'} · stored records only`]}
+          unavailable={[['Outreach drafting', 'No message, sequence or introduction is written here. Every send is a human click.']]}
+        />
+      )}
       scope={role === 'investor' ? 'One fund' : 'One book'}
       intro={INTRO[slug] || INTRO.relationships}
     >

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, CircleDot, FileText, Filter, RefreshCw, Sparkles, Target } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, CircleDot, FileText, Filter, RefreshCw, Target } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderRaiseStatus.css';
 
 const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
@@ -166,7 +167,18 @@ function StatusContent({ project, round, roundInfo, target, raised, coverage, ro
 }
 
 function Stat({ label, value, note, muted }) { return <div className={`fr-status-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function WorkerRail({ project, rows, target, raised, errors }) { return <aside className="fr-status-rail"><div className="fr-status-rail-heading"><span>Worker AI · Raise</span><Sparkles size={14} /></div><div className="fr-status-rail-callout"><b>Manual war-room view</b><p>This page reads selected-project raise records. It does not score prospects, rank blockers, or write a close plan.</p></div><div className="fr-status-rail-block"><span className="fr-status-label">Record coverage</span><strong>{project ? `${rows.length} stored raise record${rows.length === 1 ? '' : 's'}` : 'No project selected'}</strong><p>{project ? (errors.round ? 'Round totals are currently unavailable.' : `${money(raised)} committed against ${money(target)} target`) : 'Select a startup to read its raise status.'}</p></div><div className="fr-status-rail-block fr-status-rail-muted"><span>Unavailable here</span><strong>Weighted pace</strong><p>No probability timeline is connected.</p><strong>AI war-room brief</strong><p>No automated summary or write action is enabled.</p></div><div className="fr-status-rail-foot">Read-only analytics · source rows only</div></aside>; }
+function WorkerRail({ project, rows, target, raised, errors }) {
+  return <FounderWorkerRail
+    workspace="Raise"
+    className="fr-status-rail"
+    stance="Manual war-room view"
+    note="This page reads selected-project raise records. It does not score prospects, rank blockers, or write a close plan."
+    coverage={[project ? `${rows.length} stored raise record${rows.length === 1 ? '' : 's'}` : 'No project selected']}
+    coverageNote={project ? (errors.round ? 'Round totals are currently unavailable.' : `${money(raised)} committed against ${money(target)} target`) : 'Select a startup to read its raise status.'}
+    unavailable={[['Weighted pace', 'No probability timeline is connected.'], ['AI war-room brief', 'No automated summary or write action is enabled.']]}
+    footer="Read-only analytics · source rows only"
+  />;
+}
 function UnavailableStatus({ onRetry }) { return <div className="fr-status-empty" data-testid="unavailable-raise-status"><AlertCircle size={24} /><h2>Project source unavailable</h2><p>The selected startup cannot be read right now. No empty-state or raise totals are inferred from this failed request.</p><button type="button" onClick={onRetry}><RefreshCw size={13} /> Retry</button></div>; }
 function EmptyStatus() { return <div className="fr-status-empty" data-testid="empty-raise-status"><Target size={24} /><h2>No startup is available</h2><p>This founder raise status is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/raise/pitch">Back to raise</Link></div>; }
 function StatusSkeleton() { return <div className="fr-status-loading" data-testid="status-raise-status-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

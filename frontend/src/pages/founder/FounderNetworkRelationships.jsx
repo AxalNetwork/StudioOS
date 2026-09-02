@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, Sparkles, UsersRound } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
 
 const list = (value, ...keys) => {
@@ -90,6 +91,17 @@ function RelationshipTable({ rows }) {
   return <div className="fn-rel-table-wrap"><table><thead><tr><th>Person</th><th>Context</th><th>Type</th><th>State</th><th>Last touch</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || row.uid || index} data-testid={`row-network-relationship-${row.id || index}`}><td><strong>{text(row.name, text(row.email, 'Name not recorded'))}</strong><small>{row.name && row.email ? row.email : 'Authorized contact'}</small></td><td>{text(row.landing_page_name, text(row.source, 'Context not recorded'))}</td><td>{title(row.audience, 'Type not recorded')}</td><td><span className={isCold(row) ? 'is-cold' : ''}>{isCold(row) ? 'Going cold' : 'Not scored'}</span></td><td>{lastTouch(row.last_activity_at)}</td></tr>)}</tbody></table></div>;
 }
 function Stat({ label, value, note, muted }) { return <div className={muted ? 'is-muted' : ''}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function RelationshipRail({ project, contacts, cold, errors }) { return <aside className="fn-rel-rail"><div className="fn-rel-rail-head"><span>Worker AI · Network</span><Sparkles size={14} /></div><div className="fn-rel-callout"><b>Read-only relationship coverage</b><p>This view does not draft outreach, set reminders, add people, export contacts, or change records.</p></div><div><span>Selected startup</span><strong>{project ? text(project.name) : 'No project selected'}</strong><p>{errors.includes('relationship contacts') ? 'Contact source unavailable.' : `${contacts.length} project-linked contact${contacts.length === 1 ? '' : 's'} · ${cold.length} going cold.`}</p></div><div className="fn-rel-rail-muted"><span>Unavailable here</span><strong>Re-engagement lines</strong><p>No message or discussion history is connected.</p><strong>Strength and reminders</strong><p>No project-scoped relationship-book source exposes them.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function RelationshipRail({ project, contacts, cold, errors }) {
+  return <FounderWorkerRail
+    workspace="Network"
+    className="fn-rel-rail"
+    stance="Read-only relationship coverage"
+    note="This view does not draft outreach, set reminders, add people, export contacts, or change records."
+    coverage={[project ? text(project.name) : 'No project selected']}
+    coverageNote={errors.includes('relationship contacts') ? 'Contact source unavailable.' : `${contacts.length} project-linked contact${contacts.length === 1 ? '' : 's'} · ${cold.length} going cold.`}
+    unavailable={[['Re-engagement lines', 'No message or discussion history is connected.'], ['Strength and reminders', 'No project-scoped relationship-book source exposes them.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function RelationshipSkeleton() { return <div className="fn-rel-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }
 function NoProject({ error }) { return <div className="fn-rel-no-project"><UsersRound size={22} /><h2>{error ? 'Startup source unavailable' : 'No startup is available'}</h2><p>Relationships are scoped to an authenticated startup and its stored contacts.</p><Link to="/network">Back to Network</Link></div>; }

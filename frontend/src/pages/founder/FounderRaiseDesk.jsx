@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Folder, Landmark, PanelRight, Scale, Sparkles, Target } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Folder, Landmark, Scale, Sparkles, Target } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderRaiseDesk.css';
+
+// Six labels, six routes. This was a six-deep ternary chain ending in an
+// `<a href="#raise-…">` fallback no label could reach — every branch already
+// resolved to a Link, so the anchor was dead code the shape still advertised.
+const SECTIONS = [
+  ['Status', 'status'], ['Pitch', 'pitch'], ['Capital', 'capital'],
+  ['Legal', 'legal'], ['Data room', 'data-room'], ['Liquidity', 'liquidity'],
+];
 
 const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const clean = (value) => String(value || '').trim();
@@ -83,7 +92,6 @@ export default function FounderRaiseDesk() {
   }, [records]);
   const query = projectId ? `?project_id=${projectId}` : '';
   const state = { founderRaiseSeed: { projects, projectId, records } };
-  const statusLink = `/raise/status${query}`;
 
   return <main className="raise-desk" data-testid="founder-raise-desk">
     <section className="raise-canvas">
@@ -93,24 +101,22 @@ export default function FounderRaiseDesk() {
           <div className="raise-heading"><div><h1>Get capital, stay legal</h1><p>Pitch, capital planning, legal readiness, data room, and liquidity in one fundraising workspace.</p></div>
             {projects.length > 1 && <select data-testid="select-raise-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
           </div>
-          <nav className="raise-anchors" aria-label="Raise desk sections">{['Status', 'Pitch', 'Capital', 'Legal', 'Data room', 'Liquidity'].map((label) => label === 'Status'
-            ? <Link data-testid="link-raise-anchor-status" to={statusLink} key={label}>{label}</Link>
-            : label === 'Pitch'
-              ? <Link data-testid="link-raise-anchor-pitch" to={`/raise/pitch${query}`} key={label}>{label}</Link>
-            : label === 'Capital'
-              ? <Link data-testid="link-raise-anchor-capital" to={`/raise/capital${query}`} key={label}>{label}</Link>
-            : label === 'Legal'
-              ? <Link data-testid="link-raise-anchor-legal" to={`/raise/legal${query}`} key={label}>{label}</Link>
-            : label === 'Data room'
-              ? <Link data-testid="link-raise-anchor-data-room" to={`/raise/data-room${query}`} key={label}>{label}</Link>
-            : label === 'Liquidity'
-              ? <Link data-testid="link-raise-anchor-liquidity" to={`/raise/liquidity${query}`} key={label}>{label}</Link>
-            : <a data-testid={`link-raise-anchor-${label.toLowerCase().replace(' ', '-')}`} href={`#raise-${label.toLowerCase().replace(' ', '-')}`} key={label}>{label}</a>)}</nav>
+          <nav className="raise-anchors" aria-label="Raise desk sections">{SECTIONS.map(([label, slug]) => <Link data-testid={`link-raise-anchor-${slug}`} to={`/raise/${slug}${query}`} key={label}>{label}</Link>)}</nav>
         </header>
         {(projectError || Object.keys(errors).length > 0) && <div className="raise-error" data-testid="status-raise-partial"><AlertCircle size={16} /><span>{projectError || 'Some selected-project records are unavailable.'}</span><button data-testid="button-retry-raise" type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></div>}
         <RaiseSections loading={loading} project={project} data={data} errors={errors} query={query} state={state} />
       </div>
-      <RaiseRail data={data} query={query} state={state} />
+      <FounderWorkerRail
+        workspace="Raise"
+        className="raise-rail"
+        stance="Manual raise view"
+        note="This surface reads selected-project records only. It does not generate, score, or change fundraising materials."
+        coverage={[
+          `${data.prospects.length} prospect${data.prospects.length === 1 ? '' : 's'} · ${data.docs.length} legal doc${data.docs.length === 1 ? '' : 's'}`,
+          `${data.versions.length} deck version${data.versions.length === 1 ? '' : 's'} · ${asList(data.room, 'files').length} data-room file${asList(data.room, 'files').length === 1 ? '' : 's'}`,
+        ]}
+        action={<Link data-testid="link-rail-open-raise-workspace" to={`/raise/pitch?mode=workspace${query ? `&${query.slice(1)}` : ''}`} state={state}>Open pitch workspace <ArrowUpRight size={13} /></Link>}
+      />
     </section>
   </main>;
 }
@@ -141,4 +147,3 @@ function Skeleton({ rows }) { return <div className="raise-skeleton">{Array.from
 function Unavailable() { return <div className="raise-unavailable">This selected-project record is unavailable. Retry when the source is reachable.</div>; }
 function Empty({ icon: Icon, title, body }) { return <div className="raise-empty"><Icon size={19} /><div><strong>{title}</strong><p>{body}</p></div></div>; }
 function DeskLink({ to, state, testid, children }) { return <Link data-testid={testid} className="raise-link" to={to} state={state}>{children}<ChevronRight size={14} /></Link>; }
-function RaiseRail({ data, query, state }) { return <aside className="raise-rail"><div className="rail-title"><span>Worker AI · Raise</span><PanelRight size={14} /></div><div className="rail-block"><b>Manual raise view</b><p>This surface reads selected-project records only. It does not generate, score, or change fundraising materials.</p></div><div className="rail-block rail-status"><span>Record coverage</span><strong>{data.prospects.length} prospects · {data.docs.length} legal docs</strong><p>{data.versions.length} deck versions · {asList(data.room, 'files').length} data-room files</p></div><div className="rail-block"><span>Next useful action</span><p>Use the detailed workspace to manage the selected startup’s source records.</p><Link data-testid="link-rail-open-raise-workspace" to={`/raise/pitch?mode=workspace${query ? `&${query.slice(1)}` : ''}`} state={state}>Open pitch workspace <ArrowUpRight size={13} /></Link></div><div className="rail-safety">Read-only summary · no automated actions</div></aside>; }

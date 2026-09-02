@@ -29,8 +29,13 @@ test('A5 reads only documented sources and does not post investor matches', () =
 
 test('A5 has all detailed handoffs and a read-only rail', () => {
   for (const path of ['/build/metrics', '/build/discovery', '/build/team?mode=workspace', '/spinout-lab/brand', '/raise/capital/pipeline', '/comarketing']) assert.ok(page.includes(path));
-  assert.match(page, /Read-only source coverage/);
-  assert.match(page, /no automated actions/);
+  // "Read-only source coverage" is A5's own stance line and stays here. The
+  // boundary statement ("no automated actions") is the shared rail's default
+  // footer now, so it is asserted against the component rather than pasted
+  // into every desk — see founder_shell.test.mjs.
+  assert.match(page, /<FounderWorkerRail\b[\s\S]*?workspace="Grow"/,
+    'A5 must mount the shared Worker AI rail');
+  assert.match(page, /stance="Read-only source coverage"/);
 });
 
 test('A5 never turns canvas fixtures into product data or claims', () => {

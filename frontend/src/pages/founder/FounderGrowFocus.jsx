@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, CheckCircle2, ChevronRight, RefreshCw, Sparkles, Target } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowFocus.css';
 
@@ -104,6 +105,16 @@ function SnapshotTable({ rows, latest }) {
 function Unavailable({ view }) { return <div className="a5-empty fg-focus-unavailable"><Sparkles size={18} /><div><b>{view === 'experiments' ? 'No experiment log source is connected.' : 'No target source is connected.'}</b><p>FG1 does not convert metric snapshots into experiments, wins, targets, or effect sizes.</p></div></div>; }
 function Head({ icon: Icon, title, meta }) { return <div className="a5-head"><div><Icon size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-focus-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function FocusRail({ project, snapshots, latest }) { return <aside className="a5-rail"><div className="a5-rail-title"><span>Worker AI · Grow</span><Sparkles size={14} /></div><div className="fg-focus-rail-callout"><b>Read-only analytics</b><p>This rail summarizes stored metrics for the selected startup. It does not create experiments, targets, or claims.</p></div><div><span>Coverage</span><strong>{project ? `${snapshots.length} metric snapshot${snapshots.length === 1 ? '' : 's'}` : 'No project selected'}</strong><strong>{latest ? `Latest ${formatDate(latest.snapshot_date)}` : 'Current metric not recorded'}</strong></div><div className="fg-focus-rail-muted"><span>Unavailable here</span><strong>Experiment outcomes</strong><p>No experiment log is connected.</p><strong>Target tracking</strong><p>No target or metric-goal source is connected.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function FocusRail({ project, snapshots, latest }) {
+  return <FounderWorkerRail
+    workspace="Grow"
+    className="a5-rail"
+    stance="Read-only analytics"
+    note="This rail summarizes stored metrics for the selected startup. It does not create experiments, targets, or claims."
+    coverage={[project ? `${snapshots.length} metric snapshot${snapshots.length === 1 ? '' : 's'}` : 'No project selected', latest ? `Latest ${formatDate(latest.snapshot_date)}` : 'Current metric not recorded']}
+    unavailable={[['Experiment outcomes', 'No experiment log is connected.'], ['Target tracking', 'No target or metric-goal source is connected.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function FocusSkeleton() { return <div className="a5-skeleton" data-testid="status-grow-focus-loading"><i /><i /><div><i /><i /><i /></div></div>; }
 function EmptyFocus() { return <div className="a5-empty fg-focus-empty"><Target size={20} /><div><b>No startup is available.</b><p>Focus is scoped to an authenticated startup and its stored metrics.</p></div></div>; }

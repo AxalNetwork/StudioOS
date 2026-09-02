@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, BarChart3, Clock3, FileText, Filter, LockKeyhole, RefreshCw, ShieldCheck, Sparkles, Waves } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseLiquidity.css';
 
@@ -89,5 +90,16 @@ function Waterfall({ waterfall, rounds, finalLedger, error }) {
 function UnavailablePanel({ view, error }) { const label = view === 'restrictions' ? 'transfer restriction source' : view === 'tender' ? 'tender-event source' : 'liquidity-history source'; return <div className="fr-capital-inline-empty"><Clock3 size={18} /><div><strong>{error ? `${label} unavailable.` : `No ${label} is connected.`}</strong><p>FR6 does not infer seed-stage events, ROFR windows, or historical activity from another workspace.</p></div></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fr-capital-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function Coverage({ label, value }) { return <div className="fr-capital-coverage-row"><span>{label}</span><strong>{value}</strong></div>; }
-function WorkerRail({ project, result, error }) { return <aside className="fr-capital-rail"><div className="fr-capital-rail-heading"><span>Worker AI · Raise</span><Sparkles size={14} /></div><div className="fr-capital-rail-callout"><b>Inherited from Raise</b><p>This page reads the selected project and its stored capital result. It does not model an exit or propose legal terms.</p></div><div className="fr-capital-rail-block"><span className="fr-capital-label">Record coverage</span><strong>{project ? (result ? 'Capital ledger connected' : 'Capital ledger unavailable') : 'No project selected'}</strong><p>{error ? 'Some project-scoped sources could not be read.' : result ? 'Preference exposure and any stored waterfall are visible.' : 'No payout values are inferred.'}</p></div><div className="fr-capital-rail-block fr-capital-rail-muted"><span>Unavailable here</span><strong>Restriction summary</strong><p>No Bylaws or SAFE clause source is connected.</p><strong>Exit model</strong><p>No scenario input or AI proposal is accepted from this read-only collection.</p></div><div className="fr-capital-rail-foot">Read-only ledger · source records only</div></aside>; }
+function WorkerRail({ project, result, error }) {
+  return <FounderWorkerRail
+    workspace="Raise"
+    className="fr-capital-rail"
+    stance="Inherited from Raise"
+    note="This page reads the selected project and its stored capital result. It does not model an exit or propose legal terms."
+    coverage={[project ? (result ? 'Capital ledger connected' : 'Capital ledger unavailable') : 'No project selected']}
+    coverageNote={error ? 'Some project-scoped sources could not be read.' : result ? 'Preference exposure and any stored waterfall are visible.' : 'No payout values are inferred.'}
+    unavailable={[['Restriction summary', 'No Bylaws or SAFE clause source is connected.'], ['Exit model', 'No scenario input or AI proposal is accepted from this read-only collection.']]}
+    footer="Read-only ledger · source records only"
+  />;
+}
 function EmptyState() { return <div className="fr-capital-empty"><Waves size={24} /><h2>No startup is available</h2><p>This liquidity collection is scoped to authenticated startup records.</p><Link to="/raise/status">Back to raise</Link></div>; }

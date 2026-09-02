@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, Sparkles, UsersRound } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
 import './founderNetworkOrganizations.css';
 
@@ -98,6 +99,17 @@ function OrganizationTable({ groups, filter }) {
   return <div className="fn-rel-table-wrap"><table><thead><tr><th>Organization</th><th>People</th><th>Freshest contact</th><th>Recorded types</th></tr></thead><tbody>{groups.map((group) => <tr key={group.name} data-testid={`row-network-organization-${group.name}`}><td><strong>{group.name}</strong><small>{group.people.length} relationship book record{group.people.length === 1 ? '' : 's'}</small></td><td>{group.people.length}</td><td>{freshest(group.people)}</td><td>{group.types.length ? group.types.map((type) => text(type).replace(/[_-]/g, ' ')).join(' + ') : 'Not recorded'}</td></tr>)}</tbody></table></div>;
 }
 function Stat({ label, value, note, muted }) { return <div className={muted ? 'is-muted' : ''}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
-function OrganizationRail({ project, contacts, groups, dormant, errors }) { return <aside className="fn-rel-rail"><div className="fn-rel-rail-head"><span>Worker AI · Network</span><Sparkles size={14} /></div><div className="fn-rel-callout"><b>Read-only organization lens</b><p>This view does not add organizations, merge duplicates, save profiles, export contacts, or write history.</p></div><div><span>Record coverage</span><strong>{project ? `${groups.length} explicit organization${groups.length === 1 ? '' : 's'}` : 'No project selected'}</strong><p>{errors.includes('relationship contacts') ? 'Contact source unavailable.' : `${contacts.length} people · ${dormant.length} dormant group${dormant.length === 1 ? '' : 's'}.`}</p></div><div className="fn-rel-rail-muted"><span>Unavailable here</span><strong>Organization profiles</strong><p>No explicit profile or history source is connected.</p><strong>Duplicate merging</strong><p>Names are not normalized or merged automatically.</p></div><footer>Read-only summary · no automated actions</footer></aside>; }
+function OrganizationRail({ project, contacts, groups, dormant, errors }) {
+  return <FounderWorkerRail
+    workspace="Network"
+    className="fn-rel-rail"
+    stance="Read-only organization lens"
+    note="This view does not add organizations, merge duplicates, save profiles, export contacts, or write history."
+    coverage={[project ? `${groups.length} explicit organization${groups.length === 1 ? '' : 's'}` : 'No project selected']}
+    coverageNote={errors.includes('relationship contacts') ? 'Contact source unavailable.' : `${contacts.length} people · ${dormant.length} dormant group${dormant.length === 1 ? '' : 's'}.`}
+    unavailable={[['Organization profiles', 'No explicit profile or history source is connected.'], ['Duplicate merging', 'Names are not normalized or merged automatically.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function OrganizationSkeleton() { return <div className="fn-rel-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }
 function NoProject({ error }) { return <div className="fn-rel-no-project"><UsersRound size={22} /><h2>{error ? 'Startup source unavailable' : 'No startup is available'}</h2><p>Organizations are scoped to an authenticated startup and its stored relationship book.</p><Link to="/network">Back to Network</Link></div>; }

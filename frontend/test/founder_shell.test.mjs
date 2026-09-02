@@ -23,7 +23,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { routeBlock } from './_routes.mjs';
 import { codeOnly } from './_codeOnly.mjs';
@@ -323,4 +323,133 @@ test('Company Settings is the pinned footer only, never a nav row', () => {
   const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
   assert.ok(/to="\/company-settings"/.test(nav), 'the pinned footer lost its link');
   assert.ok(!/to="\/settings"/.test(nav), 'the footer must not point at the personal Account page');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The six workspaces: the root owns the overview, the pills navigate, and the
+ * rail is the same one everywhere.
+ *
+ * These four tests exist because of the specific way this broke. Every
+ * overview was BUILT and contract-tested, and then displaced: a rebuild took a
+ * desk's slot, the desk was re-mounted on whatever path was free, and the
+ * sidebar row was never pointed back. Nothing failed, because nothing asserted
+ * that a row's target and its workspace's overview were the same page.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+// label → [root, the component the root must render for a founder]
+const WORKSPACES = {
+  Validate: ['/validate', 'FounderValidatePage'],
+  Build: ['/build', 'FounderBuildDesk'],
+  Raise: ['/raise', 'FounderRaiseDesk'],
+  Grow: ['/grow', 'FounderGrowDesk'],
+  Network: ['/network', 'FounderNetworkDesk'],
+  Research: ['/research', 'FounderResearchDesk'],
+};
+
+test('every founder row lands on its own workspace overview', () => {
+  for (const [label, [root, desk]] of Object.entries(WORKSPACES)) {
+    const row = rows.find((r) => r.label === label);
+    assert.ok(row, `the ${label} row is gone from the founder sidebar`);
+    assert.equal(row.to, root,
+      `the ${label} row points at ${row.to}, one level below its overview — `
+      + `that is exactly how the overviews were lost the first time`);
+    const block = routeBlock(app, root);
+    assert.ok(block, `${root} has no route`);
+    assert.ok(block.includes(`<${desk} />`),
+      `${root} must render ${desk} for a founder, not redirect past it`);
+  }
+});
+
+test('a founder desk pill navigates — it is not an anchor onto the page', () => {
+  // The user's words: "The buttons are the ones that should show the pages."
+  // Three desks shipped their pill row as `href="#validate-0"`, `#a7-ask`,
+  // `#build-1` — in-page anchors, two of which named sections that did not
+  // exist on the page at all. A pill that scrolls is not navigation, and the
+  // section pages it names were then reachable only from the sidebar.
+  const DESKS = [
+    'FounderValidatePage', 'FounderBuildDesk', 'FounderRaiseDesk',
+    'FounderGrowDesk', 'FounderNetworkDesk', 'FounderResearchDesk',
+  ];
+  const routes = new Set(
+    [...app.matchAll(/path="([^":]+)"/g)].map((m) => m[1]).filter((p) => p.startsWith('/')),
+  );
+  for (const name of DESKS) {
+    const src = codeOnly(read(`frontend/src/pages/founder/${name}.jsx`));
+    const nav = /<nav[^>]*>[\s\S]*?<\/nav>/.exec(src);
+    assert.ok(nav, `${name} has no section row`);
+    assert.doesNotMatch(nav[0], /href=\{?[`'"]#/,
+      `${name} still has an in-page anchor in its section row`);
+    // Every `to=` in that row must be a route the router actually opens. The
+    // literal targets are checked; template-built ones carry their base path.
+    for (const m of nav[0].matchAll(/to=\{?[`'"]([^`'"?$]+)/g)) {
+      const target = m[1].replace(/\/$/, '');
+      assert.ok(routes.has(target),
+        `${name}'s section row links ${target}, which has no route`);
+    }
+  }
+});
+
+test('the Worker AI rail is one component, and every founder workspace has it', () => {
+  // It used to be twenty-seven: a local WorkerRail / BuildRail / RaiseRail /
+  // ValidateRail / CadenceRail declared at the bottom of each page file under
+  // seventeen distinct names, agreeing on their shape by coincidence. The
+  // pages that never grew one had no rail, and the workspace shells mounted
+  // AssistLayout with a surface eadwynConfig does not define, which renders
+  // nothing at all — "it looks blank, probably not connected to anything".
+  for (const [label, [, desk]] of Object.entries(WORKSPACES)) {
+    const src = codeOnly(read(`frontend/src/pages/founder/${desk}.jsx`));
+    assert.match(src, new RegExp(`<FounderWorkerRail[\\s\\S]*?workspace="${label}"`),
+      `${desk} must mount the shared rail`);
+  }
+  // And nothing declares its own again.
+  const own = [];
+  for (const f of readdirSync(resolve(process.cwd(), 'frontend/src/pages/founder'))) {
+    if (!f.endsWith('.jsx')) continue;
+    const src = codeOnly(read(`frontend/src/pages/founder/${f}`));
+    if (/<aside[^>]*className="[^"]*rail/.test(src)) own.push(f);
+  }
+  assert.deepEqual(own, [], 'these pages hand-build a rail again instead of using the shared one');
+
+  // What the shared rail says. The canvas (A1) specifies mode, model, meter and
+  // safety; there is deliberately no model block, because ASSIST_SURFACES keys
+  // a surface to an aiRouter task class and no founder workspace runs one — a
+  // model named here would be a model on a page that never calls one.
+  const rail = codeOnly(read('frontend/src/ui/FounderWorkerRail.jsx'));
+  for (const block of ['>Mode<', '>Coverage<', '>Usage this month<']) {
+    assert.ok(rail.includes(block), `the rail lost its ${block} block`);
+  }
+  assert.match(rail, /EADWYN_GUARDRAIL/,
+    'the safety block must import the product-wide guardrail, not restate it');
+  assert.match(rail, /useAiSpend/, 'the usage meter must read the live spend endpoint');
+  assert.doesNotMatch(rail, /ASSIST_SURFACES|priceForTask/,
+    'no founder workspace runs an aiRouter task, so the rail must not quote a model or a price');
+});
+
+test('the founder full-bleed list covers every desk and section page', () => {
+  // `fullWidthSurface` and `flushSurface` were two hand-typed arrays of the
+  // same sixteen paths, matched exactly. `/grow/focus` was the one `/grow/*`
+  // route missing from both, and that was the whole of "Grow doesn't fit full
+  // width and height". One list, and this test, so the omission cannot recur.
+  // Comment-stripped: a prose apostrophe inside the array's own comments pairs
+  // with the next quote and shreds the parse.
+  const sidebar = codeOnly(read('frontend/src/sidebarConfig.js'));
+  const listed = new Set(
+    [...(/export const FOUNDER_FULL_BLEED = \[([\s\S]*?)\];/.exec(sidebar)?.[1] || '')
+      .matchAll(/'([^']+)'/g)].map((m) => m[1]),
+  );
+  assert.ok(listed.size >= 20, 'FOUNDER_FULL_BLEED could not be parsed');
+  const required = [
+    ...Object.values(WORKSPACES).map(([root]) => root),
+    '/build/discovery', '/execution', '/build/team', '/signals',
+    '/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi',
+    '/raise/pitch',
+    '/grow/focus', '/grow/talent', '/grow/customers', '/grow/partnerships',
+    '/grow/capital-match', '/grow/brand', '/grow/launch',
+    '/network/relationships', '/network/introductions', '/network/organizations',
+  ];
+  assert.deepEqual(required.filter((p) => !listed.has(p)), [],
+    'these founder surfaces draw their own full-bleed canvas but sit in the shell’s centred column');
+  // And both flags read the one list rather than re-typing it.
+  assert.equal((app.match(/FOUNDER_FULL_BLEED\.includes\(location\.pathname\)/g) || []).length, 2,
+    'fullWidthSurface and flushSurface must both read the single list');
 });

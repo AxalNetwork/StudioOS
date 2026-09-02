@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, Database, Download, FileText, Filter, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Database, Download, FileText, Filter, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderBuildKpi.css';
 
 const FIELDS = [
@@ -158,6 +159,17 @@ function Stat({ label, value, note, muted }) { return <div className={`fb-kpi-st
 function KpiRow({ row }) { return <tr data-testid={`row-kpi-${row.key}`}><td><strong>{row.label}</strong><small>{row.key === 'runway_months' ? 'Server-derived summary' : 'Stored snapshot field'}</small></td><td className={row.value === null || row.value === undefined ? 'is-empty' : ''}>{formatValue(row.value, row.unit)}</td><td className="is-empty">Not recorded</td><td className="is-empty">—</td><td><span className={`fb-kpi-source ${row.source === 'stripe' ? 'source-stripe' : row.source === 'Derived' ? 'source-derived' : ''}`}>{row.source ? row.source : 'Not recorded'}</span></td></tr>; }
 function HistoryCard({ snapshots, total }) { return <section className="fb-kpi-card"><div className="fb-kpi-card-head"><div><Database size={16} /><h2>Snapshot history</h2></div><span>{total} total</span></div>{snapshots.length ? <div className="fb-kpi-history">{snapshots.slice(0, 6).map((snapshot) => <div className="fb-kpi-history-row" key={snapshot.id}><span>{formatDate(snapshot.snapshot_date)}</span><strong>{snapshot.source || 'Not recorded'}</strong><span>{FIELDS.filter((field) => snapshot[field.key] !== null && snapshot[field.key] !== undefined && snapshot[field.key] !== '').length} fields populated</span></div>)}</div> : <p className="fb-kpi-muted-copy">No snapshots match this filter.</p>}<p className="fb-kpi-note">History is read-only here. Use the editor for manual entry or imports.</p></section>; }
 function CoverageCard({ latest, summary }) { return <section className="fb-kpi-card"><div className="fb-kpi-card-head"><div><CheckCircle2 size={16} /><h2>Ledger coverage</h2></div><span>Truthful fields only</span></div><div className="fb-kpi-coverage-row"><span>Latest recorded snapshot</span><strong>{latest ? formatDate(latest.snapshot_date) : 'Unavailable'}</strong></div><div className="fb-kpi-coverage-row"><span>Server-derived runway</span><strong>{formatValue(summary?.runway_months, 'mo')}</strong></div><p className="fb-kpi-note">Runway appears only when the server can derive it from its available records. No cash, burn, or target value is filled in from assumptions.</p></section>; }
-function WorkerRail({ project, snapshotCount }) { return <aside className="fb-kpi-rail"><div className="fb-kpi-rail-heading"><span>Worker AI · Build</span><Sparkles size={14} /></div><div className="fb-kpi-rail-callout"><b>Manual ledger view</b><p>This page reads stored metric snapshots. It does not write entries, sync Stripe, or explain a variance automatically.</p></div><div className="fb-kpi-rail-block"><span className="fb-kpi-label">Record coverage</span><strong>{project ? `${snapshotCount} stored snapshot${snapshotCount === 1 ? '' : 's'}` : 'No project selected'}</strong><p>{project ? 'Metric values are available for review.' : 'Select a startup to read its ledger.'}</p></div><div className="fb-kpi-rail-block fb-kpi-rail-muted"><span>Unavailable here</span><strong>Target comparison</strong><p>No target source is connected.</p><strong>AI annotations</strong><p>No automated explanations or writes are enabled on this read-only surface.</p></div><div className="fb-kpi-rail-foot">Read-only ledger · edit through KPI editor</div></aside>; }
+function WorkerRail({ project, snapshotCount }) {
+  return <FounderWorkerRail
+    workspace="Build"
+    className="fb-kpi-rail"
+    stance="Manual ledger view"
+    note="This page reads stored metric snapshots. It does not write entries, sync Stripe, or explain a variance automatically."
+    coverage={[project ? `${snapshotCount} stored snapshot${snapshotCount === 1 ? '' : 's'}` : 'No project selected']}
+    coverageNote={project ? 'Metric values are available for review.' : 'Select a startup to read its ledger.'}
+    unavailable={[['Target comparison', 'No target source is connected.'], ['AI annotations', 'No automated explanations or writes are enabled on this read-only surface.']]}
+    footer="Read-only ledger · edit through KPI editor"
+  />;
+}
 function EmptyKpi() { return <div className="fb-kpi-empty" data-testid="empty-kpi"><Database size={24} /><h2>No startup is available</h2><p>This founder KPI ledger is scoped to authenticated startup records. There is no project to inspect yet.</p><Link to="/execution">Back to execution</Link></div>; }
 function KpiSkeleton() { return <div className="fb-kpi-loading" data-testid="status-kpi-loading"><i /><i /><div><i /><i /><i /><i /></div></div>; }

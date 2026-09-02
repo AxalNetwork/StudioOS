@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Card, Skeleton } from '../ui';
+import { Card, FounderWorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import { bucketForPath, zoneForPath } from './shellConfig';
 
@@ -60,6 +60,10 @@ function NoStoreYet({ heading, what, why, link, accentClass = 'text-axal-violet'
     </Card>
   );
 }
+
+// The two zones with a live source behind them. Everything else in ZONE_COPY
+// renders NoStoreYet, and the rail says so rather than implying a source.
+const LIVE_ZONES = new Set(['markets', 'companies']);
 
 const ASK = {
   heading: 'Ask has no library to read',
@@ -148,7 +152,17 @@ export default function ResearchWorkspace({ role = 'founder' }) {
   return (
     <WorkspaceShell
       role={role}
-      surface="research"
+      rail={(
+        <FounderWorkerRail
+          workspace="Research"
+          stance="Read-only source coverage"
+          note="This rail reports which zones have a store behind them. It does not run research, answer questions, or take actions."
+          coverage={[LIVE_ZONES.has(slug)
+            ? `${zone?.label || 'This zone'} reads a live source`
+            : `${zone?.label || 'This zone'} has no store behind it yet`]}
+          unavailable={[['Cited answers', 'No document cache, index or retrieval step exists in the product, so nothing here can cite.']]}
+        />
+      )}
       intro={INTRO[slug] || INTRO.ask}
     >
       {body}

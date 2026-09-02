@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, ClipboardCheck, Filter, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, ClipboardCheck, Filter, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { FounderWorkerRail } from '../../ui';
 import './founderBuildThisWeek.css';
 
 const text = (value, fallback = 'Not recorded') => {
@@ -130,6 +131,17 @@ function Stat({ label, value, note, muted }) { return <div className={`fb-week-s
 function CommitmentRow({ item }) { const [label, tone] = commitmentState(item); return <tr data-testid={`row-week-commitment-${item.id}`}><td><strong>{text(item.text)}</strong></td><td>{text(item.objective)}</td><td>{formatProgress(item)}</td><td><span className={`fb-week-status status-${tone}`}>{label}</span></td><td><span className="fb-week-source">Roadmap · Now</span></td></tr>; }
 function HistoryUnavailable() { return <section className="fb-week-card fb-week-unavailable-card"><div className="fb-week-card-head"><div><CircleDot size={16} /><h2>Commitment history</h2></div><span>Not recorded</span></div><strong>Weekly history is unavailable</strong><p>Carry-overs, skipped commitments, streaks, and retro notes require a cadence history source that is not connected to this desk.</p></section>; }
 function SourceSummary({ objectiveCount, commitmentCount }) { return <section className="fb-week-card"><div className="fb-week-card-head"><div><CheckCircle2 size={16} /><h2>Source coverage</h2></div><span>Read-only</span></div><div className="fb-week-source-row"><span>Now objectives</span><strong>{objectiveCount}</strong></div><div className="fb-week-source-row"><span>Key results</span><strong>{commitmentCount}</strong></div><p className="fb-week-note">Progress is shown only when it is stored on the key result. No completion rate is inferred from missing values.</p></section>; }
-function WorkerRail({ project, commitmentCount }) { return <aside className="fb-week-rail"><div className="fb-week-rail-heading"><span>Worker AI · Build</span><Sparkles size={14} /></div><div className="fb-week-rail-callout"><b>Manual operating view</b><p>This rail reads stored roadmap records. It does not generate plans, alter commitments, or write to the roadmap.</p></div><div className="fb-week-rail-block"><span className="fb-week-label">Record coverage</span><strong>{project ? `${commitmentCount} stored current commitment${commitmentCount === 1 ? '' : 's'}` : 'No project selected'}</strong><p>{project ? 'Current Now key results are available for review.' : 'Select a startup to read its roadmap.'}</p></div><div className="fb-week-rail-block fb-week-rail-muted"><span>Unavailable here</span><strong>Weekly history</strong><p>No cadence archive is returned by the available founder read API.</p><strong>AI Monday plan</strong><p>Worker AI assistance is not enabled for this manual surface.</p></div><div className="fb-week-rail-foot">Read-only summary · no automated actions</div></aside>; }
+function WorkerRail({ project, commitmentCount }) {
+  return <FounderWorkerRail
+    workspace="Build"
+    className="fb-week-rail"
+    stance="Manual operating view"
+    note="This rail reads stored roadmap records. It does not generate plans, alter commitments, or write to the roadmap."
+    coverage={[project ? `${commitmentCount} stored current commitment${commitmentCount === 1 ? '' : 's'}` : 'No project selected']}
+    coverageNote={project ? 'Current Now key results are available for review.' : 'Select a startup to read its roadmap.'}
+    unavailable={[['Weekly history', 'No cadence archive is returned by the available founder read API.'], ['AI Monday plan', 'Worker AI assistance is not enabled for this manual surface.']]}
+    footer="Read-only summary · no automated actions"
+  />;
+}
 function EmptyWeek() { return <div className="fb-week-empty" data-testid="empty-week"><ClipboardCheck size={24} /><h2>No startup is available</h2><p>This founder desk can only display authenticated roadmap records. There is no project to inspect yet.</p><Link to="/execution">Back to execution</Link></div>; }
 function WeekSkeleton() { return <div className="fb-week-loading" data-testid="status-week-loading"><i /><i /><div><i /><i /><i /></div></div>; }

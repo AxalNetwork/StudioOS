@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { Card, EmptyState, ErrorState, Skeleton } from '../../ui';
+import { Card, EmptyState, ErrorState, FounderWorkerRail, Skeleton } from '../../ui';
 import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 
@@ -318,7 +318,15 @@ export default function FounderValidateWorkspace() {
   return (
     <WorkspaceShell
       role="founder"
-      surface="validate"
+      rail={(
+        <FounderWorkerRail
+          workspace="Validate"
+          stance="Evidence-led view"
+          note="This workspace does not generate, transcribe, or change records. It keeps the evidence surface readable."
+          coverage={[projectId ? `Venture #${projectId} selected` : 'No venture selected']}
+          unavailable={[['Automated grouping', 'Pain themes are founder-curated. Nothing here groups, scores or summarises an interview for you.']]}
+        />
+      )}
       scope="One venture"
       intro={INTRO[zone?.slug] || INTRO.interviews}
     >
