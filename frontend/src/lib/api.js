@@ -1681,6 +1681,7 @@ export const api = {
   onboardingGetProgress: () => request('/onboarding/progress'),
   onboardingSaveProgress: (payload) => request('/onboarding/progress', { method: 'PUT', body: JSON.stringify(payload) }),
   onboardingComplete: (flow) => request('/onboarding/complete', { method: 'POST', body: JSON.stringify({ flow }) }),
+  onboardingChooseLicence: (licence) => request('/onboarding/licence', { method: 'POST', body: JSON.stringify({ licence }) }),
 
   // Task #24 — Brand & landing page generator.
   brandLogo: (payload) => request('/brand/logo', { method: 'POST', body: JSON.stringify(payload) }),
