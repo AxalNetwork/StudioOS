@@ -567,3 +567,22 @@ export const INVESTOR_FULL_BLEED = [
   // Research — the legacy mount of the investor overview.
   '/market-intel',
 ];
+
+/**
+ * Full-bleed surfaces that belong to no single licence.
+ *
+ * The two lists above are role-scoped because their pages are: a founder desk
+ * is not reachable as an investor. `/referrals` is not like that — admin,
+ * founder, partner and investor all open the same page at the same path, so
+ * appending it to one role's list would be wrong for the other three and
+ * appending it to both would be the duplication those lists exist to remove.
+ *
+ * It is a list rather than a bare constant so the next role-agnostic canvas
+ * has an obvious home. The alternative — and what this replaced — was
+ * `location.pathname === '/referrals'` hand-typed onto BOTH `fullWidthSurface`
+ * and `flushSurface` in App.jsx, which is exactly the shape that let
+ * `/grow/focus` go missing from one array and not the other.
+ */
+export const SHARED_FULL_BLEED = [
+  '/referrals',
+];

@@ -23,6 +23,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `partner/` | Partner-side operations (BD console). |
 | `captable/` | Cap-table panels composed into `CapTablePage.jsx`. |
 | `raise/` | Round-manager panels. |
+| `referrals/` | The Refer & Earn canvas stylesheet for `ReferralsPage.jsx`. |
 | `pipeline/` | Pipeline helpers shared by the pipeline screens. |
 | `events/` | Public and host-side event screens. |
 | `jobs/` | Public and host-side job screens. |
