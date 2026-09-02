@@ -6,7 +6,9 @@ import { bucketForPath, zoneForPath } from '../shellConfig';
 import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
-const AdvisorExpertiseWorkspace = lazy(() => import('../../pages/advisor/AdvisorExpertiseWorkspace'));
+const ExpertiseProfileZone = lazy(() => import('../../pages/advisor/expertise/ProfileZone'));
+const ExpertiseServicesZone = lazy(() => import('../../pages/advisor/expertise/ServicesZone'));
+const ExpertiseProofZone = lazy(() => import('../../pages/advisor/expertise/ProofZone'));
 
 /**
  * Practice, Cohorts and Expertise — one component, three buckets.
@@ -33,13 +35,19 @@ const AdvisorExpertiseWorkspace = lazy(() => import('../../pages/advisor/Advisor
  * advisor↔cohort assignment table in the product today, so it ships as an
  * honest empty rather than a board of plausible-looking founders.
  *
- * EXPERTISE ALREADY HAS A HOME at /office-hours, which renders
- * AdvisorExpertiseWorkspace for advisors. That component couples the profile
- * fields to a slot picker; the canvas splits them, putting booked sessions
- * under Practice·Sessions and reserving Expertise for profile, services,
- * proof, thinking and visibility. Which of those two readings wins is a
- * product decision that is still open, so every Expertise zone mounts the live
- * workspace and nothing here assumes either answer.
+ * EXPERTISE NOW HAS THREE REAL ZONES, and two that still say what is missing.
+ * Migrations 202, 203 and 204 gave Profile, Services and Proof stores of their
+ * own, so each mounts its own page instead of all five rendering one
+ * undifferentiated component. Thinking and Visibility keep a NoStoreYet card
+ * naming exactly which store is absent.
+ *
+ * /office-hours IS UNCHANGED, deliberately. It still renders
+ * `AdvisorExpertiseWorkspace` — the component is not edited, moved or
+ * replaced, and nothing in this file imports it any more. The canvas splits
+ * booking (Practice·Sessions) from storefront (Expertise) while that page
+ * couples them; which reading wins is task #124's to settle, and it is frozen.
+ * Until then the two surfaces coexist over one store rather than one being
+ * rewritten under the other.
  */
 
 function Loading() {
@@ -77,7 +85,14 @@ function NoStoreYet({ heading, what, why, links = [], seam }) {
 // Zones whose content is already live, and the component that serves them.
 const LIVE = {
   '/practice': new Set(['opportunities', 'engagements', 'delivery']),
-  '/expertise': new Set(['profile', 'services', 'proof', 'thinking', 'visibility']),
+  '/expertise': new Set(['profile', 'services', 'proof']),
+};
+
+// One page per Expertise zone, each over the store its migration created.
+const EXPERTISE_ZONE = {
+  profile: ExpertiseProfileZone,
+  services: ExpertiseServicesZone,
+  proof: ExpertiseProofZone,
 };
 
 const COPY = {
@@ -93,6 +108,20 @@ const COPY = {
       what: 'What the practice billed, what has been collected, and what is outstanding — per engagement and per session.',
       why: 'This is the zone that turns an advisory shell into a business, and it has no store at all: no session pricing, no paid booking, no payout record. It is the same gap tracked as the Advisory Practice integration.',
       links: [{ to: '/practice/engagements', label: 'Engagements →' }],
+    },
+  },
+  '/expertise': {
+    thinking: {
+      heading: 'Published thinking is not advisor-scoped yet',
+      what: 'What you have written, where it ran, and what it brought back — so a founder can read you before they book you.',
+      why: 'The `articles` table exists and records a date and a publication state, but it has no advisor owner, no reach figure and no record of where a piece ran. Listing articles against your name would require a join that does not exist, and reporting reach would require a number nobody stores.',
+      links: [{ to: '/articles', label: 'The articles hub as it stands →' }],
+    },
+    visibility: {
+      heading: 'Nothing counts profile views',
+      what: 'How often your profile was shown, how often it was opened, and which searches you appeared in.',
+      why: 'There is no impression or profile-view counter anywhere in the product — not for advisors, not for anyone. This needs an analytics pipeline rather than a table, and a page of plausible-looking numbers would be worse than an empty one.',
+      links: [{ to: '/expertise/profile', label: 'What a founder would see →' }],
     },
   },
   '/cohorts': {
@@ -143,12 +172,18 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     // and keeps the shell — the crumb, zone row and rail still say where you
     // are, which a redirect to /studio did not.
     if (preview) return <AdvisorPreviewNotice />;
+    // Expertise is one page per zone, each over its own store. They are
+    // written to render a BODY only — the shell below draws the crumb, h1,
+    // zone pills and rail — so unlike the Practice workspace they need no
+    // `embedded` prop to suppress chrome they never had.
+    const Zone = prefix === '/expertise' ? EXPERTISE_ZONE[slug] : null;
+    if (Zone) return <Suspense fallback={<Loading />}><Zone /></Suspense>;
+
     if (LIVE[prefix]?.has(slug)) {
       // `embedded`: the WorkspaceShell below already draws the crumb, the h1,
-      // the zone pills and the rail. Both live components carry their own
+      // the zone pills and the rail. AdvisorAdvisoryWorkspace carries its own
       // AdvisorWorkspaceShell, which would draw a second of each inside it.
-      const Live = prefix === '/practice' ? AdvisorAdvisoryWorkspace : AdvisorExpertiseWorkspace;
-      return <Suspense fallback={<Loading />}><Live embedded /></Suspense>;
+      return <Suspense fallback={<Loading />}><AdvisorAdvisoryWorkspace embedded /></Suspense>;
     }
     const copy = COPY[prefix]?.[slug];
     if (copy) return <NoStoreYet {...copy} />;
@@ -196,9 +231,10 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     '/expertise': {
       workspace: 'Expertise',
       stance: 'Manual profile record',
-      note: 'Profile, services and proof read the stored practice record. No positioning line, price or attestation is drafted here.',
+      note: 'Profile, services and proof read and write the stored practice record. No positioning line, price, claim or attestation is drafted here — every word on your storefront is one you typed.',
       unavailable: [
-        ['Attestation', 'Consent is asked and recorded, never assumed. An unattested claim stays visibly weaker than an attested one.'],
+        ['Attestation', 'Confirmation is asked of a named person and recorded from their own answer, never assumed. An unconfirmed claim stays visibly weaker than a confirmed one, and nothing here can move a claim between those two states on your behalf.'],
+        ['Money movement', 'A service price is your record of what you charge. Axal issues no invoice, runs no checkout, and settles nothing.'],
       ],
     },
   }[prefix];

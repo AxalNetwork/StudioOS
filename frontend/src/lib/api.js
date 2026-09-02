@@ -117,6 +117,11 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/pricing/')
     || currentPath.startsWith('/partner-onboarding/')
     || currentPath.startsWith('/partners/onboard')
+    // The attester's side of an advisor proof claim. Reached by a link an
+    // advisor handed over, by someone who has no account here and is not
+    // going to make one — a background settings/me 401 must not bounce them
+    // to /login before they can answer.
+    || currentPath.startsWith('/attest/')
     || currentPath.startsWith('/esign/')
     || currentPath.startsWith('/deck/share/')
     || currentPath.startsWith('/share/deck/')
@@ -2694,6 +2699,39 @@ export const api = {
   fileAdvisorReview: (bookingId, data) =>
     request(`/advisors/bookings/${bookingId}/review`, { method: 'POST', body: JSON.stringify(data) }),
   listBookingReviews: (bookingId) => request(`/advisors/bookings/${bookingId}/reviews`),
+
+  // ---------- The advisor's own stores (migrations 203-206) ----------
+  // Every one of these is scoped server-side on the signed-in user; none takes
+  // an advisor id, because there is nowhere to put someone else's.
+  listMyAdvisorServices: () => request('/advisors/me/services'),
+  createMyAdvisorService: (data) =>
+    request('/advisors/me/services', { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorService: (id, data) =>
+    request(`/advisors/me/services/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteMyAdvisorService: (id) =>
+    request(`/advisors/me/services/${id}`, { method: 'DELETE' }),
+
+  listMyAdvisorProof: () => request('/advisors/me/proof'),
+  createMyAdvisorProof: (data) =>
+    request('/advisors/me/proof', { method: 'POST', body: JSON.stringify(data) }),
+  deleteMyAdvisorProof: (id) => request(`/advisors/me/proof/${id}`, { method: 'DELETE' }),
+  // Records the ask; it does not send it. The response carries `request_token`
+  // exactly once — the advisor hands the link over by whatever channel they
+  // already have with the person, and no later read returns it.
+  requestAdvisorProofConsent: (id, data) =>
+    request(`/advisors/me/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
+
+  updateMyAdvisorBookingBilling: (id, data) =>
+    request(`/advisors/me/bookings/${id}/billing`, { method: 'PATCH', body: JSON.stringify(data) }),
+  getMyAdvisorEarnings: () => request('/advisors/me/earnings'),
+
+  // The attester's own answer. Unauthenticated on purpose — the token is the
+  // credential, and an attester is usually not a user of this product.
+  respondToAdvisorProofConsent: (token, data) =>
+    request(`/advisors/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
+
+  listMyAdvisorCohorts: () => request('/advisors/me/cohort'),
+  listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),
 
   // ---------- Unified calendar (Task #56) ----------
   listCalendarEvents: (opts = {}) => {

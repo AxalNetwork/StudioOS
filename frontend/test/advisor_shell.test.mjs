@@ -234,10 +234,29 @@ test('an advisor never gets two headers or two rails on one page', () => {
     assert.match(src, /\{ embedded = false \}/, `${msg} must accept embedded`);
     assert.match(src, /embedded=\{embedded\}/, `${msg} must pass embedded to its inner shell`);
   }
-  assert.match(codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx')),
-    /<Live embedded \/>/, 'the bucket routes must mount their live components embedded');
+  const bucketRoutes = codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'));
+  assert.match(bucketRoutes, /<AdvisorAdvisoryWorkspace embedded \/>/,
+    'the Practice workspace carries its own shell and must be mounted embedded');
   assert.match(codeOnly(read('frontend/src/workspaces/NetworkWorkspace.jsx')),
     /<NetworkPage embedded \/>/, 'the shared network shell must mount NetworkPage embedded');
+
+  // The Expertise zone pages take the other route to the same guarantee: they
+  // render a BODY and carry no shell of their own, so there is no second
+  // header or rail to suppress. That has to be checked rather than assumed —
+  // a later zone page that reached for AdvisorWorkspaceShell would bring the
+  // double chrome straight back, and it would be mounted with no `embedded`
+  // to catch it.
+  const zoneDir = 'frontend/src/pages/advisor/expertise';
+  const zonePages = readdirSync(resolve(process.cwd(), zoneDir))
+    .filter((f) => f.endsWith('.jsx'));
+  assert.ok(zonePages.length >= 3, 'the backed Expertise zones each have their own page');
+  for (const f of zonePages) {
+    const src = codeOnly(read(`${zoneDir}/${f}`));
+    assert.doesNotMatch(src, /AdvisorWorkspaceShell/,
+      `${f} must render a body only — WorkspaceShell above it already draws the chrome`);
+    assert.doesNotMatch(src, /<WorkerRail/,
+      `${f} must not draw a second Worker AI rail`);
+  }
 });
 
 test('the advisor preview boundary is stated, and covers every surface that renders a practice', () => {
