@@ -513,11 +513,16 @@ export const FOUNDER_FULL_BLEED = [
   // The legacy paths the overviews were rescued onto. Still live, still linked
   // from inside pages, so they keep rendering the same desk at the same width.
   '/build/discovery', '/execution', '/build/team', '/signals',
-  // Section pages, one group per workspace.
+  // Validate zones
+  '/validate/interviews', '/validate/pain-map', '/validate/hypotheses', '/validate/verdict',
+  // Build zones
   '/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi',
-  '/raise/pitch',
+  // Raise zones
+  '/raise/status', '/raise/pitch', '/raise/capital', '/raise/legal', '/raise/data-room', '/raise/liquidity',
+  // Grow zones
   '/grow/focus', '/grow/talent', '/grow/customers', '/grow/partnerships',
   '/grow/capital-match', '/grow/brand', '/grow/launch',
+  // Network zones
   '/network/relationships', '/network/introductions', '/network/organizations',
 ];
 
