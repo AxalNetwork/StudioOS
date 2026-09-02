@@ -5,6 +5,7 @@ import { requireAuth, canAccessFounderResource } from '../auth';
 import { notifyPipelineRoom } from '../services/realtime';
 import { ensureWorkflowSchema } from '../services/workflowSchema';
 import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
+import { activeCompanyFor } from '../middleware/activeCompany';
 
 const pipeline = new Hono<{ Bindings: Env }>();
 
@@ -144,17 +145,30 @@ pipeline.get('/active', async (c) => {
   // every LP/partner read goes through getVerifiedLatestSnapshot below so the
   // hash is recomputed and the read is audited. Sandbox rows are never
   // surfaced here.
+  //
+  // Company scoping. The founder branch must narrow on the active company the
+  // same way /projects and /dashboard do: a founder who switches company in
+  // the sidebar expects this list to show only that company's projects, and
+  // without the clause the switcher visibly does nothing on the Build desk.
+  const companyId = isFounder ? await activeCompanyFor(c, user) : null;
   const baseRows = isAdmin
     ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                   p.status as project_status, p.created_at
                 FROM projects p WHERE p.status NOT IN ('rejected', 'archived')
                 ORDER BY p.created_at DESC LIMIT 100`
     : isFounder
-      ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
-                    p.status as project_status, p.created_at
-                  FROM projects p
-                  WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
-                  ORDER BY p.created_at DESC LIMIT 100`
+      ? companyId === null
+        ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
+                      p.status as project_status, p.created_at
+                    FROM projects p
+                    WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
+                    ORDER BY p.created_at DESC LIMIT 100`
+        : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
+                      p.status as project_status, p.created_at
+                    FROM projects p
+                    WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
+                      AND (p.company_id = ${companyId} OR p.company_id IS NULL)
+                    ORDER BY p.created_at DESC LIMIT 100`
       : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
                     p.status as project_status, p.created_at
                   FROM projects p WHERE p.status NOT IN ('rejected', 'archived')
