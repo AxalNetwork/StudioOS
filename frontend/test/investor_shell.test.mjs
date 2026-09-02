@@ -316,4 +316,16 @@ test('a failed read is never rendered as an empty one', () => {
   assert.ok(!fund.includes('{fund.lp_count || 0}'), 'an absent LP count renders as 0 again');
   assert.match(fund, /const UNAVAILABLE = Symbol\('unavailable'\)/,
     'the three detail sources must distinguish unreadable from empty');
+  // EVERY SOURCE THAT CAN CARRY THE SENTINEL MUST READ IT. Storing it and not
+  // reading it is worse than the bug it replaced: a Symbol is truthy and has
+  // no `.length`, so `detail.lps || []` handed it straight to `.slice()` and a
+  // failed LP read went from a misleading "no records exist" to a thrown
+  // TypeError. CodeQL is what catches the general class — it reported `unread`
+  // as written and never read — so these three pin the specific call sites.
+  for (const source of ['detail.lps', 'detail.calls', 'detail.periods']) {
+    assert.ok(fund.includes(`unread(${source})`),
+      `${source} can be the unavailable sentinel and nothing checks for it`);
+  }
+  assert.match(fund, /const lpRows = Array\.isArray\(detail\.lps\)/,
+    'lpRows must reject the sentinel by shape, not by truthiness');
 });

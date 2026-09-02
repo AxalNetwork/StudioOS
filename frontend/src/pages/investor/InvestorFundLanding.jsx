@@ -45,6 +45,9 @@ function LockedFund() {
 // each card now says which of the two it is.
 const UNAVAILABLE = Symbol('unavailable');
 const unread = (value) => value === UNAVAILABLE;
+const Unreadable = ({ what }) => (
+  <p className="i6-load-error"><CircleAlert size={13} />{what} could not be read. This is not a claim that none exist.</p>
+);
 
 function FundDetail({ fund }) {
   const [detail, setDetail] = useState({ lps: null, calls: null, periods: null });
@@ -68,7 +71,7 @@ function FundDetail({ fund }) {
   useEffect(() => { load(); }, [load]);
 
   const unfunded = Math.max(0, Number(fund.committed_cents || 0) - Number(fund.called_cents || 0));
-  const lpRows = detail.lps || [];
+  const lpRows = Array.isArray(detail.lps) ? detail.lps : [];
   return (
     <>
       <section className="i6-summary" id="summary">
@@ -89,7 +92,7 @@ function FundDetail({ fund }) {
       <div className="i6-grid">
         <section className="i6-card i6-registry" id="lps">
           <header><div><h2>LP registry</h2><span>{fund.lp_count == null ? <Unrecorded>LP count unrecorded</Unrecorded> : `${fund.lp_count} LPs`} · record status below</span></div><Link to="/funds/lps" data-testid="link-fund-lps"><ArrowUpRight size={15} /></Link></header>
-          {detail.lps === null ? <div className="i6-skeleton" /> : lpRows.length === 0 ? <p className="i6-empty">No LP records are available for this fund.</p> : (
+          {detail.lps === null ? <div className="i6-skeleton" /> : unread(detail.lps) ? <Unreadable what="The LP register" /> : lpRows.length === 0 ? <p className="i6-empty">No LP records are available for this fund.</p> : (
             <table><thead><tr><th>LP</th><th className="right">Committed</th><th>KYC / LPA</th></tr></thead><tbody>
               {lpRows.slice(0, 8).map((lp) => <tr key={lp.id}><td>{lp.name || lp.email || `LP #${lp.id}`}</td><td className="right">{fmtCents(dollarsToCents(lp.commitment_amount))}</td><td><span className={lp.lpa_signed ? 'i6-ok' : 'i6-alert'}>{lp.lpa_signed ? 'LPA signed' : 'LPA unsigned'}</span></td></tr>)}
             </tbody></table>
@@ -100,7 +103,7 @@ function FundDetail({ fund }) {
         <section className="i6-card i6-movements" id="movements">
           <header><div><h2>Capital calls &amp; distributions</h2><span>Recorded notices and payment status</span></div><Link to="/funds/calls" data-testid="link-fund-calls"><ArrowUpRight size={15} /></Link></header>
           <div className="i6-manual"><span>Schedule basis</span><p>Calls can be reviewed in the capital-call ledger. This overview does not draft or send notices.</p><Link to="/funds/capital-calls" data-testid="link-review-call-ledger">Open capital-call ledger</Link></div>
-          {detail.calls === null ? <div className="i6-skeleton" /> : detail.calls.length === 0 ? <p className="i6-empty">No capital call notices on record for this fund.</p> : <ul className="i6-call-list">
+          {detail.calls === null ? <div className="i6-skeleton" /> : unread(detail.calls) ? <Unreadable what="The capital-call ledger" /> : detail.calls.length === 0 ? <p className="i6-empty">No capital call notices on record for this fund.</p> : <ul className="i6-call-list">
             {detail.calls.slice(0, 5).map((call) => <li key={call.id}><strong>{fmtCents(Math.round(callDollars(call) * 100))}</strong><span>{date(call.due_date || call.created_at)}</span><em className={`i6-${call.status === 'paid' ? 'ok' : 'alert'}`}>{titleCase(call.status || 'pending')}</em></li>)}
           </ul>}
           <p className="i6-footnote">Distribution execution remains in the detailed fund-administration tool.</p>
@@ -115,12 +118,12 @@ function FundDetail({ fund }) {
         </section>
 
         <section className="i6-card i6-reporting" id="reporting">
-          <header><div><h2>LP reporting</h2><span>{detail.periods === null ? 'Checking issued periods' : `${detail.periods.length} period${detail.periods.length === 1 ? '' : 's'} on record`}</span></div><Link to="/funds/reporting" data-testid="link-fund-reporting"><ArrowUpRight size={15} /></Link></header>
+          <header><div><h2>LP reporting</h2><span>{detail.periods === null ? 'Checking issued periods' : unread(detail.periods) ? 'Issued periods unavailable' : `${detail.periods.length} period${detail.periods.length === 1 ? '' : 's'} on record`}</span></div><Link to="/funds/reporting" data-testid="link-fund-reporting"><ArrowUpRight size={15} /></Link></header>
           <div className="i6-manual"><span>Report control</span><p>LP pack authoring and publishing live in the reporting workspace. This landing page never represents a draft as delivered.</p><Link to="/lp-reports" data-testid="link-open-lp-reporting">Open LP reporting</Link></div>
-          {detail.periods?.length > 0 && <ul className="i6-periods">{detail.periods.slice(0, 3).map((period) => <li key={period.id || period.period}><FileText size={13} />{period.period || period.label || `Period ${period.id}`}<span>{period.issued_at ? `Issued ${date(period.issued_at)}` : 'Draft'}</span></li>)}</ul>}
+          {unread(detail.periods) && <Unreadable what="The reporting archive" />}
+          {Array.isArray(detail.periods) && detail.periods.length > 0 && <ul className="i6-periods">{detail.periods.slice(0, 3).map((period) => <li key={period.id || period.period}><FileText size={13} />{period.period || period.label || `Period ${period.id}`}<span>{period.issued_at ? `Issued ${date(period.issued_at)}` : 'Draft'}</span></li>)}</ul>}
         </section>
       </div>
-      {detail.error && <p className="i6-load-error"><CircleAlert size={13} />{detail.error}</p>}
     </>
   );
 }
