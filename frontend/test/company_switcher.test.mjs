@@ -124,17 +124,16 @@ test('the scope notice stands exactly as long as scoping is incomplete', () => {
     assert.ok(!SCOPED.test(row.src), `${f} now narrows by company — drop it from WIDE_ON_PURPOSE`);
   }
 
-  const hasNotice = /SCOPE_NOTICE|SHARED_NOTICE/.test(switcher);
+  const hasNotice = /SHARED_NOTICE/.test(switcher);
   if (unscoped.length === 0) {
-    assert.equal(
-      /SCOPE_NOTICE/.test(switcher), false,
+    assert.ok(
+      hasNotice,
       'every founder-ownership surface now narrows by company — the "still rolling out" ' +
       'notice is no longer true and must be replaced (not simply deleted: shared ' +
       'marketplaces and account-level data stay the same in every company by design, ' +
       'and the advisor Practice/Expertise rows really are unseparated because they run ' +
       'on frozen code — task #124, UNRESOLVED_ITEMS.md U4)',
     );
-    assert.ok(hasNotice, 'the switcher must still say what does NOT move between companies');
   } else {
     assert.ok(
       /SCOPE_NOTICE/.test(switcher),

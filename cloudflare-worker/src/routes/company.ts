@@ -287,14 +287,22 @@ r.get('/company/:uid', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (await viewerIsMember(c.env, company.id, user)) {
-      return c.json(await detailDto(c.env, company, user));
+    // Companies are private workspaces: only members (and platform admins)
+    // may read the profile. A non-member gets 404 rather than a summary so
+    // the directory does not confirm a company exists.
+    if (!(await viewerIsMember(c.env, company.id, user))) {
+      return c.json({ detail: 'Company not found' }, 404);
     }
-    return c.json(await summaryDto(c.env, company));
+    return c.json(await detailDto(c.env, company, user));
   } catch (e) { return mapError(c, e); }
 });
 
 // /companies (list)
+//
+// Companies are private workspaces. The directory is not a public catalogue:
+// non-admin callers see only the companies they are members of, so a company
+// one user creates is not visible to another user's search. Admins keep the
+// full list for support and moderation.
 r.get('/companies', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -311,6 +319,10 @@ r.get('/companies', async (c) => {
         return c.json({ detail: 'Filtering by revenue_range is restricted to administrators' }, 403);
       }
       where += ' AND revenue_range = ?'; params.push(revenue);
+    }
+    if (!isAdmin(user)) {
+      where += ' AND id IN (SELECT company_id FROM user_company_links WHERE user_id = ?)';
+      params.push(user.id);
     }
     const rows = await c.env.DB.prepare(
       `SELECT * FROM company_profiles WHERE ${where} ORDER BY created_at DESC`

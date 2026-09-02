@@ -155,6 +155,25 @@ let _activeCompanyId = null;
 
 export function setActiveCompanyId(id) {
   _activeCompanyId = Number.isSafeInteger(id) && id > 0 ? id : null;
+  try {
+    if (_activeCompanyId === null) localStorage.removeItem('active_company_id');
+    else localStorage.setItem('active_company_id', String(_activeCompanyId));
+  } catch { /* ignore */ }
+}
+
+export function getActiveCompanyId() {
+  return _activeCompanyId;
+}
+
+export function initActiveCompanyId() {
+  try {
+    const raw = localStorage.getItem('active_company_id');
+    if (raw) {
+      const id = Number(raw);
+      if (Number.isSafeInteger(id) && id > 0) _activeCompanyId = id;
+    }
+  } catch { /* ignore */ }
+  return _activeCompanyId;
 }
 
 function getActiveCompanyHeader() {
