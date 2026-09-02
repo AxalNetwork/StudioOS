@@ -457,7 +457,7 @@ export default function ReferralsPage({ embedded = false }) {
               </div>
               <div className="rf-cat-grid">
                 {(overview?.categories || []).map((cat) => (
-                  <div key={cat.key} className="rounded-[13px] border border-[#ececf1] bg-white p-4">
+                  <div key={cat.key} className="rounded-[13px] border border-[#ececf1] bg-white p-4 dark:bg-gray-900">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-[13.5px] font-extrabold tracking-tight">{cat.name}</div>
                       <span className={cat.locked ? CHIP.purple : CHIP.grey}>{cat.access}</span>
@@ -508,7 +508,7 @@ export default function ReferralsPage({ embedded = false }) {
               <div className="rf-card p-5 text-center sm:p-6">
                 <h2 className="text-sm font-extrabold tracking-tight">QR code</h2>
                 <div className="mt-4 flex justify-center">
-                  <canvas ref={qrCanvasRef} className="rounded-[11px] border border-[#ececf1] bg-white p-2" aria-label="Referral QR code" />
+                  <canvas ref={qrCanvasRef} className="rounded-[11px] border border-[#ececf1] bg-white p-2 dark:bg-white" aria-label="Referral QR code" />
                 </div>
                 <p className="mt-3.5 text-[11.5px] leading-snug text-[#8b8798]">
                   Scan to open registration with <span className="rf-mono text-violet-700">{overview?.referral_code || '—'}</span> pre-filled.
@@ -600,7 +600,7 @@ export default function ReferralsPage({ embedded = false }) {
               </div>
 
               {filtered.length === 0 ? (
-                <div className="rounded-[14px] border border-dashed border-[#d4d0dc] bg-white px-6 py-11 text-center">
+                <div className="rounded-[14px] border border-dashed border-[#d4d0dc] bg-white px-6 py-11 text-center dark:bg-gray-900">
                   <p className="text-sm font-bold text-[#3f3b47]">No referrals yet</p>
                   <p className="mx-auto mt-1.5 max-w-sm text-[12.5px] leading-relaxed text-[#8b8798]">
                     Submit your first referral to start tracking it here — review status, fit notes, and reward eligibility all live on this page.
@@ -664,7 +664,7 @@ export default function ReferralsPage({ embedded = false }) {
               </div>
               <button
                 type="button"
-                className="rf-btn flex-none rounded-[10px] border border-[#d4c9f0] bg-white px-5 py-2.5 text-[13px] font-bold text-violet-700"
+                className="rf-btn flex-none rounded-[10px] border border-[#d4c9f0] bg-white px-5 py-2.5 text-[13px] font-bold text-violet-700 dark:bg-gray-900 dark:text-violet-300"
                 onClick={() => setPartnerOpen(true)}
               >
                 Become a referral partner
@@ -861,7 +861,7 @@ function SubmitDrawer({ categories, onClose, onDone }) {
                   <p className="text-[12.5px] font-bold">Import a contact list (CSV)</p>
                   <p className="text-[11px] text-[#8b8798]">Columns: name, organization, context</p>
                 </div>
-                <label className="rf-btn cursor-pointer rounded-lg border border-[#ececf1] bg-white px-3 py-1.5 text-[11.5px] font-bold text-zinc-700">
+                <label className="rf-btn cursor-pointer rounded-lg border border-[#ececf1] bg-white px-3 py-1.5 text-[11.5px] font-bold text-zinc-700 dark:bg-gray-900 dark:text-zinc-200">
                   Choose file
                   <input type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
                 </label>
@@ -884,7 +884,7 @@ function SubmitDrawer({ categories, onClose, onDone }) {
                 <>
                   <div className="mt-2 flex flex-col gap-1.5">
                     {importRows.slice(0, 5).map((ir, idx) => (
-                      <div key={idx} className="flex items-center gap-2 rounded-lg border border-[#ececf1] bg-white px-2 py-1.5 text-[11.5px]">
+                      <div key={idx} className="flex items-center gap-2 rounded-lg border border-[#ececf1] bg-white px-2 py-1.5 text-[11.5px] dark:bg-gray-900">
                         <span className="min-w-0 flex-1"><strong>{ir.name}</strong> {ir.org}</span>
                         <span className="text-[#a8a4b4]">{ir.context}</span>
                       </div>

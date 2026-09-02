@@ -23,7 +23,7 @@ import {
   ChevronDown, Eye, ArrowLeft, Sparkles,
   Gift
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, SHARED_FULL_BLEED } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
 import { api } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -656,13 +656,13 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // expression written out twice, identically, and the four `/funds/*` zone
   // pages were in neither — see INVESTOR_FULL_BLEED for what that cost.
   const fullBleedSurface = (activeRole === 'founder' && FOUNDER_FULL_BLEED.includes(location.pathname))
-    || (activeRole === 'investor' && INVESTOR_FULL_BLEED.includes(location.pathname));
+    || (activeRole === 'investor' && INVESTOR_FULL_BLEED.includes(location.pathname))
+    || SHARED_FULL_BLEED.includes(location.pathname);
   const fullWidthSurface = fullBleedSurface
     || activeRole === 'advisor'
     || location.pathname === '/spinout-lab'
-    || location.pathname.startsWith('/spinout-lab/')
-    || location.pathname === '/referrals';
-  const flushSurface = fullBleedSurface || location.pathname === '/referrals';
+    || location.pathname.startsWith('/spinout-lab/');
+  const flushSurface = fullBleedSurface;
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
