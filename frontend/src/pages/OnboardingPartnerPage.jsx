@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import OnboardingWizard, { TextField, TextArea, MultiChoiceField, ChoiceField } from '../components/OnboardingWizard';
+import { useAuth } from '../hooks/useAuthSync';
 
 // Phase 0.2 / Task #23 — Service-provider partner onboarding.
 // Collects: firm details, service catalogue, specialties.
@@ -10,6 +11,7 @@ import OnboardingWizard, { TextField, TextArea, MultiChoiceField, ChoiceField } 
 // nudged from this wizard.
 export default function OnboardingPartnerPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const steps = [
     {
@@ -86,7 +88,7 @@ export default function OnboardingPartnerPage() {
         flow="partner"
         steps={steps}
         finishLabel="Open Partner Portal"
-        onFinish={() => navigate('/partner-portal')}
+        onFinish={() => navigate(user?.role === 'exploring' ? '/exploring' : '/partner-portal')}
       />
     </div>
   );

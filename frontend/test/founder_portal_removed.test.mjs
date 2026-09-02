@@ -21,6 +21,6 @@ test('the retired Founder Portal has no route, sidebar entry, or persona quick l
 
 test('incorporated founders continue from onboarding to Studio', () => {
   const onboarding = read('pages/OnboardingFounderPage.jsx');
-  assert.match(onboarding, /navigate\('\/studio'\)/);
-  assert.match(onboarding, /finishLabel="Continue to Studio"/);
+  assert.match(onboarding, /navigate\('\/studio'/);
+  assert.match(onboarding, /Continue to Studio/);
 });

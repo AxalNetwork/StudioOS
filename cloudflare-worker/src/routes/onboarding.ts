@@ -8,23 +8,36 @@
  *   GET  /api/onboarding/progress
  *   PUT  /api/onboarding/progress   {flow, step, total_steps, data}
  *   POST /api/onboarding/complete   {flow}
+ *   POST /api/onboarding/licence    {licence}  — Auth v2 licence picker (A2)
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { ensureExploringSchema, getSuggestedRole, upsertSuggestedRole } from '../services/exploringSchema';
 
 const onboarding = new Hono<{ Bindings: Env }>();
 
 const VALID_FLOWS = new Set(['founder', 'investor', 'partner']);
+const VALID_LICENCES = new Set(['founder', 'investor', 'advisor', 'partner']);
+const WIZARD_LICENCES = new Set(['founder', 'investor', 'partner']);
 
-function enforceFlowMatch(user: any, flow: string): { ok: true } | { ok: false; status: number; error: string } {
+async function enforceFlowMatch(
+  env: Env,
+  user: any,
+  flow: string,
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   // Server-side role-flow binding. Admins can write any flow (seeding,
   // impersonation); everyone else may only touch their own role's
-  // wizard. Mirrors backend/app/api/routes/onboarding.py.
+  // wizard. Exploring users may run the wizard for their chosen licence
+  // (stored as suggested_role) while membership is under review.
   const role = String(user?.role || '').toLowerCase();
   if (role === 'admin') return { ok: true };
-  if (role !== flow) return { ok: false, status: 403, error: 'flow does not match your role' };
-  return { ok: true };
+  if (role === flow) return { ok: true };
+  if (role === 'exploring') {
+    const suggested = await getSuggestedRole(env, user.id);
+    if (suggested === flow) return { ok: true };
+  }
+  return { ok: false, status: 403, error: 'flow does not match your role' };
 }
 
 async function ensureSchema(env: Env): Promise<void> {
@@ -82,7 +95,7 @@ onboarding.put('/progress', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   if (!VALID_FLOWS.has(body.flow)) return c.json({ error: 'invalid flow' }, 400);
-  const guard = enforceFlowMatch(user, body.flow);
+  const guard = await enforceFlowMatch(c.env, user, body.flow);
   if (!guard.ok) return c.json({ error: guard.error }, guard.status as any);
   const step = Math.max(0, Number(body.step) || 0);
   const totalSteps = Math.max(0, Number(body.total_steps) || 0);
@@ -108,7 +121,7 @@ onboarding.post('/complete', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   if (!VALID_FLOWS.has(body.flow)) return c.json({ error: 'invalid flow' }, 400);
-  const guardC = enforceFlowMatch(user, body.flow);
+  const guardC = await enforceFlowMatch(c.env, user, body.flow);
   if (!guardC.ok) return c.json({ error: guardC.error }, guardC.status as any);
   await ensureSchema(c.env);
   // Either UPDATE the existing row or INSERT a stub if the user finished
@@ -165,6 +178,48 @@ onboarding.post('/complete', async (c) => {
     }
   }
   return c.json({ ok: true, completed_at: true, ...(projection ? { projection } : {}) });
+});
+
+// Auth & Onboarding v2 — licence picker (A2). Records the user's chosen
+// licence as suggested_role and advances onboarding_progress out of the
+// `licence` gate into the role wizard (or marks complete for advisor).
+onboarding.post('/licence', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({} as any));
+  const licence = String(body.licence || '').toLowerCase();
+  if (!VALID_LICENCES.has(licence)) return c.json({ error: 'invalid licence' }, 400);
+
+  await ensureExploringSchema(c.env);
+  await upsertSuggestedRole(c.env, user.id, licence);
+  await ensureSchema(c.env);
+
+  if (WIZARD_LICENCES.has(licence)) {
+    await c.env.DB.prepare(
+      `INSERT INTO onboarding_progress (user_id, flow, step, total_steps, data, completed_at, updated_at)
+       VALUES (?, ?, 0, 0, '{}', NULL, datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET
+         flow = excluded.flow,
+         step = 0,
+         total_steps = 0,
+         data = '{}',
+         completed_at = NULL,
+         updated_at = datetime('now')`
+    ).bind(user.id, licence).run();
+  } else {
+    // Advisor — no dedicated wizard; licence step is complete.
+    await c.env.DB.prepare(
+      `INSERT INTO onboarding_progress (user_id, flow, step, total_steps, data, completed_at, updated_at)
+       VALUES (?, 'advisor', 0, 0, '{}', datetime('now'), datetime('now'))
+       ON CONFLICT(user_id) DO UPDATE SET
+         flow = 'advisor',
+         step = 0,
+         total_steps = 0,
+         completed_at = datetime('now'),
+         updated_at = datetime('now')`
+    ).bind(user.id).run();
+  }
+
+  return c.json({ ok: true, licence, suggested_role: licence });
 });
 
 export default onboarding;

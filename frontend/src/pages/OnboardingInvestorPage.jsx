@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import OnboardingWizard, { TextField, TextArea, ChoiceField, MultiChoiceField, SliderField } from '../components/OnboardingWizard';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuthSync';
 
 // Phase 0.2 / Task #23 — Investor onboarding wizard.
 // Task #4 (2026-05-10) — extended into a 6-step profiling chatbot whose
@@ -9,6 +10,7 @@ import { api } from '../lib/api';
 // flow into the anonymized "Axal VC Investor Signals" aggregate.
 export default function OnboardingInvestorPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const SECTORS = ['AI/ML','Climate','Fintech','Healthtech','Consumer','Enterprise SaaS','Crypto','Bio','Defense','Robotics','Energy'];
   const STAGES = ['Pre-seed','Seed','Series A','Series B+','Growth'];
@@ -236,7 +238,7 @@ export default function OnboardingInvestorPage() {
       // Surfacing this in the wizard would be confusing; the user can
       // re-save anytime from Settings → Privacy.
     }
-    navigate('/studio');
+    navigate(user?.role === 'exploring' ? '/exploring' : '/studio');
   };
 
   return (
