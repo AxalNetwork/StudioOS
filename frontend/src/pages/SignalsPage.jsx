@@ -18,11 +18,31 @@ import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
  * Founder mode ("what should I build next?") and Advisor mode ("what should I
  * point founders toward?"); the mode toggle changes ordering + copy only.
  */
-export default function SignalsPage({ user }) {
-  // eslint-disable-next-line no-console
-  console.log('[SignalsPage] rendering — user role:', user?.role);
+/**
+ * `embedded` — set by `workspaces/ResearchWorkspace`, which already draws the
+ * breadcrumb, the h1, the zone pills and the Worker AI rail around this page.
+ *
+ * IT ALSO HAD TO START PASSING `user`, AND THAT WAS THE REAL BUG. This
+ * component derives `mode` from `user?.role`, and the Research workspace
+ * mounted it with neither prop. `user` was therefore `undefined` on that route
+ * for EVERY role, `mode` fell to `'founder'` unconditionally, and an advisor at
+ * /research/markets got the founder ordering, the founder "Build angle" copy,
+ * no advisor helper strip, and no `advisor_note` on any card — a field the
+ * engine has been returning all along, seed rows included. `isAdmin` was false
+ * for admins on the same route, hiding Refresh. Only /signals passed `user`,
+ * which is why the advisor view appeared to work when tested there.
+ */
+export default function SignalsPage({ user, embedded = false, mode: modeProp = null }) {
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
-  const mode = String(user?.role || '').toLowerCase() === 'advisor' ? 'advisor' : 'founder';
+  // Two different questions, so two props. `user` answers "who is this?" and
+  // gates the admin-only Refresh. `mode` answers "which workspace am I in?"
+  // and drives the ordering and the copy — a workspace that already knows the
+  // role states it, rather than leaving this to re-derive it and disagree. It
+  // would disagree today: an admin previewing the Advisor role gets an advisor
+  // shell, but their own `user.role` is still `admin`, so the body underneath
+  // would have ordered itself for a founder.
+  const mode = modeProp
+    || (String(user?.role || '').toLowerCase() === 'advisor' ? 'advisor' : 'founder');
 
   const [filters, setFilters] = useState({});
   const [facets, setFacets] = useState(null);
@@ -95,7 +115,7 @@ export default function SignalsPage({ user }) {
   const content = (
     <div className="space-y-5 pb-10">
       {/* Header */}
-      {mode !== 'advisor' && <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+      {mode !== 'advisor' && !embedded && <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-300">
@@ -221,7 +241,8 @@ export default function SignalsPage({ user }) {
         title="Know more than the room"
         description="Public-market evidence you can use to point founders toward the next useful question — with provenance intact."
         icon={Radar}
-        rail
+        rail={!embedded}
+        embedded={embedded}
       >
         {content}
       </AdvisorWorkspaceShell>

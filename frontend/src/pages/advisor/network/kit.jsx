@@ -1,7 +1,21 @@
-// Shared UI primitives for the advisor Network workspace pages (Introductions,
-// Relationships, Organizations). These mirror the app's existing table / chip /
-// slide-over patterns so the section reads like the rest of the product without
-// pulling in a new component library.
+// A GENERAL UI KIT AT A MISLEADING PATH — read this before importing `./kit`.
+//
+// It was written for advisor Network pages that no longer exist: #320
+// consolidated Network onto the surface that worked and deleted them, leaving
+// the kit behind because eight unrelated pages had already adopted it. Its
+// real consumers today are Pipeline (screening / commit / transactions),
+// Portfolio (performance / growth), Fund (accounting / performance) and
+// `pages/partner/operations/kit.jsx` — nothing advisor, nothing Network.
+//
+// The three advisor Network zones now sitting beside this file deliberately do
+// NOT use it: they build on `pages/advisor/expertise/kit.jsx`, the shared
+// advisor kit that owns the four-state body and the absent-is-not-empty rules.
+// If you are writing an advisor zone, that is the import you want. Moving this
+// file to a neutral path is the real fix and is recorded as such; it is not
+// done here because it would touch eight surfaces on three other licences.
+//
+// Table / chip / slide-over primitives that mirror the app's existing patterns
+// so a section reads like the rest of the product without a new dependency.
 import React, { useEffect } from 'react';
 import { X, Search } from 'lucide-react';
 

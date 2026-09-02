@@ -1,6 +1,6 @@
 <<<<<<< HEAD
-<<<<<<<< HEAD:docs/assets/CompetitorAnalysisPage-B08WWPFp.js
-import"./rolldown-runtime-Dd_uD5pT.js";import{g as e,n as t}from"./react-vendor-CanlMnhD.js";import{t as n}from"./CompetitorAnalysis-DQqUM5pm.js";e();var r=t();function i(){return(0,r.jsx)(n,{})}export{i as default};
+<<<<<<<< HEAD:docs/assets/CompetitorAnalysisPage-BrcaPQjr.js
+import"./rolldown-runtime-Dd_uD5pT.js";import{g as e,n as t}from"./react-vendor-CanlMnhD.js";import{t as n}from"./CompetitorAnalysis-2iUxBFt0.js";e();var r=t();function i(e){return(0,r.jsx)(n,{...e})}export{i as default};
 =======
 <<<<<<<< HEAD:docs/assets/CompetitorAnalysisPage-BQNjd3cQ.js
 import"./rolldown-runtime-Dd_uD5pT.js";import{g as e,n as t}from"./react-vendor-CanlMnhD.js";import{t as n}from"./CompetitorAnalysis-Jo7_IxoQ.js";e();var r=t();function i(){return(0,r.jsx)(n,{})}export{i as default};

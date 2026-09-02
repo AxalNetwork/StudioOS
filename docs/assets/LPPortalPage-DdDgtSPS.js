@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:docs/assets/LPPortalPage-DdDgtSPS.js
-import"./rolldown-runtime-Dd_uD5pT.js";import{g as e,n as t}from"./react-vendor-CanlMnhD.js";import{E as n}from"./index-CrFzmjqT.js";import{t as r}from"./WorkspaceTabs-DUMNP4Xj.js";import{n as i}from"./FundsPage-CwBFD8EK.js";e();var a=t();function o(){return(0,a.jsxs)(`div`,{className:`p-6 max-w-7xl mx-auto`,children:[(0,a.jsx)(r,{icon:n,title:`My LP Portal`,description:`Your commitments, capital calls, distributions and performance — read straight from the canonical LP store.`}),(0,a.jsx)(i,{})]})}export{o as default};
-========
-import"./rolldown-runtime-Dd_uD5pT.js";import{g as e,n as t}from"./react-vendor-CanlMnhD.js";import{D as n}from"./index-BmIpyP_B.js";import{t as r}from"./WorkspaceTabs-DUMNP4Xj.js";import{n as i}from"./FundsPage-7wI2-aH_.js";e();var a=t();function o(){return(0,a.jsxs)(`div`,{className:`p-6 max-w-7xl mx-auto`,children:[(0,a.jsx)(r,{icon:n,title:`My LP Portal`,description:`Your commitments, capital calls, distributions and performance — read straight from the canonical LP store.`}),(0,a.jsx)(i,{})]})}export{o as default};
->>>>>>>> origin/main:docs/assets/LPPortalPage-CbGx6wLQ.js

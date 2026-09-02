@@ -7,7 +7,7 @@ structural damage across multiple workspaces?"* Everything that cleared that bar
 is below; everything that did not was decided and written down in
 `ASSUMPTIONS_LOG.md` instead.
 
-Six items. Each names the evidence, what is actually blocked, and what a wrong
+Eight items. Each names the evidence, what is actually blocked, and what a wrong
 guess would cost — because "blocked" without a cost is just a to-do.
 
 ---
@@ -174,6 +174,69 @@ inventing them. The reply-time promise is a commitment, not a field —
 `contact.ts` stores submissions and nothing measures a response time.
 
 **Blocks:** #189 (Wave 3 Website/Pricing).
+
+---
+
+## U7 — The worker grants advisors the full market lens; the UI does not let them in
+
+**Evidence.** `util/marketIntelTier.ts:20-23` lists the roles that bypass the
+tier gate on market intelligence:
+
+```ts
+const FULL_LENS_BYPASS_ROLES = ['admin', 'partner', 'advisor'] as const;
+```
+
+`routes/market_intel.ts:201-202` repeats it, and `/investor-lens` bypasses for
+advisors too. So the API's own policy says an advisor sees everything. The route
+that renders it, `App.jsx:1732`, guards `labRoles(['admin', 'partner',
+'investor'])` — no advisor — and nothing in the advisor shell links there.
+Research · Markets reads the separate `signals` family instead.
+
+**Why it is a blocker.** These two statements cannot both be the policy, and
+which one is wrong is a commercial call, not a wiring one. Opening the route
+gives a licence with no market-intel entitlement in its pricing the full lens on
+aggregated data drawn from other users' survey answers. Removing `advisor` from
+the bypass list silently narrows an API grant that has been in place long enough
+that something may rely on it. Guessing either way changes what a paying licence
+can see.
+
+**What is NOT blocked by it.** Research · Markets, which is live and does not
+touch `market_intel`.
+
+---
+
+## U8 — One person writes a relationship record about another, and nobody asks them
+
+**Evidence.** `POST /api/partnernet/relationships` (`routes/partnernet.ts:236`)
+is `requireAuth` with a rate limit and no consent step. It verifies the other
+user exists (`:246-247`) and inserts a row carrying a `relationship_type` and a
+`strength_score`. `GET /relationships` (`:223`) returns rows where **either**
+side matches, so the row — and the score — appears in the other person's book
+immediately. They are not notified, cannot decline it, and the only history the
+store keeps is `created` and `updated` (`:76-83`).
+
+**Why it is a blocker.** It is the same question as U6 one surface over: a
+record about a person, readable by someone else, with no consent artefact
+anywhere. There are three defensible answers and they build very differently — a
+row is private to its author until the other side accepts; a row is mutual and
+its creation notifies; or a row is one-sided by design and the score is simply
+never shown to the subject. Choosing wrong is expensive in both directions, and
+the current behaviour is the third answer arrived at by omission rather than by
+decision.
+
+**What this branch did about it.** Nothing, deliberately. Network ·
+Relationships **reads** the book and edits rows the caller is already a member
+of; it does not offer creation. The page says why: there is no person picker
+either, so the only way to add a row today is to type another user's internal
+id (`RelationshipsPage.jsx:140`), and shipping that into a new surface would
+have propagated both defects.
+
+**Adjacent, and worth fixing whatever is decided:** `partner_relationships` and
+`relationship_events` are created by no migration at all — `ensureSchema` builds
+them lazily at `routes/partnernet.ts:59-70`, guarded by a module-global
+(`let migrated = false`, `:18-20`) rather than the per-binding cache
+`GOTCHAS.md` requires. That is the same class of gap migration 201 closed for
+`advisors`.
 
 ---
 
