@@ -71,6 +71,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/integrations/providers', 'third-party provider clients'],
   ['cloudflare-worker/src/services/advisor',  'the advisor state machine'],
   ['cloudflare-worker/src/services/advisor/banks', 'its question banks'],
+  ['cloudflare-worker/src/services/email',    'transactional mail — canvas chrome, Gmail send, persona invites'],
   ['cloudflare-worker/src/services/decks',    'deck assembly and export'],
   ['cloudflare-worker/src/services/market_intel', 'market-intelligence ingestion'],
   ['cloudflare-worker/src/services/market_intel/extractors', 'what is pulled out of a source'],
