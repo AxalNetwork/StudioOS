@@ -21,10 +21,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
 
 const OPS = resolve(process.cwd(), 'frontend/src/pages/partner/operations');
 const pages = () => readdirSync(OPS).filter((f) => f.endsWith('.jsx'));
 const src = (f) => readFileSync(join(OPS, f), 'utf8');
+const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
 test('the fixture module is deleted', () => {
   assert.ok(
@@ -90,4 +92,48 @@ test('offerings ?mine=1 is scoped to the caller in the worker', () => {
     services, /mine\s*\?\s*'owner_user_id = \?'/,
     'the mine=1 branch must filter by owner_user_id — without it every partner sees every draft',
   );
+});
+
+test('the partner stat strips read fields the worker actually emits', () => {
+  // THIS IS THE THIRD PR IN A ROW WITH THE SAME DEFECT, so it is pinned rather
+  // than fixed again. A canvas stat strip invents a DTO field name, `|| 0`
+  // coerces the resulting `undefined` to zero, and the page renders a confident
+  // number instead of an obvious blank. Nothing else catches it: the field is
+  // read, not imported, so `check-unused-imports` is silent; the bundle
+  // compiles; and no test renders these pages.
+  //
+  // The three that shipped here:
+  //   `e.agreed_price`  — engagements emit `price` (REAL NOT NULL), and this
+  //                       same file reads `e.price` for every individual row.
+  //                       The total was always 0, so "Active value $0" sat
+  //                       beside a live engagement count on the same card.
+  //   `i.claims_count`  — routes/perks.ts aliases the subquery `claim_count`,
+  //                       singular. Every listing counted 0 redemptions.
+  //   win rate over all quotes — statuses are submitted|accepted|rejected|
+  //                       withdrawn, so pending proposals counted as losses and
+  //                       the note said "N decided" about quotes that were not.
+  //
+  // Comment-stripped: the fixes name the wrong fields on purpose to explain
+  // themselves, and a raw scan would read that prose as the defect.
+  const eng = codeOnly(read('frontend/src/pages/partner/operations/EngagementsPage.jsx'));
+  const perks = codeOnly(read('frontend/src/pages/PerksPage.jsx'));
+
+  assert.doesNotMatch(eng, /agreed_price/,
+    'engagements emit `price`, not `agreed_price` — nothing in the product defines that field');
+  assert.match(eng, /active\.reduce\(\(a, e\) => a \+ \(Number\(e\.price\) \|\| 0\), 0\)/,
+    'the active-value total must sum the column that exists');
+
+  assert.doesNotMatch(perks, /claims_count/,
+    'routes/perks.ts aliases it `claim_count`, singular');
+  assert.match(perks, /Number\(i\.claim_count\)/,
+    'the claims total must read the alias the route emits');
+
+  // A win rate divides by decisions, not by submissions, and the sentence under
+  // it must count the same set the percentage does.
+  assert.match(eng, /const decidedQuotes = acceptedQuotes \+ rejectedQuotes;/,
+    'the denominator must be accepted + rejected');
+  assert.doesNotMatch(eng, /acceptedQuotes \/ myQuotes/,
+    'dividing by every quote counts pending proposals as losses');
+  assert.match(eng, /\$\{acceptedQuotes\} of \$\{decidedQuotes\} decided/,
+    'the note must count the same set as the percentage');
 });

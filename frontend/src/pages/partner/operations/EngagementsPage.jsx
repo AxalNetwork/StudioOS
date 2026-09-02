@@ -61,11 +61,24 @@ export default function EngagementsPage() {
   const invoiced = engagements.filter((e) => e.status === 'invoiced');
 
   // Canvas-aligned stats: computed from the pipeline record, not asserted.
+  //
+  // A WIN RATE IS OVER DECIDED PROPOSALS, NOT SUBMITTED ONES. `quotes.status`
+  // is submitted|accepted|rejected|withdrawn. Dividing by every quote counts
+  // the ones still waiting for an answer as losses, so a partner with two
+  // accepted and eight pending reads 20% — and the note under it claimed "2 of
+  // 10 decided", which eight of them are not. `withdrawn` is excluded too: the
+  // partner pulled the proposal, so it was never lost to anyone.
   const openNeeds = needs.length;
   const myQuotes = quotes.length;
   const acceptedQuotes = quotes.filter((x) => x.status === 'accepted').length;
-  const winRate = myQuotes > 0 ? Math.round((acceptedQuotes / myQuotes) * 100) : null;
-  const activeValue = active.reduce((a, e) => a + (e.agreed_price || 0), 0);
+  const rejectedQuotes = quotes.filter((x) => x.status === 'rejected').length;
+  const decidedQuotes = acceptedQuotes + rejectedQuotes;
+  const winRate = decidedQuotes > 0 ? Math.round((acceptedQuotes / decidedQuotes) * 100) : null;
+  // `engagements.price` is the column and is NOT NULL — the DTO emits `price`,
+  // which this file already reads for every individual row. An earlier revision
+  // summed `agreed_price`, a field that exists nowhere in the product, so the
+  // total was always 0 and rendered "$0" beside a live engagement count.
+  const activeValue = active.reduce((a, e) => a + (Number(e.price) || 0), 0);
 
   const startProposal = (n) => {
     setOpenNeed(n);
@@ -144,7 +157,13 @@ export default function EngagementsPage() {
         {[
           { label: 'Open requests', value: String(openNeeds), note: 'founder needs accepting proposals' },
           { label: 'My proposals', value: String(myQuotes), note: `${acceptedQuotes} accepted` },
-          { label: 'Win rate', value: winRate != null ? `${winRate}%` : '—', note: myQuotes ? `${acceptedQuotes} of ${myQuotes} decided` : 'no proposals yet' },
+          {
+            label: 'Win rate',
+            value: winRate != null ? `${winRate}%` : '—',
+            note: decidedQuotes
+              ? `${acceptedQuotes} of ${decidedQuotes} decided`
+              : myQuotes ? `${myQuotes} still awaiting a decision` : 'no proposals yet',
+          },
           { label: 'Active value', value: moneyUsd(activeValue), note: `${active.length} engagement${active.length === 1 ? '' : 's'} in flight` },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">

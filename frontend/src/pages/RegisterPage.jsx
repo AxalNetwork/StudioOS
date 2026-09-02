@@ -2,13 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { safeReadJSON } from '../lib/storage';
 import { storePendingNext, sanitizeNextPath } from '../lib/pendingNext';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Copy, Check, Mail, RefreshCw } from 'lucide-react';
+import { Copy, Check, Mail, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
 import { track } from '../lib/funnel';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { loadTurnstile } from '../lib/turnstile';
 import AxalLogo from '../components/AxalLogo';
-import AuthShell, { AuthCard, authV2 } from '../components/auth/AuthShell';
+import AuthShell, { AuthCard } from '../components/auth/AuthShell';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 

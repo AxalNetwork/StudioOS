@@ -448,7 +448,9 @@ function PartnerConsole() {
           {[
             { label: 'Listings', value: String(items.length), note: `${items.filter((i) => i.status === 'live').length} live` },
             { label: 'In review', value: String(items.filter((i) => i.status === 'in_review').length), note: 'awaiting approval' },
-            { label: 'Claims', value: String(items.reduce((a, i) => a + (i.claims_count || 0), 0)), note: 'total redemptions' },
+            // `claim_count` is singular — routes/perks.ts computes it as a subquery
+            // alias. Reading `claims_count` produced 0 for every listing.
+            { label: 'Claims', value: String(items.reduce((a, i) => a + (Number(i.claim_count) || 0), 0)), note: 'total redemptions' },
             { label: 'Paused', value: String(items.filter((i) => i.status === 'paused').length), note: 'not visible to founders' },
           ].map((s) => (
             <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
