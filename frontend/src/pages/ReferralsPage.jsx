@@ -1,83 +1,65 @@
 /**
- * Referrals — submit people into the programme and watch them move through
- * review.
+ * Refer & Earn — `/referrals`
  *
- * This replaced the former two-tab surface ("Refer & Earn" + "Payouts"). The
- * old page was organised around a Stripe Connect balance: connect an account,
- * watch cents accrue, request a transfer. That model is gone — rewards are
- * milestone labels settled off-platform — so the page is now organised around
- * the thing that actually has state worth checking: the referral pipeline.
+ * Canvas-aligned surface (Refer___Earn.dc): page body only — production
+ * `SidebarNav` stays in App shell. Data from `/api/refer-earn/*` and
+ * `/api/email/*`; no canvas `.side` nav.
  *
- * Everything on screen comes from the worker (`/api/refer-earn/*`). The three
- * programme categories, their gating, and the status vocabulary are all served
- * by `/overview` rather than duplicated here, so the client can't drift from
- * the server's idea of what a referral can be.
+ * The old page was organised around a Stripe Connect balance; that model is
+ * gone — rewards are milestone labels settled off-platform.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import {
-  Share2, Plus, Upload, X, ChevronRight, Check, Copy, Lock,
-  Send, MessageCircle, Mail, AlertCircle, Loader2,
+  Check, Copy, Loader2, Upload, X,
 } from 'lucide-react';
 
 import { api } from '../lib/api';
-import PageExplainer from '../components/PageExplainer';
+import { parseLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCsv';
 import { useToast } from '../components/useToast';
+import './referrals/referrals.css';
 
-/**
- * LinkedIn glyph. This lucide build dropped its brand icons, so brand marks
- * are inline SVG here (the same approach IntegrationsPage uses). `currentColor`
- * keeps it matching whatever the button sets.
- */
 function LinkedinIcon({ size = 14 }) {
   return (
-    <svg
-      width={size} height={size} viewBox="0 0 24 24"
-      fill="currentColor" aria-hidden="true" focusable="false"
-    >
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-.95 1.83-1.95 3.77-1.95 4.03 0 4.78 2.5 4.78 5.76V21h-4v-5.6c0-1.34-.03-3.06-1.9-3.06-1.9 0-2.2 1.45-2.2 2.96V21H9z" />
     </svg>
   );
 }
 
-/** Status → chip classes. Mirrors the server's status vocabulary; anything
- *  unrecognised falls back to neutral rather than rendering unstyled. */
 const STATUS_TONE = {
-  draft: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-  submitted: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-  under_review: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-  more_info_needed: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
-  qualified: 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
-  in_conversation: 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
-  converted: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  reward_eligible: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  reward_issued: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  rejected: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-  closed: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
+  draft: 'grey',
+  submitted: 'grey',
+  under_review: 'amber',
+  more_info_needed: 'amber',
+  qualified: 'purple',
+  in_conversation: 'purple',
+  converted: 'green',
+  reward_eligible: 'green',
+  reward_issued: 'green',
+  rejected: 'red',
+  closed: 'grey',
 };
 
-const PRIORITY_TONE = {
-  'Highest priority': 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  Standard: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-  Selective: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+const CHIP = {
+  green: 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold bg-green-50 text-green-700',
+  amber: 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold bg-amber-50 text-amber-700',
+  grey: 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold bg-gray-100 text-gray-600',
+  purple: 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold bg-violet-50 text-violet-700',
+  red: 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold bg-red-50 text-red-700',
 };
 
-const QUALITY_BAR = {
-  strong: [
-    'A warm introduction where both sides already know context',
-    'Specific evidence — traction, expertise, or relevance — not a cold contact',
-    'Complete context: why now, why this person, why Axal VC',
-  ],
-  needsInfo: [
-    'Referral submitted without contact details or context',
-    'Relationship to Axal VC or to the referred party unclear',
-    'Category selected doesn’t match what’s actually being referred',
-  ],
-  notAccepted: [
-    'Self-referrals or referrals made without the person’s knowledge',
-    'Mass contact lists with no individual context',
-    'An idea with no founder attached yet',
-  ],
+const PRIORITY_CHIP = {
+  'Highest priority': CHIP.green,
+  Standard: CHIP.grey,
+  Selective: CHIP.amber,
 };
+
+const REWARD_MATRIX = [
+  { cat: 'Startup / founder', model: 'Milestone-based', modelTone: 'green', note: 'Paid on cohort acceptance and completed formation.' },
+  { cat: 'Platform user', model: 'Platform credit', modelTone: 'grey', note: 'Issued once matched and onboarded with a founder.' },
+  { cat: 'Strategic & capital', model: 'Invite-only / custom', modelTone: 'amber', note: 'Terms negotiated directly, not published — case by case.' },
+];
 
 const FAQS = [
   { q: 'Who is eligible to submit a referral?', a: 'Anyone already connected to Axal VC — founders in a cohort or graduated, advisors, investors, operators, and service partners.' },
@@ -88,76 +70,115 @@ const FAQS = [
   { q: 'What if my referral needs more information?', a: 'It moves to "More info needed" in your pipeline with a note on what’s missing — you can update it from the detail view.' },
 ];
 
-function Chip({ className = '', children }) {
-  return (
-    <span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold ${className}`}>
-      {children}
-    </span>
-  );
-}
+const PIPELINE_FILTERS = ['All', 'under_review', 'in_conversation', 'reward_issued', 'rejected'];
+
+const WARM_OPTIONS = [
+  'Yes — they know I’m referring them',
+  'No — cold introduction',
+  'Not sure yet',
+];
 
 function StatusChip({ status, label }) {
-  return <Chip className={STATUS_TONE[status] || STATUS_TONE.submitted}>{label || status}</Chip>;
+  const tone = STATUS_TONE[status] || 'grey';
+  return <span className={CHIP[tone] || CHIP.grey}>{label || status}</span>;
 }
 
-/** Share copy written per-platform: LinkedIn earns trust from a professional
- *  feed, X has to survive a quote-tweet, WhatsApp/Telegram are conversational. */
-function shareTargets(link) {
+function rewardColor(status) {
+  if (status === 'reward_issued') return '#15803d';
+  if (status === 'rejected') return '#b91c1c';
+  if (['qualified', 'in_conversation', 'converted', 'reward_eligible'].includes(status)) return '#b45309';
+  return '#8b8798';
+}
+
+function formatShortDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(d);
+}
+
+function sharePlatforms(link) {
+  const shareUrl = link || 'https://axal.vc/referrals';
   const enc = encodeURIComponent;
+  const msgLinkedin = `Referring the right person is worth more than a hundred cold applications.\n\nAxal VC’s Refer & Earn program rewards founders, advisors, and operators who bring high-quality people into the network — real rewards for a real fit, every submission reviewed individually.\n\nIf you know a founder who should be building inside a structured 28-day formation program, an advisor with real operating depth, or a strategic introduction worth making — this is where it goes: ${shareUrl}`;
+  const msgX = `Know a founder who should be building inside Axal VC’s Spin-Out Lab? Refer them. Reviewed individually, rewarded on real outcomes — not a referral-spam program. ${shareUrl}`;
+  const msgWhatsapp = `Hey — Axal VC has a referral program where you get rewarded for introducing strong founders, advisors, or partners into their network. Thought of you for this: ${shareUrl}`;
+  const msgTelegram = `Axal VC’s Refer & Earn: refer founders, advisors, or strategic intros into their network and earn when there’s a real fit. Reviewed individually, not a numbers game. ${shareUrl}`;
+
   return [
     {
-      key: 'linkedin', label: 'LinkedIn', Icon: LinkedinIcon,
-      className: 'bg-[#0a66c2] hover:bg-[#004182] text-white',
-      href: `https://www.linkedin.com/sharing/share-offsite/?url=${enc(link)}`,
+      key: 'linkedin', label: 'LinkedIn', preview: msgLinkedin.slice(0, 72) + '…', iconBg: '#0A66C2',
+      go: () => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${enc(shareUrl)}`, '_blank'),
+      icon: <LinkedinIcon size={16} />,
     },
     {
-      key: 'x', label: 'X / Twitter', Icon: X,
-      className: 'bg-black hover:bg-gray-800 text-white',
-      href: `https://twitter.com/intent/tweet?url=${enc(link)}&text=${enc('If you’re building something worth funding, Axal VC’s Spin-Out Lab takes companies from idea to incorporated in 28 days.')}`,
+      key: 'x', label: 'X / Twitter', preview: msgX.slice(0, 72) + '…', iconBg: '#000000',
+      go: () => window.open(`https://twitter.com/intent/tweet?text=${enc(msgX)}`, '_blank'),
+      icon: <span className="text-sm font-bold">𝕏</span>,
     },
     {
-      key: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle,
-      className: 'bg-[#25d366] hover:bg-[#1da851] text-white',
-      href: `https://wa.me/?text=${enc(`Thought of you — Axal VC's Spin-Out Lab: ${link}`)}`,
+      key: 'whatsapp', label: 'WhatsApp', preview: msgWhatsapp.slice(0, 72) + '…', iconBg: '#25D366',
+      go: () => window.open(`https://wa.me/?text=${enc(msgWhatsapp)}`, '_blank'),
+      icon: <span className="text-xs">WA</span>,
     },
     {
-      key: 'telegram', label: 'Telegram', Icon: Send,
-      className: 'bg-[#2aabee] hover:bg-[#1e96d4] text-white',
-      href: `https://t.me/share/url?url=${enc(link)}&text=${enc('Axal VC Spin-Out Lab — idea to incorporated in 28 days.')}`,
-    },
-    {
-      key: 'email', label: 'Email', Icon: Mail,
-      className: 'bg-violet-600 hover:bg-violet-700 text-white',
-      href: `mailto:?subject=${enc('Axal VC Spin-Out Lab')}&body=${enc(`I thought this might be relevant to you: ${link}`)}`,
+      key: 'telegram', label: 'Telegram', preview: msgTelegram.slice(0, 72) + '…', iconBg: '#26A5E4',
+      go: () => window.open(`https://t.me/share/url?url=${enc(shareUrl)}&text=${enc(msgTelegram)}`, '_blank'),
+      icon: <span className="text-xs">TG</span>,
     },
   ];
 }
 
+function inviteLink(code, email) {
+  if (!code) return '—';
+  const base = `https://axal.vc/register?ref=${encodeURIComponent(code)}`;
+  return email ? `${base}&invitee=${encodeURIComponent(email)}` : base;
+}
+
+function inviteStatus(row) {
+  if (row.signed_up_user_id || row.status === 'joined') return { label: 'Registered', tone: 'green' };
+  if (row.status === 'sent' || row.status === 'opened') return { label: 'Invited', tone: 'purple' };
+  if (row.status === 'failed') return { label: 'Failed', tone: 'red' };
+  return { label: 'Not sent', tone: 'grey' };
+}
+
 export default function ReferralsPage({ embedded = false }) {
   const { showToast } = useToast();
+  const policyRef = useRef(null);
+  const csvInputRef = useRef(null);
+  const qrCanvasRef = useRef(null);
 
   const [overview, setOverview] = useState(null);
   const [rows, setRows] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [pendingContacts, setPendingContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
   const [statusFilter, setStatusFilter] = useState('All');
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [partnerOpen, setPartnerOpen] = useState(false);
+  const [partnerNote, setPartnerNote] = useState('');
   const [detail, setDetail] = useState(null);
-  const [faqOpen, setFaqOpen] = useState(0);
+  const [faqOpen, setFaqOpen] = useState(-1);
   const [copied, setCopied] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [shareToast, setShareToast] = useState('');
+  const [sendingInvite, setSendingInvite] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError('');
     try {
-      const [ov, list] = await Promise.all([
+      const [ov, list, inv] = await Promise.all([
         api.referralOverview(),
         api.referralSubmissions(),
+        api.emailInvites().catch(() => ({ invites: [] })),
       ]);
       setOverview(ov);
       setRows(Array.isArray(list) ? list : []);
+      setInvites(Array.isArray(inv?.invites) ? inv.invites : []);
     } catch (e) {
       setLoadError(e?.message || 'Could not load your referrals.');
     } finally {
@@ -167,19 +188,85 @@ export default function ReferralsPage({ embedded = false }) {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PENDING_LINKEDIN_IMPORT_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed?.rows?.length) return;
+      if (parsed.at && Date.now() - parsed.at > 10 * 60 * 1000) {
+        localStorage.removeItem(PENDING_LINKEDIN_IMPORT_KEY);
+        return;
+      }
+      setPendingContacts(parsed.rows);
+      localStorage.removeItem(PENDING_LINKEDIN_IMPORT_KEY);
+      showToast(`${parsed.rows.length} contacts imported from LinkedIn — review and send invites below.`, 'success');
+    } catch { /* ignore */ }
+  }, [showToast]);
+
+  useEffect(() => {
+    const link = overview?.referral_link;
+    if (!link || !qrCanvasRef.current) return;
+    QRCode.toCanvas(qrCanvasRef.current, link, { width: 172, margin: 1 }, () => {});
+  }, [overview?.referral_link]);
+
   const statusLabels = overview?.status_labels || {};
   const filtered = useMemo(() => {
     if (statusFilter === 'All') return rows;
     return rows.filter((r) => r.status === statusFilter);
   }, [rows, statusFilter]);
 
-  // Only offer filters the user actually has rows for — an empty pipeline
-  // shouldn't render eleven dead buttons.
-  const availableStatuses = useMemo(() => {
-    const seen = [];
-    for (const r of rows) if (!seen.includes(r.status)) seen.push(r.status);
-    return seen;
-  }, [rows]);
+  const byStatus = overview?.counts?.by_status || {};
+  const summary = useMemo(() => {
+    const qualifiedKeys = ['qualified', 'in_conversation', 'converted', 'reward_eligible', 'reward_issued'];
+    const qualified = qualifiedKeys.reduce((n, k) => n + (byStatus[k] || 0), 0);
+    const underReview = (byStatus.under_review || 0) + (byStatus.more_info_needed || 0);
+    const catCounts = {};
+    for (const r of rows) catCounts[r.category] = (catCounts[r.category] || 0) + 1;
+    const top = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0];
+    const topLabel = !top ? '—' : top[0] === 'startup' ? 'Startup' : top[0] === 'customer' ? 'Platform user' : 'Strategic';
+    const rewardIssued = overview?.counts?.reward_issued ?? 0;
+    const dollarRow = rows.find((r) => r.status === 'reward_issued' && /\$/.test(r.reward_label || ''));
+    return [
+      { k: 'Referrals submitted', v: String(overview?.counts?.total ?? 0), tone: '#18181b' },
+      { k: 'Qualified', v: String(qualified), tone: '#6d28d9' },
+      { k: 'Under review', v: String(underReview), tone: '#b45309' },
+      { k: 'Rewards earned', v: dollarRow?.reward_label?.match(/\$[\d,]+/)?.[0] || String(rewardIssued), tone: '#15803d' },
+      { k: 'Avg. review time', v: '5 days', tone: '#18181b' },
+      { k: 'Top category', v: topLabel, tone: '#18181b' },
+    ];
+  }, [byStatus, overview, rows]);
+
+  const contactRows = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const p of pendingContacts) {
+      const email = (p.email || '').toLowerCase();
+      if (!email || seen.has(email)) continue;
+      seen.add(email);
+      out.push({ key: `p-${email}`, name: p.name || '—', email: p.email, pending: true });
+    }
+    for (const inv of invites) {
+      const email = (inv.recipient_email || '').toLowerCase();
+      if (!email || seen.has(email)) continue;
+      seen.add(email);
+      out.push({
+        key: `i-${inv.id}`,
+        id: inv.id,
+        name: inv.recipient_name || '—',
+        email: inv.recipient_email,
+        invite: inv,
+        pending: false,
+      });
+    }
+    return out;
+  }, [invites, pendingContacts]);
+
+  const sentInviteCount = contactRows.filter((c) => {
+    if (c.pending) return false;
+    const st = inviteStatus(c.invite);
+    return st.label !== 'Not sent';
+  }).length;
 
   const copyLink = async () => {
     const link = overview?.referral_link;
@@ -187,9 +274,35 @@ export default function ReferralsPage({ embedded = false }) {
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      setTimeout(() => setCopied(false), 1600);
     } catch {
       showToast('Could not copy — select the link and copy manually.', 'error');
+    }
+  };
+
+  const copyShareLink = async () => {
+    const link = overview?.referral_link || 'https://axal.vc/referrals';
+    try {
+      await navigator.clipboard.writeText(link);
+      setShareCopied(true);
+    } catch {
+      showToast('Could not copy link.', 'error');
+    }
+  };
+
+  const downloadQr = async () => {
+    const link = overview?.referral_link;
+    if (!link) return;
+    try {
+      const dataUrl = await QRCode.toDataURL(link, { width: 400, margin: 2 });
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `referral-${overview.referral_code || 'code'}.png`;
+      a.click();
+      setShareToast(`QR downloaded as referral-${overview.referral_code || 'code'}.png`);
+      setTimeout(() => setShareToast(''), 2400);
+    } catch {
+      showToast('Could not generate QR image.', 'error');
     }
   };
 
@@ -204,282 +317,388 @@ export default function ReferralsPage({ embedded = false }) {
     }
   };
 
+  const onCsvUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('File too large (max 2 MB).', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = parseLinkedInCsv(String(reader.result || ''));
+      if (!parsed.length) {
+        showToast('No contacts found — CSV needs an email column.', 'warning');
+        return;
+      }
+      setPendingContacts(parsed);
+      showToast(`${parsed.length} contacts ready to invite.`, 'success');
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const sendContactInvite = async (contact) => {
+    setSendingInvite(contact.key);
+    try {
+      if (contact.id && !contact.pending) {
+        await api.emailRemindInvite(contact.id);
+        showToast('Reminder sent.', 'success');
+      } else {
+        const r = await api.emailSendReferralInvites([{ email: contact.email, name: contact.name === '—' ? '' : contact.name }]);
+        if (r.sent > 0) {
+          showToast('Invite sent.', 'success');
+          setPendingContacts((prev) => prev.filter((p) => p.email !== contact.email));
+        } else {
+          const reason = r.failed?.[0]?.reason || 'Could not send invite.';
+          showToast(reason, 'warning');
+        }
+      }
+      const inv = await api.emailInvites().catch(() => ({ invites: [] }));
+      setInvites(Array.isArray(inv?.invites) ? inv.invites : []);
+    } catch (err) {
+      showToast(err?.message || 'Could not send invite.', 'error');
+    } finally {
+      setSendingInvite(null);
+    }
+  };
+
+  const importLinkedin = async () => {
+    try {
+      const st = await api.linkedinStatus();
+      if (!st?.connected) {
+        const start = await api.linkedinOAuthStart({ return_to: '/referrals' });
+        if (start?.url) window.location.href = start.url;
+        else showToast('LinkedIn is not configured.', 'warning');
+        return;
+      }
+      showToast('Upload Connections.csv using Upload CSV — or import from Settings → Integrations.', 'info');
+    } catch (e) {
+      showToast(e?.message || 'Could not start LinkedIn import.', 'error');
+    }
+  };
+
+  const submitPartner = async () => {
+    try {
+      await api.referralStrategicAccess({ note: partnerNote });
+      setOverview((o) => ({ ...o, strategic_access: 'requested' }));
+      setPartnerOpen(false);
+      setPartnerNote('');
+      showToast('Partner program request submitted — we’ll follow up directly.', 'success');
+    } catch (e) {
+      showToast(e?.message || 'Could not submit request.', 'error');
+    }
+  };
+
+  const scrollToPolicy = () => {
+    policyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const stop = (e) => e.stopPropagation();
+
   return (
-    <div
-      className={embedded ? 'space-y-6' : 'p-6 max-w-6xl mx-auto space-y-6'}
-      data-testid="referrals-page"
-    >
+    <div className={`rf-page ${embedded ? 'space-y-6' : ''}`} data-testid="referrals-page">
       {!embedded && (
-        <div className="flex items-center gap-3">
-          <Share2 className="text-violet-600" size={24} />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Referrals</h1>
-            <PageExplainer pageKey="refer_earn" />
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Refer founders, partners, and LPs — then track them through review.
-            </p>
+        <div className="rf-header">
+          <div className="rf-header-inner">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="text-xl font-extrabold tracking-tight">Refer &amp; Earn</h1>
+                  <span className={CHIP.green}>Selective · Open</span>
+                </div>
+                <p className="mt-1.5 max-w-xl text-[13px] leading-snug text-[#4a4553]">
+                  Submit and track referrals into the Axal VC network — founders, advisors, service partners, and strategic introductions. Reviewed individually against a real quality bar.
+                </p>
+              </div>
+              <div className="flex flex-none flex-wrap gap-2">
+                <button type="button" className="rf-btn rounded-lg border border-[#ececf1] px-3.5 py-2 text-xs font-semibold text-zinc-500" onClick={scrollToPolicy}>
+                  View policy
+                </button>
+                <button type="button" className="rf-btn rounded-lg border border-[#ececf1] px-3.5 py-2 text-xs font-semibold text-zinc-500" onClick={() => setShareOpen(true)}>
+                  Share
+                </button>
+                <button type="button" className="rf-btn rounded-lg bg-violet-700 px-4 py-2 text-[13px] font-bold text-white" onClick={() => setSubmitOpen(true)}>
+                  Submit referral
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {loadError && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
-          <AlertCircle size={16} className="mt-0.5 shrink-0" />
-          <div className="flex-1">
+      <div className={embedded ? 'space-y-6' : 'rf-body'}>
+        {loadError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {loadError}
             <button type="button" onClick={load} className="ml-2 font-semibold underline">Retry</button>
           </div>
-        </div>
-      )}
+        )}
 
-      {loading ? (
-        <div className="flex items-center gap-2 py-12 text-sm text-gray-500 dark:text-gray-400">
-          <Loader2 size={16} className="animate-spin" /> Loading your referrals…
-        </div>
-      ) : (
-        <>
-          {/* ---- Summary ------------------------------------------------ */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {[
-              { label: 'Submitted', value: overview?.counts?.total ?? 0 },
-              { label: 'Converted', value: overview?.counts?.converted ?? 0 },
-              { label: 'Rewards issued', value: overview?.counts?.reward_issued ?? 0, accent: true },
-            ].map((tile) => (
-              <div
-                key={tile.label}
-                className={`rounded-xl border p-4 ${
-                  tile.accent
-                    ? 'border-violet-200 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-900/20'
-                    : 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900'
-                }`}
-              >
-                <div className="text-xs font-medium text-gray-500 dark:text-gray-400">{tile.label}</div>
-                <div className={`mt-1 text-2xl font-bold ${tile.accent ? 'text-violet-700 dark:text-violet-300' : 'text-gray-900 dark:text-gray-100'}`}>
-                  {tile.value}
-                </div>
-              </div>
-            ))}
+        {loading ? (
+          <div className="flex items-center gap-2 py-12 text-sm text-zinc-500">
+            <Loader2 size={16} className="animate-spin" /> Loading your referrals…
           </div>
-
-          {/* ---- Referral link + share ---------------------------------- */}
-          <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
-            <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">Your referral link</h2>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <code className="flex-1 min-w-[240px] break-all rounded-lg bg-gray-50 px-3 py-2 font-mono text-sm text-violet-700 dark:bg-gray-800 dark:text-violet-300">
-                {overview?.referral_link || '—'}
-              </code>
-              <button
-                type="button"
-                onClick={copyLink}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white hover:bg-violet-700"
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
-              </button>
-            </div>
-            {overview?.legacy_referral_code && (
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Previous code also works: <span className="font-mono">{overview.legacy_referral_code}</span>
-              </p>
-            )}
-            <div className="mt-4 flex flex-wrap gap-2">
-              {shareTargets(overview?.referral_link || '').map(({ key, label, Icon, className, href }) => (
-                <a
-                  key={key}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold ${className}`}
-                >
-                  <Icon size={14} /> {label}
-                </a>
+        ) : (
+          <>
+            <div className="rf-stat-grid">
+              {summary.map((s) => (
+                <div key={s.k} className="rf-stat-cell">
+                  <div className="rf-mono text-[19px] font-extrabold tracking-tight" style={{ color: s.tone }}>{s.v}</div>
+                  <div className="rf-lbl mt-1 text-[9.5px]">{s.k}</div>
+                </div>
               ))}
             </div>
-          </div>
 
-          {/* ---- Programmes -------------------------------------------- */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            {(overview?.categories || []).map((cat) => (
-              <div key={cat.key} className="flex flex-col rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Chip className={PRIORITY_TONE[cat.priority] || PRIORITY_TONE.Standard}>{cat.priority}</Chip>
-                  <Chip className={cat.locked
-                    ? 'bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
-                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'}
-                  >
-                    {cat.access}
-                  </Chip>
-                </div>
-                <h3 className="mt-2 text-sm font-bold text-gray-900 dark:text-gray-100">{cat.name}</h3>
-                <p className="mt-1 flex-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">{cat.qualifies}</p>
-                <p className="mt-2 text-xs font-medium text-gray-700 dark:text-gray-300">{cat.reward}</p>
-                {cat.locked && (
+            <div className="mt-8">
+              <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-2">
+                <div className="rf-lbl">Referral categories</div>
+                <div className="text-[11.5px] text-[#8b8798]">Not every category carries equal weight or the same reward model</div>
+              </div>
+              <div className="rf-cat-grid">
+                {(overview?.categories || []).map((cat) => (
+                  <div key={cat.key} className="rounded-[13px] border border-[#ececf1] bg-white p-4 dark:bg-gray-900">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[13.5px] font-extrabold tracking-tight">{cat.name}</div>
+                      <span className={cat.locked ? CHIP.purple : CHIP.grey}>{cat.access}</span>
+                    </div>
+                    <div className="mt-2">
+                      <span className={PRIORITY_CHIP[cat.priority] || CHIP.grey}>{cat.priority}</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-[#4a4553]">{cat.qualifies}</p>
+                    <p className="mt-2 border-t border-[#f4f3f7] pt-2 text-[11px] text-[#8b8798]">Reward: {cat.reward}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rf-share-grid mt-8">
+              <div className="rf-card p-5 sm:p-6">
+                <h2 className="text-sm font-extrabold tracking-tight">Your referral link</h2>
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-[11px] border border-[#ececf1] bg-[#faf9fc] p-2 pl-3.5">
+                  <div className="rf-mono min-w-0 flex-1 break-all text-[12.5px] text-violet-700">
+                    {overview?.referral_link || '—'}
+                  </div>
                   <button
                     type="button"
-                    onClick={async () => {
-                      try {
-                        const r = await api.referralStrategicAccess({ note: '' });
-                        setOverview((o) => ({ ...o, strategic_access: r.strategic_access }));
-                        showToast('Access requested — we’ll be in touch.', 'success');
-                      } catch (e) {
-                        showToast(e?.message || 'Could not request access.', 'error');
-                      }
-                    }}
-                    disabled={overview?.strategic_access === 'requested'}
-                    className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-200 px-3 py-1.5 text-xs font-semibold text-violet-700 disabled:opacity-60 dark:border-violet-900 dark:text-violet-300"
+                    onClick={copyLink}
+                    className={`rf-btn inline-flex flex-none items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-bold ${copied ? 'bg-green-50 text-green-700' : 'bg-violet-700 text-white'}`}
                   >
-                    <Lock size={12} />
-                    {overview?.strategic_access === 'requested' ? 'Access requested' : 'Request access'}
+                    {copied ? <Check size={13} /> : <Copy size={13} />}
+                    {copied ? 'Copied' : 'Copy'}
                   </button>
+                </div>
+                <div className="rf-lbl mb-1.5 mt-4 text-[9.5px]">Referral code</div>
+                <div className="rounded-[11px] border border-[#e6e0f7] bg-gradient-to-b from-[#f8f6fe] to-[#f4f2fb] px-4 py-4 text-center">
+                  <div className="rf-mono text-[26px] font-bold tracking-widest text-violet-700">{overview?.referral_code || '—'}</div>
+                  {overview?.legacy_referral_code && (
+                    <p className="mt-1.5 text-[11.5px] text-[#8b8798]">
+                      Previous code also works: <span className="rf-mono">{overview.legacy_referral_code}</span>
+                    </p>
+                  )}
+                </div>
+                <p className="mt-4 border-t border-[#f4f3f7] pt-4 text-[11.5px] leading-relaxed text-[#8b8798]">
+                  Anyone who registers with your code is attributed to you. Rewards accrue when they reach a qualified milestone — acceptance, onboarding, or close — never on signup alone.
+                </p>
+                {shareToast && (
+                  <div className="mt-2.5 rounded-lg bg-green-50 px-3 py-2 text-[11.5px] font-semibold text-green-700">{shareToast}</div>
                 )}
               </div>
-            ))}
-          </div>
 
-          {/* ---- Pipeline ----------------------------------------------- */}
-          <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 p-4 dark:border-gray-800">
-              <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">Your referrals</h2>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setImportOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-                >
-                  <Upload size={14} /> Import CSV
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubmitOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-700"
-                >
-                  <Plus size={14} /> Submit a referral
+              <div className="rf-card p-5 text-center sm:p-6">
+                <h2 className="text-sm font-extrabold tracking-tight">QR code</h2>
+                <div className="mt-4 flex justify-center">
+                  <canvas ref={qrCanvasRef} className="rounded-[11px] border border-[#ececf1] bg-white p-2 dark:bg-white" aria-label="Referral QR code" />
+                </div>
+                <p className="mt-3.5 text-[11.5px] leading-snug text-[#8b8798]">
+                  Scan to open registration with <span className="rf-mono text-violet-700">{overview?.referral_code || '—'}</span> pre-filled.
+                </p>
+                <button type="button" className="rf-btn mt-3 w-full rounded-lg border border-[#ececf1] py-2 text-[11.5px] font-bold text-zinc-700" onClick={downloadQr}>
+                  Download PNG
                 </button>
               </div>
             </div>
 
-            {availableStatuses.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 border-b border-gray-200 p-3 dark:border-gray-800">
-                {['All', ...availableStatuses].map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setStatusFilter(s)}
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      statusFilter === s
-                        ? 'bg-violet-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    {s === 'All' ? 'All' : (statusLabels[s] || s)}
+            <div className="rf-card mt-3.5 overflow-hidden">
+              <div className="flex flex-wrap items-start justify-between gap-3 p-5 sm:px-6">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-extrabold tracking-tight">Import contacts</h2>
+                  <p className="mt-1 text-[12.5px] leading-snug text-[#4a4553]">
+                    Upload a CSV with <span className="rf-mono rounded bg-[#f4f3f7] px-1 text-[11.5px]">name,email</span> columns to generate a personalised invite link per contact.
+                  </p>
+                </div>
+                <div className="flex flex-none flex-wrap gap-2">
+                  <button type="button" className="rf-btn inline-flex items-center gap-1.5 rounded-lg bg-[#0a66c2] px-4 py-2 text-[12.5px] font-bold text-white" onClick={importLinkedin}>
+                    <LinkedinIcon size={14} /> Import from LinkedIn
                   </button>
-                ))}
+                  <button type="button" className="rf-btn inline-flex items-center gap-1.5 rounded-lg bg-violet-700 px-4 py-2 text-[12.5px] font-bold text-white" onClick={() => csvInputRef.current?.click()}>
+                    <Upload size={14} /> Upload CSV
+                  </button>
+                  <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={onCsvUpload} />
+                </div>
               </div>
-            )}
 
-            {filtered.length === 0 ? (
-              <div className="p-8 text-center">
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {rows.length === 0 ? 'No referrals yet' : 'Nothing in this status'}
-                </p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {rows.length === 0
-                    ? 'Refer someone you already know is a fit — a warm, specific introduction beats a list of contacts.'
-                    : 'Try a different filter.'}
-                </p>
-              </div>
-            ) : (
-              <ul className="divide-y divide-gray-200 dark:divide-gray-800">
-                {filtered.map((r) => (
-                  <li key={r.uid}>
+              {contactRows.length === 0 ? (
+                <div className="border-t border-[#f4f3f7] px-6 py-8 text-center">
+                  <p className="text-[12.5px] leading-relaxed text-[#8b8798]">
+                    No contacts imported yet. Your CSV needs a header row with at least <span className="rf-mono rounded bg-[#f4f3f7] px-1 text-[11.5px]">email</span> — <span className="rf-mono rounded bg-[#f4f3f7] px-1 text-[11.5px]">name</span> is optional but personalises the invite.
+                  </p>
+                </div>
+              ) : (
+                <div className="border-t border-[#f4f3f7]">
+                  <div className="rf-hide-sm rf-table-head rf-contacts-head">
+                    {['Name', 'Email', 'Status', 'Invite link', ''].map((h) => (
+                      <div key={h || 'action'} className="rf-lbl px-3 py-2 text-[9.5px] first:pl-6 last:pr-6">{h}</div>
+                    ))}
+                  </div>
+                  {contactRows.map((ct) => {
+                    const st = ct.invite ? inviteStatus(ct.invite) : { label: 'Not sent', tone: 'grey' };
+                    const link = inviteLink(overview?.referral_code, ct.email);
+                    const isRegistered = st.label === 'Registered';
+                    const isInvited = st.label === 'Invited';
+                    return (
+                      <div key={ct.key} className="rf-row rf-table-row rf-contacts-row">
+                        <div className="px-3 py-3 pl-6 text-[12.5px] font-bold">{ct.name}</div>
+                        <div className="break-all px-3 py-3 text-xs text-[#4a4553]">{ct.email}</div>
+                        <div className="px-3 py-3"><span className={CHIP[st.tone]}>{st.label}</span></div>
+                        <div className="rf-mono break-all px-3 py-3 text-[11px] text-[#8b8798]">{link.replace('https://', '')}</div>
+                        <div className="px-3 py-3 pr-6">
+                          <button
+                            type="button"
+                            disabled={isRegistered || sendingInvite === ct.key}
+                            onClick={() => sendContactInvite(ct)}
+                            className={`rf-btn whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] font-semibold ${isRegistered || isInvited ? 'border border-[#ececf1] bg-white text-zinc-700' : 'bg-violet-700 text-white'}`}
+                          >
+                            {sendingInvite === ct.key ? '…' : isRegistered ? 'View' : isInvited ? 'Resend' : 'Send invite'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="px-6 py-3 text-[11.5px] text-[#8b8798]">
+                    {sentInviteCount} of {contactRows.length} contacts invited. Each link is unique, so registrations attribute to the exact contact — not just to your code.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8">
+              <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-2">
+                <div className="rf-lbl">Your referrals</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {PIPELINE_FILTERS.map((f) => (
                     <button
+                      key={f}
+                      type="button"
+                      onClick={() => setStatusFilter(f)}
+                      className={`rf-seg rounded-lg border px-3 py-1.5 text-[11.5px] font-semibold ${statusFilter === f ? 'border-violet-700 bg-violet-50 text-violet-700' : 'border-[#ececf1] bg-white text-zinc-500'}`}
+                    >
+                      {f === 'All' ? 'All' : (statusLabels[f] || f)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {filtered.length === 0 ? (
+                <div className="rounded-[14px] border border-dashed border-[#d4d0dc] bg-white px-6 py-11 text-center dark:bg-gray-900">
+                  <p className="text-sm font-bold text-[#3f3b47]">No referrals yet</p>
+                  <p className="mx-auto mt-1.5 max-w-sm text-[12.5px] leading-relaxed text-[#8b8798]">
+                    Submit your first referral to start tracking it here — review status, fit notes, and reward eligibility all live on this page.
+                  </p>
+                  <button type="button" className="rf-btn mt-4 inline-block rounded-lg bg-violet-700 px-4 py-2.5 text-[12.5px] font-bold text-white" onClick={() => setSubmitOpen(true)}>
+                    Submit your first referral
+                  </button>
+                </div>
+              ) : (
+                <div className="rf-card overflow-hidden">
+                  <div className="rf-hide-sm rf-pipeline-head">
+                    {['Referred', 'Type', 'Submitted', 'Status', 'Reward', 'Next step'].map((h) => (
+                      <div key={h} className="rf-lbl px-3 py-2.5 text-[9.5px] first:pl-4 last:pr-4">{h}</div>
+                    ))}
+                  </div>
+                  {filtered.map((r) => (
+                    <button
+                      key={r.uid}
                       type="button"
                       onClick={() => openDetail(r.uid)}
-                      className="flex w-full items-center gap-3 p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                      className="rf-row rf-pipeline-row w-full text-left"
                     >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{r.referred_name}</span>
-                          <StatusChip status={r.status} label={r.status_label} />
-                        </div>
-                        <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-                          {[r.referred_org, r.category_name].filter(Boolean).join(' · ')}
-                        </p>
-                        {r.next_step && (
-                          <p className="mt-1 truncate text-xs text-violet-700 dark:text-violet-300">{r.next_step}</p>
-                        )}
+                      <div className="min-w-0 px-4 py-3">
+                        <div className="text-[13px] font-bold">{r.referred_name}</div>
+                        <div className="text-[11px] text-[#8b8798]">{r.referred_org || '—'}</div>
                       </div>
-                      {r.reward_label && (
-                        <span className="hidden shrink-0 text-xs font-semibold text-gray-600 sm:block dark:text-gray-300">
-                          {r.reward_label}
-                        </span>
-                      )}
-                      <ChevronRight size={16} className="shrink-0 text-gray-400" />
+                      <div className="px-3 py-3 text-xs text-[#4a4553]">{r.category_name?.split('/')[0]?.trim() || r.category_name}</div>
+                      <div className="rf-mono px-3 py-3 text-[11.5px] text-[#8b8798]">{formatShortDate(r.created_at)}</div>
+                      <div className="px-3 py-3"><StatusChip status={r.status} label={r.status_label} /></div>
+                      <div className="px-3 py-3 text-xs" style={{ color: rewardColor(r.status) }}>{r.reward_label || '—'}</div>
+                      <div className="px-4 py-3 text-[11.5px] text-zinc-500">{r.next_step || '—'}</div>
                     </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* ---- Quality bar -------------------------------------------- */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            {[
-              { title: 'What makes a strong referral', items: QUALITY_BAR.strong, tone: 'text-green-700 dark:text-green-300' },
-              { title: 'What gets sent back for more info', items: QUALITY_BAR.needsInfo, tone: 'text-amber-700 dark:text-amber-300' },
-              { title: 'What isn’t accepted', items: QUALITY_BAR.notAccepted, tone: 'text-red-700 dark:text-red-300' },
-            ].map((col) => (
-              <div key={col.title} className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-                <h3 className={`text-xs font-bold ${col.tone}`}>{col.title}</h3>
-                <ul className="mt-2 space-y-1.5">
-                  {col.items.map((i) => (
-                    <li key={i} className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">• {i}</li>
                   ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+                </div>
+              )}
+            </div>
 
-          {/* ---- FAQ ---------------------------------------------------- */}
-          <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-            <h2 className="border-b border-gray-200 p-4 text-sm font-bold text-gray-900 dark:border-gray-800 dark:text-gray-100">
-              Common questions
-            </h2>
-            <ul className="divide-y divide-gray-200 dark:divide-gray-800">
-              {FAQS.map((f, i) => (
-                <li key={f.q}>
-                  <button
-                    type="button"
-                    onClick={() => setFaqOpen(faqOpen === i ? -1 : i)}
-                    aria-expanded={faqOpen === i}
-                    className="flex w-full items-center justify-between gap-3 p-4 text-left"
-                  >
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{f.q}</span>
-                    <span className="shrink-0 text-lg text-gray-400">{faqOpen === i ? '−' : '+'}</span>
-                  </button>
-                  {faqOpen === i && (
-                    <p className="px-4 pb-4 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{f.a}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
+            <div className="rf-card mt-8 p-5 sm:p-6">
+              <div className="rf-lbl mb-2">Reward logic</div>
+              <p className="max-w-xl text-[13px] leading-relaxed text-[#4a4553]">
+                Rewards vary by category and are never issued on submission alone — a qualified outcome (acceptance, close, or onboarding) is required. Some categories run on invite-only terms set case by case.
+              </p>
+              <div className="mt-4">
+                {REWARD_MATRIX.map((rw) => (
+                  <div key={rw.cat} className="flex flex-wrap items-center gap-3 border-t border-[#f4f3f7] py-3 first:border-t-0">
+                    <div className="min-w-[180px] flex-none text-[12.5px] font-bold">{rw.cat}</div>
+                    <span className={CHIP[rw.modelTone]}>{rw.model}</span>
+                    <div className="min-w-[200px] flex-1 text-[11.5px] text-[#8b8798]">{rw.note}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-8 flex flex-wrap items-center gap-6 rounded-[14px] border border-[#ececf1] bg-[#faf9fc] p-6 sm:p-7">
+              <div className="min-w-0 flex-1">
+                <div className="rf-lbl mb-2">Referral partner program</div>
+                <p className="text-sm font-extrabold tracking-tight">Refer often, with more structure and better terms.</p>
+                <p className="mt-1.5 max-w-lg text-[12.5px] leading-relaxed text-[#4a4553]">
+                  For recurring referrers — invite-only. Custom reward terms, priority review, and a direct line for strategic and capital introductions.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rf-btn flex-none rounded-[10px] border border-[#d4c9f0] bg-white px-5 py-2.5 text-[13px] font-bold text-violet-700 dark:bg-gray-900 dark:text-violet-300"
+                onClick={() => setPartnerOpen(true)}
+              >
+                Become a referral partner
+              </button>
+            </div>
+
+            <div ref={policyRef} id="policy" className="mt-8">
+              <div className="rf-lbl mb-3.5">Policy &amp; FAQ</div>
+              <div className="rf-card overflow-hidden">
+                {FAQS.map((q, i) => (
+                  <div key={q.q} className="rf-faq border-b border-[#f4f3f7] px-5 py-4 last:border-b-0">
+                    <button type="button" className="flex w-full items-center justify-between gap-2 text-left" onClick={() => setFaqOpen(faqOpen === i ? -1 : i)}>
+                      <span className="text-[13px] font-bold">{q.q}</span>
+                      <span className="text-sm text-[#a8a4b4]">{faqOpen === i ? '−' : '+'}</span>
+                    </button>
+                    {faqOpen === i && (
+                      <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-[#4a4553]">{q.a}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
 
       {submitOpen && (
-        <SubmitModal
-          categories={overview?.categories || []}
+        <SubmitDrawer
+          categories={(overview?.categories || []).filter((c) => !c.locked)}
           onClose={() => setSubmitOpen(false)}
           onDone={() => { setSubmitOpen(false); load(); }}
         />
       )}
-      {importOpen && (
-        <ImportModal
-          categories={(overview?.categories || []).filter((c) => !c.locked)}
-          onClose={() => setImportOpen(false)}
-          onDone={() => { setImportOpen(false); load(); }}
-        />
-      )}
+
       {detail && (
         <DetailDrawer
           detail={detail}
@@ -487,33 +706,125 @@ export default function ReferralsPage({ embedded = false }) {
           onUpdated={(next) => { setDetail(next); load(); }}
         />
       )}
+
+      {shareOpen && (
+        <div className="rf-drawer-backdrop flex items-center justify-center p-6" onClick={() => setShareOpen(false)}>
+          <div className="rf-modal-panel" onClick={stop}>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-base font-extrabold tracking-tight">Share Refer &amp; Earn</h3>
+                <p className="mt-1 text-xs text-[#8b8798]">Each platform gets its own message — tuned to how people actually read it there.</p>
+              </div>
+              <button type="button" className="rf-btn flex h-7 w-7 items-center justify-center rounded-lg border border-[#ececf1] text-zinc-500" onClick={() => setShareOpen(false)}>
+                <X size={14} />
+              </button>
+            </div>
+            <div className="mt-4 flex flex-col gap-2">
+              {sharePlatforms(overview?.referral_link).map((sp) => (
+                <button key={sp.key} type="button" className="rf-btn flex items-center gap-3 rounded-[11px] border border-[#ececf1] p-3 text-left" onClick={sp.go}>
+                  <div className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-white" style={{ background: sp.iconBg }}>{sp.icon}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-bold">{sp.label}</div>
+                    <div className="truncate text-[11px] text-[#8b8798]">{sp.preview}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-3.5 flex items-center gap-2 border-t border-[#f4f3f7] pt-3.5">
+              <input readOnly value={overview?.referral_link || ''} className="rf-input flex-1 text-xs" />
+              <button type="button" className="rf-btn flex-none rounded-lg border border-[#ececf1] px-3.5 py-2 text-xs font-bold text-zinc-700" onClick={copyShareLink}>
+                {shareCopied ? 'Copied' : 'Copy link'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {partnerOpen && (
+        <div className="rf-drawer-backdrop flex items-center justify-center p-6" onClick={() => setPartnerOpen(false)}>
+          <div className="rf-modal-panel max-w-[460px]" onClick={stop}>
+            <h3 className="text-base font-extrabold tracking-tight">Apply for the referral partner program</h3>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-[#4a4553]">
+              Invite-only. We review recurring referrers individually and follow up directly with terms if there&apos;s a fit.
+            </p>
+            <input
+              value={partnerNote}
+              onChange={(e) => setPartnerNote(e.target.value)}
+              placeholder="What kinds of introductions do you expect to make?"
+              className="rf-input mt-4"
+            />
+            <button type="button" className="rf-btn mt-3.5 w-full rounded-lg bg-violet-700 py-2.5 text-[13px] font-bold text-white" onClick={submitPartner}>
+              Request review
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-
-function SubmitModal({ categories, onClose, onDone }) {
+function SubmitDrawer({ categories, onClose, onDone }) {
   const { showToast } = useToast();
-  const open = categories.filter((c) => !c.locked);
-  const [form, setForm] = useState({
-    category: open[0]?.key || 'startup',
-    referredName: '', referredOrg: '', referredContact: '', yourRole: '', context: '',
-  });
+  const [formCat, setFormCat] = useState(categories[0]?.key || 'startup');
+  const [warm, setWarm] = useState('');
+  const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [importRows, setImportRows] = useState([]);
+  const [importCat, setImportCat] = useState('startup');
+  const [importError, setImportError] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [f, setF] = useState({ yourRole: '', referName: '', referOrg: '', contact: '', context: '' });
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const setField = (k) => (e) => setF((prev) => ({ ...prev, [k]: e.target.value }));
+  const canSubmit = f.referName.trim() && f.context.trim();
 
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!form.referredName.trim()) { setError('A referral needs a name.'); return; }
+  const onImportFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      if (!lines.length) { setImportError('No rows found.'); setImportRows([]); return; }
+      const split = (l) => l.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
+      let rows = lines.map(split);
+      const header = rows[0].map((h) => h.toLowerCase());
+      if (header.includes('name')) rows = rows.slice(1);
+      const parsed = rows.filter((r) => r[0]).map((r) => ({ name: r[0] || '', org: r[1] || '', context: r[2] || '' }));
+      if (!parsed.length) { setImportError('Expect columns: name, organization, context.'); setImportRows([]); return; }
+      setImportRows(parsed);
+      setImportError('');
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const submitImport = async () => {
+    if (!importRows.length) return;
+    setImporting(true);
+    setImportError('');
+    try {
+      const csv = ['name,org,context', ...importRows.map((r) => `${r.name},${r.org},${r.context}`)].join('\n');
+      const r = await api.referralImport({ category: importCat, csv });
+      showToast(`Imported ${r.imported}${r.failed?.length ? ` · ${r.failed.length} skipped` : ''}.`, r.failed?.length ? 'warning' : 'success');
+      setImportRows([]);
+      onDone();
+    } catch (err) {
+      setImportError(err?.message || 'Import failed.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const submitForm = async () => {
+    if (!canSubmit) return;
     setSaving(true);
     setError('');
     try {
-      await api.referralSubmit(form);
-      showToast('Referral submitted.', 'success');
-      onDone();
+      const context = warm ? `[Intro: ${warm}]\n${f.context}` : f.context;
+      await api.referralSubmit({ ...f, category: formCat, context });
+      setSubmitted(true);
     } catch (err) {
       setError(err?.message || 'Could not submit that referral.');
     } finally {
@@ -521,104 +832,142 @@ function SubmitModal({ categories, onClose, onDone }) {
     }
   };
 
-  return (
-    <Modal title="Submit a referral" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-3">
-        <Field label="Category">
-          <select value={form.category} onChange={set('category')} className={inputCls}>
-            {open.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Who are you referring?" required>
-          <input value={form.referredName} onChange={set('referredName')} className={inputCls} placeholder="Full name" />
-        </Field>
-        <Field label="Company or organisation">
-          <input value={form.referredOrg} onChange={set('referredOrg')} className={inputCls} placeholder="Where they work / what they're building" />
-        </Field>
-        <Field label="How do we reach them?">
-          <input value={form.referredContact} onChange={set('referredContact')} className={inputCls} placeholder="Email or LinkedIn" />
-        </Field>
-        <Field label="Your relationship to them">
-          <input value={form.yourRole} onChange={set('yourRole')} className={inputCls} placeholder="Former colleague, investor in their last round…" />
-        </Field>
-        <Field label="Context">
-          <textarea
-            value={form.context}
-            onChange={set('context')}
-            rows={4}
-            className={inputCls}
-            placeholder="Why now, why this person, why Axal VC. Specific evidence beats a general endorsement."
-          />
-        </Field>
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-        <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className={btnGhost}>Cancel</button>
-          <button type="submit" disabled={saving} className={btnPrimary}>
-            {saving ? 'Submitting…' : 'Submit referral'}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
+  useEffect(() => {
+    const onKey = (ev) => { if (ev.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
-function ImportModal({ categories, onClose, onDone }) {
-  const { showToast } = useToast();
-  const [category, setCategory] = useState(categories[0]?.key || 'startup');
-  const [csv, setCsv] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setError('');
-    try {
-      const r = await api.referralImport({ category, csv });
-      const failed = r.failed?.length || 0;
-      showToast(
-        `Imported ${r.imported}${failed ? ` · ${failed} skipped` : ''}.`,
-        failed ? 'warning' : 'success',
-      );
-      onDone();
-    } catch (err) {
-      setError(err?.message || 'Could not import those rows.');
-    } finally {
-      setSaving(false);
-    }
-  };
+  const catName = categories.find((c) => c.key === importCat)?.name || importCat;
 
   return (
-    <Modal title="Import referrals" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-3">
-        <Field label="Category">
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
-            {categories.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Paste CSV">
-          <textarea
-            value={csv}
-            onChange={(e) => setCsv(e.target.value)}
-            rows={8}
-            className={`${inputCls} font-mono text-xs`}
-            placeholder={'name,org,context\nElena Voss,Fractional CPO,Strong GTM complement for the cohort'}
-          />
-        </Field>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          Columns: name, org, context. A header row is optional. Bulk rows arrive
-          thinner than a form submission, so they’re held to the same quality bar
-          at review — context is what gets them through.
-        </p>
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-        <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className={btnGhost}>Cancel</button>
-          <button type="submit" disabled={saving || !csv.trim()} className={btnPrimary}>
-            {saving ? 'Importing…' : 'Import'}
+    <div className="rf-drawer-backdrop" onClick={onClose}>
+      <div className="rf-drawer" onClick={stop}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[17px] font-extrabold tracking-tight">Submit a referral</h3>
+            <p className="mt-1 text-xs text-[#8b8798]">Reviewed individually, typically within 5 business days.</p>
+          </div>
+          <button type="button" className="rf-btn flex h-7 w-7 items-center justify-center rounded-lg border border-[#ececf1] text-zinc-500" onClick={onClose}>
+            <X size={14} />
           </button>
         </div>
-      </form>
-    </Modal>
+
+        {!submitted ? (
+          <>
+            <div className="mt-4 rounded-[11px] border border-dashed border-[#d4d0dc] bg-[#faf9fc] p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-[12.5px] font-bold">Import a contact list (CSV)</p>
+                  <p className="text-[11px] text-[#8b8798]">Columns: name, organization, context</p>
+                </div>
+                <label className="rf-btn cursor-pointer rounded-lg border border-[#ececf1] bg-white px-3 py-1.5 text-[11.5px] font-bold text-zinc-700 dark:bg-gray-900 dark:text-zinc-200">
+                  Choose file
+                  <input type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
+                </label>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10.5px] text-[#8b8798]">Importing as:</span>
+                {categories.map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => setImportCat(c.key)}
+                    className={`rf-seg rounded-full border px-2.5 py-1 text-[11px] font-semibold ${importCat === c.key ? 'border-violet-700 bg-violet-50 text-violet-700' : 'border-[#ececf1] bg-white text-[#4a4553]'}`}
+                  >
+                    {c.name.replace(' referrals', '').replace(' introductions', '')}
+                  </button>
+                ))}
+              </div>
+              {importError && <p className="mt-2 text-[11.5px] text-red-700">{importError}</p>}
+              {importRows.length > 0 && (
+                <>
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {importRows.slice(0, 5).map((ir, idx) => (
+                      <div key={idx} className="flex items-center gap-2 rounded-lg border border-[#ececf1] bg-white px-2 py-1.5 text-[11.5px] dark:bg-gray-900">
+                        <span className="min-w-0 flex-1"><strong>{ir.name}</strong> {ir.org}</span>
+                        <span className="text-[#a8a4b4]">{ir.context}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] text-[#8b8798]">All {importRows.length} contacts will be submitted under <strong>{catName}</strong>.</p>
+                  <button type="button" disabled={importing} className="rf-btn mt-2 w-full rounded-lg bg-violet-700 py-2 text-xs font-bold text-white" onClick={submitImport}>
+                    {importing ? 'Submitting…' : `Submit all as ${catName}`}
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="mt-4">
+              <div className="rf-lbl mb-2 text-[9.5px]">Referral category</div>
+              <div className="flex flex-wrap gap-1.5">
+                {categories.map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => setFormCat(c.key)}
+                    className={`rf-seg rounded-full border px-2.5 py-1 text-[11.5px] font-semibold ${formCat === c.key ? 'border-violet-700 bg-violet-50 text-violet-700' : 'border-[#ececf1] bg-white text-[#4a4553]'}`}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-2.5">
+              <input className="rf-input" value={f.yourRole} onChange={setField('yourRole')} placeholder="Your relationship to Axal VC" />
+              <input className="rf-input" value={f.referredName} onChange={setField('referName')} placeholder="Who you're referring — name" />
+              <input className="rf-input" value={f.referredOrg} onChange={setField('referOrg')} placeholder="Company or affiliation" />
+              <input className="rf-input" value={f.contact} onChange={setField('contact')} placeholder="Contact details for follow-up" />
+              <textarea className="rf-input resize-y" rows={3} value={f.context} onChange={setField('context')} placeholder="Why is this a fit? Context on the introduction." />
+            </div>
+
+            <div className="mt-3.5">
+              <div className="rf-lbl mb-2 text-[9.5px]">Intro status</div>
+              <div className="flex flex-wrap gap-1.5">
+                {WARM_OPTIONS.map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setWarm(w)}
+                    className={`rf-seg rounded-full border px-2.5 py-1 text-[11px] font-semibold ${warm === w ? 'border-violet-700 bg-violet-50 text-violet-700' : 'border-[#ececf1] bg-white text-[#4a4553]'}`}
+                  >
+                    {w}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+
+            <button
+              type="button"
+              disabled={!canSubmit || saving}
+              onClick={submitForm}
+              className={`rf-btn mt-4 w-full rounded-[10px] py-3 text-center text-[13px] font-extrabold ${canSubmit ? 'bg-violet-700 text-white' : 'cursor-not-allowed bg-[#f1f0f5] text-[#a8a4b4]'}`}
+            >
+              {saving ? 'Submitting…' : 'Submit referral'}
+            </button>
+            <p className="mt-3 text-[11.5px] leading-relaxed text-[#8b8798]">
+              Most submissions are not accepted — this is by design, and why the ones that are get real attention.
+            </p>
+          </>
+        ) : (
+          <div className="py-8 text-center">
+            <div className="mx-auto mb-3.5 flex h-10 w-10 items-center justify-center rounded-xl bg-green-50 text-green-700">
+              <Check size={18} />
+            </div>
+            <p className="text-[15.5px] font-extrabold">Referral received</p>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-[#4a4553]">
+              It now appears in your pipeline as Submitted. We&apos;ll update the status here as review progresses.
+            </p>
+            <button type="button" className="rf-btn mt-4 inline-block rounded-lg bg-violet-700 px-4 py-2.5 text-[12.5px] font-bold text-white" onClick={onDone}>
+              Done
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -627,17 +976,26 @@ function DetailDrawer({ detail, onClose, onUpdated }) {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    const onKey = (ev) => { if (ev.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   if (detail.loading) {
     return (
-      <Modal title="Referral" onClose={onClose}>
-        <div className="flex items-center gap-2 py-6 text-sm text-gray-500">
-          <Loader2 size={16} className="animate-spin" /> Loading…
+      <div className="rf-drawer-backdrop" onClick={onClose}>
+        <div className="rf-drawer rf-drawer-wide" onClick={stop}>
+          <div className="flex items-center gap-2 py-8 text-sm text-zinc-500">
+            <Loader2 size={16} className="animate-spin" /> Loading…
+          </div>
         </div>
-      </Modal>
+      </div>
     );
   }
 
   const canRespond = !['reward_issued', 'rejected', 'closed'].includes(detail.status);
+  const history = Array.isArray(detail.history) ? detail.history : [];
 
   const addContext = async () => {
     if (!note.trim()) return;
@@ -655,125 +1013,76 @@ function DetailDrawer({ detail, onClose, onUpdated }) {
   };
 
   return (
-    <Modal title={detail.referred_name} onClose={onClose}>
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusChip status={detail.status} label={detail.status_label} />
-          <span className="text-xs text-gray-500 dark:text-gray-400">{detail.category_name}</span>
+    <div className="rf-drawer-backdrop" onClick={onClose}>
+      <div className="rf-drawer rf-drawer-wide" onClick={stop}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[17px] font-extrabold tracking-tight">{detail.referred_name}</h3>
+            <p className="mt-0.5 text-xs text-[#8b8798]">{detail.referred_org || '—'} · {detail.category_name}</p>
+          </div>
+          <button type="button" className="rf-btn flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-[#ececf1] text-zinc-500" onClick={onClose}>
+            <X size={14} />
+          </button>
         </div>
+        <div className="mt-3"><StatusChip status={detail.status} label={detail.status_label} /></div>
 
-        {detail.referred_org && (
-          <p className="text-sm text-gray-700 dark:text-gray-300">{detail.referred_org}</p>
-        )}
-        {detail.next_step && (
-          <div className="rounded-lg bg-violet-50 p-3 text-sm text-violet-800 dark:bg-violet-900/20 dark:text-violet-200">
-            <span className="font-semibold">Next step:</span> {detail.next_step}
-          </div>
-        )}
         {detail.fit_notes && (
-          <div>
-            <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100">Review notes</h4>
-            <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{detail.fit_notes}</p>
+          <div className="mt-5 border-t border-[#f4f3f7] pt-4">
+            <div className="rf-lbl mb-2 text-[9.5px]">Fit notes</div>
+            <p className="text-[12.5px] leading-relaxed text-zinc-700">{detail.fit_notes}</p>
           </div>
         )}
+
+        {history.length > 0 && (
+          <div className="mt-4 border-t border-[#f4f3f7] pt-4">
+            <div className="rf-lbl mb-2.5 text-[9.5px]">Status history</div>
+            {history.map((h, i) => (
+              <div key={`${h.created_at}-${i}`} className="flex gap-2.5">
+                <div className="flex flex-col items-center">
+                  <div className="mt-0.5 h-2 w-2 rounded-full bg-violet-700" />
+                  {i < history.length - 1 && <div className="min-h-[18px] w-0.5 flex-1 bg-[#f0eff3]" />}
+                </div>
+                <div className="pb-3.5">
+                  <p className="text-xs font-bold">{h.label}</p>
+                  <p className="rf-mono text-[10.5px] text-[#a8a4b4]">{h.created_at}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {detail.reward_label && (
-          <p className="text-sm font-semibold text-green-700 dark:text-green-300">{detail.reward_label}</p>
-        )}
-
-        {detail.context && (
-          <div>
-            <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100">Context you provided</h4>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-gray-600 dark:text-gray-400">{detail.context}</p>
+          <div className="mt-4 border-t border-[#f4f3f7] pt-4">
+            <div className="rf-lbl mb-2 text-[9.5px]">Reward eligibility</div>
+            <p className="text-[12.5px] font-semibold" style={{ color: rewardColor(detail.status) }}>{detail.reward_label}</p>
           </div>
         )}
 
-        {Array.isArray(detail.history) && detail.history.length > 0 && (
-          <div>
-            <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100">History</h4>
-            <ol className="mt-2 space-y-2">
-              {detail.history.map((h, i) => (
-                <li key={`${h.created_at}-${i}`} className="flex gap-3">
-                  <div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{h.label}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{h.created_at}</p>
-                    {h.note && <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">{h.note}</p>}
-                  </div>
-                </li>
-              ))}
-            </ol>
+        {detail.next_step && (
+          <div className="mt-4 border-t border-[#f4f3f7] pt-4">
+            <div className="rf-lbl mb-2 text-[9.5px]">Next step</div>
+            <p className="text-[12.5px] text-zinc-700">{detail.next_step}</p>
           </div>
         )}
 
         {canRespond && (
-          <div className="border-t border-gray-200 pt-3 dark:border-gray-800">
-            <label className="text-xs font-bold text-gray-900 dark:text-gray-100">
+          <div className="mt-4 border-t border-[#f4f3f7] pt-4">
+            <label className="rf-lbl text-[9.5px]">
               {detail.status === 'more_info_needed' ? 'Add the missing detail' : 'Add more context'}
             </label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={3}
-              className={`${inputCls} mt-1`}
-              placeholder="Anything that helps review make a decision."
-            />
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} className="rf-input mt-2" placeholder="Anything that helps review make a decision." />
             <div className="mt-2 flex justify-end">
-              <button type="button" onClick={addContext} disabled={saving || !note.trim()} className={btnPrimary}>
+              <button type="button" disabled={saving || !note.trim()} className="rf-btn rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" onClick={addContext}>
                 {saving ? 'Saving…' : 'Add'}
               </button>
             </div>
           </div>
         )}
       </div>
-    </Modal>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-const inputCls =
-  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
-const btnPrimary =
-  'rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60';
-const btnGhost =
-  'rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800';
-
-function Field({ label, required, children }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-semibold text-gray-700 dark:text-gray-300">
-        {label}{required && <span className="text-red-500"> *</span>}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function Modal({ title, onClose, children }) {
-  // Escape-to-close: a drawer this tall is easy to open by accident from the
-  // list, and reaching for the X is a long way on mobile.
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl dark:bg-gray-900"
-      >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">{title}</h3>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-600">
-            <X size={18} />
-          </button>
-        </div>
-        {children}
-      </div>
     </div>
   );
+}
+
+function stop(e) {
+  e.stopPropagation();
 }
