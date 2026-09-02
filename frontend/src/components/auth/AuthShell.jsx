@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import AxalLogo from '../AxalLogo';
 
 /**
  * Auth & Onboarding v2 — shared chrome for sign-in, register, and onboarding
@@ -13,24 +14,28 @@ export default function AuthShell({
   applyHref = '/register',
   applyLabel = 'Apply to Axal VC →',
   compact = false,
+  /** Full-page background image (e.g. /auth/login-background.webp on /login). */
+  backgroundSrc = null,
 }) {
+  const shellStyle = backgroundSrc
+    ? {
+        backgroundImage:
+          'linear-gradient(104deg, rgba(36,31,56,.52) 0%, rgba(36,31,56,.28) 42%, rgba(36,31,56,.62) 100%), '
+          + `url(${backgroundSrc})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }
+    : {
+        background:
+          'linear-gradient(104deg, rgba(244,240,254,.97) 0%, rgba(244,240,254,.9) 34%, rgba(36,31,56,.32) 68%, rgba(36,31,56,.5) 100%), '
+          + 'linear-gradient(135deg, #241f38 0%, #4c1d95 100%)',
+      };
+
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{
-        background: 'linear-gradient(104deg, rgba(244,240,254,.97) 0%, rgba(244,240,254,.9) 34%, rgba(36,31,56,.32) 68%, rgba(36,31,56,.5) 100%), linear-gradient(135deg, #241f38 0%, #4c1d95 100%)',
-      }}
-    >
+    <div className="min-h-screen flex flex-col" style={shellStyle}>
       <header className="flex items-center justify-between gap-3 px-6 py-5 sm:px-8">
-        <div className="flex items-center gap-2.5">
-          <span
-            className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-extrabold text-white"
-            style={{ background: '#7c3aed' }}
-          >
-            A
-          </span>
-          <span className="text-sm font-extrabold tracking-tight text-white">Axal VC</span>
-        </div>
+        <AxalLogo size="sm" onDark={!!backgroundSrc} />
         {email ? (
           <span className="font-mono text-[11px] text-white/80 truncate max-w-[220px]">{email}</span>
         ) : (

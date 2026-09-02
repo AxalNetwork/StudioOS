@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Mail, MessageSquare, KeyRound, Users, ShieldAlert } from 'lucide-react';
+import AxalLogo from '../components/AxalLogo';
 
 // Task #50 — Lost-TOTP recovery landing page. Lists available layers in
 // order of friction. Layers fan out into their own mini-flows below.
@@ -341,9 +342,8 @@ function Shell({ children }) {
           <ArrowLeft size={14} /> Back to sign in
         </Link>
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm dark:bg-gray-900 dark:border-gray-800">
-          <div className="flex items-center gap-3 mb-5">
-            <img src="/axal-mark.png" alt="Axal VC" className="h-9 w-9 rounded-lg object-contain" />
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-lg font-bold text-gray-900 dark:text-gray-100">Axal VC</span>
+          <div className="flex items-center justify-center mb-5">
+            <AxalLogo size="lg" />
           </div>
           {children}
         </div>
