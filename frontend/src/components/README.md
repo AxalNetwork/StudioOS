@@ -13,6 +13,7 @@ building blocks.
 | Folder | What lives there |
 | --- | --- |
 | `advisor/` | Advisor-facing panels. |
+| `auth/` | Shared auth chrome (`AuthShell`) for sign-in and onboarding entry. |
 | `brand/` | Brand builder; `brand/templates/` holds the landing-page previews. |
 | `cofounder/` | Co-founder agreement and matching. |
 | `command-center/` | Founder command-centre widgets. |

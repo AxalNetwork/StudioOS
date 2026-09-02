@@ -14,7 +14,7 @@ export default function AuthShell({
   applyHref = '/register',
   applyLabel = 'Apply to Axal VC →',
   compact = false,
-  /** Full-page background image (e.g. /auth/login-background.png on /login). */
+  /** Full-page background image (e.g. /auth/login-background.webp on /login). */
   backgroundSrc = null,
 }) {
   const shellStyle = backgroundSrc
