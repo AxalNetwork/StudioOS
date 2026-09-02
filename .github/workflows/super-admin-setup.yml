@@ -1,0 +1,85 @@
+name: Super Admin setup
+
+# One-off operator workflow: inspect and optionally elevate a user to
+# Super Admin (role=admin, is_super_admin=1) in production D1.
+# Requires repository secrets CLOUDFLARE_API_TOKEN (D1:Edit) and
+# CLOUDFLARE_ACCOUNT_ID.
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: 'User email to inspect or elevate'
+        required: true
+        default: 'guillaume.lauzier@axal.vc'
+      mode:
+        description: 'check = read-only; elevate = grant admin + super admin'
+        required: true
+        default: 'check'
+        type: choice
+        options:
+          - check
+          - elevate
+
+permissions:
+  contents: read
+
+jobs:
+  super-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Preflight — assert required secrets are set
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          MISSING=()
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
+            MISSING+=("CLOUDFLARE_API_TOKEN")
+          fi
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            MISSING+=("CLOUDFLARE_ACCOUNT_ID")
+          fi
+          if [[ ${#MISSING[@]} -gt 0 ]]; then
+            echo "::error::Required repo secret(s) are missing or empty: ${MISSING[*]}"
+            exit 1
+          fi
+
+      - name: Install wrangler
+        run: npm install --no-save wrangler@4.128.0
+
+      - name: Check migration 199 and target accounts
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          echo "=== migration 199 ==="
+          npx wrangler d1 execute studioos-db --remote --env production --command \
+            "SELECT filename FROM schema_migrations WHERE filename LIKE '%199_super_admin%';"
+          echo "=== target emails ==="
+          npx wrangler d1 execute studioos-db --remote --env production --command \
+            "SELECT id, email, role, is_super_admin, is_active FROM users WHERE lower(email) IN ('${{ github.event.inputs.email }}', 'gl@axal.vc');"
+          echo "=== current super admins ==="
+          npx wrangler d1 execute studioos-db --remote --env production --command \
+            "SELECT id, email, role, is_super_admin FROM users WHERE is_super_admin = 1;"
+
+      - name: Elevate to Super Admin
+        if: github.event.inputs.mode == 'elevate'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          EMAIL='${{ github.event.inputs.email }}'
+          npx wrangler d1 execute studioos-db --remote --env production --command \
+            "UPDATE users SET role = 'admin' WHERE lower(email) = lower('${EMAIL}');"
+          npx wrangler d1 execute studioos-db --remote --env production --command \
+            "UPDATE users SET is_super_admin = 1 WHERE lower(email) = lower('${EMAIL}') AND lower(role) = 'admin';"
+          npx wrangler d1 execute studioos-db --remote --env production --command \
+            "UPDATE users SET is_active = 1 WHERE lower(email) = lower('${EMAIL}') AND is_active = 0;"
+          echo "=== post-elevation state ==="
+          npx wrangler d1 execute studioos-db --remote --env production --command \
+            "SELECT id, email, role, is_super_admin, is_active FROM users WHERE lower(email) = lower('${EMAIL}');"
