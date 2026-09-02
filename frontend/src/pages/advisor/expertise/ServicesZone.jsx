@@ -102,14 +102,38 @@ export default function ServicesZone() {
 
   const priced = state.items.filter((s) => s.price_cents != null);
   const unpriced = state.items.filter((s) => s.price_cents == null);
-  // Sum only priced services. An unpriced row contributes nothing to the total,
-  // which is the honest reading of "not recorded" — it is not a zero price.
-  const bookedCents = priced.reduce((a, s) => a + s.price_cents * (s.sold ?? 0), 0);
-  const unitsSold = state.items.reduce((a, s) => a + (s.sold ?? 0), 0);
-  const mostSold = state.items.length
-    ? state.items.reduce((a, b) => ((b.sold ?? 0) > (a.sold ?? 0) ? b : a), state.items[0])
+
+  /**
+   * HOW MANY TIMES A SERVICE SOLD IS NOT KNOWN, and the two stats that depend
+   * on it say so rather than computing a confident zero.
+   *
+   * `GET /me/services` returns `units_sold: null` on every row — not sometimes,
+   * always — and `routes/advisors.ts` explains why: nothing links a booking to
+   * a service. `advisor_bookings` carries a free-text `topic`, not a service
+   * id, so counting bookings whose topic happens to match a title would be a
+   * guess wearing a number's clothes. Migration 203's header says the same.
+   *
+   * An earlier revision of this strip read `s.sold` — a field that exists under
+   * no name — and defaulted it to 0. That did NOT render as blank: `money(0)`
+   * returns "$0", so an advisor with real bookings was shown a practice that
+   * had booked $0, and "Most sold" named whichever service happened to be
+   * first, since nothing ever beat zero.
+   *
+   * So both are `null` here, and null reaches the strip as "Not recorded". When
+   * a booking can name the service it delivered, `unitsFor` becomes real and
+   * these two light up on their own.
+   */
+  const unitsFor = (s) => (s.units_sold == null ? null : s.units_sold);
+  const anyUnitsKnown = state.items.some((s) => unitsFor(s) != null);
+  const bookedCents = anyUnitsKnown
+    ? priced.reduce((a, s) => a + s.price_cents * (unitsFor(s) ?? 0), 0)
     : null;
-  const mostSoldUnits = mostSold?.sold ?? 0;
+  const unitsSold = anyUnitsKnown
+    ? state.items.reduce((a, s) => a + (unitsFor(s) ?? 0), 0)
+    : null;
+  const mostSold = anyUnitsKnown
+    ? state.items.reduce((a, b) => ((unitsFor(b) ?? 0) > (unitsFor(a) ?? 0) ? b : a), state.items[0])
+    : null;
 
   const empty = (
     <NothingYet
@@ -125,8 +149,16 @@ export default function ServicesZone() {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {[
             { label: 'Services', value: String(state.items.length), note: `${priced.length} priced, ${unpriced.length} not` },
-            { label: 'Booked', value: money(bookedCents) || '—', note: `from ${unitsSold} units` },
-            { label: 'Most sold', value: mostSold?.title || '—', note: `${mostSoldUnits} units` },
+            {
+              label: 'Booked',
+              value: bookedCents == null ? <Unrecorded /> : money(bookedCents),
+              note: unitsSold == null ? 'a booking records a topic, not a service' : `from ${unitsSold} units`,
+            },
+            {
+              label: 'Most sold',
+              value: mostSold?.title || <Unrecorded />,
+              note: mostSold ? `${unitsFor(mostSold)} units` : 'nothing counts sales per service yet',
+            },
             { label: 'Unpriced', value: String(unpriced.length), note: unpriced.length ? 'scope settled, price is not' : 'all priced' },
           ].map((s) => (
             <Card key={s.label} padding="md">

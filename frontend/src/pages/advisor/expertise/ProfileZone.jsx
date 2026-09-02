@@ -36,6 +36,12 @@ const joinList = (v) => (Array.isArray(v) ? v.join(', ') : '');
 /** Canvas-aligned completeness: which fields a match surface reads, and which are missing. */
 function profileCompleteness(profile) {
   if (!profile) return { pct: 0, gaps: [], complete: 0, total: 0 };
+  // ONE ROW PER FIELD. `headline` was counted twice — once as "Positioning
+  // statement" and again as "Match one-liner", the same value re-tested for
+  // length — so a single field was worth 2 of 8, and an advisor with a
+  // 79-character headline was told to go and write a "match one-liner" that is
+  // the box they had already filled. A meter that names a gap the advisor
+  // cannot close is worse than a shorter meter.
   const fields = [
     ['Positioning statement', profile.headline],
     ['Sectors', profile.sectors?.length ? profile.sectors : null],
@@ -43,7 +49,6 @@ function profileCompleteness(profile) {
     ['Languages', profile.languages?.length ? profile.languages : null],
     ['Geography', profile.country],
     ['Availability window', profile.availability_note],
-    ['Match one-liner', profile.headline && profile.headline.length >= 80 ? profile.headline : null],
     ['Headshot', profile.headshot_url],
   ];
   const complete = fields.filter(([, v]) => v != null && v !== '').length;
