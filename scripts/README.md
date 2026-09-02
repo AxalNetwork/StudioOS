@@ -17,6 +17,7 @@ represents a bug that reached production once:
 | `check-api-drift.mjs` | The SPA calling an endpoint the worker does not serve — resolved against the real mount table, not a regex. |
 | `check-sqlite-columns.mjs` | SQL naming a column that does not exist. D1 rejects the whole statement, so this renders as an empty screen rather than an error. |
 | `check-sqlite-tables.mjs` | SQL against a table nothing creates. |
+| `check-migration-column-shapes.mjs` | A migration reading a column that only SOME definitions of a multiply-defined table have — D1 keeps one table per name, so it cannot apply unless that shape happened to win. Exceptions live in `migration-column-shapes-baseline.json`. |
 | `check-sql-prepare.mjs` | A `${}` inside `DB.prepare()`. Exceptions live in `sql-prepare-baseline.json` and are argued one at a time. |
 | `check-money-cents.mjs` | Money parsed as a float. |
 | `check-wrangler-binding-parity.mjs` | A binding added to one `wrangler.toml` table but not the other — the worker then boots without it in production only. |
