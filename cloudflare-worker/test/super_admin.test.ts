@@ -96,12 +96,18 @@ test('migration 199 keeps the elevation OFF the users table', () => {
   assert.doesNotMatch(code, /INSERT/, "who holds it is 207's decision, not a backfill");
 });
 
-/** The body of one top-level `export … function NAME` in a source file. */
+/**
+ * The body of one top-level `export … function NAME` in a source file. Plain
+ * string search, not a regex built from the name (Semgrep's non-literal
+ * RegExp rule, and there is nothing a regex adds here).
+ */
 function exportedFn(src: string, name: string): string {
-  const start = src.search(new RegExp(`^export (async )?function ${name}\\b`, 'm'));
-  assert.ok(start > -1, `${name} is exported`);
-  const next = src.indexOf('\nexport ', start + 1);
-  return src.slice(start, next === -1 ? src.length : next);
+  const heads = ['async function', 'function'].flatMap((kw) => ['(', '<'].map((open) => `\nexport ${kw} ${name}${open}`));
+  const start = heads.map((h) => src.indexOf(h)).find((i) => i > -1);
+  assert.ok(start !== undefined, `${name} is exported`);
+  const from = start as number;
+  const next = src.indexOf('\nexport ', from + 1);
+  return src.slice(from, next === -1 ? src.length : next);
 }
 
 test('the elevation is read from super_admins, never from a users column', () => {
