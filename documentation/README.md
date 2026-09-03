@@ -29,7 +29,7 @@ nothing here is served.
 | What can each role actually navigate to? | [architecture/PAGE_INVENTORY.md](architecture/PAGE_INVENTORY.md) |
 | What is blocked, and on what? | [architecture/UNRESOLVED_ITEMS.md](architecture/UNRESOLVED_ITEMS.md) |
 | Why was this routed that way with nobody asked? | [architecture/ASSUMPTIONS_LOG.md](architecture/ASSUMPTIONS_LOG.md) |
-| Who serves the frontend, and is that changing? | [architecture/CLOUDFLARE-PAGES-MIGRATION.md](architecture/CLOUDFLARE-PAGES-MIGRATION.md) |
+| Who serves the frontend, and how did it get that way? | [architecture/PRODUCTION.md](architecture/PRODUCTION.md) for today — the Worker, on both `axal.vc` and `app.axal.vc`. [architecture/CLOUDFLARE-CUTOVER.md](architecture/CLOUDFLARE-CUTOVER.md) and [architecture/CLOUDFLARE-PAGES-MIGRATION.md](architecture/CLOUDFLARE-PAGES-MIGRATION.md) are the superseded 2026-08 records of how the apex left GitHub Pages, sat on Cloudflare Pages for one day, and came to the Worker. |
 | Why is it built this way and not the obvious way? | [architecture/DECISIONS.md](architecture/DECISIONS.md) |
 | What will bite me? | [architecture/GOTCHAS.md](architecture/GOTCHAS.md) |
 | How do I deploy to production? | [operations/DEPLOY.md](operations/DEPLOY.md) |

@@ -273,12 +273,15 @@ const app = new Hono<{ Bindings: Env }>();
 // www); the dev allowlist now comes from `env.EXTRA_DEV_ORIGINS` (comma
 // separated) so the workers.dev sandbox URL is NEVER hardcoded into a
 // production deploy. Production env should leave EXTRA_DEV_ORIGINS unset.
-// Task #30 — Production allowlist. `app.axal.vc` is the same-origin SPA
-// (no CORS preflight needed for that traffic, but listing it keeps
-// preflight code paths well-behaved). `axal.vc` + `www.axal.vc` are the
-// GitHub-Pages marketing site, which posts to `/api/forms/*` and reads
-// `/api/public/status` cross-origin. `status.axal.vc` is the public
-// status page (Worker-served HTML), allowed for any future widget JS.
+// Task #30 — Production allowlist. `app.axal.vc` and `axal.vc` are both the
+// same-origin SPA: since 2026-09-01 (1d320dda9) each is a whole-host Workers
+// Custom Domain of this Worker, which serves the SPA and `/api/*` on either
+// (no CORS preflight needed for that traffic, but listing them keeps
+// preflight code paths well-behaved). `www.axal.vc` is kept for the `www`
+// alias of the marketing site, which posted to `/api/forms/*` and read
+// `/api/public/status` cross-origin (GitHub Pages no longer serves any
+// production host). `status.axal.vc` is the public status page
+// (Worker-served HTML), allowed for any future widget JS.
 const PROD_ORIGINS = [
   'https://app.axal.vc',
   'https://axal.vc',
@@ -927,9 +930,10 @@ app.route('/api/public', circlesPublicRoutes);
 app.route('/api/public', publicCertificateRoutes);
 app.route('/api/public', publicRoutes);
 // Task #10 (LD) — Public team roster. Mounted under /api/public so it
-// sits OUTSIDE auth + the /api/admin/* CF Access perimeter; the Jekyll
-// marketing build (axalnetwork.github.io) curls /api/public/team into
-// _data/team.json before rendering /team on axal.vc.
+// sits OUTSIDE auth + the /api/admin/* CF Access perimeter. /api/public/team
+// was written for the Jekyll marketing build that used to curl it into
+// _data/team.json; that build is gone (the Worker serves axal.vc), and the
+// SPA's /team and /about read it directly.
 app.route('/api/public', teamPublic);
 // Task #1 — Public photo proxy for network_profiles (mentor/partner
 // roster). Mounted under /api/public so it bypasses CF-Access.
@@ -1198,9 +1202,11 @@ export default {
     // from the ASSETS binding, but if the SPA fallback returned index.html
     // (`text/html`) for a MISSING hashed asset, we convert it to a real 404.
     // Otherwise the browser executes HTML as a JS/CSS module and the page
-    // renders blank — the recurring Safari blank page: after a deploy the
-    // apex root HTML (GitHub Pages) can reference a build hash this Worker no
-    // longer serves. A clean 404 lets the client boot-watchdog (index.html)
+    // renders blank — the recurring Safari blank page: an open tab or a
+    // cached shell from before a deploy can reference a build hash this Worker
+    // no longer serves (the shell used to come from GitHub Pages; since
+    // 2026-09-01 the Worker serves it on both hosts, so only stale clients
+    // and the asset-retention window are in play). A clean 404 lets the client boot-watchdog (index.html)
     // and the stale-chunk recovery (main.jsx) reload onto the current build
     // instead of blanking.
     const { pathname } = new URL(request.url);

@@ -26,6 +26,12 @@ represents a bug that reached production once:
 | `check-folder-docs.mjs` | A folder that carries weight without explaining itself, or a README naming a file that does not exist. |
 | `check-dark-mode.mjs` | A surface with no dark variant. |
 
+## The pull-request preview
+
+| File | What it does |
+| --- | --- |
+| `pr-preview-worker.mjs` | The script behind `wrangler.pr-preview.toml` (repo root): a Worker per pull request with no bindings, serving the PR's `docs/` build on workers.dev. Two jobs, mirroring what `cloudflare-worker/src/index.ts` does on production — a missing hashed `/assets/*` file is a plain 404, never the SPA shell, and `/api/*` is a JSON 404 because a preview has no API. Deployed and deleted by `.github/workflows/pr-preview.yml`; guarded by `frontend/test/pr_preview.test.mjs`. |
+
 ## Subfolders
 
 | Folder | What lives there |

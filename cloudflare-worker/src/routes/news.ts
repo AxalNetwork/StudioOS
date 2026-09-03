@@ -55,7 +55,8 @@ news.use('*', async (c, next) => {
   c.res = res;
 });
 
-// Public endpoints accept CORS from the Jekyll marketing site on axal.vc.
+// Public endpoints accept CORS from axal.vc / www (historical: the Jekyll
+// marketing site; axal.vc is the same-origin SPA on this Worker now).
 news.use('/', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));
 news.use('/:slug', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));
 news.use('/cover/:id', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));

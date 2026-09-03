@@ -7,12 +7,20 @@ structural damage across multiple workspaces?"* Everything that cleared that bar
 is below; everything that did not was decided and written down in
 `ASSUMPTIONS_LOG.md` instead.
 
-Eight items. Each names the evidence, what is actually blocked, and what a wrong
-guess would cost — because "blocked" without a cost is just a to-do.
+Ten items. Each names the evidence, what is actually blocked, and what a wrong
+guess would cost — because "blocked" without a cost is just a to-do. U9 and
+U10 are operations questions rather than routing ones — who serves `axal.vc`
+is settled (`DECISIONS.md` D34). U9 (the Pages mirror) was resolved on
+2026-09-03 by retiring it (D36); U10 (whether the Worker-served HTML carries
+its security headers) is now measured live by `scripts/check-spa-live.mjs`
+rather than asserted. Both stay here because `CLAUDE.md` fact 4 points at
+them.
 
 ---
 
 ## U1 — There is one `admin` sidebar, and the brief needs two
+
+**STATUS 2026-09-03 — the sidebar half is done; the scoping half is still open.** #416 split the shells: `shellRoleFor(role, user, hqView)` in `frontend/src/lib/shellRole.js` picks the eight-row HQ sidebar for a `super_admins` holder and the subsidiary sidebar for every other admin, and View-as lets the holder preview the subsidiary shell without impersonating. Nothing below this line about scoping has changed: no row names its licence, so every per-subsidiary figure on `/hq` (#417) and `/admin/security` (#418) renders Not recorded with this item as the reason, and the tenant switcher on `/hq` narrows the loaded payload client-side and says so.
 
 **Evidence.** `SIDEBAR_GROUPS` in `frontend/src/sidebarConfig.js` has six role
 keys: `founder`, `advisor`, `investor`, `partner`, `admin`, `exploring`. The
@@ -237,6 +245,99 @@ them lazily at `routes/partnernet.ts:59-70`, guarded by a module-global
 (`let migrated = false`, `:18-20`) rather than the per-binding cache
 `GOTCHAS.md` requires. That is the same class of gap migration 201 closed for
 `advisors`.
+
+---
+
+## U9 — The Cloudflare Pages mirror and its workflow: keep as a preview/rollback copy, or retire
+
+**RESOLVED 2026-09-03 — retired** (`DECISIONS.md` D36). The owner chose
+Workers Static Assets as the only host. `.github/workflows/cloudflare-pages-deploy.yml`
+and `frontend/public/_worker.js` are deleted, `scripts/build-frontend.mjs` no
+longer writes the `.assetsignore` that hid the entry script from the Worker
+upload, and every document that called the project a mirror now dates it.
+Deleting the Pages project itself is a dashboard act for the owner — the
+Worker carries the same name, `studioos`, so the entry of type *Pages* is the
+one to remove. The evidence and the two cases below stay as the record of why
+it was open.
+
+**Evidence (as recorded before the decision).** The `studioos` Pages project
+(`studioos-2p8.pages.dev`) serves no production hostname. Since 2026-09-01 (`1d320dda9`) both `axal.vc` and
+`app.axal.vc` are whole-host Workers Custom Domains of the `studioos` Worker,
+and the Pages dashboard's Production card lists only `studioos-2p8.pages.dev`
+under Domains — a Pages custom domain on `axal.vc` would appear there and
+would have blocked the Worker binding. The project still exists, and
+`.github/workflows/cloudflare-pages-deploy.yml` (added 2026-09-02,
+`eda67173d`) Direct-Uploads a freshly built `docs/` to it on every push to
+`main`; `frontend/public/_worker.js` (Pages Advanced Mode) runs only there.
+Its dashboard-side Git integration is "retained for previews" — that is what
+the "This project is disconnected from your Git account" banner refers to,
+and it has no bearing on `axal.vc`. `DECISIONS.md` D34 has the record.
+
+**Why it is not decided here.** On 2026-09-03 the Worker deploys after #413
+and #414 failed in the migration step, so `wrangler deploy` never ran and
+both hosts stayed at run #27's build (`96a6e5769`) — while the mirror
+advanced twice. The dashboard showed "Production" deployments for commits
+whose Worker never shipped, and misled the operators for a morning. That is
+the case for retiring it. The case for keeping it is that it is an
+independently built copy of every `main` build on a hostname nothing depends
+on — a preview and a rollback reference that costs one workflow. Which
+matters more is the owner's call: an operations decision rather than a
+routing one, recorded here because `CLAUDE.md` fact 4 points at it.
+
+**Cost of guessing.** Retiring it means removing the workflow, the Pages
+project and `frontend/public/_worker.js` together, plus every mention of the
+mirror in the documents corrected on 2026-09-03 — leaving any of them behind
+recreates a surface that looks live and is not. Keeping it means the next
+reader of the Pages dashboard can be misled the same way, unless every
+document that mentions it keeps saying "mirror".
+
+**Blocks:** nothing. The Worker deploy and both hosts are unaffected either
+way.
+
+---
+
+## U10 — Whether the Worker-served SPA HTML carries the security headers cannot be read from this repository
+
+**Status 2026-09-03 — mechanism shipped; the answer is measured, not yet
+recorded here.** `frontend/public/_headers` (built to `docs/_headers`) is
+read natively by Workers static assets and applied to every response the
+`[assets]` binding serves, and `scripts/check-spa-live.mjs` asserts HSTS,
+nosniff, `X-Frame-Options` and `Referrer-Policy` on every shell route — so
+the first `post-deploy SPA smoke` run (or `npm run deploy`'s `postdeploy`
+hook) after the deploy that carried `_headers` answers this item. Until that
+run is green, nothing here claims the headers are present; if it is red, the
+fallback is the Worker change named below. Record the run here when it has
+happened.
+
+**Evidence (as recorded 2026-09-03, before the fix).** Two files set HSTS,
+`X-Content-Type-Options: nosniff`, `X-Frame-Options` and `Referrer-Policy`:
+`frontend/public/_worker.js`, which ran only on the Pages mirror (both now
+retired, D36), and `cloudflare-worker/src/middleware/securityHeaders.ts`,
+which runs on API responses. On `axal.vc` and `app.axal.vc`, requests for
+paths outside `run_worker_first` (`/api/*`, `/landing/*`, `/p/*`,
+`/assets/*`) are answered by the Worker's `[assets]` binding without invoking
+the Hono app — so neither file ran for `/login` or `/dashboard` there.
+
+**Why it is a blocker and not a judgement call.** Whether those responses
+carry the headers is a property of the Cloudflare edge, not of anything in
+this tree, so it cannot be read from the code — and it is exactly the kind of
+fact that gets asserted from a document. `GOTCHAS.md` already records the
+marketing surface having had no enforced headers at all while three documents
+said it did. The one-line live check is:
+
+```sh
+curl -sI https://axal.vc/login
+```
+
+Until someone runs it and records the answer here, nothing in this repository
+may claim the headers are present or absent on the SPA HTML. If they turn out
+to be absent, the fix is itself a decision — route the shell through the Hono
+app so `securityHeaders.ts` applies, or set them at the edge — and it is not
+taken here.
+
+**Blocks:** nothing today — API responses are covered by `securityHeaders.ts`
+regardless. Recorded so that `CLAUDE.md` fact 4, `GOTCHAS.md` and
+`frontend/public/_headers` can point here instead of guessing.
 
 ---
 

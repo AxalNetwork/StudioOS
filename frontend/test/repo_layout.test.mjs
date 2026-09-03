@@ -79,7 +79,8 @@ test('the index says what documentation/ is and what docs/ is', () => {
 // NOT generated, and they are not swept: `scripts/build-frontend.mjs` writes
 // named outputs and prunes hashed assets on a retention window rather than
 // emptying the tree, so both survive every build. They are reachable as raw
-// markdown at the apex because GitHub Pages serves `docs/` directly.
+// markdown at the apex because the Worker's `[assets]` binding serves `docs/`
+// directly (as GitHub Pages did before 2026-09-01).
 //
 // They are allowlisted rather than moved: a raw URL that has been live cannot
 // be relocated on a tidying pass without knowing who links to it. This is

@@ -4,10 +4,16 @@
  *
  * Runs the Vite build and then restores a bounded window of PRIOR builds'
  * hashed `docs/assets/*` files. This keeps the deployed Worker able to serve
- * the previous build's asset hashes during the window between `npm run deploy`
- * (Worker updated) and GitHub Pages catching up (apex root `/` still serving
- * the previous `index.html`). Without retention the apex root goes blank for
- * that window because its old hashes now route to the Worker (Task #15 carve).
+ * the previous builds' asset hashes during the window between a Worker deploy
+ * and a client that still holds the previous `index.html` (an open tab, a
+ * cached shell): without retention its old hashes 404 on the new Worker and
+ * the page goes blank until a reload. The original motive — GitHub Pages
+ * serving the apex root `/` while `/assets/*` routed to the Worker (Task #15
+ * carve) — ended on 2026-09-01 (1d320dda9), when both hosts became Workers
+ * Custom Domains served from the Worker's `[assets]` copy of `docs/`. The
+ * Cloudflare Pages mirror this script also built until 2026-09-03 is retired
+ * (documentation/architecture/DECISIONS.md D36): `docs/` has one consumer,
+ * the Worker deploy.
  *
  * The pure planning logic lives in `scripts/lib/assetRetention.mjs` and is
  * unit-tested (`scripts/lib/assetRetention.test.mjs`). This file is only the
@@ -29,7 +35,6 @@ const root = path.resolve(here, '..');
 const docsDir = path.join(root, 'docs');
 const assetsDir = path.join(docsDir, 'assets');
 const ledgerPath = path.join(docsDir, '.asset-retention.json');
-const assetsIgnorePath = path.join(docsDir, '.assetsignore');
 
 function listAssetFiles(dir) {
   try {
@@ -117,10 +122,12 @@ fs.rmSync(backupDir, { recursive: true, force: true });
 console.log('[build] prerendering per-route Open Graph metadata …');
 execSync('node scripts/prerender-og.mjs', { cwd: root, stdio: 'inherit' });
 
-// Wrangler's Worker Static Assets upload must not publish the Pages Advanced
-// Mode entry point as a public asset. Vite empties docs/ on every build, so
-// recreate this guard after all build output has been written.
-fs.writeFileSync(assetsIgnorePath, '_worker.js\n');
+// Nothing in docs/ needs hiding from the Worker's asset upload any more. The
+// `.assetsignore` this step used to write existed only to keep the Pages
+// Advanced Mode entry (`_worker.js`) out of the upload, and both went with the
+// Pages mirror. `docs/_headers` (copied by Vite from frontend/public/) is read
+// by Workers static assets and applied to the responses the assets binding
+// serves; it is parsed, not served, so it needs no exclusion either.
 
 console.log(
   `[build] done — ${newFiles.length} fresh asset(s); ${restored} prior hash(es) ` +

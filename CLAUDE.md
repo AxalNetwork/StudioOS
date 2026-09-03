@@ -16,49 +16,67 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    live worker's bindings API). Do not run `npx wrangler deploy` by hand: it
    skips the `predeploy` hook that applies D1 migrations, so the worker ships
    ahead of its schema.
-2. **D1 (`studioos-db`) is the canonical user store.** All 23 production user
-   accounts live in D1. The dev FastAPI uses a separate SQLite file
+2. **D1 (`studioos-db`) is the canonical user store.** Every production user
+   account lives in D1. The dev FastAPI uses a separate SQLite file
    (`backend/app.db`) and is **not** kept in sync.
 3. **The FastAPI in `backend/` is Replit-dev-only.** It exists for local
    iteration speed during Replit sessions. It is **never** deployed to
    production — Cloudflare Workers do not run Python. Do not change
    `wrangler.toml`'s `main` field.
-4. **The frontend is served by Cloudflare Pages**, built from `frontend/` into
-   `docs/`. Pages owns the apex HTML, every frontend route, and `/assets/*`
-   **together** — that pairing is the whole point, not an implementation
-   detail. The Worker keeps exactly four route patterns, mirrored in both
-   tables: `app.axal.vc` (Workers Custom Domain), `axal.vc/api/*`,
-   `axal.vc/landing/*`, `axal.vc/p/*`. Pages runs in **Advanced Mode** — a
-   `_worker.js` at the build root handles every request, which means
-   `_redirects` and `_headers` files are inert and the security headers live in
-   that script.
-   **Never re-add a page or asset route to the Worker's apex table.** Worker
-   routes beat a Pages custom domain, so an `axal.vc/assets/*` entry serves
-   Pages HTML alongside a different Worker asset build: the entry module 404s
-   and the boot watchdog spins on `?__reboot=`. That is not a hypothetical —
-   it took the apex down on 2026-08-31 and is guarded by
+4. **The Worker serves the frontend on both hosts.** `axal.vc` and
+   `app.axal.vc` are whole-host Workers Custom Domains of the `studioos`
+   Worker (`custom_domain = true`, mirrored in `[[routes]]` and
+   `[[env.production.routes]]` of `wrangler.toml`), answered from the
+   Worker's own `[assets]` copy of `docs/` (built from `frontend/`;
+   `not_found_handling = "single-page-application"`) plus the `/api/*`
+   handlers. One build sits behind both hosts and ships on every `wrangler
+   deploy` — `.github/workflows/cloudflare-worker-deploy.yml` on each push to
+   `main` (build → D1 migrations → deploy), or `npm run deploy` by hand —
+   so the two hosts always carry the same build. This has been so since
+   2026-09-01: `1d320dda9` ("Remove stale documentation asset files", author
+   Replit Agent) replaced the Pages cutover's three path routes (`e1de44c2f`,
+   2026-08-31) with the `axal.vc` custom domain in both tables and touched
+   no document, so this fact described Pages as the apex for two days while
+   the toml, the guard tests and the deploy log said otherwise. Who serves a
+   host is settled by the deploy log's "Deployed studioos triggers" lines,
+   never by prose.
+   **Cloudflare Pages is retired (2026-09-03, `DECISIONS.md` D36).** The
+   `studioos` Pages project (`studioos-2p8.pages.dev`) was a mirror fed by a
+   workflow that is now deleted, together with the Pages Advanced Mode
+   `_worker.js` that ran only there; on 2026-09-03 its dashboard had shown
+   "Production" rows for two commits whose Worker deploy failed at the
+   migration step. Nothing ships a build anywhere but the Worker. The static
+   security headers on the SPA HTML come from `frontend/public/_headers`
+   (built to `docs/_headers`), which Workers static assets read natively and
+   apply to every assets-binding response; `scripts/check-spa-live.mjs`
+   asserts them on every shell route, so U10 in
+   `documentation/architecture/UNRESOLVED_ITEMS.md` is answered by that run,
+   not by this sentence.
+   **Never add a path-scoped apex route** (`axal.vc/*`, `axal.vc/assets/*`)
+   to either table: it would take those URLs away from the assets binding
+   and break the SPA fallback. That is how 2026-08-31 paired apex HTML with
+   a different asset build — the entry module 404'd and the boot watchdog
+   spun on `?__reboot=` — and it is guarded by
    `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
-   `frontend/test/apex_route_coverage.test.mjs`.
-   GitHub Pages no longer serves the apex; the DNS CNAME points at the Pages
-   project. `docs/` is committed by hand, which is why
-   `scripts/check-docs-fresh.mjs` exists. **`app.axal.vc` is still Worker-served
-   from the Worker's own `[assets]` copy of `docs/`**, so it updates only on
-   `npm run deploy` while the apex updates on every push to `main` — the two
-   hosts can legitimately sit at different builds, and each is internally
-   consistent.
+   `frontend/test/apex_route_coverage.test.mjs`. `docs/` is committed by hand
+   for review and for `scripts/check-docs-fresh.mjs`; the deploy workflow
+   rebuilds it from source at deploy time, so the committed bytes are what
+   reviewers read, not necessarily what ships
+   (`documentation/operations/DEPLOY.md` §2.1). GitHub Pages and Cloudflare
+   Pages are both decommissioned; the Worker is the only host.
 
 ## File map
 
 | Path                  | Role                                                      |
 | --------------------- | --------------------------------------------------------- |
-| `frontend/`           | React + Vite SPA → built into `docs/`, served by the Worker |
+| `frontend/`           | React + Vite SPA → built into `docs/`, served by the Worker on both hosts |
 | `cloudflare-worker/`  | Hono on CF Workers → axal.vc/api/* (production)           |
 | `cloudflare-worker/sql/` | D1 schema + migrations (canonical)                     |
 | `backend/`            | FastAPI for Replit dev only — **never deployed**          |
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
 | `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
 | `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
-| `docs/`               | Built frontend bundle — the Worker's `[assets]` directory  |
+| `docs/`               | Built frontend bundle — the Worker's `[assets]` directory; its `_headers` sets the static security headers |
 
 **`documentation/` and `docs/` are different things.** `documentation/` is
 prose a person wrote; `docs/` is build output a person must never edit. The

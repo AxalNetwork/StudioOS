@@ -65,7 +65,7 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Home | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
 | Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Admin Console | `/admin` | Contracts · Subsidiary, Admin · Super, Contracts · Super, Support Security · Super |
+| Admin | Admin Console | `/admin` | Contracts · Subsidiary |
 | Admin | Due Diligence | `/admin/due-diligence` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Assessment Studio | `/admin/assessment` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Best-Fit Console | `/admin/best-fit` | — (no canvas; shipped ahead of the design corpus) |
@@ -75,7 +75,7 @@ canvas behind it still shows up here.
 | Admin | Advisor Cohort Access | `/admin/advisor-cohorts` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Exploring Users | `/admin/exploring` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | LP Applications | `/admin/lp-applications` | GP Application Review |
-| Admin | Monitoring | `/monitoring` | Support Security · Super |
+| Admin | Monitoring | `/monitoring` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Telegram Channels | `/admin/telegram` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Content Queue | `/admin/articles` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | My Licence | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
@@ -93,7 +93,7 @@ canvas behind it still shows up here.
 | Capital & Legal | Portfolio Health | `/portfolio/health` | — (no canvas; shipped ahead of the design corpus) |
 | Capital & Legal | Portfolio Coverage | `/portfolio/coverage` | — (no canvas; shipped ahead of the design corpus) |
 | Capital & Legal | Reserve Allocation | `/portfolio/reserves` | — (no canvas; shipped ahead of the design corpus) |
-| Capital & Legal | Exit Waterfall | `/portfolio/waterfall` | Fund Administration |
+| Capital & Legal | Exit Waterfall | `/portfolio/waterfall` | — (no canvas; shipped ahead of the design corpus) |
 | Capital & Legal | Watchlist & Journal | `/watchlist` | — (no canvas; shipped ahead of the design corpus) |
 | Capital & Legal | Legal & Capital | `/legal-capital` | Legal & Capital Engine |
 | Capital & Legal | Incorporate | `/incorporate` | — (no canvas; shipped ahead of the design corpus) |
@@ -121,9 +121,22 @@ canvas behind it still shows up here.
 | Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
 | Account | My Profile | `/profile` | — (no canvas; shipped ahead of the design corpus) |
 
+## `super_admin` — 8 destinations in 1 group
+
+| Group | Label | Route | Canvas behind it |
+| --- | --- | --- | --- |
+| HQ | Home | `/hq` | Admin · Super |
+| HQ | Licences | `/admin/licences` | Admin · Super |
+| HQ | Funds | `/funds` | Funds · Fabric |
+| HQ | Contracts | `/admin/contracts` | Admin · Super, Contracts · Super |
+| HQ | Team | `/admin/accounts` | Admin · Super |
+| HQ | Support | `/tickets` | Support Security · Super |
+| HQ | Security | `/admin/security` | Support Security · Super |
+| HQ | Settings | `/settings` | — (no canvas; shipped ahead of the design corpus) |
+
 ## Destinations with no canvas
 
-53 of the 83 sidebar rows above are not claimed
+56 of the 91 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -146,6 +159,7 @@ rather than merely absent.
 - admin · Admin · Communities Admin (`/admin/circles`)
 - admin · Admin · Advisor Cohort Access (`/admin/advisor-cohorts`)
 - admin · Admin · Exploring Users (`/admin/exploring`)
+- admin · Admin · Monitoring (`/monitoring`)
 - admin · Admin · Telegram Channels (`/admin/telegram`)
 - admin · Admin · Content Queue (`/admin/articles`)
 - admin · Admin · My Licence (`/admin/my-licence`)
@@ -162,6 +176,7 @@ rather than merely absent.
 - admin · Capital & Legal · Portfolio Health (`/portfolio/health`)
 - admin · Capital & Legal · Portfolio Coverage (`/portfolio/coverage`)
 - admin · Capital & Legal · Reserve Allocation (`/portfolio/reserves`)
+- admin · Capital & Legal · Exit Waterfall (`/portfolio/waterfall`)
 - admin · Capital & Legal · Watchlist & Journal (`/watchlist`)
 - admin · Capital & Legal · Incorporate (`/incorporate`)
 - admin · Capital & Legal · Compliance Calendar (`/compliance`)
@@ -182,5 +197,6 @@ rather than merely absent.
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
 - exploring · Home · Messages (`/messages`)
 - exploring · Account · My Profile (`/profile`)
+- super_admin · HQ · Settings (`/settings`)
 
 **Canvas corpus:** 107. **Workspace assignments:** 126.

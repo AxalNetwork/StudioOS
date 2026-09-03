@@ -114,10 +114,14 @@ jobs:
   # Open Graph / social-preview gate.
   #
   # Guards the "every axal.vc link previews with the same wrong image" class of
-  # regression. Validates the committed docs/ build — the bytes a crawler
-  # actually receives — so it catches a route that stopped being prerendered, an
-  # og:image pointing at a file that does not exist, a relative image URL, or a
-  # card that is not 1200x630.
+  # regression. Validates the committed docs/ build. Those are the bytes a
+  # reviewer reads, not by themselves the bytes a crawler actually receives:
+  # both production hosts are served by the `studioos` Worker's [assets] copy of
+  # docs/, which cloudflare-worker-deploy.yml rebuilds from source at deploy
+  # time. The freshness step below is what makes the committed build and the
+  # shipped one the same build; given that, these checks catch a route that
+  # stopped being prerendered, an og:image pointing at a file that does not
+  # exist, a relative image URL, or a card that is not 1200x630.
   # -------------------------------------------------------------------------
   og-tags:
     name: open graph metadata
@@ -136,8 +140,9 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
           node-version: '22'
-      # The three checks below all read the COMMITTED docs/ bytes — "what a
-      # crawler actually receives". If docs/ is behind frontend/src they are
+      # The three checks below all read the COMMITTED docs/ bytes, which are
+      # what a crawler receives only when they match the source the deploy
+      # rebuilds from. If docs/ is behind frontend/src they are
       # validating an old build and passing, so assert freshness first. Strict
       # here (unlike the local warning) because this job can rebuild from the
       # lockfile if it needs to.

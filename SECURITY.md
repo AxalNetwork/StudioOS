@@ -5,16 +5,19 @@ reports from researchers, customers, and the public as a first-class
 operational priority. This document tells you how to reach us, what to
 expect, and what we ask of you.
 
-> **Last updated:** 2026-05-12
+> **Last updated:** 2026-09-03
 > **Contact:** `security@axal.vc`
 > **PGP fingerprint:** _to be added — see "Encrypted reports" below_
 
 ## Supported versions
 
-We operate a single production deployment of StudioOS. The production
-SPA + API both live under `app.axal.vc` (Pages SPA at the root,
-Cloudflare Worker at `app.axal.vc/api/*`); the `axal.vc` apex is
-GitHub Pages marketing only. Everything is continuously updated;
+We operate a single production deployment of StudioOS. The `studioos`
+Cloudflare Worker serves both `axal.vc` and `app.axal.vc` as whole-host
+custom domains — the SPA from its assets binding and the API at
+`/api/*` on either host — with one build behind both, and the static
+responses carrying the headers `docs/_headers` declares. There is no
+Cloudflare Pages deployment (the mirror was retired on 2026-09-03).
+Everything is continuously updated;
 there is no notion of a "supported version" for end users. Researchers should target the live production surface or
 a publicly available preview environment.
 
@@ -71,7 +74,8 @@ severity bucket we assigned and why.
 - The Cloudflare Worker production API at `axal.vc/api/*`.
 - D1, KV, R2, Durable Objects, Queues, and Workers AI integrations
   reachable from the production Worker.
-- The frontend SPA bundled into Cloudflare Pages.
+- The frontend SPA, served by the production Worker on `axal.vc` and
+  `app.axal.vc`.
 - Authentication and authorization flows (signup, login, TOTP, SMS,
   Cloudflare Access on admin paths, impersonation, role checks).
 - Contract and e-sign flows, including KYC/KYB/accreditation, NDAs,
