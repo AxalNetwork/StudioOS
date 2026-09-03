@@ -4,10 +4,15 @@
  *
  * Runs the Vite build and then restores a bounded window of PRIOR builds'
  * hashed `docs/assets/*` files. This keeps the deployed Worker able to serve
- * the previous build's asset hashes during the window between `npm run deploy`
- * (Worker updated) and GitHub Pages catching up (apex root `/` still serving
- * the previous `index.html`). Without retention the apex root goes blank for
- * that window because its old hashes now route to the Worker (Task #15 carve).
+ * the previous builds' asset hashes during the window between a Worker deploy
+ * and a client that still holds the previous `index.html` (an open tab, a
+ * cached shell): without retention its old hashes 404 on the new Worker and
+ * the page goes blank until a reload. The Cloudflare Pages mirror
+ * (studioos-2p8.pages.dev, no production hostname) is built by this same
+ * script and gets the same window. The original motive — GitHub Pages serving
+ * the apex root `/` while `/assets/*` routed to the Worker (Task #15 carve) —
+ * ended on 2026-09-01 (1d320dda9), when both hosts became Workers Custom
+ * Domains served from the Worker's `[assets]` copy of `docs/`.
  *
  * The pure planning logic lives in `scripts/lib/assetRetention.mjs` and is
  * unit-tested (`scripts/lib/assetRetention.test.mjs`). This file is only the

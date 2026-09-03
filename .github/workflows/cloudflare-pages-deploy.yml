@@ -1,8 +1,15 @@
 name: Cloudflare Pages deploy
 
-# The Pages Git connection is retained for previews, but production publishing
-# is driven explicitly from GitHub Actions so every push to main has a visible,
-# deterministic deploy step and does not depend on a stale Pages webhook.
+# This feeds the `studioos` Cloudflare Pages project (studioos-2p8.pages.dev),
+# which serves NO production hostname: since 2026-09-01 (1d320dda9) both
+# `axal.vc` and `app.axal.vc` are custom domains of the `studioos` Worker,
+# shipped by cloudflare-worker-deploy.yml. This job Direct-Uploads a fresh
+# docs/ build to that mirror on every push to main so it stays a copy of what
+# the Worker deploy built from the same commit — but a green run here, or a
+# "Production" deployment in the Pages dashboard, says nothing about whether
+# the Worker shipped. The Pages Git connection is retained for previews only.
+# Whether to retire the mirror and this workflow is
+# documentation/architecture/UNRESOLVED_ITEMS.md U9.
 #
 # Required repository secrets:
 #   CLOUDFLARE_API_TOKEN  — Cloudflare Pages:Edit

@@ -6,9 +6,16 @@ name: post-deploy SPA smoke
 # this is the LIVE counterpart. The original blank-page incident shipped because
 # nothing verified the deployed site.
 #
-# Deploys happen via `npm run deploy` (which runs scripts/check-spa-live.mjs as
-# its `postdeploy` hook), so this workflow is the synthetic/on-demand layer:
-# - workflow_dispatch: re-run by hand right after a deploy.
+# Both hosts are whole-host custom domains of the `studioos` Worker, served
+# from its [assets] copy of docs/ (wrangler.toml), and ship together on every
+# `wrangler deploy`: by hand via `npm run deploy` (which runs
+# scripts/check-spa-live.mjs as its `postdeploy` hook) or from CI via
+# cloudflare-worker-deploy.yml, which does NOT run it. So this workflow is the
+# synthetic/on-demand layer:
+# - workflow_dispatch: re-run by hand right after a deploy. A green
+#   cloudflare-pages-deploy.yml run or a "Production" row in the Pages
+#   dashboard is not evidence either host updated — that project is a mirror
+#   serving no production hostname; this probe is.
 # - schedule: catch a site that goes blank between deploys (cache purge, asset
 #   rot, Worker rollback, etc.).
 #

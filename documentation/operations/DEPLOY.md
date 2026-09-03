@@ -243,9 +243,16 @@ already produced one false "production auth is broken" report.
 
 ## 6. Related, but not this runbook
 
-- **Retiring the GitHub Pages apex** — `documentation/architecture/CLOUDFLARE-CUTOVER.md`.
-  That is a routing and DNS change with a 24-hour observation gate, not a
-  deploy. `OAUTH_CALLBACK_BASE_URL` stays pinned until every redirect URI is
+- **How the apex came to be Worker-served** — `documentation/architecture/CLOUDFLARE-CUTOVER.md`
+  is the plan that retired the GitHub Pages apex; its status line predates
+  the end of the story. Cloudflare Pages took `axal.vc` on 2026-08-31
+  (`e1de44c2f`), and on 2026-09-01 the `studioos` Worker took both `axal.vc`
+  and `app.axal.vc` as whole-host custom domains (`1d320dda9`, a commit whose
+  message says nothing about routing). Since then `npm run deploy` ships the
+  SPA and the API to both hosts together and there is no separate apex step;
+  who serves a host is settled by the deploy log's `Deployed studioos
+  triggers` lines and the Pages dashboard's Domains line, never by prose.
+  `OAUTH_CALLBACK_BASE_URL` stays pinned until every redirect URI is
   registered; flipping it early breaks Google sign-in for everyone at once.
 - **A production incident** — `documentation/operations/INCIDENT_RESPONSE.md`.
 - **Gotchas that bite during a deploy** — `documentation/architecture/GOTCHAS.md`.

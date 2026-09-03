@@ -8,9 +8,12 @@ import type { Context, Next } from 'hono';
  * - Referrer-Policy: `no-referrer` — never leak full URLs (which contain
  *   query params, IDs) from the authenticated app/API surface. This is the
  *   CANONICAL value for the Worker (NICE-SEC-01); it is intentionally stricter
- *   than the `strict-origin-when-cross-origin` used by the public static
- *   frontend (frontend/public/_headers), whose pages carry no
- *   sensitive URLs and benefit from cross-origin referral attribution.
+ *   than the `strict-origin-when-cross-origin` the Pages mirror's entry
+ *   script (frontend/public/_worker.js) sets for the static frontend, whose
+ *   pages carry no sensitive URLs and benefit from cross-origin referral
+ *   attribution. (`frontend/public/_headers` was deleted in #371; whether
+ *   the Worker-served hosts' assets-binding responses carry any of these
+ *   headers is UNRESOLVED_ITEMS U10.)
  * - Permissions-Policy: disable powerful browser features for any HTML responses.
  * - Cross-Origin-Resource-Policy: only same-site can load API responses as resources.
  *
@@ -62,7 +65,8 @@ export function securityHeadersMiddleware() {
     h.set('X-Frame-Options', allowSameOriginFraming ? 'SAMEORIGIN' : 'DENY');
     // Canonical for the authenticated app/API surface (NICE-SEC-01). The
     // public static frontend deliberately uses strict-origin-when-cross-origin
-    // (frontend/public/_headers).
+    // (set by frontend/public/_worker.js on the Pages mirror; U10 for the
+    // Worker-served hosts).
     h.set('Referrer-Policy', 'no-referrer');
     // Task #33 — broaden Permissions-Policy to deny every powerful sensor
     // by default. Add features only when an actual route needs them.

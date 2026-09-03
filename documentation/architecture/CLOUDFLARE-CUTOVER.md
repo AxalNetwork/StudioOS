@@ -1,5 +1,29 @@
 # Jekyll → Cloudflare cutover: content inventory
 
+> **Note added 2026-09-03 — the apex steps below were executed, and then the
+> apex moved again.** Everything under this note is left as the dated record
+> it is. What happened after it was written: GitHub Pages was retired from
+> the apex on 2026-08-31, with Cloudflare Pages as the destination and
+> `e1de44c2f` ("Stop apex Pages and Worker asset skew") as the matching route
+> table — step 6 in its `CLOUDFLARE-PAGES-MIGRATION.md` variant, not the
+> step-7 wildcard route. One day later `1d320dda9` (2026-09-01, "Remove stale
+> documentation asset files", author Replit Agent — a message that does not
+> mention routing) replaced the apex path routes with a whole-host `axal.vc`
+> Workers Custom Domain in both `wrangler.toml` tables. Since then the
+> `studioos` Worker serves both `axal.vc` and `app.axal.vc` from its
+> `[assets]` copy of `docs/`, the outcome the inventory below argued for,
+> reached by a commit whose message does not mention it. Not executed: step 5
+> — `wrangler.toml` still pins `OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"`,
+> so the OAuth re-registration table below is still live work. The "GitHub
+> Pages fallthrough" the gate discusses no longer exists, and step 7 must not
+> be retried as written: with whole-host custom domains an `axal.vc/*` zone
+> route would take those URLs away from the assets binding and break the SPA
+> fallback, and `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` /
+> `frontend/test/apex_route_coverage.test.mjs` refuse it. Current truth lives
+> in `CLAUDE.md` fact 4 and `PRODUCTION.md`; who serves a host is settled by
+> the deploy log's "Deployed studioos triggers" lines and the Pages
+> dashboard's Domains line, never by prose.
+
 Status (updated 2026-08-31): **step 1's two unknowns are confirmed, gate
 item 1 is done in code, step 3's bootstrap deploy landed 2026-08-30, and gate
 item 2 has been rewritten because the original was unsatisfiable** (see step 1

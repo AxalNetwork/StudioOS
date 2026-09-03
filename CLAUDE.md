@@ -23,42 +23,57 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    iteration speed during Replit sessions. It is **never** deployed to
    production — Cloudflare Workers do not run Python. Do not change
    `wrangler.toml`'s `main` field.
-4. **The frontend is served by Cloudflare Pages**, built from `frontend/` into
-   `docs/`. Pages owns the apex HTML, every frontend route, and `/assets/*`
-   **together** — that pairing is the whole point, not an implementation
-   detail. The Worker keeps exactly four route patterns, mirrored in both
-   tables: `app.axal.vc` (Workers Custom Domain), `axal.vc/api/*`,
-   `axal.vc/landing/*`, `axal.vc/p/*`. Pages runs in **Advanced Mode** — a
-   `_worker.js` at the build root handles every request, which means
-   `_redirects` and `_headers` files are inert and the security headers live in
-   that script.
-   **Never re-add a page or asset route to the Worker's apex table.** Worker
-   routes beat a Pages custom domain, so an `axal.vc/assets/*` entry serves
-   Pages HTML alongside a different Worker asset build: the entry module 404s
-   and the boot watchdog spins on `?__reboot=`. That is not a hypothetical —
-   it took the apex down on 2026-08-31 and is guarded by
+4. **The Worker serves the frontend on both hosts.** `axal.vc` and
+   `app.axal.vc` are whole-host Workers Custom Domains of the `studioos`
+   Worker (`custom_domain = true`, mirrored in `[[routes]]` and
+   `[[env.production.routes]]` of `wrangler.toml`), answered from the
+   Worker's own `[assets]` copy of `docs/` (built from `frontend/`;
+   `not_found_handling = "single-page-application"`) plus the `/api/*`
+   handlers. One build sits behind both hosts and ships on every `wrangler
+   deploy` — `.github/workflows/cloudflare-worker-deploy.yml` on each push to
+   `main` (build → D1 migrations → deploy), or `npm run deploy` by hand —
+   so the two hosts always carry the same build. This has been so since
+   2026-09-01: `1d320dda9` ("Remove stale documentation asset files", author
+   Replit Agent) replaced the Pages cutover's three path routes (`e1de44c2f`,
+   2026-08-31) with the `axal.vc` custom domain in both tables and touched
+   no document, so this fact described Pages as the apex for two days while
+   the toml, the guard tests and the deploy log said otherwise. Who serves a
+   host is settled by the deploy log's "Deployed studioos triggers" lines
+   and the Pages dashboard's Domains line, never by prose.
+   **Cloudflare Pages is now a mirror, not a host.** The `studioos` project
+   (`studioos-2p8.pages.dev`) gets a Direct Upload of a fresh `docs/` build
+   from `.github/workflows/cloudflare-pages-deploy.yml` on every push to
+   `main` and serves no production hostname; `docs/_worker.js` governs only
+   that mirror. A "Production" deployment on its dashboard says nothing
+   about what the Worker shipped — on 2026-09-03 two Worker deploys failed
+   at the migration step, both hosts stayed a build behind, and the mirror
+   advanced twice. Retiring it is U9 in
+   `documentation/architecture/UNRESOLVED_ITEMS.md`; whether the
+   Worker-served HTML carries the security headers is U10 — assert neither.
+   **Never add a path-scoped apex route** (`axal.vc/*`, `axal.vc/assets/*`)
+   to either table: it would take those URLs away from the assets binding
+   and break the SPA fallback. That is how 2026-08-31 paired apex HTML with
+   a different asset build — the entry module 404'd and the boot watchdog
+   spun on `?__reboot=` — and it is guarded by
    `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
-   `frontend/test/apex_route_coverage.test.mjs`.
-   GitHub Pages no longer serves the apex; the DNS CNAME points at the Pages
-   project. `docs/` is committed by hand, which is why
-   `scripts/check-docs-fresh.mjs` exists. **`app.axal.vc` is still Worker-served
-   from the Worker's own `[assets]` copy of `docs/`**, so it updates only on
-   `npm run deploy` while the apex updates on every push to `main` — the two
-   hosts can legitimately sit at different builds, and each is internally
-   consistent.
+   `frontend/test/apex_route_coverage.test.mjs`. `docs/` is committed by hand
+   for review and for `scripts/check-docs-fresh.mjs`; both CI workflows
+   rebuild it at deploy time, so the committed bytes are what reviewers
+   read, not necessarily what ships (`documentation/operations/DEPLOY.md`
+   §2.1). GitHub Pages is decommissioned as the apex.
 
 ## File map
 
 | Path                  | Role                                                      |
 | --------------------- | --------------------------------------------------------- |
-| `frontend/`           | React + Vite SPA → built into `docs/`, served by the Worker |
+| `frontend/`           | React + Vite SPA → built into `docs/`, served by the Worker on both hosts |
 | `cloudflare-worker/`  | Hono on CF Workers → axal.vc/api/* (production)           |
 | `cloudflare-worker/sql/` | D1 schema + migrations (canonical)                     |
 | `backend/`            | FastAPI for Replit dev only — **never deployed**          |
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
 | `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
 | `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
-| `docs/`               | Built frontend bundle — the Worker's `[assets]` directory  |
+| `docs/`               | Built frontend bundle — the Worker's `[assets]` directory; mirrored to Pages |
 
 **`documentation/` and `docs/` are different things.** `documentation/` is
 prose a person wrote; `docs/` is build output a person must never edit. The

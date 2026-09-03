@@ -18,30 +18,42 @@
  *     src="/assets/*.js">` (proof the built bundle is wired in, not a stub)
  *   - Every hashed `/assets/*.{js,css}` the shell references actually
  *     RESOLVES on the same host (HTTP 200 + a JS/CSS content-type, never
- *     text/html). This is the check that catches the recurring blank page.
- *     On the apex, Pages must serve both the shell and its assets so their
- *     hashes always come from the same atomic Pages deployment. The Worker
- *     must not intercept `/assets/*`.
+ *     text/html). This is the check that catches the recurring blank page:
+ *     a shell and its `/assets/*` served from two different builds (the
+ *     2026-08-31 apex outage paired Pages-served HTML with a different
+ *     Worker asset build). Both hosts are now served by the one Worker from
+ *     its `[assets]` copy of `docs/`, so the shell and its hashes come from
+ *     the same `wrangler deploy`; a mismatch here means a skewed or partial
+ *     deploy.
  *
- * Host model (see wrangler.toml + replit.md "Apex routing"):
- *   - app.axal.vc is a Workers Custom Domain: the Worker serves the SPA on
- *     EVERY path via `not_found_handling = "single-page-application"`, so `/`
- *     and all deep links return the shell.
- *   - axal.vc is the proxied apex: Cloudflare Pages serves `/` and static
- *     assets, while path-scoped Worker routes retain API/backend behavior.
- *     The asset checks ensure each shell receives its matching JS and CSS.
+ * Host model (see wrangler.toml `[[routes]]` + `[assets]`, CLAUDE.md fact 4):
+ *   - axal.vc AND app.axal.vc are both whole-host Workers Custom Domains of
+ *     the `studioos` Worker (since 2026-09-01, commit 1d320dda9). The Worker
+ *     serves the SPA on EVERY path of either host via `not_found_handling =
+ *     "single-page-application"`, so `/` and all deep links return the
+ *     shell; `/api/*`, `/landing/*`, `/p/*` and `/assets/*` run the Hono app
+ *     first (`run_worker_first`). One build sits behind both hosts and they
+ *     ship together on every deploy. The asset checks ensure each shell
+ *     receives its matching JS and CSS.
+ *   - The Cloudflare Pages project (studioos-2p8.pages.dev) is a mirror of
+ *     `docs/` that serves NO production hostname. Who serves a host is
+ *     settled by the deploy log's "Deployed studioos triggers" lines and the
+ *     Pages dashboard's Domains line, never by prose.
  *
  * Apex `/api/*` routing assertion (the regression that took prod down):
- *   The shell-HTML checks above can ALL pass while every `/api/*` fetch falls
- *   through to Jekyll. On the proxied apex, if the `axal.vc/api/*` Worker route
- *   isn't registered (stale/incomplete deploy, or a deploy that bound a route
- *   table without the apex carve-out, or Cloudflare zone-route drift), GitHub
- *   Pages answers `/api/*` with an HTML 404 — so the SPA's relative `/api/*`
- *   XHRs 404 and every authenticated page breaks. This script now probes a
- *   stable `/api/*` endpoint on each host and FAILS loudly when it returns an
- *   HTML body instead of a Worker JSON response. A JSON response (a 200 from
- *   /api/health, or even a JSON 401 from an authed probe) counts as HEALTHY —
- *   it proves the request reached the Worker; auth state is irrelevant here.
+ *   The shell-HTML checks above can ALL pass while every `/api/*` fetch never
+ *   reaches the Hono app. Historically that meant another host served the
+ *   apex (GitHub Pages, then Cloudflare Pages) and the `axal.vc/api/*` Worker
+ *   route was missing, so `/api/*` came back as that host's HTML 404. Today
+ *   it means the custom domain is not bound to the Worker (an HTML error
+ *   page), or `/api/*` has dropped out of `run_worker_first` and the assets
+ *   binding's SPA fallback answers with `index.html` (an HTML 200). Either
+ *   way the SPA's relative `/api/*` XHRs get HTML and every authenticated
+ *   page breaks. This script probes a stable `/api/*` endpoint on each host
+ *   and FAILS loudly when it returns an HTML body instead of a Worker JSON
+ *   response. A JSON response (a 200 from /api/health, or even a JSON 401
+ *   from an authed probe) counts as HEALTHY — it proves the request reached
+ *   the Worker; auth state is irrelevant here.
  *
  * Exit 0 when every check passes; exit 1 (loud) on the first host with any
  * failure, after reporting ALL failures.
@@ -97,8 +109,9 @@ if (process.env.SKIP_LIVE_SMOKE === '1') {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A route check declares the path and whether the SPA shell is required.
-// `shell: false` means "this path serves something else (Jekyll), only
-// require a 200 + HTML body" — used for the apex root.
+// `shell: false` means "only require a 200 + HTML body" — used for the apex
+// root, a leniency from when another host served `/` on the apex (see the
+// note on that entry below).
 function routesForHost(base) {
   const isApex = /\/\/axal\.vc/i.test(base);
   const appRoutes = [
@@ -121,7 +134,10 @@ function routesForHost(base) {
     { path: '/portfolio/health', shell: true },
     { path: '/spinout-lab', shell: true },
   ];
-  // Apex `/` is Jekyll, not the SPA; the custom domain `/` is the SPA shell.
+  // Apex `/` is checked leniently (`shell: false`): it was a separate
+  // marketing page (GitHub Pages, then Cloudflare Pages) until 2026-09-01.
+  // Since 1d320dda9 the Worker's assets binding answers `/` on both hosts
+  // with the same shell; the leniency is kept as-is here, not yet tightened.
   appRoutes.unshift({ path: '/', shell: !isApex });
   return appRoutes;
 }
@@ -131,10 +147,12 @@ function looksLikeJsonNotFound(body) {
   return trimmed.startsWith('{') && /"detail"\s*:\s*"Not found"/i.test(body);
 }
 
-// GitHub Pages / Jekyll serves an HTML document (its 404.html or a marketing
-// page) when an apex path isn't routed to the Worker. Detect an HTML body so
-// an `/api/*` probe that fell through to Pages is flagged even when the
-// Content-Type header is missing or unexpected.
+// An `/api/*` probe that never reaches the Hono app comes back as HTML: the
+// SPA shell (HTTP 200) if `/api/*` ever drops out of `run_worker_first` and
+// the assets binding's single-page-application fallback answers instead, or
+// an error page if the host is not bound to the Worker at all. Detect an
+// HTML body so such a probe is flagged even when the Content-Type header is
+// missing or unexpected.
 function looksLikeHtml(body) {
   return /<!doctype html|<html[\s>]/i.test(body.trimStart().slice(0, 2048));
 }
@@ -287,10 +305,12 @@ async function checkRoute(base, route, assetSink) {
         // omit it. Static analysis only sees today's single call site and reads
         // this guard as always-true — it's deliberate defensive handling of an
         // optional argument, not dead code.
-        // The apex root intentionally falls through to the marketing site,
-        // where `shell: false` means this checker only asserts a healthy HTML
-        // response. Its asset manifest belongs to GitHub Pages and must not be
-        // mixed with the Worker-served SPA asset checks for routed app paths.
+        // The apex root is a `shell: false` route (a healthy HTML response is
+        // all this checker asserts there), a leniency from when a separate
+        // marketing site answered `/` on the apex and its asset manifest could
+        // not be mixed with the Worker's. Both hosts' `/` now come from the
+        // Worker's assets binding, but only `shell: true` routes feed the
+        // asset checks, so the split is kept.
         if (assetSink && route.shell) {
           for (const ref of extractAssetRefs(body)) assetSink.add(ref);
         }
@@ -313,15 +333,17 @@ async function checkRoute(base, route, assetSink) {
 // Returns null when the API probe reaches the Worker on `base`, else a
 // human-readable failure reason. HEALTHY = a JSON response: a 200 from
 // /api/health, or even a JSON 401 from an authed probe — both prove the
-// request reached the Worker. FAILURE = an HTML body / HTML 404, the exact
-// signature of `/api/*` falling through to the Jekyll/GitHub-Pages site
-// because the `axal.vc/api/*` Worker route isn't registered on this zone.
+// request reached the Worker. FAILURE = an HTML body, the signature of
+// `/api/*` never reaching the Hono app: the host is not bound to the Worker,
+// or `/api/*` left `run_worker_first` and the assets binding's SPA fallback
+// answered with `index.html`. (Before 2026-09-01 it was the apex's other
+// host — GitHub Pages, then Cloudflare Pages — answering with its HTML 404.)
 async function checkApiRouting(base) {
   const url = base.replace(/\/$/, '') + API_PROBE_PATH;
-  // axal.vc is the proxied apex (the Jekyll fall-through case); app.axal.vc is
-  // the Workers custom domain. Match the same detection routesForHost() uses
-  // (`//axal.vc` does not match `//app.axal.vc`) so the failure reason names
-  // the correct cause for each host.
+  // Both hosts are Workers Custom Domains (since 2026-09-01, 1d320dda9); the
+  // apex/app split below only chooses which failure text is printed. Match the
+  // same detection routesForHost() uses (`//axal.vc` does not match
+  // `//app.axal.vc`) so each host gets its own message.
   const isApex = /\/\/axal\.vc/i.test(base);
   let lastErr = '';
   for (let attempt = 1; attempt <= RETRIES; attempt++) {
@@ -333,9 +355,9 @@ async function checkApiRouting(base) {
         (!isHtml && body.trimStart().startsWith('{'));
       if (isHtml) {
         lastErr = isApex
-          ? `apex /api/* fell through to the Jekyll/GitHub-Pages site ` +
+          ? `apex /api/* answered with HTML ` +
             `(HTTP ${status}, Content-Type "${ctype || '(none)'}", HTML body) ` +
-            `instead of reaching the Worker`
+            `instead of reaching the Worker — the axal.vc custom-domain binding is not answering`
           : `/api/* returned an HTML response ` +
             `(HTTP ${status}, Content-Type "${ctype || '(none)'}", HTML body) ` +
             `instead of Worker JSON — the Workers custom domain is not routing ` +
@@ -370,9 +392,10 @@ async function main() {
   for (const base of HOSTS) {
     // Apex API-routing assertion FIRST: prove `/api/*` actually reaches the
     // Worker on this host. The shell-HTML + asset checks below can all pass
-    // while every `/api/*` fetch falls through to Jekyll (an HTML 404) — the
-    // exact regression that took prod down on axal.vc. Catch it loudly before
-    // anything else.
+    // while every `/api/*` fetch comes back as HTML instead of Worker JSON —
+    // the exact regression that took prod down on axal.vc (then an HTML 404
+    // from the host that served the apex). Catch it loudly before anything
+    // else.
     {
       const apiUrl = base.replace(/\/$/, '') + API_PROBE_PATH;
       const reason = await checkApiRouting(base);
@@ -399,9 +422,12 @@ async function main() {
       }
     }
     // The shell HTML can look perfect while the hashed JS/CSS it points to
-    // 404s — the exact signature of the recurring blank page (Worker serves a
-    // newer build than the stale GitHub Pages that backs `/assets/*`). Verify
-    // every referenced asset actually resolves on this host.
+    // 404s — the exact signature of the recurring blank page (an `index.html`
+    // and the `/assets/*` it references coming from two different builds; on
+    // 2026-08-31 that was Pages-served HTML against a different Worker asset
+    // build). Both hosts now come from one Worker deploy, so a mismatch here
+    // means the deploy itself is skewed. Verify every referenced asset
+    // actually resolves on this host.
     for (const assetPath of assetSink) {
       const url = base.replace(/\/$/, '') + assetPath;
       const reason = await checkAsset(base, assetPath);
@@ -421,26 +447,28 @@ async function main() {
     for (const f of failures) console.error(`  - ${f}`);
     if (apexApiRoutingFailed) {
       console.error(
-        '\nAn `/api/*` probe returned an HTML 404 (the Jekyll/GitHub-Pages site)\n' +
-          'instead of a Worker JSON response. The `axal.vc/api/*` Worker route is\n' +
-          'NOT registered on the apex zone, so the SPA\'s relative `/api/*` fetches\n' +
-          'all fall through to Pages and every authenticated page 404s — the same\n' +
-          'outage as before.\n' +
-          'Fix: redeploy with `npm run deploy` (it passes `--env production`). Note\n' +
-          'a plain `wrangler deploy` binds the TOP-LEVEL `[[routes]]` block, so the\n' +
-          'apex carve-out (`axal.vc/api/*`, `/dashboard`, `/login`, …) must be kept\n' +
-          'in lockstep in BOTH `[[routes]]` and `[[env.production.routes]]` in\n' +
-          'wrangler.toml. If `/api/*` still 404s after a correct deploy, reattach\n' +
-          'the `axal.vc/*` Worker routes on the `axal.vc` zone in the Cloudflare\n' +
-          'dashboard (zone-route drift).',
+        '\nAn `/api/*` probe returned HTML instead of a Worker JSON response, so\n' +
+          'the request never reached the Worker: the whole-host custom-domain\n' +
+          'binding for that host is missing or its DNS record has drifted. Both\n' +
+          '`axal.vc` and `app.axal.vc` are Workers Custom Domains of `studioos`\n' +
+          '(wrangler.toml [[routes]] and [[env.production.routes]], kept in\n' +
+          'lockstep). Fix: redeploy with `npm run deploy` (it passes\n' +
+          '`--env production` and re-binds both domains), then read the closing\n' +
+          '"Deployed studioos triggers" lines of the deploy output and the DNS\n' +
+          'record for the host in the Cloudflare dashboard. Never add a\n' +
+          'path-scoped `axal.vc/*` or `axal.vc/assets/*` route: it steals those\n' +
+          'URLs from the assets binding and breaks the SPA fallback (the\n' +
+          '2026-08-31 outage).',
       );
     }
     console.error(
       '\nThe deployed site is serving blank/broken pages, a JSON 404, or hashed\n' +
-        'assets that 404. On axal.vc, confirm Cloudflare Pages owns both the HTML\n' +
-        'route and /assets/* while the Worker owns /api/*. Then confirm the latest\n' +
-        'main commit finished deploying on Pages and re-run this check. (Set\n' +
-        'SKIP_LIVE_SMOKE=1 only if this host genuinely cannot reach production.)',
+        'assets that 404. On both hosts the Worker serves the HTML, /assets/* and\n' +
+        '/api/* from one build, so confirm the latest main commit\'s "Cloudflare\n' +
+        'Worker deploy" run finished (GitHub Actions), not the Pages dashboard —\n' +
+        'Pages is a mirror that advances even when the Worker deploy fails — and\n' +
+        're-run this check. (Set SKIP_LIVE_SMOKE=1 only if this host genuinely\n' +
+        'cannot reach production.)',
     );
     process.exit(1);
   }

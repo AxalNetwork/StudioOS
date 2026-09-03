@@ -13,14 +13,22 @@ const TABLES = ['routes', 'env.production.routes'];
 /**
  * The whole production surface, as two Workers Custom Domains.
  *
- * This list used to read `app.axal.vc` plus three `axal.vc/...` path routes,
- * which was the table from BEFORE the apex cutover. `e1de44c2` ("Stop apex
- * Pages and Worker asset skew") completed that cutover: it deleted every
- * path route from `wrangler.toml`, leaving `axal.vc` and `app.axal.vc` as
- * whole-host custom domains, and rewrote this file in the same commit — but
- * the rewrite kept the old four-entry allowlist, so the toml and the guard
- * shipped disagreeing with each other and this test has been red on `main`
- * ever since. The toml is the deployed truth; this list now matches it.
+ * This list used to read `app.axal.vc` plus three `axal.vc/...` path routes
+ * (`/api/*`, `/landing/*`, `/p/*`): the PAGES cutover's table, written into
+ * `wrangler.toml` and into this file by `e1de44c2` ("Stop apex Pages and
+ * Worker asset skew", 2026-08-31 10:51Z), under which Cloudflare Pages served
+ * the apex — correct at the time. (Attribution fixed 2026-09-03 from git; an
+ * earlier version of this comment credited `e1de44c2` with the flip below.)
+ * The flip came in `1d320dda9` (2026-09-01 09:08Z, author "Replit Agent",
+ * message "Remove stale documentation asset files"): it replaced the three
+ * path routes with a whole-host `axal.vc` custom domain in both tables,
+ * leaving `axal.vc` and `app.axal.vc` as Workers Custom Domains, and touched
+ * neither this file nor any documentation — a deployed-config change in a
+ * commit whose message is about something else. The toml and this guard
+ * therefore shipped disagreeing, and this test was red on `main` until #374
+ * (2026-09-01) rewrote it. The toml is the deployed truth (the deploy log's
+ * "Deployed studioos triggers: axal.vc (custom domain), app.axal.vc (custom
+ * domain)" lines confirm it); this list matches it.
  *
  * The cutover is the point, not an implementation detail. Serving the apex
  * and `app.axal.vc` from one Worker means one asset build behind both, which

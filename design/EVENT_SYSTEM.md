@@ -280,6 +280,12 @@ variants.
 
 ### 9.1 Routing (replit.md "Apex routing")
 
+> **Superseded 2026-09-01.** The paragraph below was written when the apex
+> was GitHub Pages/Jekyll with path-scoped Worker routes. Both hosts are
+> whole-host Workers Custom Domains now: a new SPA route needs **no**
+> `wrangler.toml` entry, and adding a path-scoped `axal.vc/…` route is the
+> 2026-08-31 outage mechanism the guard tests refuse. Kept as history.
+
 Add to `wrangler.toml` `[[env.production.routes]]` **BOTH** exact + `/*` patterns
 for `axal.vc/events` and `axal.vc/invite` (and mirror in the **top-level**
 `[[routes]]` block — the live deploy binds the top-level block) so the SPA, not

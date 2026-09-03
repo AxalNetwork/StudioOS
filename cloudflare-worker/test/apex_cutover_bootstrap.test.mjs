@@ -121,16 +121,23 @@ test('both deploy targets keep the apex route table to the audited allowlist', a
   // carried a hardcoded 68 that was 166 by the time it mattered, which is the
   // other reason it earned no trust.
   //
-  // CORRECTED 2026-09-01. `e1de44c2` ("Stop apex Pages and Worker asset skew")
-  // finished the cutover in the other direction: it deleted every path route
-  // from wrangler.toml and bound BOTH hosts as Workers Custom Domains, so one
-  // asset build sits behind the apex and app.axal.vc and the two can no longer
-  // drift apart. That commit rewrote this test in the same breath but left the
-  // pre-cutover four-entry table here, so the toml and its guard shipped
-  // disagreeing and this has been red on `main` ever since. The toml is the
-  // deployed truth. `frontend/test/apex_route_coverage.test.mjs` carries the
-  // same correction and additionally pins that each entry is a custom domain
-  // rather than a zone route.
+  // CORRECTED 2026-09-01; attribution fixed 2026-09-03 from git. The
+  // four-entry table the paragraph above defends (`app.axal.vc` as a custom
+  // domain plus `axal.vc/api/*`, `/landing/*`, `/p/*`) was the PAGES cutover's,
+  // from `e1de44c2` ("Stop apex Pages and Worker asset skew", 2026-08-31
+  // 10:51Z), and #371 pinned it here the same day — correct at the time. The
+  // flip back came in `1d320dda9` (2026-09-01 09:08Z, author "Replit Agent",
+  // message "Remove stale documentation asset files"): it replaced the three
+  // path routes with a whole-host `axal.vc` custom domain in BOTH tables and
+  // touched no test and no documentation, so one asset build sits behind the
+  // apex and app.axal.vc and the two can no longer drift apart — in a commit
+  // whose message never mentions it. The toml and this guard therefore
+  // shipped disagreeing, and this was red on `main` until #374 (2026-09-01)
+  // rewrote it to match. The toml is the deployed truth: the deploy log ends
+  // with "Deployed studioos triggers: axal.vc (custom domain), app.axal.vc
+  // (custom domain)". `frontend/test/apex_route_coverage.test.mjs` carries
+  // the same correction and additionally pins that each entry is a custom
+  // domain rather than a zone route.
   const ALLOWED = [
     'axal.vc',      // Workers Custom Domain — the Worker serves this whole host
     'app.axal.vc',  // Workers Custom Domain — same build, same handlers

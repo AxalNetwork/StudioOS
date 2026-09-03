@@ -3,11 +3,11 @@
  *
  * Mounted at /api/public/team. NO AUTHENTICATION. Returns only published
  * members ordered by display_order. Consumed by:
- *   (a) Jekyll marketing build (axalnetwork.github.io) — a GitHub Actions
- *       pre-build step curls this into `_data/team.json` and falls back
- *       to a committed copy on failure.
- *   (b) Direct browser fetches from https://axal.vc/team if/when the
- *       marketing site grows a client-side component.
+ *   (a) Historical: the Jekyll marketing build (axalnetwork.github.io) used
+ *       to curl this into `_data/team.json` at build time. That site is gone;
+ *       the Worker serves axal.vc since 2026-09-01.
+ *   (b) Direct browser fetches from the SPA's /team and /about on axal.vc
+ *       (same origin, so CORS below is belt-and-braces).
  *
  * CORS: explicitly emits `Access-Control-Allow-Origin: https://axal.vc`
  * regardless of request origin. The global cors() middleware in index.ts

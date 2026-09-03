@@ -11,9 +11,16 @@
 #     local iteration; it is NOT deployed to Cloudflare (Workers do not run
 #     FastAPI). Do not change `main` to a Python file.
 #
-# Deploy:
-#   npx wrangler deploy                       # production
-#   npx wrangler deploy --env preview         # preview / staging
+# Deploy (from the repo root — never `npx wrangler deploy` by hand: it
+# skips the `predeploy` hook that applies D1 migrations, so the Worker
+# would ship ahead of its schema):
+#   npm run deploy            # build docs/, migrate D1 (predeploy), then
+#                             # `wrangler deploy --config ../wrangler.toml
+#                             # --env production`; postdeploy runs
+#                             # scripts/check-spa-live.mjs
+#   npm run deploy:preview    # `--env preview` (studioos-preview)
+# CI does the same on every push to `main`:
+# .github/workflows/cloudflare-worker-deploy.yml (build → migrate → deploy).
 #
 # Secrets are managed via `wrangler secret put <NAME>` (see .env.example).
 # ---------------------------------------------------------------------------
@@ -23,9 +30,10 @@ main = "cloudflare-worker/src/index.ts"
 compatibility_date = "2026-04-01"
 compatibility_flags = ["nodejs_compat"]
 # Task #36 — workers.dev subdomain disabled. The worker is reachable
-# only through its Workers Custom Domain `app.axal.vc` (see [[routes]]
-# below). Re-enabling this also requires removing `app.axal.vc` from
-# the OAuth-callback workers.dev guard in cloudflare-worker/src/index.ts.
+# only through its Workers Custom Domains `axal.vc` and `app.axal.vc`
+# (see [[routes]] below; both since 2026-09-01, 1d320dda9). Re-enabling
+# this also requires removing `app.axal.vc` from the OAuth-callback
+# workers.dev guard in cloudflare-worker/src/index.ts.
 workers_dev = false
 
 # Epic 11 — minified production bundle. Wrangler runs esbuild with
@@ -59,7 +67,9 @@ custom_domain  = true
 
 # ---------- Static Assets (SPA) ----------
 # Task #36 — Worker Static Assets binding. The worker serves the
-# Vite-built SPA from `frontend/dist`. With `not_found_handling =
+# Vite-built SPA from the repo-root `./docs` (see below) — on BOTH
+# `axal.vc` and `app.axal.vc` since 2026-09-01 (1d320dda9), which is
+# why one build sits behind both hosts. With `not_found_handling =
 # "single-page-application"`, any request the worker's fetch handler
 # doesn't match (i.e. anything NOT under `/api/*`, `/landing/:slug`,
 # or the few other handlers in `cloudflare-worker/src/index.ts`)
@@ -69,7 +79,7 @@ custom_domain  = true
 # `run_worker_first = false` (the default) means assets are checked
 # BEFORE the worker fetch handler — so static files (.js/.css/.png)
 # are served directly from the edge without invoking the worker.
-# Only requests for paths not present in `dist/` reach the worker.
+# Only requests for paths not present in `docs/` reach the worker.
 #
 # `run_worker_first` lists path patterns where the worker MUST run
 # before any asset lookup. Without this, the SPA fallback in
@@ -79,12 +89,16 @@ custom_domain  = true
 # routes (`*` wildcards, not regex).
 #
 # Vite is configured (frontend/vite.config.js) to build into the
-# repo-root `./docs/` directory (legacy GitHub-Pages output path,
-# preserved so the in-repo deploy artifact stays in one place).
+# repo-root `./docs/` directory. The path dates from when GitHub Pages
+# published it (GitHub Pages no longer serves any production host) and
+# is kept because `docs/` is committed by hand for review and for
+# scripts/check-docs-fresh.mjs; both CI deploy workflows rebuild it
+# from source at deploy time, so the committed bytes are what reviewers
+# read, not necessarily what ships.
 #
-# Build before deploy:
-#   cd frontend && npm run build      # writes to ./docs/
-#   npx wrangler deploy --env production
+# Build + deploy: root `npm run deploy` (see the Deploy note at the top
+# of this file) — it runs `node scripts/build-frontend.mjs` (Vite +
+# hashed-asset retention + OG prerender) before `wrangler deploy`.
 
 [assets]
 directory = "./docs"
