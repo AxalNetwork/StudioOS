@@ -2,7 +2,8 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
-import { bucketForPath, zoneForPath, zonePath } from '../shellConfig';
+import BucketOverview, { unbuiltFrom } from '../BucketOverview';
+import { bucketForPath, zoneForPath } from '../shellConfig';
 import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
@@ -124,60 +125,6 @@ const ZONE_BLURB = {
   outcomes: 'The programme’s published outcomes — company-level and anonymous, not your batch alone.',
 };
 
-/**
- * The canvas overview a bucket root renders: the tagline, then one card per
- * zone so the reader can open the section they came for. The sidebar row
- * points here; the zone pills below are the same destinations.
- */
-function BucketOverview({ bucket }) {
-  if (!bucket) return null;
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {bucket.zones.map((zone) => {
-        // An entry in COPY IS the definition of "this zone has no store": it
-        // is what the zone's own page renders. Reading it here keeps the card
-        // and the page one sentence rather than two that can drift apart.
-        const unbuilt = COPY[bucket.prefix]?.[zone.slug];
-        return (
-          <Link
-            key={zone.slug}
-            to={zonePath(bucket, zone)}
-            className={`group rounded-xl border bg-white p-4 transition-colors ${
-              unbuilt
-                ? 'border-dashed border-axal-border hover:border-axal-ink-3'
-                : 'border-axal-border hover:border-emerald-300 hover:bg-emerald-50/40'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span
-                className={`text-sm font-bold ${
-                  unbuilt ? 'text-axal-ink-2' : 'text-axal-ink group-hover:text-emerald-800'
-                }`}
-              >
-                {zone.label}
-              </span>
-              <span
-                className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"
-                style={{ background: zone.archetype.colors[0], color: zone.archetype.colors[1], borderColor: zone.archetype.colors[2] }}
-              >
-                {zone.archetype.label}
-              </span>
-            </div>
-            <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
-              {unbuilt && (
-                <span className="mr-1.5 rounded-[3px] border border-axal-border px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
-                  Not built
-                </span>
-              )}
-              {unbuilt ? unbuilt.heading : ZONE_BLURB[zone.slug]}
-            </p>
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
 // Zones served by the legacy five-tab Advisory workspace, which carries its
 // own shell and must therefore be mounted `embedded`.
 const LIVE = {
@@ -265,7 +212,16 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     // this bucket holds and opens each zone from there. The sidebar row must
     // land here, not on the first zone.
     if (isRoot) {
-      return <BucketOverview bucket={bucket} />;
+      // `unbuilt` is derived from COPY — the same object each zone page
+      // renders — so a card cannot describe a store the page denies having.
+      return (
+        <BucketOverview
+          bucket={bucket}
+          role="advisor"
+          descriptions={ZONE_BLURB}
+          unbuilt={unbuiltFrom(COPY[prefix])}
+        />
+      );
     }
 
     const Zone = ZONE[prefix]?.[slug];

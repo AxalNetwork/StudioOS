@@ -2031,8 +2031,12 @@ function AppInner() {
       <Route path="/offers/visibility" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/offers/proof" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/offers/audience-fit" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
-      <Route path="/delivery" element={<Navigate to="/delivery/board" replace />} />
-      <Route path="/offers" element={<Navigate to="/offers/catalog" replace />} />
+      <Route path="/delivery" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      {/* Partner canvas P3 — the partner Pipeline root is the bucket overview,
+          not the investor deal pipeline that owns this prefix for investors.
+          Investor and founder keep the page they had; partner gets the shell. */}
+      <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'partner' ? <PartnerBucketRoutes /> : investorWorkspace('deals', <PipelineWorkspace />))} />
 
       <Route path="/partner/operations" element={<Navigate to="/partner/operations/overview" replace />} />
       <Route path="/partner/operations/overview" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerOperationsWorkspace />))} />
@@ -2096,7 +2100,9 @@ function AppInner() {
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor'], <Navigate to="/referrals" replace />)} />
       <Route path="/matches" element={guard(['admin', 'partner', 'investor'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="pipeline" user={user}><MatchesPage /></PartnerWorkspaceTabs>))} />
       <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('grow', <FounderWorkspaceTabs set="grow" user={user}><NetworkEffectsPage /></FounderWorkspaceTabs>))} />
-      <Route path="/pipeline" element={guard(['admin', 'founder', 'partner', 'investor'], investorWorkspace('deals', <PipelineWorkspace />))} />
+      {/* /pipeline lives with the Partner bucket routes above — the partner
+          canvas claims the prefix root as its Pipeline overview, and the
+          investor deal pipeline keeps the zone slugs below it. */}
       {/* Task #1 — unified Network page (Contacts + Introductions +
           Relationships tabs). The legacy /relationships route redirects into
           the Relationships tab. Advisors are included so the Introductions
@@ -2107,7 +2113,7 @@ function AppInner() {
           a violet founder-shaped page with an empty right column. The shell
           resolves the zone to `relationships` on a bare prefix, so the row
           lands on the bucket and the pills navigate from there. */}
-      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], partnerPrivateWorkspace(effectiveRole === 'investor' ? <InvestorNetworkWorkspace /> : effectiveRole === 'advisor' ? <NetworkWorkspace role="advisor" /> : founderNetworkLanding ? <FounderNetworkDesk /> : founderWorkspace('network', <NetworkPage />, { hideHeader: true })))} />
+      <Route path="/network" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], effectiveRole === 'partner' ? <NetworkWorkspace role="partner" /> : partnerPrivateWorkspace(effectiveRole === 'investor' ? <InvestorNetworkWorkspace /> : effectiveRole === 'advisor' ? <NetworkWorkspace role="advisor" /> : founderNetworkLanding ? <FounderNetworkDesk /> : founderWorkspace('network', <NetworkPage />, { hideHeader: true })))} />
       {/* ── Network · three zones, every licence ─────────────────────────────
           These were guarded ['admin','founder'] because they were built for
           the founder shell and nothing else linked them. All four canvases

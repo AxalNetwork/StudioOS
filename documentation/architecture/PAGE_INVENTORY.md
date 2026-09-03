@@ -53,11 +53,11 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Headerless | Studio | `/studio` | Partner Operator Canvas |
 | Headerless | Spin-Out Lab | `/spinout-lab` | Partner Operator Canvas |
-| Headerless | Pipeline | `/needs` | BD Console, Pages · Partner Pipeline, Partner Operator Canvas |
-| Headerless | Delivery | `/partner/operations/overview` | BD Console |
-| Headerless | Offers | `/services` | Partner Operator Canvas |
+| Headerless | Pipeline | `/pipeline` | — (no canvas; shipped ahead of the design corpus) |
+| Headerless | Delivery | `/delivery` | — (no canvas; shipped ahead of the design corpus) |
+| Headerless | Offers | `/offers` | — (no canvas; shipped ahead of the design corpus) |
 | Headerless | Network | `/network` | Partner Operator Canvas |
-| Headerless | Research | `/signals` | — (no canvas; shipped ahead of the design corpus) |
+| Headerless | Research | `/research` | — (no canvas; shipped ahead of the design corpus) |
 
 ## `admin` — 48 destinations in 6 groups
 
@@ -136,7 +136,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-56 of the 91 sidebar rows above are not claimed
+59 of the 91 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -148,7 +148,10 @@ rather than merely absent.
 - advisor · Home · Expertise (`/expertise`)
 - advisor · Home · Research (`/research`)
 - investor · Home · Trust (`/trust`)
-- partner · Headerless · Research (`/signals`)
+- partner · Headerless · Pipeline (`/pipeline`)
+- partner · Headerless · Delivery (`/delivery`)
+- partner · Headerless · Offers (`/offers`)
+- partner · Headerless · Research (`/research`)
 - admin · Home · Studio (`/studio`)
 - admin · Home · Messages (`/messages`)
 - admin · Admin · Due Diligence (`/admin/due-diligence`)

@@ -2,7 +2,8 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
-import { bucketForPath, zoneForPath, zonePath } from './shellConfig';
+import BucketOverview, { unbuiltFrom } from './BucketOverview';
+import { bucketForPath, zoneForPath } from './shellConfig';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -182,35 +183,12 @@ function ResearchOverview({ role }) {
   const bucket = bucketForPath(role, '/research');
   if (!bucket) return null;
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {bucket.zones.map((zone) => (
-        <Link
-          key={zone.slug}
-          to={zonePath(bucket, zone)}
-          className="group rounded-xl border border-axal-border bg-white p-4 transition-colors hover:border-emerald-300 hover:bg-emerald-50/40"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-bold text-axal-ink group-hover:text-emerald-800">{zone.label}</span>
-            <span
-              className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"
-              style={{ background: zone.archetype.colors[0], color: zone.archetype.colors[1], borderColor: zone.archetype.colors[2] }}
-            >
-              {zone.archetype.label}
-            </span>
-          </div>
-          <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
-            {ZONE_BLURB[zone.slug] || (
-              <>
-                <span className="mr-1.5 rounded-[3px] border border-axal-border px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
-                  Not built
-                </span>
-                {(ZONE_COPY[zone.slug] || ZONE_COPY.ask).heading}
-              </>
-            )}
-          </p>
-        </Link>
-      ))}
-    </div>
+    <BucketOverview
+      bucket={bucket}
+      role={role}
+      descriptions={ZONE_BLURB}
+      unbuilt={unbuiltFrom(ZONE_COPY)}
+    />
   );
 }
 
@@ -267,16 +245,12 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
         : `${zone?.label || 'This zone'} reads a live source`)
       : `${zone?.label || 'This zone'} has no store behind it yet`;
 
-  const INTRO = {
-    ask: 'Cited answers over your own documents. Every answer names the sources it drew on.',
-    markets: 'Signals from the sectors you work in, with the date each one was gathered.',
-    companies: 'Companies you have looked into — and whether you have a relationship or only a file.',
-    funds: 'Who invests at your stage, and on what terms.',
-    library: 'The documents Ask reads from. What is indexed here is exactly what Ask can reach.',
-    diligence: 'The evidence behind a decision, and the questions still open against it.',
-    benchmarking: 'Comparables, with the sample size on every figure.',
-    'client-prep': 'One client, everything you need before the session.',
-  };
+  // The zone header's line, for the two zones with a source. Every other zone
+  // takes the heading its own body renders — the same coupling the overview
+  // cards use. This map previously described Ask as "cited answers over your
+  // own documents" and Library as "the documents Ask reads from" directly
+  // above the cards saying neither exists.
+  const INTRO = { ...ZONE_BLURB, ...unbuiltFrom(ZONE_COPY) };
 
   return (
     <WorkspaceShell

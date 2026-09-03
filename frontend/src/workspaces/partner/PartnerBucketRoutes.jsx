@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton } from '../../ui';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
+import BucketOverview, { unbuiltFrom } from '../BucketOverview';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 
 const PartnerOperationsWorkspace = lazy(() => import('../../pages/partner/operations/PartnerOperationsWorkspace'));
@@ -133,14 +134,70 @@ const COPY = {
   },
 };
 
+/**
+ * One line per zone, for the overview a bucket root renders — but only for the
+ * zones with a page behind them. A zone with no store is deliberately absent:
+ * its card is written from `COPY` — the same heading its own body renders — or
+ * from the generic no-store card when it has neither. `NOTHING_YET` below
+ * mirrors that fallback. The canvas's anchor nav names the same destinations;
+ * the card grid is what the sidebar row opens.
+ *
+ * The first draft of this map described all eight unbacked partner zones as
+ * working features — negotiations "live deals at terms", deliverables "shipped
+ * and acknowledged", capacity "where the firm is over-committed", catalog "the
+ * record lead scoring reads against" — every one of them a `NoStoreYet` card
+ * one click away.
+ */
+const ZONE_LINES = {
+  '/pipeline': {
+    leads: 'Lead sources with provenance — where the work comes from is as useful as how much of it there is.',
+    proposals: 'The proposal desk: what is open, what it is worth, and the activity on each.',
+    retainers: 'Recurring engagements and the renewals coming due.',
+    analytics: 'Win rate, cycle time and source quality across the pipeline.',
+  },
+  '/delivery': {
+    board: 'Both modes on one board: projects with milestones, and embedded seats with founder-granted scope.',
+    health: 'Engagement health across the book, with the at-risk row first.',
+  },
+  '/offers': {
+    'perk-deals': 'Deals that expire in public, with grants revoked when they do.',
+  },
+};
+
+const NOTHING_YET = 'Nothing here yet';
+
+/** Gap lines for every zone this bucket cannot serve: its own no-store heading
+ *  where COPY has one, the generic card's heading where it does not. */
+function gapsFor(prefix, bucket) {
+  const gaps = unbuiltFrom(COPY[prefix]);
+  for (const zone of bucket?.zones || []) {
+    if (LIVE[prefix]?.[zone.slug] || gaps[zone.slug]) continue;
+    gaps[zone.slug] = NOTHING_YET;
+  }
+  return gaps;
+}
+
 export default function PartnerBucketRoutes() {
   const location = useLocation();
   const bucket = bucketForPath('partner', location.pathname);
-  const zone = zoneForPath(bucket, location.pathname);
+  const isRoot = bucket && location.pathname === bucket.prefix;
+  const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
   const prefix = bucket?.prefix;
   const slug = zone?.slug;
 
   const body = useMemo(() => {
+    // The bucket root is the canvas overview — the sidebar row lands here,
+    // not on the first zone. Zones stay one click away on the cards below.
+    if (isRoot) {
+      return (
+        <BucketOverview
+          bucket={bucket}
+          role="partner"
+          descriptions={ZONE_LINES[prefix]}
+          unbuilt={gapsFor(prefix, bucket)}
+        />
+      );
+    }
     const Live = LIVE[prefix]?.[slug];
     if (Live) return <Suspense fallback={<Loading />}><Live /></Suspense>;
     const copy = COPY[prefix]?.[slug];
@@ -150,7 +207,7 @@ export default function PartnerBucketRoutes() {
       what="This zone is named by the canvas and has no surface behind it."
       why="It ships empty rather than as a placeholder that could be mistaken for real data."
     />;
-  }, [prefix, slug]);
+  }, [prefix, slug, isRoot, bucket]);
 
   const INTRO = {
     '/pipeline': 'Win the work. One firm’s pipeline, from lead to signed retainer.',
@@ -161,8 +218,10 @@ export default function PartnerBucketRoutes() {
   return (
     <WorkspaceShell
       role="partner"
+      title={isRoot ? bucket?.label : undefined}
       scope="One firm"
       intro={INTRO[prefix]}
+      activeSlug={isRoot ? null : undefined}
     >
       {body}
     </WorkspaceShell>

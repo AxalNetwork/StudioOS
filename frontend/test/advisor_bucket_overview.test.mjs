@@ -43,8 +43,9 @@ test('Cohorts root is a route, not a redirect', () => {
 test('bucket roots render an overview grid, not a zone body', () => {
   const code = codeOnly(bucketRoutes);
   assert.match(code, /isRoot &&/, 'AdvisorBucketRoutes must detect the bucket root');
-  assert.match(code, /<BucketOverview bucket=\{bucket\} \/>/, 'the root must render the overview');
-  assert.match(code, /bucket\.zones\.map/, 'the overview must list every zone');
+  assert.match(code, /<BucketOverview/, 'the root must render the shared overview');
+  assert.match(code, /unbuilt=\{unbuiltFrom\(COPY\[prefix\]\)\}/,
+    'the advisor overview must derive its gaps from COPY, the map its zone pages render');
 });
 
 test('Network root renders an overview for advisors', () => {
@@ -163,18 +164,19 @@ test('every zone with a store has an overview blurb, and no zone without one doe
   );
 });
 
-test('an unbuilt zone card is written from COPY and marked, not hand-written', () => {
-  assert.match(
-    advisorCode,
-    /const unbuilt = COPY\[bucket\.prefix\]\?\.\[zone\.slug\]/,
-    'the card must read the same COPY entry its zone page renders',
-  );
-  assert.match(
-    advisorCode,
-    /unbuilt \? unbuilt\.heading : ZONE_BLURB\[zone\.slug\]/,
-    'an unbuilt card must show the COPY heading, never a blurb of its own',
-  );
-  assert.match(advisorCode, /Not built/, 'an unbuilt card must be visibly marked');
+test('the shared overview marks an unbuilt zone and shows its own page heading', () => {
+  // The coupling moved into BucketOverview when the partner buckets joined:
+  // one component renders every licence's grid, so the honest-state handling
+  // is written once and a new bucket cannot forget it.
+  const overview = codeOnly(read('frontend/src/workspaces/BucketOverview.jsx'));
+  assert.match(overview, /export function unbuiltFrom\(copy\)/,
+    'the derivation must live beside the component, not be hand-written per caller');
+  assert.match(overview, /\.map\(\(\[slug, v\]\) => \[slug, v\.heading\]\)/,
+    'unbuiltFrom must take the heading the zone page renders, verbatim');
+  assert.match(overview, /const gap = unbuilt\[zone\.slug\]/);
+  assert.match(overview, /const line = gap \|\| descriptions\[zone\.slug\]/,
+    'a gap line must WIN over a description, never merely supplement it');
+  assert.match(overview, /Not built/, 'an unbuilt card must be visibly marked');
 });
 
 test('the Research overview describes only its two live zones, and reads ZONE_COPY for the rest', () => {
@@ -187,11 +189,10 @@ test('the Research overview describes only its two live zones, and reads ZONE_CO
     [...live].sort(),
     'only the zones in LIVE_ZONES may carry a blurb: Ask, Library, Client prep, Funds, Diligence and Benchmarking are withdrawn or unbuilt (D9/D12)',
   );
-  assert.match(
-    code,
-    /\(ZONE_COPY\[zone\.slug\] \|\| ZONE_COPY\.ask\)\.heading/,
-    'an unbuilt Research card must show the same heading its own page renders, with the same fallback',
-  );
+  assert.match(code, /unbuilt=\{unbuiltFrom\(ZONE_COPY\)\}/,
+    'the Research overview must derive its gaps from ZONE_COPY');
+  assert.match(code, /const INTRO = \{ \.\.\.ZONE_BLURB, \.\.\.unbuiltFrom\(ZONE_COPY\) \}/,
+    'the zone HEADER line must come from the same two maps: a withdrawn zone said "cited answers over your own documents" above its own empty card');
   assert.doesNotMatch(
     block(code, 'ZONE_BLURB'),
     /relationship or only a file/i,
@@ -202,7 +203,7 @@ test('the Research overview describes only its two live zones, and reads ZONE_CO
 test('the Network overview shares one INTRO map and marks Organizations where it reads nothing', () => {
   const code = codeOnly(networkWs);
   assert.match(code, /^const INTRO = \{/m, 'INTRO must be module-scope so the overview and the zone header share it');
-  assert.match(code, /INTRO\[zone\.slug\]/, 'the overview must read INTRO rather than restating it');
+  assert.match(code, /descriptions=\{INTRO\}/, 'the overview must read INTRO rather than restating it');
 
   // The three lines must exist once, not once per surface: duplicated copy is
   // how an overview card and the zone header it opens drift apart.
@@ -211,8 +212,8 @@ test('the Network overview shares one INTRO map and marks Organizations where it
 
   assert.match(
     code,
-    /zone\.slug === 'organizations' && !ORG_BACKED\.has\(role\)/,
-    'the Organizations card must consult the same ORG_BACKED set the zone body and rail use',
+    /ORG_BACKED\.has\(role\) \? \{\} : \{ organizations: ORG_NO_STORE \}/,
+    'the Organizations gap must be per-role, from the same ORG_BACKED set the zone body and rail use',
   );
 });
 

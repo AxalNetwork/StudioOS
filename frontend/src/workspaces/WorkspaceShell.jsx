@@ -54,7 +54,11 @@ export default function WorkspaceShell({
 }) {
   const location = useLocation();
   const bucket = bucketForPath(role, location.pathname);
-  const zone = zoneForPath(bucket, location.pathname);
+  // `activeSlug === null` is the overview mode: a bucket root is above its
+  // zones, so no zone is current — not in the pill row, and not in the crumb
+  // or title either. `zoneForPath` defaults to the first zone, which is right
+  // on a zone route and wrong here.
+  const zone = activeSlug === null ? null : zoneForPath(bucket, location.pathname);
   // No accent is read here on purpose. In the canvases the shell chrome —
   // crumb, title, divider — is neutral in all four roles; the accent lives on
   // the zone pills (ZoneNav) and the AI rail, which is where a reader looks to
