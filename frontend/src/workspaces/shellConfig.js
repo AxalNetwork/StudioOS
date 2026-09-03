@@ -59,6 +59,11 @@ export const ACCENT = {
   investor: { ink: '#4f46e5', deep: '#4338ca', tint: '#eef2ff', border: '#c7d2fe', deepDark: '#818cf8', tintDark: '#211f3d' },
   advisor:  { ink: '#047857', deep: '#065f46', tint: '#f0fdf6', border: '#a7f3d0', deepDark: '#34d399', tintDark: '#0d2b22' },
   partner:  { ink: '#b45309', deep: '#92400e', tint: '#fffbf2', border: '#fde68a', deepDark: '#fbbf24', tintDark: '#2b210d' },
+  // HQ. Oxblood, per every Super canvas ("oxblood · owns the system, not the
+  // paperwork"). Not a fifth licence — the franchisor's tier above the four —
+  // and the accent has to sit apart from founder violet and investor indigo
+  // for the same reason those two sit apart from each other.
+  super_admin: { ink: '#881337', deep: '#9f1239', tint: '#fff5f7', border: '#f9c8d2', deepDark: '#fb7185', tintDark: '#2c1018' },
 };
 
 export const SEAM = { ink: '#0e7490', tint: '#f0fdff', border: '#a5edf5' };

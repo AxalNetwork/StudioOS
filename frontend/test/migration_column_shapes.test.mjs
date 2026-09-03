@@ -90,8 +90,8 @@ test('the Super Admin migration is reachable behind a sequence that can apply', 
   }
   assert.match(read(`${M}/199_super_admin.sql`).replace(/--.*$/gm, ''),
     /CREATE TABLE IF NOT EXISTS super_admins \(\s*user_id\s+INTEGER PRIMARY KEY/);
-  assert.match(read('frontend/src/App.jsx'),
-    /role === 'admin' && Number\(user\?\.is_super_admin \?\? 0\) === 1 \? 'super_admin' : role/,
+  assert.match(read('frontend/src/lib/shellRole.js'),
+    /role === 'admin' && Number\(user\?\.is_super_admin \?\? 0\) === 1 && hqView \? 'super_admin' : role/,
     'the HQ shell must still key on the flag /me echoes from the side table');
 });
 

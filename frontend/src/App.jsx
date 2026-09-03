@@ -160,6 +160,11 @@ const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePa
 // The subsidiary administrator's read of their own territory licence.
 // Migration 190 made "which licence is this admin's?" answerable at all.
 const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
+// The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
+// renders the notice for an admin without the elevation.
+const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
+const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
+const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
@@ -319,6 +324,7 @@ const StepUpModal = lazy(() => import('./components/StepUpModal'));
 const InstallPrompt = lazy(() => import('./components/InstallPrompt'));
 const KeyboardShortcutsOverlay = lazy(() => import('./components/KeyboardShortcutsOverlay'));
 import useInactivityTimeout from './hooks/useInactivityTimeout';
+import { shellRoleFor, isSuperAdminUser, readHqView, writeHqView, clearHqView } from './lib/shellRole';
 
 // Phase B · Prompt 5 — sidebar groups now live in `frontend/src/sidebarConfig.js`.
 
@@ -384,21 +390,12 @@ function IntegrationsRedirect() {
 }
 
 
-/**
- * The shell a super admin sees.
- *
- * `super_admin` is an elevation on `admin` rather than a role beside it
- * (migration 199), so `user.role` is still `'admin'` here and the shell has to
- * be chosen on the flag. Only when the caller is genuinely acting as an admin:
- * an admin using the "view as" switch to check a founder's experience must get
- * the FOUNDER shell, or the switch shows them their own console back.
- */
-function shellRoleFor(role, user) {
-  return role === 'admin' && Number(user?.is_super_admin ?? 0) === 1 ? 'super_admin' : role;
-}
-
-function getSidebarGroups(role, primaryPersonaId, user) {
-  const base = SIDEBAR_GROUPS[shellRoleFor(role, user)] || SIDEBAR_GROUPS.founder;
+// The shell a super admin sees is chosen by `shellRoleFor` (lib/shellRole.js):
+// `super_admin` is an elevation on `admin`, so `user.role` is still 'admin'
+// here and the sidebar has to be picked on the flag — and on `hqView`, the
+// holder's own choice between the HQ shell and the plain admin one.
+function getSidebarGroups(role, primaryPersonaId, user, hqView = true) {
+  const base = SIDEBAR_GROUPS[shellRoleFor(role, user, hqView)] || SIDEBAR_GROUPS.founder;
   // Apply tier gating per group (stub passes everything through today;
   // Phase C will swap `hasTier` for the real subscription check).
   const groups = base
@@ -507,13 +504,28 @@ function UserDropdown({ user, onLogout }) {
 }
 
 
-function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser }) {
+function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, impersonatedUser, superAdmin = false, hqView = true }) {
   const [open, setOpen] = useState(false);
+  // "Super Admin" is a VIEW of the admin role, not a role: choosing it browses
+  // as admin with the HQ shell, choosing "Admin" browses as admin with the
+  // plain shell — exactly what a subsidiary admin sees, without impersonating
+  // anyone. The entry is offered only to a holder.
+  const hq = superAdmin && viewMode === 'admin' && hqView;
+  const viewOptions = [
+    ...(superAdmin ? [['super_admin', 'Super Admin']] : []),
+    ...Object.entries(ROLE_LABELS),
+  ];
+  const isActiveOption = (key) => (key === 'super_admin' ? hq : viewMode === key && !hq);
+  const choose = (key) => {
+    if (key === 'super_admin') onViewModeChange('admin', { hq: true });
+    else if (key === 'admin') onViewModeChange('admin', { hq: false });
+    else onViewModeChange(key);
+  };
 
   return (
-    <div className="bg-gradient-to-r from-violet-700 to-indigo-700 text-white px-4 py-2 flex items-center gap-3 text-sm relative z-[60]">
+    <div className={`${superAdmin ? 'bg-gradient-to-r from-[#881337] to-violet-800' : 'bg-gradient-to-r from-violet-700 to-indigo-700'} text-white px-4 py-2 flex items-center gap-3 text-sm relative z-[60]`}>
       <Shield size={14} className="opacity-80" />
-      <span className="font-medium opacity-90">Admin Mode</span>
+      <span className="font-medium opacity-90">{superAdmin ? 'Super Admin Mode' : 'Admin Mode'}</span>
 
       {isImpersonating ? (
         <div className="ml-2 flex items-center gap-2 bg-amber-500/20 px-3 py-1.5 rounded-lg">
@@ -527,7 +539,7 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
             className="flex items-center gap-2 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors"
           >
             <Eye size={13} />
-            <span>View as: {ROLE_LABELS[viewMode]}</span>
+            <span>View as: {hq ? 'Super Admin' : ROLE_LABELS[viewMode]}</span>
             <ChevronDown size={13} />
           </button>
           {open && (
@@ -544,12 +556,12 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
                     end-to-end: /exploring dashboard, the lean exploring sidebar,
                     and RoleGuard bounces on non-exploring routes. Per-user
                     review still lives at /admin/exploring. */}
-                {Object.entries(ROLE_LABELS).map(([role, label]) => (
+                {viewOptions.map(([key, label]) => (
                   <button
-                    key={role}
-                    onClick={() => { onViewModeChange(role); setOpen(false); }}
+                    key={key}
+                    onClick={() => { choose(key); setOpen(false); }}
                     className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
-                      viewMode === role ? 'text-violet-700 font-medium bg-violet-50' : 'text-gray-700'
+                      isActiveOption(key) ? 'text-violet-700 font-medium bg-violet-50' : 'text-gray-700'
                     }`}
                   >
                     {label}
@@ -579,7 +591,7 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
   );
 }
 
-function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId }) {
+function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId, hqView = true }) {
   const location = useLocation();
   // Active-company context state — owned here so descendants (CompanySwitcher,
   // CompanySettingsPage, etc.) share the same reference without prop drilling.
@@ -661,6 +673,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   }, []);
   const isAdmin = (realUser || user)?.role === 'admin';
   const activeRole = resolveActiveRole({ user, realUser, viewMode, isImpersonating });
+  // The elevation belongs to the session that signed in; the shell follows
+  // the identity being browsed (which is the same person unless impersonating,
+  // and a holder is the only one allowed to impersonate a holder).
+  const superAdmin = isSuperAdminUser(realUser || user);
+  const shellRole = shellRoleFor(activeRole, user, hqView);
   // Both flags read the same two lists. They used to hold the investor
   // expression written out twice, identically, and the four `/funds/*` zone
   // pages were in neither — see INVESTOR_FULL_BLEED for what that cost.
@@ -672,7 +689,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     || location.pathname === '/spinout-lab'
     || location.pathname.startsWith('/spinout-lab/');
   const flushSurface = fullBleedSurface;
-  const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user);
+  const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView);
 
   // Auto-logout after 20 minutes of inactivity, with a 60-second warning modal.
   // Tracks mouse/keyboard/scroll/touch on `window`. Disabled when no user is
@@ -687,8 +704,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // Memoize the context value so consumers of `useViewMode()` don't re-render
   // on every App render. Stable identity unless one of the three inputs changes.
   const viewModeContextValue = useMemo(
-    () => ({ viewMode: activeRole, isAdmin, isImpersonating }),
-    [activeRole, isAdmin, isImpersonating],
+    () => ({ viewMode: activeRole, isAdmin, isImpersonating, shellRole }),
+    [activeRole, isAdmin, isImpersonating, shellRole],
   );
 
   return (
@@ -703,6 +720,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             onExitImpersonation={onExitImpersonation}
             realUser={realUser}
             impersonatedUser={isImpersonating ? user : null}
+            superAdmin={superAdmin}
+            hqView={hqView}
           />
         )}
 
@@ -731,6 +750,15 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 {ROLE_LABELS[activeRole]} View
               </span>
             )}
+            {/* A holder sees which of its two admin shells it is in: HQ, or the
+                plain one a subsidiary admin gets. Neither chip shows for an
+                admin without the elevation, whose only admin shell is the plain
+                one and needs no label. */}
+            {superAdmin && activeRole === 'admin' && !isImpersonating && (
+              shellRole === 'super_admin'
+                ? <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200">HQ</span>
+                : <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS.admin}`}>Admin View</span>
+            )}
             {(activeRole === 'founder' || activeRole === 'admin') && (
               <Suspense fallback={<span className="inline-block h-8 w-8" />}>
                 <FounderWellbeingMenu />
@@ -758,7 +786,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             transform transition-transform duration-200
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden'}
           `}>
-            <SidebarNav groups={sidebarGroups} role={activeRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} onCollapse={toggleSidebarCollapsed} onClose={() => setSidebarOpen(false)} />
+            <SidebarNav groups={sidebarGroups} role={shellRole || 'founder'} onNavigate={closeOnMobileNav} user={user} collapsed={effectiveCollapsed} onCollapse={toggleSidebarCollapsed} onClose={() => setSidebarOpen(false)} />
           </aside>
 
           {sidebarOpen && (
@@ -808,7 +836,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   );
 }
 
-function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate }) {
+function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, hqView = true }) {
   const location = useLocation();
   const { oauthBootstrapping } = useAuth();
   const [kycStatus, setKycStatus] = useState(user?.kyc_status || null);
@@ -1027,6 +1055,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
       realUser={realUser}
       onImpersonate={onImpersonate}
       primaryPersonaId={primaryPersonaId}
+      hqView={hqView}
     >
       {children}
     </ProtectedLayout>
@@ -1089,15 +1118,27 @@ function AppInner() {
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem('viewMode') || 'admin';
   });
+  // The Super Admin's choice between the HQ shell and the plain admin shell.
+  // Per browser, default HQ, cleared with the session (lib/shellRole.js).
+  const [hqView, setHqView] = useState(() => readHqView());
 
   const isImpersonating = !!realUser;
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleViewModeChange = (mode) => {
+  // `opts.hq` is only meaningful for mode 'admin': true is the HQ shell
+  // ("Super Admin" in the list), false the plain shell ("Admin"). Other modes
+  // leave the toggle where it was, so switching to Founder and back returns
+  // the holder to whichever admin shell they were in.
+  const handleViewModeChange = (mode, opts = {}) => {
     setViewMode(mode);
     localStorage.setItem('viewMode', mode);
-    const defaultPath = ROLE_DEFAULT_PATH[mode] || '/studio';
+    let defaultPath = ROLE_DEFAULT_PATH[mode] || '/studio';
+    if (mode === 'admin' && typeof opts.hq === 'boolean') {
+      setHqView(opts.hq);
+      writeHqView(opts.hq);
+      if (opts.hq) defaultPath = '/admin';
+    }
     navigate(defaultPath);
   };
 
@@ -1170,6 +1211,10 @@ function AppInner() {
     setRealUser(null);
     setViewMode('admin');
     localStorage.setItem('viewMode', 'admin');
+    // Back to the holder's own desk. A support session ends where the
+    // franchisor works, not in the shell they were checking.
+    setHqView(true);
+    writeHqView(true);
     navigate('/admin');
     // T20 — restore the real admin's freshest profile immediately rather
     // than wait for the next throttled re-sync.
@@ -1193,6 +1238,7 @@ function AppInner() {
     localStorage.removeItem('realUser');
     localStorage.removeItem('realToken');
     localStorage.removeItem('viewMode');
+    clearHqView();
     // The active company is a per-BROWSER memory (localStorage), not a
     // per-account one. Left in place, the next account to sign in on this
     // browser would send the previous account's company on its first
@@ -1259,7 +1305,7 @@ function AppInner() {
   }, []);
 
   const authProps = {
-    user, onLogout: logout, viewMode, onViewModeChange: handleViewModeChange,
+    user, onLogout: logout, viewMode, onViewModeChange: handleViewModeChange, hqView,
     isImpersonating, onExitImpersonation: exitImpersonation, realUser, onImpersonate: handleImpersonate,
   };
 
@@ -1333,6 +1379,14 @@ function AppInner() {
   const advisorRolePreview = user?.role === 'admin' && !isImpersonating && effectiveRole === 'advisor';
   const advisorPrivateWorkspace = (component) => (
     advisorRolePreview ? <AdvisorPreviewNotice /> : component
+  );
+  // The HQ-only surfaces, same shape as the advisor notice: a stated boundary
+  // inside the shell, not a bounce. Keyed on the browsed identity's elevation
+  // off /me — the route guard has already proved admin, and the worker
+  // re-checks every call with requireSuperAdmin regardless. An admin without
+  // the elevation used to reach these pages and watch each action 403.
+  const hqOnly = (component) => (
+    isSuperAdminUser(user) ? component : <SuperAdminOnlyNotice />
   );
   const partnerRolePreview = effectiveRole === 'partner' && user?.role !== 'partner';
   const partnerPrivateWorkspace = (component) => (
@@ -1603,9 +1657,14 @@ function AppInner() {
       <Route path="/admin/lp-applications" element={guard(['admin'], <AdminLpApplications />)} />
       {/* Territory licence ledger (migration 187). Admin only — it carries the
           fee, the revenue share and an exclusive grant over whole countries. */}
-      <Route path="/admin/licences" element={guard(['admin'], <AdminLicences />)} />
+      <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
+      {/* The HQ shell's Contracts and Team rows. Both frame panels the Admin
+          Console already has (Legal templates; the Users table) for the
+          franchisor, with the holder console above the accounts. */}
+      <Route path="/admin/contracts" element={guard(['admin'], hqOnly(<HqContractsPage />))} />
+      <Route path="/admin/accounts" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}

@@ -3,7 +3,7 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashEmail } from '../util/hashEmail';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAdmin, createJWT, hashToken, requireFactor, requireStepUp } from '../auth';
+import { requireAdmin, createJWT, hashToken, requireFactor, requireStepUp, isSuperAdmin, hydrateSuperAdmin } from '../auth';
 import {
   serializeTranscriptCsv,
   classifyOnboardingEmpty,
@@ -1443,6 +1443,21 @@ admin.post('/impersonate/:userId', async (c) => {
   const rows = await sql`SELECT * FROM users WHERE id = ${userId}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'User not found' }, 404); }
   const target = rows[0];
+  // Migrations 199/207 — impersonating the Super Admin IS the Super Admin:
+  // the minted token carries the target's identity, so every gate downstream,
+  // requireSuperAdmin included, would pass. A plain admin borrowing the one
+  // account that can franchise the platform is an escalation, not support.
+  // Only a holder may impersonate a holder. The target row comes from
+  // SELECT *, so its elevation is read from the super_admins side table
+  // first (auth.ts) — never from a column the row may still carry.
+  await hydrateSuperAdmin(c.env, target as any);
+  if (isSuperAdmin(target as any) && !isSuperAdmin(adminUser as any)) {
+    await sql.end();
+    return c.json({
+      error: 'Only a Super Admin can impersonate a Super Admin.',
+      code: 'cannot_impersonate_super_admin',
+    }, 403);
+  }
   const token = await createJWT(c.env, target.id, target.email, target.role, adminUser.id);
   // Epic 11 — actor is email_hash, details references user_id only.
   const impAdminHash = await hashEmail(adminUser.email);

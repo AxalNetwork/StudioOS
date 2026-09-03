@@ -232,6 +232,24 @@ test('the User type carries the flag, so reads stop going through `as any`', () 
   assert.match(read('cloudflare-worker/src/types.ts'), /is_super_admin\?: number \| null;/);
 });
 
+test('only a holder may impersonate a holder', () => {
+  // The impersonation token carries the TARGET's identity, so every gate
+  // downstream — requireSuperAdmin included — passes for whoever holds it. A
+  // plain admin borrowing the one account that can franchise the platform is
+  // an escalation, and the refusal has to sit in the impersonate handler
+  // itself, before the token is minted.
+  const src = read('cloudflare-worker/src/routes/admin.ts');
+  const handler = src.slice(src.indexOf("admin.post('/impersonate/:userId'"), src.indexOf("admin.post('/impersonate-sessions/:id/end'"));
+  assert.match(handler, /await hydrateSuperAdmin\(c\.env, target as any\)/,
+    'the target is a SELECT * row: its elevation must come from the side table, not a stale column');
+  assert.match(handler, /isSuperAdmin\(target as any\) && !isSuperAdmin\(adminUser as any\)/);
+  assert.ok(handler.indexOf('await hydrateSuperAdmin(c.env, target as any)') < handler.indexOf('isSuperAdmin(target as any)'),
+    'hydrate before the check');
+  assert.match(handler, /code: 'cannot_impersonate_super_admin'/);
+  assert.ok(handler.indexOf('cannot_impersonate_super_admin') < handler.indexOf('createJWT('),
+    'the refusal must come before the token is minted');
+});
+
 test('the SPA reaches the console through api.js', () => {
   const api = read('frontend/src/lib/api.js');
   assert.match(api, /superAdmins: \(\) => request\('\/admin\/super-admins'\)/);

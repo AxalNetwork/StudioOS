@@ -4,6 +4,15 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Super Admin — the mode: bar, View-as, seven HQ rows, HQ-only notices (PR 1 of 4)
+
+- `frontend/src/lib/shellRole.js` (new): `shellRoleFor(role, user, hqView)`, `isSuperAdminUser`, and the `hqView` localStorage toggle — moved out of `App.jsx` so `SidebarNav` and tests import the same selector. It names a sidebar, never a permission: `'super_admin'` appears in no `guard([...])` array and `lib/activeRole.js` is untouched.
+- `App.jsx`: the bar reads **Super Admin Mode** for a holder; View-as leads with **Super Admin** (HQ shell) above **Admin** (the plain shell, so the holder can see exactly what a subsidiary admin sees without impersonating). `hqView` is restored on load, reset on exit-impersonation, cleared with the session. `SidebarNav` now receives the *shell* role, so `defaultOpenGroups` opens the HQ group instead of leaving it collapsed on first visit. `hqOnly(...)` wraps `/admin/licences`, `/admin/contracts` and `/admin/accounts` with `pages/hq/SuperAdminOnlyNotice` for an admin without the elevation.
+- `sidebarConfig.js`: seven of the canvas's eight HQ rows (Security lands with its page); Team → `/admin/accounts` (canvas H4), not the public team-page editor; "Territory Licences" removed from the plain admin group — every call behind it 403s a plain admin.
+- `pages/hq/` (new): `AccountsPage` (holder console + the Admin Console's Users panel locked via a new `section` prop on `AdminPage`), `ContractsPage` (the Legal templates panel framed for HQ; the doc-type registry is named as not recorded), `SuperAdminHolders` (list / grant / revoke through `/api/admin/super-admins`, step-up handled by `lib/api.js`), `SuperAdminOnlyNotice`.
+- `workspaces/shellConfig.js`: `ACCENT.super_admin` (oxblood) for `WorkerRail role="super_admin"`.
+- Worker `routes/admin.ts`: `POST /impersonate/:userId` refuses a Super Admin target unless the actor is one (`cannot_impersonate_super_admin`) — the minted token carries the target's powers.
+- Tests: `super_admin_shell.test.mjs` rewritten around the selector, the row/route rule, the access rule, the bar, the notice wrapping and the accent; `super_admin.test.ts` pins the impersonation refusal; `migration_column_shapes.test.mjs` follows the selector to `lib/shellRole.js`.
 ## Migration 200 carried `BEGIN;`/`COMMIT;`, which D1 rejects — stripped, deferred foreign keys, guarded (PR 0c)
 
 The deploy that ran when #414 merged (Actions run 33738772717) applied 199 — `super_admins` now exists in production — and then failed at `200_service_offerings_shape.sql` with D1's "use state.storage.transaction() … instead of the SQL BEGIN TRANSACTION or SAVEPOINT statements", the rule GOTCHAS has carried since 141 hit it in July. 201–207, the advisor stores and the single-holder seed, stayed pending behind it.

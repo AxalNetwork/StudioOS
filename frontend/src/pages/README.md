@@ -29,6 +29,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `jobs/` | Public and host-side job screens. |
 | `legal/` | Non-admin document origination (Send for signature). |
 | `subsidiary/` | A territory licence holder's read of their own licence. |
+| `hq/` | The Super Admin's HQ-only surfaces: the holder console, the HQ framings of Accounts and Contracts, and the notice a plain admin sees instead. |
 | `insights/` | Insight reader and its public variant. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | Persona home-page templates. |

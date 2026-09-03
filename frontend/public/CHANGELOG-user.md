@@ -3,6 +3,12 @@
 A plain-English summary of recent changes to StudioOS, written for
 everyone using the platform. Newest changes are at the top.
 
+## New: Super Admin mode for the account that licenses the platform
+
+The account that licenses StudioOS to subsidiaries now has its own **Super Admin** mode. The bar at the top reads "Super Admin Mode", the View-as list starts with **Super Admin** (the HQ view) and **Admin** (exactly what a subsidiary admin sees), and the HQ sidebar carries Home, Licences, Funds, Contracts, Team, Support and Settings. Admins without that elevation see a clear notice on HQ-only pages instead of a page that refuses every action. Figures per subsidiary — accounts, revenue, queues — show "Not recorded" until accounts are linked to licences; nothing is estimated.
+
+---
+
 ## Spin-Out Lab applications now update automatically
 
 The "Apply to Cohort" section on the Spin-Out Lab page now shows the correct cohort number and application deadline without any manual updates. The deadline is always 7 days before the 1st of the cohort month. Cohort numbers advance automatically each month, and workspace access is still granted at midnight Delaware time on the 1st of each cohort month.
