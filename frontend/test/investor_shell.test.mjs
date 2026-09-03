@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { INVESTOR_FULL_BLEED } from '../src/sidebarConfig.js';
 import { routeBlock } from './_routes.mjs';
 import { allZoneRoutes } from '../src/workspaces/shellConfig.js';
 
@@ -193,15 +194,28 @@ test('an investor never gets two headings, two pill rows or two rails on one pag
   // above it already owns the chrome.
   for (const name of ['InvestorDealsWorkspace', 'InvestorNetworkWorkspace']) {
     const page = codeOnly(read(`${investorDir}/${name}.jsx`));
-    assert.match(page, /export default function \w+\(\{ embedded = false \}\)/,
+    // `embedded` must be the first destructured prop and must default false —
+    // but the signature is allowed to take more after it. Network now also
+    // takes `zone`, which is what stopped its three zone routes rendering the
+    // identical stacked body; pinning the signature to exactly one prop would
+    // have made that fix fail a test about a different defect.
+    assert.match(page, /export default function \w+\(\{ embedded = false\s*[,}]/,
       `${name} must accept an embedded flag`);
     assert.match(page, /\{!embedded && <header/, `${name} must not draw its header when embedded`);
     assert.match(page, /\{!embedded && \(\s*<WorkerRail/, `${name} must not draw a rail when embedded`);
   }
   assert.match(codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx')),
     /<InvestorDealsWorkspace embedded \/>/, 'the Deals shell must pass embedded');
-  assert.match(codeOnly(read('frontend/src/workspaces/NetworkWorkspace.jsx')),
-    /<InvestorNetworkWorkspace embedded \/>/, 'the Network shell must pass embedded');
+  // `embedded` AND the zone. The second half is the fix for the defect this
+  // test's own name half-describes: the page renders all three sections
+  // stacked, so mounted without a slug it drew the identical body on all three
+  // zone routes — one heading, but the wrong one on two of them.
+  const networkShell = codeOnly(read('frontend/src/workspaces/NetworkWorkspace.jsx'));
+  assert.match(networkShell, /<InvestorNetworkWorkspace embedded zone=\{slug\} \/>/,
+    'the Network shell must pass embedded and the zone slug');
+  assert.match(codeOnly(read('frontend/src/pages/investor/InvestorNetworkWorkspace.jsx')),
+    /const shows = \(section\) => !known \|\| zone === section;/,
+    'the investor Network page must narrow to the zone it was given');
   // And the fund zone pages own their own composition, so the generic investor
   // chrome must not be stacked on top of them either.
   assert.match(codeOnly(read(`${investorDir}/InvestorWorkspacePage.jsx`)),
@@ -263,36 +277,47 @@ test('the investor full-bleed list covers every investor root and zone route', (
   // so the four /funds/* zone pages were in neither, even though each of their
   // shells declares min-height:100vh. That is the /grow/focus omission, four
   // times over.
-  const sidebar = codeOnly(read('frontend/src/sidebarConfig.js'));
-  const listed = new Set(
-    [...(/export const INVESTOR_FULL_BLEED = \[([\s\S]*?)\];/.exec(sidebar)?.[1] || '')
-      .matchAll(/'([^']+)'/g)].map((m) => m[1]),
-  );
-  assert.ok(listed.size >= 25, 'INVESTOR_FULL_BLEED could not be parsed');
-
-  // Required = the five bucket roots + every zone route the shell config
-  // advertises. Imported rather than parsed: two of the five buckets take their
-  // zones from shared consts (NETWORK_ZONES, RESEARCH_ZONES.investor) declared
-  // elsewhere in the file, so a text scan of the investor block finds eleven of
-  // nineteen and silently passes on the rest.
   //
-  // ONE CARVE-OUT, with its reason, rather than a silent gap. Full-bleed is a
-  // statement about the BODY: does the page draw its own canvas edge to edge?
-  // `/research/*` renders WorkspaceShell around a plain card — `NoStoreYet` on
-  // four of the five zones, the signals feed on the fifth — so it wants the
-  // shell's centred column, which is why `/research/*` is absent from
-  // FOUNDER_FULL_BLEED too. `/network/*` is the opposite case and is in both:
-  // its zone bodies ARE canvases.
-  const CENTRED = new Set(allZoneRoutes('investor').filter((p) => p.startsWith('/research/')));
-  assert.equal(CENTRED.size, 5, 'the Research bucket no longer declares five zones');
-  const required = [...Object.values(OVERVIEWS), ...allZoneRoutes('investor')]
-    .filter((p) => !CENTRED.has(p));
-  assert.equal(required.length, 19, 'the investor shell no longer declares 5 roots and 19 zones');
+  // THIS USED TO REGEX THE LITERALS out of the source and assert
+  // `listed.size >= 25`. A derived list has no literals to count, so that
+  // check could not survive the derivation — and it was the weaker check
+  // anyway: two of the five buckets take their zones from shared consts
+  // declared elsewhere in the file, so a text scan of the investor block found
+  // eleven of nineteen and passed silently on the rest.
+  const listed = new Set(INVESTOR_FULL_BLEED);
+
+  // THE `/research/*` CARVE-OUT IS GONE, and it is worth saying why rather
+  // than just deleting the assertion. It excluded the five Research zones from
+  // full-bleed because they "render WorkspaceShell around a plain card" and
+  // "a page that does not draw its own canvas does not want the canvas
+  // layout". That was a true statement about a shell that set no padding of
+  // its own — and `/validate/*` has the identical shape and was never carved
+  // out, so one licence held both treatments at once. `WorkspaceShell` now
+  // carries the canvases' `.main { padding }`, so a plain-card zone is padded
+  // by the component that draws it. The carve-out has nothing left to
+  // compensate for, and keeping it would leave Research the one bucket in the
+  // product that is centred at 1280px AND padded twice.
+  const required = [...Object.values(OVERVIEWS), ...allZoneRoutes('investor')];
+  assert.equal(Object.values(OVERVIEWS).length, 5, 'the investor shell no longer declares 5 roots');
+  assert.equal(allZoneRoutes('investor').length, 19, 'the investor shell no longer declares 19 zones');
   assert.deepEqual(required.filter((p) => !listed.has(p)), [],
-    'these investor surfaces draw their own full-bleed canvas but sit in the shell’s centred column');
+    'these investor surfaces sit in the shell’s centred column instead of owning the page');
+
+  // DERIVED, NOT TYPED — a new zone cannot be added to an investor bucket and
+  // left out of the layout.
+  const sidebar = codeOnly(read('frontend/src/sidebarConfig.js'));
+  assert.match(sidebar, /export const INVESTOR_FULL_BLEED = \[\s*\.\.\.workspaceRoutes\('investor'\)/,
+    'INVESTOR_FULL_BLEED must be derived from the shell config, not re-typed');
+  const block = /export const INVESTOR_FULL_BLEED = \[([\s\S]*?)\];/.exec(sidebar)?.[1] || '';
+  assert.ok(block, 'INVESTOR_FULL_BLEED block not found');
+  for (const zone of allZoneRoutes('investor')) {
+    assert.ok(!block.includes(`'${zone}'`),
+      `${zone} is typed into INVESTOR_FULL_BLEED as a literal — it should come from the shell config`);
+  }
 
   // Both flags read the one list, and the hand-typed expression cannot return.
-  assert.match(app, /activeRole === 'investor' && INVESTOR_FULL_BLEED\.includes\(location\.pathname\)/);
+  assert.match(app, /investor: INVESTOR_FULL_BLEED/,
+    'the per-role table must map investor to its own list');
   assert.match(app, /const flushSurface = fullBleedSurface;/);
   assert.doesNotMatch(app, /activeRole === 'investor' && \(\s*\n?\s*location\.pathname\.startsWith/,
     'the hand-typed investor path expression is back');

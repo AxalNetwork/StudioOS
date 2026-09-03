@@ -44,7 +44,7 @@ const stateLabel = (row) => {
   return pretty(status, 'Not recorded');
 };
 
-export default function FounderNetworkIntroductions() {
+export default function FounderNetworkIntroductions({ embedded = false }) {
   const [params] = useSearchParams();
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState('all');
@@ -79,8 +79,8 @@ export default function FounderNetworkIntroductions() {
   const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
   const workspace = `/network?mode=workspace&tab=introductions${projectId ? `&project_id=${encodeURIComponent(projectId)}` : ''}`;
 
-  return <main className="fn-rel fn-intro" data-testid="founder-network-introductions"><div className="fn-rel-shell"><section className="fn-rel-main">
-    <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Introductions</strong></div><div className="fn-rel-title-row"><div><h1>Introductions</h1><p>Asks and offers ledger with privacy-filtered counterpart and state records.</p></div></div><nav aria-label="Network sections"><Link to={`/network/relationships${query}`}>Relationships</Link><Link className="is-active" to={`/network/introductions${query}`}>Introductions</Link><Link to={`/network/organizations${query}`}>Organizations</Link></nav></header>
+  return <main className={`fn-rel fn-intro${embedded ? ' is-embedded' : ''}`} data-testid="founder-network-introductions"><div className="fn-rel-shell"><section className="fn-rel-main">
+    {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Introductions</strong></div><div className="fn-rel-title-row"><div><h1>Introductions</h1><p>Asks and offers ledger with privacy-filtered counterpart and state records.</p></div></div><nav aria-label="Network sections"><Link to={`/network/relationships${query}`}>Relationships</Link><Link className="is-active" to={`/network/introductions${query}`}>Introductions</Link><Link to={`/network/organizations${query}`}>Organizations</Link></nav></header>}
     {status === 'error' && <div className="fn-rel-alert" data-testid="status-network-introductions-error"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <IntroductionSkeleton />}
     {status === 'ready' && <><div className="fn-intro-context"><div><span>Ledger scope</span><strong>Introductions where you are a participant</strong><small>Contact details remain privacy-filtered until connected</small></div><div><span>Source</span><strong>Secure introductions</strong><small>Direction and state are stored on each record</small></div></div>
@@ -89,7 +89,7 @@ export default function FounderNetworkIntroductions() {
       <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>Introduction ledger</h2></div><span>Direction and state are stored · outcome is not inferred</span></div><IntroductionTable rows={visible} filter={filter} /><p className="fn-rel-note">“Asked” and “Offered” are viewer-relative directions returned by the secure ledger. Only explicitly expired records are counted as stalled; pending age is not treated as proof that an introduction died.</p></section>
       <section className="fn-rel-card fn-rel-unavailable"><div className="fn-rel-card-head"><div><AlertCircle size={16} /><h2>Introduction context</h2></div><span>Partially unavailable</span></div><strong>Connector and downstream outcomes are not recorded.</strong><p>The source proves who participated, direction, acceptance state, and connection state. It does not identify who carried the introduction or whether a call, hire, referral, or other real-world outcome followed.</p></section>
     </>}
-  </section><IntroductionRail rows={rows} landed={landed} stalled={stalled} error={error} /></div></main>;
+  </section>{!embedded && <IntroductionRail rows={rows} landed={landed} stalled={stalled} error={error} />}</div></main>;
 }
 
 function IntroductionTable({ rows, filter }) {

@@ -612,7 +612,12 @@ function ReviewQueue() {
 
 /* ------------------------------------------------------------------ */
 
-export default function PerksPage({ user }) {
+// `embedded`: mounted on /offers/perk-deals inside a WorkspaceShell that
+// already draws the crumb, the heading and the zone pills — and which supplies
+// its own page container, so the page drops its `max-w-6xl px-4 py-6` too
+// rather than centring a second column inside the first. The tab row stays:
+// Perks / My perks / My listings are views of this page, not sibling zones.
+export default function PerksPage({ user, embedded = false }) {
   const role = String(user?.role || '').toLowerCase();
   const isPartner = role === 'partner';
   const isAdmin = role === 'admin';
@@ -625,14 +630,18 @@ export default function PerksPage({ user }) {
   const [tab, setTab] = useState('browse');
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
-      <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Perks &amp; products</h1>
-      <p className="mt-1 text-sm text-gray-600">
-        Offers partners have agreed to honour for people on the platform. Distinct from the
-        services marketplace and from plan pricing.
-      </p>
+    <div className={embedded ? '' : 'mx-auto max-w-6xl px-4 py-6'}>
+      {!embedded && (
+        <>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Perks &amp; products</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Offers partners have agreed to honour for people on the platform. Distinct from the
+            services marketplace and from plan pricing.
+          </p>
+        </>
+      )}
 
-      <div className="mt-5 flex gap-1 border-b border-gray-200 dark:border-gray-800">
+      <div className={`${embedded ? '' : 'mt-5 '}flex gap-1 border-b border-gray-200 dark:border-gray-800`}>
         {tabs.map(({ k, label, icon: Icon }) => (
           <button
             key={k} type="button" onClick={() => setTab(k)}

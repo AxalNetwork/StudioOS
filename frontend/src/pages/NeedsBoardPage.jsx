@@ -26,7 +26,12 @@ const QUOTE_TONE = {
   withdrawn: 'bg-gray-100 text-gray-600 border-gray-200',
 };
 
-export default function NeedsBoardPage({ user }) {
+// `embedded`: `workspaces/partner/PartnerBucketRoutes` mounts this page on
+// /pipeline/leads, inside a WorkspaceShell that has already drawn the crumb,
+// the heading and the zone pills. Only the heading block is suppressed — the
+// tab row below it is a different axis (Browse / My needs / My quotes /
+// Engagements are views of this board, not sibling zones), so it stays.
+export default function NeedsBoardPage({ user, embedded = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const isFounder = user?.role === 'founder';
   const isPartner = user?.role === 'partner';
@@ -43,10 +48,12 @@ export default function NeedsBoardPage({ user }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Needs Board</h1>
-        <p className="text-sm text-gray-500 mt-1">Founders post needs and RFPs. Partners submit quotes. Accepted quotes become engagements.</p>
-      </div>
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Needs Board</h1>
+          <p className="text-sm text-gray-500 mt-1">Founders post needs and RFPs. Partners submit quotes. Accepted quotes become engagements.</p>
+        </div>
+      )}
 
       <div className="border-b border-gray-200 flex gap-6 overflow-x-auto dark:border-gray-800">
         {tabs.map((t) => {

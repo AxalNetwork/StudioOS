@@ -27,7 +27,7 @@ const freshest = (people) => {
   return values.length ? `${Math.min(...values)} day${Math.min(...values) === 1 ? '' : 's'} ago` : 'Unavailable';
 };
 
-export default function FounderNetworkOrganizations() {
+export default function FounderNetworkOrganizations({ embedded = false }) {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
   const [projects, setProjects] = useState([]);
@@ -79,8 +79,8 @@ export default function FounderNetworkOrganizations() {
   const contactsUnavailable = errors.includes('relationship contacts');
   const query = project?.id ? `?project_id=${project.id}` : '';
 
-  return <main className="fn-rel fn-org" data-testid="founder-network-organizations"><div className="fn-rel-shell"><section className="fn-rel-main">
-    <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Organizations</strong></div><div className="fn-rel-title-row"><div><h1>Organizations</h1><p>Organization profiles, people and history from the relationship book.</p></div>{projects.length > 1 && <label><span>Startup</span><select data-testid="select-network-organizations-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div><nav aria-label="Network sections"><Link to={`/network/relationships${query}`}>Relationships</Link><Link to={`/network/introductions${query}`}>Introductions</Link><Link className="is-active" to={`/network/organizations${query}`}>Organizations</Link></nav></header>
+  return <main className={`fn-rel fn-org${embedded ? ' is-embedded' : ''}`} data-testid="founder-network-organizations"><div className="fn-rel-shell"><section className="fn-rel-main">
+    {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Organizations</strong></div><div className="fn-rel-title-row"><div><h1>Organizations</h1><p>Organization profiles, people and history from the relationship book.</p></div>{projects.length > 1 && <label><span>Startup</span><select data-testid="select-network-organizations-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div><nav aria-label="Network sections"><Link to={`/network/relationships${query}`}>Relationships</Link><Link to={`/network/introductions${query}`}>Introductions</Link><Link className="is-active" to={`/network/organizations${query}`}>Organizations</Link></nav></header>}
     {errors.length > 0 && <div className="fn-rel-alert" data-testid="status-network-organizations-partial"><AlertCircle size={15} /><span>{`Some selected-project sources are unavailable: ${errors.join(', ')}.`}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <OrganizationSkeleton />}
     {status === 'empty' && <NoProject />}
@@ -91,7 +91,7 @@ export default function FounderNetworkOrganizations() {
       <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>Organizations</h2></div><span>People counts read from the relationship book</span></div>{contactsUnavailable ? <div className="fn-rel-empty"><AlertCircle size={18} /><div><strong>Organization collection unavailable.</strong><p>The project relationship-book source could not be read, so FN3 does not present an empty collection as fact.</p></div></div> : <OrganizationTable groups={visible} filter={filter} />}<p className="fn-rel-note">Organizations are a lens over stored people, not a second address book. FN3 does not infer membership from email domains, landing pages, source labels, or similar names.</p></section>
       <section className="fn-rel-card fn-rel-unavailable"><div className="fn-rel-card-head"><div><AlertCircle size={16} /><h2>Organization intelligence</h2></div><span>Partially unavailable</span></div><strong>{groups.length ? 'Profiles and history are not recorded for these groups.' : 'No relationship-backed organization rollup is available.'}</strong><p>Profiles, organization history, duplicate review, and merge actions require explicit organization records. This read-only collection does not create or merge them.</p></section>
     </>}
-  </section><OrganizationRail project={project} contacts={contacts} groups={groups} dormant={dormant} errors={errors} /></div></main>;
+  </section>{!embedded && <OrganizationRail project={project} contacts={contacts} groups={groups} dormant={dormant} errors={errors} />}</div></main>;
 }
 
 function OrganizationTable({ groups, filter }) {

@@ -24,7 +24,7 @@ import {
   ChevronDown, Eye, ArrowLeft, Sparkles,
   Gift
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, SHARED_FULL_BLEED } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -593,6 +593,18 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
   );
 }
 
+/**
+ * Which paths own the full dashboard, per licence. Derived in
+ * `sidebarConfig.js` from the shell config rather than typed here; this table
+ * is only the role → list mapping, so adding a fifth shell is one line.
+ */
+const FULL_BLEED_BY_ROLE = {
+  founder: FOUNDER_FULL_BLEED,
+  investor: INVESTOR_FULL_BLEED,
+  advisor: ADVISOR_FULL_BLEED,
+  partner: PARTNER_FULL_BLEED,
+};
+
 function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId, hqView = true }) {
   const location = useLocation();
   // Active-company context state — owned here so descendants (CompanySwitcher,
@@ -680,13 +692,27 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // and a holder is the only one allowed to impersonate a holder).
   const superAdmin = isSuperAdminUser(realUser || user);
   const shellRole = shellRoleFor(activeRole, user, hqView);
-  // Both flags read the same two lists. They used to hold the investor
-  // expression written out twice, identically, and the four `/funds/*` zone
-  // pages were in neither — see INVESTOR_FULL_BLEED for what that cost.
-  const fullBleedSurface = (activeRole === 'founder' && FOUNDER_FULL_BLEED.includes(location.pathname))
-    || (activeRole === 'investor' && INVESTOR_FULL_BLEED.includes(location.pathname))
+  // ONE RULE, FOUR LICENCES. This read two lists and named two roles, so the
+  // other two got whatever the fallback happened to be: advisor routes were
+  // full width but padded, and partner routes were padded AND centred at
+  // `max-w-7xl` — the only licence constrained to 1280px, and the single
+  // biggest reason Partner looked least like its canvas. All four lists are
+  // now derived from `workspaces/shellConfig.js` rather than typed, so a zone
+  // cannot be added to a shell and left out of its layout.
+  //
+  // The pages themselves stopped depending on this for their inner padding in
+  // the same change: `WorkspaceShell` now carries the canvases' own
+  // `.main { padding }`, so a workspace route wants `p-0` here on every
+  // licence — including `/research/*`, which was carved out of both lists
+  // precisely because the shell had no padding of its own.
+  const fullBleedSurface = (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
     || SHARED_FULL_BLEED.includes(location.pathname);
   const fullWidthSurface = fullBleedSurface
+    // Advisor's blanket clause stays, and only this clause is still blanket:
+    // it also covers the advisor pages OUTSIDE any workspace, which have been
+    // full width since the advisor shell shipped. Narrowing it to the derived
+    // list would silently re-centre those, which is a separate decision from
+    // this one.
     || activeRole === 'advisor'
     || location.pathname === '/spinout-lab'
     || location.pathname.startsWith('/spinout-lab/');

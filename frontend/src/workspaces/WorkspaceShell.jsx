@@ -78,10 +78,35 @@ export default function WorkspaceShell({
     // ground between the body and a border that is meant to be the seam
     // between them. The canvases have the two columns meeting exactly.
     <div className={rail ? 'flex items-stretch' : ''}>
-      {/* `pr-6` replaces the `gap-6` removed above. The space has to sit
-          INSIDE the body column rather than between the columns, or it shows
-          as page ground on the wrong side of the rail's border. */}
-      <div className={`min-w-0 flex-1${rail ? ' pr-6' : ''}`}>
+      {/*
+        THE SHELL OWNS ITS OWN PADDING, and this is the whole of the "one
+        padding rule". Every one of the twenty-nine canvases specifies the same
+        frame — `.main { flex:1; min-width:0; padding:20-24px }` beside a
+        `.rail` with its own `padding:17-18px` — and until now no part of this
+        component set either. Padding came from `App.jsx`'s page container
+        instead, which gives it per ROLE rather than per component, and the
+        four roles disagreed:
+
+          · founder and investor workspace routes are full-bleed (`p-0`), so
+            `/validate/interviews` and `/deals/pipeline` rendered plain cards
+            flush against the viewport with zero padding on either side;
+          · advisor routes were padded and full width;
+          · partner routes were padded AND centred at `max-w-7xl` — the only
+            profile constrained to 1280px, which is why Partner looked least
+            like its canvas;
+          · and `/research/*` was carved out of the full-bleed lists for all of
+            them, on the stated reasoning that "a page that does not draw its
+            own canvas does not want the canvas layout" — which was true, and
+            is exactly the gap this padding closes. `/validate/*` has the same
+            shape and was never carved out, so the two treatments disagreed
+            inside one role as well as across four.
+
+        One component, one number, and `App.jsx` now hands every workspace
+        route `p-0` on all four licences. The `pr-6` this replaces was the
+        gutter between the body and the rail; the right-hand padding is that
+        gutter now, and it lands at the canvases' figure.
+      */}
+      <div className="min-w-0 flex-1 p-5">
         {bucket && (
           <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-ink-3">
             <Link to={bucket.prefix} className="hover:underline">

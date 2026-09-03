@@ -69,14 +69,20 @@ export default function NetworkPage({ embedded = false }) {
   };
 
   const content = (
-    <div className={`${role === 'partner' ? 'space-y-6' : 'p-6 max-w-6xl mx-auto space-y-6'}`}>
-      <div className="flex items-center gap-3">
-        <Network className={role === 'partner' ? 'text-amber-600' : 'text-violet-600'} size={24} />
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Network &amp; Relationships</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Contacts, curated introductions, partner relationships, and your network graph in one place.</p>
+    <div className={`${role === 'partner' || embedded ? 'space-y-6' : 'p-6 max-w-6xl mx-auto space-y-6'}`}>
+      {/* Embedded, the shell above has already drawn the crumb, the heading
+          and the sub-line for the zone the URL names. This block is the page's
+          own title for its own mount, and rendering it inside the shell put a
+          second, differently-worded heading under the first. */}
+      {!embedded && (
+        <div className="flex items-center gap-3">
+          <Network className={role === 'partner' ? 'text-amber-600' : 'text-violet-600'} size={24} />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Network &amp; Relationships</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Contacts, curated introductions, partner relationships, and your network graph in one place.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {unservedZone && (
         <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/40">
@@ -91,7 +97,14 @@ export default function NetworkPage({ embedded = false }) {
         </div>
       )}
 
-      {tabs.length > 1 && (
+      {/* And embedded, the shell's zone pills ARE this navigation. Only a
+          partner reaches this page through the shell (`networkRole` sends
+          admins down the founder branch), and a partner cannot see Contacts —
+          so these tabs are Introductions and Relationships, two of the three
+          pills already sitting above them, wired to `?tab=` instead of to the
+          route. Two rows navigating the same three places by two different
+          mechanisms is how a zone route came to disagree with its own body. */}
+      {!embedded && tabs.length > 1 && (
         <div className="flex gap-1 border-b border-gray-200 overflow-x-auto no-scrollbar [&>button]:whitespace-nowrap dark:border-gray-800">
           {tabs.map((t) => {
             const Icon = t.icon;
@@ -118,7 +131,13 @@ export default function NetworkPage({ embedded = false }) {
     </div>
   );
 
+  // The advisor branch below has honoured `embedded` since #391; this one
+  // never did, and it is the reason partner `/network/*` was the worst surface
+  // in the product: `PartnerWorkspaceShell` draws its own header, its own tab
+  // row and its own Worker AI rail, all of it inside the WorkspaceShell that
+  // had already drawn each one. Three headings, two nav rows, two rails.
   if (role === 'partner') {
+    if (embedded) return content;
     return (
       <PartnerWorkspaceShell workspace="network" icon={Network}>
         {content}

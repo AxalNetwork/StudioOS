@@ -1,11 +1,24 @@
 import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Card, Skeleton } from '../../ui';
+import { Card, Skeleton, WorkerRail } from '../../ui';
+import { useAuth } from '../../hooks/useAuthSync';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from '../BucketOverview';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 
-const PartnerOperationsWorkspace = lazy(() => import('../../pages/partner/operations/PartnerOperationsWorkspace'));
+// NOT `PartnerOperationsWorkspace`, and that is the fix rather than an
+// omission. That component is the legacy five-tab shell at
+// /partner/operations/* — it draws its own PartnerWorkspaceShell, its own
+// header and its own tab bar, and it derives its active tab by testing the
+// pathname for `/capabilities`, `/portfolio`, `/engagements` or
+// `/performance`. None of those strings occurs in `/pipeline/proposals`,
+// `/pipeline/retainers`, `/delivery/board` or `/delivery/health`, so all four
+// zones fell to its `overview` fallback and rendered the SAME page — under a
+// second header whose workspace label came from the same fallback and read
+// "Delivery · Ship the work" on a Pipeline route. Mounting its feature pages
+// directly removes the doubled chrome and the wrong-bucket header together,
+// and leaves /partner/operations/* exactly as it was.
+const PartnerEngagements = lazy(() => import('../../pages/partner/operations/EngagementsPage'));
 const NeedsBoardPage = lazy(() => import('../../pages/NeedsBoardPage'));
 const PartnerInsightsPage = lazy(() => import('../../pages/PartnerInsightsPage'));
 const PerksPage = lazy(() => import('../../pages/PerksPage'));
@@ -71,12 +84,50 @@ function NoStoreYet({ heading, what, why, links = [], seam }) {
   );
 }
 
-// Zone → the live component that already answers it.
+/**
+ * Zone → the live body that answers it, as a render function rather than a
+ * bare component, because two of these need props to be the right zone at all.
+ *
+ * `user` is the prop whose absence was a visible feature loss, not a style
+ * one: `NeedsBoardPage` reads `user.role` to decide whether to offer the
+ * partner's **My quotes** tab, and `PerksPage` reads it for **My listings**.
+ * Mounted with no props, both saw `undefined` and silently dropped the one tab
+ * the operator came for. `ResearchWorkspace` records fixing the identical
+ * prop-drop for `SignalsPage`; this is the same bug on two more pages.
+ *
+ * `embedded` suppresses each page's own heading block — the shell above has
+ * already drawn the crumb, the h1 and the zone pills. It deliberately does NOT
+ * suppress their tab rows: Browse / My quotes / Engagements and Perks / My
+ * perks / My listings are views WITHIN a zone, not sibling zones, so they are
+ * this page's controls rather than a second copy of the navigation.
+ *
+ * `PartnerEngagements` takes no `embedded`, and that is deliberate rather than
+ * an oversight: it draws no heading and no rail of its own — its host has
+ * always supplied both — so there is nothing for the flag to suppress. The
+ * class guard in `advisor_network_zones.test.mjs` catches a component handed
+ * `embedded` that never reads it, and it caught this one; a prop that does
+ * nothing reads as a seam that has been dealt with when it has not.
+ *
+ * TWO ZONES THAT USED TO BE HERE ARE NOW IN `COPY`. Pipeline · retainers and
+ * Delivery · health both resolved to the operations Overview, so both looked
+ * live and neither was. Neither is buildable: `engagements`
+ * (sql/t13_t14_t15.sql:366) carries id, need, quote, partner, founder,
+ * project, price, status, delivered/cancelled/invoiced timestamps and nothing
+ * else — no recurrence, renewal date or consumption for retainers; no health,
+ * risk, milestone or hours column for the board's health lens. They say so.
+ */
 const LIVE = {
-  '/pipeline': { leads: NeedsBoardPage, proposals: PartnerOperationsWorkspace,
-    retainers: PartnerOperationsWorkspace, analytics: PartnerInsightsPage },
-  '/delivery': { board: PartnerOperationsWorkspace, health: PartnerOperationsWorkspace },
-  '/offers': { 'perk-deals': PerksPage },
+  '/pipeline': {
+    leads: (user) => <NeedsBoardPage user={user} embedded />,
+    proposals: () => <PartnerEngagements view="proposals" />,
+    analytics: () => <PartnerInsightsPage embedded />,
+  },
+  '/delivery': {
+    board: () => <PartnerEngagements view="engagements" />,
+  },
+  '/offers': {
+    'perk-deals': (user) => <PerksPage user={user} embedded />,
+  },
 };
 
 const COPY = {
@@ -87,8 +138,20 @@ const COPY = {
       why: 'Terms and ball-in-court state exist in the canvas record but nothing in the operations workspace tracks them — a proposal is either sent or decided, with the conversation between the two unmodelled.',
       links: [{ to: '/pipeline/proposals', label: 'Proposals →' }],
     },
+    retainers: {
+      heading: 'Retainers has no recurrence to read',
+      what: 'Recurring revenue, what each client is actually consuming against what they bought, and when each one renews.',
+      why: 'An engagement is a single accepted quote at a single price: `engagements` carries no cadence, no renewal date and no consumption, so there is no row that is a retainer rather than a project. Every figure on this zone would be one the store cannot distinguish from a one-off.',
+      links: [{ to: '/delivery/board', label: 'Engagement board →' }],
+    },
   },
   '/delivery': {
+    health: {
+      heading: 'Health has nothing to score',
+      what: 'Engagement health across the book with the at-risk row first — drift against milestones, an embedded seat burning its cap, a client who has gone quiet.',
+      why: 'Each of those reads a column that does not exist. `engagements` records a status, a price and the dates work was delivered, cancelled or invoiced — no milestones, no hours against a cap, no last client contact. A health pill computed from status alone would rate every live engagement identically and call it a judgement.',
+      links: [{ to: '/delivery/board', label: 'Engagement board →' }],
+    },
     deliverables: {
       heading: 'The shipped log is not built yet',
       what: 'What was shipped, when, and whether the client opened it. A deliverable sent and never opened is the firm’s most expensive state — invoiced, unreviewed, and blocking the next milestone.',
@@ -150,14 +213,19 @@ const COPY = {
  */
 const ZONE_LINES = {
   '/pipeline': {
-    leads: 'Lead sources with provenance — where the work comes from is as useful as how much of it there is.',
-    proposals: 'The proposal desk: what is open, what it is worth, and the activity on each.',
-    retainers: 'Recurring engagements and the renewals coming due.',
-    analytics: 'Win rate, cycle time and source quality across the pipeline.',
+    leads: 'Open founder needs with the RFP behind each, and the quotes you have out on them.',
+    proposals: 'The proposal desk: every quote you have submitted, its status, and what it is worth.',
+    // The canvas asks Analytics for win rate, cycle time and source quality
+    // across the firm's own pipeline. This route renders Demand Insights —
+    // where founder demand is concentrated across the whole board — which is a
+    // different question, honestly answered. The firm's own win rate lives on
+    // /partner/operations/performance. Which of the two owns this zone is a
+    // product call; naming what the route actually shows is not, and the line
+    // used to promise the other one.
+    analytics: 'Demand Insights: where founder need is concentrated across the board, and how it is trending.',
   },
   '/delivery': {
-    board: 'Both modes on one board: projects with milestones, and embedded seats with founder-granted scope.',
-    health: 'Engagement health across the book, with the at-risk row first.',
+    board: 'Accepted work with its lifecycle actions and the invoice ledger beside it.',
   },
   '/offers': {
     'perk-deals': 'Deals that expire in public, with grants revoked when they do.',
@@ -179,6 +247,7 @@ function gapsFor(prefix, bucket) {
 
 export default function PartnerBucketRoutes() {
   const location = useLocation();
+  const { user } = useAuth();
   const bucket = bucketForPath('partner', location.pathname);
   const isRoot = bucket && location.pathname === bucket.prefix;
   const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
@@ -198,8 +267,8 @@ export default function PartnerBucketRoutes() {
         />
       );
     }
-    const Live = LIVE[prefix]?.[slug];
-    if (Live) return <Suspense fallback={<Loading />}><Live /></Suspense>;
+    const live = LIVE[prefix]?.[slug];
+    if (live) return <Suspense fallback={<Loading />}>{live(user)}</Suspense>;
     const copy = COPY[prefix]?.[slug];
     if (copy) return <NoStoreYet {...copy} />;
     return <NoStoreYet
@@ -207,13 +276,71 @@ export default function PartnerBucketRoutes() {
       what="This zone is named by the canvas and has no surface behind it."
       why="It ships empty rather than as a placeholder that could be mistaken for real data."
     />;
-  }, [prefix, slug, isRoot, bucket]);
+  }, [prefix, slug, isRoot, bucket, user]);
 
   const INTRO = {
     '/pipeline': 'Win the work. One firm’s pipeline, from lead to signed retainer.',
     '/delivery': 'Ship the work. Projects report milestones; embedded seats report hours against a grant the client can revoke.',
     '/offers': 'Package what we sell. The storefront lead scoring reads against.',
   };
+
+  /**
+   * The Worker AI rail. This caller never filled the shell's `rail` slot and
+   * did not even import `WorkerRail` — so all fifteen Partner zones and all
+   * three bucket roots rendered with an empty right-hand column. It is the
+   * same omission `AdvisorBucketRoutes` records having fixed for the advisor
+   * shell, and by itself it was most of the product's rail gap.
+   *
+   * NO MODEL CARD, and that is not an oversight either. The rail names a model
+   * and a per-million rate only for a surface registered in `ASSIST_SURFACES`
+   * (`ui/eadwynConfig.js`), because that registration is what binds a surface
+   * to a real aiRouter task class — and the task class is what decides the
+   * model and the price. No workspace surface on any of the four licences is
+   * registered; the four keys that exist are page-level features. Registering
+   * `pipeline`, `delivery` or `offers` to make the card appear would attach a
+   * model and a price to surfaces that call no router task, which is the exact
+   * failure `WorkspaceShell`'s own docblock records the rail slot being created
+   * to end.
+   *
+   * `coverage` reports what THIS route reads, so it cannot be more confident
+   * than the body beside it: a zone whose card says no store says the same
+   * here, and the two now come from the same `LIVE` map.
+   */
+  const live = Boolean(LIVE[prefix]?.[slug]);
+  const coverage = isRoot
+    ? [`${bucket?.label || 'This bucket'} overview — ${bucket?.zones?.length || 0} zones`]
+    : [live
+      ? `${zone?.label || 'This zone'} reads the stored record`
+      : `${zone?.label || 'This zone'} has no store behind it`];
+  const RAIL = {
+    '/pipeline': {
+      workspace: 'Pipeline',
+      stance: 'Manual pipeline record',
+      note: 'Leads, proposals and analytics read the stored needs, quotes and engagements. No proposal is drafted, no price is suggested, and no lead is passed or pursued except on your click.',
+      unavailable: [
+        ['Proposal drafting', 'Every word of a quote is one you typed. Nothing here writes, rewrites or scores a proposal on your behalf.'],
+        ['Pricing suggestions', 'No rate is proposed, benchmarked or inferred from your other quotes. A price is yours.'],
+      ],
+    },
+    '/delivery': {
+      workspace: 'Delivery',
+      stance: 'Manual delivery record',
+      note: 'The board reads accepted work and the invoice ledger beside it. Nothing here messages a client, marks a milestone, or moves an engagement between states on its own.',
+      unavailable: [
+        ['Health and risk scoring', 'No engagement carries a milestone, an hours cap or a last-contact date, so nothing here can rate one at risk. A pill computed from status alone would rate every live engagement the same and call it a judgement.'],
+        ['Status reports', 'No recurring client update is drafted or sent from this bucket. What is shipped and what is blocked are not recorded, so there is nothing to draft one from.'],
+      ],
+    },
+    '/offers': {
+      workspace: 'Offers',
+      stance: 'Manual storefront record',
+      note: 'What the firm publishes is what the firm typed. No listing, perk description or claim about the practice is written here.',
+      unavailable: [
+        ['Surface attribution', 'Nothing records which surface sourced an engagement, so no listing here can be credited with the work it produced.'],
+        ['Published proof', 'An outcome is publishable only where the client agreed to it, and nothing stores that consent. Consent is a gate rather than a warning: without it there is no published form to suppress.'],
+      ],
+    },
+  }[prefix];
 
   return (
     <WorkspaceShell
@@ -222,6 +349,16 @@ export default function PartnerBucketRoutes() {
       scope="One firm"
       intro={INTRO[prefix]}
       activeSlug={isRoot ? null : undefined}
+      rail={RAIL && (
+        <WorkerRail
+          workspace={RAIL.workspace}
+          role="partner"
+          stance={RAIL.stance}
+          note={RAIL.note}
+          coverage={coverage}
+          unavailable={RAIL.unavailable}
+        />
+      )}
     >
       {body}
     </WorkspaceShell>
