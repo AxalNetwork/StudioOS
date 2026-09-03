@@ -174,11 +174,15 @@ the file is not in the ledger. Inspect the live schema, then either make the
 file safely re-runnable or leave it and write a forward fix-up migration.
 
 **(d) `schema_migrations exists but is not this runner's ledger`.**
-The target holds a `schema_migrations` with other columns — production was
-found with `(name, applied_at)` and four rows nothing in this repository wrote.
-Against it the ledger DDL is a silent no-op and the first read fails, so every
-mode used to die with `no such column: filename` before touching anything. The
-runner now names the shape and refuses. Adopt it in one run:
+The target holds a `schema_migrations` with other columns. A read through the
+Cloudflare connection on 2026-09-03 showed production that way —
+`(name, applied_at)` and four rows nothing in this repository wrote — yet the
+first CI migration step the same morning read the runner's own 200-row ledger
+through wrangler against the same binding (GOTCHAS has both reads). Against a
+foreign shape the ledger DDL is a silent no-op and the first read fails, so
+every mode would die with `no such column: filename` before touching anything.
+The runner names the shape and refuses. **Only if a CI `dry-run` reports it**,
+adopt it in one run:
 
 ```bash
 npm run d1:adopt-legacy-ledger   # = --remote --adopt-legacy-ledger --baseline

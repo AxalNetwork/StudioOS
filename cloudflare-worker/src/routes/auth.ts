@@ -908,9 +908,10 @@ auth.get('/me', async (c) => {
     founder_id: founderId, partner_id: partnerId,
     suggested_role: suggestedRole,
     // Migration 199. The elevation that lets an admin franchise the platform,
-    // echoed so the SPA can render the Super shell. Coerced rather than passed
-    // through: a DB without the column yields undefined, and the shell must
-    // read that as "not a super admin" rather than as a missing answer.
+    // hydrated onto `user` from the `super_admins` side table by getCurrentUser
+    // and echoed so the SPA can render the Super shell. Coerced rather than
+    // passed through: a row nobody hydrated yields undefined, and the shell
+    // must read that as "not a super admin" rather than as a missing answer.
     is_super_admin: Number((user as any).is_super_admin ?? 0) === 1 ? 1 : 0,
     // Spin-Out Lab flags — parity with the login payload and the FastAPI
     // dev backend's /me, so frontend route guards keep lab access stable

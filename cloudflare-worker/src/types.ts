@@ -426,9 +426,11 @@ export interface User {
   // Spin-Out Lab membership (getCurrentUser does SELECT *, so the row carries
   // it). Lab members may edit their OWN project regardless of account role.
   spinout_lab_active?: number | null;
-  // Migration 199 — the franchisor's elevation on `role: 'admin'`. Optional
-  // because a database bootstrapped from schema.sql alone lacks the column,
-  // and `isSuperAdmin` reads a missing value as 0.
+  // Migration 199 — the franchisor's elevation on `role: 'admin'`. NOT a
+  // column: `users` is at D1's 100-column ceiling, so the elevation is a row
+  // in `super_admins` and `auth.ts hydrateSuperAdmin` copies it here. Optional
+  // because a row nobody hydrated has no value, and `isSuperAdmin` reads a
+  // missing value as 0.
   is_super_admin?: number | null;
 }
 

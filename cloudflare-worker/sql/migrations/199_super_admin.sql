@@ -1,54 +1,78 @@
 -- 199 — the Super Admin: who may franchise the platform.
 --
+-- REWRITTEN 2026-09-03, BEFORE IT EVER APPLIED TO PRODUCTION. The first
+-- version of this file was `ALTER TABLE users ADD COLUMN is_super_admin`, and
+-- the first deploy that ran migrations before shipping the worker (#413,
+-- Actions run 33734906029) failed on exactly that statement:
+--
+--     too many columns on sqlite_altertab_users: SQLITE_ERROR
+--
+-- D1 caps a table at 100 columns and `users` is already there — a fact
+-- documentation/architecture/GOTCHAS.md had recorded, with the fix, before
+-- this file was written: user-attached facts go in a side table keyed by
+-- `user_id PRIMARY KEY` (migration 065's `user_google_links` is the pattern;
+-- `mi_pro_subscriptions` is the one `auth.ts getCurrentUser` already
+-- hydrates). Because the runner is forward-only and ordered, an unapplicable
+-- 199 also held 200–207 — every advisor store from #394 — out of production.
+-- Production's ledger never recorded the old bytes, so this is an edit to a
+-- pending file, not to an applied one (DEPLOY.md §4's rule). A local or
+-- preview database that DID apply the old version keeps its harmless extra
+-- column, skips this file with a checksum-drift warning, and needs the side
+-- table applied by hand once:
+--   wrangler d1 execute studioos-db --local --file=cloudflare-worker/sql/migrations/199_super_admin.sql
+--
 -- WHAT WAS MISSING, and it was not the ledger. Migration 187 built the licence
 -- ledger (`territory_licences`, `licence_territories`, `licence_seats`,
 -- `licence_events`) and 190 added `licence_admins` — who administers a
 -- licence. `routes/admin_licences.ts` is the console that issues, activates,
 -- suspends, renews and terminates them. All of it exists and all of it works.
 --
--- What nothing said is who may OPERATE that console. Every route in it gates
--- on `requireAdmin`, so today any admin can license the platform to a new
+-- What nothing said is who may OPERATE that console. Every route in it gated
+-- on `requireAdmin`, so any admin could license the platform to a new
 -- subsidiary, change another licensee's terms, or terminate one. In a
 -- franchise model that is the one power the franchisor cannot share with the
 -- franchisees: a subsidiary admin who can issue licences is not a subsidiary.
 --
--- WHY A FLAG AND NOT A ROLE. `super_admin` as a distinct `users.role` value
--- would be the obvious modelling, and it is the wrong one here: 468 call sites
--- across the worker check `role === 'admin'` by exact equality (`isAdmin`,
--- `requireAdmin`, `UNSCOPED_ROLES`, per-file exemption sets). A new role value
--- fails every one of them, so a super admin would be locked out of the entire
--- admin product and each of the 468 would have to be found and widened — with
--- every miss a silent loss of access, discovered by a person hitting a 403.
+-- WHY AN ELEVATION AND NOT A ROLE. `super_admin` as a distinct `users.role`
+-- value would be the obvious modelling, and it is the wrong one here: 468
+-- call sites across the worker check `role === 'admin'` by exact equality
+-- (`isAdmin`, `requireAdmin`, `UNSCOPED_ROLES`, per-file exemption sets). A
+-- new role value fails every one of them, so a super admin would be locked
+-- out of the entire admin product and each of the 468 would have to be found
+-- and widened — with every miss a silent loss of access, discovered by a
+-- person hitting a 403.
 --
 -- The user's own description is additive: the Super Admin "is the same as the
 -- Admin, but has the power to license". So the model is additive too. The role
--- stays `admin` and this column adds the one power on top. Every existing
--- check passes unchanged, and the new gate (`requireSuperAdmin`) fails CLOSED:
--- a surface that forgets it stays admin-only, which is the pre-existing
--- behaviour, rather than accidentally granting the franchise.
+-- stays `admin` and a row in this table adds the one power on top. Every
+-- existing check passes unchanged, and the new gate (`requireSuperAdmin`)
+-- fails CLOSED: a surface that forgets it stays admin-only, which is the
+-- pre-existing behaviour, rather than accidentally granting the franchise.
 --
--- BACKFILL: EVERY EXISTING ADMIN BECOMES A SUPER ADMIN, and that is
--- deliberate rather than lazy. Today every admin can already do all of this;
--- backfilling 0 would silently revoke a power the platform's operators
--- currently hold and are presumably using — a migration is the wrong place to
--- make that authorization decision about named people. So this preserves
--- today's behaviour exactly, and the boundary starts applying to admins
--- created FROM NOW ON, who default to 0. Demoting a specific existing admin is
--- then a deliberate act by a super admin, recorded in `admin_audit_log`, and
--- not something a schema change guessed at.
+-- HOW THE WORKER READS IT. `getCurrentUser` does `SELECT * FROM users` and
+-- cannot widen that result set either — D1 also rejects a result wider than
+-- 100 columns, so a JOIN is out. It hydrates `user.is_super_admin` with one
+-- keyed lookup on this table for admin accounts, and sets 0 for everyone
+-- else, OVERRIDING any column a database may still carry from the old 199.
+-- `/me` echoes the hydrated value; the SPA keys the HQ shell on it.
+--
+-- WHO HOLDS IT. Nobody, from this file. The original version backfilled every
+-- existing admin so that a schema change would not silently revoke a power
+-- operators already held. That decision has since been made by the platform's
+-- owner — one holder, by name — and migration 207 records it. On a fresh
+-- database 199 and 207 apply in the same run, so a backfill here would be
+-- granted and revoked inside a second; it is left out.
 --
 -- WHAT THIS IS STILL NOT. It is not the tenancy scoping half. Migration 190's
 -- header says the same thing about itself and it is still true: subsidiary
 -- admins remain UNSCOPED across the platform, because scoping every account,
 -- project, deal and document to a licence is a programme across 151 route
--- files. This column answers "who may franchise", not "what may a franchisee
+-- files. This table answers "who may franchise", not "what may a franchisee
 -- see". Those are different questions and only the first is answered here.
 
-ALTER TABLE users ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0;
-
-CREATE INDEX IF NOT EXISTS idx_users_super_admin
-  ON users(is_super_admin) WHERE is_super_admin = 1;
-
-UPDATE users
-   SET is_super_admin = 1
- WHERE LOWER(role) = 'admin';
+CREATE TABLE IF NOT EXISTS super_admins (
+  user_id            INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  granted_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  granted_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  note               TEXT
+);

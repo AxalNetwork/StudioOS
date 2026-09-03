@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { isSuperAdmin } from '../src/auth.ts';
+import { isSuperAdmin, hydrateSuperAdmin, loadSuperAdminFlag } from '../src/auth.ts';
 
 const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8');
 
@@ -84,13 +84,87 @@ test('/me echoes the flag, or the SPA cannot render the shell', () => {
   assert.match(src, /is_super_admin:/);
 });
 
-test('migration 199 preserves what admins can do today', () => {
-  // Backfilling 0 would silently revoke a power the platform's operators
-  // currently hold. The boundary applies to admins created from now on.
-  const sql = read('cloudflare-worker/sql/migrations/199_super_admin.sql');
-  assert.match(sql, /ALTER TABLE users ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0/);
-  assert.match(sql, /UPDATE users\s+SET is_super_admin = 1\s+WHERE LOWER\(role\) = 'admin'/,
-    'existing admins must keep the access they have');
+test('migration 199 keeps the elevation OFF the users table', () => {
+  // The first version of 199 was `ALTER TABLE users ADD COLUMN`, and the first
+  // deploy that ran migrations before shipping (#413, 2026-09-03) failed on
+  // it: D1 caps a table at 100 columns and `users` is there — GOTCHAS had said
+  // so. The elevation is a side table keyed by user_id, the shape
+  // user_google_links (065) and mi_pro_subscriptions already use.
+  const code = read('cloudflare-worker/sql/migrations/199_super_admin.sql').replace(/--.*$/gm, '');
+  assert.match(code, /CREATE TABLE IF NOT EXISTS super_admins \(\s*user_id\s+INTEGER PRIMARY KEY REFERENCES users\(id\)/);
+  assert.doesNotMatch(code, /ALTER TABLE users/, 'users cannot take another column on D1');
+  assert.doesNotMatch(code, /INSERT/, "who holds it is 207's decision, not a backfill");
+});
+
+/** The body of one top-level `export … function NAME` in a source file. */
+function exportedFn(src: string, name: string): string {
+  const start = src.search(new RegExp(`^export (async )?function ${name}\\b`, 'm'));
+  assert.ok(start > -1, `${name} is exported`);
+  const next = src.indexOf('\nexport ', start + 1);
+  return src.slice(start, next === -1 ? src.length : next);
+}
+
+test('the elevation is read from super_admins, never from a users column', () => {
+  // A database that applied the first 199 still carries `users.is_super_admin`,
+  // and that column says every admin is elevated. Nothing may read it.
+  const router = read('cloudflare-worker/src/routes/admin_super_admins.ts');
+  // Inside the router's SQL, `is_super_admin` may appear ONLY as the alias of
+  // a value derived from the side table — never as a column read, a filter
+  // or a write on `users`.
+  const sqlStrings = router.match(/prepare\(\s*(`[^`]*`|'[^']*')/g) || [];
+  assert.ok(sqlStrings.length >= 4, 'the router prepares its SQL');
+  for (const stmt of sqlStrings) {
+    const stray = stmt.replace(/\bAS is_super_admin\b/g, '');
+    assert.doesNotMatch(stray, /is_super_admin/, `is_super_admin is read off users in: ${stmt.slice(0, 80)}…`);
+  }
+  assert.doesNotMatch(router, /users SET is_super_admin|is_super_admin FROM users|WHERE is_super_admin/);
+  assert.match(router, /FROM super_admins s\s+JOIN users u ON u\.id = s\.user_id/, 'holders are the side table');
+  assert.match(router, /LEFT JOIN super_admins s ON s\.user_id = u\.id/, 'a target\'s elevation is derived from the join');
+  assert.match(router, /DELETE FROM super_admins WHERE user_id = \?/, 'revoke deletes the row');
+
+  const auth = read('cloudflare-worker/src/auth.ts');
+  assert.match(exportedFn(auth, 'loadSuperAdminFlag'), /SELECT user_id FROM super_admins WHERE user_id = \?/);
+  assert.match(exportedFn(auth, 'getCurrentUser'), /await hydrateSuperAdmin\(c\.env, u\)/,
+    'getCurrentUser hydrates the flag from the side table before anything downstream reads the row');
+  const hydrate = exportedFn(auth, 'hydrateSuperAdmin');
+  assert.match(hydrate, /\.is_super_admin = flag;/, "the row's own value, if a column still exists, is overwritten");
+  assert.match(hydrate, /isAdminRole \? await loadSuperAdminFlag\(/, 'non-admins are 0 without a lookup');
+});
+
+function fakeEnv(first: () => Promise<unknown>) {
+  const calls: string[] = [];
+  return {
+    calls,
+    env: { DB: { prepare: (sql: string) => { calls.push(sql); return { bind: () => ({ first }) }; } } } as any,
+  };
+}
+
+test('hydrateSuperAdmin answers from the table, and only asks for admins', async () => {
+  const present = fakeEnv(async () => ({ user_id: 8 }));
+  const admin = await hydrateSuperAdmin(present.env, { id: 8, role: 'admin', is_super_admin: 0 });
+  assert.equal(admin.is_super_admin, 1, 'a row in super_admins elevates, whatever the users column said');
+  assert.equal(present.calls.length, 1);
+
+  const absent = fakeEnv(async () => null);
+  const plain = await hydrateSuperAdmin(absent.env, { id: 1, role: 'admin', is_super_admin: 1 });
+  assert.equal(plain.is_super_admin, 0, 'no row: not elevated, even if a stale column says 1');
+
+  const founder = fakeEnv(async () => ({ user_id: 3 }));
+  const f = await hydrateSuperAdmin(founder.env, { id: 3, role: 'founder' });
+  assert.equal(f.is_super_admin, 0);
+  assert.equal(founder.calls.length, 0, 'a non-admin is never elevated, so the table is not consulted');
+});
+
+test('a side table that cannot be read elevates nobody', async () => {
+  const warn = console.warn; const warned: string[] = [];
+  console.warn = (...a: unknown[]) => { warned.push(String(a[0])); };
+  try {
+    const broken = fakeEnv(async () => { throw new Error('no such table: super_admins'); });
+    assert.equal(await loadSuperAdminFlag(broken.env, 8), 0, 'fail closed');
+    const u = await hydrateSuperAdmin(broken.env, { id: 8, role: 'admin', is_super_admin: 1 });
+    assert.equal(u.is_super_admin, 0, 'the gate never says yes because it could not ask');
+    assert.ok(warned.some((w) => /super_admins hydrate failed/.test(w)), 'and it is logged, not silent');
+  } finally { console.warn = warn; }
 });
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -102,13 +176,14 @@ const ROUTER = 'cloudflare-worker/src/routes/admin_super_admins.ts';
 test('migration 207 narrows the elevation to the one named account, after 199', () => {
   const sql = read('cloudflare-worker/sql/migrations/207_super_admin_single_holder.sql');
   const code = sql.replace(/--.*$/gm, '');
-  assert.match(code, /SET is_super_admin = 0\s+WHERE is_super_admin = 1\s+AND LOWER\(email\) <> 'guillaume\.lauzier@axal\.vc'/,
-    'every other holder 199 backfilled is revoked');
-  assert.match(code, /SET is_super_admin = 1\s+WHERE LOWER\(email\) = 'guillaume\.lauzier@axal\.vc'\s+AND LOWER\(role\) = 'admin'/,
+  assert.match(code, /DELETE FROM super_admins\s+WHERE user_id NOT IN \(\s*SELECT id FROM users WHERE LOWER\(email\) = 'guillaume\.lauzier@axal\.vc'\s*\)/,
+    'every other holder is revoked, including any an old-shape database elevated');
+  assert.match(code, /INSERT OR IGNORE INTO super_admins[\s\S]*FROM users\s+WHERE LOWER\(email\) = 'guillaume\.lauzier@axal\.vc'\s+AND LOWER\(role\) = 'admin'/,
     'the grant still requires the admin role — the elevation stays an elevation');
-  assert.doesNotMatch(code, /ALTER TABLE/, '207 is a data migration; the column is 199\'s');
+  assert.doesNotMatch(code, /ALTER TABLE/, '207 is a data migration; the table is 199\'s');
+  assert.doesNotMatch(code, /UPDATE users|users SET/, '207 never touches users — it cannot take a column, and the side table is the source');
   assert.doesNotMatch(read('cloudflare-worker/sql/migrations/199_super_admin.sql'), /axal\.vc/,
-    '199 is not edited to carry the decision — it may already be applied elsewhere');
+    '199 is not edited to carry the decision; 207 is the decision');
 });
 
 test('the holder console gates every write behind TOTP, step-up and the elevation', () => {
@@ -129,7 +204,7 @@ test('the holder console never empties the set, never elevates a non-admin, neve
   assert.match(src, /code: 'last_super_admin'/, 'revoking the last active holder is refused');
   assert.match(src, /code: 'not_an_admin'/, 'only an admin can be elevated');
   assert.match(src, /code: 'cannot_revoke_self'/);
-  assert.match(src, /LOWER\(role\) = 'admin'/, 'the grant UPDATE itself re-checks the role');
+  assert.match(src, /INSERT OR IGNORE INTO super_admins[\s\S]*WHERE id = \? AND LOWER\(role\) = 'admin'/, 'the grant INSERT itself re-checks the role');
 });
 
 test('every holder change is written to admin_audit_log', () => {

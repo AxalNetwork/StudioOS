@@ -4,6 +4,17 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Super Admin — `users` is at D1's column cap, so the elevation moves to a side table (PR 0b)
+
+The first deploy that ran migrations before shipping (#413, Actions run 33734906029) failed at `199_super_admin.sql`: `ALTER TABLE users ADD COLUMN is_super_admin` hit D1's 100-column ceiling (`too many columns on sqlite_altertab_users`), which `GOTCHAS.md` had already recorded together with the fix. Because the runner is forward-only, 199 also held 200–207 out of production. The same run settled one open question: through wrangler, production's `schema_migrations` is the runner's own shape with 200 rows applied — the foreign `(name, applied_at)` table seen through the Cloudflare connection that morning is unexplained and the runner's refusal has never fired.
+
+- `cloudflare-worker/sql/migrations/199_super_admin.sql` — rewritten before it applied anywhere that matters: `CREATE TABLE IF NOT EXISTS super_admins (user_id INTEGER PRIMARY KEY …)`, the `user_google_links` / `mi_pro_subscriptions` shape. No backfill; the holder is 207's decision.
+- `207_super_admin_single_holder.sql` — the single holder as a `DELETE` + `INSERT OR IGNORE` against the side table, idempotent, never touching `users`.
+- `cloudflare-worker/src/auth.ts` — `loadSuperAdminFlag` (one keyed lookup, fail-closed, logged) and `hydrateSuperAdmin` (admin accounts only; overwrites any `is_super_admin` a database may still carry from the old 199). `getCurrentUser` calls it beside the MI Pro hydration; `/me` and `isSuperAdmin` are unchanged consumers.
+- `routes/admin_super_admins.ts` — holders are the side table joined to `users`; a target's `is_super_admin` is derived from a `LEFT JOIN`; grant is an `INSERT OR IGNORE … WHERE LOWER(role) = 'admin'`, revoke a `DELETE`.
+- Guards: `cloudflare-worker/test/super_admin.test.ts` (199 creates the table and no longer widens `users`; nothing reads a `users` column; `getCurrentUser` hydrates; hydration overwrites; a failed read elevates nobody — the last three behavioural); `frontend/test/migration_column_shapes.test.mjs` fails any migration numbered above 198 that adds a column to `users`.
+- `GOTCHAS.md` (both bullets), `DEPLOY.md` §4(d) (adopt the legacy ledger only if a CI `dry-run` names it).
+
 ## Super Admin — make production migratable, then turn the elevation on (PR 0 of 4)
 
 The Super Admin shipped in #387 (migration 199, `requireSuperAdmin`, the HQ sidebar) but production never received 199: the database the worker binds to holds a `schema_migrations(name, applied_at)` nothing in this repo wrote, so every runner mode failed on `no such column: filename` before applying anything, and `cloudflare-worker-deploy.yml` never ran the runner at all.
