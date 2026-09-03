@@ -259,6 +259,17 @@ test('the HQ overview is super-admin only, mounted before the catch-all, and say
   assert.ok(idx.indexOf("app.route('/api/admin/hq', adminHq)") < idx.indexOf("app.route('/api/admin', admin)"));
 });
 
+test('force re-auth is behind the impersonation bar, needs a reason, and is audited', () => {
+  const src = read('cloudflare-worker/src/routes/admin_security.ts');
+  assert.doesNotMatch(src, /\brequireAdmin\b/);
+  const write = src.slice(src.indexOf("r.post('/force-reauth'"));
+  assert.match(write, /await requireFactor\(c, 'totp'\);\s+await requireStepUp\(c\);\s+const actor = await requireSuperAdmin\(c\);/);
+  assert.match(write, /code: 'reason_required'/);
+  assert.match(write, /INSERT INTO admin_audit_log \(admin_user_id, action, filters_json\)/);
+  const idx = read('cloudflare-worker/src/index.ts');
+  assert.ok(idx.indexOf("app.route('/api/admin/security', adminSecurity)") < idx.indexOf("app.route('/api/admin', admin)"));
+});
+
 test('the SPA reaches the console through api.js', () => {
   const api = read('frontend/src/lib/api.js');
   assert.match(api, /superAdmins: \(\) => request\('\/admin\/super-admins'\)/);

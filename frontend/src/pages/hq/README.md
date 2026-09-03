@@ -13,6 +13,7 @@ re-checks with `requireSuperAdmin` on every call regardless.
 | `AccountsPage.jsx` | The HQ "Team" row (canvas H4): the holder console above the Admin Console's Users panel, locked to that section. |
 | `ContractsPage.jsx` | The HQ "Contracts" row: the master template library the platform holds. The doc-type registry the canvas draws above it has no store, and the page says so. |
 | `HqHomePage.jsx` | The HQ "Home" row (canvas H1) at `/hq`: totals, one health card per licence, the licence trail and renewals, over `GET /api/admin/hq/overview`. The tenant switcher narrows this page only. |
+| `SecurityPage.jsx` | The HQ "Security" row (canvas Y2, decision A4) at `/admin/security`: the admin action audit, sessions and impersonations with the platform-wide force re-auth, KYC and deletion-request clocks; security events, AI safety, sanctions and DR named as not recorded. |
 
 ## Rules
 

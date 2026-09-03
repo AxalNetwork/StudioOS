@@ -3,6 +3,12 @@
 A plain-English summary of recent changes to StudioOS, written for
 everyone using the platform. Newest changes are at the top.
 
+## New: a Security page for the Super Admin
+
+The HQ sidebar's Security row opens one page for the things a security review asks about: every admin action on record, who is impersonating whom right now and recently, how many sessions are active and how many admins have two-factor sign-in, the KYC queue, and open deletion requests with days left on their 30-day clock. It also carries one action — signing every account out everywhere, with a typed reason that is kept. Where the platform keeps no record (security events, AI safety counters, sanctions screening, backup drills) the page says so instead of showing a number.
+
+---
+
 ## New: an HQ Home page for the Super Admin
 
 The Super Admin's Home row now opens an HQ overview: how many accounts and licensed seats the platform has, one health card per subsidiary licence with its status, territories and renewal date, the licence event trail, and renewals due in the next 60 days. The "All subsidiaries" switcher narrows that page to one licence. Figures per subsidiary (accounts, revenue, queue depth) read "Not recorded" until accounts are linked to licences; nothing is estimated.
