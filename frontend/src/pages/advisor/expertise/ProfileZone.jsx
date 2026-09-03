@@ -129,7 +129,25 @@ export default function ProfileZone() {
   };
 
   return (
-    <ZoneBody loading={state.loading || !draft} error={state.error} onRetry={load} isEmpty={false}>
+    // ZoneBody checks `loading` BEFORE `error`, so a caller that holds
+    // loading true past a failure makes its own error card unreachable. The
+    // old expression was `state.loading || !draft`, and `!draft` stays true
+    // after a FAILED load (the catch sets `error` and never sets `draft`) —
+    // so every load error rendered as a spinner forever and the error the
+    // page had just captured never appeared.
+    //
+    // `!state.error` is what makes the draft guard safe to keep: an error
+    // always beats the skeleton, and the children below still cannot be
+    // rendered against a null draft — every field reads `draft.<key>`
+    // unconditionally. Dropping the guard entirely would leave that
+    // resting on React batching the two setState calls in `load`, which it
+    // does today and need not tomorrow.
+    <ZoneBody
+      loading={state.loading || (!draft && !state.error)}
+      error={state.error}
+      onRetry={load}
+      isEmpty={false}
+    >
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
           {/* Canvas completeness meter — computed from the fields, not asserted. */}
