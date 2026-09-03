@@ -50,6 +50,35 @@ const SEMGREP = path.join(ROOT, '.semgrepignore');
 /** The generator's own marker, as written into the first line of its bundle. */
 const GENERATED_MARKER = 'GENERATED from dc-runtime/src/';
 
+/**
+ * The generator's own marker for a canvas DOCUMENT, which is the extension it
+ * writes. A tree of these is a dc-runtime export whether or not the bundle
+ * travelled with it.
+ *
+ * WHY THIS WAS ADDED. `design/incoming/` — the documented intake queue every
+ * new Claude Design export lands in before triage — held eleven `.dc.html`
+ * pages and no `support.js`: each one references the bundle as `./support.js`,
+ * a relative path that does not even resolve there, because the archive keeps
+ * one copy at `design/canvases/shared/`. So the bundle-header test below could
+ * not see the tree, neither ignore list mentioned it, and the first eleven
+ * canvases to land produced twenty-four code-scanning findings — ten CodeQL
+ * "expression has no effect" and fourteen Semgrep `var-in-href` — every one of
+ * them in a document that is never built, bundled or served.
+ *
+ * That is the same failure this file was written to catch, one level over: it
+ * caught a canvas tree that brings its bundle and missed one that does not.
+ * And because `incoming/` is where canvases land BY DESIGN, it would have
+ * recurred on every future import.
+ *
+ * The extension is the right evidence rather than a directory name, for the
+ * reason the header is: the generator writes it, so a canvas dropped in a
+ * folder nobody has thought of yet is still caught. It is also universal in a
+ * way the document's own metadata is not — `design_doc_mode` appears in 46 of
+ * the 145 `.dc.html` files in this repo, so matching on that would have missed
+ * two thirds of them.
+ */
+const CANVAS_EXT = '.dc.html';
+
 /** Never walked: no generated tree hides in here, and they are enormous. */
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.wrangler']);
 
@@ -144,12 +173,18 @@ function isCovered(tree, listed) {
  * 49M of canvases to the leaves on every CI run buys nothing, but stopping at
  * depth 1 would now silently find nothing at all.
  */
-/** The marker in THIS directory's own .js files — no descent. */
+/**
+ * The marker in THIS directory's own files — no descent. Either form of the
+ * generator's evidence counts: a bundle carrying the GENERATED header, or the
+ * canvas documents themselves.
+ */
 function hasMarkerHere(dir) {
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return false; }
   for (const e of entries) {
-    if (!e.isFile() || !e.name.endsWith('.js')) continue;
+    if (!e.isFile()) continue;
+    if (e.name.endsWith(CANVAS_EXT)) return true;
+    if (!e.name.endsWith('.js')) continue;
     try {
       const head = fs.readFileSync(path.join(dir, e.name), 'utf8').slice(0, 400);
       if (head.includes(GENERATED_MARKER)) return true;

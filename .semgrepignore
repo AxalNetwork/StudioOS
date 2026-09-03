@@ -25,3 +25,9 @@
 # bundled or served; canvases are ported into frontend/src/ by hand and
 # scanned there. The space in the directory name is a literal here.
 /design/canvases/
+
+# The intake queue those same exports land in before triage
+# (design/incoming/README.md) — identical material, same rule, and likewise
+# never bundled or served. It holds the .dc.html pages without a copy of the
+# bundle, which is why the parity guard had to learn the extension.
+/design/incoming/

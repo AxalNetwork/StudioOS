@@ -29,3 +29,10 @@ paths-ignore:
   # frontend/src/ by hand, and that ported code is scanned like any other
   # source. Quoted because the directory name contains spaces.
   - "design/canvases"
+  # The intake queue the same exports land in before triage
+  # (design/incoming/README.md). Identical material to the tree above and
+  # under the same rule — never built, bundled or served, ported into
+  # frontend/src/ by hand and scanned there — but it holds the .dc.html pages
+  # WITHOUT a copy of the bundle, so the parity guard's bundle-header test
+  # could not see it until it learned to read the .dc.html extension too.
+  - "design/incoming"
