@@ -72,8 +72,16 @@ export default function WorkspaceShell({
     // intrinsic width and shoves the rail off-screen. `hidden xl:flex`: below
     // 1280px there is no room for a rail beside a working page, and stacking a
     // meter above the tool puts the least important thing first.
-    <div className={rail ? 'flex items-start gap-6' : ''}>
-      <div className="min-w-0 flex-1">
+    //
+    // NO `gap` WHEN THE RAIL IS A PANEL. The rail draws its own left border and
+    // its own inner padding (see below), so a gap would put a stripe of page
+    // ground between the body and a border that is meant to be the seam
+    // between them. The canvases have the two columns meeting exactly.
+    <div className={rail ? 'flex items-stretch' : ''}>
+      {/* `pr-6` replaces the `gap-6` removed above. The space has to sit
+          INSIDE the body column rather than between the columns, or it shows
+          as page ground on the wrong side of the rail's border. */}
+      <div className={`min-w-0 flex-1${rail ? ' pr-6' : ''}`}>
         {bucket && (
           <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-ink-3">
             <Link to={bucket.prefix} className="hover:underline">
@@ -132,7 +140,24 @@ export default function WorkspaceShell({
           {children}
         </div>
       </div>
-      {rail && <div className="hidden w-[280px] shrink-0 xl:block sticky top-20">{rail}</div>}
+      {/*
+        THE RAIL IS A PANEL, not a floating column, and that is the whole of
+        why it looked detached and clipped at once. `WorkerRail` itself sets no
+        background, no border and no padding — so on a full-bleed route, where
+        `App.jsx` gives the page container `p-0`, the rail was bare text on the
+        page's grey ground running flush into the viewport's right edge, with
+        the last words of every line cut off.
+
+        All four design canvases draw it the same way and this matches them:
+        a white ground, a hairline on the left as the seam against the body,
+        its own inner padding, and full height so the seam runs the length of
+        the page rather than stopping where the text happens to end.
+      */}
+      {rail && (
+        <div className="hidden w-[280px] shrink-0 border-l border-axal-border-soft bg-white px-[18px] pb-7 pt-[18px] xl:block dark:border-gray-800 dark:bg-gray-900">
+          <div className="sticky top-20">{rail}</div>
+        </div>
+      )}
     </div>
   );
 }
