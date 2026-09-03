@@ -2290,6 +2290,9 @@ export const api = {
   // Not the scoping half: nothing else in the product reads a territory from
   // this yet, which is why `seats_used` comes back null rather than 0.
   licences: () => request('/admin/licences'),
+  // HQ · Home. One payload for the franchisor's overview; the page's tenant
+  // switcher narrows it client-side and sends nothing back (routes/admin_hq.ts).
+  hqOverview: () => request('/admin/hq/overview'),
   licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
   licenceTerritories: () => request('/admin/licences/territories'),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),

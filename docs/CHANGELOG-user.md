@@ -3,6 +3,12 @@
 A plain-English summary of recent changes to StudioOS, written for
 everyone using the platform. Newest changes are at the top.
 
+## New: an HQ Home page for the Super Admin
+
+The Super Admin's Home row now opens an HQ overview: how many accounts and licensed seats the platform has, one health card per subsidiary licence with its status, territories and renewal date, the licence event trail, and renewals due in the next 60 days. The "All subsidiaries" switcher narrows that page to one licence. Figures per subsidiary (accounts, revenue, queue depth) read "Not recorded" until accounts are linked to licences; nothing is estimated.
+
+---
+
 ## New: Super Admin mode for the account that licenses the platform
 
 The account that licenses StudioOS to subsidiaries now has its own **Super Admin** mode. The bar at the top reads "Super Admin Mode", the View-as list starts with **Super Admin** (the HQ view) and **Admin** (exactly what a subsidiary admin sees), and the HQ sidebar carries Home, Licences, Funds, Contracts, Team, Support and Settings. Admins without that elevation see a clear notice on HQ-only pages instead of a page that refuses every action. Figures per subsidiary — accounts, revenue, queues — show "Not recorded" until accounts are linked to licences; nothing is estimated.

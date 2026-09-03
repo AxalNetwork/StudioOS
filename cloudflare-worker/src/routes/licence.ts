@@ -32,8 +32,12 @@ import { hydrate, type LicenceRow } from './admin_licences';
 
 const r = new Hono<{ Bindings: Env }>();
 
-/** Said once, in one place, so the two callers below cannot word it differently. */
-const DERIVED_UNAVAILABLE = {
+/**
+ * Said once, in one place, so the callers cannot word it differently. Exported
+ * for the HQ overview (routes/admin_hq.ts), which reports the same absence
+ * platform-wide and must not develop a second phrasing of it.
+ */
+export const DERIVED_UNAVAILABLE = {
   derived_metrics_available: false,
   derived_metrics_reason:
     'Seats used, accounts in territory and revenue per subsidiary all need every account to name '
