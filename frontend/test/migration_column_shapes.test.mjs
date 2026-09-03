@@ -94,6 +94,17 @@ test('the Super Admin migration is reachable behind a sequence that can apply', 
     'the HQ shell must still key on the flag 199 adds');
 });
 
+test('migration 207 sits behind 199 and names a single holder', () => {
+  // 199 backfills every admin; 207 is the decision 199's header deferred —
+  // one franchisor, by name. It has to sort after 199 or the narrowing UPDATE
+  // runs against a column that does not exist yet.
+  const sql = read(`${M}/207_super_admin_single_holder.sql`);
+  assert.ok(sql.trim().length > 0, '207_super_admin_single_holder.sql is missing');
+  assert.match(sql.replace(/--.*$/gm, ''), /LOWER\(email\) = 'guillaume\.lauzier@axal\.vc'/);
+  assert.ok(parseInt('207', 10) > parseInt('199', 10));
+  assert.doesNotMatch(sql.replace(/--.*$/gm, ''), /ALTER TABLE/, '207 reads the column 199 adds; it must not re-add it');
+});
+
 /* ────────────────────────────────────────────────────────────────────────────
  * Migration 200 — the rebuild that moves production onto the shape the code
  * reads. A rebuild is the one migration shape that can lose data silently, so

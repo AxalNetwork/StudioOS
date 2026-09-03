@@ -28,14 +28,18 @@ import { fileURLToPath } from 'node:url';
 import {
   LEDGER_DDL,
   LEDGER_TABLE,
+  LEGACY_LEDGER_TABLE,
   compareMigrations,
   classifyIdempotency,
   auditMigrations,
+  expectedEffects,
+  ledgerShapeProblem,
   listMigrationFiles,
   planActions,
   applyPlan,
   needsBaseline,
   sqlQuote,
+  verifyMarked,
 } from '../../scripts/lib/migrationPlan.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -273,4 +277,132 @@ test('applyPlan surfaces a record() failure after a successful exec', () => {
   assert.equal(res.failure.phase, 'record-after-apply');
   assert.equal(res.failure.file.name, '001_ok.sql');
   assert.equal(res.applied.length, 0, 'not counted as cleanly applied');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The foreign ledger. Production was found holding a `schema_migrations` with
+ * columns (name, applied_at) that nothing in this repo wrote; against it the
+ * DDL is a no-op and `SELECT filename, checksum` fails, so every mode died
+ * before applying anything. These pin: the shape is named, not swallowed; the
+ * adoption keeps the rows; and a baseline mark can be checked against reality.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+test('ledgerShapeProblem: absent and runner-shaped ledgers are fine, anything else is named', () => {
+  assert.equal(ledgerShapeProblem([]), null, 'no table yet is not a problem');
+  assert.equal(ledgerShapeProblem(['filename', 'checksum', 'applied_at']), null);
+  assert.equal(ledgerShapeProblem(['FILENAME', 'CHECKSUM']), null, 'case-insensitive');
+  const msg = ledgerShapeProblem(['name', 'applied_at']);
+  assert.ok(msg, 'the production shape must be refused');
+  assert.match(msg!, /name, applied_at/, 'the message names the columns found');
+  assert.match(msg!, /filename/, 'and the column that is missing');
+});
+
+test('adopting a foreign ledger renames it aside with its rows intact', () => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  db.exec(`CREATE TABLE ${LEDGER_TABLE} (name TEXT, applied_at TEXT)`);
+  db.exec(`INSERT INTO ${LEDGER_TABLE} VALUES ('score_anti_cheat_v1', '2026-05-06')`);
+  const cols = (db.prepare(`PRAGMA table_info(${LEDGER_TABLE})`).all() as any[]).map((r) => r.name);
+  assert.ok(ledgerShapeProblem(cols), 'precondition: the shape is foreign');
+
+  // The CLI's adoption is exactly this statement, then the normal DDL.
+  db.exec(`ALTER TABLE ${LEDGER_TABLE} RENAME TO ${LEGACY_LEDGER_TABLE}`);
+  db.exec(LEDGER_DDL);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM ${LEGACY_LEDGER_TABLE}`).get() as any).n, 1,
+    'the foreign rows survive under the legacy name');
+  const fresh = (db.prepare(`PRAGMA table_info(${LEDGER_TABLE})`).all() as any[]).map((r) => r.name);
+  assert.equal(ledgerShapeProblem(fresh), null, 'the runner now has its own ledger');
+});
+
+test('expectedEffects reads CREATE, ADD COLUMN, and the rebuild idiom in statement order', () => {
+  assert.deepEqual(expectedEffects('ALTER TABLE users ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0;'),
+    { tables: [], columns: [['users', 'is_super_admin']] });
+  assert.deepEqual(expectedEffects('CREATE TABLE IF NOT EXISTS licence_admins (id INTEGER);'),
+    { tables: ['licence_admins'], columns: [] });
+  // Rebuild: the temporary table is renamed INTO the name the code reads.
+  assert.deepEqual(expectedEffects(
+    'CREATE TABLE service_offerings_new (id INTEGER, company_id INTEGER);\n' +
+    'INSERT INTO service_offerings_new SELECT id, NULL FROM service_offerings;\n' +
+    'DROP TABLE service_offerings;\n' +
+    'ALTER TABLE service_offerings_new RENAME TO service_offerings;',
+  ), { tables: ['service_offerings'], columns: [] });
+  // A temp table the file drops itself leaves nothing to check.
+  assert.deepEqual(expectedEffects('CREATE TABLE tmp_x (a); DROP TABLE tmp_x;'), { tables: [], columns: [] });
+  // Prose in a header comment is not an effect.
+  assert.deepEqual(expectedEffects('-- ALTER TABLE users ADD COLUMN example TEXT;\nINSERT OR IGNORE INTO t VALUES (1);'),
+    { tables: [], columns: [] });
+});
+
+test('verifyMarked separates present, absent and unverifiable ledger rows', () => {
+  const { files } = tmpMigrations({
+    '001_present.sql': 'ALTER TABLE users ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0;',
+    '002_absent.sql': 'ALTER TABLE users ADD COLUMN never_added TEXT;',
+    '003_table_absent.sql': 'CREATE TABLE IF NOT EXISTS security_events (id INTEGER);',
+    '004_seed_only.sql': "INSERT OR IGNORE INTO users (id) VALUES (1);",
+  });
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, is_super_admin INTEGER NOT NULL DEFAULT 0)');
+  const engine = makeEngine(db);
+  // A baseline marked all four without executing them.
+  for (const f of files) engine.record(f);
+
+  const probes = {
+    tableExists: (t: string) =>
+      db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t) !== undefined,
+    tableColumns: (t: string) =>
+      new Set((db.prepare(`PRAGMA table_info(${t})`).all() as any[]).map((r) => String(r.name).toLowerCase())),
+  };
+  const out = verifyMarked(files, engine.appliedSet(), probes);
+  assert.deepEqual(out.verified.map((f) => f.name), ['001_present.sql']);
+  assert.deepEqual(out.missing.map((m) => m.file.name), ['002_absent.sql', '003_table_absent.sql']);
+  assert.match(out.missing[0].gaps.join(' '), /users\.never_added is missing/);
+  assert.match(out.missing[1].gaps.join(' '), /table security_events is missing/);
+  assert.deepEqual(out.unverifiable.map((u) => u.file.name), ['004_seed_only.sql'],
+    'an INSERT-only file cannot be checked and must not be guessed at');
+  // A file that is not in the ledger is simply not a marked row.
+  const partial = new Map([...engine.appliedSet()].filter(([k]) => k !== '002_absent.sql'));
+  assert.deepEqual(verifyMarked(files, partial, probes).missing.map((m) => m.file.name), ['003_table_absent.sql']);
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The workflows. CI used to deploy the worker without ever running the runner
+ * (DEPLOY.md §1.1's first "silent skip", on every merge), and the one-off
+ * super-admin workflow interpolated an operator-typed email straight into a
+ * SQL string. Pin the replacements.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const WORKFLOWS = path.join(HERE, '..', '..', '.github', 'workflows');
+const workflow = (name: string) => fs.readFileSync(path.join(WORKFLOWS, name), 'utf8');
+
+test('the deploy workflow applies migrations before it deploys the worker', () => {
+  // Match the `run:` lines, not the phrases: the file's own header explains
+  // that it USED to call `wrangler deploy` directly, and that sentence sits
+  // above both steps.
+  const src = workflow('cloudflare-worker-deploy.yml');
+  const migrate = src.search(/^\s+run: node scripts\/migrate-d1\.mjs --remote\s*$/m);
+  const deploy = src.search(/^\s+run: npx --no-install wrangler deploy\b/m);
+  assert.ok(migrate > -1, 'the deploy must run the migration runner');
+  assert.ok(deploy > -1, 'the deploy step must still be there');
+  assert.ok(migrate < deploy, 'and run it BEFORE the worker ships, or the worker starts ahead of its schema');
+});
+
+test('the migrate workflow offers every mode the runner has, each behind a plan', () => {
+  const src = workflow('d1-migrate.yml');
+  for (const mode of ['dry-run', 'adopt-and-baseline', 'verify-marked', 'apply']) {
+    assert.match(src, new RegExp(`^\\s+- ${mode}$`, 'm'), `mode ${mode} must be selectable`);
+  }
+  assert.match(src, /--adopt-legacy-ledger --baseline/);
+  assert.match(src, /--verify-marked/);
+  assert.ok(src.indexOf('--dry-run') < src.indexOf('--adopt-legacy-ledger'),
+    'the read-only plan runs before any mode that writes');
+});
+
+test('no workflow interpolates a dispatch input into a SQL command', () => {
+  // The deleted super-admin-setup.yml did: `lower(email) IN ('${{ github.event.inputs.email }}')`.
+  assert.ok(!fs.existsSync(path.join(WORKFLOWS, 'super-admin-setup.yml')),
+    'the elevate-by-email workflow is replaced by routes/admin_super_admins.ts');
+  for (const name of fs.readdirSync(WORKFLOWS).filter((n) => /\.ya?ml$/.test(n))) {
+    const lines = workflow(name).split('\n');
+    const bad = lines.filter((l) => /--command/.test(l) && /\$\{\{\s*(github\.event\.)?inputs\./.test(l));
+    assert.deepEqual(bad, [], `${name} builds SQL from a workflow input`);
+  }
 });

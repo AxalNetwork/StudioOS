@@ -92,3 +92,68 @@ test('migration 199 preserves what admins can do today', () => {
   assert.match(sql, /UPDATE users\s+SET is_super_admin = 1\s+WHERE LOWER\(role\) = 'admin'/,
     'existing admins must keep the access they have');
 });
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * One holder, by name (migration 207), and the console that changes it.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const ROUTER = 'cloudflare-worker/src/routes/admin_super_admins.ts';
+
+test('migration 207 narrows the elevation to the one named account, after 199', () => {
+  const sql = read('cloudflare-worker/sql/migrations/207_super_admin_single_holder.sql');
+  const code = sql.replace(/--.*$/gm, '');
+  assert.match(code, /SET is_super_admin = 0\s+WHERE is_super_admin = 1\s+AND LOWER\(email\) <> 'guillaume\.lauzier@axal\.vc'/,
+    'every other holder 199 backfilled is revoked');
+  assert.match(code, /SET is_super_admin = 1\s+WHERE LOWER\(email\) = 'guillaume\.lauzier@axal\.vc'\s+AND LOWER\(role\) = 'admin'/,
+    'the grant still requires the admin role — the elevation stays an elevation');
+  assert.doesNotMatch(code, /ALTER TABLE/, '207 is a data migration; the column is 199\'s');
+  assert.doesNotMatch(read('cloudflare-worker/sql/migrations/199_super_admin.sql'), /axal\.vc/,
+    '199 is not edited to carry the decision — it may already be applied elsewhere');
+});
+
+test('the holder console gates every write behind TOTP, step-up and the elevation', () => {
+  const src = read(ROUTER);
+  assert.doesNotMatch(src, /\brequireAdmin\b/, 'a plain admin gate here is a franchisee minting franchisors');
+  assert.match(src, /requireFactor\(c, 'totp'\)/);
+  assert.match(src, /requireStepUp\(c\)/);
+  assert.match(src, /requireSuperAdmin\(c\)/);
+  // The bar is one function, so a new write cannot forget one of the three.
+  const bar = src.slice(src.indexOf('async function requireWriteBar'), src.indexOf('function parseUserId'));
+  assert.ok(bar.indexOf("requireFactor(c, 'totp')") < bar.indexOf('requireStepUp(c)'), 'factor before step-up');
+  assert.ok(bar.indexOf('requireStepUp(c)') < bar.indexOf('requireSuperAdmin(c)'), 'step-up before the elevation');
+  assert.equal((src.match(/await requireWriteBar\(c\)/g) || []).length, 2, 'both writes use the bar');
+});
+
+test('the holder console never empties the set, never elevates a non-admin, never self-revokes', () => {
+  const src = read(ROUTER);
+  assert.match(src, /code: 'last_super_admin'/, 'revoking the last active holder is refused');
+  assert.match(src, /code: 'not_an_admin'/, 'only an admin can be elevated');
+  assert.match(src, /code: 'cannot_revoke_self'/);
+  assert.match(src, /LOWER\(role\) = 'admin'/, 'the grant UPDATE itself re-checks the role');
+});
+
+test('every holder change is written to admin_audit_log', () => {
+  const src = read(ROUTER);
+  assert.match(src, /INSERT INTO admin_audit_log \(admin_user_id, action, filters_json\)/);
+  assert.match(src, /'super_admin_grant'/);
+  assert.match(src, /'super_admin_revoke'/);
+});
+
+test('the holder console is mounted before the /api/admin catch-all', () => {
+  const src = read('cloudflare-worker/src/index.ts');
+  const mount = src.indexOf("app.route('/api/admin/super-admins', adminSuperAdmins)");
+  const catchAll = src.indexOf("app.route('/api/admin', admin)");
+  assert.ok(mount > -1, 'the router must be mounted');
+  assert.ok(mount < catchAll, 'or the generic admin router answers first');
+});
+
+test('the User type carries the flag, so reads stop going through `as any`', () => {
+  assert.match(read('cloudflare-worker/src/types.ts'), /is_super_admin\?: number \| null;/);
+});
+
+test('the SPA reaches the console through api.js', () => {
+  const api = read('frontend/src/lib/api.js');
+  assert.match(api, /superAdmins: \(\) => request\('\/admin\/super-admins'\)/);
+  assert.match(api, /superAdminGrant: \(userId\) => request\(`\/admin\/super-admins\/\$\{userId\}`, \{ method: 'POST' \}\)/);
+  assert.match(api, /superAdminRevoke: \(userId\) => request\(`\/admin\/super-admins\/\$\{userId\}`, \{ method: 'DELETE' \}\)/);
+});

@@ -18,6 +18,19 @@
 //   node scripts/migrate-d1.mjs --remote --baseline  # one-time adoption (see below)
 //   node scripts/migrate-d1.mjs --audit            # idempotency audit only (no DB)
 //   node scripts/migrate-d1.mjs --remote --dry-run # show the plan, touch nothing
+//   node scripts/migrate-d1.mjs --remote --adopt-legacy-ledger --baseline
+//                                                  # a schema_migrations of the WRONG
+//                                                  # shape: rename it aside, then baseline
+//   node scripts/migrate-d1.mjs --remote --verify-marked
+//                                                  # un-mark baselined files whose effect
+//                                                  # is absent from the live schema
+//
+// A foreign ledger (found in production 2026-09-03): a `schema_migrations`
+// with columns `name, applied_at` that nothing in this repo wrote. Against it
+// the ledger DDL is a no-op and `SELECT filename, checksum` fails, so every
+// mode died with "no such column" and the migrations behind it never landed.
+// The runner now names that shape and refuses; `--adopt-legacy-ledger` renames
+// the table to `schema_migrations_legacy` (rows kept) so a baseline can run.
 //
 // Baseline (one-time, for the existing hand-migrated prod DB):
 //   Because prod already has ~124 migrations applied by hand with no ledger,
@@ -38,6 +51,8 @@ import { fileURLToPath } from 'node:url';
 import {
   LEDGER_TABLE,
   LEDGER_DDL,
+  LEGACY_LEDGER_TABLE,
+  ledgerShapeProblem,
   listMigrationFiles,
   auditMigrations,
   classifyIdempotency,
@@ -45,6 +60,7 @@ import {
   applyPlan,
   needsBaseline,
   sqlQuote,
+  verifyMarked,
 } from './lib/migrationPlan.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -57,6 +73,8 @@ const has = (flag) => argv.includes(flag);
 const MODE_AUDIT = has('--audit');
 const MODE_DRY_RUN = has('--dry-run');
 const MODE_BASELINE = has('--baseline');
+const MODE_VERIFY_MARKED = has('--verify-marked');
+const ADOPT_LEGACY = has('--adopt-legacy-ledger');
 
 // Target selection. local = miniflare D1; remote = prod; preview = preview env.
 function resolveTarget() {
@@ -138,6 +156,82 @@ function printAudit(files) {
   return { report, unsafe };
 }
 
+// Column names of the ledger table on the target, [] when it does not exist.
+function ledgerColumns(target) {
+  const rows = wrangler(target, { json: true, command: `PRAGMA table_info(${LEDGER_TABLE})` });
+  return rows.map((r) => String(r.name));
+}
+
+// A ledger of the wrong shape is refused unless the operator adopts it. The
+// rename keeps its rows: they are the only record of whatever wrote them.
+function adoptOrRefuseForeignLedger(target) {
+  const cols = ledgerColumns(target);
+  const problem = ledgerShapeProblem(cols);
+  if (!problem) {
+    if (ADOPT_LEGACY) console.log('[migrate-d1] --adopt-legacy-ledger: nothing to adopt, the ledger already has the runner shape.');
+    return;
+  }
+  if (!ADOPT_LEGACY) {
+    fail(
+      `${problem}\n  To adopt this database, rename that table aside and baseline in one run:\n` +
+        `    node scripts/migrate-d1.mjs ${target.flags.join(' ')} --adopt-legacy-ledger --baseline\n` +
+        `  (the old table becomes ${LEGACY_LEDGER_TABLE}; nothing in it is deleted).`,
+    );
+  }
+  console.log(`[migrate-d1] adopting: renaming ${LEDGER_TABLE} (${cols.join(', ')}) to ${LEGACY_LEDGER_TABLE}.`);
+  wrangler(target, { command: `ALTER TABLE ${LEDGER_TABLE} RENAME TO ${LEGACY_LEDGER_TABLE}` });
+}
+
+// --verify-marked: check every ledgered file's tables and columns against the
+// live schema and un-mark the ones whose effect is absent, so the next plain
+// run applies them for real. GOTCHAS §Migrations is the procedure this
+// automates; DEPLOY.md's "never delete a ledger row" is about files that
+// EXECUTED, and a row a baseline wrote without executing is the one exception
+// that document's own §4(b) creates.
+function verifyMarkedRun(target, files, appliedSet) {
+  if (appliedSet.size === 0) {
+    console.log('[migrate-d1] --verify-marked: the ledger is empty, nothing is marked.');
+    return;
+  }
+  const existsCache = new Map();
+  const columnsCache = new Map();
+  const tableExists = (t) => {
+    if (!existsCache.has(t)) {
+      const rows = wrangler(target, {
+        json: true,
+        command: `SELECT name FROM sqlite_master WHERE type='table' AND name=${sqlQuote(t)}`,
+      });
+      existsCache.set(t, rows.length > 0);
+    }
+    return existsCache.get(t);
+  };
+  const tableColumns = (t) => {
+    if (!columnsCache.has(t)) {
+      // `t` came out of a \w+ capture over repo-controlled SQL; PRAGMA takes no
+      // bind parameter, so that character class is the whole of the escaping.
+      const rows = wrangler(target, { json: true, command: `PRAGMA table_info(${t})` });
+      columnsCache.set(t, new Set(rows.map((r) => String(r.name).toLowerCase())));
+    }
+    return columnsCache.get(t);
+  };
+
+  const { verified, missing, unverifiable } = verifyMarked(files, appliedSet, { tableExists, tableColumns });
+  console.log(
+    `[migrate-d1] --verify-marked on ${target.label}: ${verified.length} verified, ` +
+      `${missing.length} missing, ${unverifiable.length} unverifiable.`,
+  );
+  for (const u of unverifiable) console.log(`  ?  ${u.file.name}: ${u.reason}`);
+  for (const m of missing) {
+    console.log(`  ✖  ${m.file.name}: ${m.gaps.join('; ')}`);
+    wrangler(target, { command: `DELETE FROM ${LEDGER_TABLE} WHERE filename = ${sqlQuote(m.file.name)}` });
+    console.log(`     un-marked — the next plain run will apply it.`);
+  }
+  if (missing.length) {
+    console.log('\n[migrate-d1] Review the plan before applying:');
+    console.log(`  node scripts/migrate-d1.mjs ${target.flags.join(' ')} --dry-run`);
+  }
+}
+
 function main() {
   const files = listMigrationFiles(MIGRATIONS_DIR);
   if (files.length === 0) fail(`no migrations found in ${MIGRATIONS_DIR}`);
@@ -180,6 +274,17 @@ function main() {
         `AND name NOT LIKE 'sqlite_%' AND name <> ${sqlQuote(LEDGER_TABLE)}`,
     });
     const dryTableCount = Number(dryTableRows[0]?.n ?? 0);
+
+    // A ledger of the wrong shape cannot be planned against. Say so and stop
+    // — a dry run writes nothing, so it cannot adopt either.
+    const dryShapeProblem = ledgerShapeProblem(ledgerColumns(target));
+    if (dryShapeProblem) {
+      console.log(
+        `\n⚠ ${dryShapeProblem}\n  No plan can be made until it is adopted:\n` +
+          `    node scripts/migrate-d1.mjs ${target.flags.join(' ')} --adopt-legacy-ledger --baseline`,
+      );
+      return;
+    }
 
     let dryApplied = new Map();
     let ledgerMissing = false;
@@ -233,6 +338,10 @@ function main() {
   });
   const appTableCount = Number(appTableRows[0]?.n ?? 0);
 
+  // A `schema_migrations` this runner did not write is refused, or renamed
+  // aside on request, BEFORE the DDL below turns into a silent no-op on it.
+  adoptOrRefuseForeignLedger(target);
+
   // Create the ledger (idempotent). Safe to do before the guard because the
   // guard keys on ledger EMPTINESS, not on whether it pre-existed — so an empty
   // ledger left behind by an earlier aborted run still trips the guard below.
@@ -244,6 +353,14 @@ function main() {
     command: `SELECT filename, checksum FROM ${LEDGER_TABLE}`,
   });
   const appliedSet = new Map(applied.map((r) => [r.filename, r.checksum]));
+
+  // --verify-marked is a correction of the ledger, not an apply; it runs
+  // before the empty-ledger guard because an empty ledger is simply "nothing
+  // to verify", not a reason to demand a baseline.
+  if (MODE_VERIFY_MARKED) {
+    verifyMarkedRun(target, files, appliedSet);
+    return;
+  }
 
   // Safety guard: an existing DB with an EMPTY ledger means migrations were
   // applied by hand and we must not auto-replay historical (non-idempotent)

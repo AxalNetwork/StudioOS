@@ -4,8 +4,13 @@ name: Cloudflare Worker deploy
 # by the separate `studioos-2p8.pages.dev` Pages project. Deploy both from the
 # same GitHub commit so the live app and Pages artifact cannot drift.
 #
+# Migrations run FIRST, through the same runner `npm run deploy`'s predeploy
+# hook uses. This job used to call `wrangler deploy` directly, which is one of
+# the two ways documentation/operations/DEPLOY.md §1.1 names for shipping the
+# worker ahead of its schema — and it did, on every merge to main.
+#
 # Required repository secrets:
-#   CLOUDFLARE_API_TOKEN  — Workers Scripts:Edit
+#   CLOUDFLARE_API_TOKEN  — Workers Scripts:Edit AND D1:Edit
 #   CLOUDFLARE_ACCOUNT_ID — the Cloudflare account containing `studioos`
 
 on:
@@ -44,6 +49,15 @@ jobs:
 
       - name: Build production SPA
         run: npm run build
+
+      # A failure here fails the deploy: the new worker must never start
+      # against an old schema. The runner refuses a ledger it cannot read and
+      # names the fix (see .github/workflows/d1-migrate.yml).
+      - name: Apply pending D1 migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/migrate-d1.mjs --remote
 
       - name: Deploy to Cloudflare Worker
         working-directory: cloudflare-worker

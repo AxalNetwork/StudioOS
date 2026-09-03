@@ -1406,6 +1406,12 @@ export const api = {
     return res;
   },
   adminImpersonateEnd: (sessionId) => request(`/admin/impersonate-sessions/${sessionId}/end`, { method: 'POST' }),
+  // Migrations 199/207 — the Super Admin holders. Reads need the elevation;
+  // writes also need a TOTP session with a recent step-up, the bar
+  // impersonation sets (routes/admin_super_admins.ts).
+  superAdmins: () => request('/admin/super-admins'),
+  superAdminGrant: (userId) => request(`/admin/super-admins/${userId}`, { method: 'POST' }),
+  superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
   adminSetIntegrationKeys: (provider, client_id, client_secret) =>

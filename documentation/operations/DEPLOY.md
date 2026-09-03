@@ -50,6 +50,21 @@ new code running against the old database:
 
 Deploy from the repository root, through `npm run deploy`. Nothing else.
 
+### 1.2 The same runner, from CI
+
+Two workflows call `scripts/migrate-d1.mjs --remote` with the repository's
+Cloudflare secrets, so applying migrations no longer depends on whose
+workstation holds wrangler credentials:
+
+| Workflow | When | What it runs |
+| --- | --- | --- |
+| `cloudflare-worker-deploy.yml` | every push to `main` | the runner, **before** `wrangler deploy` — a failure fails the deploy |
+| `d1-migrate.yml` | by hand, from the Actions tab | one of `dry-run`, `adopt-and-baseline`, `verify-marked`, `apply`, each bracketed by a read-only plan |
+
+The token behind `CLOUDFLARE_API_TOKEN` therefore needs **D1:Edit** as well as
+Workers Scripts:Edit. Until 2026-09-03 the deploy workflow called
+`wrangler deploy` directly — the first "silent skip" above, on every merge.
+
 ---
 
 ## 2. Pre-flight
@@ -157,6 +172,31 @@ apply only genuinely new migrations.
 Statements are not wrapped in one transaction, so the earlier ones landed and
 the file is not in the ledger. Inspect the live schema, then either make the
 file safely re-runnable or leave it and write a forward fix-up migration.
+
+**(d) `schema_migrations exists but is not this runner's ledger`.**
+The target holds a `schema_migrations` with other columns — production was
+found with `(name, applied_at)` and four rows nothing in this repository wrote.
+Against it the ledger DDL is a silent no-op and the first read fails, so every
+mode used to die with `no such column: filename` before touching anything. The
+runner now names the shape and refuses. Adopt it in one run:
+
+```bash
+npm run d1:adopt-legacy-ledger   # = --remote --adopt-legacy-ledger --baseline
+```
+
+That renames the foreign table to `schema_migrations_legacy` (rows kept),
+creates the runner's own ledger, and baselines. A baseline **marks** every
+non-idempotent file without executing it, on the assumption its effect is
+already present — so follow it with
+
+```bash
+npm run d1:verify-marked         # = --remote --verify-marked
+```
+
+which checks each marked file's tables and columns against the live schema and
+un-marks the ones that are absent. Then `--dry-run` shows exactly what a plain
+run will apply. Un-marking a row a baseline wrote without executing is the one
+exception to the rule below: it corrects a claim the ledger never earned.
 
 ### Two rules with no exceptions
 

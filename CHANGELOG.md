@@ -4,6 +4,16 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Super Admin — make production migratable, then turn the elevation on (PR 0 of 4)
+
+The Super Admin shipped in #387 (migration 199, `requireSuperAdmin`, the HQ sidebar) but production never received 199: the database the worker binds to holds a `schema_migrations(name, applied_at)` nothing in this repo wrote, so every runner mode failed on `no such column: filename` before applying anything, and `cloudflare-worker-deploy.yml` never ran the runner at all.
+
+- `scripts/lib/migrationPlan.mjs` + `scripts/migrate-d1.mjs`: `ledgerShapeProblem()` refuses a foreign-shaped ledger by name; `--adopt-legacy-ledger` renames it to `schema_migrations_legacy` (rows kept) ahead of a baseline; `--verify-marked` (`expectedEffects()` + `verifyMarked()`) checks each ledgered file's tables/columns against the live schema and un-marks the absent ones — the GOTCHAS "verify the baseline" procedure, automated. Scripts `d1:adopt-legacy-ledger`, `d1:verify-marked`.
+- `.github/workflows/d1-migrate.yml` (new, dispatch: `dry-run | adopt-and-baseline | verify-marked | apply`); `cloudflare-worker-deploy.yml` now applies migrations **before** `wrangler deploy`. `CLOUDFLARE_API_TOKEN` needs D1:Edit. `super-admin-setup.yml` deleted (dead on the same column, and it interpolated the input email into SQL).
+- `207_super_admin_single_holder.sql`: one holder, `guillaume.lauzier@axal.vc`; the other admin stays a plain admin. 199 is untouched.
+- `routes/admin_super_admins.ts` at `/api/admin/super-admins` (mounted before the catch-all): list / grant / revoke; writes require TOTP + recent step-up + the elevation, refuse a non-admin target, self-revoke and the last active holder, and write `admin_audit_log`. `types.ts` `User.is_super_admin`; `api.js` `superAdmins` / `superAdminGrant` / `superAdminRevoke`.
+- Tests: `migrate_d1_plan.test.ts` (foreign ledger, adoption, `expectedEffects`, `verifyMarked`, workflow ordering, no SQL built from workflow inputs), `super_admin.test.ts` (207, the write bar, refusals, audit, mount order), `migration_column_shapes.test.mjs` (207 behind 199). Docs: DEPLOY.md §1.2 and §4(d), GOTCHAS.
+
 ## Spin-Out Lab — dynamic cohort numbering & deadline
 
 - `frontend/src/pages/SpinoutLabPage.jsx`: added `resolveOpenCohort()` + `cohortNumFor()` helpers (client-side DST-correct port of Worker's `resolveApplicationTarget` / `wallClockToUtcMs`). Base anchor: May 2026 = Cohort 1.

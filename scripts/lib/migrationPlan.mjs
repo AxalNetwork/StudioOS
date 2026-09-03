@@ -22,6 +22,37 @@ export const LEDGER_DDL = `CREATE TABLE IF NOT EXISTS ${LEDGER_TABLE} (
   applied_at TEXT NOT NULL DEFAULT (datetime('now'))
 );`;
 
+// Where a foreign-shaped ledger goes when the operator adopts it. Renamed, not
+// dropped: its rows are the only record of whatever wrote them.
+export const LEGACY_LEDGER_TABLE = 'schema_migrations_legacy';
+
+/**
+ * Does an existing `schema_migrations` table have the shape this runner reads?
+ *
+ * Production was found (2026-09-03) holding a `schema_migrations` with columns
+ * `name, applied_at` and four rows nothing in this repository wrote. Against
+ * that table `CREATE TABLE IF NOT EXISTS` is a silent no-op and the very next
+ * statement, `SELECT filename, checksum`, fails with "no such column" — so a
+ * plain run, a dry run and a baseline all died before touching anything, and
+ * every migration after the last hand-apply stayed unapplied while looking
+ * merely "pending". A runner that cannot read its ledger must say exactly that
+ * rather than report a generic SQL error.
+ *
+ * @param {string[]} columns the names from `PRAGMA table_info(schema_migrations)`;
+ *   an empty list means the table does not exist, which is not a problem.
+ * @returns {string|null} a message naming the shape found, or null when fine
+ */
+export function ledgerShapeProblem(columns) {
+  const names = (columns || []).map((c) => String(c).toLowerCase());
+  if (names.length === 0) return null;
+  if (names.includes('filename') && names.includes('checksum')) return null;
+  return (
+    `${LEDGER_TABLE} exists but is not this runner's ledger: it has columns ` +
+    `(${names.join(', ')}) and no \`filename\`/\`checksum\`. Nothing in this ` +
+    'repository creates that shape. The runner will not read or write it.'
+  );
+}
+
 // Sort key: numeric prefix first (so 9 < 10 < 100), then the full filename as a
 // deterministic tiebreak. Tiebreak matters — this repo has duplicate prefixes
 // (011_, 068_, 118_ each appear twice); without it their order would be
@@ -203,4 +234,82 @@ export function applyPlan(actions, { exec, record }) {
     applied.push(a);
   }
   return { applied, marked, skipped, failure: null };
+}
+
+/**
+ * What a migration file leaves behind that can be CHECKED: the tables it
+ * creates and the columns it adds. Statements are read in order so the rebuild
+ * idiom resolves correctly — `CREATE t_new … DROP t … ALTER t_new RENAME TO t`
+ * leaves `t`, not `t_new` — and a temporary table the file itself drops leaves
+ * nothing. INSERT-only files have no checkable effect and are reported as such.
+ *
+ * @returns {{ tables: string[], columns: Array<[string, string]> }}
+ */
+export function expectedEffects(sql) {
+  const body = stripComments(sql);
+  const tables = new Set();
+  const columns = [];
+  const re =
+    /\b(?:CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"[]?(\w+)|ALTER\s+TABLE\s+[`"[]?(\w+)[`"\]]?\s+RENAME\s+TO\s+[`"[]?(\w+)|DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?[`"[]?(\w+)|ALTER\s+TABLE\s+[`"[]?(\w+)[`"\]]?\s+ADD\s+(?:COLUMN\s+)?[`"[]?(\w+))/gi;
+  for (const m of body.matchAll(re)) {
+    const [, created, renameFrom, renameTo, dropped, alterTable, alterColumn] = m;
+    if (created) {
+      tables.add(created.toLowerCase());
+    } else if (renameFrom) {
+      const from = renameFrom.toLowerCase();
+      const to = renameTo.toLowerCase();
+      if (tables.has(from)) { tables.delete(from); tables.add(to); }
+      for (const pair of columns) if (pair[0] === from) pair[0] = to;
+    } else if (dropped) {
+      tables.delete(dropped.toLowerCase());
+    } else if (alterTable) {
+      columns.push([alterTable.toLowerCase(), alterColumn.toLowerCase()]);
+    }
+  }
+  return { tables: [...tables], columns };
+}
+
+/**
+ * Check every ledgered file against the live schema.
+ *
+ * A baseline RECORDS non-idempotent files without executing them, on the
+ * assumption their effect is already present from the hand-applies. When it is
+ * not — the 2026-07-08 baseline marked 139–145 whose effects were absent — the
+ * ledger claims a column that does not exist, the code reads it, and the page
+ * 500s. `documentation/architecture/GOTCHAS.md` §Migrations prescribes the fix:
+ * check each marked file's indicator, delete the ledger row for the truly
+ * missing ones, re-run. This is that check, injectable so it runs against a
+ * real SQLite in the test and against wrangler in the CLI.
+ *
+ * Files whose effects are all present are `verified`; files with a missing
+ * table or column are `missing` (with the gaps named); files with nothing
+ * checkable are `unverifiable` and left alone — a guess would be worse.
+ *
+ * @param {Array<{name:string, sql:string}>} files
+ * @param {Map<string, string>} appliedSet ledger filename -> checksum
+ * @param {{ tableExists:(t:string)=>boolean, tableColumns:(t:string)=>Set<string> }} probes
+ */
+export function verifyMarked(files, appliedSet, probes) {
+  const verified = [];
+  const missing = [];
+  const unverifiable = [];
+  for (const f of files) {
+    if (!appliedSet.has(f.name)) continue;
+    const { tables, columns } = expectedEffects(f.sql);
+    if (tables.length === 0 && columns.length === 0) {
+      unverifiable.push({ file: f, reason: 'no CREATE TABLE or ADD COLUMN to check' });
+      continue;
+    }
+    const gaps = [];
+    for (const t of tables) {
+      if (!probes.tableExists(t)) gaps.push(`table ${t} is missing`);
+    }
+    for (const [t, c] of columns) {
+      if (!probes.tableExists(t)) { gaps.push(`table ${t} is missing (would hold ${c})`); continue; }
+      if (!probes.tableColumns(t).has(c)) gaps.push(`column ${t}.${c} is missing`);
+    }
+    if (gaps.length) missing.push({ file: f, gaps });
+    else verified.push(f);
+  }
+  return { verified, missing, unverifiable };
 }
