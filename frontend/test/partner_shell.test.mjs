@@ -24,11 +24,13 @@ test('Partner sidebar is exactly the seven approved rows in order', () => {
   // role for as long as the config has existed. The same correction was made in
   // founder_shell, investor_shell and advisor_shell.
   //
-  // '/signals', not '/market-intel'. The partner Research row points at
-  // /signals — on main too, unchanged by this branch. Both surfaces admit a
-  // partner, so this is an IA choice rather than a permission one: /signals is
-  // the shared decision surface and /market-intel stays reachable through the
-  // row's `match` list, which the deep-link test below still pins.
+  // EVERY WORKSPACE ROW POINTS AT ITS BUCKET ROOT. Pipeline, Delivery, Offers
+  // and Research used to point at legacy destinations — /needs,
+  // /partner/operations/overview, /services, /signals — so the canvas overview
+  // pages (P3, P4, P5, P7) were unreachable from the sidebar and the rows lit
+  // up on pages outside their own buckets. The roots render the overviews via
+  // PartnerBucketRoutes; the legacy destinations stay in each row's `match`
+  // list, which the deep-link test below still pins.
   assert.deepEqual(labels, [
     'Studio',
     'Spin-Out Lab',
@@ -41,11 +43,11 @@ test('Partner sidebar is exactly the seven approved rows in order', () => {
   assert.deepEqual(targets, [
     '/studio',
     '/spinout-lab',
-    '/needs',
-    '/partner/operations/overview',
-    '/services',
+    '/pipeline',
+    '/delivery',
+    '/offers',
     '/network',
-    '/signals',
+    '/research',
   ]);
   assert.ok(!labels.includes('Messages'));
   assert.ok(!labels.includes('Jobs'));
@@ -67,11 +69,11 @@ test('Home remains /studio and no Partner persona root was invented', () => {
 
 test('canonical Partner deep links are owned by the correct workspace', () => {
   const expectedMatches = {
-    Pipeline: ['/needs', '/matches', '/partner/insights', '/partner/operations/engagements'],
-    Delivery: ['/partner/operations/overview', '/partner/operations/portfolio', '/partner/operations/performance'],
-    Offers: ['/services', '/perks', '/comarketing', '/partner/office-hours', '/partner/operations/capabilities'],
+    Pipeline: ['/pipeline', '/needs', '/matches', '/partner/insights', '/partner/operations/engagements'],
+    Delivery: ['/delivery', '/partner/operations/overview', '/partner/operations/portfolio', '/partner/operations/performance'],
+    Offers: ['/offers', '/services', '/perks', '/comarketing', '/partner/office-hours', '/partner/operations/capabilities'],
     Network: ['/network', '/relationships', '/contacts'],
-    Research: ['/market-intel'],
+    Research: ['/research', '/signals', '/market-intel'],
   };
   for (const [label, paths] of Object.entries(expectedMatches)) {
     const rowStart = partner.indexOf(`label: '${label}'`);

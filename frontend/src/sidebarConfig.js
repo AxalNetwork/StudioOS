@@ -384,17 +384,24 @@ export const SIDEBAR_GROUPS = {
     { key: 'shell', label: '', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
       { to: '/spinout-lab', icon: Rocket, label: 'Spin-Out Lab' },
-      { to: '/needs', icon: Target, label: 'Pipeline',
-        match: ['/needs', '/matches', '/partner/insights', '/partner/operations/engagements'] },
-      { to: '/partner/operations/overview', icon: Briefcase, label: 'Delivery',
-        match: ['/partner/operations/overview', '/partner/operations/portfolio',
+      // EVERY WORKSPACE ROW POINTS AT ITS BUCKET ROOT. Pipeline, Delivery,
+      // Offers and Research used to point at legacy destinations — /needs,
+      // /partner/operations/overview, /services, /signals — so the canvas
+      // overview pages were unreachable from the sidebar and the rows lit up
+      // on pages outside their own buckets. The roots render the overviews
+      // (PartnerBucketRoutes); the legacy destinations stay in `match` so a
+      // deep link still lights the right row.
+      { to: '/pipeline', icon: Target, label: 'Pipeline',
+        match: ['/pipeline', '/needs', '/matches', '/partner/insights', '/partner/operations/engagements'] },
+      { to: '/delivery', icon: Briefcase, label: 'Delivery',
+        match: ['/delivery', '/partner/operations/overview', '/partner/operations/portfolio',
                 '/partner/operations/performance'] },
-      { to: '/services', icon: Package, label: 'Offers',
-        match: ['/services', '/perks', '/comarketing', '/partner/office-hours',
+      { to: '/offers', icon: Package, label: 'Offers',
+        match: ['/offers', '/services', '/perks', '/comarketing', '/partner/office-hours',
                 '/partner/operations/capabilities'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts'] },
-      { to: '/signals', icon: Radar, label: 'Research', match: ['/signals', '/market-intel'] },
+      { to: '/research', icon: Radar, label: 'Research', match: ['/research', '/signals', '/market-intel'] },
     ]},
   ],
 

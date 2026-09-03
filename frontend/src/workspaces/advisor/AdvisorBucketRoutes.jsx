@@ -2,7 +2,8 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
-import { bucketForPath, zoneForPath, zonePath } from '../shellConfig';
+import BucketOverview from '../BucketOverview';
+import { bucketForPath, zoneForPath } from '../shellConfig';
 import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
@@ -87,50 +88,29 @@ function NoStoreYet({ heading, what, why, links = [], seam }) {
 }
 
 /**
- * The canvas overview a bucket root renders: the tagline, then one card per
- * zone so the reader can open the section they came for. The sidebar row
- * points here; the zone pills below are the same destinations.
+ * The advisor bucket root overview delegates to the shared grid; the map
+ * below is the only advisor-specific part — one line per zone.
  */
-function BucketOverview({ bucket }) {
-  if (!bucket) return null;
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {bucket.zones.map((zone) => (
-        <Link
-          key={zone.slug}
-          to={zonePath(bucket, zone)}
-          className="group rounded-xl border border-axal-border bg-white p-4 transition-colors hover:border-emerald-300 hover:bg-emerald-50/40"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-bold text-axal-ink group-hover:text-emerald-800">{zone.label}</span>
-            <span
-              className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"
-              style={{ background: zone.archetype.colors[0], color: zone.archetype.colors[1], borderColor: zone.archetype.colors[2] }}
-            >
-              {zone.archetype.label}
-            </span>
-          </div>
-          <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
-            {zone.slug === 'opportunities' && 'Inbound requests and proposals — what is asking for your time.'}
-            {zone.slug === 'engagements' && 'The clients you are actively working with, and what is due next.'}
-            {zone.slug === 'delivery' && 'Work product sent, opened, and still in progress.'}
-            {zone.slug === 'sessions' && 'Your calendar, availability, and the sessions on it.'}
-            {zone.slug === 'earnings' && 'What you billed, what the platform took, and what you keep.'}
-            {zone.slug === 'profile' && 'What a founder sees before they book you.'}
-            {zone.slug === 'services' && 'What you sell, at what price, and how often it is booked.'}
-            {zone.slug === 'proof' && 'Outcomes and testimonials, fed from the client side.'}
-            {zone.slug === 'thinking' && 'Articles and pieces that make you findable.'}
-            {zone.slug === 'visibility' && 'Where your profile appears and what it converts.'}
-            {zone.slug === 'founders' && 'The batch you are guiding, one founder at a time.'}
-            {zone.slug === 'guidance' && 'What you have told the batch, and who has acted on it.'}
-            {zone.slug === 'this-week' && 'The cohort’s current week, deadlines, and where each founder stands.'}
-            {zone.slug === 'calendar' && 'Sessions, milestones and Lab dates in one place.'}
-            {zone.slug === 'outcomes' && 'What the batch produced, and what it is worth.'}
-          </p>
-        </Link>
-      ))}
-    </div>
-  );
+const ADVISOR_ZONE_LINES = {
+  opportunities: 'Inbound requests and proposals — what is asking for your time.',
+  engagements: 'The clients you are actively working with, and what is due next.',
+  delivery: 'Work product sent, opened, and still in progress.',
+  sessions: 'Your calendar, availability, and the sessions on it.',
+  earnings: 'What you billed, what the platform took, and what you keep.',
+  profile: 'What a founder sees before they book you.',
+  services: 'What you sell, at what price, and how often it is booked.',
+  proof: 'Outcomes and testimonials, fed from the client side.',
+  thinking: 'Articles and pieces that make you findable.',
+  visibility: 'Where your profile appears and what it converts.',
+  founders: 'The batch you are guiding, one founder at a time.',
+  guidance: 'What you have told the batch, and who has acted on it.',
+  'this-week': 'The cohort’s current week, deadlines, and where each founder stands.',
+  calendar: 'Sessions, milestones and Lab dates in one place.',
+  outcomes: 'What the batch produced, and what it is worth.',
+};
+
+function BucketOverviewGrid({ bucket }) {
+  return <BucketOverview bucket={bucket} role="advisor" descriptions={ADVISOR_ZONE_LINES} />;
 }
 
 // Zones served by the legacy five-tab Advisory workspace, which carries its
@@ -220,7 +200,7 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     // this bucket holds and opens each zone from there. The sidebar row must
     // land here, not on the first zone.
     if (isRoot) {
-      return <BucketOverview bucket={bucket} />;
+      return <BucketOverviewGrid bucket={bucket} />;
     }
 
     const Zone = ZONE[prefix]?.[slug];

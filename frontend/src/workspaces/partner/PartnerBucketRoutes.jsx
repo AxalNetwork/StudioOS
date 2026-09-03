@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton } from '../../ui';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
+import BucketOverview from '../BucketOverview';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 
 const PartnerOperationsWorkspace = lazy(() => import('../../pages/partner/operations/PartnerOperationsWorkspace'));
@@ -133,14 +134,49 @@ const COPY = {
   },
 };
 
+/**
+ * One line per zone, for the overview a bucket root renders. The canvas's
+ * anchor nav names the same destinations; the card grid is what the sidebar
+ * row opens.
+ */
+const ZONE_LINES = {
+  '/pipeline': {
+    leads: 'Lead sources with provenance — where the work comes from is as useful as how much of it there is.',
+    proposals: 'The proposal desk: what is open, what it is worth, and the activity on each.',
+    negotiations: 'Live deals at terms — their ask, your line, and whose court the ball is in.',
+    retainers: 'Recurring engagements and the renewals coming due.',
+    analytics: 'Win rate, cycle time and source quality across the pipeline.',
+  },
+  '/delivery': {
+    board: 'Both modes on one board: projects with milestones, and embedded seats with founder-granted scope.',
+    deliverables: 'Shipped and acknowledged, or shipped and ignored — the firm’s most expensive state.',
+    capacity: 'People rather than projects: who is committed to what, and where the firm is over-committed.',
+    'status-reports': 'The recurring client-facing update — shipped, next, blocked.',
+    health: 'Engagement health across the book, with the at-risk row first.',
+  },
+  '/offers': {
+    catalog: 'Productised services with an engagement model and a price — the record lead scoring reads against.',
+    'perk-deals': 'Deals that expire in public, with grants revoked when they do.',
+    visibility: 'Which surfaces the firm appears on and what each produced.',
+    proof: 'Case studies and outcomes, each carrying which engagement produced it and whether the client agreed to publish it.',
+    'audience-fit': 'Who the firm is for — and the working half, who it is not.',
+  },
+};
+
 export default function PartnerBucketRoutes() {
   const location = useLocation();
   const bucket = bucketForPath('partner', location.pathname);
-  const zone = zoneForPath(bucket, location.pathname);
+  const isRoot = bucket && location.pathname === bucket.prefix;
+  const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
   const prefix = bucket?.prefix;
   const slug = zone?.slug;
 
   const body = useMemo(() => {
+    // The bucket root is the canvas overview — the sidebar row lands here,
+    // not on the first zone. Zones stay one click away on the cards below.
+    if (isRoot) {
+      return <BucketOverview bucket={bucket} role="partner" descriptions={ZONE_LINES[prefix]} />;
+    }
     const Live = LIVE[prefix]?.[slug];
     if (Live) return <Suspense fallback={<Loading />}><Live /></Suspense>;
     const copy = COPY[prefix]?.[slug];
@@ -150,7 +186,7 @@ export default function PartnerBucketRoutes() {
       what="This zone is named by the canvas and has no surface behind it."
       why="It ships empty rather than as a placeholder that could be mistaken for real data."
     />;
-  }, [prefix, slug]);
+  }, [prefix, slug, isRoot, bucket]);
 
   const INTRO = {
     '/pipeline': 'Win the work. One firm’s pipeline, from lead to signed retainer.',
@@ -161,8 +197,10 @@ export default function PartnerBucketRoutes() {
   return (
     <WorkspaceShell
       role="partner"
+      title={isRoot ? bucket?.label : undefined}
       scope="One firm"
       intro={INTRO[prefix]}
+      activeSlug={isRoot ? null : undefined}
     >
       {body}
     </WorkspaceShell>

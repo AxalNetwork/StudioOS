@@ -43,8 +43,10 @@ test('Cohorts root is a route, not a redirect', () => {
 test('bucket roots render an overview grid, not a zone body', () => {
   const code = codeOnly(bucketRoutes);
   assert.match(code, /isRoot &&/, 'AdvisorBucketRoutes must detect the bucket root');
-  assert.match(code, /<BucketOverview bucket=\{bucket\} \/>/, 'the root must render the overview');
-  assert.match(code, /bucket\.zones\.map/, 'the overview must list every zone');
+  assert.match(code, /<BucketOverviewGrid bucket=\{bucket\} \/>/, 'the root must render the overview');
+  assert.match(code, /<BucketOverview bucket=\{bucket\} role="advisor"/,
+    'the overview must delegate to the shared grid with the advisor accent');
+  assert.match(code, /ADVISOR_ZONE_LINES/, 'the overview must list every zone');
 });
 
 test('Network root renders an overview for advisors', () => {

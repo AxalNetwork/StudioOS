@@ -2,7 +2,8 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
-import { bucketForPath, zoneForPath, zonePath } from './shellConfig';
+import BucketOverview from './BucketOverview';
+import { bucketForPath, zoneForPath } from './shellConfig';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -159,37 +160,21 @@ const ZONE_COPY = {
 
 function ResearchOverview({ role }) {
   const bucket = bucketForPath(role, '/research');
-  if (!bucket) return null;
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {bucket.zones.map((zone) => (
-        <Link
-          key={zone.slug}
-          to={zonePath(bucket, zone)}
-          className="group rounded-xl border border-axal-border bg-white p-4 transition-colors hover:border-emerald-300 hover:bg-emerald-50/40"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-bold text-axal-ink group-hover:text-emerald-800">{zone.label}</span>
-            <span
-              className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"
-              style={{ background: zone.archetype.colors[0], color: zone.archetype.colors[1], borderColor: zone.archetype.colors[2] }}
-            >
-              {zone.archetype.label}
-            </span>
-          </div>
-          <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
-            {zone.slug === 'ask' && 'Cited answers over your own documents. Every answer names the sources it drew on.'}
-            {zone.slug === 'client-prep' && 'One client, everything you need before the session.'}
-            {zone.slug === 'markets' && 'Signals from the sectors you work in, with the date each one was gathered.'}
-            {zone.slug === 'companies' && 'Companies you have looked into — and whether you have a relationship or only a file.'}
-            {zone.slug === 'library' && 'The documents Ask reads from. What is indexed here is exactly what Ask can reach.'}
-            {zone.slug === 'funds' && 'Who invests at your stage, and on what terms.'}
-            {zone.slug === 'diligence' && 'The evidence behind a decision, and the questions still open against it.'}
-            {zone.slug === 'benchmarking' && 'Comparables, with the sample size on every figure.'}
-          </p>
-        </Link>
-      ))}
-    </div>
+    <BucketOverview
+      bucket={bucket}
+      role={role}
+      descriptions={{
+        ask: 'Cited answers over your own documents. Every answer names the sources it drew on.',
+        'client-prep': 'One client, everything you need before the session.',
+        markets: 'Signals from the sectors you work in, with the date each one was gathered.',
+        companies: 'Companies you have looked into — and whether you have a relationship or only a file.',
+        library: 'The documents Ask reads from. What is indexed here is exactly what Ask can reach.',
+        funds: 'Who invests at your stage, and on what terms.',
+        diligence: 'The evidence behind a decision, and the questions still open against it.',
+        benchmarking: 'Comparables, with the sample size on every figure.',
+      }}
+    />
   );
 }
 

@@ -1,8 +1,9 @@
 import React, { Suspense, lazy, useEffect, useMemo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
-import { bucketForPath, zoneForPath, zonePath } from './shellConfig';
+import BucketOverview from './BucketOverview';
+import { bucketForPath, zoneForPath } from './shellConfig';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
@@ -75,32 +76,16 @@ const ORG_BACKED = new Set(['founder', 'investor']);
 
 function NetworkOverview({ role }) {
   const bucket = bucketForPath(role, '/network');
-  if (!bucket) return null;
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      {bucket.zones.map((zone) => (
-        <Link
-          key={zone.slug}
-          to={zonePath(bucket, zone)}
-          className="group rounded-xl border border-axal-border bg-white p-4 transition-colors hover:border-emerald-300 hover:bg-emerald-50/40"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-bold text-axal-ink group-hover:text-emerald-800">{zone.label}</span>
-            <span
-              className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"
-              style={{ background: zone.archetype.colors[0], color: zone.archetype.colors[1], borderColor: zone.archetype.colors[2] }}
-            >
-              {zone.archetype.label}
-            </span>
-          </div>
-          <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
-            {zone.slug === 'relationships' && 'People you know and how strongly, from the records you keep here.'}
-            {zone.slug === 'introductions' && 'Double opt-in: an introduction cannot advance past a consent nobody has recorded.'}
-            {zone.slug === 'organizations' && 'Companies, funds and firms, rolled up from the people you know inside them.'}
-          </p>
-        </Link>
-      ))}
-    </div>
+    <BucketOverview
+      bucket={bucket}
+      role={role}
+      descriptions={{
+        relationships: 'People you know and how strongly, from the records you keep here.',
+        introductions: 'Double opt-in: an introduction cannot advance past a consent nobody has recorded.',
+        organizations: 'Companies, funds and firms, rolled up from the people you know inside them.',
+      }}
+    />
   );
 }
 
