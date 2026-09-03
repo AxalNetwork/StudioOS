@@ -1,0 +1,94 @@
+name: D1 migrations
+
+# Operator workflow for the production D1 ledger — the same runner
+# (`scripts/migrate-d1.mjs`) that `npm run deploy`'s predeploy hook uses, run
+# from CI so it does not depend on whose workstation holds wrangler
+# credentials. Every mode prints a read-only plan first and again afterwards.
+#
+#   dry-run             read the live ledger, print the plan, write nothing
+#   adopt-and-baseline  a `schema_migrations` of the wrong shape is renamed to
+#                       `schema_migrations_legacy` (rows kept), then the
+#                       one-time baseline runs. Read the "marked" list it
+#                       prints, then run verify-marked.
+#   verify-marked       un-mark baselined files whose tables/columns are absent
+#                       from the live schema, so `apply` runs them for real
+#   apply               apply every pending file, in order, recording each
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN  — D1:Edit (plus Workers Scripts:Edit for the deploy
+#                           workflow, which now runs this same step first)
+#   CLOUDFLARE_ACCOUNT_ID — the account holding `studioos-db`
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'dry-run | adopt-and-baseline | verify-marked | apply'
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - adopt-and-baseline
+          - verify-marked
+          - apply
+
+permissions:
+  contents: read
+
+# One migration run at a time. The deploy workflow's own migration step is in
+# its own group; do not dispatch this while a deploy is in flight.
+concurrency:
+  group: d1-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: ${{ inputs.mode }} against studioos-db
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cloudflare-worker/package-lock.json
+
+      - name: Preflight — required secrets are set
+        run: |
+          MISSING=()
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then MISSING+=("CLOUDFLARE_API_TOKEN"); fi
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then MISSING+=("CLOUDFLARE_ACCOUNT_ID"); fi
+          if [[ ${#MISSING[@]} -gt 0 ]]; then
+            echo "::error::Required repo secret(s) are missing or empty: ${MISSING[*]}"
+            exit 1
+          fi
+
+      # The runner shells out to `npx wrangler` from cloudflare-worker/, so the
+      # worker's own pinned wrangler is the one that runs.
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+
+      - name: Plan before (read-only)
+        run: node scripts/migrate-d1.mjs --remote --dry-run
+
+      - name: Adopt the legacy ledger and baseline
+        if: inputs.mode == 'adopt-and-baseline'
+        run: node scripts/migrate-d1.mjs --remote --adopt-legacy-ledger --baseline
+
+      - name: Verify marked rows against the live schema
+        if: inputs.mode == 'verify-marked'
+        run: node scripts/migrate-d1.mjs --remote --verify-marked
+
+      - name: Apply pending migrations
+        if: inputs.mode == 'apply'
+        run: node scripts/migrate-d1.mjs --remote
+
+      - name: Plan after (read-only)
+        if: inputs.mode != 'dry-run'
+        run: node scripts/migrate-d1.mjs --remote --dry-run

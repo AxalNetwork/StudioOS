@@ -36,7 +36,11 @@ const POSTMORTEM = '## 7. Why nothing here is hardcoded';
 const operative = doc.slice(0, doc.indexOf(POSTMORTEM));
 
 test('every `npm run <script>` the runbook names exists in package.json', () => {
-  const named = [...doc.matchAll(/\bnpm run ([a-z][a-z0-9:]*)/g)].map((m) => m[1]);
+  // Script names carry hyphens (`lfs:check-all`, `d1:verify-marked`). The
+  // earlier class stopped at the first one, so `npm run d1:verify-marked`
+  // was checked as `d1:verify` — a name that does not exist, reported as if
+  // the runbook had invented it.
+  const named = [...doc.matchAll(/\bnpm run ([a-z][a-z0-9:-]*)/g)].map((m) => m[1]);
   assert.ok(named.length >= 5, `expected the runbook to name several scripts, found ${named.length}`);
 
   const missing = [...new Set(named)].filter((s) => !(s in rootPkg.scripts));

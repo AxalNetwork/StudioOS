@@ -26,6 +26,8 @@
     "d1:migrate:local": "node scripts/migrate-d1.mjs --local",
     "d1:migrate:preview": "node scripts/migrate-d1.mjs --preview",
     "d1:baseline": "node scripts/migrate-d1.mjs --remote --baseline",
+    "d1:adopt-legacy-ledger": "node scripts/migrate-d1.mjs --remote --adopt-legacy-ledger --baseline",
+    "d1:verify-marked": "node scripts/migrate-d1.mjs --remote --verify-marked",
     "d1:audit": "node scripts/migrate-d1.mjs --audit",
     "claude:check": "bash scripts/check-anthropic-key.sh",
     "lfs:check": "node scripts/lfs-size-gate.mjs",

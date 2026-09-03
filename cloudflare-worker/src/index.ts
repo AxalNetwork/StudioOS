@@ -162,6 +162,7 @@ import dataRoomRoutes from './routes/data_room';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
+import adminSuperAdmins from './routes/admin_super_admins';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
 import licence from './routes/licence';
@@ -735,6 +736,9 @@ app.route('/api/admin/lp-applications', adminLpApplications);
 // Wave 4 — territory licence ledger. Mount BEFORE the catch-all /api/admin so
 // /api/admin/licences/* resolves here, not in the generic admin router.
 app.route('/api/admin/licences', adminLicences);
+// Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
+// catch-all for the same reason as the licence ledger above.
+app.route('/api/admin/super-admins', adminSuperAdmins);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
