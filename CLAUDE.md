@@ -49,9 +49,11 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    security headers on the SPA HTML come from `frontend/public/_headers`
    (built to `docs/_headers`), which Workers static assets read natively and
    apply to every assets-binding response; `scripts/check-spa-live.mjs`
-   asserts them on every shell route, so U10 in
-   `documentation/architecture/UNRESOLVED_ITEMS.md` is answered by that run,
-   not by this sentence.
+   asserts them on every shell route, and that run — not this sentence — is
+   what answered U10 in `documentation/architecture/UNRESOLVED_ITEMS.md`:
+   smoke 33774445968 (2026-09-03 15:45Z) found HSTS, nosniff,
+   `X-Frame-Options` and `Referrer-Policy` on twenty-six shell routes across
+   both hosts. Every later run re-checks it.
    **Never add a path-scoped apex route** (`axal.vc/*`, `axal.vc/assets/*`)
    to either table: it would take those URLs away from the assets binding
    and break the SPA fallback. That is how 2026-08-31 paired apex HTML with

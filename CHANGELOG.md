@@ -4,6 +4,15 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## U10 answered: the security headers are on the live SPA HTML
+
+Documentation only; no code changes. The `_headers` mechanism shipped in #422 works, and this records the measurement rather than the expectation.
+
+- **Evidence:** [post-deploy SPA smoke 33774445968](https://github.com/AxalNetwork/StudioOS/actions/runs/33774445968), 2026-09-03 15:45Z, on `f51433d8f`, against production carrying the 15:17:58Z deploy (`e78e2960`). Twenty-six shell routes across `axal.vc` and `app.axal.vc` each reported `PASS … (SPA shell + security headers)` — HSTS with a max-age, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` on the live response. The Worker-side fallback U10 named is therefore not needed.
+- **Stated rather than glossed:** the apex root `https://axal.vc/` is a `shell: false` route in `check-spa-live.mjs` (a leniency from when a separate marketing site answered `/`), so it is checked for a healthy HTML 200 and not for headers. `app.axal.vc/` is asserted in full and passes, and both hosts serve one build — but the apex root itself has not been measured, and tightening it is a one-line change nobody has made.
+- Also recorded: both hosts' first `/api/health` probe in that run returned an HTML 403 and passed on retry, identically — an edge challenge on a cold runner IP, which is why the retry exists. A 403 that does not clear is a different thing.
+- `UNRESOLVED_ITEMS.md` U10 → RESOLVED (with the run, the scope, and what it does not cover); the file header; `GOTCHAS.md`'s Referrer-Policy bullet; `CLAUDE.md` fact 4.
+
 ## Pull-request previews — one Worker per PR, with no bindings (PR B)
 
 `DECISIONS.md` D36 item 3, built. Cloudflare generates no preview URL for a Worker that implements a Durable Object (`studioos` implements `PipelineRoom` and `OnboardingChat`), so the "Workers Builds preview URL" route is closed; instead every same-repository pull request gets its own Worker, `studioos-pr-<number>` on workers.dev, built from the PR's frontend and deployed from a config that binds nothing.

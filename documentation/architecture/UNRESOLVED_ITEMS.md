@@ -10,11 +10,12 @@ is below; everything that did not was decided and written down in
 Ten items. Each names the evidence, what is actually blocked, and what a wrong
 guess would cost — because "blocked" without a cost is just a to-do. U9 and
 U10 are operations questions rather than routing ones — who serves `axal.vc`
-is settled (`DECISIONS.md` D34). U9 (the Pages mirror) was resolved on
-2026-09-03 by retiring it (D36); U10 (whether the Worker-served HTML carries
-its security headers) is now measured live by `scripts/check-spa-live.mjs`
-rather than asserted. Both stay here because `CLAUDE.md` fact 4 points at
-them.
+is settled (`DECISIONS.md` D34). Both were resolved on 2026-09-03: U9 (the
+Pages mirror) by retiring it (D36), and U10 (whether the Worker-served HTML
+carries its security headers) by measuring it — smoke run 33774445968 found
+the headers present on twenty-six shell routes across both hosts. They stay
+here because `CLAUDE.md` fact 4 points at them, and because how U10 was
+answered is the point: by a request to the edge, not a reading of the tree.
 
 ---
 
@@ -298,16 +299,36 @@ way.
 
 ## U10 — Whether the Worker-served SPA HTML carries the security headers cannot be read from this repository
 
-**Status 2026-09-03 — mechanism shipped; the answer is measured, not yet
-recorded here.** `frontend/public/_headers` (built to `docs/_headers`) is
-read natively by Workers static assets and applied to every response the
-`[assets]` binding serves, and `scripts/check-spa-live.mjs` asserts HSTS,
-nosniff, `X-Frame-Options` and `Referrer-Policy` on every shell route — so
-the first `post-deploy SPA smoke` run (or `npm run deploy`'s `postdeploy`
-hook) after the deploy that carried `_headers` answers this item. Until that
-run is green, nothing here claims the headers are present; if it is red, the
-fallback is the Worker change named below. Record the run here when it has
-happened.
+**RESOLVED 2026-09-03 — the headers ARE on the live SPA HTML, measured.**
+`frontend/public/_headers` (built to `docs/_headers`) is read natively by
+Workers static assets and applied to the responses the `[assets]` binding
+serves. The evidence is a run, not a reading of this tree:
+[post-deploy SPA smoke 33774445968](https://github.com/AxalNetwork/StudioOS/actions/runs/33774445968),
+2026-09-03 15:45Z, on `f51433d8f`, against production carrying the 15:17:58Z
+deploy (version `e78e2960`). **Twenty-six shell routes across both hosts** —
+`/login`, `/dashboard`, `/studio`, `/articles/:slug`, `/admin/licences`,
+`/spinout-lab` and the rest, on `axal.vc` and `app.axal.vc` — each reported
+`PASS … (SPA shell + security headers)`, which is `scripts/check-spa-live.mjs`
+asserting HSTS with a max-age, `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY` and `Referrer-Policy: strict-origin-when-cross-origin`
+on the live response. So the Worker-side fallback below is **not** needed:
+nothing has to be routed through the Hono app.
+
+**What the run does not cover, stated rather than glossed.** The apex root
+`https://axal.vc/` is a `shell: false` route in that script — a leniency from
+when a separate marketing site answered `/` and its asset manifest could not
+be mixed with the Worker's — so it is checked for a healthy HTML 200 and not
+for headers. `https://app.axal.vc/` *is* asserted in full and passes, and both
+hosts serve the same build from one deploy, so there is no reason to think the
+apex root differs; but it has not been measured, and tightening that route to
+`shell: true` is a one-line change nobody has made. Re-checked on every
+6-hourly smoke run from here on.
+
+**A recurring transient worth knowing.** Both hosts' first `/api/health` probe
+in that run came back `HTTP 403` with an HTML body and passed on the retry —
+identical on `axal.vc` and `app.axal.vc`, which is why the script's retry
+exists. It is an edge challenge on a cold runner IP, not a routing fault; a
+403 that does *not* clear on retry would be.
 
 **Evidence (as recorded 2026-09-03, before the fix).** Two files set HSTS,
 `X-Content-Type-Options: nosniff`, `X-Frame-Options` and `Referrer-Policy`:
@@ -333,11 +354,15 @@ Until someone runs it and records the answer here, nothing in this repository
 may claim the headers are present or absent on the SPA HTML. If they turn out
 to be absent, the fix is itself a decision — route the shell through the Hono
 app so `securityHeaders.ts` applies, or set them at the edge — and it is not
-taken here.
+taken here. *(That fallback was never needed: the run above found them
+present.)*
 
-**Blocks:** nothing today — API responses are covered by `securityHeaders.ts`
-regardless. Recorded so that `CLAUDE.md` fact 4, `GOTCHAS.md` and
-`frontend/public/_headers` can point here instead of guessing.
+**Blocks:** nothing, and nothing did. API responses were covered by
+`securityHeaders.ts` throughout. Kept rather than deleted because the item's
+value is the method: the question was answerable only by a request to the
+edge, and it stayed unanswered in this file — with `CLAUDE.md` fact 4,
+`GOTCHAS.md` and `frontend/public/_headers` all pointing here — until
+something actually made that request.
 
 ---
 
