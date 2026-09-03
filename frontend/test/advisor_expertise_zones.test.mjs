@@ -152,6 +152,87 @@ test('a failed read is not rendered as an empty store', () => {
   }
 });
 
+/**
+ * Every `<ZoneBody …>` opening tag under pages/advisor, as raw source. The
+ * tag spans several lines at most call sites, so this balances angle brackets
+ * at brace depth 0 rather than reading a line.
+ */
+function zoneBodyTags(code) {
+  const tags = [];
+  let at = code.indexOf('<ZoneBody');
+  while (at !== -1) {
+    let depth = 0;
+    let end = at;
+    for (let i = at; i < code.length; i += 1) {
+      const ch = code[i];
+      if (ch === '{') depth += 1;
+      else if (ch === '}') depth -= 1;
+      else if (ch === '>' && depth === 0) { end = i; break; }
+    }
+    tags.push(code.slice(at, end + 1));
+    at = code.indexOf('<ZoneBody', end + 1);
+  }
+  return tags;
+}
+
+/** The `loading={…}` expression of one tag, brace-balanced. */
+function loadingExpr(tag) {
+  const key = 'loading={';
+  const at = tag.indexOf(key);
+  if (at === -1) return null;
+  let depth = 1;
+  for (let i = at + key.length; i < tag.length; i += 1) {
+    if (tag[i] === '{') depth += 1;
+    else if (tag[i] === '}') { depth -= 1; if (depth === 0) return tag.slice(at + key.length, i); }
+  }
+  return null;
+}
+
+test('no zone holds `loading` true past its own error', () => {
+  // THE BUG THIS PINS SHUT, which shipped and was reported from production as
+  // /expertise/profile spinning forever. ZoneBody tests `loading` before
+  // `error` (asserted above), so a caller that ORs a data-presence check into
+  // `loading` makes its OWN error card unreachable: the failed read sets
+  // `error` and leaves the data null, `!data` stays true, and the skeleton
+  // renders for good with the captured message never shown.
+  //
+  // The rule: a `loading` expression may OR something in only if it also
+  // subordinates it to the error state (`… && !x.error`), so an error always
+  // beats the skeleton. ProfileZone keeps its draft guard that way, because
+  // every field in its body reads `draft.<key>` unconditionally and would
+  // throw on a null.
+  const OR = /\|\|/;
+  const SUBORDINATED = /&&\s*!\s*(?:[\w$]+\.)*error\b/;
+
+  const dir = resolve(process.cwd(), 'frontend/src/pages/advisor');
+  const files = [];
+  const walk = (d) => {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      const full = resolve(d, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.jsx')) files.push(full);
+    }
+  };
+  walk(dir);
+
+  let checked = 0;
+  for (const full of files) {
+    const code = codeOnly(readFileSync(full, 'utf8'));
+    for (const tag of zoneBodyTags(code)) {
+      const expr = loadingExpr(tag);
+      assert.ok(expr !== null, `${full} has a ZoneBody with no loading prop`);
+      checked += 1;
+      if (!OR.test(expr)) continue;
+      assert.match(expr, SUBORDINATED,
+        `${full}: loading={${expr.trim()}} ORs a guard in without subordinating it `
+        + 'to the error state, so this zone can never render its own error card');
+    }
+  }
+  // A parse that found nothing would pass silently, which is the failure mode
+  // this whole file exists to prevent.
+  assert.ok(checked >= 10, `expected every advisor ZoneBody call site, parsed ${checked}`);
+});
+
 test('confirmation is the attester’s to give, and the token is shown once', () => {
   const proof = codeOnly(read('frontend/src/pages/advisor/expertise/ProofZone.jsx'));
   // `attested` comes off the worker's row; nothing here computes it from the

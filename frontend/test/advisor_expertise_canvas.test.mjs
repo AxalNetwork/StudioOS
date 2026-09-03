@@ -44,10 +44,14 @@ test('a failed profile load shows the error card, not a spinner forever', () => 
   // error the page had just captured never rendered. Reported on production
   // as /expertise/profile hanging on a spinner.
   const code = codeOnly(profile);
-  assert.match(code, /<ZoneBody loading=\{state\.loading\} error=\{state\.error\}/,
-    'loading must come from the request state alone');
+  // The draft guard survives, but only behind `!state.error`. Every field in
+  // the body reads `draft.<key>` unconditionally, so dropping it outright
+  // would trade a spinner for a null deref the moment React stops batching
+  // the two setState calls in `load`.
+  assert.match(code, /loading=\{state\.loading \|\| \(!draft && !state\.error\)\}/,
+    'an error must beat the skeleton, and children must never see a null draft');
   assert.doesNotMatch(code, /loading=\{state\.loading \|\| !draft\}/,
-    'draft is null after a failed load — it must not feed the loading flag');
+    'draft alone is null after a failed load — it must not feed the loading flag');
   assert.match(code, /setState\(\{ loading: false, error:/,
     'the catch path must keep recording the error');
 
