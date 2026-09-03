@@ -18,6 +18,8 @@ because `CLAUDE.md` fact 4 points at them.
 
 ## U1 — There is one `admin` sidebar, and the brief needs two
 
+**STATUS 2026-09-03 — the sidebar half is done; the scoping half is still open.** #416 split the shells: `shellRoleFor(role, user, hqView)` in `frontend/src/lib/shellRole.js` picks the eight-row HQ sidebar for a `super_admins` holder and the subsidiary sidebar for every other admin, and View-as lets the holder preview the subsidiary shell without impersonating. Nothing below this line about scoping has changed: no row names its licence, so every per-subsidiary figure on `/hq` (#417) and `/admin/security` (#418) renders Not recorded with this item as the reason, and the tenant switcher on `/hq` narrows the loaded payload client-side and says so.
+
 **Evidence.** `SIDEBAR_GROUPS` in `frontend/src/sidebarConfig.js` has six role
 keys: `founder`, `advisor`, `investor`, `partner`, `admin`, `exploring`. The
 single `admin` key carries 48 destinations across six populated groups (Home ·
