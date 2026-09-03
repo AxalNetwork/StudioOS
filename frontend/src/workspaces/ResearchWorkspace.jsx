@@ -157,6 +157,27 @@ const ZONE_COPY = {
   },
 };
 
+/**
+ * One line per zone, for the zones in `LIVE_ZONES` — the only two with a
+ * source behind them. Every other zone is described from `ZONE_COPY`, the
+ * same object its own page renders, so an overview card cannot promise what
+ * the page behind it denies.
+ *
+ * The first draft of this grid did exactly that: Ask as "cited answers over
+ * your own documents", Library as "the documents Ask reads from", Client prep
+ * as "everything you need before the session" — a retrieval stack that exists
+ * in no form (D9/D12 withdrew these zones on that finding) — and Companies as
+ * showing "whether you have a relationship or only a file", a flag
+ * `competitor_candidates` does not carry.
+ *
+ * `frontend/test/advisor_bucket_overview.test.mjs` fails if a zone outside
+ * LIVE_ZONES reappears here.
+ */
+const ZONE_BLURB = {
+  markets: 'Signals from the sectors you work in, with the date each one was gathered.',
+  companies: 'The competitor and market analyses you have run yourself.',
+};
+
 function ResearchOverview({ role }) {
   const bucket = bucketForPath(role, '/research');
   if (!bucket) return null;
@@ -178,14 +199,14 @@ function ResearchOverview({ role }) {
             </span>
           </div>
           <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
-            {zone.slug === 'ask' && 'Cited answers over your own documents. Every answer names the sources it drew on.'}
-            {zone.slug === 'client-prep' && 'One client, everything you need before the session.'}
-            {zone.slug === 'markets' && 'Signals from the sectors you work in, with the date each one was gathered.'}
-            {zone.slug === 'companies' && 'Companies you have looked into — and whether you have a relationship or only a file.'}
-            {zone.slug === 'library' && 'The documents Ask reads from. What is indexed here is exactly what Ask can reach.'}
-            {zone.slug === 'funds' && 'Who invests at your stage, and on what terms.'}
-            {zone.slug === 'diligence' && 'The evidence behind a decision, and the questions still open against it.'}
-            {zone.slug === 'benchmarking' && 'Comparables, with the sample size on every figure.'}
+            {ZONE_BLURB[zone.slug] || (
+              <>
+                <span className="mr-1.5 rounded-[3px] border border-axal-border px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
+                  Not built
+                </span>
+                {(ZONE_COPY[zone.slug] || ZONE_COPY.ask).heading}
+              </>
+            )}
           </p>
         </Link>
       ))}

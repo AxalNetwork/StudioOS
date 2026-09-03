@@ -87,6 +87,44 @@ function NoStoreYet({ heading, what, why, links = [], seam }) {
 }
 
 /**
+ * One line per zone, for the zones that have a page behind them.
+ *
+ * A zone with NO store is deliberately absent from this map: its card is
+ * written from `COPY` below — the same sentence the zone's own page shows —
+ * so an overview card can never promise what the page behind it denies. That
+ * is not hypothetical. This map first shipped describing Guidance as "what
+ * you have told the batch, and who has acted on it" over a page that reads
+ * "Cohort guidance has no store"; Visibility as "what it converts" over
+ * "Nothing counts profile views"; Earnings as "what the platform took" beside
+ * a rail on the same screen saying Axal takes no cut; and Services as "how
+ * often it is booked", which `units_sold` returns null for by design. Four
+ * cards advertising a feature and one contradicting a recorded decision, on
+ * the one surface an advisor reads before choosing where to click.
+ *
+ * `frontend/test/advisor_bucket_overview.test.mjs` fails if a no-store zone
+ * reappears here, and if a blurb re-acquires the settled-money or
+ * booking-count claims.
+ */
+const ZONE_BLURB = {
+  // Practice — all five zones read a real store.
+  opportunities: 'Inbound requests and proposals — what is asking for your time.',
+  engagements: 'The engagements you have accepted, and where each one stands.',
+  delivery: 'What you have sent a client, and what is still outstanding.',
+  sessions: 'Each booked session, the amount you recorded against it, and whether you have marked it billed.',
+  earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed. Axal settles nothing and takes no cut.',
+  // Expertise — profile, services and proof are backed; thinking and
+  // visibility are not, and are written from COPY.
+  profile: 'What a founder sees before they book you.',
+  services: 'What you sell and at what price. Nothing counts how often a service is booked.',
+  proof: 'Claims you have made, and whether the person named has confirmed each one.',
+  // Cohorts — founders, this week and outcomes are backed; guidance and
+  // calendar are not, and are written from COPY.
+  founders: 'The batch an admin has put in front of you, read from the Lab’s own record.',
+  'this-week': 'Which cycles are running and where each sits in its window. What is due stays the Lab’s to say.',
+  outcomes: 'The programme’s published outcomes — company-level and anonymous, not your batch alone.',
+};
+
+/**
  * The canvas overview a bucket root renders: the tagline, then one card per
  * zone so the reader can open the section they came for. The sidebar row
  * points here; the zone pills below are the same destinations.
@@ -95,40 +133,47 @@ function BucketOverview({ bucket }) {
   if (!bucket) return null;
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      {bucket.zones.map((zone) => (
-        <Link
-          key={zone.slug}
-          to={zonePath(bucket, zone)}
-          className="group rounded-xl border border-axal-border bg-white p-4 transition-colors hover:border-emerald-300 hover:bg-emerald-50/40"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-bold text-axal-ink group-hover:text-emerald-800">{zone.label}</span>
-            <span
-              className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"
-              style={{ background: zone.archetype.colors[0], color: zone.archetype.colors[1], borderColor: zone.archetype.colors[2] }}
-            >
-              {zone.archetype.label}
-            </span>
-          </div>
-          <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
-            {zone.slug === 'opportunities' && 'Inbound requests and proposals — what is asking for your time.'}
-            {zone.slug === 'engagements' && 'The clients you are actively working with, and what is due next.'}
-            {zone.slug === 'delivery' && 'Work product sent, opened, and still in progress.'}
-            {zone.slug === 'sessions' && 'Your calendar, availability, and the sessions on it.'}
-            {zone.slug === 'earnings' && 'What you billed, what the platform took, and what you keep.'}
-            {zone.slug === 'profile' && 'What a founder sees before they book you.'}
-            {zone.slug === 'services' && 'What you sell, at what price, and how often it is booked.'}
-            {zone.slug === 'proof' && 'Outcomes and testimonials, fed from the client side.'}
-            {zone.slug === 'thinking' && 'Articles and pieces that make you findable.'}
-            {zone.slug === 'visibility' && 'Where your profile appears and what it converts.'}
-            {zone.slug === 'founders' && 'The batch you are guiding, one founder at a time.'}
-            {zone.slug === 'guidance' && 'What you have told the batch, and who has acted on it.'}
-            {zone.slug === 'this-week' && 'The cohort’s current week, deadlines, and where each founder stands.'}
-            {zone.slug === 'calendar' && 'Sessions, milestones and Lab dates in one place.'}
-            {zone.slug === 'outcomes' && 'What the batch produced, and what it is worth.'}
-          </p>
-        </Link>
-      ))}
+      {bucket.zones.map((zone) => {
+        // An entry in COPY IS the definition of "this zone has no store": it
+        // is what the zone's own page renders. Reading it here keeps the card
+        // and the page one sentence rather than two that can drift apart.
+        const unbuilt = COPY[bucket.prefix]?.[zone.slug];
+        return (
+          <Link
+            key={zone.slug}
+            to={zonePath(bucket, zone)}
+            className={`group rounded-xl border bg-white p-4 transition-colors ${
+              unbuilt
+                ? 'border-dashed border-axal-border hover:border-axal-ink-3'
+                : 'border-axal-border hover:border-emerald-300 hover:bg-emerald-50/40'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span
+                className={`text-sm font-bold ${
+                  unbuilt ? 'text-axal-ink-2' : 'text-axal-ink group-hover:text-emerald-800'
+                }`}
+              >
+                {zone.label}
+              </span>
+              <span
+                className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"
+                style={{ background: zone.archetype.colors[0], color: zone.archetype.colors[1], borderColor: zone.archetype.colors[2] }}
+              >
+                {zone.archetype.label}
+              </span>
+            </div>
+            <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
+              {unbuilt && (
+                <span className="mr-1.5 rounded-[3px] border border-axal-border px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
+                  Not built
+                </span>
+              )}
+              {unbuilt ? unbuilt.heading : ZONE_BLURB[zone.slug]}
+            </p>
+          </Link>
+        );
+      })}
     </div>
   );
 }

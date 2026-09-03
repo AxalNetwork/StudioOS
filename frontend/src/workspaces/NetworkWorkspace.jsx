@@ -73,6 +73,22 @@ const ADVISOR_ZONE = {
  */
 const ORG_BACKED = new Set(['founder', 'investor']);
 
+/**
+ * One line per zone, shared by the overview cards and the zone headers below
+ * so the two cannot drift apart. Organizations is the one line that is not
+ * true on every licence: an advisor is 403'd from `/api/contacts` and an
+ * operator has no organizations tab, so on those licences the card says the
+ * zone reads nothing rather than describing the roll-up it would perform —
+ * `ORG_BACKED` is the same set the zone body and the rail already consult.
+ */
+const INTRO = {
+  relationships: 'People you know and how strongly, from the records you keep here.',
+  introductions: 'Double opt-in: an introduction cannot advance past a consent nobody has recorded.',
+  organizations: 'Companies, funds and firms, rolled up from the people you know inside them.',
+};
+
+const ORG_NO_STORE = 'Organizations reads nothing on this licence — no store links a relationship to an organisation here.';
+
 function NetworkOverview({ role }) {
   const bucket = bucketForPath(role, '/network');
   if (!bucket) return null;
@@ -94,9 +110,16 @@ function NetworkOverview({ role }) {
             </span>
           </div>
           <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
-            {zone.slug === 'relationships' && 'People you know and how strongly, from the records you keep here.'}
-            {zone.slug === 'introductions' && 'Double opt-in: an introduction cannot advance past a consent nobody has recorded.'}
-            {zone.slug === 'organizations' && 'Companies, funds and firms, rolled up from the people you know inside them.'}
+            {zone.slug === 'organizations' && !ORG_BACKED.has(role) ? (
+              <>
+                <span className="mr-1.5 rounded-[3px] border border-axal-border px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
+                  Not built
+                </span>
+                {ORG_NO_STORE}
+              </>
+            ) : (
+              INTRO[zone.slug]
+            )}
           </p>
         </Link>
       ))}
@@ -157,12 +180,6 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     }
     return <Suspense fallback={<Loading />}><NetworkPage embedded /></Suspense>;
   }, [role, slug, isRoot]);
-
-  const INTRO = {
-    relationships: 'People you know and how strongly, from the records you keep here.',
-    introductions: 'Double opt-in: an introduction cannot advance past a consent nobody has recorded.',
-    organizations: 'Companies, funds and firms, rolled up from the people you know inside them.',
-  };
 
   const orgGap = slug === 'organizations' && !ORG_BACKED.has(role);
 
