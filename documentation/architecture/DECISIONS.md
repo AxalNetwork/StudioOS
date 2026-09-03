@@ -1513,3 +1513,47 @@ that `docs/_worker.js` sets on the Pages mirror and
 `middleware/securityHeaders.ts` sets on API responses cannot be read from
 this repository. That is U10, with its one-line live check
 (`curl -sI https://axal.vc/login`); this decision claims neither answer.
+### D35. The Super Admin is an elevation on `admin`, held by one account, with a per-browser HQ view
+
+**RESOLVED (2026-09-03; #413, #414, #415, #416, #417, #418).** The brief asked for
+a "Super Admin profile with full authority" and for the HQ dashboard to be
+integrated, with the single authority assigned to `guillaume.lauzier@axal.vc`.
+Four decisions were taken to deliver that without breaking what exists.
+
+1. **An elevation, not a role.** 468 call sites across the worker check
+   `role === 'admin'` by exact equality. A seventh `users.role` value would fail
+   every one of them and lock the franchisor out of the admin product. The role
+   stays `admin`; the elevation is a row in `super_admins` (migration 199) and
+   `auth.ts hydrateSuperAdmin` copies it onto the user object `isSuperAdmin`
+   reads. `requireSuperAdmin` fails closed: a surface that forgets it stays
+   admin-only. **A side table, not a column**, because `users` sits at D1's
+   100-column ceiling — the first version of 199 was an `ALTER TABLE users`
+   and it failed the first migrating deploy (GOTCHAS records both incidents
+   of that morning; #414 and #415 are the repairs).
+2. **One holder, by name.** Migration 207 seeds `guillaume.lauzier@axal.vc`
+   and removes every other row; the other admin account stays a plain admin.
+   Changing the holder afterwards is a console act — `/api/admin/super-admins`,
+   behind the impersonation write bar (TOTP session → recent step-up → the
+   elevation), audited, never self, never the last active holder — not a
+   migration.
+3. **The HQ shell is a view, not a permission.** `shellRoleFor(role, user,
+   hqView)` names a sidebar; `'super_admin'` appears in no `guard([...])`
+   array. A holder switches between the eight-row HQ shell and the plain
+   subsidiary shell through View-as, per browser (`hqView`), so the franchisor
+   can check what a licensee sees without impersonating anyone. HQ-only pages
+   render a stated notice for an admin without the elevation; the worker still
+   re-checks every call.
+4. **Unscoped facts are Not recorded.** The canvases draw accounts, MTD
+   revenue, backlog and token P&L per subsidiary. No row names its licence
+   (U1), so `/hq` and `/admin/security` render those as Not recorded with the
+   reason, and the `/hq` tenant switcher narrows the loaded payload
+   client-side and says so beside the control. The `security_events` ledger
+   the Security canvas calls "the one real backend build" was deliberately
+   not built this pass; its zone says so.
+
+Two things the apex audit of the same day caught before #417 and #418 went up
+are recorded here so they are not re-learned: `WorkerRail` destructures
+`unavailable` entries as `[title, detail]` pairs (a bare string renders as its
+first two characters), and a tile's note must never assert a state — "none",
+"every admin enrolled" — while the read behind it failed. Both are guarded.
+

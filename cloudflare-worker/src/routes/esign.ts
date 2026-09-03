@@ -609,8 +609,10 @@ esign.post('/send', async (c) => {
   }
 
   // Studio-tier gate. DocuSign is a Studio-only provider; non-Studio
-  // senders get a 402 with the standard upsell payload (the BYPASS_ROLES
-  // set in middleware/requireTier already lets super-admins through).
+  // senders get a 402 with the standard upsell payload. Admins pass through
+  // BYPASS_ROLES in middleware/requireTier; there is no separate super-admin
+  // role for it to admit — the Super Admin is an elevation on `admin`
+  // (migration 199, DECISIONS D35), so a holder is an admin here too.
   if (viaProvider === 'docusign') {
     const { userMeetsTier, tierUpsell } = await import('../middleware/requireTier');
     if (!userMeetsTier(sender, 'studio')) {

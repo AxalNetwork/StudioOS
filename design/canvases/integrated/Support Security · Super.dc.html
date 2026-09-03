@@ -321,5 +321,263 @@
   </div>
 </section>
 </x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const OX = '#881337', OXT = '#fff5f7', OXE = '#f9c8d2';
+    const I = {
+      home:  this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      lic:   this.ic('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>'),
+      fund:  this.ic('<path d="M12 2v20M6 7h9a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h10"/>'),
+      con:   this.ic('<path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>'),
+      team:  this.ic('<path d="M16 19c0-2.8-2.2-5-5-5s-5 2.2-5 5"/><circle cx="11" cy="8" r="3.2"/>'),
+      sup:   this.ic('<circle cx="12" cy="12" r="9"/><path d="M9.2 9.4a2.9 2.9 0 0 1 5.5 1c0 1.9-2.7 2.4-2.7 4M12 17.5h.01"/>'),
+      sec:   this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/><path d="m9 12 2 2 4-4"/>'),
+      cog:   this.ic('<circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>')
+    };
+    const ROWS = [['Home',I.home],['Licences',I.lic],['Funds',I.fund],['Contracts',I.con],
+                  ['Team',I.team],['Support',I.sup],['Security',I.sec],['Settings',I.cog]];
+    const nav = (active) => ROWS.map(([label, icon]) => ({ label, icon,
+      style:'display:flex;align-items:center;gap:9px;padding:8px 15px;font-size:12.5px;'
+        + (label === active ? 'font-weight:700;color:' + OX + ';background:' + OXT + ';box-shadow:inset 2px 0 0 ' + OX
+                            : 'font-weight:600;color:#4a4553') }));
+
+    const TONE = { ok:['#a7f3d0','#f2fdf7','#047857'], warn:['#fde68a','#fffdf5','#92400e'],
+                   bad:[OXE, OXT, OX], plain:['#ececf1','#fbfbfc','#18181b'] };
+    const box = (t) => { const c = TONE[t] || TONE.plain; return { edge:c[0], bg:c[1], ink:c[2] }; };
+    const pill = (t, tone) => { const c = TONE[tone] || TONE.plain;
+      return 'font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+c[1]+';color:'+c[2]+';border:1px solid '+c[0]+';white-space:nowrap'; };
+
+    // ══ ONE ticket record. The three queue cards, the per-tenant analytics and the SLA
+    // taxonomy counts all derive from it, so a headline cannot outrun its own rows. ══
+    const T = [
+      { id:'HQ-4471', q:'esc', prio:'P1', tenant:'France', hrs:31, cat:'Fund administration',
+        subject:'Capital call №3 notice failed for 4 LPs', from:'Escalated by Axal VC France · Camille Roux' },
+      { id:'HQ-4468', q:'esc', prio:'P2', tenant:'DACH', hrs:19, cat:'Contracts',
+        subject:'DocuSign webhook not returning countersigned state', from:'Escalated by Axal VC DACH · Jonas Weber' },
+      { id:'HQ-4462', q:'adm', prio:'P1', tenant:'Nordics', hrs:52, cat:'Access & permissions',
+        subject:'Cannot grant Funds read to a new ops hire', from:'Axal VC Nordics · Ingrid Sørensen, admin' },
+      { id:'HQ-4459', q:'adm', prio:'P3', tenant:'Benelux', hrs:8, cat:'Licence & seats',
+        subject:'Seat count shows 12 of 10 after an offboard', from:'Axal VC Benelux · Sanne de Vries, admin' },
+      { id:'HQ-4455', q:'hq', prio:'P2', tenant:'HQ', hrs:14, cat:'Billing',
+        subject:'Invoice for Fund II admin fee shows the wrong entity', from:'Direct · Thornbury Capital, LP' },
+      { id:'HQ-4451', q:'hq', prio:'P3', tenant:'HQ', hrs:41, cat:'Data & reporting',
+        subject:'Quarterly report export missing two positions', from:'Direct · Marisol Vega, LP' }
+    ];
+    const SLA = { P1:24, P2:48, P3:96 };
+    const past = (t) => t.hrs > SLA[t.prio];
+    const qOf = (k) => T.filter(t => t.q === k);
+    const oldestOf = (rows) => rows.length ? Math.max.apply(null, rows.map(r => r.hrs)) : 0;
+    const prioStyle = (p) => 'font-size:9px;font-weight:800;letter-spacing:.05em;padding:2px 5px;border-radius:3px;white-space:nowrap;'
+      + (p === 'P1' ? 'background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE
+          : (p === 'P2' ? 'background:#fffdf5;color:#92400e;border:1px solid #fde68a'
+                        : 'background:#f4f4f6;color:#615c6e;border:1px solid #e4e4e8'));
+
+    const QDEF = [
+      { k:'esc', name:'Escalations', who:'Pushed up by a subsidiary that could not resolve it', isNew:false,
+        note:'The queue everyone expects. It arrives already triaged, which is why its median is the fastest of the three.' },
+      { k:'adm', name:'Subsidiary admins', who:'The operators themselves, stuck on the console', isNew:true,
+        note:'Nobody serves this today: an admin blocked by the tool has no queue, so they message a person and it is lost. Its oldest item is the oldest on the page.' },
+      { k:'hq', name:'HQ-held users', who:'LPs and counterparties HQ holds directly', isNew:false,
+        note:'HQ is also a working tenant. These are its own users, and they belong in the same instrument rather than a private inbox.' }
+    ];
+
+    // Tenants come from the ticket record itself, so every ticket has a row and the column
+    // sums to its own total. Iberia is appended because a suspended tenant holds no tickets
+    // and would otherwise vanish — which is a different fact from having none.
+    const SUSPENDED = 'Iberia';
+    const TEN = [...new Set(T.map(t => t.tenant))].concat([SUSPENDED]);
+    // A real median, since the column says median.
+    const median = (xs) => {
+      if (!xs.length) return 0;
+      const s = xs.slice().sort((a, b) => a - b), m = Math.floor(s.length / 2);
+      return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+    };
+    const ANALYTICS = TEN.map(name => {
+      const rows = T.filter(t => t.tenant === name);
+      const breached = rows.filter(past).length;
+      return { tenant:name, open:rows.length, breached,
+        median: rows.length ? median(rows.map(r => r.hrs)) + 'h' : '—',
+        read: name === SUSPENDED ? 'Suspended — no queue' : (breached ? 'Escalates late, not often' : 'Within band') };
+    });
+    const totalOpen = T.length, totalBreach = T.filter(past).length;
+    const medAll = median(T.map(t => t.hrs));
+
+    const CATS = ['Fund administration','Contracts','Access & permissions','Licence & seats','Billing','Data & reporting','Onboarding','Other'];
+
+    // ══ Security. Eight zones, one page — the argument the artboard makes. ══
+    const SEC = [
+      { t:'09:41', event:'Impersonation started', tenant:'France', subject:'g.moreau@axal.vc', tone:'bad',
+        detail:'Support ticket HQ-4471 · 30-minute expiry · reason recorded' },
+      { t:'09:12', event:'Step-up auth', tenant:'HQ', subject:'guillaume.lauzier@axal.vc', tone:'warn',
+        detail:'registry.type.publish · IP Assignment Agreement v1.0' },
+      { t:'08:55', event:'Failed sign-in ×6', tenant:'Nordics', subject:'i.sorensen@axal.vc', tone:'warn',
+        detail:'Same IP, six attempts in four minutes — account not locked' },
+      { t:'Yesterday', event:'Permission granted', tenant:'DACH', subject:'j.weber@axal.vc', tone:'plain',
+        detail:'Funds read · granted by HQ, ceiling unchanged' },
+      { t:'Yesterday', event:'Export', tenant:'Benelux', subject:'s.devries@axal.vc', tone:'warn',
+        detail:'LP registry · 41 rows · own tenant only' },
+      { t:'Aug 28', event:'Licence suspended', tenant:'Iberia', subject:'system', tone:'bad',
+        detail:'Non-payment · all sessions terminated, queue frozen' }
+    ];
+
+    // ONE DSR record: the summary bar and the rows below both read it.
+    const DSR = [
+      { who:'Camille Roux', type:'Access', tenant:'France', days:4, tone:'bad' },
+      { who:'Anonymised applicant', type:'Erasure', tenant:'Benelux', days:11, tone:'warn' },
+      { who:'Jonas Weber', type:'Portability', tenant:'DACH', days:23, tone:'plain' },
+      { who:'Former LP', type:'Erasure', tenant:'HQ', days:27, tone:'plain' }
+    ];
+    const DSR_PRESSURE = 14;
+
+    const AUDIT = [
+      { t:'09:41', actor:'g.moreau', tenant:'France', action:'impersonate.start', target:'founder · Novacraft SAS', tone:'bad' },
+      { t:'09:12', actor:'guillaume.lauzier', tenant:'HQ', action:'registry.type.publish', target:'IP Assignment Agreement v1.0', tone:'warn' },
+      { t:'08:30', actor:'guillaume.lauzier', tenant:'Nordics', action:'permission.ceiling.deny', target:'Tech Support → Funds read', tone:'plain' },
+      { t:'Aug 28', actor:'system', tenant:'Iberia', action:'licence.suspend', target:'Axal VC Iberia · non-payment', tone:'bad' }
+    ];
+
+    return {
+      nav: nav('Support'), navSec: nav('Security'),
+
+      // ── Y1 · support ──
+      // The .hq bar reads two numbers, not one pre-composed string — both from the ticket record.
+      openTotal: String(totalOpen), breachedTotal: String(totalBreach),
+      hubSub:'Every ticket on the platform, in the three queues that actually have different owners. '
+        + totalBreach + ' of ' + totalOpen + ' are past their band, and the oldest sits in the queue nobody serves today.',
+      queues: QDEF.map(d => {
+        const rows = qOf(d.k);
+        const worst = oldestOf(rows);
+        const tone = worst > 48 ? 'bad' : (worst > 24 ? 'warn' : 'ok');
+        const c = box(tone);
+        return {
+          name:d.name, who:d.who, isNew:d.isNew, note:d.note,
+          n:String(rows.length), ink:c.ink, oldest:'oldest ' + worst + 'h',
+          cardStyle:'border:1px solid ' + c.edge + ';background:' + c.bg + ';border-radius:11px;padding:14px 15px',
+          items: rows.map(t => ({
+            id:t.id, prio:t.prio, subject:t.subject, from:t.from,
+            prioStyle:prioStyle(t.prio),
+            age:t.hrs + 'h', slaStyle:'font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;white-space:nowrap;'
+              + (past(t) ? 'background:' + OXT + ';color:' + OX + ';border:1px solid ' + OXE
+                         : 'background:#f2fdf7;color:#047857;border:1px solid #a7f3d0'),
+            rowStyle:'border:1px solid ' + (past(t) ? OXE : '#f0eff4') + ';background:#fff;border-radius:9px;padding:10px 11px'
+          }))
+        };
+      }),
+      queueNote:'Three queues rather than one list, because the three have different owners and different clocks. The middle one is the point of the redesign: an admin blocked by the console is currently served by nobody, and its oldest item — ' + oldestOf(qOf('adm')) + ' hours — is the oldest on the page.',
+
+      analytics: ANALYTICS.map(a => ({
+        tenant:a.tenant, open:String(a.open), breached:String(a.breached), median:a.median, read:a.read,
+        weight:'500', breachInk: a.breached ? OX : '#615c6e',
+        rowStyle:'display:grid;grid-template-columns:1.05fr .6fr .6fr .7fr 1.1fr;gap:11px;align-items:center;border-bottom:1px solid #f6f5f9;'
+          + (a.tenant === 'Iberia' ? 'opacity:.6;' : '')
+      })).concat([{ tenant:'Platform', open:String(totalOpen), breached:String(totalBreach), median:medAll + 'h',
+        read:'', weight:'800', breachInk:OX,
+        rowStyle:'display:grid;grid-template-columns:1.05fr .6fr .6fr .7fr 1.1fr;gap:11px;align-items:center;border-top:1px solid #ececf1;margin-top:2px' }]),
+
+      analyticsNote:'HQ appears as a tenant because it is one — it holds users directly, and a table that omitted it would total more than its own rows. Iberia is suspended, so it holds no queue at all rather than an empty one; a tenant with nothing to answer is a different fact from a tenant answering nothing. The platform median of '
+        + medAll + 'h '
+        + (medAll <= SLA.P1
+            ? 'clears every band, so the middle of the distribution is genuinely healthy and the '
+              + totalBreach + ' late tickets are the tail rather than the trend.'
+            : 'clears ' + Object.keys(SLA).filter(k => medAll <= SLA[k]).join(' and ')
+              + ' but already breaches ' + Object.keys(SLA).filter(k => medAll > SLA[k]).join(' and ')
+              + ' at ' + SLA.P1 + 'h. The middle of the distribution is not healthy: half of every ticket on the platform is older than the tightest band allows, which makes the '
+              + totalBreach + ' flagged breaches a floor rather than the problem.'),
+      syncNote:'Two failures in 24 hours, both rate-limiting rather than malformed payloads — the queue drained on retry and depth is zero. Worth watching rather than fixing, and the distinction is why the feed shows the reason instead of a red count.',
+
+      syncStats: [
+        { label:'Synced 24h', value:'38', tone:'plain' },
+        { label:'Failed', value:'2', tone:'bad' },
+        { label:'Median lag', value:'4s', tone:'ok' },
+        { label:'Queue depth', value:'0', tone:'ok' }
+      ].map(s => { const c = box(s.tone); return { label:s.label, value:s.value, edge:c.edge, bg:c.bg, ink:c.ink }; }),
+      syncFeed: [
+        { when:'09:44', what:'HQ-4471 → issue #2841 opened', ink:'#3f3a49' },
+        { when:'09:31', what:'Sync failed — rate limited, retrying in 60s', ink:OX },
+        { when:'08:02', what:'HQ-4462 → issue #2839 assigned to platform', ink:'#3f3a49' },
+        { when:'Yesterday', what:'12 tickets synced, no failures', ink:'#615c6e' }
+      ],
+
+      slaBands: [
+        { name:'P1', desc:'Money, access, or data at risk', hrs:'24h', tone:'bad' },
+        { name:'P2', desc:'A workflow is blocked, a workaround exists', hrs:'48h', tone:'warn' },
+        { name:'P3', desc:'Wrong, but nobody is stopped', hrs:'96h', tone:'plain' }
+      ].map(b => { const c = box(b.tone);
+        return { name:b.name, desc:b.desc, hrs:b.hrs, edge:c.edge, bg:c.bg, ink:c.ink, chip:prioStyle(b.name) }; }),
+      slaNote:'Bands are set here and inherited whole — a subsidiary can escalate a ticket\u2019s priority but cannot redefine what P1 means, because a shared SLA that each tenant reinterprets is not a shared SLA.',
+      taxonomy: CATS.map(name => ({ name, n:String(T.filter(t => t.cat === name).length) })),
+      taxNote:'Eight categories, fixed. Free-text categories are how a support taxonomy becomes unreadable within a quarter — and the per-tenant read above depends on these being comparable.',
+
+      // ── Y2 · security ──
+      // Derived from the same records the zones below render.
+      secOpen: String(SEC.filter(e => e.tone !== 'plain').length),
+      dsrDue: String(DSR.filter(d => d.days <= DSR_PRESSURE).length),
+      secSub:'Was Governance, which described the audit log and nothing else. Eight zones now, because at this scale the compliance officer and the security engineer are one headcount and one page.',
+      authStats: [
+        { label:'Active sessions', value:'34', note:'across 5 tenants', tone:'plain' },
+        { label:'Impersonations live', value:'1', note:'expires 10:11', tone:'bad' },
+        { label:'Failed sign-ins 24h', value:'11', note:'6 from one IP', tone:'warn' },
+        { label:'MFA coverage', value:'92%', note:'3 admins without', tone:'warn' }
+      ].map(a => { const c = box(a.tone); return { label:a.label, value:a.value, note:a.note, edge:c.edge, bg:c.bg, ink:c.ink }; }),
+
+      secEvents: SEC.map(e => ({
+        t:e.t, event:e.event, tenant:e.tenant, subject:e.subject, detail:e.detail,
+        ink: TONE[e.tone][2],
+        rowStyle:'display:grid;grid-template-columns:.5fr .85fr .6fr 1fr 1.5fr;gap:11px;align-items:baseline;padding:9px 0;border-top:1px solid #f4f3f7;'
+          + (e.tone === 'bad' ? 'background:' + OXT + ';' : '')
+      })),
+      secEventNote:'One feed, every tenant, newest first. The six failed sign-ins from a single IP are the row worth arguing about — no policy locked the account, which is a decision this page makes visible rather than a gap it hides.',
+
+      sessions: [
+        { who:'g.moreau@axal.vc · impersonating', meta:'France · started 09:41 · expires 10:11 · ticket HQ-4471', tone:'bad', label:'Revoke' },
+        { who:'guillaume.lauzier@axal.vc', meta:'HQ · Chrome · Geneva · since 08:02', tone:'plain', label:'Current' },
+        { who:'i.sorensen@axal.vc', meta:'Nordics · Safari · Oslo · since Aug 29', tone:'warn', label:'Revoke' },
+        { who:'s.devries@axal.vc', meta:'Benelux · Chrome · Amsterdam · since 07:50', tone:'plain', label:'Revoke' }
+      ].map(s => ({ who:s.who, meta:s.meta,
+        rowStyle:'border:1px solid ' + box(s.tone).edge + ';background:' + box(s.tone).bg + ';border-radius:9px;padding:11px 12px',
+        label:s.label,
+        action: s.label === 'Current'
+          ? 'font-size:10.5px;font-weight:700;color:#615c6e;background:#f4f4f6;border:1px solid #e4e4e8;border-radius:6px;padding:3px 9px;flex:none'
+          : 'font-size:10.5px;font-weight:700;color:' + OX + ';background:#fff;border:1px solid ' + OXE + ';border-radius:6px;padding:3px 9px;flex:none;cursor:pointer' })),
+      sessionNote:'An impersonation is a session like any other, which is why it sits in this list rather than in a special panel — the fastest way to end one is where you end all the others.',
+
+      aiSafety: [
+        { what:'Guardrail hits', n:'7', pct:'22', tone:'warn', note:'Prompts blocked before reaching a model, 7 days' },
+        { what:'Flagged outputs', n:'3', pct:'9', tone:'warn', note:'Held for review; none released' },
+        { what:'Cross-tenant refusals', n:'12', pct:'38', tone:'ok', note:'Forge declined and said why — the wall holding' },
+        { what:'Token anomalies', n:'1', pct:'4', tone:'bad', note:'DACH consumption 4× its trailing week' }
+      ].map(a => { const c = box(a.tone); return { what:a.what, n:a.n, pct:a.pct, ink:c.ink, note:a.note }; }),
+      aiNote:'Cross-tenant refusals are counted as a positive: each one is the tenancy wall doing its job in a place no human reviewed. A month at zero would mean the wall is untested, not that it is sound.',
+
+      dsr: DSR.map(d => ({ who:d.who, type:d.type, tenant:d.tenant, left:d.days + 'd left', ink:box(d.tone).ink,
+        rowStyle:'display:grid;grid-template-columns:1fr .8fr .75fr .9fr;gap:11px;align-items:center;padding:9px 0;border-top:1px solid #f6f5f9' })),
+      dsrNote:'The clock is statutory — 30 days from receipt, not from triage. Showing days remaining rather than date received is the difference between a queue you work and a list you read.',
+
+      kyc: [
+        { what:'Sanctions review', meta:'Possible match, manual clearance', n:'2', tone:'bad' },
+        { what:'KYC pending', meta:'Documents submitted, unverified', n:'9', tone:'warn' },
+        { what:'Accreditation lapsed', meta:'Re-attestation overdue', n:'4', tone:'warn' }
+      ].map(k => { const c = box(k.tone); return { what:k.what, meta:k.meta, n:k.n, edge:c.edge, bg:c.bg, ink:c.ink }; }),
+
+      dr: [
+        { what:'Nightly backup', meta:'Last · 02:14 today · 4.2 GB', state:'Green', tone:'ok' },
+        { what:'Restore drill', meta:'Last · Jun 12 · 79 days ago', state:'Overdue', tone:'bad' },
+        { what:'Failover test', meta:'Last · Aug 2 · 28 days ago', state:'Amber', tone:'warn' }
+      ].map(d => { const c = box(d.tone); return { what:d.what, meta:d.meta, state:d.state, edge:c.edge, bg:c.bg, pill:pill(d.state, d.tone) }; }),
+      drNote:'A backup nobody has restored is a hypothesis. The drill row is red at 79 days for that reason, while the backup beside it is green — two facts that a single "backup status" light would have merged into one comfortable lie.',
+
+      audit: AUDIT.map(a => ({
+        t:a.t, actor:a.actor, tenant:a.tenant, action:a.action, target:a.target,
+        ink: TONE[a.tone][2],
+        rowStyle:'display:grid;grid-template-columns:.5fr .85fr .6fr 1.1fr 1.4fr;gap:11px;align-items:baseline;padding:9px 0;border-top:1px solid #f4f3f7'
+      })),
+      auditNote:'Unchanged from Governance — same table, same immutability, same filters. What changed is its status: it was the whole page and is now one zone of eight, which is the honest description of how much of security an audit log actually covers.'
+    };
+  }
+}
+</script>
 </body>
 </html>

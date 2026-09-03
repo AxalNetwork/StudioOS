@@ -119,7 +119,7 @@ export function parseSidebar(src) {
   const roles = {};
   let role = null, group = null;
   for (const line of lines) {
-    const r = line.match(/^\s{2}([a-z]+):\s*\[/);
+    const r = line.match(/^\s{2}([a-z_]+):\s*\[/);
     if (r) { role = r[1]; roles[role] = []; group = null; continue; }
     if (!role) continue;
     const g = line.match(/\{\s*key:\s*'([^']+)',\s*label:\s*'([^']*)'/);
@@ -150,7 +150,7 @@ const WORKSPACES = [
   ['LP / Investor', 'investor'],
   ['Partner / Operator', 'partner'],
   ['Subsidiary Admin', 'admin'],
-  ['Super Admin', 'admin'],
+  ['Super Admin', 'super_admin'],
   ['Shell (all workspaces)', null],
   ['Shared (multi-workspace)', null],
   ['Public (pre-login)', null],

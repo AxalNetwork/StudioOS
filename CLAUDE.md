@@ -16,8 +16,8 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    live worker's bindings API). Do not run `npx wrangler deploy` by hand: it
    skips the `predeploy` hook that applies D1 migrations, so the worker ships
    ahead of its schema.
-2. **D1 (`studioos-db`) is the canonical user store.** All 23 production user
-   accounts live in D1. The dev FastAPI uses a separate SQLite file
+2. **D1 (`studioos-db`) is the canonical user store.** Every production user
+   account lives in D1. The dev FastAPI uses a separate SQLite file
    (`backend/app.db`) and is **not** kept in sync.
 3. **The FastAPI in `backend/` is Replit-dev-only.** It exists for local
    iteration speed during Replit sessions. It is **never** deployed to
