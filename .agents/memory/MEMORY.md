@@ -18,3 +18,4 @@
 - [Investor deal scoping](investor-deal-scoping.md) — investor deal lists and deal-room reads must use the same relationship predicate in FastAPI and Worker.
 - [Desk edge-to-edge overrides](desk-edge-to-edge-overrides.md) — outer spacing resets must come after base desk rules or use higher specificity, otherwise later padding and max-width declarations restore the gap.
 - [Build cadence data honesty](build-cadence-data-honesty.md) — calendar events and roadmap changes are not operating rituals or review outcomes without explicit cadence records.
+- [Merge and rebase resolution](merge-rebase-resolution.md) — finish an active merge before rebasing; in rebase conflicts, stage 2 is upstream and stage 3 is the replayed commit.
