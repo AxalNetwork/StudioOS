@@ -4,6 +4,12 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Super Admin — Security at /admin/security (PR 3 of 4)
+
+- Worker `routes/admin_security.ts` at `/api/admin/security` (mounted before the catch-all, every handler `requireSuperAdmin`): `GET /overview` — the admin action audit (every action, newest first; the existing `/monitoring/audit` read allows two), impersonation sessions live and recent, active sessions in a 30-day window, MFA coverage among admins, KYC by status, deletion requests with a server-side 30-day clock (null when unparseable), and `{ available: false, reason }` blocks for `security_events`, `ai_safety`, `sanctions`, `backup_dr`. `POST /force-reauth` — TOTP + recent step-up + the elevation, a stored reason of ≥ 8 characters, bumps `jwt_min_iat` for every active account (the caller included, and says so), audited as `security_force_reauth`.
+- `pages/hq/SecurityPage.jsx` (canvas Y2 zones in order): four read their stores, four render Not recorded from the payload's reason in the zone the canvas draws for them; `WorkerRail role="super_admin"`. Eighth HQ row **Security** (decision A4), `/admin/security` wrapped in `hqOnly`. `api.js` `hqSecurityOverview`, `hqSecurityForceReauth`.
+- Tests: `hq_security.test.mjs` (row and route, one read + one write, the four absences, unreadable ≠ zero, the statutory clock, the write bar and reason, mount order, unfiltered audit); `super_admin.test.ts` pins the write; `super_admin_shell.test.mjs` now expects eight rows and five `hqOnly` routes.
+
 ## Super Admin — HQ Home at /hq (PR 2 of 4)
 
 - Worker `routes/admin_hq.ts`, `GET /api/admin/hq/overview` (`requireSuperAdmin`, mounted before the `/api/admin` catch-all): active accounts by role, seats licensed, countries held, every licence hydrated (reusing `admin_licences.hydrate`), renewals due within 60 days, suspended licences, the last 20 `licence_events`, the ticket queue by status (reported unreadable, never zeroed, when the table cannot be read), `escalations_available: false`, and the same `DERIVED_UNAVAILABLE` block `GET /licence/mine` sends — now exported from `routes/licence.ts` so there is one wording.

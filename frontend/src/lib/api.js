@@ -2293,6 +2293,12 @@ export const api = {
   // HQ · Home. One payload for the franchisor's overview; the page's tenant
   // switcher narrows it client-side and sends nothing back (routes/admin_hq.ts).
   hqOverview: () => request('/admin/hq/overview'),
+  // HQ · Security. The overview is read-only; force re-auth signs every
+  // active account out everywhere (the caller included) and needs a TOTP
+  // session with a recent step-up, which lib/api.js prompts for on the 403.
+  hqSecurityOverview: () => request('/admin/security/overview'),
+  hqSecurityForceReauth: (reason) =>
+    request('/admin/security/force-reauth', { method: 'POST', body: JSON.stringify({ reason }) }),
   licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
   licenceTerritories: () => request('/admin/licences/territories'),
   licenceCreate: (data) => request('/admin/licences', { method: 'POST', body: JSON.stringify(data || {}) }),

@@ -46,10 +46,10 @@ test('every row points at a route that is actually registered', () => {
   );
 });
 
-test('the seven rows that have pages are present, in canvas order', () => {
-  // Security arrives with its page. The canvas order is Home, Licences,
-  // Funds, Contracts, Team, Support, Security, Settings.
-  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Support', 'Settings']);
+test('all eight rows are present, in canvas order', () => {
+  // The canvas order is Home, Licences, Funds, Contracts, Team, Support,
+  // Security, Settings. "Security", not "Governance" — decision A4.
+  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Support', 'Security', 'Settings']);
   const licences = rows.find((r) => r.to === '/admin/licences');
   assert.ok(licences, 'the franchise console must be reachable from the HQ shell');
   assert.equal(rows.find((r) => r.label === 'Team')?.to, '/admin/accounts',
@@ -103,7 +103,7 @@ test("'super_admin' names a shell, never a permission", () => {
 });
 
 test('the HQ-only routes render the notice for an admin without the elevation', () => {
-  for (const path of ['/admin/licences', '/admin/contracts', '/admin/accounts']) {
+  for (const path of ['/admin/licences', '/admin/contracts', '/admin/accounts', '/hq', '/admin/security']) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.ok(line, `${path} must be registered`);
     assert.match(line, /hqOnly\(/, `${path} must be wrapped in hqOnly — the server 403s a plain admin on every call there`);

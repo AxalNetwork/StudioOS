@@ -164,6 +164,7 @@ import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
 import adminSuperAdmins from './routes/admin_super_admins';
 import adminHq from './routes/admin_hq';
+import adminSecurity from './routes/admin_security';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
 import licence from './routes/licence';
@@ -743,6 +744,8 @@ app.route('/api/admin/super-admins', adminSuperAdmins);
 // HQ · Home — the franchisor's overview. Super-admin-only, mounted before
 // the catch-all like everything else in the HQ tier.
 app.route('/api/admin/hq', adminHq);
+// HQ · Security — the cross-tenant security desk. Super-admin-only.
+app.route('/api/admin/security', adminSecurity);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);

@@ -77,9 +77,9 @@ export const SIDEBAR_GROUPS = {
   // ROWS ARE ADDED AS THEIR PAGES LAND. The approved canvas has eight rows —
   // Home, Licences, Funds, Contracts, Team, Support, Security, Settings. A row
   // pointing at a route that does not exist is worse than a missing row: it
-  // looks shipped and 404s. Seven resolve today; Security arrives with its
-  // page, and `super_admin_shell.test.mjs` fails if a row is added whose route
-  // is not registered in App.jsx.
+  // looks shipped and 404s. All eight resolve today, and
+  // `super_admin_shell.test.mjs` fails if a row is added whose route is not
+  // registered in App.jsx.
   //
   // Two rows deliberately do not point where their labels first suggest:
   //   Team  → /admin/accounts, the cross-tenant accounts table with the holder
@@ -99,6 +99,9 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/contracts', icon: FileText, label: 'Contracts' },
       { to: '/admin/accounts', icon: Users, label: 'Team' },
       { to: '/tickets', icon: Inbox, label: 'Support' },
+      // "Security", not "Governance" (ASSUMPTIONS_LOG A4): the audit log is
+      // what someone finds inside, not what they come for.
+      { to: '/admin/security', icon: ShieldCheck, label: 'Security' },
       { to: '/settings', icon: UserCog, label: 'Settings' },
     ]},
   ],

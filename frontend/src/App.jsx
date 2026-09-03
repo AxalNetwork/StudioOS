@@ -166,6 +166,7 @@ const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'
 const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
 const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
 const HqHomePage = lazy(() => import('./pages/hq/HqHomePage'));
+const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
@@ -1669,6 +1670,9 @@ function AppInner() {
       {/* HQ · Home (canvas H1). The whole business on one screen; every
           per-subsidiary figure says Not recorded until accounts carry a licence. */}
       <Route path="/hq" element={guard(['admin'], hqOnly(<HqHomePage />))} />
+      {/* HQ · Security (canvas Y2, decision A4). Four zones read their stores;
+          four say what is not recorded. Force re-auth is the one write. */}
+      <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}
