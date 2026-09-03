@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#047857;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#065f46;background:#f0fdf6;border-color:#a7f3d0;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#f0fdf6;border-color:#a7f3d0;color:#065f46;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#f0fdf6;border:1px solid #a7f3d0;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#065f46;background:#dcfce7;border:1px solid #a7f3d0;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #047857;background:#047857;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .mine{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#065f46;background:#f0fdf6;border:1px solid #a7f3d0;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .cit{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#3730a3;background:#f5f5ff;border:1px solid #c7d2fe;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .stale{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .nrc{font-size:10px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .legend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:10.5px;color:#615c6e;margin-top:12px}
+    .meter{display:flex;align-items:center;gap:10px;background:#f0fdf6;border:1px solid #a7f3d0;border-radius:10px;padding:9px 13px;flex-wrap:wrap}
+    .qa{background:#fff;border:1px solid #ececf1;border-radius:10px;padding:12px 14px}
+    .askbar{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e2e1e8;border-radius:11px;padding:11px 14px}
+    .pair{background:#f0fdf6;border:1px solid #a7f3d0;border-radius:10px;padding:12px 15px}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="5">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /research</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#065f46;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Research</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px">{{ p.scope }}<sc-if value="{{ p.switcher }}"><span style="color:#615c6e;font-weight:600">⌄ switch client</span></sc-if></span>
+        </div>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="5">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <sc-if value="{{ p.meter }}">
+          <div class="meter" style="margin-top:14px">
+            <span class="lbl" style="font-size:9px;color:#065f46">Metered</span>
+            <span style="font-size:11.5px;color:#3f3a49;line-height:1.5;flex:1;min-width:340px">{{ p.meter.body }}</span>
+            <span class="num" style="font-size:11.5px;font-weight:800;color:#065f46">{{ p.meter.rate }}</span>
+            <span class="num" style="font-size:10.5px;color:#615c6e">{{ p.meter.spent }}</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ p.askbar }}">
+          <div class="askbar" style="margin-top:12px">
+            <span style="font-size:12.5px;color:#9c96a8;flex:1">{{ p.askbar }}</span>
+            <span class="num" style="font-size:10.5px;color:#615c6e">{{ p.askCost }}</span>
+            <span class="acc">Ask</span>
+          </div>
+        </sc-if>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:13px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <sc-if value="{{ a.nr }}"><div style="margin-top:6px"><span class="nrc">Not recorded</span></div></sc-if>
+              <sc-if value="{{ a.value }}"><div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div></sc-if>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ p.legend }}">
+          <div class="legend">
+            <span style="display:inline-flex;align-items:center;gap:6px"><span class="seam">From the founder</span>read-only — from the client’s own record or the Lab</span>
+            <span style="display:inline-flex;align-items:center;gap:6px"><span class="mine">Mine</span>written by me, editable</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ p.thread }}">
+          <div style="display:grid;gap:10px;margin-top:13px">
+            <sc-for list="{{ p.thread }}" as="t" hint-placeholder-count="3">
+              <div class="qa" style="{{ t.style }}">
+                <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+                  <span class="lbl" style="font-size:9px;color:#065f46">{{ t.role }}</span>
+                  <span style="font-size:12.5px;font-weight:700;letter-spacing:-.01em;flex:1;min-width:0">{{ t.q }}</span>
+                  <span class="num" style="font-size:10px;color:#615c6e">{{ t.cost }}</span>
+                </div>
+                <div style="font-size:12px;color:#3f3a49;line-height:1.65;margin-top:8px">{{ t.a }}</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:9px;flex-wrap:wrap">
+                  <sc-for list="{{ t.cites }}" as="cc" hint-placeholder-count="2"><span class="cit">{{ cc }}</span></sc-for>
+                  <sc-if value="{{ t.noSource }}"><span class="nrc">No retrievable source</span></sc-if>
+                </div>
+                <sc-if value="{{ t.emptyNote }}"><div style="font-size:11px;color:#615c6e;margin-top:8px;line-height:1.55">{{ t.emptyNote }}</div></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="6"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center;{{ r.rowStyle }}">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                <span class="td" style="{{ c.style }}">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                  <sc-if value="{{ c.mine }}"><span class="mine">{{ c.mine }}</span></sc-if>
+                  <sc-if value="{{ c.stale }}"><span class="stale">{{ c.stale }}</span></sc-if>
+                  <sc-if value="{{ c.cit }}"><span class="cit">{{ c.cit }}</span></sc-if>
+                  <sc-if value="{{ c.nr }}"><span class="nrc">Not recorded</span></sc-if>
+                  <sc-if value="{{ c.sub }}"><span style="display:block;font-size:10px;color:#615c6e;margin-top:3px;line-height:1.45">{{ c.sub }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <sc-if value="{{ p.pair }}">
+          <div class="pair" style="margin-top:13px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+              <span style="font-size:13px;font-weight:800;letter-spacing:-.015em;color:#065f46">{{ p.pair.h }}</span>
+              <span style="font-size:11px;color:#065f46">{{ p.pair.meta }}</span>
+            </div>
+            <div style="font-size:11.5px;color:#3f3a49;line-height:1.65;margin-top:8px">{{ p.pair.body }}</div>
+          </div>
+        </sc-if>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="emerald" page="Research" hint-size="100%,760px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const E = { ink:'#047857', deep:'#065f46', tint:'#f0fdf6' };
+    const ROWS = ['Home','Practice','Cohorts','Expertise','Network','Research','Trust','Practice Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Research' ? 'nav on' : 'nav',
+      style: label === 'Research' ? 'color:'+E.deep+';background:'+E.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+E.ink : '' }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Ask','Client prep','Markets','Companies','Library'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Markets' }));
+
+    const pill = (t) => {
+      const M = { 'Current':['#ecfdf5','#047857','#a7f3d0'], 'Indexed':['#ecfdf5','#047857','#a7f3d0'],
+        'Client':['#ecfdf5','#047857','#a7f3d0'], 'Done':['#ecfdf5','#047857','#a7f3d0'],
+        'Ageing':['#fffbeb','#92400e','#fde68a'], 'Not indexed':['#fffbeb','#92400e','#fde68a'],
+        'Partly':['#fffbeb','#92400e','#fde68a'], 'Prospect':['#fffbeb','#92400e','#fde68a'],
+        'Stale':['#fef2f2','#b91c1c','#fecaca'], 'Not done':['#fef2f2','#b91c1c','#fecaca'],
+        'Researching':['#f6f5f8','#615c6e','#e2e1e8'], 'Comparable':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Competitor':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Session doc':['#f0fdff','#0e7490','#a5edf5'], 'Reusable':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Flat':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Flat'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => {
+      const o = Object.assign({ text, pill:null, seam:null, mine:null, stale:null, cit:null, nr:false, sub:null, style:'' }, opt || {});
+      o.pillStyle = o.pill ? pill(o.pill) : '';
+      return o;
+    };
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    // Money is integer cents; usd() is the single formatting edge.
+    const usd = (cents) => '$' + Math.round(cents / 100).toLocaleString('en-US');
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven','eight','nine','ten'][n] || String(n);
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    const plural = (n, s, p) => n === 1 ? s : (p || s + 's');
+
+    // DeepSeek V4 Flash — the Research curation. Cached input is the feature: the first pass
+    // reads the document, every question after it costs a fraction.
+    const R_IN = 0.440, R_OUT = 1.320, R_CACHED = 0.014;
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout, cached) => (cached ? tin / 1e6 * R_CACHED : tin / 1e6 * R_IN) + tout / 1e6 * R_OUT;
+
+    // ══ ONE library. Ask reads over exactly this. ══
+    const LIB = [
+      { doc:'Halverton — rate card, v3', kind:'Session doc', added:'Jul 12, 2026', state:'Indexed', src:'seam', srcT:'From Halverton' },
+      { doc:'Novacraft Labs — pricing page, Aug', kind:'Session doc', added:'Aug 26, 2026', state:'Indexed', src:'seam', srcT:'Cohort 4' },
+      { doc:'Meridian Robotics — tier proposal', kind:'Session doc', added:'Aug 21, 2026', state:'Indexed', src:'seam', srcT:'Cohort 4' },
+      { doc:'Packaging sprint — my session template', kind:'Reusable', added:'Mar 4, 2026', state:'Indexed', src:'mine' },
+      { doc:'Objection handling — my notes', kind:'Reusable', added:'Jan 18, 2026', state:'Indexed', src:'mine' },
+      { doc:'Kelp Bio — pricing review notes', kind:'Session doc', added:'Aug 30, 2026', state:'Not indexed', src:'mine' }
+    ];
+    const indexed = LIB.filter(d => d.state === 'Indexed');
+    const unindexed = LIB.filter(d => d.state !== 'Indexed');
+    const seamDocs = LIB.filter(d => d.src === 'seam');
+    const reusable = LIB.filter(d => d.kind === 'Reusable');
+    const libRows = LIB.map(d => ({ rowStyle: d.state === 'Not indexed' ? 'background:#fffcf5' : '', cells:[
+      cell(d.doc, d.src === 'seam' ? { seam: d.srcT } : { mine:'Mine' }),
+      cell('', { pill: d.kind }),
+      cell(d.added),
+      cell('', { pill: d.state }),
+      d.state === 'Indexed' ? cell('Answerable in Ask') : cell('Not answerable until indexed')
+    ]}));
+
+    // ══ Ask thread. Every answer cites; a sourceless question returns an empty state. ══
+    const THREAD = [
+      { role:'Asked', q:'What did Halverton set as their enterprise floor?',
+        a:'Their v3 rate card sets an enterprise floor of ' + usd(4800000) + ' annual, with a stated exception path for design partners.',
+        cites:['Halverton — rate card v3, §Enterprise'], cost:c4(runCost(10400, 360, false)), style:'' },
+      { role:'Asked', q:'How did Novacraft price their tiers on the August page?',
+        a:'Three tiers at ' + usd(4900) + ', ' + usd(19900) + ' and custom monthly, with seats as the metric on the middle tier only.',
+        cites:['Novacraft Labs — pricing page, Aug'], cost:c4(runCost(8800, 320, true)) + ' · cached', style:'' },
+      { role:'Asked', q:'What is Kelp Bio\u2019s current headcount?',
+        a:'No answer given. Nothing in the library states Kelp Bio\u2019s headcount — their review notes were added two days ago and are not indexed, and carry no headcount in any case.',
+        cites:[], noSource:true, cost:c4(0), style:'background:#fffcf5',
+        emptyNote:'An answer with no retrievable source is not shown as an answer. Nothing is charged for a question the cache cannot reach, and the response names the gap rather than reasoning across it.' }
+    ];
+    const asked = THREAD.length;
+    const answered = THREAD.filter(t => !t.noSource).length;
+
+    // ══ ONE client brief. Halverton. Seam-marked where founder-sourced. ══
+    const BRIEF = [
+      { k:'What they said they\u2019d do', v:'Publish the v3 rate card and hold the enterprise floor for one quarter.', src:'mine', sub:'My notes, session Jul 12', state:'Done' },
+      { k:'What they actually did', v:'Published Jul 20. Two deals since closed below the floor under the design-partner exception.', src:'seam', srcT:'From Halverton', sub:'Their deal record, read-only', state:'Partly' },
+      { k:'What changed since last time', v:'Hired a first AE in August; pricing now leaves the founders\u2019 hands.', src:'seam', srcT:'From Halverton', sub:'Their team record, read-only', state:'Flat' },
+      { k:'Open question I logged', v:'Is the design-partner exception a discount policy or a sales habit?', src:'mine', sub:'Logged Aug 28, unanswered', state:'Not done' },
+      { k:'Their stated next milestone', v:'Series A conversations in Q4.', src:'seam', srcT:'From Halverton', sub:'Their roadmap, read-only', state:'Flat' },
+      { k:'Their current ACV', v:'', nr:true, src:'seam', srcT:'From Halverton', sub:'Not in anything they have shared', state:'Flat' }
+    ];
+    const seamBrief = BRIEF.filter(b => b.src === 'seam');
+    const openQs = BRIEF.filter(b => b.state === 'Not done');
+    const briefRows = BRIEF.map(b => ({ rowStyle: b.nr ? 'background:#fbfbfc' : (b.state === 'Not done' ? 'background:#fffafa' : ''), cells:[
+      cell(b.k, b.src === 'seam' ? { seam: b.srcT } : { mine:'Mine' }),
+      b.nr ? cell('', { nr:true, sub: b.sub }) : cell(b.v, { sub: b.sub }),
+      b.state === 'Flat' ? cell('') : cell('', { pill: b.state })
+    ]}));
+
+    // ══ Markets — declared sectors from Expertise · Profile. Every figure names its source and age. ══
+    const MKT = [
+      { m:'B2B software · median seed ACV', v:usd(2400000), src:'Cohort 3 & 4 rate cards, 11 companies', ran:'Aug 28, 2026', days:4 },
+      { m:'Developer tools · median first paid price', v:usd(9900) + ' / mo', src:'Public pricing pages, 14 companies', ran:'Aug 28, 2026', days:4 },
+      { m:'Vertical SaaS · seat vs usage split', v:'62% seat-priced', src:'Public pricing pages, 21 companies', ran:'Jun 30, 2026', days:63 },
+      { m:'B2B software · discount depth at seed', v:'18% median', src:'Cohort 2 deal records, 8 companies', ran:'Mar 12, 2026', days:173 },
+      { m:'Developer tools · net revenue retention', v:'', nr:true, src:'No source with enough companies', ran:'—', days:null }
+    ];
+    const STALE_AT = 120, AGE_AT = 30;
+    const ageState = (d) => d === null ? null : (d > STALE_AT ? 'Stale' : (d > AGE_AT ? 'Ageing' : 'Current'));
+    const current = MKT.filter(r => r.days !== null && r.days <= AGE_AT);
+    const staleRows = MKT.filter(r => r.days !== null && r.days > STALE_AT);
+    const noSource = MKT.filter(r => r.days === null);
+    const mktRows = MKT.map(r => {
+      const st = ageState(r.days);
+      return { rowStyle: st === 'Stale' ? 'background:#fffafa' : (r.nr ? 'background:#fbfbfc' : ''), cells:[
+        cell(r.m),
+        r.nr ? cell('', { nr:true }) : cell(r.v),
+        cell(r.src),
+        cell(r.ran, { sub: r.days === null ? null : r.days + ' days old' }),
+        r.days === null ? cell('', { nr:true }) : cell('', st === 'Stale' ? { stale:'Stale · re-run' } : { pill: st })
+      ]};
+    });
+
+    // ══ Companies — relationship vs research is the distinction the page turns on. ══
+    const CO = [
+      { co:'Halverton', rel:'Client', why:'Rate card rebuild, ongoing', looked:'Aug 28, 2026', fund:'Seed, ' + usd(280000000), hc:'19' },
+      { co:'Novacraft Labs', rel:'Client', why:'Cohort 4 pricing teardown', looked:'Aug 26, 2026', fund:'Pre-seed, ' + usd(45000000), hc:'6' },
+      { co:'Meridian Robotics', rel:'Client', why:'Cohort 4 packaging sprint', looked:'Aug 21, 2026', fund:'Seed, ' + usd(310000000), hc:'11' },
+      { co:'Rowanbank', rel:'Prospect', why:'Asked about a teardown in July, never booked', looked:'Jul 14, 2026', fund:'Seed, ' + usd(150000000), hc:null },
+      { co:'Tessellate', rel:'Researching', why:'Comparable for Novacraft\u2019s tier structure', looked:'Aug 26, 2026', fund:null, hc:null },
+      { co:'Brightseam', rel:'Researching', why:'Halverton names them as their main competitor', looked:'Aug 28, 2026', fund:'Series A, ' + usd(1200000000), hc:'54' }
+    ];
+    const clients = CO.filter(c => c.rel === 'Client');
+    const researching = CO.filter(c => c.rel === 'Researching');
+    const noHc = CO.filter(c => c.hc === null);
+    const coRows = CO.map(c => ({ rowStyle: c.rel === 'Researching' ? 'opacity:.82' : '', cells:[
+      cell(c.co, c.rel === 'Client' ? { mine:'Relationship' } : {}),
+      cell('', { pill: c.rel }),
+      cell(c.why),
+      cell(c.looked),
+      c.fund ? cell(c.fund) : cell('', { nr:true }),
+      c.hc ? cell(c.hc) : cell('', { nr:true })
+    ]}));
+
+    const PAGES = [
+      { id:'ar1', badge:'AR1', route:'/research/ask', zone:'Ask', arch:'FEED',
+        title:'Research · Ask', h1:'Ask the library', scope:'Priya Nair · ' + indexed.length + ' indexed docs',
+        blurb:'Question and answer over the document cache, every answer citing the sources it drew on. A question the cache cannot reach returns an empty state rather than a paragraph — and costs nothing, because nothing was retrieved to reason over.',
+        sub:'Cited answers over ' + indexed.length + ' indexed documents.',
+        cmpTitle:'Ask · ' + answered + ' of ' + asked + ' answered',
+        cmpBody: cap(nWord(asked - answered)) + ' question had no retrievable source. ' + indexed.length + ' documents indexed, ' + unindexed.length + ' not.',
+        viewMore:'View more · session history and citations →',
+        filters: fil(['This session','All history','Cited','Unanswered'], 0), ops:['New session','Saved answers','Export'],
+        meter:{ body:'Each question is charged on what it retrieves. The first pass over a document pays full input; every question after it reads from cache at a small fraction of that — which is what makes asking one client\u2019s rate card forty questions reasonable.',
+          rate:'$0.440 / M in · $0.014 cached', spent:'this session: ' + c4(runCost(19200, 680, false)) },
+        askbar:'Ask across the library — e.g. "which clients hold an enterprise floor?"', askCost:'≈ $0.005 per question',
+        adds:[ { label:'Indexed documents', value:String(indexed.length), note:'what Ask can answer over' },
+          { label:'Answered', value:answered + ' of ' + asked, note:'each with citations' },
+          { label:'No source', value:String(asked - answered), note:'returned empty, charged nothing' },
+          { label:'Session spend', value:c4(runCost(19200, 680, false)), note:'shown before each question, not after' } ],
+        thread: THREAD,
+        instTitle:'What Ask can reach', instMeta:'Reads over the library and nothing else',
+        cols:'2.2fr 1fr 1fr .9fr 1.4fr',
+        head:['Document','Kind','Added','Index state','In Ask'],
+        rows: libRows,
+        instNote:'Ask reaches exactly the ' + indexed.length + ' indexed rows — the Kelp Bio notes were added two days ago and are not indexed, which is why the headcount question came back empty rather than reaching for them. The per-question cost sits above the input on purpose: this surface spends money, and the number belongs before the question, not on the invoice.',
+        aiLabel:'Draft · session brief', aiCost:c4(runCost(12200, 880, true)),
+        aiBody:'The session\u2019s answers gathered into one brief with every citation carried through, and the unanswered question named as a gap rather than dropped. Cached input, so the brief costs less than the questions that produced it.',
+        aiAccept:'Open the draft', aiFoot:'Citations preserved per claim.' },
+
+      { id:'ar2', badge:'AR2', route:'/research/client-prep', zone:'Client prep', arch:'WORK BOARD',
+        title:'Research · Client prep', h1:'Session brief — Halverton', scope:'Halverton', switcher:true,
+        blurb:'The brief assembled before a session: what they said they would do, what they actually did, what changed, and what is still open. One client per brief — context changes only through the switcher, never implicitly.',
+        sub:'One client. Founder-sourced rows are read-only.',
+        cmpTitle:'Client prep · Halverton',
+        cmpBody: seamBrief.length + ' rows founder-sourced, ' + (BRIEF.length - seamBrief.length) + ' mine. ' + cap(nWord(openQs.length)) + ' question still open.',
+        viewMore:'View more · full brief, ' + BRIEF.length + ' rows →',
+        filters: fil(['Full brief','Mine only','Founder-sourced','Open questions'], 0), ops:['New brief','Attach to session','Export'],
+        legend: true,
+        adds:[ { label:'Brief rows', value:String(BRIEF.length), note:'assembled for the Sep 4 session' },
+          { label:'Founder-sourced', value:String(seamBrief.length), note:'read-only — Halverton\u2019s own record' },
+          { label:'Open questions', value:String(openQs.length), note:'logged Aug 28, unanswered' },
+          { label:'Their current ACV', nr:true, note:'not in anything they have shared' } ],
+        instTitle:'Halverton — brief for Sep 4 session', instMeta:'Cyan is theirs, emerald is mine',
+        cols:'1.4fr 2.8fr 1fr', head:['Section','What it says','State'],
+        rows: briefRows,
+        instNote:'The said-versus-did pair is the whole point of the page: the rate card shipped on time, and two deals then closed below the floor under an exception — one row mine, the next theirs, and the gap between them is the session. Their ACV reads "Not recorded" rather than being derived from the deals they mentioned, because a number I inferred and then quoted back at them is the fastest way to lose a session\u2019s first ten minutes.',
+        aiLabel:'Draft · session brief', aiCost:c4(runCost(13800, 1050, true)),
+        aiBody:'The six rows drafted into a one-page brief for Sep 4, keeping founder-sourced facts attributed to Halverton and my notes to me. Names the design-partner exception as the unresolved thread, since it is the row I logged and they have not answered.',
+        aiAccept:'Open the draft', aiFoot:'Read-only rows quoted, never rewritten.' },
+
+      { id:'ar3', badge:'AR3', route:'/research/markets', zone:'Markets', arch:'ANALYTICS',
+        title:'Research · Markets', h1:'Sector & stage data', scope:'B2B software · dev tools · vertical SaaS',
+        blurb:'Market data for the three sectors declared on Expertise · Profile. Every figure names the source it came from and the date it was last run, and a figure past its shelf life shows its age rather than being re-rendered as current.',
+        sub:'Figures with named sources and run dates.',
+        cmpTitle:'Markets · ' + current.length + ' current',
+        cmpBody: staleRows.length + ' ' + plural(staleRows.length, 'figure') + ' past ' + STALE_AT + ' days. ' + cap(nWord(noSource.length)) + ' has no source with enough companies behind it.',
+        viewMore:'View more · ' + MKT.length + ' figures, ' + current.length + ' current →',
+        filters: fil(['All','Current','Ageing','Stale'], 0), ops:['Re-run stale','Add source','Export'],
+        adds:[ { label:'Current', value:String(current.length), note:'run within ' + AGE_AT + ' days' },
+          { label:'Stale', value:String(staleRows.length), note:'past ' + STALE_AT + ' days' },
+          { label:'Sectors covered', value:'3', note:'read from Expertise · Profile' },
+          { label:'Net revenue retention', nr:true, note:'no source with enough companies' } ],
+        instTitle:'Figures', instMeta:'Source and run date on every row',
+        cols:'1.9fr 1.2fr 1.9fr 1.2fr 1.1fr',
+        head:['Figure','Value','Source','Last run','Age'],
+        rows: mktRows,
+        instNote:'The discount-depth figure is 173 days old and marked stale in red: an 18% median from March, quoted in a September session as though it were current, is worse than saying nothing. The seat-versus-usage split is ageing at 63 days and still shown, with its age on the row so the decision to use it is a knowing one. Net revenue retention reads "Not recorded" because no source covers enough companies — a figure from three would be arithmetic, not data.',
+        aiLabel:'Findings · what moved this quarter', aiCost:c4(runCost(15600, 1300, false)),
+        aiBody:'Findings across the ' + current.length + ' current figures, stating the company count behind each rather than smoothing over thin bases. Names the ' + nWord(staleRows.length) + ' stale figure as needing a re-run before it is used in a session.',
+        aiAccept:'Accept findings', aiFoot:'Run dates carried into any use.' },
+
+      { id:'ar4', badge:'AR4', route:'/research/companies', zone:'Companies', arch:'COLLECTION',
+        title:'Research · Companies', h1:'Companies looked into', scope:'Priya Nair · ' + CO.length + ' companies',
+        blurb:'Companies looked into — clients, prospects, comparables and a client\u2019s competitor. The distinction the page turns on: a relationship is marked as one, and a company merely researched is dimmed and carries no relationship badge, so the two can never be mistaken in a session.',
+        sub:'Relationships and research, visibly different.',
+        cmpTitle:'Companies · ' + clients.length + ' relationships',
+        cmpBody: researching.length + ' researched with no relationship, 1 prospect. ' + noHc.length + ' have no headcount recorded.',
+        viewMore:'View more · ' + CO.length + ' companies, ' + clients.length + ' with a relationship →',
+        filters: fil(['All','Relationships','Prospects','Researching'], 0), ops:['Add company','Open in Ask','Export'],
+        adds:[ { label:'Relationships', value:String(clients.length), note:'engagement on record' },
+          { label:'Researching', value:String(researching.length), note:'no relationship — comparables' },
+          { label:'Prospects', value:'1', note:'asked in July, never booked' },
+          { label:'Headcounts missing', value:String(noHc.length), note:'never estimated from funding' } ],
+        instTitle:'Companies', instMeta:'Relationships at full strength, research dimmed',
+        cols:'1.3fr 1fr 2.2fr 1.1fr 1.4fr .7fr',
+        head:['Company','Relationship','Why I looked','Last looked','Last round','Headcount'],
+        rows: coRows,
+        instNote:'Brightseam sits at Series A with 54 people and no relationship at all — it is here because Halverton names it as their competitor, and dimming the row is what keeps that clear when the brief gets read aloud. Tessellate has neither a round nor a headcount recorded, so both cells say so: inferring headcount from a funding stage would put a made-up number next to real ones on the same row.',
+        aiLabel:'Draft · comparable summary', aiCost:c4(runCost(11400, 940, true)),
+        aiBody:'A summary of the ' + researching.length + ' researched companies against Novacraft\u2019s tier structure, citing only the pricing pages in the library. Where a company\u2019s data is absent the summary says so instead of filling it from the sector figures.',
+        aiAccept:'Open the draft', aiFoot:'Cites library documents only.' },
+
+      { id:'ar5', badge:'AR5', route:'/research/library', zone:'Library', arch:'COLLECTION',
+        title:'Research · Library', h1:'Document library', scope:'Priya Nair · ' + LIB.length + ' documents',
+        blurb:'The cache Ask reads from, plus reusable material of my own. Library and Ask are one system: what is indexed here is precisely what Ask can answer over, and a document sitting unindexed is invisible to every question asked on that page.',
+        sub:'Session documents and reusable notes, with index state.',
+        cmpTitle:'Library · ' + LIB.length + ' documents',
+        cmpBody: indexed.length + ' indexed and answerable, ' + unindexed.length + ' not. ' + seamDocs.length + ' came from clients or the Lab.',
+        viewMore:'View more · ' + LIB.length + ' documents, ' + reusable.length + ' reusable →',
+        filters: fil(['All','Session docs','Reusable','Not indexed'], 0), ops:['Add document','Re-index','Export'],
+        legend: true,
+        adds:[ { label:'Documents', value:String(LIB.length), note:(LIB.length - reusable.length) + ' session, ' + reusable.length + ' reusable' },
+          { label:'Indexed', value:String(indexed.length), note:'answerable in Ask' },
+          { label:'Not indexed', value:String(unindexed.length), note:'invisible to Ask until indexed' },
+          { label:'Founder-sourced', value:String(seamDocs.length), note:'read-only, seam-marked' } ],
+        instTitle:'Library', instMeta:'Index state is Ask\u2019s reach, stated as a column',
+        cols:'2.2fr 1fr 1fr .9fr 1.4fr',
+        head:['Document','Kind','Added','Index state','In Ask'],
+        rows: libRows,
+        pair:{ h:'Library and Ask are one system', meta:'Empty library, no Ask',
+          body:'The last column is not a status — it is Ask\u2019s reach, restated here so the relationship reads from both ends. With an empty library Ask has no fallback prose: it can only report that nothing is indexed, which is why the unindexed Kelp Bio notes are a working gap rather than housekeeping. Three of these documents came from clients or the Lab and are read-only: they can be indexed and read, never edited.' },
+        instNote:'Three documents arrived through the platform and carry the seam mark — indexable and readable, never editable, which is the right asymmetry for a record the client also sees. The Kelp Bio notes are mine and still unindexed, so they answer nothing: adding a document and making it answerable are two acts, and this column is where the second one becomes visible.',
+        aiLabel:'Draft · index gaps', aiCost:c4(runCost(6800, 600, true)),
+        aiBody:'Points to the ' + nWord(unindexed.length) + ' unindexed document and what it would unlock in Ask — the Kelp Bio notes cover a pricing review, which is the one topic this session could not answer over.',
+        aiAccept:'Open the draft', aiFoot:'Counted from index state.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({ meter:null, askbar:null, thread:null, legend:null, pair:null, switcher:false }, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

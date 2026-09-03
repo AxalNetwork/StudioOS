@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#047857;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#065f46;background:#f0fdf6;border-color:#a7f3d0;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#f0fdf6;border-color:#a7f3d0;color:#065f46;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#f0fdf6;border:1px solid #a7f3d0;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#065f46;background:#dcfce7;border:1px solid #a7f3d0;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #047857;background:#047857;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .att{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#065f46;background:#f0fdf6;border:1px solid #a7f3d0;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .unatt{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .miss{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .nrc{font-size:10px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .rec{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:11px 14px;font-size:11.5px;color:#3f3a49;line-height:1.6}
+    .fun{display:flex;align-items:flex-end;gap:8px;margin-top:11px}
+    .assist{border:1px solid #a7f3d0;background:#f0fdf6;border-radius:10px;padding:11px 13px}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="5">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /expertise</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#065f46;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Expertise</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px">Priya Nair <span style="color:#615c6e;font-weight:600">· one practice</span></span>
+        </div>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="5">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <sc-if value="{{ p.meterPct }}">
+          <div class="card" style="padding:14px 17px;margin-top:14px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <span class="lbl">Profile completeness · what every match surface reads</span>
+              <span class="num" style="font-size:13px;font-weight:800;color:#065f46">{{ p.meterPct }}%</span>
+            </div>
+            <div style="height:6px;background:#ececf1;border-radius:999px;overflow:hidden;margin-top:9px"><div style="height:100%;width:{{ p.meterPct }}%;background:#047857;border-radius:999px"></div></div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:11px">
+              <sc-for list="{{ p.gaps }}" as="g" hint-placeholder-count="3"><span class="miss">Missing · {{ g }}</span></sc-for>
+            </div>
+            <div style="font-size:11px;color:#615c6e;margin-top:10px;line-height:1.55">{{ p.meterNote }}</div>
+          </div>
+        </sc-if>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:13px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <sc-if value="{{ a.nr }}"><div style="margin-top:6px"><span class="nrc">Not recorded</span></div></sc-if>
+              <sc-if value="{{ a.value }}"><div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div></sc-if>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ p.funnel }}">
+          <div class="card" style="padding:15px 17px;margin-top:13px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+              <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">Funnel · Aug 2026</span>
+              <span style="font-size:11px;color:#615c6e">Honest zeroes — a stage with none reads 0, not blank</span>
+            </div>
+            <div class="fun">
+              <sc-for list="{{ p.funnel }}" as="fu" hint-placeholder-count="4">
+                <div style="flex:1">
+                  <div style="height:52px;display:flex;align-items:flex-end"><div style="width:100%;height:{{ fu.h }}%;background:{{ fu.c }};border-radius:6px 6px 0 0;min-height:3px"></div></div>
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px"><span style="font-size:10px;font-weight:700;color:#615c6e">{{ fu.k }}</span><span class="num" style="font-size:11.5px;font-weight:800">{{ fu.n }}</span></div>
+                  <div style="font-size:9.5px;color:#9c96a8;margin-top:2px">{{ fu.rate }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ p.assist }}">
+          <div class="assist" style="margin-top:13px">
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <span class="propb">AI fills the blanks</span>
+              <span style="font-size:11.5px;font-weight:700;color:#065f46">{{ p.assist.h }}</span>
+              <span class="num" style="font-size:10.5px;color:#615c6e;margin-left:auto">{{ p.assist.cost }}</span>
+            </div>
+            <div style="font-size:11.5px;color:#3f3a49;line-height:1.65;margin-top:9px">{{ p.assist.body }}</div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:10px;flex-wrap:wrap">
+              <span class="acc">Open the draft</span><span class="gho">Keep my version</span><span class="dis">Discard</span>
+              <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.assist.foot }}</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="6"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center;{{ r.rowStyle }}">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                <span class="td" style="{{ c.style }}">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.att }}"><span class="att">{{ c.att }}</span></sc-if>
+                  <sc-if value="{{ c.unatt }}"><span class="unatt">{{ c.unatt }}</span></sc-if>
+                  <sc-if value="{{ c.miss }}"><span class="miss">{{ c.miss }}</span></sc-if>
+                  <sc-if value="{{ c.nr }}"><span class="nrc">Not recorded</span></sc-if>
+                  <sc-if value="{{ c.sub }}"><span style="display:block;font-size:10px;color:#615c6e;margin-top:3px;line-height:1.45">{{ c.sub }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <sc-if value="{{ p.reconcile }}">
+          <div class="rec" style="margin-top:13px"><strong style="color:#92400e">Reconciliation:</strong> {{ p.reconcile }}</div>
+        </sc-if>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#065f46;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="emerald" page="Expertise" hint-size="100%,{{ p.railH }}"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const E = { ink:'#047857', deep:'#065f46', tint:'#f0fdf6' };
+    const ROWS = ['Home','Practice','Cohorts','Expertise','Network','Research','Trust','Practice Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Expertise' ? 'nav on' : 'nav',
+      style: label === 'Expertise' ? 'color:'+E.deep+';background:'+E.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+E.ink : '' }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    const ZONES = ['Profile','Services','Proof','Thinking','Visibility'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Proof' }));
+
+    const pill = (t) => {
+      const M = { 'Complete':['#ecfdf5','#047857','#a7f3d0'], 'Published':['#ecfdf5','#047857','#a7f3d0'],
+        'Live':['#ecfdf5','#047857','#a7f3d0'], 'Attested':['#ecfdf5','#047857','#a7f3d0'],
+        'Partial':['#fffbeb','#92400e','#fde68a'], 'Draft':['#fffbeb','#92400e','#fde68a'],
+        'Consent asked':['#fffbeb','#92400e','#fde68a'], 'Unpriced':['#fffbeb','#92400e','#fde68a'],
+        'Empty':['#fef2f2','#b91c1c','#fecaca'], 'Retired':['#f6f5f8','#7c6f86','#e2e1e8'],
+        'Self-stated':['#f6f5f8','#615c6e','#e2e1e8'],
+        'Fixed':['#f5f5ff','#3730a3','#c7d2fe'], 'Package':['#f5f5ff','#3730a3','#c7d2fe'], 'Retainer':['#f5f5ff','#3730a3','#c7d2fe'],
+        'Flat':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Flat'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => {
+      const o = Object.assign({ text, pill:null, att:null, unatt:null, miss:null, nr:false, sub:null, style:'' }, opt || {});
+      o.pillStyle = o.pill ? pill(o.pill) : '';
+      return o;
+    };
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    // Money is stored as INTEGER CENTS. usd() is the single formatting edge — no float ever
+    // reaches the page, so no price can render with a computed-looking decimal.
+    const usd = (cents) => '$' + Math.round(cents / 100).toLocaleString('en-US');
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven','eight','nine','ten'][n] || String(n);
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    const plural = (n, s, p) => n === 1 ? s : (p || s + 's');
+
+    // ══ Mistral Small 3.1 — the Expertise curation. Long-form drafting on Thinking is the
+    // heaviest run in the set, and its cost is stated before the draft opens. ══
+    const X_IN = 0.351, X_OUT = 0.555;
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout) => tin / 1e6 * X_IN + tout / 1e6 * X_OUT;
+
+    // ══ ONE profile. Completeness is computed from the fields, not asserted. ══
+    const PROFILE = [
+      { f:'Positioning statement', v:'Pricing and packaging for early B2B software — from first paid pilot to a rate card that holds.', state:'Complete' },
+      { f:'Sectors', v:'B2B software, developer tools, vertical SaaS', state:'Complete' },
+      { f:'Stages', v:'Pre-seed through Series A', state:'Complete' },
+      { f:'Languages', v:'English, Hindi, Portuguese', state:'Complete' },
+      { f:'Geography', v:'Europe and North America · UTC−5 to UTC+2', state:'Complete' },
+      { f:'Availability window', v:'', nr:true, state:'Empty' },
+      { f:'Practice one-liner for match cards', v:'Pricing for early B2B.', state:'Partial', sub:'Under the 80-character minimum match surfaces read' },
+      { f:'Headshot', v:'', nr:true, state:'Empty' }
+    ];
+    const complete = PROFILE.filter(f => f.state === 'Complete');
+    const empty = PROFILE.filter(f => f.state === 'Empty');
+    const partial = PROFILE.filter(f => f.state === 'Partial');
+    const meterPct = Math.round(complete.length / PROFILE.length * 100);
+    const gaps = PROFILE.filter(f => f.state !== 'Complete').map(f => f.f.toLowerCase());
+    const profileRows = PROFILE.map(f => ({ rowStyle: f.state === 'Empty' ? 'background:#fffafa' : (f.state === 'Partial' ? 'background:#fffcf5' : ''), cells:[
+      cell(f.f),
+      f.nr ? cell('', { nr:true }) : cell(f.v, { sub: f.sub }),
+      cell('', { pill: f.state })
+    ]}));
+
+    // ══ ONE service ledger. Integer cents; one service deliberately unpriced. ══
+    const SVC = [
+      { name:'Pricing teardown', kind:'Fixed', dur:'90 min', cents:45000, sold:11, scope:'Current pricing reviewed against comparables; one page back.' },
+      { name:'Packaging sprint', kind:'Package', dur:'3 sessions over 2 weeks', cents:180000, sold:4, scope:'Tiers, metric, and a rate card the team can defend.' },
+      { name:'First rate card', kind:'Fixed', dur:'2 × 60 min', cents:120000, sold:6, scope:'From nothing to a published price, with objection handling.' },
+      { name:'Monthly pricing seat', kind:'Retainer', dur:'2 sessions / month', cents:250000, sold:2, scope:'Ongoing review as the funnel changes.' },
+      { name:'Enterprise deal review', kind:'Fixed', dur:'60 min', cents:null, sold:0, scope:'One live deal read end to end. Scope settled, price is not.' }
+    ];
+    const priced = SVC.filter(s => s.cents !== null);
+    const unpriced = SVC.filter(s => s.cents === null);
+    const bookedCents = SVC.reduce((a, s) => a + (s.cents || 0) * s.sold, 0);
+    const unitsSold = SVC.reduce((a, s) => a + s.sold, 0);
+    const svcRows = SVC.map(s => ({ rowStyle: s.cents === null ? 'background:#fffcf5' : '', cells:[
+      cell(s.name, { pill: s.cents === null ? 'Unpriced' : null, sub: s.scope }),
+      cell('', { pill: s.kind }),
+      cell(s.dur),
+      s.cents === null ? cell('', { nr:true }) : cell(usd(s.cents) + (s.kind === 'Retainer' ? ' / mo' : '')),
+      cell(s.sold ? String(s.sold) : '—')
+    ]}));
+
+    // ══ ONE proof shelf. Attested vs self-stated is the contrast the page is built on. ══
+    const PROOF = [
+      { item:'Halverton — rate card rebuild', outcome:'ACV up 34% over two quarters.', by:'Rowan Whitfield, CEO', on:'Jul 12, 2026', state:'Attested' },
+      { item:'Novacraft Labs — first paid pilot priced', outcome:'Pilot closed at ' + usd(1200000) + '.', by:'Dev Raghunathan, Founder', on:'Aug 19, 2026', state:'Attested' },
+      { item:'Meridian Robotics — packaging sprint', outcome:'Three tiers shipped; conversion effect not yet measured.', by:'Ines Marchetti, Co-founder', on:'Aug 28, 2026', state:'Attested' },
+      { item:'Kelp Bio — pricing review', outcome:'Engagement complete. Outcome not published.', by:null, on:null, state:'Consent asked' },
+      { item:'12 years pricing at two SaaS companies', outcome:'Background, not an engagement outcome.', by:null, on:null, state:'Self-stated' },
+      { item:'Certified pricing practitioner', outcome:'', nr:true, by:null, on:null, state:'Self-stated' }
+    ];
+    const attested = PROOF.filter(p => p.state === 'Attested');
+    const selfStated = PROOF.filter(p => p.state === 'Self-stated');
+    const awaiting = PROOF.filter(p => p.state === 'Consent asked');
+    const proofRows = PROOF.map(p => ({ rowStyle: p.state === 'Attested' ? '' : 'opacity:.74', cells:[
+      cell(p.item),
+      p.nr ? cell('', { nr:true }) : cell(p.outcome),
+      p.by ? cell(p.by, { att:'Attested ' + p.on }) : cell('No attestation', { unatt: p.state === 'Consent asked' ? 'Consent asked' : 'Self-stated' }),
+      cell('', { pill: p.state })
+    ]}));
+
+    // ══ ONE thinking feed. Chronological. Long-form drafting lives here. ══
+    const THINK = [
+      { t:'The rate card is a product decision', kind:'Essay', on:'Aug 24, 2026', state:'Published', reach:'1,240 reads', ai:'Outline drafted, rewritten by hand' },
+      { t:'Why your first pilot should not be free', kind:'Essay', on:'Jul 30, 2026', state:'Published', reach:'2,810 reads', ai:'Written unaided' },
+      { t:'Teardown: three seed-stage pricing pages', kind:'Teardown', on:'Jul 8, 2026', state:'Published', reach:'980 reads', ai:'Written unaided' },
+      { t:'Packaging for a two-sided funnel', kind:'Talk', on:'Jun 19, 2026', state:'Published', reach:'', nr:true, ai:'Written unaided' },
+      { t:'What founders get wrong about discounts', kind:'Essay', on:'Aug 30, 2026', state:'Draft', reach:'', nr:true, ai:'Draft open — 6 of 9 sections mine' }
+    ];
+    const published = THINK.filter(t => t.state === 'Published');
+    const thinkDrafts = THINK.filter(t => t.state === 'Draft');
+    const noReach = THINK.filter(t => t.nr);
+    const thinkRows = THINK.map(t => ({ rowStyle: t.state === 'Draft' ? 'background:#fffcf5' : '', cells:[
+      cell(t.t, { sub: t.ai }),
+      cell('', { pill: t.kind === 'Essay' ? 'Flat' : 'Flat' }),
+      cell(t.on),
+      cell('', { pill: t.state }),
+      t.nr ? cell('', { nr:true }) : cell(t.reach)
+    ]}));
+
+    // ══ ONE visibility funnel. Honest zeroes. ══
+    const SURF = [
+      { s:'Cohort match surface', imp:340, views:88, req:14, eng:6 },
+      { s:'Advisor directory', imp:2100, views:141, req:9, eng:2 },
+      { s:'Published thinking', imp:5030, views:212, req:11, eng:3 },
+      { s:'Practice profile link', imp:null, views:64, req:5, eng:2 },
+      { s:'Partner referral', imp:null, views:7, req:2, eng:0 }
+    ];
+    const imp = SURF.reduce((a, s) => a + (s.imp || 0), 0);
+    const views = SURF.reduce((a, s) => a + s.views, 0);
+    const reqs = SURF.reduce((a, s) => a + s.req, 0);
+    const engs = SURF.reduce((a, s) => a + s.eng, 0);
+    const noImp = SURF.filter(s => s.imp === null);
+    const zeroEng = SURF.filter(s => s.eng === 0);
+    const surfRows = SURF.slice().sort((a, b) => b.eng - a.eng || b.req - a.req).map(s => ({
+      rowStyle: s.eng === 0 ? 'background:#fffafa' : '', cells:[
+        cell(s.s),
+        s.imp === null ? cell('', { nr:true }) : cell(s.imp.toLocaleString('en-US')),
+        cell(String(s.views)), cell(String(s.req)), cell(String(s.eng)),
+        cell(s.req ? (s.eng / s.req * 100).toFixed(0) + '%' : '0%')
+      ]}));
+    const FUN = [
+      { k:'Impressions', n:imp.toLocaleString('en-US'), h:100, c:'#a5f3d0', rate:'2 surfaces uncounted' },
+      { k:'Profile views', n:String(views), h:32, c:'#6ee7b7', rate:(views / imp * 100).toFixed(1) + '% of impressions' },
+      { k:'Requests', n:String(reqs), h:14, c:'#34d399', rate:(reqs / views * 100).toFixed(0) + '% of views' },
+      { k:'Engagements', n:String(engs), h:7, c:'#047857', rate:(engs / reqs * 100).toFixed(0) + '% of requests' }
+    ];
+
+    const PAGES = [
+      { id:'ax1', badge:'AX1', route:'/expertise/profile', zone:'Profile', arch:'COLLECTION', railH:'700px',
+        title:'Expertise · Profile', h1:'Practice profile',
+        blurb:'Who this practice is, as every match surface in the product reads it. The completeness meter is computed from the fields below rather than asserted — a profile that scores well while missing an availability window would be flattering and useless.',
+        sub:'Positioning, sectors, stages, languages, geography, availability.',
+        cmpTitle:'Profile · ' + meterPct + '% complete',
+        cmpBody: complete.length + ' of ' + PROFILE.length + ' fields complete. ' + cap(nWord(empty.length)) + ' empty, ' + nWord(partial.length) + ' too short for match cards.',
+        viewMore:'View more · ' + PROFILE.length + ' fields, ' + gaps.length + ' gaps →',
+        filters: fil(['All fields','Gaps only','Match-critical','Public preview'], 0), ops:['Edit profile','Preview as founder','Export'],
+        meterPct: String(meterPct), gaps: gaps,
+        meterNote:'The meter counts only fields a match surface actually reads. Availability window is the costly gap: without it, a founder browsing the cohort surface cannot tell whether this practice takes new work this month, so the profile ranks but does not convert.',
+        adds:[ { label:'Fields complete', value:complete.length + ' of ' + PROFILE.length, note:'computed, not asserted' },
+          { label:'Empty', value:String(empty.length), note:'availability window, headshot' },
+          { label:'Too short', value:String(partial.length), note:'one-liner under 80 characters' },
+          { label:'Availability window', nr:true, note:'the gap that costs conversions' } ],
+        instTitle:'Fields', instMeta:'Gaps first within each state',
+        cols:'1.3fr 2.6fr 1fr', head:['Field','Value','State'],
+        rows: profileRows,
+        instNote:'The match one-liner reads "Pricing for early B2B." — accurate, and eleven characters under what a match card renders, so it truncates to nothing useful. Both empty fields render "Not recorded" rather than a placeholder: a generated positioning line would be this practice claiming words it did not choose, on the surface where founders decide whether to book.',
+        reconcile:'AdvisorExpertiseWorkspace already lives at /office-hours and carries these fields alongside booking. This page owns the fields only — no slot picker, no calendar. Booking can settle under Practice · Sessions or stay at /office-hours; nothing here assumes either.',
+        aiLabel:'AI fills the blanks · positioning draft', aiCost:c4(runCost(4200, 620)),
+        aiBody:'A longer match one-liner drafted from the positioning statement and the ' + attested.length + ' attested outcomes, at the length match cards render. Arrives as a draft in the field; the practice owns the words that ship.',
+        aiAccept:'Open the draft', aiFoot:'Nothing publishes without an edit and a save.' },
+
+      { id:'ax2', badge:'AX2', route:'/expertise/services', zone:'Services', arch:'LEDGER', railH:'720px',
+        title:'Expertise · Services', h1:'Service ledger',
+        blurb:'The productised offer: named engagements with a scope, a duration and a price. Prices are stored as integer cents and formatted once at the edge, so nothing on this page can render as a float or a computed-looking decimal.',
+        sub:'Named services, durations and prices.',
+        cmpTitle:'Services · ' + priced.length + ' priced',
+        cmpBody: unitsSold + ' ' + plural(unitsSold, 'unit') + ' sold, ' + usd(bookedCents) + ' booked. ' + cap(nWord(unpriced.length)) + ' service has no price set.',
+        viewMore:'View more · ' + SVC.length + ' services, ' + priced.length + ' priced →',
+        filters: fil(['All','Fixed','Package','Retainer'], 0), ops:['New service','Price history','Export'],
+        adds:[ { label:'Services', value:String(SVC.length), note:priced.length + ' priced, ' + unpriced.length + ' not' },
+          { label:'Booked', value:usd(bookedCents), note:'from ' + unitsSold + ' units' },
+          { label:'Most sold', value:'Pricing teardown', note:'11 units at ' + usd(45000) },
+          { label:'Enterprise deal review', nr:true, note:'scope settled, price is not' } ],
+        instTitle:'Services', instMeta:'Cents in the record, currency at the edge',
+        cols:'2.2fr .9fr 1.2fr 1.1fr .6fr',
+        head:['Service','Kind','Duration','Price','Sold'],
+        rows: svcRows,
+        instNote:'The enterprise deal review has a settled scope and no price, so it renders "Not recorded" and sells nothing — which is the honest state of a service still being priced, and better than a round number posted to fill the column. The retainer prices monthly; everything else prices once. Nothing here books a session: a service is an offer, and the slot that fulfils it lives outside this page.',
+        reconcile:'Same reconciliation as Profile — the live AdvisorExpertiseWorkspace couples services to a slot picker. This ledger deliberately stops at the offer, so booking can land under Practice · Sessions without a rewrite here.',
+        aiLabel:'Draft · scope copy for the unpriced service', aiCost:c4(runCost(3800, 540)),
+        aiBody:'Scope language for the enterprise deal review drafted from the four priced services and their ' + unitsSold + ' delivered units. The price stays empty — a number the practice has not chosen is not a blank to fill.',
+        aiAccept:'Open the draft', aiFoot:'Price fields are never drafted.' },
+
+      { id:'ax3', badge:'AX3', route:'/expertise/proof', zone:'Proof', arch:'COLLECTION', railH:'740px',
+        title:'Expertise · Proof', h1:'Evidence',
+        blurb:'Evidence rather than claims. Every item carries provenance — who attested it and when — and an unattested item renders visibly weaker than an attested one. That contrast is the whole design: a background line and a client-verified outcome should never look alike.',
+        sub:'Completed engagements, published outcomes, credentials.',
+        cmpTitle:'Proof · ' + attested.length + ' attested',
+        cmpBody: awaiting.length + ' awaiting consent, ' + selfStated.length + ' self-stated. Provenance shown per item.',
+        viewMore:'View more · ' + PROOF.length + ' items, ' + attested.length + ' with attestation →',
+        filters: fil(['All','Attested','Awaiting consent','Self-stated'], 0), ops:['Ask for consent','Public preview','Export'],
+        adds:[ { label:'Attested', value:String(attested.length), note:'named client, dated' },
+          { label:'Awaiting consent', value:String(awaiting.length), note:'asked, no answer yet' },
+          { label:'Self-stated', value:String(selfStated.length), note:'no external attestation' },
+          { label:'Credential verified', nr:true, note:'no verifying body connected' } ],
+        instTitle:'Evidence', instMeta:'Attested rows read at full strength; the rest are dimmed',
+        cols:'2fr 2fr 1.5fr 1.1fr',
+        head:['Item','Outcome','Provenance','State'],
+        rows: proofRows,
+        instNote:'The three attested rows name a person and a date, and read at full strength. Everything below them is dimmed by ' + nWord(1) + ' step: Kelp Bio\u2019s engagement is real but its outcome unpublished, the twelve-year background is true and unattestable, and the practitioner certification has no verifying body connected — so its outcome column reads "Not recorded" rather than restating the claim as if the claim were the evidence.',
+        aiLabel:'Draft · consent requests', aiCost:c4(runCost(4600, 580)),
+        aiBody:'A consent request for the Kelp Bio engagement, naming the specific claim and where it would appear. Drafted; a person sends it, and the item stays dimmed until the answer arrives.',
+        aiAccept:'Open the draft', aiFoot:'One request. Consent is never assumed.' },
+
+      { id:'ax4', badge:'AX4', route:'/expertise/thinking', zone:'Thinking', arch:'FEED', railH:'760px',
+        title:'Expertise · Thinking', h1:'Published thinking',
+        blurb:'Essays, talks and teardowns, chronological. This is the only page in the set where the assist drafts long-form, so it is where "AI fills the blanks" sits most prominently — as a labelled offer on a draft the practice still owns, edits, and publishes by hand.',
+        sub:'Points of view, newest first.',
+        cmpTitle:'Thinking · ' + published.length + ' published',
+        cmpBody: thinkDrafts.length + ' in draft. ' + noReach.length + ' items have no reach figure recorded.',
+        viewMore:'View more · ' + THINK.length + ' items, full drafting history →',
+        filters: fil(['All','Published','Drafts','Essays'], 0), ops:['New piece','Drafting history','Export'],
+        assist:{ h:'Draft the discounts essay', cost:c4(runCost(18400, 4200)),
+          body:'Six of nine sections are already the practice\u2019s own words. The assist drafts the three unwritten sections from the ' + attested.length + ' attested outcomes and the pricing teardowns, and marks every drafted paragraph so the practice can see exactly which sentences are not yet theirs. It never publishes: the draft opens in the editor and stays a draft until a person presses publish.',
+          foot:'Long-form is the heaviest run here — cost shown before the draft opens.' },
+        adds:[ { label:'Published', value:String(published.length), note:'essays, a teardown, a talk' },
+          { label:'In draft', value:String(thinkDrafts.length), note:'6 of 9 sections written' },
+          { label:'Best reach', value:'2,810', note:'first pilot essay, Jul 30' },
+          { label:'Talk reach', nr:true, note:'no counter on the venue\u2019s recording' } ],
+        instTitle:'Feed', instMeta:'Newest first · drafting provenance per row',
+        cols:'2.3fr .9fr 1fr 1fr 1.1fr',
+        head:['Piece','Kind','Date','State','Reach'],
+        rows: thinkRows,
+        instNote:'Each row states how it was written — two pieces drafted with the assist and rewritten by hand, three written unaided, one open with six of nine sections the practice\u2019s own. That column exists because a reader who later asks "did you write this?" deserves the same answer the practice gave itself. The June talk has no reach figure because the venue\u2019s recording carries no counter, and an estimate would be the only invented number on a page about credibility.',
+        aiLabel:'AI fills the blanks · three unwritten sections', aiCost:c4(runCost(18400, 4200)),
+        aiBody:'The draft\u2019s remaining sections, written from attested outcomes rather than from general knowledge, with every drafted paragraph marked. Publication is a human act — the assist has no path to it.',
+        aiAccept:'Open the draft', aiFoot:'Drafted paragraphs stay marked until rewritten.' },
+
+      { id:'ax5', badge:'AX5', route:'/expertise/visibility', zone:'Visibility', arch:'ANALYTICS', railH:'700px',
+        title:'Expertise · Visibility', h1:'Surfaces & funnel',
+        blurb:'Where the profile appears and what each surface produced, all the way to a booked engagement. Honest zeroes: a surface that produced no engagement reads 0 rather than being quietly dropped, and two surfaces have no impression counter at all.',
+        sub:'Impressions, views, requests and engagements per surface.',
+        cmpTitle:'Visibility · ' + engs + ' engagements',
+        cmpBody: reqs + ' requests from ' + views + ' profile views. ' + cap(nWord(zeroEng.length)) + ' surface produced none.',
+        viewMore:'View more · ' + SURF.length + ' surfaces, full funnel →',
+        filters: fil(['By engagements','By requests','By views','Zero-conversion'], 0), ops:['Adjust surfaces','Attribution rules','Export'],
+        adds:[ { label:'Profile views', value:String(views), note:'across ' + SURF.length + ' surfaces' },
+          { label:'Requests', value:String(reqs), note:(reqs / views * 100).toFixed(0) + '% of views' },
+          { label:'Engagements', value:String(engs), note:(engs / reqs * 100).toFixed(0) + '% of requests' },
+          { label:'Impressions', value:imp.toLocaleString('en-US'), note:noImp.length + ' surfaces have no counter' } ],
+        funnel: FUN,
+        instTitle:'Surfaces', instMeta:'Sorted by engagements, not impressions',
+        cols:'1.7fr 1fr .9fr .9fr 1fr 1.1fr',
+        head:['Surface','Impressions','Views','Requests','Engagements','Request → engagement'],
+        rows: surfRows,
+        instNote:'The cohort match surface is the smallest by impressions and the largest by engagements — 340 impressions produced six, while the directory\u2019s 2,100 produced two. Partner referral shows 0% against two requests rather than being hidden: two asks and no booking is a real reading at this volume, and rounding it away would leave the funnel describing four surfaces while claiming five. Two surfaces carry no impression counter, so those cells read "Not recorded" and the funnel\u2019s top bar says so.',
+        aiLabel:'Reading · funnel findings', aiCost:c4(runCost(7200, 780)),
+        aiBody:'Findings across the ' + SURF.length + ' surfaces: requests convert at ' + (engs / reqs * 100).toFixed(0)
+          + '% overall, and the two surfaces where founders arrive having already read something convert far above the directory. Points to the missing availability window on Profile as the most likely brake between a view and a request.',
+        aiAccept:'Accept reading', aiFoot:'Counts read from surface rows.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({ meterPct:null, gaps:null, meterNote:null, funnel:null, assist:null, reconcile:null }, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>

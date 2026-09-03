@@ -56,6 +56,58 @@ ever hold work that is still outstanding.
    — or into `backlog/` if it is triaged but not yet built. This queue holds
    only what has not been triaged.
 
+## In the queue now — the four-profile layout pass (2026-09-03)
+
+Eleven canvases landed here from the layout pass. Everything else the owner
+sent in that batch was already committed under `design/canvases/`, byte for
+byte, so only what the repository did not already hold is here.
+
+**Eight the repository had never seen.** Each governs a bucket whose zone
+routes are live and whose bodies have not yet been built up to the canvas —
+which is exactly what this queue is for. Partner · Pipeline is the one bucket
+of the four whose canvas was already committed — it is in
+`design/canvases/integrated/` and is not repeated here.
+
+| Canvas | Governs | Grade |
+| --- | --- | --- |
+| `Pages · Founder Validate.dc.html` | `/validate`, `/validate/{interviews,pain-map,hypotheses,verdict}` | UPGRADE |
+| `Pages · Advisor Expertise.dc.html` | `/expertise`, `/expertise/{profile,services,proof,thinking,visibility}` | UPGRADE |
+| `Pages · Advisor Network.dc.html` | `/network/*` on the advisor licence | UPGRADE |
+| `Pages · Advisor Research.dc.html` | `/research/*` on the advisor licence | UPGRADE |
+| `Pages · Partner Delivery.dc.html` | `/delivery`, `/delivery/{board,deliverables,capacity,status-reports,health}` | UPGRADE |
+| `Pages · Partner Offers.dc.html` | `/offers`, `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` | UPGRADE |
+| `Pages · Partner Network.dc.html` | `/network/*` on the partner licence | UPGRADE |
+| `Pages · Partner Research.dc.html` | `/research/*` on the partner licence | UPGRADE |
+
+**Three are newer exports of canvases already in `canvases/backlog/`** —
+`AIRail.dc.html`, `Founder Workspaces Canvas.dc.html` and
+`Investor LP Canvas.dc.html`. They land here rather than overwriting the
+backlog copies, which is the same route the newer `Support Security · Super`
+export took. Triage decides whether each replaces its predecessor; until it
+does, **the backlog copy is still the one that was built against**, so read
+both before treating a difference as intent.
+
+`AIRail.dc.html` is the one to read first. It, `PartnerRail.dc.html` and
+`EmberRail.dc.html` specify the same rail in the same block order — Mode, a
+fill-the-blanks toggle, **Model · this page**, Batch, Usage, and a Screened
+footer — differing only in profile accent. The shipped rail has Mode,
+Coverage, Unavailable here, Usage and the guardrail footer. **The model card
+cannot honestly ship yet**: it names a model and a per-million rate, and those
+come from the aiRouter task class a surface is bound to through
+`ASSIST_SURFACES`. No workspace surface on any of the four licences is
+registered there, so the card would name a model for a page that never calls
+one. That is a registration gap behind a content gap, not a layout defect, and
+`frontend/test/workspace_frame_contract.test.mjs` pins the rail shut against it
+in the meantime.
+
+**What already shipped against these**, so nobody re-derives it: the frame
+itself. All eleven specify the same `.frame` / `.side` / `.main` / `.rail`
+geometry with exactly one crumb, one `<h1>`, one sub-line, one zone-pill row
+and one rail, and that contract is now enforced across all four licences —
+including `.main`'s padding, which lives on `WorkspaceShell` rather than on
+the page container it used to come from. What remains per profile is the
+BODIES: the cards, tables and empty states inside the frame.
+
 ## The rule that matters most
 
 **A canvas is a proposal, not a specification.** These designs are drawn with

@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeecf1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08)}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 18px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px;letter-spacing:.05em}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.5 Inter,system-ui,sans-serif;color:rgba(24,24,27,.55)}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f8f8fa;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:196px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;gap:9px;padding:8px 16px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .nav.on{color:#7c3aed;background:#f6f2ff;font-weight:700;box-shadow:inset 2px 0 0 #7c3aed}
+    .main{flex:1;min-width:0;padding:22px 24px 30px}
+    .rail{width:286px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:18px 18px 26px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#7d7889}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:13px}
+    .prop{background:#faf7ff;border:1px solid #d8c9ff;border-radius:13px;padding:15px 17px}
+    .proph{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+    .propb{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6d28d9;background:#f0e9ff;border:1px solid #d8c9ff;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #7c3aed;background:#7c3aed;color:#fff;cursor:pointer}
+    .gho{font-size:11.5px;font-weight:700;padding:6px 12px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49;cursor:pointer}
+    .dis{font-size:11.5px;font-weight:600;padding:6px 10px;color:#7d7889;cursor:pointer}
+    .add{font-size:11.5px;line-height:1.5;background:#eaf9f0;border-left:2px solid #10b981;padding:6px 10px;border-radius:0 6px 6px 0;color:#14532d}
+    .anch{display:flex;gap:6px;flex-wrap:wrap;padding:9px 0 0}
+    .anchi{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px}
+    .anchi.on{color:#6d28d9;background:#f6f2ff;border-color:#e6dcff;font-weight:700}
+    .zh[id],[id^="r-status"],[id^="g-focus"],[id^="re-ask"]{scroll-margin-top:26px}
+    .zh{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 11px}
+    .zt{font-size:15px;font-weight:800;letter-spacing:-.015em}
+    .zs{font-size:11.5px;color:#7d7889}
+    .mrow{border:1px solid #ececf1;border-radius:10px;padding:11px 12px;margin-bottom:8px}
+    .mrow.on{border-color:#7c3aed;background:#faf7ff;box-shadow:0 0 0 2px rgba(124,58,237,.08)}
+    .tag{font-size:10px;font-weight:700;color:#4a4553;background:#f4f4f6;border:1px solid #e8e8ec;border-radius:4px;padding:2px 6px}
+    .shield{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;border-radius:4px;padding:2px 6px}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#7d7889;text-align:left;padding:0 0 8px}
+    .td{font-size:12px;padding:9px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+  </style>
+</helmet>
+
+<!-- ══════════════ ARTBOARD 1 — WORKER AI RAIL ══════════════ -->
+<section class="ab" id="a1">
+  <div class="ab-hd"><a class="ab-id" href="#a1">A1</a><span class="ab-nm">The Worker AI Rail — shared system spec</span></div>
+  <div class="ab-sub" style="max-width:900px;margin:-8px 0 20px">Identical on all six workspaces, docked right, collapsible to a 44px spine. Four stacked blocks: mode, model, meter, safety. Every price below is an all-in platform rate — Axal VC's margin is inside the rate, so there is never a second fee line.</div>
+
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+
+    <!-- expanded rail -->
+    <div style="width:320px;flex:none;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);padding:18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span class="lbl">Worker AI</span>
+        <span style="font-size:11px;color:#a8a4b4">collapse ›</span>
+      </div>
+
+      <div class="lbl" style="margin-top:17px">1 · Mode</div>
+      <div style="display:grid;gap:7px;margin-top:9px">
+        <div style="border:1px solid #e2e1e8;border-radius:10px;padding:11px 12px">
+          <div style="font-size:12.5px;font-weight:700">Manual</div>
+          <div style="font-size:11px;color:#615c6e;margin-top:4px;line-height:1.5">AI stands down. Boards, forms and tables work exactly as they do now. No tokens spent.</div>
+        </div>
+        <div style="border:1px solid #7c3aed;background:#faf7ff;border-radius:10px;padding:11px 12px;box-shadow:0 0 0 2px rgba(124,58,237,.08)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span style="font-size:12.5px;font-weight:800;color:#4c1d95">AI fills the blanks</span>
+            <span style="width:26px;height:15px;border-radius:999px;background:#7c3aed;position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:11px;height:11px;border-radius:50%;background:#fff"></span></span>
+          </div>
+          <div style="font-size:11px;color:#4c1d95;margin-top:5px;line-height:1.5">Drafts into empty fields, suggests next actions, pre-writes summaries — always as a proposal you accept, edit or discard.</div>
+        </div>
+      </div>
+
+      <div class="lbl" style="margin-top:18px">2 · Model for this page</div>
+      <div style="margin-top:9px">
+        <div class="mrow on">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span style="font-size:12.5px;font-weight:800">Llama 3.3 70B Fast</span>
+            <span style="font-size:9px;font-weight:800;letter-spacing:.07em;color:#6d28d9;background:#f0e9ff;border:1px solid #d8c9ff;border-radius:4px;padding:2px 6px">RECOMMENDED</span>
+          </div>
+          <div class="num" style="font-size:10.5px;color:#615c6e;margin-top:4px;font-family:ui-monospace,Menlo,monospace">@cf/meta/llama-3.3-70b-instruct-fp8-fast</div>
+          <div style="font-size:11px;color:#4a4553;margin-top:6px;line-height:1.5">Reads across all your interviews at once and writes the synthesis. Good enough for real work, cheap enough to re-run.</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px"><span class="tag">Best for: synthesis</span><span class="tag">Long context</span></div>
+          <div class="num" style="display:flex;justify-content:space-between;gap:10px;font-size:11px;margin-top:9px;padding-top:8px;border-top:1px solid #f0eff4">
+            <span style="color:#615c6e">$0.293 / M in · $2.253 / M out</span>
+          </div>
+          <div class="num" style="font-size:11.5px;font-weight:700;color:#047857;margin-top:6px">{{ validateEst }} per interview synthesis</div>
+        </div>
+        <div class="mrow">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span style="font-size:12.5px;font-weight:700">Llama 3.2 3B</span>
+            <span class="num" style="font-size:10.5px;color:#615c6e">$0.051 / $0.335</span>
+          </div>
+          <div style="font-size:11px;color:#615c6e;margin-top:5px;line-height:1.5">Fast quote tagging. Six times cheaper, shallower reasoning.</div>
+        </div>
+        <div style="font-size:11px;color:#7d7889;margin-top:4px;line-height:1.5">Each workspace remembers its own model. Switching is instant and changes nothing you've already accepted.</div>
+      </div>
+
+      <div class="lbl" style="margin-top:18px">3 · Usage</div>
+      <div style="border:1px solid #ececf1;border-radius:10px;padding:12px;margin-top:9px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+          <span class="num" style="font-size:19px;font-weight:800;letter-spacing:-.02em">$14.20</span>
+          <span style="font-size:11px;color:#615c6e">of $40.00 this month</span>
+        </div>
+        <div style="height:6px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:9px"><div style="height:100%;width:36%;background:#7c3aed;border-radius:999px"></div></div>
+        <div style="display:grid;gap:5px;margin-top:11px">
+          <div class="num" style="display:flex;justify-content:space-between;font-size:11px;color:#4a4553"><span>Raise</span><span>$6.41</span></div>
+          <div class="num" style="display:flex;justify-content:space-between;font-size:11px;color:#4a4553"><span>Research</span><span>$4.08</span></div>
+          <div class="num" style="display:flex;justify-content:space-between;font-size:11px;color:#4a4553"><span>Validate</span><span>$2.27</span></div>
+          <div class="num" style="display:flex;justify-content:space-between;font-size:11px;color:#4a4553"><span>Grow · Build · Network</span><span>$1.44</span></div>
+        </div>
+        <div class="num" style="font-size:10.5px;color:#7d7889;margin-top:10px;padding-top:9px;border-top:1px solid #f4f3f7;line-height:1.5">{{ a1MeterReceipt }}</div>
+      </div>
+
+      <div style="border:1px solid #fde68a;background:#fffdf5;border-radius:10px;padding:11px 12px;margin-top:9px">
+        <div style="font-size:11.5px;font-weight:700;color:#78350f">Out of tokens</div>
+        <div style="font-size:11px;color:#78350f;margin-top:4px;line-height:1.5">The page drops to Manual and keeps working — nothing locks. Top up when you want the advisor back.</div>
+        <div style="font-size:11.5px;font-weight:700;color:#6d28d9;margin-top:8px">Add tokens →</div>
+      </div>
+
+      <div class="lbl" style="margin-top:18px">4 · Safety</div>
+      <div style="display:flex;align-items:flex-start;gap:9px;margin-top:9px">
+        <span class="shield" style="flex:none;margin-top:1px">Screened</span>
+        <div style="font-size:11px;color:#615c6e;line-height:1.5">Anything generated for outside eyes — investor emails, deck copy, data-room summaries — passes <span class="num" style="font-family:ui-monospace,Menlo,monospace;font-size:10px">@cf/meta/llama-guard-3-8b</span> first. Automatic, not a setting.</div>
+      </div>
+    </div>
+
+    <!-- collapsed + anatomy -->
+    <div style="display:grid;gap:16px;flex:1;min-width:320px">
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="width:52px;flex:none;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);padding:14px 0;text-align:center">
+          <div style="font-size:11px;color:#a8a4b4">‹</div>
+          <div style="width:28px;height:28px;border-radius:8px;background:#f6f2ff;color:#6d28d9;display:flex;align-items:center;justify-content:center;margin:12px auto 0;font-size:12px;font-weight:800">AI</div>
+          <div style="width:8px;height:8px;border-radius:50%;background:#10b981;margin:10px auto 0"></div>
+          <div class="num" style="font-size:9px;color:#615c6e;margin-top:10px;writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.05em">$14.20</div>
+        </div>
+        <div style="flex:1;min-width:260px;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:17px 19px">
+          <div class="lbl">Collapsed spine</div>
+          <div style="font-size:12.5px;color:#3f3a49;margin-top:9px;line-height:1.6">44–52px. Keeps three facts alive: the advisor is on (green dot), which page-model is loaded (hover), and spend to date. One click restores the rail. Manual mode turns the dot grey and hides the meter — a founder who never wants AI sees a quiet strip, not a nag.</div>
+        </div>
+      </div>
+
+      <!-- DARK MODE — the rail is the one component identical across all six pages, so the
+           dark treatment is specified once here and the workspaces inherit it by reference. -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+        <div style="width:300px;flex:none;background:#1a1822;border:1px solid #2e2b38;border-radius:12px;box-shadow:0 2px 14px rgba(0,0,0,.28);padding:17px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span class="lbl" style="color:#a9a4b8">Worker AI · dark</span>
+            <span style="font-size:11px;color:#6f6a80">collapse ›</span>
+          </div>
+          <div style="border:1px solid #4c3d7a;background:#241d38;border-radius:9px;padding:10px 11px;margin-top:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="font-size:12px;font-weight:800;color:#c4b5fd">AI fills the blanks</span>
+              <span style="width:24px;height:14px;border-radius:999px;background:#a78bfa;position:relative;flex:none"><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#1a1822"></span></span>
+            </div>
+            <div style="font-size:10.5px;color:#c4b5fd;margin-top:4px;line-height:1.45">Same proposals, same receipts. Accent lightens to violet-400 so it holds on a dark surface.</div>
+          </div>
+          <div style="border:1px solid #4c3d7a;background:#241d38;border-radius:9px;padding:10px 11px;margin-top:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:7px">
+              <span style="font-size:12px;font-weight:800;color:#f4f3f7">Llama 3.3 70B Fast</span>
+              <span style="font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#c4b5fd;background:#31265c;border:1px solid #4c3d7a;border-radius:3px;padding:2px 5px;flex:none">RECOMMENDED</span>
+            </div>
+            <div class="num" style="font-size:10.5px;color:#a9a4b8;margin-top:4px;font-family:ui-monospace,Menlo,monospace;word-break:break-all">@cf/meta/llama-3.3-70b-instruct-fp8-fast</div>
+            <div style="font-size:10.5px;color:#cdc9d8;margin-top:5px;line-height:1.5">Model IDs use the muted token, never a faint grey — this string is the proof the model is real.</div>
+            <div class="num" style="font-size:10.5px;color:#a9a4b8;margin-top:8px;padding-top:7px;border-top:1px solid #2e2b38">$0.293 / M in · $2.253 / M out</div>
+            <div class="num" style="font-size:11px;font-weight:700;color:#34d399;margin-top:6px">{{ validateEst }} per interview synthesis</div>
+          </div>
+          <div style="border:1px solid #2e2b38;border-radius:9px;padding:11px;margin-top:9px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+              <span class="num" style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:#f4f3f7">$14.20</span>
+              <span style="font-size:10.5px;color:#a9a4b8">of $40.00</span>
+            </div>
+            <div style="height:5px;background:#2e2b38;border-radius:999px;overflow:hidden;margin-top:8px"><div style="height:100%;width:36%;background:#a78bfa;border-radius:999px"></div></div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px;margin-top:13px;padding-top:12px;border-top:1px solid #2e2b38">
+            <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;color:#5eead4;background:#0f2f2c;border:1px solid #155e56;border-radius:3px;padding:2px 5px;flex:none;margin-top:1px">Screened</span>
+            <div style="font-size:10px;color:#a9a4b8;line-height:1.5">Semantic colours shift lightness, never hue — green stays the cost signal, amber the warning.</div>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:340px;background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+          <div class="lbl">Token pairs — light / dark</div>
+          <div style="font-size:12px;color:#3f3a49;margin-top:9px;line-height:1.6">The six workspaces reference these; no page defines its own colour. Accent lightens on dark so violet-600 does not vibrate against a near-black surface.</div>
+          <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;margin-top:14px">
+            <span class="th">Token</span><span class="th">Light</span><span class="th">Dark</span>
+          </div>
+          <sc-for list="{{ tokens }}" as="t" hint-placeholder-count="10">
+            <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;align-items:center">
+              <span class="td" style="font-weight:600">{{ t.name }}</span>
+              <span class="td num" style="display:flex;align-items:center;gap:7px;font-family:ui-monospace,Menlo,monospace;font-size:11px"><span style="{{ t.lSwatch }}"></span>{{ t.light }}</span>
+              <span class="td num" style="display:flex;align-items:center;gap:7px;font-family:ui-monospace,Menlo,monospace;font-size:11px"><span style="{{ t.dSwatch }}"></span>{{ t.dark }}</span>
+            </div>
+          </sc-for>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.6">Contrast floor is 4.5:1 for anything under 18.66px — which is why the muted token is <span class="num" style="font-family:ui-monospace,Menlo,monospace">#615c6e</span> and not a lighter grey. Model IDs, prices and receipts are all small monospace, so they all sit on that token.</div>
+        </div>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(24,24,27,.12);border-radius:12px;padding:19px 21px">
+        <div class="lbl">Proposal anatomy — the rule on every page</div>
+        <div class="prop" style="margin-top:12px">
+          <div class="proph">
+            <span class="propb">Proposal · Advisor</span>
+            <span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">{{ a1Will }}</span>
+          </div>
+          <div class="add">+ Adds 3 hypothesis cards drawn from 5 interviews. Nothing existing is changed.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap">
+            <div class="acc">Accept</div><div class="gho">Edit first</div><div class="dis">Discard</div>
+            <span class="num" style="font-size:10.5px;color:#7d7889;margin-left:auto">{{ a1Receipt }}</span>
+          </div>
+        </div>
+        <div style="display:grid;gap:8px;margin-top:14px">
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· Cost is shown <strong>before</strong> the run and receipted <strong>after</strong>. No surprise line items.</div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· A proposal never writes to the record. Accept commits; Edit opens the draft in the normal editor; Discard leaves no trace.</div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· Green diff bars mark additions. Anything the advisor would overwrite is shown struck through in amber, and requires a second confirm.</div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">· Accepted output keeps a small provenance mark naming the model, so a founder can tell six weeks later what they wrote and what they approved.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ ARTBOARD 2 — VALIDATE ══════════════ -->
+<section class="ab" id="a2">
+  <div class="ab-hd"><a class="ab-id" href="#a2">A2</a><span class="ab-nm">Validate — "Prove someone wants this"</span></div>
+  <div class="frame">
+    <div class="side">
+      <sc-for list="{{ navV }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for>
+    </div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Prove someone wants this</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Every interview, every pain, every hypothesis and the verdict they add up to — on one page.</div>
+      <div class="anch"><sc-for list="{{ anchV }}" as="a" hint-placeholder-count="4"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for></div>
+
+      <!-- interviews -->
+      <div class="card" style="padding:17px 19px;margin-top:18px">
+        <div class="zh" id="v-interviews"><span class="zt">Interview library</span><span class="zs">12 logged · 3 this week</span></div>
+        <div class="prop">
+          <div class="proph"><span class="propb">Transcribed · Whisper</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">44 min audio · $0.0220</span></div>
+          <div style="font-size:12.5px;font-weight:700">Priya Menon · Head of Platform, Verwood</div>
+          <div style="font-size:11.5px;color:#4a4553;margin-top:6px;line-height:1.6">"We have four tools that all think they own the handoff. Nobody can tell me where a task actually is on a Thursday afternoon."</div>
+          <div class="add" style="margin-top:9px">+ 6 quotes extracted · 4 tagged to <strong>Handoff opacity</strong>, 2 to <strong>Tool sprawl</strong></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept tags</div><div class="gho">Review each</div><div class="dis">Discard</div></div>
+        </div>
+        <div style="display:grid;gap:0;margin-top:14px">
+          <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:12px"><span class="th">Person</span><span class="th">Role</span><span class="th">Date</span><span class="th">Quotes</span></div>
+          <sc-for list="{{ interviews }}" as="i" hint-placeholder-count="4">
+            <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:12px"><span class="td" style="font-weight:600">{{ i.name }}</span><span class="td">{{ i.role }}</span><span class="td num">{{ i.date }}</span><span class="td num">{{ i.quotes }}</span></div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:9px;margin-top:14px;flex-wrap:wrap"><div class="gho">+ Record now</div><div class="gho">Upload audio</div><div class="gho">Type notes</div></div>
+      </div>
+
+      <!-- pain map -->
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="v-pain"><span class="zt">Pain map</span><span class="zs">Clustered by bge-m3 · edit any grouping</span></div>
+        <div style="display:grid;gap:9px">
+          <sc-for list="{{ pains }}" as="p" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="font-size:12.5px;font-weight:700;width:170px;flex:none">{{ p.name }}</span>
+              <div style="flex:1;height:20px;background:#f4f3f7;border-radius:5px;overflow:hidden"><div style="height:100%;width:{{ p.pct }}%;background:{{ p.ink }};border-radius:5px"></div></div>
+              <span class="num" style="font-size:11.5px;color:#615c6e;width:88px;flex:none;text-align:right">{{ p.count }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- hypotheses -->
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="v-hyp"><span class="zt">Hypotheses</span><span class="zs">Drag to reorder · each carries its evidence</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px">
+          <sc-for list="{{ hyps }}" as="h" hint-placeholder-count="3">
+            <div style="{{ h.cardStyle }}">
+              <span style="{{ h.pill }}">{{ h.verdict }}</span>
+              <div style="font-size:12.5px;font-weight:700;margin-top:9px;line-height:1.45">{{ h.text }}</div>
+              <div class="num" style="font-size:11px;color:#615c6e;margin-top:8px">{{ h.evidence }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="prop" style="margin-top:12px">
+          <div class="proph"><span class="propb">Proposal · Advisor</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">≈ $0.006</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">Three interviews mention procurement blocking a trial, which no hypothesis covers yet.</div>
+          <div class="add" style="margin-top:9px">+ New card — "Teams under 50 can buy without procurement review" · unproven · 3 quotes attached</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept</div><div class="gho">Edit first</div><div class="dis">Discard</div></div>
+        </div>
+      </div>
+
+      <!-- verdict -->
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="v-verdict"><span class="zt">Validation summary</span><span class="zs">Living verdict · rewrites as evidence lands</span></div>
+        <div style="font-size:13px;color:#3f3a49;line-height:1.65">Handoff opacity is <strong>validated</strong> — 9 of 12 interviews name it unprompted and 4 quantify it in hours lost. Willingness to pay is <strong>unproven</strong>: only 2 interviewees named a number, both under your model's floor. The integration-first objection is <strong>invalidated</strong> — nobody raised it.</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
+          <span class="shield">Provenance</span>
+          <span style="font-size:11px;color:#7d7889">Every clause above links to the quotes behind it — hover to see its receipts.</span>
+        </div>
+      </div>
+    </div>
+    <div class="rail">
+      <dc-import name="AIRail" page="Validate" hint-size="100%,760px"></dc-import>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ ARTBOARD 3 — BUILD ══════════════ -->
+<section class="ab" id="a3">
+  <div class="ab-hd"><a class="ab-id" href="#a3">A3</a><span class="ab-nm">Build — "Operate the company this week"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navB }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Operate the company this week</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Commitments first. Everything else on this page exists to serve the seven days in front of you.</div>
+      <div class="anch"><sc-for list="{{ anchB }}" as="a" hint-placeholder-count="4"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for></div>
+
+      <div class="card" style="padding:17px 19px;margin-top:18px;border-color:#d8c9ff">
+        <div class="zh" id="b-week"><span class="zt">This week · Aug 24–30</span><span class="zs">4 commitments · 1 at risk</span></div>
+        <div class="prop">
+          <div class="proph"><span class="propb">Proposal · Monday plan</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">≈ $0.0005</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">Drafted from what actually moved last week: two cards shipped, the pricing card slipped twice.</div>
+          <div class="add" style="margin-top:9px">+ Ship async digest v1 · Amara<br>+ Close 3 of 5 pending trials · Guillaume<br>+ Pricing page copy — <em>carried from last week, third attempt</em></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept all 3</div><div class="gho">Pick individually</div><div class="dis">I'll write it</div></div>
+        </div>
+        <div style="display:grid;gap:8px;margin-top:14px">
+          <sc-for list="{{ commits }}" as="c" hint-placeholder-count="4">
+            <div style="{{ c.rowStyle }}">
+              <span style="{{ c.box }}"></span>
+              <span style="font-size:12.5px;font-weight:600;flex:1;min-width:0">{{ c.text }}</span>
+              <span class="num" style="font-size:11px;color:#615c6e">{{ c.who }}</span>
+              <span style="{{ c.pill }}">{{ c.state }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="b-board"><span class="zt">Execution board</span><span class="zs">14 cards</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:9px">
+            <sc-for list="{{ board }}" as="b" hint-placeholder-count="4">
+              <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:9px;padding:10px">
+                <div class="lbl" style="font-size:9px">{{ b.col }}</div>
+                <div class="num" style="font-size:17px;font-weight:800;margin-top:6px">{{ b.n }}</div>
+                <div style="font-size:10.5px;color:#7d7889;margin-top:4px;line-height:1.4">{{ b.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.55">Cards are yours. The advisor only ever proposes new ones or summarises movement — it never moves a card for you.</div>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="b-cadence"><span class="zt">Operating cadence</span><span class="zs">Weekly review</span></div>
+          <div style="display:grid;gap:9px">
+            <sc-for list="{{ cadence }}" as="c" hint-placeholder-count="3">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding-bottom:8px;border-bottom:1px solid #f6f5f9">
+                <span style="font-size:12px;font-weight:600">{{ c.name }}</span>
+                <span class="num" style="font-size:11px;color:#615c6e">{{ c.when }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.55">Friday retro gets a draft summary from the board's own history — accept it or write your own.</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="b-roadmap"><span class="zt">Roadmap</span><span class="zs">Two quarters · MVP scope feeds the board above</span></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:11px">
+          <sc-for list="{{ roadmap }}" as="r" hint-placeholder-count="3">
+            <div style="{{ r.cardStyle }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <span class="lbl" style="font-size:9.5px">{{ r.period }}</span>
+                <span style="{{ r.pill }}">{{ r.state }}</span>
+              </div>
+              <div style="display:grid;gap:6px;margin-top:10px">
+                <sc-for list="{{ r.items }}" as="i" hint-placeholder-count="3">
+                  <div style="font-size:11.5px;color:#3f3a49;line-height:1.5">{{ i }}</div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="prop" style="margin-top:13px">
+          <div class="proph"><span class="propb">Proposal · tradeoff, reasoned</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">QwQ 32B · ≈ $0.011</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">Slack integration and the permissions model both sit in Q4 and both need Amara. Asked to reason it out, the model argues for Slack first: 7 of 12 interviews named the handoff, none named permissions, and permissions is a one-week task at 20 seats but a one-month task at 200 — so it gets cheaper to defer, not dearer.</div>
+          <div class="add" style="margin-top:9px">+ Reorders Q4 · Slack before permissions · rationale attached to both cards</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept order</div><div class="gho">Show the full argument</div><div class="dis">Keep mine</div></div>
+          <div style="font-size:10.5px;color:#7d7889;margin-top:9px">Routed to the reasoning model on purpose — this is an argument, not a summary, so it costs 20× a Monday plan.</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="b-kpi"><span class="zt">KPI entry</span><span class="zs">Input only — the read lives on Home</span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:11px">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+            <div>
+              <div class="lbl" style="font-size:9.5px">{{ k.label }}</div>
+              <div style="{{ k.inStyle }}">{{ k.value }}</div>
+              <sc-if value="{{ k.flag }}"><div style="font-size:10.5px;color:#92400e;margin-top:5px;line-height:1.45">{{ k.flag }}</div></sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <div class="prop" style="margin-top:13px">
+          <div class="proph"><span class="propb">Out of range · explain this?</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">≈ $0.0002</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">Burn jumped 31% on last month. Want a one-line annotation drafted from your board and Team changes, attached to this figure for investor updates?</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Draft it</div><div class="dis">No, it's expected</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AIRail" page="Build" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════════ ARTBOARD 4 — RAISE ══════════════ -->
+<section class="ab" id="a4">
+  <div class="ab-hd"><a class="ab-id" href="#a4">A4</a><span class="ab-nm">Raise — "Get capital, stay legal"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navR }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Get capital, stay legal</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">The highest-stakes page in the product. Its model menu leads with quality, because a wrong answer here costs more than tokens.</div>
+      <div class="anch"><sc-for list="{{ anchR }}" as="a" hint-placeholder-count="4"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for></div>
+
+      <div class="card" style="padding:19px 21px;margin-top:18px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap">
+          <div>
+            <div class="lbl" id="r-status">Seed · open since Aug 3</div>
+            <div class="num" style="font-size:27px;font-weight:800;letter-spacing:-.03em;margin-top:7px">$620,000 <span style="font-size:14px;font-weight:600;color:#615c6e">of $1.5M</span></div>
+          </div>
+          <div style="display:flex;gap:22px;flex-wrap:wrap">
+            <sc-for list="{{ raiseStats }}" as="r" hint-placeholder-count="3">
+              <div><div class="lbl" style="font-size:9.5px">{{ r.label }}</div><div class="num" style="font-size:16px;font-weight:800;margin-top:5px">{{ r.value }}</div></div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="height:8px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:15px;display:flex"><div style="height:100%;width:29%;background:#7c3aed"></div><div style="height:100%;width:12%;background:#c4b5fd"></div></div>
+        <div style="display:flex;gap:18px;margin-top:10px;flex-wrap:wrap"><span class="num" style="font-size:11px;color:#615c6e">■ $435k signed</span><span class="num" style="font-size:11px;color:#615c6e">■ $185k soft-circled</span><span class="num" style="font-size:11px;color:#b91c1c">2 blockers</span></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="r-capital"><span class="zt">Capital · dilution</span><span class="zs">Round planner</span></div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Proposal · plain-language read</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">≈ $0.032</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">At $1.5M on a $12M post with a 12% pool top-up, you and Amara go from 89.5% to <strong>66.1%</strong> combined. The pool top-up costs you more dilution than the round itself — 7.4 points against 16.0.</div>
+            <div style="font-size:11.5px;color:#4c1d95;margin-top:8px;line-height:1.6">Reasoning shown step by step, because you will be asked to defend this number.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Attach to scenario</div><div class="gho">Show the math</div><div class="dis">Discard</div></div>
+          </div>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="r-legal"><span class="zt">Legal engine</span><span class="zs">Term sheet · Kestrel Ventures</span></div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Clause explained</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">≈ $0.028</span></div>
+            <div style="font-size:11.5px;color:#7f1d1d;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:9px 11px;line-height:1.55">"Full ratchet anti-dilution" — <strong>off market</strong> at seed. Broad-based weighted average is standard. Full ratchet transfers essentially all down-round risk to you.</div>
+            <div style="font-size:11.5px;color:#3f3a49;margin-top:9px;line-height:1.6">Two other clauses flagged: a 2× participating preference and a board seat at $435k. Both unusual at this cheque size.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Draft a redline</div><div class="gho">Read all 3</div><div class="dis">Dismiss</div></div>
+            <div style="font-size:10.5px;color:#7d7889;margin-top:9px;line-height:1.5">Not legal advice. Counsel is on the Team page.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="r-dataroom"><span class="zt">Data room</span><span class="zs">11 artifacts · 4 investors with access</span></div>
+        <div class="prop">
+          <div class="proph"><span class="propb">Gap analysis</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">≈ $0.019</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">Seed investors in workflow software ask for three things you don't have staged: a cohort retention chart, the 83(b) confirmations, and a one-page security posture. Two of the four investors already viewing have requested the first.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Create the 3 placeholders</div><div class="gho">Explain each</div><div class="dis">Discard</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px">
+          <sc-for list="{{ dataRoom }}" as="d" hint-placeholder-count="4">
+            <div style="{{ d.cardStyle }}">
+              <div style="font-size:11.5px;font-weight:700;line-height:1.4">{{ d.name }}</div>
+              <div style="font-size:10.5px;color:#615c6e;margin-top:5px">{{ d.state }}</div>
+              <sc-if value="{{ d.screened }}"><span class="shield" style="margin-top:8px">Screened</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="r-pitch"><span class="zt">Pitch</span><span class="zs">11 slides · v4 shared with 3 investors</span></div>
+        <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+          <div style="width:190px;height:107px;border-radius:9px;background:linear-gradient(135deg,#1f1633,#4c1d95);flex:none;display:flex;align-items:flex-end;padding:11px;box-sizing:border-box"><span style="font-size:10.5px;color:rgba(255,255,255,.85);line-height:1.4">Generated cover · flux-2-klein</span></div>
+          <div style="flex:1;min-width:220px">
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Deck imagery is generated in place at $0.015 for the first megapixel — cheap enough to try six covers before a partner meeting. Narrative rewrites route to Llama 3.3 70B rather than the reasoning model; you're paying for prose, not proofs.</div>
+            <div style="display:flex;align-items:center;gap:9px;margin-top:11px;flex-wrap:wrap"><span class="shield">Screened before share</span><span style="font-size:11px;color:#7d7889">Anything investor-facing passes Llama Guard first.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="r-liquidity"><span class="zt">Liquidity &amp; exits</span><span class="zs">Nothing live — modelled, not marketed</span></div>
+        <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:14px">
+          <div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">No secondary is open and none should be at seed. The zone exists so the waterfall is understood <em>before</em> terms are signed, not after — the term sheet on this page carries a 2× participating preference, and that clause is what decides who gets paid in a modest exit.</div>
+            <div style="display:grid;gap:8px;margin-top:13px">
+              <sc-for list="{{ waterfall }}" as="w" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:11px">
+                  <span style="font-size:11.5px;font-weight:600;width:112px;flex:none">{{ w.scenario }}</span>
+                  <div style="flex:1;height:18px;background:#f4f3f7;border-radius:5px;overflow:hidden;display:flex">
+                    <div style="height:100%;width:{{ w.foundersPct }}%;background:#7c3aed"></div>
+                    <div style="height:100%;width:{{ w.prefPct }}%;background:#fbbf24"></div>
+                  </div>
+                  <span class="num" style="font-size:11px;color:#615c6e;width:96px;flex:none;text-align:right">{{ w.founders }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap"><span class="num" style="font-size:10.5px;color:#615c6e">■ to founders</span><span class="num" style="font-size:10.5px;color:#92400e">■ to preference</span></div>
+          </div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Proposal · plain-language read</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">≈ $0.024</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ wfRead }}</div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65;margin-top:8px">{{ wfCost }}</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Attach to term sheet</div><div class="gho">Model other exits</div><div class="dis">Discard</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AIRail" page="Raise" hint-size="100%,820px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════════ ARTBOARD 5 — GROW ══════════════ -->
+<section class="ab" id="a5">
+  <div class="ab-hd"><a class="ab-id" href="#a5">A5</a><span class="ab-nm">Grow — "Get customers, people, reach"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navG }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Get customers, people, reach</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">One metric owns the month. Everything below is a lever on it.</div>
+      <div class="anch"><sc-for list="{{ anchG }}" as="a" hint-placeholder-count="4"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for></div>
+
+      <div class="card" style="padding:19px 21px;margin-top:18px;background:linear-gradient(180deg,#faf7ff,#fff);border-color:#d8c9ff">
+        <div class="lbl" id="g-focus" style="color:#6d28d9">This month's focus</div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-top:9px;flex-wrap:wrap">
+          <div><div class="num" style="font-size:30px;font-weight:800;letter-spacing:-.03em">14 <span style="font-size:15px;font-weight:600;color:#615c6e">of 25 paid trials</span></div><div style="font-size:12px;color:#4a4553;margin-top:5px">Everything else this month is subordinate to this number.</div></div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap">
+            <sc-for list="{{ growStats }}" as="g" hint-placeholder-count="3"><div><div class="lbl" style="font-size:9.5px">{{ g.label }}</div><div class="num" style="font-size:15px;font-weight:800;margin-top:5px">{{ g.value }}</div></div></sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="g-customers"><span class="zt">Customers</span><span class="zs">Pipeline · 38 in play</span></div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Proposal · outreach sequence</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">{{ growEst }}</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.6">Segment: platform leads at 50–200 engineer orgs, cold, no reply in 14 days.</div>
+            <div class="add" style="margin-top:9px">+ 3-touch sequence, each opening on the handoff-opacity pain <em>their own segment named</em> in your interviews</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept sequence</div><div class="gho">Edit touch 1</div><div class="dis">Discard</div></div>
+            <div style="font-size:10.5px;color:#7d7889;margin-top:9px">Commodity-cost model on purpose — this is volume copy, not reasoning.</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:14px">
+            <sc-for list="{{ pipeline }}" as="p" hint-placeholder-count="5">
+              <div style="background:#fbfbfc;border:1px solid #f0eff4;border-radius:8px;padding:9px 8px;text-align:center"><div class="num" style="font-size:15px;font-weight:800">{{ p.n }}</div><div style="font-size:9.5px;color:#7d7889;margin-top:4px;line-height:1.3">{{ p.stage }}</div></div>
+            </sc-for>
+          </div>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="g-talent"><span class="zt">Talent</span><span class="zs">1 role live · 14 applicants</span></div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Match · why this one</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">rerank ≈ $0.0003</span></div>
+            <div style="font-size:12.5px;font-weight:700">Nadia Okonkwo · senior backend</div>
+            <div style="font-size:11.5px;color:#3f3a49;margin-top:6px;line-height:1.6">Ranked first of 14 on three receipts you can check: shipped an event-sourced handoff system at Verwood, applied through your careers page rather than a board, and names async workflows in her own words.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Move to screen</div><div class="gho">See all 14 ranked</div><div class="dis">Not a fit</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="g-brand"><span class="zt">Brand &amp; landing</span><span class="zs">3 pages live · 61 leads captured</span></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <div style="width:230px;flex:none">
+            <div style="height:118px;border-radius:9px;background:linear-gradient(135deg,#ede9fe,#c4b5fd);display:flex;align-items:flex-end;padding:10px;box-sizing:border-box"><span style="font-size:10px;color:#4c1d95;font-weight:700">Hero · flux-1-schnell</span></div>
+            <div class="num" style="font-size:10.5px;color:#7d7889;margin-top:7px">$0.0000528 per tile — effectively free to iterate</div>
+          </div>
+          <div style="flex:1;min-width:230px">
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Hero imagery generates inline at a cost so low it stops being a decision. Four variants render in the time it takes to read them; you pick one or write your own brief.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap"><div class="gho">Generate 4 more</div><div class="gho">Upload my own</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="g-capmatch"><span class="zt">Capital match</span><span class="zs">Investor fit · ranked, with receipts</span></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:11px">
+          <sc-for list="{{ capMatch }}" as="c" hint-placeholder-count="3">
+            <div style="{{ c.cardStyle }}">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <span style="font-size:12.5px;font-weight:700">{{ c.fund }}</span>
+                <span class="num" style="{{ c.scorePill }}">{{ c.score }}</span>
+              </div>
+              <div style="font-size:11px;color:#4a4553;margin-top:6px;line-height:1.55">{{ c.why }}</div>
+              <div class="num" style="font-size:10.5px;color:#7d7889;margin-top:7px">{{ c.detail }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:12px;line-height:1.55">Scored by the same reranker behind talent and customer matching. Warm-path availability comes from Network — a fund you can reach through Priyanka outranks a better thesis fit you can't reach at all. Acting on any of these hands off to <strong>Raise</strong>; this zone only ranks.</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="g-partners"><span class="zt">Partnerships</span><span class="zs">2 in motion</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">Proposals route to Mistral Small rather than the volume model — a partnership document is read by someone senior, so it gets the more polished writer at $0.351 / $0.555.</div>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="g-launch"><span class="zt">Launch calendar</span><span class="zs">Sep</span></div>
+          <div style="display:grid;gap:8px">
+            <sc-for list="{{ launches }}" as="l" hint-placeholder-count="3"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding-bottom:7px;border-bottom:1px solid #f6f5f9"><span style="font-size:12px;font-weight:600">{{ l.name }}</span><span class="num" style="font-size:11px;color:#615c6e">{{ l.when }}</span></div></sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AIRail" page="Grow" hint-size="100%,760px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════════ ARTBOARD 6 — NETWORK ══════════════ -->
+<section class="ab" id="a6">
+  <div class="ab-hd"><a class="ab-id" href="#a6">A6</a><span class="ab-nm">Network — "Work my relationships"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navN }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Work my relationships</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">Who you know, what you last said, and who ought to meet whom.</div>
+      <div class="anch"><sc-for list="{{ anchN }}" as="a" hint-placeholder-count="4"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for></div>
+
+      <div class="card" style="padding:17px 19px;margin-top:18px">
+        <div class="zh" id="n-rels"><span class="zt">Relationships</span><span class="zs">184 · 12 going cold</span></div>
+        <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr auto;gap:12px">
+          <span class="th">Person</span><span class="th">Context</span><span class="th">Strength</span><span class="th">Last touch</span><span class="th"></span>
+        </div>
+        <sc-for list="{{ rels }}" as="r" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr auto;gap:12px;align-items:center">
+            <span class="td" style="font-weight:600">{{ r.name }}</span>
+            <span class="td">{{ r.context }}</span>
+            <span class="td"><span style="{{ r.strengthStyle }}">{{ r.strength }}</span></span>
+            <span class="td num" style="color:{{ r.touchInk }}">{{ r.touch }}</span>
+            <span class="td"><span style="font-size:11.5px;font-weight:700;color:#7c3aed">{{ r.action }}</span></span>
+          </div>
+        </sc-for>
+        <div class="prop" style="margin-top:14px">
+          <div class="proph"><span class="propb">Proposal · re-engagement</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">≈ $0.0009</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.6">Marisol Vega has gone 71 days without contact. She asked about your retention data in June — you have it now.</div>
+          <div class="add" style="margin-top:9px">+ Two-line note opening on the answer to her actual question, not a check-in</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Accept draft</div><div class="gho">Edit</div><div class="dis">Not now</div></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+        <div class="card" style="padding:17px 19px">
+          <div class="zh" id="n-intros"><span class="zt">Introductions</span><span class="zs">3 asked · 2 offered · 1 in motion</span></div>
+          <div class="prop">
+            <div class="proph"><span class="propb">Proposal · intro email</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">≈ $0.0009</span></div>
+            <div style="font-size:12px;color:#3f3a49;line-height:1.65">Written from <em>both</em> sides' real context: Dev Raman's fund thesis on developer tooling, and your handoff-opacity evidence. Forwardable as-is.</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Send to connector</div><div class="gho">Edit first</div><div class="dis">Discard</div></div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:9px"><span class="shield">Screened</span><span style="font-size:10.5px;color:#7d7889">Leaves your account — screened automatically.</span></div>
+          </div>
+        </div>
+        <div class="card" style="padding:17px 19px">
+          <div class="zh"><span class="zt">Who should meet whom</span><span class="zs">Matched on bge-m3</span></div>
+          <div style="display:grid;gap:10px">
+            <sc-for list="{{ matches }}" as="m" hint-placeholder-count="2">
+              <div style="border:1px solid #f0eff4;background:#fbfbfc;border-radius:10px;padding:11px 12px">
+                <div style="font-size:12px;font-weight:700">{{ m.pair }}</div>
+                <div style="font-size:11.5px;color:#4a4553;margin-top:5px;line-height:1.55">{{ m.why }}</div>
+                <div style="font-size:11.5px;font-weight:700;color:#7c3aed;margin-top:8px">Offer the intro →</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="n-orgs"><span class="zt">Organizations</span><span class="zs">31 tracked · funds, customers, partners in one list</span></div>
+        <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1.4fr;gap:12px">
+          <span class="th">Organization</span><span class="th">Type</span><span class="th">People you know</span><span class="th">Why it matters</span>
+        </div>
+        <sc-for list="{{ orgs }}" as="o" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr 1.4fr;gap:12px;align-items:center">
+            <span class="td" style="font-weight:600">{{ o.name }}</span>
+            <span class="td"><span style="{{ o.typeStyle }}">{{ o.type }}</span></span>
+            <span class="td num">{{ o.people }}</span>
+            <span class="td">{{ o.note }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:11.5px;color:#615c6e;margin-top:13px;line-height:1.55">An organization is a lens over the people above, not a separate address book — its row counts real relationships you hold there. Cheap summaries of a long thread with any org route to Gemma 4 at $0.100 / $0.300.</div>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AIRail" page="Network" hint-size="100%,700px"></dc-import></div>
+  </div>
+</section>
+
+<!-- ══════════════ ARTBOARD 7 — RESEARCH ══════════════ -->
+<section class="ab" id="a7">
+  <div class="ab-hd"><a class="ab-id" href="#a7">A7</a><span class="ab-nm">Research — "Go deep on a market or company"</span></div>
+  <div class="frame">
+    <div class="side"><sc-for list="{{ navRe }}" as="n" hint-placeholder-count="9"><div class="{{ n.cls }}"><span style="width:14px;height:14px;display:block;flex:none" dangerouslySetInnerHTML="{{ n.icon }}"></span><span>{{ n.label }}</span></div></sc-for></div>
+    <div class="main">
+      <h1 style="margin:0;font-size:24px;font-weight:800;letter-spacing:-.025em">Go deep on a market or company</h1>
+      <div style="font-size:13px;color:#4a4553;margin-top:6px;line-height:1.5">The page opens as a question, not a menu.</div>
+
+      <div id="re-ask" style="margin-top:16px;background:#fff;border:1px solid #d8c9ff;border-radius:13px;padding:6px 6px 6px 18px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 10px rgba(124,58,237,.08)">
+        <span style="width:17px;height:17px;display:block;flex:none;color:#7c3aed" dangerouslySetInnerHTML="{{ searchIcon }}"></span>
+        <span style="flex:1;font-size:14px;color:#3f3a49">How fast is async workflow tooling growing in EU mid-market?</span>
+        <div class="acc" style="padding:9px 16px;font-size:12.5px">{{ resAskCost }}</div>
+      </div>
+      <div class="anch" style="padding-top:12px"><sc-for list="{{ anchRe }}" as="a" hint-placeholder-count="4"><a href="{{ a.href }}" onClick="{{ a.go }}" style="{{ a.style }}">{{ a.label }}</a></sc-for></div>
+
+      <div class="card" style="padding:17px 19px;margin-top:16px">
+        <div class="zh" id="re-markets"><span class="zt">Sourced brief</span><span class="zs">{{ resReceipt }}</span></div>
+        <div class="prop">
+          <div class="proph"><span class="propb">Proposal · brief</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">save to Markets?</span></div>
+          <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">EU mid-market async tooling is growing faster than the global figure — driven by distributed-team mandates rather than headcount growth, which changes who buys. Three sources agree on direction; they disagree on size by a factor of two, and the brief says so rather than averaging them.</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:11px">
+            <sc-for list="{{ sources }}" as="s" hint-placeholder-count="3"><span class="tag" style="font-size:10.5px">{{ s }}</span></sc-for>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap"><div class="acc">Save to Markets</div><div class="gho">Ask a follow-up</div><div class="dis">Discard</div></div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px;border-color:#a7f3d0;background:linear-gradient(180deg,#f6fffb,#fff)">
+        <div class="zh" id="re-library"><span class="zt">Cached input — the economics as a feature</span><span class="zs">Document library</span></div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+          <div style="flex:1;min-width:250px">
+            <div style="font-size:12.5px;color:#3f3a49;line-height:1.7">Drop in a PDF and it becomes queryable. The <strong>first</strong> question pays to read the document — 62,400 tokens at $0.440/M, or {{ resFirstCost }}. Every question after that hits cached input at <strong>$0.014/M</strong>, so the reading cost falls <strong>31×</strong> and a follow-up lands at {{ resCachedCost }}.</div>
+            <div style="font-size:12.5px;color:#3f3a49;margin-top:9px;line-height:1.7">In practice: interrogate a 90-page industry report fifty times for less than a coffee. This is why the default model here is chosen for long-document work rather than raw intelligence.</div>
+          </div>
+          <div style="width:250px;flex:none;background:#fff;border:1px solid #ececf1;border-radius:11px;padding:14px">
+            <div class="lbl" style="font-size:9.5px">Cost of asking one document</div>
+            <div style="display:grid;gap:9px;margin-top:11px">
+              <sc-for list="{{ cacheRows }}" as="c" hint-placeholder-count="3">
+                <div>
+                  <div class="num" style="display:flex;justify-content:space-between;font-size:11.5px;color:#3f3a49"><span>{{ c.label }}</span><span style="font-weight:700">{{ c.cost }}</span></div>
+                  <div style="height:5px;background:#eceaf2;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:{{ c.pct }}%;background:{{ c.ink }};border-radius:999px"></div></div>
+                </div>
+              </sc-for>
+            </div>
+            <div class="num" style="font-size:10.5px;color:#7d7889;margin-top:11px;line-height:1.5">50 questions on one report ≈ {{ resFiftyTotal }} total — the first at full price, 49 cached.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:17px 19px;margin-top:14px">
+        <div class="zh" id="re-funds"><span class="zt">Fund research</span><span class="zs">Who to raise from, read before the meeting</span></div>
+        <div style="display:grid;grid-template-columns:1.15fr 1fr 1fr 1.5fr;gap:12px">
+          <span class="th">Fund</span><span class="th">Cheque</span><span class="th">Stage</span><span class="th">Thesis, in their own words</span>
+        </div>
+        <sc-for list="{{ funds }}" as="f" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:1.15fr 1fr 1fr 1.5fr;gap:12px;align-items:center">
+            <span class="td" style="font-weight:600">{{ f.name }}</span>
+            <span class="td num">{{ f.cheque }}</span>
+            <span class="td">{{ f.stage }}</span>
+            <span class="td">{{ f.thesis }}</span>
+          </div>
+        </sc-for>
+        <div class="prop" style="margin-top:14px">
+          <div class="proph"><span class="propb">Proposal · pre-meeting brief</span><span class="num" style="font-size:10.5px;color:#6d28d9;margin-left:auto">≈ $0.031</span></div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">Kestrel has led three workflow rounds in 18 months and lost one to a bigger fund at Series A — which is why their term sheet reaches for a board seat at $435k. Their last two seed leads both had a design partner named in the deck. You have four.</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:11px;flex-wrap:wrap"><div class="acc">Save to fund profile</div><div class="gho">Ask a follow-up</div><div class="dis">Discard</div></div>
+          <div style="font-size:10.5px;color:#7d7889;margin-top:9px">Built from public filings and their own writing — sources listed on the saved profile, never asserted without one.</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px">
+        <sc-for list="{{ reCards }}" as="r" hint-placeholder-count="3">
+          <div class="card" style="padding:16px 18px">
+            <div class="zt" id="{{ r.anchorId }}" style="font-size:14px">{{ r.title }}</div>
+            <div style="font-size:11.5px;color:#4a4553;margin-top:7px;line-height:1.6">{{ r.body }}</div>
+            <div class="num" style="font-size:11px;color:#7d7889;margin-top:9px">{{ r.meta }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="rail"><dc-import name="AIRail" page="Research" hint-size="100%,780px"></dc-import></div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { anch:{} };
+
+  // One anchor model per page: label, target id, and which pill is active.
+  anchorsFor(key, list) {
+    const active = this.state.anch[key] || list[0][1];
+    return list.map(([label, id]) => ({
+      label, href:'#' + id,
+      go: () => { const a = Object.assign({}, this.state.anch); a[key] = id; this.setState({ anch:a }); },
+      style:'font-size:11px;font-weight:' + (active === id ? '700' : '600')
+        + ';color:' + (active === id ? '#6d28d9' : '#615c6e')
+        + ';background:' + (active === id ? '#f6f2ff' : '#fff')
+        + ';border:1px solid ' + (active === id ? '#e6dcff' : '#ececf1')
+        + ';border-radius:999px;padding:5px 11px;cursor:pointer;text-decoration:none;display:inline-block'
+    }));
+  }
+
+  ic(p){ return { __html:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">'+p+'</svg>' }; }
+
+  renderVals() {
+    const I = {
+      home:   this.ic('<path d="M4 11 12 4l8 7v9H4Z"/>'),
+      check:  this.ic('<path d="M20 6 9 17l-5-5"/>'),
+      build:  this.ic('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'),
+      raise:  this.ic('<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+      grow:   this.ic('<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v5h-5"/>'),
+      net:    this.ic('<circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.6 9 11 15.6M16.4 9 13 15.6M8.5 7h7"/>'),
+      res:    this.ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+      trust:  this.ic('<path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z"/><path d="m9 12 2 2 4-4"/>'),
+      cog:    this.ic('<path d="M4 21V5l8-3 8 3v16"/><path d="M9 21v-6h6v6"/>')
+    };
+    const ROWS = [
+      ['Home', I.home], ['Validate', I.check], ['Build', I.build], ['Raise', I.raise],
+      ['Grow', I.grow], ['Network', I.net], ['Research', I.res], ['Trust', I.trust], ['Company Settings', I.cog]
+    ];
+    const nav = (active) => ROWS.map(([label, icon]) => ({
+      label, icon, cls: label === active ? 'nav on' : 'nav'
+    }));
+
+    const pill = (t) => {
+      const M = { validated:['#ecfdf5','#047857','#a7f3d0'], unproven:['#fffbeb','#92400e','#fde68a'],
+                  invalidated:['#fef2f2','#b91c1c','#fecaca'] };
+      const c = M[t] || M.unproven;
+      return 'font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:3px 7px;border-radius:4px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2];
+    };
+
+    // Post-round founder fraction as stated by the Capital card, and the 2× participating
+    // preference on $435k signed. Declared once; nothing downstream re-states a number.
+    // Same arithmetic the rail uses: one function drives the before-estimate and the receipt.
+    const c4 = (n) => '$' + n.toFixed(4);
+    const tokf = (n) => n.toLocaleString('en-US');
+    const runOf = (tin, tout, pin, pout) => tin / 1e6 * pin + tout / 1e6 * pout;
+    const A1 = { tin:21400, tout:1180, pin:0.293, pout:2.253 };
+    const a1Cost = runOf(A1.tin, A1.tout, A1.pin, A1.pout);
+    const GROW = { tin:3100, tout:2040, pin:0.200, pout:0.300 };
+    const RES  = { tin:62400, tout:1240, pin:0.440, pout:1.320 };
+    const resFirst = runOf(RES.tin, RES.tout, RES.pin, RES.pout);
+    const resCached = runOf(RES.tin, RES.tout, 0.014, RES.pout);
+
+    const FOUNDER_FRAC = 0.661;
+    const PREF_M = 0.87;
+    const m1 = (n) => '$' + n.toFixed(1) + 'M';
+    const k0 = (n) => '$' + Math.round(n * 1000) + 'k';
+    const wfRow = (exitM) => {
+      const founders = (exitM - PREF_M) * FOUNDER_FRAC;
+      return { scenario: '$' + exitM + 'M exit', founders: m1(founders),
+        foundersPct: String(Math.round(founders / exitM * 100)),
+        prefPct: String(Math.round(PREF_M / exitM * 100)) };
+    };
+    const prefCostM = PREF_M * FOUNDER_FRAC;           // constant, whatever the exit
+    const noPrefAt20 = 20 * FOUNDER_FRAC;
+    const withPrefAt20 = (20 - PREF_M) * FOUNDER_FRAC;
+    const biteSmall = prefCostM / (8 * FOUNDER_FRAC) * 100;
+    const biteLarge = prefCostM / (60 * FOUNDER_FRAC) * 100;
+    const WF = {
+      rows: [8, 20, 60].map(wfRow),
+      read: 'The 2× participating preference takes ' + k0(PREF_M) + ' off the top, then still participates pro-rata. '
+        + 'At a $20M exit you clear ' + m1(withPrefAt20) + ' instead of ' + m1(noPrefAt20) + '.',
+      cost: 'Because the preference is a fixed ' + k0(PREF_M) + ', it costs you the same ' + k0(prefCostM)
+        + ' at every exit size — which is ' + biteSmall.toFixed(0) + '% of your proceeds in an $8M exit but only '
+        + biteLarge.toFixed(1) + '% in a $60M one. Common only approaches zero below ' + k0(PREF_M) + ', not at some mid-range cliff.'
+    };
+
+    return {
+      navV: nav('Validate'), navB: nav('Build'), navR: nav('Raise'),
+      navG: nav('Grow'), navN: nav('Network'), navRe: nav('Research'),
+      anchV: this.anchorsFor('V', [['Interviews','v-interviews'],['Pain map','v-pain'],['Hypotheses','v-hyp'],['Verdict','v-verdict']]),
+      anchB: this.anchorsFor('B', [['This week','b-week'],['Board','b-board'],['Roadmap','b-roadmap'],['Cadence','b-cadence'],['KPI entry','b-kpi']]),
+      anchR: this.anchorsFor('R', [['Status','r-status'],['Pitch','r-pitch'],['Capital','r-capital'],['Legal','r-legal'],['Data room','r-dataroom'],['Liquidity','r-liquidity']]),
+      anchG: this.anchorsFor('G', [['Focus','g-focus'],['Talent','g-talent'],['Customers','g-customers'],['Partnerships','g-partners'],['Capital match','g-capmatch'],['Brand','g-brand'],['Launch','g-launch']]),
+      anchN: this.anchorsFor('N', [['Relationships','n-rels'],['Introductions','n-intros'],['Organizations','n-orgs']]),
+      anchRe: this.anchorsFor('Re', [['Ask','re-ask'],['Markets','re-markets'],['Companies','re-companies'],['Funds','re-funds'],['Library','re-library']]),
+
+      tokens: [
+        ['Page surface', '#f8f8fa', '#16141c'],
+        ['Card surface', '#ffffff', '#1e1b26'],
+        ['Rail surface', '#ffffff', '#1a1822'],
+        ['Border', '#ececf1', '#2e2b38'],
+        ['Text primary', '#18181b', '#f4f3f7'],
+        ['Text muted', '#615c6e', '#a9a4b8'],
+        ['Accent', '#7c3aed', '#a78bfa'],
+        ['Accent tint', '#faf7ff', '#241d38'],
+        ['Accent border', '#d8c9ff', '#4c3d7a'],
+        ['Cost / positive', '#047857', '#34d399'],
+        ['Warning', '#92400e', '#fbbf24'],
+        ['Destructive', '#b91c1c', '#f87171']
+      ].map(([name, light, dark]) => ({
+        name, light, dark,
+        lSwatch:'width:11px;height:11px;border-radius:3px;flex:none;background:' + light + ';border:1px solid rgba(24,24,27,.14)',
+        dSwatch:'width:11px;height:11px;border-radius:3px;flex:none;background:' + dark + ';border:1px solid rgba(24,24,27,.14)'
+      })),
+
+      searchIcon: I.res,
+      a1Will: 'will cost ≈ ' + c4(a1Cost),
+      a1Receipt: 'ran in 4.1s · ' + tokf(A1.tin) + ' in / ' + tokf(A1.tout) + ' out · ' + c4(a1Cost),
+      a1MeterReceipt: 'Last run · synthesis of 5 interviews · ' + tokf(A1.tin) + ' in / ' + tokf(A1.tout) + ' out · ' + c4(a1Cost),
+      validateEst: '≈ ' + c4(a1Cost),
+      growEst: '12 emails ≈ ' + c4(runOf(GROW.tin, GROW.tout, GROW.pin, GROW.pout)),
+      resFirstCost: c4(resFirst),
+      resCachedCost: c4(resCached),
+      resFiftyTotal: '$' + (resFirst + 49 * resCached).toFixed(2),
+      resAskCost: 'Research it · ≈ ' + c4(resFirst),
+      resReceipt: 'Ran 6s ago · ' + tokf(RES.tin) + ' in / ' + tokf(RES.tout) + ' out · ' + c4(resFirst),
+
+      // ---- Validate ----
+      interviews: [
+        { name:'Priya Menon', role:'Head of Platform', date:'Aug 24', quotes:'6' },
+        { name:'Dev Raman', role:'VP Eng', date:'Aug 21', quotes:'4' },
+        { name:'Sara Lindqvist', role:'Staff Eng', date:'Aug 18', quotes:'7' },
+        { name:'Tobias Ncube', role:'Eng Manager', date:'Aug 14', quotes:'5' }
+      ],
+      pains: [
+        { name:'Handoff opacity', count:'9 of 12', pct:'75', ink:'#7c3aed' },
+        { name:'Tool sprawl', count:'7 of 12', pct:'58', ink:'#a78bfa' },
+        { name:'Status theatre', count:'5 of 12', pct:'42', ink:'#c4b5fd' },
+        { name:'Procurement drag', count:'3 of 12', pct:'25', ink:'#ddd6fe' }
+      ],
+      hyps: [
+        { text:'Platform leads lose hours weekly reconstructing task state', verdict:'Validated', evidence:'9 interviews · 14 quotes',
+          pill: pill('validated'), cardStyle:'border:1px solid #a7f3d0;background:#f7fffb;border-radius:11px;padding:13px 14px' },
+        { text:'They will pay $40/seat to fix it', verdict:'Unproven', evidence:'2 interviews · both below floor',
+          pill: pill('unproven'), cardStyle:'border:1px solid #fde68a;background:#fffdf5;border-radius:11px;padding:13px 14px' },
+        { text:'Integrations must ship before anyone trials', verdict:'Invalidated', evidence:'0 interviews raised it',
+          pill: pill('invalidated'), cardStyle:'border:1px solid #fecaca;background:#fffbfb;border-radius:11px;padding:13px 14px' }
+      ],
+
+      // ---- Build ----
+      commits: [
+        { text:'Ship async digest v1', who:'Amara', state:'On track', done:false },
+        { text:'Close 3 of 5 pending trials', who:'Guillaume', state:'On track', done:false },
+        { text:'Pricing page copy', who:'Guillaume', state:'At risk', done:false },
+        { text:'Onboard Dmitri to the deploy path', who:'Amara', state:'Done', done:true }
+      ].map(c => {
+        const M = { 'On track':['#f4f4f6','#4a4553','#e4e4e8'], 'At risk':['#fffbeb','#92400e','#fde68a'], 'Done':['#ecfdf5','#047857','#a7f3d0'] };
+        const s = M[c.state];
+        return { text:c.text, who:c.who, state:c.state,
+          pill:'font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+s[0]+';color:'+s[1]+';border:1px solid '+s[2]+';flex:none',
+          box:'width:15px;height:15px;border-radius:4px;flex:none;'+(c.done ? 'background:#10b981;border:1px solid #10b981' : 'background:#fff;border:1px solid #d4d2dc'),
+          rowStyle:'display:flex;align-items:center;gap:11px;padding:10px 12px;border:1px solid #f0eff4;border-radius:9px;background:'+(c.state === 'At risk' ? '#fffdf5' : '#fbfbfc') };
+      }),
+      board: [
+        { col:'Backlog', n:'6', note:'2 added this week' },
+        { col:'In progress', n:'4', note:'1 stale 5 days' },
+        { col:'Review', n:'2', note:'both on Amara' },
+        { col:'Shipped', n:'2', note:'this week' }
+      ],
+      cadence: [
+        { name:'Monday plan', when:'Mon 9:00' },
+        { name:'Midweek standup', when:'Wed 9:00' },
+        { name:'Friday retro', when:'Fri 16:00' }
+      ],
+      roadmap: [
+        { period:'Q3 2026 · now', state:'In flight',
+          items:['Async digest v1','Handoff timeline view','Pricing page'] },
+        { period:'Q4 2026', state:'Committed',
+          items:['Slack integration','Permissions model','Self-serve trial'] },
+        { period:'Q1 2027 · post-raise', state:'Provisional',
+          items:['EU data residency','Audit log','SSO'] }
+      ].map(r => {
+        const M = { 'In flight':['#f5f2ff','#6d28d9','#e6dcff'], 'Committed':['#f4f4f6','#4a4553','#e4e4e8'], 'Provisional':['#fffbeb','#92400e','#fde68a'] };
+        const c = M[r.state];
+        return { period:r.period, state:r.state, items:r.items,
+          pill:'font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 7px;border-radius:4px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2],
+          cardStyle:'border:1px solid '+(r.state === 'In flight' ? '#d8c9ff;background:#faf7ff' : '#f0eff4;background:#fbfbfc')+';border-radius:11px;padding:13px 14px' };
+      }),
+      kpis: [
+        { label:'MRR', value:'$4,200', flag:null },
+        { label:'Paid trials', value:'14', flag:null },
+        { label:'Monthly burn', value:'$21,412', flag:'+31% on last month' },
+        { label:'Runway', value:'18 mo', flag:null }
+      ].map(k => ({ label:k.label, value:k.value, flag:k.flag,
+        inStyle:'font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;padding:9px 11px;border-radius:9px;margin-top:6px;border:1px solid '
+          + (k.flag ? '#fde68a;background:#fffdf5' : '#e2e1e8;background:#fff') })),
+
+      // ---- Raise ----
+      raiseStats: [
+        { label:'Days open', value:'22' },
+        { label:'Investors in play', value:'9' },
+        { label:'Projected close', value:'Oct 14' }
+      ],
+      dataRoom: [
+        { name:'Pitch deck v4', state:'Shared · 3 viewers', screened:true },
+        { name:'Cap table', state:'Staged', screened:false },
+        { name:'Financial model', state:'Staged', screened:false },
+        { name:'Cohort retention', state:'Missing · requested ×2', screened:false }
+      ].map(d => ({ name:d.name, state:d.state, screened:d.screened,
+        cardStyle:'border:1px solid '+(d.state.indexOf('Missing') >= 0 ? '#fecaca;background:#fffbfb' : '#f0eff4;background:#fbfbfc')+';border-radius:10px;padding:11px 12px' })),
+
+      // ---- Waterfall: ONE cap table, ONE preference. Every row and every sentence below
+      // derives from FOUNDER_FRAC and PREF_M, so residual share is constant by construction.
+      waterfall: WF.rows,
+      wfRead: WF.read,
+      wfCost: WF.cost,
+
+      // ---- Grow ----
+      capMatch: [
+        { fund:'Latitude Seed', score:'91', why:'Developer-tooling thesis written this year; Dev Raman already in your pipeline and four days warm.', detail:'$250k–$750k · warm path via yourself' },
+        { fund:'Thornbury Capital', score:'78', why:'Right stage and cheque, but workflow is adjacent to their core. Marisol is 71 days cold — reachable, not warm.', detail:'$300k–$1M · warm path via Priyanka' },
+        { fund:'Verwood Ventures', score:'54', why:'Strong thesis fit and no path in at all. Worth an intro request before an outreach email.', detail:'$150k–$500k · no path yet' }
+      ].map(c => {
+        const n = parseInt(c.score, 10);
+        const t = n >= 85 ? ['#ecfdf5','#047857','#a7f3d0'] : (n >= 70 ? ['#f5f2ff','#6d28d9','#e6dcff'] : ['#f4f4f6','#615c6e','#e4e4e8']);
+        return { fund:c.fund, score:c.score, why:c.why, detail:c.detail,
+          scorePill:'font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;background:'+t[0]+';color:'+t[1]+';border:1px solid '+t[2],
+          cardStyle:'border:1px solid '+(n >= 85 ? '#a7f3d0;background:#f7fffb' : '#f0eff4;background:#fbfbfc')+';border-radius:11px;padding:13px 14px' };
+      }),
+      growStats: [
+        { label:'Leads captured', value:'61' },
+        { label:'Trial → paid', value:'37%' },
+        { label:'Open roles', value:'1' }
+      ],
+      pipeline: [
+        { stage:'Contacted', n:'38' }, { stage:'Replied', n:'21' }, { stage:'Demo', n:'12' },
+        { stage:'Trial', n:'14' }, { stage:'Paid', n:'5' }
+      ],
+      launches: [
+        { name:'Async digest launch post', when:'Sep 3' },
+        { name:'Co-marketing webinar · Verwood', when:'Sep 11' },
+        { name:'EU distributed-teams meetup', when:'Sep 24' }
+      ],
+
+      // ---- Network ----
+      rels: [
+        { name:'Marisol Vega', context:'Thornbury Capital', strength:'Strong', touch:'71 days', cold:true, action:'Re-engage' },
+        { name:'Dev Raman', context:'Latitude Seed', strength:'Warm', touch:'4 days', cold:false, action:'Follow up' },
+        { name:'Aoife Brennan', context:'Kestrel Ventures', strength:'Warm', touch:'11 days', cold:false, action:'Log a touch' },
+        { name:'Priyanka Raghunathan', context:'Advisor', strength:'Strong', touch:'2 days', cold:false, action:'Log a touch' }
+      ].map(r => {
+        const M = { Strong:['#ecfdf5','#047857','#a7f3d0'], Warm:['#f5f2ff','#6d28d9','#e6dcff'], Cool:['#f4f4f6','#615c6e','#e4e4e8'] };
+        const s = M[r.strength];
+        return { name:r.name, context:r.context, strength:r.strength, touch:r.touch, action:r.action,
+          touchInk: r.cold ? '#b91c1c' : '#615c6e',
+          strengthStyle:'font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+s[0]+';color:'+s[1]+';border:1px solid '+s[2] };
+      }),
+      matches: [
+        { pair:'Dev Raman ↔ Priyanka Raghunathan', why:'His fund is writing a developer-tooling thesis; she has run pricing at two of its portfolio companies. Neither has met.' },
+        { pair:'Aoife Brennan ↔ Tobias Ncube', why:'She asked for design-partner references in EU mid-market. He is one, and already positive about you.' }
+      ],
+
+      orgs: [
+        { name:'Latitude Seed', type:'Fund', people:'1', note:'Leading candidate on this round' },
+        { name:'Verwood', type:'Customer', people:'3', note:'Design partner · Priya, Nadia, Tobias' },
+        { name:'Thornbury Capital', type:'Fund', people:'1', note:'Marisol · going cold at 71 days' },
+        { name:'Raghunathan Law', type:'Partner', people:'1', note:'Counsel of record for the raise' }
+      ].map(o => {
+        const M = { Fund:['#f5f2ff','#6d28d9','#e6dcff'], Customer:['#f0fdfa','#0f766e','#99f6e4'], Partner:['#f4f4f6','#4a4553','#e4e4e8'] };
+        const c = M[o.type];
+        return { name:o.name, type:o.type, people:o.people, note:o.note,
+          typeStyle:'font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2] };
+      }),
+
+      // ---- Research ----
+      funds: [
+        { name:'Latitude Seed', cheque:'$250k–$750k', stage:'Pre-seed · seed', thesis:'"Tools engineers choose before procurement hears about it"' },
+        { name:'Kestrel Ventures', cheque:'$400k–$1.5M', stage:'Seed · lead', thesis:'"Workflow infrastructure for distributed work"' },
+        { name:'Thornbury Capital', cheque:'$300k–$1M', stage:'Seed · follow', thesis:'"B2B software with a named design partner at seed"' }
+      ],
+      sources: ['Gartner 2026 · Workflow Automation', 'CB Insights Q2 2026', 'Eurostat remote-work series 2025'],
+      cacheRows: [
+        { label:'First question', cost:c4(resFirst), pct:'100', ink:'#7c3aed' },
+        { label:'Each follow-up', cost:c4(resCached), pct:String(Math.round(resCached / resFirst * 100)), ink:'#10b981' },
+        { label:'Same query, no cache', cost:c4(resFirst), pct:'100', ink:'#d4d2dc' }
+      ],
+      reCards: [
+        { anchorId:'re-deepdives', title:'Market deep-dives', body:'Saved briefs keep their sources and the date they were run, so a stale number is visibly stale.', meta:'4 saved · oldest Jun 2026' },
+        { anchorId:'re-companies', title:'Company profiles', body:'Competitor and comparable profiles, built from public filings and your own notes in one view.', meta:'11 tracked' },
+        { anchorId:'re-docs', title:'Document library', body:'PDFs, reports and decks — queryable, with figures and charts read by a vision model when text alone will not do.', meta:'9 documents · 340 pages' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
