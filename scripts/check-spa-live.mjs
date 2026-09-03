@@ -25,6 +25,13 @@
  *     its `[assets]` copy of `docs/`, so the shell and its hashes come from
  *     the same `wrangler deploy`; a mismatch here means a skewed or partial
  *     deploy.
+ *   - The response carries the static security headers `docs/_headers`
+ *     declares (HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options`,
+ *     `Referrer-Policy`). The Worker's assets binding answers these routes
+ *     without running the Hono app, so `securityHeaders.ts` never touches
+ *     them; the headers come only from `frontend/public/_headers`, which
+ *     Workers static assets read natively. This is the live answer to
+ *     UNRESOLVED_ITEMS.md U10 — measured here, not asserted from a document.
  *
  * Host model (see wrangler.toml `[[routes]]` + `[assets]`, CLAUDE.md fact 4):
  *   - axal.vc AND app.axal.vc are both whole-host Workers Custom Domains of
@@ -35,10 +42,10 @@
  *     first (`run_worker_first`). One build sits behind both hosts and they
  *     ship together on every deploy. The asset checks ensure each shell
  *     receives its matching JS and CSS.
- *   - The Cloudflare Pages project (studioos-2p8.pages.dev) is a mirror of
- *     `docs/` that serves NO production hostname. Who serves a host is
- *     settled by the deploy log's "Deployed studioos triggers" lines and the
- *     Pages dashboard's Domains line, never by prose.
+ *   - There is no other host. The Cloudflare Pages mirror
+ *     (studioos-2p8.pages.dev) was retired on 2026-09-03 (DECISIONS.md D36);
+ *     who serves a host is settled by the deploy log's "Deployed studioos
+ *     triggers" lines, never by prose.
  *
  * Apex `/api/*` routing assertion (the regression that took prod down):
  *   The shell-HTML checks above can ALL pass while every `/api/*` fetch never
@@ -90,6 +97,21 @@ const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
 // returns JSON on every deploy. An authed endpoint would also work — a JSON
 // 401 still proves the Worker answered — but health needs no credentials.
 const API_PROBE_PATH = process.env.SMOKE_API_PROBE || '/api/health';
+
+// Static security headers every SPA shell response must carry. They are set
+// by `docs/_headers` (built from frontend/public/_headers), which Workers
+// static assets apply to the responses the assets binding serves. The values
+// mirror cloudflare-worker/src/middleware/securityHeaders.ts except
+// Referrer-Policy, which is deliberately laxer on the public static surface
+// (GOTCHAS, "Referrer-Policy is two-tier"). HSTS is matched on the presence
+// of a max-age so a longer or shorter window is not a deploy failure; the
+// other three must be the exact value the file declares.
+const REQUIRED_SHELL_HEADERS = [
+  ['strict-transport-security', /max-age=\d+/i],
+  ['x-content-type-options', /^nosniff$/i],
+  ['x-frame-options', /^deny$/i],
+  ['referrer-policy', /^strict-origin-when-cross-origin$/i],
+];
 
 const hostsArg =
   process.argv.slice(2).filter((a) => !a.startsWith('-')).join(' ') ||
@@ -171,6 +193,23 @@ function assertShell(body) {
   return problems;
 }
 
+// The shell's security headers, from `docs/_headers`. A missing header means
+// the file did not ship in the deployed build, its rules no longer parse, or
+// Workers static assets is not applying it to the SPA fallback — the
+// UNRESOLVED_ITEMS.md U10 case, which this check answers by measurement.
+function assertSecurityHeaders(headers) {
+  const problems = [];
+  for (const [name, want] of REQUIRED_SHELL_HEADERS) {
+    const got = headers.get(name);
+    if (got == null) {
+      problems.push(`missing security header ${name} (docs/_headers not applied)`);
+    } else if (!want.test(got.trim())) {
+      problems.push(`security header ${name} is "${got}" (expected ${want})`);
+    }
+  }
+  return problems;
+}
+
 // Pull every hashed `/assets/*.{js,css}` the document references (entry
 // script, modulepreload chunks, stylesheet). These are the files the browser
 // must load for the page to render; if any 404s the page goes blank.
@@ -231,7 +270,7 @@ async function checkAsset(base, assetPath) {
       if (/text\/html/i.test(ctype)) {
         problems.push(
           'served as text/html (SPA-fallback/404 page, not the real asset — ' +
-            'Worker/Pages build skew)',
+            'the shell and its assets came from different builds)',
         );
       } else if (status === 200) {
         const want = isCss ? /css/i : /(javascript|ecmascript)/i;
@@ -270,7 +309,12 @@ async function fetchOnce(url) {
       headers: { 'User-Agent': 'axal-spa-smoke/1.0' },
     });
     const body = await res.text();
-    return { status: res.status, ctype: res.headers.get('content-type') || '', body };
+    return {
+      status: res.status,
+      ctype: res.headers.get('content-type') || '',
+      headers: res.headers,
+      body,
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -284,7 +328,7 @@ async function checkRoute(base, route, assetSink) {
   let lastErr = '';
   for (let attempt = 1; attempt <= RETRIES; attempt++) {
     try {
-      const { status, ctype, body } = await fetchOnce(url);
+      const { status, ctype, headers, body } = await fetchOnce(url);
       const problems = [];
       if (status !== 200) problems.push(`HTTP ${status} (expected 200)`);
       if (!/text\/html/i.test(ctype)) {
@@ -295,6 +339,7 @@ async function checkRoute(base, route, assetSink) {
       }
       if (route.shell) {
         problems.push(...assertShell(body));
+        problems.push(...assertSecurityHeaders(headers));
       } else if (!/<html|<!doctype/i.test(body)) {
         problems.push('body is not an HTML document');
       }
@@ -389,6 +434,7 @@ async function main() {
   );
   const failures = [];
   let apexApiRoutingFailed = false;
+  let securityHeadersFailed = false;
   for (const base of HOSTS) {
     // Apex API-routing assertion FIRST: prove `/api/*` actually reaches the
     // Worker on this host. The shell-HTML + asset checks below can all pass
@@ -416,8 +462,9 @@ async function main() {
       if (reason) {
         console.error(`[spa-live] FAIL  ${url} — ${reason}`);
         failures.push(`${url} — ${reason}`);
+        if (/security header/.test(reason)) securityHeadersFailed = true;
       } else {
-        const kind = route.shell ? 'SPA shell' : '200 + HTML';
+        const kind = route.shell ? 'SPA shell + security headers' : '200 + HTML';
         console.log(`[spa-live] PASS  ${url} (${kind})`);
       }
     }
@@ -461,12 +508,25 @@ async function main() {
           '2026-08-31 outage).',
       );
     }
+    if (securityHeadersFailed) {
+      console.error(
+        '\nA SPA shell response is missing a security header. Those routes are\n' +
+          "answered by the Worker's assets binding without the Hono app, so the\n" +
+          'headers come only from `docs/_headers` (built from\n' +
+          'frontend/public/_headers by `npm run build`). Check that the deployed\n' +
+          'build carried the file and that its rules still parse; if Workers\n' +
+          'static assets is not applying it to the SPA fallback, that is the\n' +
+          'documentation/architecture/UNRESOLVED_ITEMS.md U10 case — route the\n' +
+          'shell through the Worker rather than asserting the headers from a\n' +
+          'document.',
+      );
+    }
     console.error(
-      '\nThe deployed site is serving blank/broken pages, a JSON 404, or hashed\n' +
-        'assets that 404. On both hosts the Worker serves the HTML, /assets/* and\n' +
-        '/api/* from one build, so confirm the latest main commit\'s "Cloudflare\n' +
-        'Worker deploy" run finished (GitHub Actions), not the Pages dashboard —\n' +
-        'Pages is a mirror that advances even when the Worker deploy fails — and\n' +
+      '\nThe deployed site is serving blank/broken pages, a JSON 404, hashed\n' +
+        'assets that 404, or a shell without its security headers. On both hosts\n' +
+        'the Worker serves the HTML, /assets/* and /api/* from one build, so\n' +
+        'confirm the latest main commit\'s "Cloudflare Worker deploy" run finished\n' +
+        '(GitHub Actions) — nothing else ships a build to either host — and\n' +
         're-run this check. (Set SKIP_LIVE_SMOKE=1 only if this host genuinely\n' +
         'cannot reach production.)',
     );

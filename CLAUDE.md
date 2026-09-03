@@ -38,18 +38,20 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    2026-08-31) with the `axal.vc` custom domain in both tables and touched
    no document, so this fact described Pages as the apex for two days while
    the toml, the guard tests and the deploy log said otherwise. Who serves a
-   host is settled by the deploy log's "Deployed studioos triggers" lines
-   and the Pages dashboard's Domains line, never by prose.
-   **Cloudflare Pages is now a mirror, not a host.** The `studioos` project
-   (`studioos-2p8.pages.dev`) gets a Direct Upload of a fresh `docs/` build
-   from `.github/workflows/cloudflare-pages-deploy.yml` on every push to
-   `main` and serves no production hostname; `docs/_worker.js` governs only
-   that mirror. A "Production" deployment on its dashboard says nothing
-   about what the Worker shipped — on 2026-09-03 two Worker deploys failed
-   at the migration step, both hosts stayed a build behind, and the mirror
-   advanced twice. Retiring it is U9 in
-   `documentation/architecture/UNRESOLVED_ITEMS.md`; whether the
-   Worker-served HTML carries the security headers is U10 — assert neither.
+   host is settled by the deploy log's "Deployed studioos triggers" lines,
+   never by prose.
+   **Cloudflare Pages is retired (2026-09-03, `DECISIONS.md` D36).** The
+   `studioos` Pages project (`studioos-2p8.pages.dev`) was a mirror fed by a
+   workflow that is now deleted, together with the Pages Advanced Mode
+   `_worker.js` that ran only there; on 2026-09-03 its dashboard had shown
+   "Production" rows for two commits whose Worker deploy failed at the
+   migration step. Nothing ships a build anywhere but the Worker. The static
+   security headers on the SPA HTML come from `frontend/public/_headers`
+   (built to `docs/_headers`), which Workers static assets read natively and
+   apply to every assets-binding response; `scripts/check-spa-live.mjs`
+   asserts them on every shell route, so U10 in
+   `documentation/architecture/UNRESOLVED_ITEMS.md` is answered by that run,
+   not by this sentence.
    **Never add a path-scoped apex route** (`axal.vc/*`, `axal.vc/assets/*`)
    to either table: it would take those URLs away from the assets binding
    and break the SPA fallback. That is how 2026-08-31 paired apex HTML with
@@ -57,10 +59,11 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    spun on `?__reboot=` — and it is guarded by
    `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
    `frontend/test/apex_route_coverage.test.mjs`. `docs/` is committed by hand
-   for review and for `scripts/check-docs-fresh.mjs`; both CI workflows
-   rebuild it at deploy time, so the committed bytes are what reviewers
-   read, not necessarily what ships (`documentation/operations/DEPLOY.md`
-   §2.1). GitHub Pages is decommissioned as the apex.
+   for review and for `scripts/check-docs-fresh.mjs`; the deploy workflow
+   rebuilds it from source at deploy time, so the committed bytes are what
+   reviewers read, not necessarily what ships
+   (`documentation/operations/DEPLOY.md` §2.1). GitHub Pages and Cloudflare
+   Pages are both decommissioned; the Worker is the only host.
 
 ## File map
 
@@ -73,7 +76,7 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
 | `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
 | `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
-| `docs/`               | Built frontend bundle — the Worker's `[assets]` directory; mirrored to Pages |
+| `docs/`               | Built frontend bundle — the Worker's `[assets]` directory; its `_headers` sets the static security headers |
 
 **`documentation/` and `docs/` are different things.** `documentation/` is
 prose a person wrote; `docs/` is build output a person must never edit. The

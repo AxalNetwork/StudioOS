@@ -8,16 +8,16 @@
 > `studioos` Worker has served **both** `axal.vc` and `app.axal.vc` from its
 > own `[assets]` copy of `docs/` since then — the *original* cutover target in
 > the table below, not the revised one. The Pages project
-> (`studioos-2p8.pages.dev`) still exists and receives a Direct Upload of a
-> fresh `docs/` build on every push to `main`
-> (`.github/workflows/cloudflare-pages-deploy.yml`, `eda67173d`, 2026-09-02),
-> but it serves no production hostname: it is a mirror, and whether to retire
-> it is `UNRESOLVED_ITEMS.md` U9. The `_headers`/`_redirects` files described
-> below were themselves replaced the same day they landed by
-> `frontend/public/_worker.js` (Pages Advanced Mode, `d69ff32e3`), which
-> governs only that mirror. Current truth: `CLAUDE.md` fact 4 and
-> `PRODUCTION.md`. The record of what bit on 2026-08-31 stays below because
-> the failure mode is still the reason no path-scoped apex route may exist.
+> (`studioos-2p8.pages.dev`) lived on as a mirror — a Direct Upload of every
+> `main` build from `.github/workflows/cloudflare-pages-deploy.yml`
+> (`eda67173d`, 2026-09-02) — until 2026-09-03, when the mirror, that
+> workflow and `frontend/public/_worker.js` (Pages Advanced Mode,
+> `d69ff32e3`, which had replaced the `_headers`/`_redirects` files described
+> below the day they landed) were retired (`DECISIONS.md` D36, resolving
+> U9). `frontend/public/_headers` is back, read natively by Workers static
+> assets. Current truth: `CLAUDE.md` fact 4 and `PRODUCTION.md`. The record
+> of what bit on 2026-08-31 stays below because the failure mode is still
+> the reason no path-scoped apex route may exist.
 
 **DONE, 2026-08-31.** The frontend moved from Workers Static Assets to
 **Cloudflare Pages**, and the apex now serves from it. This document is kept as

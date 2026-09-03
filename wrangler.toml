@@ -92,9 +92,12 @@ custom_domain  = true
 # repo-root `./docs/` directory. The path dates from when GitHub Pages
 # published it (GitHub Pages no longer serves any production host) and
 # is kept because `docs/` is committed by hand for review and for
-# scripts/check-docs-fresh.mjs; both CI deploy workflows rebuild it
-# from source at deploy time, so the committed bytes are what reviewers
-# read, not necessarily what ships.
+# scripts/check-docs-fresh.mjs; the deploy workflow rebuilds it from
+# source at deploy time, so the committed bytes are what reviewers read,
+# not necessarily what ships. `docs/_headers` (from frontend/public/) is
+# read by Workers static assets and sets the security headers on every
+# response this binding serves; it is parsed, never served, and does not
+# apply to the `run_worker_first` paths below (the Worker sets its own).
 #
 # Build + deploy: root `npm run deploy` (see the Deploy note at the top
 # of this file) — it runs `node scripts/build-frontend.mjs` (Vite +
@@ -555,18 +558,22 @@ crons = [
 # ===========================================================================
 # Environment: preview / staging
 # ---------------------------------------------------------------------------
-# Task #9 (AO) — preview env declared so the GitHub Action's PR preview
-# deploy can run. Operator must provision the preview D1 + KV namespaces
-# and replace the REPLACE_WITH_PREVIEW_* placeholders below before the
-# `wrangler deploy --env preview` step in CI will succeed:
+# Task #9 (AO) — preview env declared for a full-stack preview deploy
+# (`npm run deploy:preview`). Operator must provision the preview D1 + KV
+# namespaces and replace the REPLACE_WITH_PREVIEW_* placeholders below
+# before `wrangler deploy --env preview` will succeed:
 #
 #   npx wrangler d1 create studioos-db-preview
 #   npx wrangler kv namespace create TOKENS-PREVIEW
 #   npx wrangler kv namespace create RATE_LIMITS-PREVIEW
 #
-# Until placeholders are replaced, the CI preview-deploy job is gated on
-# the CLOUDFLARE_PREVIEW_READY repo variable; absence skips the job
-# without failing the build. See .github/workflows/ci.yml.
+# No CI job deploys this environment (the `CLOUDFLARE_PREVIEW_READY` gate
+# an earlier version of this comment described was never wired), and
+# Workers preview URLs cannot exist for it regardless: Cloudflare
+# generates none for a Worker that implements a Durable Object, and this
+# one implements two. Pull-request previews are therefore a separate
+# Worker per PR with no bindings — documentation/architecture/DECISIONS.md
+# D36.
 # ===========================================================================
 [env.preview]
 name = "studioos-preview"

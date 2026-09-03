@@ -10,9 +10,11 @@ is below; everything that did not was decided and written down in
 Ten items. Each names the evidence, what is actually blocked, and what a wrong
 guess would cost — because "blocked" without a cost is just a to-do. U9 and
 U10 are operations questions rather than routing ones — who serves `axal.vc`
-is settled (`DECISIONS.md` D34); what to do with the Pages mirror, and whether
-the Worker-served HTML carries its security headers, are not — recorded here
-because `CLAUDE.md` fact 4 points at them.
+is settled (`DECISIONS.md` D34). U9 (the Pages mirror) was resolved on
+2026-09-03 by retiring it (D36); U10 (whether the Worker-served HTML carries
+its security headers) is now measured live by `scripts/check-spa-live.mjs`
+rather than asserted. Both stay here because `CLAUDE.md` fact 4 points at
+them.
 
 ---
 
@@ -248,8 +250,18 @@ them lazily at `routes/partnernet.ts:59-70`, guarded by a module-global
 
 ## U9 — The Cloudflare Pages mirror and its workflow: keep as a preview/rollback copy, or retire
 
-**Evidence.** The `studioos` Pages project (`studioos-2p8.pages.dev`) serves
-no production hostname. Since 2026-09-01 (`1d320dda9`) both `axal.vc` and
+**RESOLVED 2026-09-03 — retired** (`DECISIONS.md` D36). The owner chose
+Workers Static Assets as the only host. `.github/workflows/cloudflare-pages-deploy.yml`
+and `frontend/public/_worker.js` are deleted, `scripts/build-frontend.mjs` no
+longer writes the `.assetsignore` that hid the entry script from the Worker
+upload, and every document that called the project a mirror now dates it.
+Deleting the Pages project itself is a dashboard act for the owner — the
+Worker carries the same name, `studioos`, so the entry of type *Pages* is the
+one to remove. The evidence and the two cases below stay as the record of why
+it was open.
+
+**Evidence (as recorded before the decision).** The `studioos` Pages project
+(`studioos-2p8.pages.dev`) serves no production hostname. Since 2026-09-01 (`1d320dda9`) both `axal.vc` and
 `app.axal.vc` are whole-host Workers Custom Domains of the `studioos` Worker,
 and the Pages dashboard's Production card lists only `studioos-2p8.pages.dev`
 under Domains — a Pages custom domain on `axal.vc` would appear there and
@@ -286,16 +298,25 @@ way.
 
 ## U10 — Whether the Worker-served SPA HTML carries the security headers cannot be read from this repository
 
-**Evidence.** Two files set HSTS, `X-Content-Type-Options: nosniff`,
-`X-Frame-Options` and `Referrer-Policy`: `frontend/public/_worker.js`
-(copied by the build to `docs/_worker.js`), which runs only on the Pages
-mirror, and `cloudflare-worker/src/middleware/securityHeaders.ts`, which runs
-on API responses. On `axal.vc` and `app.axal.vc`, requests for paths outside
-`run_worker_first` (`/api/*`, `/landing/*`, `/p/*`, `/assets/*`) are answered
-by the Worker's `[assets]` binding without invoking the Hono app — so neither
-file runs for `/login` or `/dashboard` there, and the Worker's asset upload
-skips `_worker.js` (`docs/.assetsignore`, written by
-`scripts/build-frontend.mjs`).
+**Status 2026-09-03 — mechanism shipped; the answer is measured, not yet
+recorded here.** `frontend/public/_headers` (built to `docs/_headers`) is
+read natively by Workers static assets and applied to every response the
+`[assets]` binding serves, and `scripts/check-spa-live.mjs` asserts HSTS,
+nosniff, `X-Frame-Options` and `Referrer-Policy` on every shell route — so
+the first `post-deploy SPA smoke` run (or `npm run deploy`'s `postdeploy`
+hook) after the deploy that carried `_headers` answers this item. Until that
+run is green, nothing here claims the headers are present; if it is red, the
+fallback is the Worker change named below. Record the run here when it has
+happened.
+
+**Evidence (as recorded 2026-09-03, before the fix).** Two files set HSTS,
+`X-Content-Type-Options: nosniff`, `X-Frame-Options` and `Referrer-Policy`:
+`frontend/public/_worker.js`, which ran only on the Pages mirror (both now
+retired, D36), and `cloudflare-worker/src/middleware/securityHeaders.ts`,
+which runs on API responses. On `axal.vc` and `app.axal.vc`, requests for
+paths outside `run_worker_first` (`/api/*`, `/landing/*`, `/p/*`,
+`/assets/*`) are answered by the Worker's `[assets]` binding without invoking
+the Hono app — so neither file ran for `/login` or `/dashboard` there.
 
 **Why it is a blocker and not a judgement call.** Whether those responses
 carry the headers is a property of the Cloudflare edge, not of anything in
@@ -316,7 +337,7 @@ taken here.
 
 **Blocks:** nothing today — API responses are covered by `securityHeaders.ts`
 regardless. Recorded so that `CLAUDE.md` fact 4, `GOTCHAS.md` and
-`frontend/public/_worker.js` can point here instead of guessing.
+`frontend/public/_headers` can point here instead of guessing.
 
 ---
 

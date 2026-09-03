@@ -6,12 +6,14 @@ name: Cloudflare Worker deploy
 # the API. A `wrangler deploy` — this job on every push to main, or root
 # `npm run deploy` by hand — is the only thing that changes what either host
 # serves: one deploy ships the SPA and the API together, so the two hosts
-# cannot sit at different builds. It guarantees nothing about the separate
-# `studioos-2p8.pages.dev` Pages project — cloudflare-pages-deploy.yml feeds
-# that mirror on its own and can advance when this job fails (it did on
-# 2026-09-03: the migration step failed, `wrangler deploy` never ran, and both
-# hosts stayed on the previous build). Who serves a host is settled by this
-# job's closing "Deployed studioos triggers" lines, not by the Pages dashboard.
+# cannot sit at different builds, and nothing else ships a build anywhere —
+# the Cloudflare Pages mirror and its workflow were retired on 2026-09-03
+# (documentation/architecture/DECISIONS.md D36) after its dashboard showed
+# "Production" rows for commits whose run here had failed in the migration
+# step. Who serves a host is settled by this job's closing "Deployed studioos
+# triggers" lines. The static security headers on SPA responses come from
+# docs/_headers, built with the SPA below and asserted live by
+# post-deploy-smoke.yml.
 #
 # Migrations run FIRST, through the same runner `npm run deploy`'s predeploy
 # hook uses. This job used to call `wrangler deploy` directly, which is one of
