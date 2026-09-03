@@ -129,7 +129,11 @@ export default function ProfileZone() {
   };
 
   return (
-    <ZoneBody loading={state.loading || !draft} error={state.error} onRetry={load} isEmpty={false}>
+    // `state.loading` alone gates the skeleton. The old expression OR'd in
+    // `!draft`, which stays true after a FAILED load (the catch sets `error`
+    // and never sets `draft`), so every load error rendered as a spinner
+    // forever and the error card underneath it never appeared.
+    <ZoneBody loading={state.loading} error={state.error} onRetry={load} isEmpty={false}>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
           {/* Canvas completeness meter — computed from the fields, not asserted. */}

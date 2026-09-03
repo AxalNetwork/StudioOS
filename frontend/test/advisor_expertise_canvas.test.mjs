@@ -37,6 +37,29 @@ test('no canvas sidebar is imported', () => {
   }
 });
 
+test('a failed profile load shows the error card, not a spinner forever', () => {
+  // ZoneBody checks `loading` before `error`. The loading prop used to be
+  // `state.loading || !draft` — and the catch path never sets `draft`, so
+  // every failed read of /advisors/me kept `loading` true forever and the
+  // error the page had just captured never rendered. Reported on production
+  // as /expertise/profile hanging on a spinner.
+  const code = codeOnly(profile);
+  assert.match(code, /<ZoneBody loading=\{state\.loading\} error=\{state\.error\}/,
+    'loading must come from the request state alone');
+  assert.doesNotMatch(code, /loading=\{state\.loading \|\| !draft\}/,
+    'draft is null after a failed load — it must not feed the loading flag');
+  assert.match(code, /setState\(\{ loading: false, error:/,
+    'the catch path must keep recording the error');
+
+  // The kit's priority order is what turned this into a spinner; pin it so a
+  // later reorder is a deliberate choice, and so every zone caller knows an
+  // error only renders once loading is false.
+  const kit = readFileSync(resolve(process.cwd(), 'frontend/src/pages/advisor/expertise/kit.jsx'), 'utf8');
+  const body = kit.slice(kit.indexOf('export function ZoneBody'));
+  assert.ok(body.indexOf('if (loading)') < body.indexOf('if (error)'),
+    'ZoneBody renders loading before error — callers must not hold loading true after an error');
+});
+
 test('a stat the store cannot answer reads as absent, never as zero', () => {
   // `GET /me/services` returns `units_sold: null` on EVERY row — always, by
   // design — because `advisor_bookings` records a free-text topic rather than a
