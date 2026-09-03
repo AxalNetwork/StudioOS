@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
-import BucketOverview from './BucketOverview';
+import BucketOverview, { unbuiltFrom } from './BucketOverview';
 import { bucketForPath, zoneForPath } from './shellConfig';
 
 /**
@@ -158,22 +158,36 @@ const ZONE_COPY = {
   },
 };
 
+/**
+ * One line per zone, for the zones in `LIVE_ZONES` — the only two with a
+ * source behind them. Every other zone is described from `ZONE_COPY`, the
+ * same object its own page renders, so an overview card cannot promise what
+ * the page behind it denies.
+ *
+ * The first draft of this grid did exactly that: Ask as "cited answers over
+ * your own documents", Library as "the documents Ask reads from", Client prep
+ * as "everything you need before the session" — a retrieval stack that exists
+ * in no form (D9/D12 withdrew these zones on that finding) — and Companies as
+ * showing "whether you have a relationship or only a file", a flag
+ * `competitor_candidates` does not carry.
+ *
+ * `frontend/test/advisor_bucket_overview.test.mjs` fails if a zone outside
+ * LIVE_ZONES reappears here.
+ */
+const ZONE_BLURB = {
+  markets: 'Signals from the sectors you work in, with the date each one was gathered.',
+  companies: 'The competitor and market analyses you have run yourself.',
+};
+
 function ResearchOverview({ role }) {
   const bucket = bucketForPath(role, '/research');
+  if (!bucket) return null;
   return (
     <BucketOverview
       bucket={bucket}
       role={role}
-      descriptions={{
-        ask: 'Cited answers over your own documents. Every answer names the sources it drew on.',
-        'client-prep': 'One client, everything you need before the session.',
-        markets: 'Signals from the sectors you work in, with the date each one was gathered.',
-        companies: 'Companies you have looked into — and whether you have a relationship or only a file.',
-        library: 'The documents Ask reads from. What is indexed here is exactly what Ask can reach.',
-        funds: 'Who invests at your stage, and on what terms.',
-        diligence: 'The evidence behind a decision, and the questions still open against it.',
-        benchmarking: 'Comparables, with the sample size on every figure.',
-      }}
+      descriptions={ZONE_BLURB}
+      unbuilt={unbuiltFrom(ZONE_COPY)}
     />
   );
 }
@@ -231,16 +245,12 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
         : `${zone?.label || 'This zone'} reads a live source`)
       : `${zone?.label || 'This zone'} has no store behind it yet`;
 
-  const INTRO = {
-    ask: 'Cited answers over your own documents. Every answer names the sources it drew on.',
-    markets: 'Signals from the sectors you work in, with the date each one was gathered.',
-    companies: 'Companies you have looked into — and whether you have a relationship or only a file.',
-    funds: 'Who invests at your stage, and on what terms.',
-    library: 'The documents Ask reads from. What is indexed here is exactly what Ask can reach.',
-    diligence: 'The evidence behind a decision, and the questions still open against it.',
-    benchmarking: 'Comparables, with the sample size on every figure.',
-    'client-prep': 'One client, everything you need before the session.',
-  };
+  // The zone header's line, for the two zones with a source. Every other zone
+  // takes the heading its own body renders — the same coupling the overview
+  // cards use. This map previously described Ask as "cited answers over your
+  // own documents" and Library as "the documents Ask reads from" directly
+  // above the cards saying neither exists.
+  const INTRO = { ...ZONE_BLURB, ...unbuiltFrom(ZONE_COPY) };
 
   return (
     <WorkspaceShell

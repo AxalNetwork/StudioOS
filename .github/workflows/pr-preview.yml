@@ -1,0 +1,138 @@
+name: PR preview
+
+# One Worker per pull request — `studioos-pr-<number>` on workers.dev — built
+# from the PR's frontend and deployed from wrangler.pr-preview.toml, which
+# declares NO bindings: a preview can never touch production data, and
+# `/api/*` is a 404 there, exactly as it was on the retired Cloudflare Pages
+# mirror. Deployed on open / synchronize / reopen, deleted on close, its URL
+# kept in one sticky comment on the PR. Same-repository PRs only — secrets are
+# not available to forks — and never for Dependabot.
+#
+# Why not Workers preview URLs or Workers Builds: Cloudflare generates none
+# for a Worker that implements a Durable Object, and `studioos` implements
+# two (documentation/architecture/DECISIONS.md D36). Production is untouched:
+# wrangler.toml is never read here, and the apex guards pin that.
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN  — Workers Scripts:Edit (the deploy token already has it)
+#   CLOUDFLARE_ACCOUNT_ID — the Cloudflare account containing `studioos`
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  deploy:
+    name: deploy the preview Worker
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PREVIEW_NAME: studioos-pr-${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      # The same root build the production deploy runs (Vite + hashed-asset
+      # retention + OG prerender), so the preview is the PR's own bytes, not
+      # the committed docs/.
+      - name: Build the SPA
+        run: npm run build
+
+      # A brand-new Worker's first `wrangler deploy` can fail AFTER the script
+      # and assets are uploaded, when the call that switches on its workers.dev
+      # subdomain races ahead of propagation: "This Worker does not exist on
+      # your account" (code 10007). It happened on this workflow's own first
+      # run (#423). A second attempt sees the script and succeeds, and the
+      # re-upload is a no-op ("already uploaded"), so the step tries three
+      # times, 15 seconds apart, before it is a failure.
+      - name: Deploy the preview Worker
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          deployed=0
+          for attempt in 1 2 3; do
+            if npx --yes wrangler@4.125.0 deploy --config wrangler.pr-preview.toml --name "$PREVIEW_NAME" 2>&1 | tee deploy.log; then
+              deployed=1
+              break
+            fi
+            echo "::warning::wrangler deploy attempt ${attempt} of 3 failed; retrying in 15s"
+            sleep 15
+          done
+          if [ "$deployed" != 1 ]; then
+            echo "::error::wrangler deploy failed three times — see the attempts above"
+            exit 1
+          fi
+          url=$(grep -o 'https://[a-z0-9.-]*\.workers\.dev' deploy.log | head -n 1)
+          if [ -z "$url" ]; then
+            echo "::error::wrangler printed no workers.dev URL — the Worker deployed, but the preview link is unknown"
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      # One comment per PR, edited in place on every push so the thread does
+      # not fill up with links. The marker is how the comment is found again.
+      - name: Post or update the preview comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          marker='<!-- pr-preview -->'
+          body="$(printf '%s\n**Preview:** %s (built from %s)\n\nThe pull request'"'"'s SPA build on a Worker with no bindings: pages and deep links work, `/api/*` is a 404, and nothing here can reach production data. Redeployed on every push; deleted when the PR closes.' "$marker" "$PREVIEW_URL" "${HEAD_SHA:0:9}")"
+          existing="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n 1)"
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" -f body="$body" > /dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body" > /dev/null
+          fi
+          echo "preview: $PREVIEW_URL"
+
+  delete:
+    name: delete the preview Worker
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PREVIEW_NAME: studioos-pr-${{ github.event.pull_request.number }}
+    steps:
+      # A PR closed before its first preview deployed has nothing to delete;
+      # that is the one failure tolerated here. Anything else stays red.
+      - name: Delete the preview Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if out="$(npx --yes wrangler@4.125.0 delete "$PREVIEW_NAME" --force 2>&1)"; then
+            echo "$out"
+          else
+            echo "$out"
+            echo "$out" | grep -q -i -E 'not found|does not exist|10007' || exit 1
+            echo "no Worker named $PREVIEW_NAME to delete"
+          fi

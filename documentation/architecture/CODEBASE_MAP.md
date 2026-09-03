@@ -193,24 +193,46 @@ Smart Placement is off.
 
 ### 2.5 The `routes` tables
 
-Both `[[routes]]` and `[[env.production.routes]]` contain **four entries each**,
-and a normalised diff of the two shows them **identical**. The table contains
-one Workers Custom Domain (`app.axal.vc`) and only three apex path routes:
-`axal.vc/api/*`, `axal.vc/landing/*`, and `axal.vc/p/*`.
+Both `[[routes]]` and `[[env.production.routes]]` contain **two entries each**,
+and a normalised diff of the two shows them **identical**: `axal.vc` and
+`app.axal.vc`, each a whole-host Workers Custom Domain (`custom_domain = true`).
+There are no zone routes at all.
 
-The apex remains on Cloudflare Pages. There is deliberately no `axal.vc/*` or
-`axal.vc/assets/*` Worker route, so Pages continues to serve the root, SPA
-fallback, and static assets from the same deployment.
-
-All zone routes carry `zone_name = "axal.vc"`.
+The apex is served by the Worker (revised 2026-09-03 — from the 2026-08-31
+Pages cutover until then this section read "the apex remains on Cloudflare
+Pages" over a four-entry table of `app.axal.vc` plus `axal.vc/api/*`,
+`axal.vc/landing/*` and `axal.vc/p/*`). `1d320dda9` (2026-09-01, "Remove stale
+documentation asset files" — a message that does not mention routing) replaced
+those three path routes with the `axal.vc` custom domain in both tables, so the
+`[assets]` binding (`directory = "./docs"`,
+`not_found_handling = "single-page-application"`, `run_worker_first` for
+`/api/*`, `/landing/*`, `/p/*` and `/assets/*`) answers the root, the SPA
+fallback and the static assets on both hosts from one build. There is
+deliberately no `axal.vc/*` or `axal.vc/assets/*` route: a path-scoped zone
+route would take those URLs away from the assets binding and break the SPA
+fallback, and `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
+`frontend/test/apex_route_coverage.test.mjs` refuse both. The Cloudflare Pages
+mirror (`studioos-2p8.pages.dev`) was retired on 2026-09-03 (`DECISIONS.md`
+D36). Who serves a host is settled by the deploy log's "Deployed studioos
+triggers" lines, never by prose. `docs/_headers` (from
+`frontend/public/_headers`) sets the security headers on every response the
+assets binding serves; the `run_worker_first` paths get
+`middleware/securityHeaders.ts` instead.
 
 ### 2.6 `[env.preview]` (for completeness)
 
 `studioos-preview`, `workers_dev = true`. Mirrors D1/KV/AI/Queues/DOs/migrations
 /R2/Analytics/Browser/triggers, but **omits** Vectorize, the `PUBLICATIONS` and
 `BACKUPS` R2 buckets, `assets`, and `tail_consumers`. D1/KV ids are still
-`REPLACE_WITH_PREVIEW_*` placeholders, so the preview deploy is gated on the
-`CLOUDFLARE_PREVIEW_READY` repo variable.
+`REPLACE_WITH_PREVIEW_*` placeholders, so `npm run deploy:preview` cannot
+succeed until they are provisioned; no CI job deploys this environment (the
+`CLOUDFLARE_PREVIEW_READY` gate once described here was never wired), and
+Workers preview URLs are unavailable to it regardless, because Cloudflare
+generates none for a Worker that implements a Durable Object (D36 — which is
+why pull-request previews are a separate Worker per PR with no bindings:
+`wrangler.pr-preview.toml` at the repo root plus
+`scripts/pr-preview-worker.mjs`, deployed and deleted by
+`.github/workflows/pr-preview.yml`).
 
 ---
 

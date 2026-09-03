@@ -1,5 +1,24 @@
 # Cloudflare Pages migration — the frontend moves, the Worker keeps the API
 
+> **SUPERSEDED 2026-09-03.** The architecture this document delivered lasted
+> one day. On 2026-09-01 `1d320dda9` ("Remove stale documentation asset
+> files", author Replit Agent — a commit whose message does not mention
+> routing) replaced the three apex path routes below with a whole-host
+> `axal.vc` Workers Custom Domain in both `wrangler.toml` tables, so the
+> `studioos` Worker has served **both** `axal.vc` and `app.axal.vc` from its
+> own `[assets]` copy of `docs/` since then — the *original* cutover target in
+> the table below, not the revised one. The Pages project
+> (`studioos-2p8.pages.dev`) lived on as a mirror — a Direct Upload of every
+> `main` build from `.github/workflows/cloudflare-pages-deploy.yml`
+> (`eda67173d`, 2026-09-02) — until 2026-09-03, when the mirror, that
+> workflow and `frontend/public/_worker.js` (Pages Advanced Mode,
+> `d69ff32e3`, which had replaced the `_headers`/`_redirects` files described
+> below the day they landed) were retired (`DECISIONS.md` D36, resolving
+> U9). `frontend/public/_headers` is back, read natively by Workers static
+> assets. Current truth: `CLAUDE.md` fact 4 and `PRODUCTION.md`. The record
+> of what bit on 2026-08-31 stays below because the failure mode is still
+> the reason no path-scoped apex route may exist.
+
 **DONE, 2026-08-31.** The frontend moved from Workers Static Assets to
 **Cloudflare Pages**, and the apex now serves from it. This document is kept as
 the record of how, and of the two things that bit on the way. The existing Worker keeps serving `axal.vc/api/*` — all
@@ -11,6 +30,10 @@ Functions) was considered and declined.
 which was the deal: it was annotated but left factually intact while the old
 statement was still true, and rewritten only once Pages actually served
 traffic. The Pages project is `studioos-2p8.pages.dev`, bound to `axal.vc`.
+*(Superseded 2026-09-01: that binding lasted a day. The project is no longer
+bound to any production hostname — see the banner above — and fact 4 was
+rewritten again on 2026-09-03, after describing Pages as the apex for two days
+in which the toml, the guard tests and the deploy log all said otherwise.)*
 
 ## What bit, after the domain was bound
 
@@ -39,11 +62,11 @@ predicted:
 Pages from the apex. It is easy to read that as one migration and this as a
 second. It is not:
 
-| | Original cutover target | Revised target |
-| --- | --- | --- |
-| Who serves `axal.vc/*` HTML | The Worker's `[assets]` binding | **Cloudflare Pages** |
-| Who serves `axal.vc/api/*` | The Worker | The Worker (unchanged) |
-| GitHub Pages | Decommissioned | Decommissioned (unchanged) |
+| | Original cutover target | Revised target (2026-08-31) | Since 2026-09-01 (`1d320dda9`) |
+| --- | --- | --- | --- |
+| Who serves `axal.vc/*` HTML | The Worker's `[assets]` binding | **Cloudflare Pages** | **The Worker's `[assets]` binding** — the original target after all, as a whole-host custom domain |
+| Who serves `axal.vc/api/*` | The Worker | The Worker (unchanged) | The Worker (unchanged) |
+| GitHub Pages | Decommissioned | Decommissioned (unchanged) | Decommissioned (unchanged) |
 
 Steps 1–5 of that document are unaffected and still required — the OAuth
 redirect URIs, the observation gate, the `OAUTH_CALLBACK_BASE_URL` flip. **Only

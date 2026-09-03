@@ -140,13 +140,13 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Admin · Super | `/admin` · `/admin/*` | Admin | Full page | Sidebar → Admin → Admin Console | UPGRADE | High |
-| Contracts · Super | `/admin` | Admin | Full page | Sidebar → Admin → Admin Console | UPGRADE | High |
+| Admin · Super | `/hq` · `/admin/licences` · `/admin/accounts` · `/admin/contracts` · `/admin` · `/admin/*` | HQ | Full page | Sidebar → HQ → Home | UPGRADE | High |
+| Contracts · Super | `/admin/contracts` | HQ | Full page | Sidebar → HQ → Contracts | UPGRADE | High |
 | Founder Journey Map | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Fund Administration | `/funds/performance` · `/funds/lp-workspace` · `/lp-reports` · `/portfolio/waterfall` | Capital & Legal | Full page | Sidebar → Capital & Legal → Exit Waterfall | UPGRADE | High |
-| Funds · Fabric | `/admin/fabric` · `/funds` | Admin | Full page (proposed) | Sidebar → Admin → Admin Console | NEW | Low |
-| Support Security · Super | `/tickets` · `/monitoring` · `/admin` | Admin | Full page | Sidebar → Admin → Monitoring | NEW | High |
-| Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | Admin | Full page | Sidebar → Admin → Admin Console | NEW | High |
+| Fund Administration | `/funds/performance` · `/funds/lp-workspace` · `/lp-reports` · `/portfolio/waterfall` | HQ | Full page | Sidebar → HQ → Funds | UPGRADE | High |
+| Funds · Fabric | `/admin/fabric` · `/funds` | HQ | Full page (proposed) | Sidebar → HQ → Funds | NEW | Low |
+| Support Security · Super | `/admin/security` · `/tickets` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
+| Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
 ## Shell (all workspaces) — 11 canvases
 
@@ -207,8 +207,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 68 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 31 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 67 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 32 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 27 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

@@ -1,8 +1,19 @@
 name: Cloudflare Worker deploy
 
-# `axal.vc` is currently served by the `studioos` Worker custom domain, not
-# by the separate `studioos-2p8.pages.dev` Pages project. Deploy both from the
-# same GitHub commit so the live app and Pages artifact cannot drift.
+# `axal.vc` and `app.axal.vc` are both whole-host custom domains of the
+# `studioos` Worker (wrangler.toml [[routes]] / [[env.production.routes]],
+# since 1d320dda9 on 2026-09-01), served from its [assets] copy of docs/ plus
+# the API. A `wrangler deploy` — this job on every push to main, or root
+# `npm run deploy` by hand — is the only thing that changes what either host
+# serves: one deploy ships the SPA and the API together, so the two hosts
+# cannot sit at different builds, and nothing else ships a build anywhere —
+# the Cloudflare Pages mirror and its workflow were retired on 2026-09-03
+# (documentation/architecture/DECISIONS.md D36) after its dashboard showed
+# "Production" rows for commits whose run here had failed in the migration
+# step. Who serves a host is settled by this job's closing "Deployed studioos
+# triggers" lines. The static security headers on SPA responses come from
+# docs/_headers, built with the SPA below and asserted live by
+# post-deploy-smoke.yml.
 #
 # Migrations run FIRST, through the same runner `npm run deploy`'s predeploy
 # hook uses. This job used to call `wrangler deploy` directly, which is one of

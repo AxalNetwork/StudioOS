@@ -34,3 +34,26 @@
 .bo-card:hover .bo-title {
   color: var(--bo-ink);
 }
+
+/* A zone with no store behind it: dashed rather than solid, and its line
+   carries a marker. The card still opens — the zone page explains itself in
+   full — but the grid must not read as a menu of working features. */
+.bo-card-unbuilt {
+  border-style: dashed;
+}
+.bo-card-unbuilt .bo-title {
+  color: var(--axal-ink-2, #4b5563);
+}
+.bo-unbuilt {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 4px;
+  border: 1px solid var(--axal-border, #e5e7eb);
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--axal-ink-3, #6b7280);
+  vertical-align: 1px;
+}

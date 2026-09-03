@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton } from '../../ui';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
-import BucketOverview from '../BucketOverview';
+import BucketOverview, { unbuiltFrom } from '../BucketOverview';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 
 const PartnerOperationsWorkspace = lazy(() => import('../../pages/partner/operations/PartnerOperationsWorkspace'));
@@ -135,33 +135,47 @@ const COPY = {
 };
 
 /**
- * One line per zone, for the overview a bucket root renders. The canvas's
- * anchor nav names the same destinations; the card grid is what the sidebar
- * row opens.
+ * One line per zone, for the overview a bucket root renders — but only for the
+ * zones with a page behind them. A zone with no store is deliberately absent:
+ * its card is written from `COPY` — the same heading its own body renders — or
+ * from the generic no-store card when it has neither. `NOTHING_YET` below
+ * mirrors that fallback. The canvas's anchor nav names the same destinations;
+ * the card grid is what the sidebar row opens.
+ *
+ * The first draft of this map described all eight unbacked partner zones as
+ * working features — negotiations "live deals at terms", deliverables "shipped
+ * and acknowledged", capacity "where the firm is over-committed", catalog "the
+ * record lead scoring reads against" — every one of them a `NoStoreYet` card
+ * one click away.
  */
 const ZONE_LINES = {
   '/pipeline': {
     leads: 'Lead sources with provenance — where the work comes from is as useful as how much of it there is.',
     proposals: 'The proposal desk: what is open, what it is worth, and the activity on each.',
-    negotiations: 'Live deals at terms — their ask, your line, and whose court the ball is in.',
     retainers: 'Recurring engagements and the renewals coming due.',
     analytics: 'Win rate, cycle time and source quality across the pipeline.',
   },
   '/delivery': {
     board: 'Both modes on one board: projects with milestones, and embedded seats with founder-granted scope.',
-    deliverables: 'Shipped and acknowledged, or shipped and ignored — the firm’s most expensive state.',
-    capacity: 'People rather than projects: who is committed to what, and where the firm is over-committed.',
-    'status-reports': 'The recurring client-facing update — shipped, next, blocked.',
     health: 'Engagement health across the book, with the at-risk row first.',
   },
   '/offers': {
-    catalog: 'Productised services with an engagement model and a price — the record lead scoring reads against.',
     'perk-deals': 'Deals that expire in public, with grants revoked when they do.',
-    visibility: 'Which surfaces the firm appears on and what each produced.',
-    proof: 'Case studies and outcomes, each carrying which engagement produced it and whether the client agreed to publish it.',
-    'audience-fit': 'Who the firm is for — and the working half, who it is not.',
   },
 };
+
+const NOTHING_YET = 'Nothing here yet';
+
+/** Gap lines for every zone this bucket cannot serve: its own no-store heading
+ *  where COPY has one, the generic card's heading where it does not. */
+function gapsFor(prefix, bucket) {
+  const gaps = unbuiltFrom(COPY[prefix]);
+  for (const zone of bucket?.zones || []) {
+    if (LIVE[prefix]?.[zone.slug] || gaps[zone.slug]) continue;
+    gaps[zone.slug] = NOTHING_YET;
+  }
+  return gaps;
+}
 
 export default function PartnerBucketRoutes() {
   const location = useLocation();
@@ -175,7 +189,14 @@ export default function PartnerBucketRoutes() {
     // The bucket root is the canvas overview — the sidebar row lands here,
     // not on the first zone. Zones stay one click away on the cards below.
     if (isRoot) {
-      return <BucketOverview bucket={bucket} role="partner" descriptions={ZONE_LINES[prefix]} />;
+      return (
+        <BucketOverview
+          bucket={bucket}
+          role="partner"
+          descriptions={ZONE_LINES[prefix]}
+          unbuilt={gapsFor(prefix, bucket)}
+        />
+      );
     }
     const Live = LIVE[prefix]?.[slug];
     if (Live) return <Suspense fallback={<Loading />}><Live /></Suspense>;

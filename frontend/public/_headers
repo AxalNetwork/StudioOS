@@ -1,0 +1,46 @@
+# Response headers for the static frontend, read by Cloudflare Workers static
+# assets (the `[assets]` binding in wrangler.toml). Vite copies this file from
+# frontend/public/ into docs/, the Worker's assets directory; Workers parses it
+# at upload and applies the rules to the responses the assets binding serves —
+# the SPA shell on every path outside `run_worker_first` (`/login`,
+# `/dashboard`, the single-page-application fallback for every deep link).
+# The file itself is never served.
+#
+# Restored 2026-09-03 (documentation/architecture/DECISIONS.md D36) from the
+# copy #371 deleted on 2026-08-31, when a Pages Advanced Mode `_worker.js`
+# beside it made it inert. That script, and the Cloudflare Pages mirror it ran
+# on, are retired; this file is the only thing setting headers on the shell.
+#
+# NOT applied to responses the Worker script generates — the
+# `run_worker_first` paths `/api/*`, `/landing/*`, `/p/*` and `/assets/*`.
+# The first three get cloudflare-worker/src/middleware/securityHeaders.ts;
+# `/assets/*` is answered by cloudflare-worker/src/index.ts straight from the
+# assets binding, which is why there is no `/assets/*` Cache-Control rule
+# here — it would be inert.
+#
+# Values are the Worker middleware's own (securityHeaders.ts).
+# frontend/test/apex_truth_doc.test.mjs fails if the two drift apart, and
+# scripts/check-spa-live.mjs asserts these headers on every live shell route
+# after a deploy — GOTCHAS records this surface losing its headers twice while
+# documents said it had them.
+#
+# Referrer-Policy is deliberately the laxer value here. The Worker's
+# authenticated API surface uses `no-referrer` (NICE-SEC-01) because its URLs
+# carry ids and query params; these static pages carry neither and benefit
+# from cross-origin referral attribution. The split is intentional — see
+# GOTCHAS, "Referrer-Policy is two-tier". Do not unify them.
+/*
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()
+
+# NO Content-Security-Policy here, and that is a decision rather than an
+# omission. The Worker's CSP is nonce-based and generated per request, which a
+# static header file cannot reproduce. index.html carries an inline boot
+# watchdog, so a naive `script-src 'self'` would break the app on load, and a
+# wrong CSP on the frontend is a white screen for every visitor. The static
+# shell has never carried a CSP, so shipping without one is not a regression.
+# Adding a correct static CSP needs the inline scripts enumerated and hashed
+# against a deployed preview.

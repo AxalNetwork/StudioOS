@@ -13,7 +13,12 @@
  *     receives" (.github/workflows/ci.yml);
  *   - prerendered OG/social metadata (scripts/prerender-og.mjs writes into
  *     docs/), so link previews describe an older build;
- *   - any GitHub Pages serving of docs/ (the historical publish path).
+ *   - reviewers reading the committed diff, and — if the repository still has
+ *     GitHub Pages enabled — the auto-generated `pages-build-deployment`
+ *     workflow, which publishes the committed docs/ to a host nothing routes
+ *     to (both production hosts have been Worker-served since 2026-09-01;
+ *     the Cloudflare Pages mirror, which rebuilt docs/ from source like the
+ *     Worker deploy does, was retired on 2026-09-03 — DECISIONS.md D36).
  *
  * So the failure mode is quiet and outward-facing: social cards and crawler
  * views drift behind the app while every local test stays green. This guard

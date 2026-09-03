@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
-import BucketOverview from '../BucketOverview';
+import BucketOverview, { unbuiltFrom } from '../BucketOverview';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
 
@@ -88,30 +88,42 @@ function NoStoreYet({ heading, what, why, links = [], seam }) {
 }
 
 /**
- * The advisor bucket root overview delegates to the shared grid; the map
- * below is the only advisor-specific part — one line per zone.
+ * One line per zone, for the zones that have a page behind them.
+ *
+ * A zone with NO store is deliberately absent from this map: its card is
+ * written from `COPY` below — the same sentence the zone's own page shows —
+ * so an overview card can never promise what the page behind it denies. That
+ * is not hypothetical. This map first shipped describing Guidance as "what
+ * you have told the batch, and who has acted on it" over a page that reads
+ * "Cohort guidance has no store"; Visibility as "what it converts" over
+ * "Nothing counts profile views"; Earnings as "what the platform took" beside
+ * a rail on the same screen saying Axal takes no cut; and Services as "how
+ * often it is booked", which `units_sold` returns null for by design. Four
+ * cards advertising a feature and one contradicting a recorded decision, on
+ * the one surface an advisor reads before choosing where to click.
+ *
+ * `frontend/test/advisor_bucket_overview.test.mjs` fails if a no-store zone
+ * reappears here, and if a blurb re-acquires the settled-money or
+ * booking-count claims.
  */
-const ADVISOR_ZONE_LINES = {
+const ZONE_BLURB = {
+  // Practice — all five zones read a real store.
   opportunities: 'Inbound requests and proposals — what is asking for your time.',
-  engagements: 'The clients you are actively working with, and what is due next.',
-  delivery: 'Work product sent, opened, and still in progress.',
-  sessions: 'Your calendar, availability, and the sessions on it.',
-  earnings: 'What you billed, what the platform took, and what you keep.',
+  engagements: 'The engagements you have accepted, and where each one stands.',
+  delivery: 'What you have sent a client, and what is still outstanding.',
+  sessions: 'Each booked session, the amount you recorded against it, and whether you have marked it billed.',
+  earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed. Axal settles nothing and takes no cut.',
+  // Expertise — profile, services and proof are backed; thinking and
+  // visibility are not, and are written from COPY.
   profile: 'What a founder sees before they book you.',
-  services: 'What you sell, at what price, and how often it is booked.',
-  proof: 'Outcomes and testimonials, fed from the client side.',
-  thinking: 'Articles and pieces that make you findable.',
-  visibility: 'Where your profile appears and what it converts.',
-  founders: 'The batch you are guiding, one founder at a time.',
-  guidance: 'What you have told the batch, and who has acted on it.',
-  'this-week': 'The cohort’s current week, deadlines, and where each founder stands.',
-  calendar: 'Sessions, milestones and Lab dates in one place.',
-  outcomes: 'What the batch produced, and what it is worth.',
+  services: 'What you sell and at what price. Nothing counts how often a service is booked.',
+  proof: 'Claims you have made, and whether the person named has confirmed each one.',
+  // Cohorts — founders, this week and outcomes are backed; guidance and
+  // calendar are not, and are written from COPY.
+  founders: 'The batch an admin has put in front of you, read from the Lab’s own record.',
+  'this-week': 'Which cycles are running and where each sits in its window. What is due stays the Lab’s to say.',
+  outcomes: 'The programme’s published outcomes — company-level and anonymous, not your batch alone.',
 };
-
-function BucketOverviewGrid({ bucket }) {
-  return <BucketOverview bucket={bucket} role="advisor" descriptions={ADVISOR_ZONE_LINES} />;
-}
 
 // Zones served by the legacy five-tab Advisory workspace, which carries its
 // own shell and must therefore be mounted `embedded`.
@@ -200,7 +212,16 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     // this bucket holds and opens each zone from there. The sidebar row must
     // land here, not on the first zone.
     if (isRoot) {
-      return <BucketOverviewGrid bucket={bucket} />;
+      // `unbuilt` is derived from COPY — the same object each zone page
+      // renders — so a card cannot describe a store the page denies having.
+      return (
+        <BucketOverview
+          bucket={bucket}
+          role="advisor"
+          descriptions={ZONE_BLURB}
+          unbuilt={unbuiltFrom(COPY[prefix])}
+        />
+      );
     }
 
     const Zone = ZONE[prefix]?.[slug];

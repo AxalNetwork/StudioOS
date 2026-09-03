@@ -1409,3 +1409,214 @@ and fails if the target never reads the prop. It is deliberately not repo-wide:
 ten other mounts pass `embedded` to children that draw no shell, h1 or rail, so
 the prop is inert there rather than dropped, and failing them would flag a
 tidiness issue in the words of a correctness one.
+
+---
+
+### D34. The Worker serves `axal.vc`; Cloudflare Pages is a mirror — and `CLAUDE.md` fact 4 said otherwise for two days
+
+**RESOLVED.** `axal.vc` and `app.axal.vc` are both whole-host Workers Custom
+Domains of the `studioos` Worker: `wrangler.toml` binds each `pattern` with
+`custom_domain = true` in `[[routes]]` (top level) and again in
+`[[env.production.routes]]`, and the Worker answers every path on either host
+— `/api/*` from Hono, everything else from its own `[assets]` copy of `docs/`
+(`directory = "./docs"`, `not_found_handling = "single-page-application"`,
+`run_worker_first = ["/api/*", "/landing/*", "/p/*", "/assets/*"]`). One
+build sits behind both hosts and they ship together on every `wrangler
+deploy`: in CI, `.github/workflows/cloudflare-worker-deploy.yml` on every push
+to `main` (build → `node scripts/migrate-d1.mjs --remote` → `wrangler deploy
+--config ../wrangler.toml --env production`), or by hand with the root
+`npm run deploy` (predeploy migrations, postdeploy `check-spa-live`).
+
+**The evidence is a deploy log and a dashboard, not a document.** GitHub
+Actions run 33740754882 (2026-09-03 09:48Z) ends with `Deployed studioos
+triggers: axal.vc (custom domain), app.axal.vc (custom domain)`, and the
+Cloudflare Pages dashboard's Production card lists only
+`studioos-2p8.pages.dev` under Domains — a Pages custom domain on `axal.vc`
+would appear there, and would have blocked the Worker binding. Those two
+lines are what settle who serves a host. Prose never does, and this entry is
+prose: if it ever disagrees with them, it is the thing that is wrong.
+
+**How the file that wins every disagreement lost this one.** The timeline,
+verified from git:
+
+- 2026-08-31 10:51Z — `e1de44c2f` ("Stop apex Pages and Worker asset skew")
+  wrote the **Pages** cutover's route table: `app.axal.vc` as a custom domain
+  plus three path routes, `axal.vc/api/*`, `axal.vc/landing/*` and
+  `axal.vc/p/*`. Cloudflare Pages served the apex.
+- 2026-08-31 15:20+04 — #371 (`3788db408`) wrote `CLAUDE.md` fact 4 against
+  that table. Correct at the time.
+- 2026-09-01 09:08Z — `1d320dda9`, author "Replit Agent", message "Remove
+  stale documentation asset files". It touched `wrangler.toml` (48 lines),
+  `scripts/build-frontend.mjs` and 287 files under `docs/`, and **no
+  documentation**: it replaced the three path routes with a whole-host
+  `axal.vc` custom domain in both tables. The apex moved back to the Worker
+  in a commit whose message does not mention it.
+- 2026-09-01 22:03+04 — #374 (`118342710`) rewrote the two guard tests,
+  `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
+  `frontend/test/apex_route_coverage.test.mjs`, to match the toml ("the toml
+  is the deployed truth") — but their comments credited the flip to
+  `e1de44c2f`. That attribution was wrong; both files now name `1d320dda9`
+  (corrected 2026-09-03, from git).
+
+So from 2026-09-01 until 2026-09-03 fact 4 — the one passage every other
+document defers to — described a topology that the deployed config, both
+guard tests and every deploy log contradicted. The hazard was never the stale
+sentence itself. It was that someone "fixing" `wrangler.toml` to match
+`CLAUDE.md` would have taken the apex down.
+
+**What 2026-09-03 added.** The deploys after #413 (Actions run 33734906029)
+and #414 (run 33738772717) failed in the migration step, so `wrangler deploy`
+never ran and **both** hosts stayed at run #27's build (`96a6e5769`) — while
+`cloudflare-pages-deploy.yml` advanced the Pages mirror twice. Its dashboard
+showed "Production" deployments for commits whose Worker never shipped, and
+that misled the operators for a morning. The Pages project `studioos`
+(`studioos-2p8.pages.dev`) still exists and receives a Direct Upload of a
+freshly built `docs/` on every push to `main` (`eda67173d`, 2026-09-02), but
+it serves no production hostname: it is a mirror. Its "disconnected from your
+Git account" banner refers to the dashboard-side Git integration retained for
+previews and has no bearing on `axal.vc`. Whether to retire the mirror and
+its workflow is `UNRESOLVED_ITEMS.md` U9 — deliberately not decided here.
+
+**What `CLAUDE.md` says now.** Fact 4 names both hosts as Workers Custom
+Domains, the `[assets]` binding, the one-build-behind-both-hosts rule and the
+two deploy paths; dates the shape to `1d320dda9`; calls Pages a mirror whose
+dashboard proves nothing about what the Worker shipped; keeps the ban on
+path-scoped apex routes; and points at U9 and U10 instead of asserting
+either. `GOTCHAS.md` carries the general lesson: a deployed-config change can
+arrive in a commit whose message is about something else, so who serves a
+host is read from the deploy log's "Deployed studioos triggers" lines and the
+Pages dashboard's Domains line, never from prose.
+`frontend/test/apex_truth_doc.test.mjs` fails if fact 4 stops naming both
+hosts as Workers Custom Domains, if it claims Pages or GitHub Pages serves
+the apex, if `wrangler.toml` stops binding both hosts with `custom_domain =
+true`, or if a live document reclaims the apex for Pages on a line that does
+not mark itself as history.
+
+**What stays true.** The 2026-08-31 incident — Pages-served HTML paired with
+a different Worker asset build, the entry module 404ing, the `?__reboot=`
+watchdog looping — is still the reason no path-scoped apex route may exist:
+with whole-host custom domains an `axal.vc/*` or `axal.vc/assets/*` zone
+route would take those URLs away from the assets binding and break the SPA
+fallback, and both guard tests still refuse them. `docs/` stays committed by
+hand, for review and for `scripts/check-docs-fresh.mjs`; both CI deploy
+workflows rebuild it from source at deploy time and never commit it, so the
+committed bytes are what reviewers read, not necessarily what ships
+(`documentation/operations/DEPLOY.md` §2.1). GitHub Pages is decommissioned
+as the apex; if the repository still has it enabled, the auto-generated
+`pages-build-deployment` workflow publishes `docs/` to a host nothing routes
+to.
+
+**Deliberately not asserted.** On the Worker-served hosts, requests for paths
+outside `run_worker_first` are answered by the assets binding without
+invoking the Hono app, so whether the apex HTML carries the security headers
+that `docs/_worker.js` sets on the Pages mirror and
+`middleware/securityHeaders.ts` sets on API responses cannot be read from
+this repository. That is U10, with its one-line live check
+(`curl -sI https://axal.vc/login`); this decision claims neither answer.
+
+**Update, later on 2026-09-03.** U9 is decided: D36 retires the mirror, its
+workflow and `_worker.js`, restores `frontend/public/_headers` as the
+mechanism for the static headers, and turns U10 into a measurement made by
+`scripts/check-spa-live.mjs` on every shell route. The paragraphs above stay
+as the record of what was true when this was written.
+
+### D35. The Super Admin is an elevation on `admin`, held by one account, with a per-browser HQ view
+
+**RESOLVED (2026-09-03; #413, #414, #415, #416, #417, #418).** The brief asked for
+a "Super Admin profile with full authority" and for the HQ dashboard to be
+integrated, with the single authority assigned to `guillaume.lauzier@axal.vc`.
+Four decisions were taken to deliver that without breaking what exists.
+
+1. **An elevation, not a role.** 468 call sites across the worker check
+   `role === 'admin'` by exact equality. A seventh `users.role` value would fail
+   every one of them and lock the franchisor out of the admin product. The role
+   stays `admin`; the elevation is a row in `super_admins` (migration 199) and
+   `auth.ts hydrateSuperAdmin` copies it onto the user object `isSuperAdmin`
+   reads. `requireSuperAdmin` fails closed: a surface that forgets it stays
+   admin-only. **A side table, not a column**, because `users` sits at D1's
+   100-column ceiling — the first version of 199 was an `ALTER TABLE users`
+   and it failed the first migrating deploy (GOTCHAS records both incidents
+   of that morning; #414 and #415 are the repairs).
+2. **One holder, by name.** Migration 207 seeds `guillaume.lauzier@axal.vc`
+   and removes every other row; the other admin account stays a plain admin.
+   Changing the holder afterwards is a console act — `/api/admin/super-admins`,
+   behind the impersonation write bar (TOTP session → recent step-up → the
+   elevation), audited, never self, never the last active holder — not a
+   migration.
+3. **The HQ shell is a view, not a permission.** `shellRoleFor(role, user,
+   hqView)` names a sidebar; `'super_admin'` appears in no `guard([...])`
+   array. A holder switches between the eight-row HQ shell and the plain
+   subsidiary shell through View-as, per browser (`hqView`), so the franchisor
+   can check what a licensee sees without impersonating anyone. HQ-only pages
+   render a stated notice for an admin without the elevation; the worker still
+   re-checks every call.
+4. **Unscoped facts are Not recorded.** The canvases draw accounts, MTD
+   revenue, backlog and token P&L per subsidiary. No row names its licence
+   (U1), so `/hq` and `/admin/security` render those as Not recorded with the
+   reason, and the `/hq` tenant switcher narrows the loaded payload
+   client-side and says so beside the control. The `security_events` ledger
+   the Security canvas calls "the one real backend build" was deliberately
+   not built this pass; its zone says so.
+
+Two things the apex audit of the same day caught before #417 and #418 went up
+are recorded here so they are not re-learned: `WorkerRail` destructures
+`unavailable` entries as `[title, detail]` pairs (a bare string renders as its
+first two characters), and a tile's note must never assert a state — "none",
+"every admin enrolled" — while the read behind it failed. Both are guarded.
+
+### D36. Workers Static Assets is the only host: the Pages mirror is retired, `_headers` carries the static security headers, and pull-request previews are bindings-free Workers
+
+**RESOLVED (2026-09-03; #422, then the preview PR).** Asked
+what the plan was for hosting the website and platform on Cloudflare Pages
+"and not Jekyll pages ever again", the owner chose Workers Static Assets — the
+shape production has had since `1d320dda9` (D34) and the one Cloudflare's own
+documentation now recommends for new projects. Three consequences.
+
+1. **The mirror is gone.** `.github/workflows/cloudflare-pages-deploy.yml`,
+   `frontend/public/_worker.js` (the Pages Advanced Mode entry that ran only
+   there) and the `.assetsignore` step that hid it from the Worker upload are
+   deleted; U9 is resolved. The Pages project (`studioos-2p8.pages.dev`) is
+   deleted from the dashboard by the owner — it shares the name `studioos`
+   with the Worker, so the entry of type *Pages* is the one to remove. The
+   GitHub-Pages-only remnants nothing reads went with it: `build-pages.sh`,
+   `frontend/public/404.html` and the `?p=` path-restore shim in
+   `frontend/index.html`, which rewrote any `/x?p=…` URL to a different path
+   before React booted (no live link carried `?p=`; `?ref=`, `?lane=`,
+   `?plan=` and `?next=` do). `CNAME` and `.nojekyll` stay until GitHub Pages
+   is switched off in the repository settings.
+2. **`_headers` is the mechanism, and the smoke check is the proof.** Workers
+   static assets read `_headers` natively and apply it to every response the
+   `[assets]` binding serves — the SPA shell on every path outside
+   `run_worker_first` — and not to responses the Worker script generates,
+   which already carry `securityHeaders.ts`. `frontend/public/_headers` is
+   restored from the copy #371 deleted, with the same values `_worker.js` set
+   (HSTS, nosniff, `X-Frame-Options: DENY`, the laxer `Referrer-Policy` the
+   two-tier rule requires, the Permissions-Policy) and, deliberately, no CSP
+   (nonce-based on the Worker; an inline boot watchdog in the shell).
+   `frontend/test/apex_truth_doc.test.mjs` pins the values to the
+   middleware's so they cannot drift a third time, and
+   `scripts/check-spa-live.mjs` asserts them on every shell route, so U10 is
+   answered by a run rather than a sentence. A `/assets/*` rule would be
+   inert (those responses come from `index.ts`) and is not written.
+3. **Previews are a per-PR Worker with no bindings, not preview URLs.** The
+   option first offered — Workers preview URLs through Workers Builds — does
+   not apply here: Cloudflare states that preview URLs are not generated for
+   Workers that implement a Durable Object, and `studioos` exports
+   `PipelineRoom` and `OnboardingChat`; Workers Builds' pull-request comment
+   depends on the same URLs. What can exist with nothing provisioned and no
+   production data in reach is a Worker per pull request (`studioos-pr-<n>`
+   from `wrangler.pr-preview.toml`: no bindings, `docs/` with the
+   single-page-application fallback, and a script of a few lines —
+   `scripts/pr-preview-worker.mjs` — that does two things: turn the
+   fallback HTML for a missing `/assets/*` file into a real 404, as
+   `index.ts` does on production, and answer `/api/*` with a JSON 404,
+   because an assets-only Worker serves the shell for every unmatched path,
+   navigation or not), deployed on open and deleted on close by
+   `.github/workflows/pr-preview.yml`, its `workers.dev` URL posted as one
+   sticky comment. `/api/*` is a 404 there, exactly as it was on the
+   mirror; `frontend/test/pr_preview.test.mjs` keeps the config
+   binding-free. A full-stack preview needs the `[env.preview]` placeholders
+   provisioned (D1, two KV namespaces, R2 buckets, and a queue a second
+   Worker could not share as a consumer) plus a rule for one shared preview
+   database across branches; that is unbuilt, not forbidden.
+

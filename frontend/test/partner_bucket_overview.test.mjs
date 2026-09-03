@@ -74,8 +74,10 @@ test('partner sidebar rows point at bucket roots', () => {
 
 test('PartnerBucketRoutes renders an overview grid at each bucket root', () => {
   assert.match(bucketRoutes, /isRoot/, 'the root must be detected');
-  assert.match(bucketRoutes, /<BucketOverview bucket=\{bucket\} role="partner"/,
+  assert.match(bucketRoutes, /<BucketOverview\s+bucket=\{bucket\}\s+role="partner"/,
     'the root must render the shared overview with the partner accent');
+  assert.match(bucketRoutes, /unbuilt=\{gapsFor\(prefix, bucket\)\}/,
+    'every partner zone without a live page must carry its own gap line');
   assert.match(bucketRoutes, /activeSlug=\{isRoot \? null : undefined\}/,
     'the root must light no zone pill');
   assert.match(bucketRoutes, /title=\{isRoot \? bucket\?\.label : undefined\}/,
@@ -91,4 +93,91 @@ test('the shared overview component exists and takes a role accent', () => {
   const overview = codeOnly(read('frontend/src/workspaces/BucketOverview.jsx'));
   assert.match(overview, /ACCENT\[role\]/, 'the accent must come from the role');
   assert.match(overview, /zonePath\(bucket, zone\)/, 'each card must link to its zone route');
+});
+
+// ---------------------------------------------------------------------------
+// The partner grid describes what the firm HAS, not what the canvas drew.
+//
+// Eight of the thirteen partner zones have no surface: negotiations,
+// deliverables, capacity, catalog, visibility and proof each carry a COPY
+// card, and status-reports and audience-fit fall through to the generic one.
+// The first draft of ZONE_LINES described all eight as working features —
+// "live deals at terms", "where the firm is over-committed", "the record lead
+// scoring reads against" — on the surface a partner reads before choosing
+// where to click.
+// ---------------------------------------------------------------------------
+
+const partnerCode = codeOnly(bucketRoutes);
+
+/** The body of a top-level `const NAME = {` … `\n};` block. */
+function blockOf(code, name) {
+  const start = code.indexOf(`const ${name} = {`);
+  assert.notEqual(start, -1, `${name} is gone`);
+  const end = code.indexOf('\n};', start);
+  assert.notEqual(end, -1, `${name} is not a closed object literal`);
+  return code.slice(start, end);
+}
+
+/**
+ * Blank out string VALUES — a literal that is not immediately followed by `:`.
+ * Without this, prose is read as code: `proposals: 'The proposal desk: what is
+ * open'` contributed a zone named `desk`, and the guard failed on a map that
+ * was correct. Quoted KEYS ('perk-deals':) survive, because those are what we
+ * are counting.
+ */
+function withoutStringValues(body) {
+  return body.replace(
+    /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"/g,
+    (lit, at) => (/^\s*:/.test(body.slice(at + lit.length)) ? lit : "''"),
+  );
+}
+
+/**
+ * The zone slugs of a bucket-keyed map. These maps are two levels deep —
+ * bucket prefix, then zone slug — so the slugs are exactly the depth-2 keys.
+ * Depth beats a name filter: COPY's third level (heading, what, why, links)
+ * drops out by structure rather than by a list someone has to remember to
+ * extend, and indentation is irrelevant, so LIVE packing four zones onto two
+ * lines reads the same as ZONE_LINES writing one per line.
+ */
+function zoneSlugs(code, name) {
+  const body = withoutStringValues(blockOf(code, name));
+  const out = new Set();
+  let depth = 0;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (ch === '{' || ch === '[') { depth += 1; continue; }
+    if (ch === '}' || ch === ']') { depth -= 1; continue; }
+    if (depth !== 2) continue;
+    const prev = body[i - 1];
+    if (prev !== undefined && !/[{,\s]/.test(prev)) continue;
+    const m = /^(?:'([^']*)'|([A-Za-z_$][\w$-]*))\s*:/.exec(body.slice(i));
+    if (!m) continue;
+    out.add(m[1] ?? m[2]);
+    i += m[0].length - 1;
+  }
+  return [...out];
+}
+
+test('ZONE_LINES describes only the zones with a live page', () => {
+  const lines = zoneSlugs(partnerCode, 'ZONE_LINES');
+  const live = zoneSlugs(partnerCode, 'LIVE');
+  assert.ok(live.length >= 5, `parse failed — only ${live.length} live zones found`);
+  assert.deepEqual(
+    [...lines].sort(),
+    [...live].sort(),
+    'a partner zone with no page must take its line from COPY or the generic card, never a description of its own',
+  );
+});
+
+test('no partner description survives for a zone that renders a no-store card', () => {
+  const copySlugs = zoneSlugs(partnerCode, 'COPY');
+  const lines = zoneSlugs(partnerCode, 'ZONE_LINES');
+  const overlap = lines.filter((s) => copySlugs.includes(s));
+  assert.deepEqual(overlap, [], `these zones render NoStoreYet and must not be described: ${overlap.join(', ')}`);
+
+  for (const claim of [/live deals at terms/i, /over-committed/i, /lead scoring reads against/i]) {
+    assert.doesNotMatch(blockOf(partnerCode, 'ZONE_LINES'), claim,
+      `an overview line re-asserts ${claim}`);
+  }
 });

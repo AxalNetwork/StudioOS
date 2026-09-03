@@ -5,8 +5,8 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 53 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
-| `backlog/` | 27 | Graded `NEW` or `DEFERRED`. No route yet. |
+| `integrated/` | 54 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `backlog/` | 26 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 27 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. |
 | `assets/`, `scraps/`, `uploads/` | — | Images and stale duplicates from the export. Not part of the 107. |

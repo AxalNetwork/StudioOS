@@ -107,22 +107,26 @@ test('what the canvas asked for and did not get is stated, not silently dropped'
     'the page should send founders to the real co-founder flow');
 });
 
-test('/legal is served by Cloudflare Pages, NOT carved out to the Worker', () => {
+test('/legal has no path-scoped Worker route — the assets binding serves it', () => {
   // This assertion is INVERTED from what it originally said, and the inversion
   // is the point. It used to require `axal.vc/legal` + `axal.vc/legal/*` in
-  // both wrangler tables, because the Worker served apex HTML and a page with
-  // no route was a 404.
+  // both wrangler tables, because the Worker served apex HTML through an
+  // explicit route table and a page with no route was a 404.
   //
-  // Since 2026-08-31 Cloudflare Pages owns the apex frontend and the Worker
-  // keeps only /api/*, /landing/* and /p/*. Re-adding a page route here does
-  // not make /legal/send *more* reachable — it pairs Pages-served HTML with a
-  // different Worker asset build, which is exactly what produced the blank
-  // page and the `?__reboot=` loop on the apex. See GOTCHAS, "Apex hashed
-  // assets / blank pages", and frontend/test/apex_route_coverage.test.mjs for
-  // the same rule stated once for the whole table.
+  // Since 2026-09-01 (1d320dda9) `axal.vc` and `app.axal.vc` are whole-host
+  // Workers Custom Domains, and every path outside `run_worker_first` is
+  // answered by the Worker's `[assets]` binding with the SPA fallback — so a
+  // new page needs no route entry, and adding a path-scoped one is the
+  // hazard: it takes the URL away from the assets binding and breaks the
+  // fallback, which is what produced the blank page and the `?__reboot=`
+  // loop on 2026-08-31 (then Pages-served HTML against a different Worker
+  // asset build; the Pages mirror itself was retired on 2026-09-03). See
+  // GOTCHAS, "Apex hashed assets / blank pages", and
+  // frontend/test/apex_route_coverage.test.mjs for the same rule stated once
+  // for the whole table.
   const wrangler = read('wrangler.toml');
   for (const p of ['axal.vc/legal', 'axal.vc/legal/*']) {
     const n = wrangler.split(`pattern    = "${p}"`).length - 1;
-    assert.equal(n, 0, `${p} must NOT be Worker-routed — Pages owns it, found ${n}`);
+    assert.equal(n, 0, `${p} must NOT be a path-scoped Worker route — the assets binding serves it, found ${n}`);
   }
 });
