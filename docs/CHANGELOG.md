@@ -4,6 +4,20 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## `request()` has a deadline, so a hung call fails instead of hanging
+
+`fetch` has no timeout and `frontend/src/lib/api.js` had no `AbortController` anywhere, so any of the ~1300 SPA calls could hang until a gateway gave up. The caller's `loading` flag stayed true and the user got a spinner that outlived the tab — the same symptom #427 fixed on `/expertise/profile`, reachable from every page, and written down nowhere when it happened.
+
+- Default **30s**, bounded on both sides by facts rather than taste: a cold isolate pays 15–20 sequential D1 round-trips before its first response (`GOTCHAS.md`), so a shorter deadline would abort healthy cold starts; Cloudflare's gateway gives up near 100s, so a longer one bounds nothing.
+- **180s** for generation, crawling, transcription and uploads — `SLOW_PATHS` (literal regexes, since `/funds/12/regenerate-lpa` and `/deck-reviewer/ab3/regenerate` carry an id mid-path) plus automatic detection of a FormData body, so an upload needs no annotation. A guard asserts every `SLOW_PATHS` entry still matches a real call: the first draft of that list named four paths this codebase does not serve, and the guard is what caught it.
+- The error is a **`TimeoutError`, never an `AbortError`** — `LoginPage.jsx` and `SettingsPage.jsx` both read that name to mean "the user dismissed the passkey prompt". It carries no `status` (there was no response), and a message written for a human, since pages render `e?.message` verbatim.
+- Timeouts are **not retried**: `_analyticsRead` retries anything status-less, which would have turned a 30s bound into 30 + 1 + 30.
+- A timeout is **reported as well as thrown**, into the `axal:client-errors` ring buffer and the Worker logs. GOTCHAS carries an open census of 254 504s from 2026-08-30 whose cause was never found; this is the client-side evidence that investigation lacked.
+
+Fixed alongside, because it sat exactly where the signal had to go: the fetch init spread `...options` **last**, after `headers: baseHeaders`, so any caller passing `headers` silently replaced the merged object with its own and shipped the request with no Authorization, no CSRF token and no `X-Company-Id`. Only `/auth/google/start` reached it — a GET needing none of the three — so it never surfaced, but `signal` would have been discarded the same way and every deadline above would have been inert.
+
+Ten guards in `frontend/test/api_request_timeout.test.mjs`, the first tests in the suite to exercise `request()` behaviourally against a stubbed `fetch`; six mutation checks.
+
 ## Asset retention: a rebuild of the same source no longer costs a slot
 
 `planAssetRetention` added a ledger entry on every build, so rebuilding the same source consumed one of the three retention slots. Content-hashed filenames mean an identical file set *is* an identical build, and rebuilding the same tree is routine — locally, then in CI, then again on a docs-only branch. Three slots would end up holding one distinct build, and the next build then deleted from `docs/` exactly the assets the window existed to keep.

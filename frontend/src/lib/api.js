@@ -180,7 +180,154 @@ function getActiveCompanyHeader() {
   return _activeCompanyId === null ? {} : { 'X-Company-Id': String(_activeCompanyId) };
 }
 
+/**
+ * REQUEST DEADLINES — why every call gets one.
+ *
+ * `fetch` has no timeout. Until this existed, a request that never settled
+ * left its caller's `loading` flag true for good, and the user got a spinner
+ * that would outlive the tab — indistinguishable from the ProfileZone bug
+ * fixed in #427, but reachable from any page. Nothing was written down when it
+ * happened, either: `documentation/architecture/GOTCHAS.md` records a census
+ * of 254 504s on 2026-08-30 whose cause is *still open*, and a client-side
+ * deadline is exactly the evidence that investigation did not have.
+ *
+ * THE NUMBERS ARE BOUNDED ON BOTH SIDES, and both bounds are real.
+ *   · Below: a cold isolate pays 15-20 sequential D1 round-trips before its
+ *     first response (GOTCHAS, "the role-schema bootstrap blocks the request
+ *     path"). A 5-10s deadline would abort healthy cold starts.
+ *   · Above: Cloudflare's gateway gives up near 100s, so a deadline past that
+ *     buys nothing — the request is already dead, just not to us.
+ * 30s sits clear of both.
+ */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
+/**
+ * Generation, crawling and transcription legitimately run for minutes: the
+ * worker is calling `aiRouter`, Workers AI Whisper, or an in-house crawl of N
+ * competitor sites. They get a long deadline rather than none, because "no
+ * deadline" is the state this module exists to end.
+ *
+ * Matched by path PREFIX against the path `request()` was given. Kept as data
+ * rather than a `timeoutMs` at ~25 call sites: one list a reader can check
+ * against the worker's routes beats twenty-five numbers that drift apart.
+ * `frontend/test/api_request_timeout.test.mjs` asserts every prefix here is
+ * actually reachable, so a stale entry fails the build instead of rotting.
+ */
+export const LONG_TIMEOUT_MS = 180_000;
+
+/**
+ * Literal patterns, not prefixes: two of these carry a path id in the middle
+ * (`/funds/12/regenerate-lpa`, `/deck-reviewer/ab3/regenerate`), so a
+ * `startsWith` list cannot express them. Literal regexes also keep Semgrep's
+ * `detect-non-literal-regexp` quiet, which a constructed one would not.
+ */
+export const SLOW_PATHS = [
+  /^\/advisor\/tool\/auto$/,
+  /^\/advisor\/transcribe$/,
+  /^\/advisory\//,                       // ask, financial-plan, diligence
+  /^\/competitors\//,                    // crawl + Workers AI synthesis
+  /^\/dashboard\/refresh-scores$/,
+  /^\/dd\/cases\/[^/]+\/(scan|report)$/,
+  /^\/deck-reviewer\/[^/]+\/regenerate$/,
+  /^\/decks\/generate$/,
+  /^\/funds\/[^/]+\/regenerate-lpa$/,
+  /^\/legal\/templates\/[^/]+\/generate$/,
+  /^\/legalcap\/legal\/generate$/,
+  /^\/profiling\/chat$/,                 // onboarding chat
+  /^\/references\/[^/]+\/(transcribe|summarize)$/,
+  /^\/scoring\//,                        // score, deal-memo, generateMemo
+  /^\/signals\/refresh$/,
+];
+
+/**
+ * The deadline for one call, in ms — or `null` for no deadline at all.
+ *
+ * Pure on purpose: this is the half worth unit-testing, and it can be read
+ * without a DOM, a `fetch` or a network.
+ *
+ * `timeoutMs` in the options always wins, including an explicit `null`, which
+ * is how a caller says "this one genuinely has no bound". A FormData body is
+ * an upload whose duration belongs to the user's connection rather than to the
+ * server, so it takes the long deadline without anyone having to remember.
+ */
+export function deadlineFor(path, options = {}) {
+  if ('timeoutMs' in options) return options.timeoutMs;
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  if (isFormData) return LONG_TIMEOUT_MS;
+  // Match on the path only — a query string is never part of what makes a
+  // call slow, and leaving it in would make `/scoring/x?range=90d` miss.
+  const bare = String(path).split('?')[0];
+  if (SLOW_PATHS.some((re) => re.test(bare))) return LONG_TIMEOUT_MS;
+  return DEFAULT_TIMEOUT_MS;
+}
+
+/**
+ * Arm a deadline and return the signal to hand `fetch`, plus the cleanup.
+ *
+ * HAND-ROLLED, and it has to stay that way. `AbortSignal.timeout()` and
+ * `AbortSignal.any()` would each collapse this to a line, and neither is in
+ * the es2020 target `frontend/vite.config.js` pins — whose comment records
+ * that moving the target "re-broke the Safari blank page" once already. The
+ * idiom below is the one already in the repo, at
+ * `frontend/src/decks/spinout/buildDeck.js:359` (feature-detect, arm, clear in
+ * a `finally`).
+ *
+ * `timedOut()` is what keeps a caller's own cancellation distinguishable from
+ * ours: both surface as an abort, and only the controller that fired says
+ * which. Without it a user navigating away would be reported as a timeout.
+ */
+export function armDeadline(ms, callerSignal) {
+  const noop = { signal: callerSignal, cleanup: () => {}, timedOut: () => false };
+  if (ms == null || typeof AbortController === 'undefined') return noop;
+  if (callerSignal && callerSignal.aborted) return noop;
+
+  const controller = new AbortController();
+  let fired = false;
+  const timer = setTimeout(() => { fired = true; controller.abort(); }, ms);
+
+  // Forward a caller's cancellation without claiming it as ours.
+  const onCallerAbort = () => controller.abort();
+  if (callerSignal) callerSignal.addEventListener('abort', onCallerAbort);
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timer);
+      if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
+    },
+    timedOut: () => fired,
+  };
+}
+
+/**
+ * A timeout is shown to the user verbatim (`e?.message || 'Failed to load'` is
+ * the fallback in every page), so the message is prose, not `AbortError` or
+ * `signal is aborted without reason`.
+ *
+ * THREE SHAPE RULES, each protecting an existing consumer:
+ *   · `name` is NOT `AbortError`. `LoginPage.jsx` and `SettingsPage.jsx` both
+ *     read that name to mean "the user dismissed the passkey prompt".
+ *   · the message must not match `/Failed to fetch dynamically imported
+ *     module/i` — `RouteErrorBoundary` reloads the page on that.
+ *   · `code` is the machine flag. `status` stays undefined because a timeout
+ *     has no HTTP status; consumers branching on `e.status` fall through to
+ *     their generic branch, which is the honest outcome.
+ */
+export function timeoutError(path, ms) {
+  const e = new Error(`The server did not respond within ${Math.round(ms / 1000)}s. Nothing was changed.`);
+  e.name = 'TimeoutError';
+  e.code = 'timeout';
+  e.path = path;
+  e.data = null;
+  e.field = null;
+  return e;
+}
+
 export async function request(path, options = {}) {
+  // Armed per attempt, never per call: the step-up retry below re-enters
+  // `request()` after a modal the user may sit on for a minute, and that wait
+  // must not eat the next attempt's deadline.
+  const deadline = armDeadline(deadlineFor(path, options), options.signal);
   try {
     // FormData uploads must NOT carry an explicit Content-Type — the browser
     // sets it (with the multipart boundary). Setting application/json here
@@ -198,8 +345,18 @@ export async function request(path, options = {}) {
       // safer for any future cross-origin SPA host (e.g. previews) and is
       // the explicit default for cookie-auth APIs.
       credentials: 'include',
-      headers: baseHeaders,
+      // ORDER IS LOAD-BEARING, and it used to be wrong. `...options` was
+      // spread LAST, after `headers: baseHeaders` — so a caller passing any
+      // `headers` at all replaced the merged object with its own raw one and
+      // silently shipped the request with no Authorization, no CSRF token and
+      // no X-Company-Id, even though `baseHeaders` had just merged them all
+      // together. Only one caller reached it (`/auth/google/start`, a GET that
+      // needs none of the three), so it never surfaced — but `signal` below
+      // would have been discarded the same way, which would have made every
+      // deadline in this module silently inert.
       ...options,
+      headers: baseHeaders,
+      signal: deadline.signal,
     });
     if (!res.ok) {
       // Public token-gated endpoints (partner onboarding, esign signing,
@@ -288,6 +445,9 @@ export async function request(path, options = {}) {
         } catch {
           throw e; // user cancelled — surface the original 403
         }
+        // The modal wait happens above, so this attempt is armed fresh by the
+        // recursive call rather than inheriting a clock already part-spent.
+        deadline.cleanup();
         return request(path, { ...options, __steppedUp: true });
       }
       throw e;
@@ -297,10 +457,28 @@ export async function request(path, options = {}) {
     });
     return data;
   } catch (error) {
+    // OUR deadline fired — not the caller cancelling, which `timedOut()`
+    // is what distinguishes. Reported as well as thrown: `reportError`
+    // consoles, keeps a capped ring buffer in `axal:client-errors` that
+    // support can read straight off an affected browser, and beacons
+    // POST /api/client-error into the Worker logs. That endpoint is one of
+    // the four exempt from the blocking cold-start bootstrap
+    // (cloudflare-worker/src/index.ts) and always answers 204, so reporting a
+    // timeout cannot compound whatever caused it.
+    if (deadline.timedOut()) {
+      const ms = deadlineFor(path, options);
+      const timeout = timeoutError(path, ms);
+      reportError('api:timeout', new Error(`${path} exceeded ${ms}ms`));
+      throw timeout;
+    }
     if (error instanceof Error) {
       throw error;
     }
     throw new Error(error.message || 'Network error');
+  } finally {
+    // Never leave a timer behind — one per call, cleared on every exit path
+    // including the successful one.
+    deadline.cleanup();
   }
 }
 
@@ -308,10 +486,17 @@ export async function request(path, options = {}) {
 // worker cold-start / D1 hiccup) with a 1s backoff. Never retries 4xx —
 // those are deterministic (auth, bad range, etc) and the caller should
 // surface them. Network errors (no `status`) get one retry too.
+//
+// A TIMEOUT IS THE ONE STATUS-LESS FAILURE THAT MUST NOT BE RETRIED. It has no
+// `.status`, so it reads as transient by the test below and would be retried
+// on reflex — turning a 30s bound into 30 + 1 + 30 = 61s of spinner, which is
+// the opposite of what the deadline is for. The user has already waited the
+// full deadline once; making them wait it twice is not resilience.
 async function _analyticsRead(path) {
   try {
     return await request(path);
   } catch (e) {
+    if (e?.code === 'timeout') throw e;
     const status = e?.status;
     const transient = !status || status >= 500;
     if (!transient) throw e;
