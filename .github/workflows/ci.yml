@@ -220,7 +220,16 @@ jobs:
   audit-frontend:
     name: audit (frontend npm)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 10, not 5. Both npm audit jobs were CANCELLED — not failed — on two
+    # consecutive runs of PR #429, a diff with no dependency change on either
+    # side, and each time the orphaned process named at cancellation was a
+    # registry call: `npm ci` on one run, `npm audit` on the next. That is a
+    # registry stall on the runner rather than a slow step, so the fix is room
+    # for one to clear, matching what `audit (python pip-audit)` already has.
+    # A cancelled job is worse than a failing one: it reads as a red square
+    # with no cause, and it says nothing about the dependencies it exists to
+    # check.
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: frontend
@@ -231,7 +240,12 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+      # `--no-audit --no-fund`: npm ci runs its own audit and funding lookup on
+      # install, so this job paid for two registry round-trips to answer one
+      # question — and the install's audit decides nothing, because the
+      # deliberate `npm audit` below is what passes or fails the job. The same
+      # flags are already on the install fallback further up this file.
+      - run: npm ci --no-audit --no-fund
       - name: npm audit (prod deps, critical fail)
         # Threshold is `critical` (not `high`) because recharts → lodash@4.17.23
         # has two high-severity advisories (`_.template`, `_.unset`) for which
@@ -243,7 +257,16 @@ jobs:
   audit-worker:
     name: audit (worker npm)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 10, not 5. Both npm audit jobs were CANCELLED — not failed — on two
+    # consecutive runs of PR #429, a diff with no dependency change on either
+    # side, and each time the orphaned process named at cancellation was a
+    # registry call: `npm ci` on one run, `npm audit` on the next. That is a
+    # registry stall on the runner rather than a slow step, so the fix is room
+    # for one to clear, matching what `audit (python pip-audit)` already has.
+    # A cancelled job is worse than a failing one: it reads as a red square
+    # with no cause, and it says nothing about the dependencies it exists to
+    # check.
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: cloudflare-worker
@@ -254,7 +277,12 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: cloudflare-worker/package-lock.json
-      - run: npm ci
+      # `--no-audit --no-fund`: npm ci runs its own audit and funding lookup on
+      # install, so this job paid for two registry round-trips to answer one
+      # question — and the install's audit decides nothing, because the
+      # deliberate `npm audit` below is what passes or fails the job. The same
+      # flags are already on the install fallback further up this file.
+      - run: npm ci --no-audit --no-fund
       - name: npm audit (prod deps, critical fail)
         run: npm audit --omit=dev --audit-level=critical
 
