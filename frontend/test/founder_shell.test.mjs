@@ -27,6 +27,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { routeBlock } from './_routes.mjs';
 import { codeOnly } from './_codeOnly.mjs';
+import { FOUNDER_FULL_BLEED } from '../src/sidebarConfig.js';
+import { allZoneRoutes } from '../src/workspaces/shellConfig.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const src = codeOnly(read('frontend/src/sidebarConfig.js'));
@@ -429,33 +431,45 @@ test('the founder full-bleed list covers every desk and section page', () => {
   // `fullWidthSurface` and `flushSurface` were two hand-typed arrays of the
   // same sixteen paths, matched exactly. `/grow/focus` was the one `/grow/*`
   // route missing from both, and that was the whole of "Grow doesn't fit full
-  // width and height". One list, and this test, so the omission cannot recur.
-  // Comment-stripped: a prose apostrophe inside the array's own comments pairs
-  // with the next quote and shreds the parse.
-  const sidebar = codeOnly(read('frontend/src/sidebarConfig.js'));
-  const listed = new Set(
-    [...(/export const FOUNDER_FULL_BLEED = \[([\s\S]*?)\];/.exec(sidebar)?.[1] || '')
-      .matchAll(/'([^']+)'/g)].map((m) => m[1]),
-  );
-  assert.ok(listed.size >= 20, 'FOUNDER_FULL_BLEED could not be parsed');
+  // width and height".
+  //
+  // THIS USED TO REGEX THE LITERALS OUT OF THE SOURCE, and could not survive
+  // the list being derived — a derived list has no quoted strings to count, so
+  // the old `listed.size >= 20` would have failed on a correct list. It reads
+  // the exported value now, which is strictly stronger: the parse could only
+  // see paths typed in the founder block, and `/network/*` reaches the list
+  // through a shared const declared elsewhere in the file.
+  const listed = new Set(FOUNDER_FULL_BLEED);
+  assert.ok(listed.size >= 20, 'FOUNDER_FULL_BLEED is unexpectedly small');
   const required = [
     ...Object.values(WORKSPACES).map(([root]) => root),
     '/build/discovery', '/execution', '/build/team', '/signals',
-    '/validate/interviews', '/validate/pain-map', '/validate/hypotheses', '/validate/verdict',
-    '/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi',
-    '/raise/status', '/raise/pitch', '/raise/capital', '/raise/legal', '/raise/data-room', '/raise/liquidity',
-    '/grow/focus', '/grow/talent', '/grow/customers', '/grow/partnerships',
-    '/grow/capital-match', '/grow/brand', '/grow/launch',
-    '/network/relationships', '/network/introductions', '/network/organizations',
+    ...allZoneRoutes('founder'),
   ];
   assert.deepEqual(required.filter((p) => !listed.has(p)), [],
-    'these founder surfaces draw their own full-bleed canvas but sit in the shell’s centred column');
-  // And both flags read the one list rather than re-typing it. They now share
-  // a single `fullBleedSurface` const — which is the same guarantee held one
-  // step tighter, since the list cannot be consulted twice with two different
-  // sets of paths if it is only consulted once.
-  assert.match(app, /const fullBleedSurface = \(activeRole === 'founder' && FOUNDER_FULL_BLEED\.includes\(location\.pathname\)\)/,
-    'the founder half of the full-bleed test must read FOUNDER_FULL_BLEED');
+    'these founder surfaces sit in the shell’s centred column instead of owning the page');
+
+  // DERIVED, NOT TYPED. Every zone route the shell config declares is covered
+  // because the list is built from that config — so a new zone cannot be added
+  // to a founder bucket and left out of the layout, which is the failure this
+  // whole test exists for. Only the four legacy mounts are still hand-written,
+  // and they are exactly the paths the shell config does not claim.
+  const sidebar = codeOnly(read('frontend/src/sidebarConfig.js'));
+  assert.match(sidebar, /export const FOUNDER_FULL_BLEED = \[\s*\.\.\.workspaceRoutes\('founder'\)/,
+    'FOUNDER_FULL_BLEED must be derived from the shell config, not re-typed');
+  // Scoped to the array's own block: these paths also appear as sidebar row
+  // targets in the same file, which is where they belong.
+  const block = /export const FOUNDER_FULL_BLEED = \[([\s\S]*?)\];/.exec(sidebar)?.[1] || '';
+  assert.ok(block, 'FOUNDER_FULL_BLEED block not found');
+  for (const zone of allZoneRoutes('founder')) {
+    assert.ok(!block.includes(`'${zone}'`),
+      `${zone} is typed into FOUNDER_FULL_BLEED as a literal — it should come from the shell config`);
+  }
+
+  // And every flag still reads one list rather than re-typing it.
+  assert.match(app, /const fullBleedSurface = \(FULL_BLEED_BY_ROLE\[activeRole\] \|\| \[\]\)\.includes\(location\.pathname\)/,
+    'the full-bleed test must read the per-role table, not name roles inline');
+  assert.match(app, /founder: FOUNDER_FULL_BLEED/, 'the table must map founder to its own list');
   assert.match(app, /const fullWidthSurface = fullBleedSurface/,
     'fullWidthSurface must derive from the shared full-bleed test');
   assert.match(app, /const flushSurface = fullBleedSurface;/,

@@ -72,8 +72,41 @@ export default function WorkspaceShell({
     // intrinsic width and shoves the rail off-screen. `hidden xl:flex`: below
     // 1280px there is no room for a rail beside a working page, and stacking a
     // meter above the tool puts the least important thing first.
-    <div className={rail ? 'flex items-start gap-6' : ''}>
-      <div className="min-w-0 flex-1">
+    //
+    // NO `gap` WHEN THE RAIL IS A PANEL. The rail draws its own left border and
+    // its own inner padding (see below), so a gap would put a stripe of page
+    // ground between the body and a border that is meant to be the seam
+    // between them. The canvases have the two columns meeting exactly.
+    <div className={rail ? 'flex items-stretch' : ''}>
+      {/*
+        THE SHELL OWNS ITS OWN PADDING, and this is the whole of the "one
+        padding rule". Every one of the twenty-nine canvases specifies the same
+        frame — `.main { flex:1; min-width:0; padding:20-24px }` beside a
+        `.rail` with its own `padding:17-18px` — and until now no part of this
+        component set either. Padding came from `App.jsx`'s page container
+        instead, which gives it per ROLE rather than per component, and the
+        four roles disagreed:
+
+          · founder and investor workspace routes are full-bleed (`p-0`), so
+            `/validate/interviews` and `/deals/pipeline` rendered plain cards
+            flush against the viewport with zero padding on either side;
+          · advisor routes were padded and full width;
+          · partner routes were padded AND centred at `max-w-7xl` — the only
+            profile constrained to 1280px, which is why Partner looked least
+            like its canvas;
+          · and `/research/*` was carved out of the full-bleed lists for all of
+            them, on the stated reasoning that "a page that does not draw its
+            own canvas does not want the canvas layout" — which was true, and
+            is exactly the gap this padding closes. `/validate/*` has the same
+            shape and was never carved out, so the two treatments disagreed
+            inside one role as well as across four.
+
+        One component, one number, and `App.jsx` now hands every workspace
+        route `p-0` on all four licences. The `pr-6` this replaces was the
+        gutter between the body and the rail; the right-hand padding is that
+        gutter now, and it lands at the canvases' figure.
+      */}
+      <div className="min-w-0 flex-1 p-5">
         {bucket && (
           <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-ink-3">
             <Link to={bucket.prefix} className="hover:underline">
@@ -132,7 +165,24 @@ export default function WorkspaceShell({
           {children}
         </div>
       </div>
-      {rail && <div className="hidden w-[280px] shrink-0 xl:block sticky top-20">{rail}</div>}
+      {/*
+        THE RAIL IS A PANEL, not a floating column, and that is the whole of
+        why it looked detached and clipped at once. `WorkerRail` itself sets no
+        background, no border and no padding — so on a full-bleed route, where
+        `App.jsx` gives the page container `p-0`, the rail was bare text on the
+        page's grey ground running flush into the viewport's right edge, with
+        the last words of every line cut off.
+
+        All four design canvases draw it the same way and this matches them:
+        a white ground, a hairline on the left as the seam against the body,
+        its own inner padding, and full height so the seam runs the length of
+        the page rather than stopping where the text happens to end.
+      */}
+      {rail && (
+        <div className="hidden w-[280px] shrink-0 border-l border-axal-border-soft bg-white px-[18px] pb-7 pt-[18px] xl:block dark:border-gray-800 dark:bg-gray-900">
+          <div className="sticky top-20">{rail}</div>
+        </div>
+      )}
     </div>
   );
 }

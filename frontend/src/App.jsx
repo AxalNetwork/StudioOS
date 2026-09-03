@@ -24,7 +24,7 @@ import {
   ChevronDown, Eye, ArrowLeft, Sparkles,
   Gift
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, SHARED_FULL_BLEED } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED } from './sidebarConfig';
 import PaywallModal from './components/PaywallModal';
 import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // Task #8 — NotFoundPage is imported eagerly (not lazy) so the catch-all 404
@@ -593,6 +593,18 @@ function PortalSwitcher({ viewMode, onViewModeChange, isImpersonating, onExitImp
   );
 }
 
+/**
+ * Which paths own the full dashboard, per licence. Derived in
+ * `sidebarConfig.js` from the shell config rather than typed here; this table
+ * is only the role → list mapping, so adding a fifth shell is one line.
+ */
+const FULL_BLEED_BY_ROLE = {
+  founder: FOUNDER_FULL_BLEED,
+  investor: INVESTOR_FULL_BLEED,
+  advisor: ADVISOR_FULL_BLEED,
+  partner: PARTNER_FULL_BLEED,
+};
+
 function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange, isImpersonating, onExitImpersonation, realUser, onImpersonate, primaryPersonaId, hqView = true }) {
   const location = useLocation();
   // Active-company context state — owned here so descendants (CompanySwitcher,
@@ -680,13 +692,27 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   // and a holder is the only one allowed to impersonate a holder).
   const superAdmin = isSuperAdminUser(realUser || user);
   const shellRole = shellRoleFor(activeRole, user, hqView);
-  // Both flags read the same two lists. They used to hold the investor
-  // expression written out twice, identically, and the four `/funds/*` zone
-  // pages were in neither — see INVESTOR_FULL_BLEED for what that cost.
-  const fullBleedSurface = (activeRole === 'founder' && FOUNDER_FULL_BLEED.includes(location.pathname))
-    || (activeRole === 'investor' && INVESTOR_FULL_BLEED.includes(location.pathname))
+  // ONE RULE, FOUR LICENCES. This read two lists and named two roles, so the
+  // other two got whatever the fallback happened to be: advisor routes were
+  // full width but padded, and partner routes were padded AND centred at
+  // `max-w-7xl` — the only licence constrained to 1280px, and the single
+  // biggest reason Partner looked least like its canvas. All four lists are
+  // now derived from `workspaces/shellConfig.js` rather than typed, so a zone
+  // cannot be added to a shell and left out of its layout.
+  //
+  // The pages themselves stopped depending on this for their inner padding in
+  // the same change: `WorkspaceShell` now carries the canvases' own
+  // `.main { padding }`, so a workspace route wants `p-0` here on every
+  // licence — including `/research/*`, which was carved out of both lists
+  // precisely because the shell had no padding of its own.
+  const fullBleedSurface = (FULL_BLEED_BY_ROLE[activeRole] || []).includes(location.pathname)
     || SHARED_FULL_BLEED.includes(location.pathname);
   const fullWidthSurface = fullBleedSurface
+    // Advisor's blanket clause stays, and only this clause is still blanket:
+    // it also covers the advisor pages OUTSIDE any workspace, which have been
+    // full width since the advisor shell shipped. Narrowing it to the derived
+    // list would silently re-centre those, which is a separate decision from
+    // this one.
     || activeRole === 'advisor'
     || location.pathname === '/spinout-lab'
     || location.pathname.startsWith('/spinout-lab/');
@@ -795,7 +821,14 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
 
-          <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-950">
+          {/* A COLUMN, so the footer sits at the bottom of a short page.
+              This was `flex-1 overflow-y-auto` with no direction, so the
+              footer rendered immediately under the content and every page
+              whose body ended early — the Validate zones, Research · Library,
+              the investor Network zones — left several hundred pixels of bare
+              grey beneath it. `flex-col` plus `flex-1` on the content pushes
+              the footer down without pinning it over a long page. */}
+          <main className="flex flex-1 flex-col overflow-y-auto bg-gray-50 dark:bg-gray-950">
             {/* Keyed on the active company so a switch REMOUNTS every page
                 below the sidebar. Pages do not read the company from context —
                 it rides in the X-Company-Id header on each request — so
@@ -804,7 +837,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 happened to refetch. `savedCompanyId` is the id restored before
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
-            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto'}`}>
+            <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`flex-1 ${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}`}>
               {children}
             </div>
             <footer className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">

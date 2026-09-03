@@ -76,7 +76,17 @@ function Alert({ children }) {
 // WorkspaceShell already draws the heading, the zone row and the rail. This
 // page drew all three again, which is why an investor saw two Worker AI rails
 // side by side on those routes.
-export default function InvestorNetworkWorkspace({ embedded = false }) {
+//
+// `zone`: which single section to render. On `/network` there is none and all
+// three stack, which is the overview and is right. On a zone route it is the
+// slug the shell already resolved, and passing it is what stopped all three
+// zone routes rendering the identical body — the pills moved, the page did
+// not, on every one of the three. Naming the sections here rather than
+// splitting the page into three files keeps one load, one error map and one
+// set of derivations behind all four URLs: `organizations` is derived from the
+// relationship rows, so a split would either duplicate that read or invent a
+// second source for it.
+export default function InvestorNetworkWorkspace({ embedded = false, zone = null }) {
   const [params] = useSearchParams();
   const highlightedIntro = params.get('intro') || '';
   const requestedTab = params.get('tab') || '';
@@ -174,6 +184,13 @@ export default function InvestorNetworkWorkspace({ embedded = false }) {
   }).length;
   const pending = propositionRows.filter((item) => item.status === 'pending');
 
+  // No zone means the overview, where every section shows. An unknown slug
+  // would show nothing at all, so it is treated as no zone: the shell only
+  // ever passes a slug out of its own bucket config, and a body that renders
+  // the whole workspace is a better failure than a body that renders nothing.
+  const known = zone === 'relationships' || zone === 'introductions' || zone === 'organizations';
+  const shows = (section) => !known || zone === section;
+
   return (
     <main className="investor-network-workspace" data-testid="investor-network-workspace">
       <div className="inw-layout">
@@ -188,7 +205,7 @@ export default function InvestorNetworkWorkspace({ embedded = false }) {
             <ZoneNav bucket={bucket} role="investor" activeSlug={null} className="mt-2.5" />
           </header>}
 
-          <section className="inw-card" aria-labelledby="relationship-book">
+          {shows('relationships') && <section className="inw-card" aria-labelledby="relationship-book">
             <SectionHeading id="relationship-book" title="Relationship book" detail={detailFor(errors.relationships, relationships, () => {
               const ties = summary?.active_relationships ?? summary?.relationships_count ?? relationships.length;
               // A book with no last-touch dates and an EMPTY book are different
@@ -208,10 +225,10 @@ export default function InvestorNetworkWorkspace({ embedded = false }) {
               </div>
             )}
             {errors.summary && <p className="inw-footnote" data-testid="text-network-summary-unavailable">{errors.summary}</p>}
-          </section>
+          </section>}
 
-          <div className="inw-lower">
-            <section className="inw-card" aria-labelledby="introductions-desk">
+          {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
+            {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
               <SectionHeading id="introductions-desk" title="Introductions desk" detail={detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} />
               {errors.introductions ? <Alert>{errors.introductions}</Alert> : introductions === null ? <Skeleton rows={4} /> : propositionRows.length === 0 ? <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div> : <>
                 {actionError && <Alert>{actionError}</Alert>}
@@ -225,14 +242,14 @@ export default function InvestorNetworkWorkspace({ embedded = false }) {
                   </article>;
                 })}</div>
               </>}
-            </section>
+            </section>}
 
-            <section className="inw-card" aria-labelledby="organizations">
+            {shows('organizations') && <section className="inw-card" aria-labelledby="organizations">
               <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => `${organizations.length} relationship-backed organizations`)} />
               {errors.organizations ? <Alert>{errors.organizations}</Alert> : relationships === null ? <Skeleton rows={4} /> : organizations.length === 0 ? <div className="inw-empty" data-testid="empty-organizations">No organization identity is recorded on your relationship records yet.</div> : <div className="inw-org-list">{organizations.slice(0, 6).map((org) => <div className="inw-org" key={org.name} data-testid={`row-organization-${safeKey(org.name)}`}><div><strong>{org.name}</strong><span>{[...org.types].join(' · ') || 'Attributed relationship'}</span></div><b>{org.people.size} known</b></div>)}</div>}
               <p className="inw-footnote">Organizations appear only when explicitly attached to a relationship record. Names and email domains are never used to infer a firm.</p>
-            </section>
-          </div>
+            </section>}
+          </div>}
         </section>
 
         {!embedded && (

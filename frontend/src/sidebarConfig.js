@@ -26,6 +26,12 @@ import {
   Mail, Gift, Map, UserCog,
 } from 'lucide-react';
 
+// `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
+// reading it here cannot close a cycle. The `.js` is explicit because the
+// guard tests import this file through Node's ESM loader, which does not
+// resolve extensionless relative specifiers the way Vite does.
+import { allZoneRoutes, bucketsFor } from './workspaces/shellConfig.js';
+
 // Task #6 — Real subscription-tier check. Bypass roles
 // (admin/partner/investor/advisor) always pass; founders are gated by their
 // `subscription_tier` column. Mirrors the worker's `userMeetsTier` helper.
@@ -515,6 +521,36 @@ export function filterItemsByTier(items /* , user */) {
 
 
 /**
+ * Every workspace route a role has, derived rather than typed.
+ *
+ * `workspaces/shellConfig.js` already declares each shell's buckets and each
+ * bucket's zones, and `App.jsx` already registers a route per entry — so the
+ * full-bleed list is a restatement of that config, and every time it was typed
+ * out by hand something went missing from it. `/grow/focus` was absent from
+ * both founder arrays and was the whole of "Grow doesn't fit full width and
+ * height"; the four `/funds/*` zone pages were absent from both investor ones.
+ * Derived, a zone cannot be added to a shell without being covered here.
+ *
+ * Safe to import: `shellConfig.js` has no imports of its own, so this cannot
+ * close a cycle. The two guards that used to regex-parse the literals out of
+ * this file's source now import these lists and check them against
+ * `allZoneRoutes`, which is a stronger check than counting quoted strings.
+ *
+ * WHY `/research/*` IS NO LONGER CARVED OUT. It used to be excluded from both
+ * lists, on the reasoning that those zones "render `WorkspaceShell` around a
+ * plain card" and "a page that does not draw its own canvas does not want the
+ * canvas layout". That was a true observation about a shell with no padding of
+ * its own — and `/validate/*` has the identical shape and was never carved
+ * out, so one role held both treatments at once. `WorkspaceShell` now carries
+ * the canvases' own `.main` padding, so a plain-card zone is padded by the
+ * component that draws it rather than by the page container, and the carve-out
+ * has nothing left to compensate for.
+ */
+function workspaceRoutes(role) {
+  return [...bucketsFor(role).map((b) => b.prefix), ...allZoneRoutes(role)];
+}
+
+/**
  * Founder surfaces that own the full dashboard: no `max-w-7xl mx-auto`, no
  * `p-4 md:p-6`. Every page here draws its own full-bleed canvas and sets its
  * own `min-height: 100dvh`, so the shell's centred column and padding would
@@ -530,22 +566,12 @@ export function filterItemsByTier(items /* , user */) {
  * section route is in it.
  */
 export const FOUNDER_FULL_BLEED = [
-  // The six workspace roots — each renders that workspace's overview.
-  '/validate', '/build', '/raise', '/grow', '/network', '/research',
+  ...workspaceRoutes('founder'),
   // The legacy paths the overviews were rescued onto. Still live, still linked
   // from inside pages, so they keep rendering the same desk at the same width.
+  // These are the only hand-typed entries left, because they are exactly the
+  // routes the shell config does NOT claim.
   '/build/discovery', '/execution', '/build/team', '/signals',
-  // Validate zones
-  '/validate/interviews', '/validate/pain-map', '/validate/hypotheses', '/validate/verdict',
-  // Build zones
-  '/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi',
-  // Raise zones
-  '/raise/status', '/raise/pitch', '/raise/capital', '/raise/legal', '/raise/data-room', '/raise/liquidity',
-  // Grow zones
-  '/grow/focus', '/grow/talent', '/grow/customers', '/grow/partnerships',
-  '/grow/capital-match', '/grow/brand', '/grow/launch',
-  // Network zones
-  '/network/relationships', '/network/introductions', '/network/organizations',
 ];
 
 /**
@@ -561,33 +587,39 @@ export const FOUNDER_FULL_BLEED = [
  * capital calls, accounting and reporting pages sat in a centred column inside
  * a page that had already drawn its own frame.
  *
- * WHAT IS NOT HERE, deliberately: `/research/ask` and its four sibling zones.
- * Those render `WorkspaceShell` around a plain card — the same treatment the
- * founder shell gives them, and the same reason `/research/*` is absent from
- * `FOUNDER_FULL_BLEED`. A page that does not draw its own canvas does not want
- * the canvas layout.
+ * `/research/*` USED TO BE CARVED OUT of this list and is not any more — see
+ * `workspaceRoutes` above for why the reason it existed no longer holds.
  */
 export const INVESTOR_FULL_BLEED = [
-  // The five workspace roots — each renders that workspace's overview canvas.
-  '/deals', '/portfolio', '/funds', '/network', '/research',
-  // Deals — four zone routes, plus the legacy `/pipeline*` mounts that render
-  // the same canvas and have always been full-bleed.
-  '/deals/pipeline', '/deals/screening', '/deals/commit', '/deals/closing',
+  ...workspaceRoutes('investor'),
+  // Legacy mounts the shell config does not claim, each still live and still
+  // rendering the same canvas at the same width.
   '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions',
-  // Portfolio — three zone routes, the `/portfolio/health` legacy alias for the
-  // overview, and the remaining `/portfolio/*` pages that the old `startsWith`
-  // covered. They are listed rather than dropped so this change moves nothing
-  // that was already sized correctly.
-  '/portfolio/positions', '/portfolio/updates', '/portfolio/value-add',
   '/portfolio/health', '/portfolio/growth', '/portfolio/performance',
   '/portfolio/risk-matrix', '/portfolio/reserves', '/portfolio/waterfall',
-  // Fund — the four that were missing from both arrays.
-  '/funds/lps', '/funds/calls', '/funds/ledger', '/funds/reporting',
-  // Network — the three zone routes, matching what the founder shell already
-  // does with the same three.
-  '/network/relationships', '/network/introductions', '/network/organizations',
-  // Research — the legacy mount of the investor overview.
   '/market-intel',
+];
+
+/**
+ * Advisor and Partner, which had no list at all — the omission behind two of
+ * the four axes the layout audit measured.
+ *
+ * Advisor routes were full WIDTH but padded, through a blanket
+ * `activeRole === 'advisor'` clause in `App.jsx` that no test referenced in
+ * either direction. Partner routes were padded AND centred at `max-w-7xl`,
+ * making it the only one of the four licences constrained to 1280px and the
+ * one that looked least like its canvas. Both now go through the same derived
+ * rule as the other two, so all four shells are one layout.
+ */
+export const ADVISOR_FULL_BLEED = [...workspaceRoutes('advisor')];
+
+export const PARTNER_FULL_BLEED = [
+  ...workspaceRoutes('partner'),
+  // Legacy mounts of the same bodies, kept at the same width so this change
+  // moves nothing that a partner already had.
+  '/partner/operations', '/partner/operations/overview', '/partner/operations/capabilities',
+  '/partner/operations/portfolio', '/partner/operations/engagements', '/partner/operations/performance',
+  '/needs', '/services', '/perks', '/partner/insights',
 ];
 
 /**

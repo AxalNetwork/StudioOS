@@ -20,8 +20,24 @@ const VIEWS = [
   { id: 'engagements', label: 'Engagements' },
 ];
 
-export default function EngagementsPage() {
-  const [view, setView] = useState('requests');
+// `view`: which of the three views this mount opens on. `/partner/operations/
+// engagements` opens on Open requests as it always has; the Partner shell
+// mounts this same page twice with a different opening view, because
+// `/pipeline/proposals` and `/delivery/board` are two zones over one store —
+// the proposal desk and the engagement board are the second and third views
+// here. Before this, neither zone reached this page at all: both resolved to
+// the operations workspace's fallback tab and rendered its Overview, under a
+// header that read "Delivery · Ship the work" on a Pipeline route.
+//
+// It is the OPENING view, not a lock: the chips stay, so a partner who lands
+// on the proposal desk can still cross to the board without going back to the
+// sidebar. A view this page does not have falls back to the original default.
+const DEFAULT_VIEW = 'requests';
+
+export default function EngagementsPage({ view: initialView = DEFAULT_VIEW }) {
+  const [view, setView] = useState(
+    VIEWS.some((v) => v.id === initialView) ? initialView : DEFAULT_VIEW,
+  );
   const [needs, setNeeds] = useState([]);
   const [quotes, setQuotes] = useState([]);
   const [engagements, setEngagements] = useState([]);

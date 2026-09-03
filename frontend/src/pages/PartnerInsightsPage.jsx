@@ -16,7 +16,10 @@ const TONES = {
   neutral: 'bg-white border-gray-200 text-gray-800',
 };
 
-export default function PartnerInsightsPage() {
+// `embedded`: mounted on /pipeline/analytics inside a WorkspaceShell that
+// already draws the crumb, the heading and the zone pills. The window selector
+// beside the heading is a control rather than chrome, so it survives.
+export default function PartnerInsightsPage({ embedded = false }) {
   const [windowDays, setWindowDays] = useState(180);
   const [heat, setHeat] = useState(null);
   const [trend, setTrend] = useState(null);
@@ -88,10 +91,12 @@ export default function PartnerInsightsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Demand Insights</h1>
-          <p className="text-sm text-gray-500 mt-1">Where founder demand is concentrated and how it's trending. Updated live from the needs board.</p>
-        </div>
+        {embedded ? <div /> : (
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Demand Insights</h1>
+            <p className="text-sm text-gray-500 mt-1">Where founder demand is concentrated and how it's trending. Updated live from the needs board.</p>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <select value={windowDays} onChange={(e) => setWindowDays(Number(e.target.value))} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
             <option value={30}>Last 30 days</option>

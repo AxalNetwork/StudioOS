@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo } from 'react';
+import React, { Suspense, lazy, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
@@ -36,22 +36,26 @@ const NetworkPage = lazy(() => import('../pages/NetworkPage'));
  * already resolved; `NetworkPage` keeps serving operators, and its tab now
  * follows the path there too.
  *
- * HOW EACH ROLE IS SERVED. Founders keep the three dedicated pages they
- * already had. Investors get `InvestorNetworkWorkspace`, which renders all
- * three sections and already scrolls to `#relationship-book`,
- * `#introductions-desk` or `#organizations`. Advisors get their own three
- * zones. Operators fall through to `NetworkPage`.
+ * THE THIRD BUG WAS THE SAME SHAPE ON TWO MORE LICENCES, and it is closed
+ * here. `InvestorNetworkWorkspace` renders all three sections stacked; mounted
+ * on a zone route with no slug it rendered all three there too, so an investor
+ * got the identical body on Relationships, Introductions and Organizations. It
+ * now takes the slug. And the three founder pages each draw a whole frame of
+ * their own — crumb, h1, zone nav, rail — which is correct where they mount
+ * directly and was a second copy of everything inside this shell; they now
+ * take `embedded`.
  *
- * The scroll for the investor workspace is driven off the pathname rather than
- * a hash, so the route stays the single source of truth for which zone is
- * active and ZoneNav's highlight cannot drift from the URL.
+ * HOW EACH ROLE IS SERVED. Founders keep the three dedicated pages they
+ * already had, embedded. Investors get `InvestorNetworkWorkspace` narrowed to
+ * the zone. Advisors get their own three body-only zones. Operators fall
+ * through to `NetworkPage`.
+ *
+ * NO SCROLL-TO-ANCHOR ANY MORE. While the investor workspace rendered all
+ * three sections on a zone route, this file polled for `#relationship-book`,
+ * `#introductions-desk` or `#organizations` and scrolled to it. Now that a
+ * zone route renders one section, there is nothing to scroll past — and
+ * scrolling would have pushed the shell's own crumb and heading off the top.
  */
-
-const ANCHORS = {
-  relationships: 'relationship-book',
-  introductions: 'introductions-desk',
-  organizations: 'organizations',
-};
 
 const FOUNDER_ZONE = {
   relationships: FounderNetworkRelationships,
@@ -109,35 +113,20 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   const isRoot = bucket && location.pathname === bucket.prefix;
   const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
   const slug = zone?.slug;
-  // Only the investor workspace renders all three sections on one page, and
-  // only its markup carries the ids in ANCHORS. Running this anywhere else
-  // polled for an element that has never existed, twenty times, on every load.
-  const anchored = role === 'investor' && !isRoot;
-
-  useEffect(() => {
-    if (!anchored || !slug) return undefined;
-    // That workspace renders all three sections; the route decides which one
-    // you land on. Retry briefly — the surface loads its data first.
-    let tries = 0;
-    const id = window.setInterval(() => {
-      const el = document.getElementById(ANCHORS[slug]);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        window.clearInterval(id);
-      } else if ((tries += 1) > 20) {
-        window.clearInterval(id);
-      }
-    }, 100);
-    return () => window.clearInterval(id);
-  }, [anchored, slug]);
 
   const body = useMemo(() => {
     if (isRoot) {
       return <NetworkOverview role={role} />;
     }
+    // `embedded`: the three founder pages each draw a full frame of their own
+    // — crumb, h1, zone nav and Worker AI rail — because they were built to be
+    // mounted directly, before this shell existed. Mounted bare here they drew
+    // every one of those a second time, inside the shell's own: two crumbs, two
+    // headings, two pill rows and two rails, each pair worded differently. This
+    // is the same seam the advisor and investor arms below already had.
     if (role === 'founder') {
       const Zone = FOUNDER_ZONE[slug] || FounderNetworkRelationships;
-      return <Suspense fallback={<Loading />}><Zone /></Suspense>;
+      return <Suspense fallback={<Loading />}><Zone embedded /></Suspense>;
     }
     if (role === 'advisor') {
       const Zone = ADVISOR_ZONE[slug] || AdvisorNetworkRelationships;
@@ -147,8 +136,15 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     // the rail. InvestorNetworkWorkspace draws all three of its own on
     // /network, so without this an investor got two of each here — including
     // two Worker AI rails side by side.
+    //
+    // `zone`: and this is the half that was still missing. That page renders
+    // all three sections stacked, which is right on `/network` and wrong on a
+    // zone route: an investor clicking Relationships, Introductions or
+    // Organizations got the identical stacked body every time. The pills moved
+    // and the page did not. Passing the slug the shell has already resolved
+    // narrows it to the one section the URL names.
     if (role === 'investor') {
-      return <Suspense fallback={<Loading />}><InvestorNetworkWorkspace embedded /></Suspense>;
+      return <Suspense fallback={<Loading />}><InvestorNetworkWorkspace embedded zone={slug} /></Suspense>;
     }
     return <Suspense fallback={<Loading />}><NetworkPage embedded /></Suspense>;
   }, [role, slug, isRoot]);

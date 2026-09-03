@@ -29,7 +29,21 @@ const isCold = (row) => {
   return days !== null && days > 60;
 };
 
-export default function FounderNetworkRelationships() {
+/**
+ * `embedded`: `workspaces/NetworkWorkspace` mounts this page inside
+ * `workspaces/WorkspaceShell`, which already draws the crumb, the h1, the zone
+ * pill row and the Worker AI rail. This page draws all four of its own, so
+ * without this prop a founder on /network/relationships saw two of every piece
+ * of chrome — two crumbs, two headings, two pill rows and two rails, each pair
+ * saying something different. The advisor and investor arms of that workspace
+ * have had this seam since #391 and #399; the founder arm never got it.
+ *
+ * It suppresses the page's own header and rail and drops the two-column grid
+ * (`.fn-rel.is-embedded` in founderNetworkRelationships.css) — the shell owns
+ * both columns now, and the page's `min-height:100vh` would otherwise stretch
+ * a short zone the full viewport inside a container that is already full.
+ */
+export default function FounderNetworkRelationships({ embedded = false }) {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
   const [projects, setProjects] = useState([]);
@@ -71,8 +85,8 @@ export default function FounderNetworkRelationships() {
   const knownTypes = new Set(contacts.map((row) => row.audience).filter(Boolean));
   const query = project?.id ? `?project_id=${project.id}` : '';
 
-  return <main className="fn-rel" data-testid="founder-network-relationships"><div className="fn-rel-shell"><section className="fn-rel-main">
-    <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Relationships</strong></div><div className="fn-rel-title-row"><div><h1>Relationship book</h1><p>Project-linked contacts, relationship context and explicit last activity.</p></div>{projects.length > 1 && <label><span>Startup</span><select data-testid="select-network-relationships-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div><nav aria-label="Network sections"><Link className="is-active" to={`/network/relationships${query}`}>Relationships</Link><Link to={`/network/introductions${query}`}>Introductions</Link><Link to={`/network/organizations${query}`}>Organizations</Link></nav></header>
+  return <main className={`fn-rel${embedded ? ' is-embedded' : ''}`} data-testid="founder-network-relationships"><div className="fn-rel-shell"><section className="fn-rel-main">
+    {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Relationships</strong></div><div className="fn-rel-title-row"><div><h1>Relationship book</h1><p>Project-linked contacts, relationship context and explicit last activity.</p></div>{projects.length > 1 && <label><span>Startup</span><select data-testid="select-network-relationships-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div><nav aria-label="Network sections"><Link className="is-active" to={`/network/relationships${query}`}>Relationships</Link><Link to={`/network/introductions${query}`}>Introductions</Link><Link to={`/network/organizations${query}`}>Organizations</Link></nav></header>}
     {errors.length > 0 && <div className="fn-rel-alert" data-testid="status-network-relationships-partial"><AlertCircle size={15} /><span>{`Some selected-project sources are unavailable: ${errors.join(', ')}.`}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <RelationshipSkeleton />}
     {status === 'empty' && <NoProject />}
@@ -83,7 +97,7 @@ export default function FounderNetworkRelationships() {
       <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>The book</h2></div><span>Cold flag uses explicit last activity only</span></div><RelationshipTable rows={visible} /><p className="fn-rel-note">Contact status is not relationship strength. A contact is flagged going cold only when `last_activity_at` is stored and more than 60 days old; creation or signup age is never substituted for a touch.</p></section>
       <section className="fn-rel-card fn-rel-unavailable"><div className="fn-rel-card-head"><div><AlertCircle size={16} /><h2>Relationship intelligence</h2></div><span>Unavailable</span></div><strong>No project-scoped relationship history is connected.</strong><p>Notes, reminders, organization membership, strength scoring, and message context require a dedicated relationship-book source. FN1 does not derive them from email domains, lead status, landing pages, or contact age.</p></section>
     </>}
-  </section><RelationshipRail project={project} contacts={contacts} cold={cold} errors={errors} /></div></main>;
+  </section>{!embedded && <RelationshipRail project={project} contacts={contacts} cold={cold} errors={errors} />}</div></main>;
 }
 
 function RelationshipTable({ rows }) {

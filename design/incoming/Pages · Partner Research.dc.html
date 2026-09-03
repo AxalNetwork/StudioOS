@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:#eeeef1;color:#18181b;-webkit-font-smoothing:antialiased}
+    a{color:#b45309;text-decoration:none}
+    .ab{padding:44px 48px 36px;border-bottom:1px solid rgba(24,24,27,.08);min-width:1536px}
+    .ab-hd{display:flex;align-items:baseline;gap:11px;margin:0 0 8px}
+    .ab-id{font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px}
+    .ab-nm{font:800 14px/1.2 Inter,system-ui,sans-serif;letter-spacing:-.01em}
+    .ab-sub{font:400 12.5px/1.55 Inter,system-ui,sans-serif;color:#615c6e;max-width:1000px;margin:0 0 18px}
+    .frame{width:1440px;min-width:1440px;flex:none;background:#f7f7f9;border:1px solid rgba(24,24,27,.12);border-radius:12px;box-shadow:0 2px 14px rgba(24,24,27,.08);overflow:hidden;display:flex}
+    .side{width:186px;flex:none;background:#fff;border-right:1px solid #ececf1;padding:14px 0}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:8px 15px;font-size:12.5px;font-weight:600;color:#4a4553}
+    .main{flex:1;min-width:0;padding:20px 22px 28px}
+    .rail{width:280px;flex:none;background:#fff;border-left:1px solid #ececf1;padding:17px 17px 24px}
+    .num{font-variant-numeric:tabular-nums}
+    .lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#615c6e}
+    .card{background:#fff;border:1px solid #ececf1;border-radius:11px}
+    .crumb{display:flex;align-items:center;gap:7px;font-size:11.5px;color:#615c6e;margin-bottom:9px}
+    .crumb b{color:#18181b;font-weight:700}
+    .zb{font-size:11px;font-weight:600;color:#615c6e;background:#fff;border:1px solid #ececf1;border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px}
+    .zb.on{color:#92400e;background:#fffbf2;border-color:#fde68a;font-weight:700}
+    .dot{width:5px;height:5px;border-radius:50%;background:#f59e0b;flex:none}
+    .fil{font-size:11px;font-weight:600;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px}
+    .fil.on{background:#fffbf2;border-color:#fde68a;color:#92400e;font-weight:700}
+    .th{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#615c6e;text-align:left;padding:0 0 8px}
+    .td{font-size:11.5px;padding:8px 0;border-top:1px solid #f4f3f7;color:#3f3a49}
+    .prop{background:#fffbf2;border:1px solid #fde68a;border-radius:11px;padding:13px 15px}
+    .propb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:3px 7px}
+    .acc{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #b45309;background:#b45309;color:#fff}
+    .gho{font-size:11px;font-weight:700;padding:6px 11px;border-radius:7px;border:1px solid #e2e1e8;background:#fff;color:#3f3a49}
+    .dis{font-size:11px;font-weight:600;padding:6px 9px;color:#615c6e}
+    .arch{font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
+    .cmp{background:#fbfbfc;border:1px dashed #d4d2dc;border-radius:11px;padding:13px 15px;width:1440px;min-width:1440px;flex:none;box-sizing:border-box;margin-bottom:10px}
+    .cmpb{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#615c6e;background:#f0eff4;border:1px solid #e2e1e8;border-radius:3px;padding:2px 6px}
+    .seam{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#0e7490;background:#f0fdff;border:1px solid #a5edf5;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .ours{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#92400e;background:#fffbf2;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .cit{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#3730a3;background:#f5f5ff;border:1px solid #c7d2fe;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .stale{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;white-space:nowrap}
+    .nrc{font-size:10px;font-weight:700;color:#7c6f86;background:#f6f5f8;border:1px solid #e2e1e8;border-radius:4px;padding:2px 7px;white-space:nowrap}
+    .legend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:10.5px;color:#615c6e;margin-top:12px}
+    .meter{display:flex;align-items:center;gap:10px;background:#fffbf2;border:1px solid #fde68a;border-radius:10px;padding:9px 13px;flex-wrap:wrap}
+    .qa{background:#fff;border:1px solid #ececf1;border-radius:10px;padding:12px 14px}
+    .askbar{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e2e1e8;border-radius:11px;padding:11px 14px}
+  </style>
+</helmet>
+
+<sc-for list="{{ pages }}" as="p" hint-placeholder-count="4">
+  <section class="ab" id="{{ p.id }}">
+    <div class="ab-hd">
+      <a class="ab-id" href="#{{ p.id }}">{{ p.badge }}</a>
+      <span class="ab-nm">{{ p.title }}</span>
+      <span class="arch" style="{{ p.archStyle }}">{{ p.arch }}</span>
+      <span class="num" style="font:400 11px ui-monospace,Menlo,monospace;color:#615c6e">{{ p.route }}</span>
+    </div>
+    <div class="ab-sub">{{ p.blurb }}</div>
+
+    <div class="cmp">
+      <span class="cmpb">Compressed · on /research</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;flex-wrap:wrap">
+        <div style="min-width:0">
+          <div style="font-size:13px;font-weight:800;letter-spacing:-.01em">{{ p.cmpTitle }}</div>
+          <div style="font-size:11.5px;color:#615c6e;margin-top:4px;line-height:1.5">{{ p.cmpBody }}</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;color:#92400e;flex:none">{{ p.viewMore }}</span>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="side"><sc-for list="{{ nav }}" as="n" hint-placeholder-count="8">
+        <div class="{{ n.cls }}" style="{{ n.style }}"><span>{{ n.label }}</span></div>
+      </sc-for></div>
+      <div class="main">
+        <div class="crumb"><span>Research</span><span style="color:#615c6e">‹</span><b>{{ p.zone }}</b></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h1 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">{{ p.h1 }}</h1>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:#3f3a49;background:#fff;border:1px solid #e2e1e8;border-radius:7px;padding:5px 10px">{{ p.scope }}<sc-if value="{{ p.switcher }}"><span style="color:#615c6e;font-weight:600">⌄ switch client</span></sc-if></span>
+        </div>
+        <div style="font-size:12px;color:#4a4553;margin-top:5px;line-height:1.5">{{ p.sub }}</div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">
+          <sc-for list="{{ p.zones }}" as="z" hint-placeholder-count="4">
+            <span class="{{ z.cls }}"><sc-if value="{{ z.attn }}"><span class="dot"></span></sc-if>{{ z.label }}</span>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;margin-top:14px;padding-bottom:13px;border-bottom:1px solid #ececf1;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ p.filters }}" as="f" hint-placeholder-count="4"><span class="{{ f.cls }}">{{ f.label }}</span></sc-for>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+            <sc-for list="{{ p.ops }}" as="o" hint-placeholder-count="3"><span class="gho">{{ o }}</span></sc-for>
+          </div>
+        </div>
+
+        <sc-if value="{{ p.meter }}">
+          <div class="meter" style="margin-top:14px">
+            <span class="lbl" style="font-size:9px;color:#92400e">Metered</span>
+            <span style="font-size:11.5px;color:#3f3a49;line-height:1.5;flex:1;min-width:340px">{{ p.meter.body }}</span>
+            <span class="num" style="font-size:11.5px;font-weight:800;color:#92400e">{{ p.meter.rate }}</span>
+            <span class="num" style="font-size:10.5px;color:#615c6e">{{ p.meter.spent }}</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ p.askbar }}">
+          <div class="askbar" style="margin-top:12px">
+            <span style="font-size:12.5px;color:#9c96a8;flex:1">{{ p.askbar }}</span>
+            <span class="num" style="font-size:10.5px;color:#615c6e">{{ p.askCost }}</span>
+            <span class="acc">Ask</span>
+          </div>
+        </sc-if>
+
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:13px">
+          <sc-for list="{{ p.adds }}" as="a" hint-placeholder-count="4">
+            <div class="card" style="padding:11px 13px">
+              <div class="lbl" style="font-size:9px">{{ a.label }}</div>
+              <sc-if value="{{ a.nr }}"><div style="margin-top:6px"><span class="nrc">Not recorded</span></div></sc-if>
+              <sc-if value="{{ a.value }}"><div class="num" style="font-size:16px;font-weight:800;letter-spacing:-.02em;margin-top:5px">{{ a.value }}</div></sc-if>
+              <div style="font-size:10px;color:#615c6e;margin-top:4px;line-height:1.45">{{ a.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ p.legend }}">
+          <div class="legend">
+            <span style="display:inline-flex;align-items:center;gap:6px"><span class="seam">Founder-sourced</span>read-only — came from the client’s own record</span>
+            <span style="display:inline-flex;align-items:center;gap:6px"><span class="ours">Ours</span>written by the firm, editable</span>
+          </div>
+        </sc-if>
+
+        <!-- Q&A thread (Ask) -->
+        <sc-if value="{{ p.thread }}">
+          <div style="display:grid;gap:10px;margin-top:13px">
+            <sc-for list="{{ p.thread }}" as="t" hint-placeholder-count="3">
+              <div class="qa" style="{{ t.style }}">
+                <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+                  <span class="lbl" style="font-size:9px;color:#92400e">{{ t.role }}</span>
+                  <span style="font-size:12.5px;font-weight:700;letter-spacing:-.01em;flex:1;min-width:0">{{ t.q }}</span>
+                  <span class="num" style="font-size:10px;color:#615c6e">{{ t.cost }}</span>
+                </div>
+                <div style="font-size:12px;color:#3f3a49;line-height:1.65;margin-top:8px">{{ t.a }}</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:9px;flex-wrap:wrap">
+                  <sc-for list="{{ t.cites }}" as="cc" hint-placeholder-count="2"><span class="cit">{{ cc }}</span></sc-for>
+                  <sc-if value="{{ t.noSource }}"><span class="nrc">No retrievable source</span></sc-if>
+                </div>
+                <sc-if value="{{ t.emptyNote }}"><div style="font-size:11px;color:#615c6e;margin-top:8px;line-height:1.55">{{ t.emptyNote }}</div></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <div class="card" style="padding:15px 17px;margin-top:13px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:11px">
+            <span style="font-size:14px;font-weight:800;letter-spacing:-.015em">{{ p.instTitle }}</span>
+            <span style="font-size:11px;color:#615c6e">{{ p.instMeta }}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px">
+            <sc-for list="{{ p.head }}" as="h" hint-placeholder-count="6"><span class="th">{{ h }}</span></sc-for>
+          </div>
+          <sc-for list="{{ p.rows }}" as="r" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:{{ p.cols }};gap:11px;align-items:center;{{ r.rowStyle }}">
+              <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                <span class="td" style="{{ c.style }}">
+                  <span>{{ c.text }}</span>
+                  <sc-if value="{{ c.pill }}"><span style="{{ c.pillStyle }}">{{ c.pill }}</span></sc-if>
+                  <sc-if value="{{ c.seam }}"><span class="seam">{{ c.seam }}</span></sc-if>
+                  <sc-if value="{{ c.ours }}"><span class="ours">{{ c.ours }}</span></sc-if>
+                  <sc-if value="{{ c.stale }}"><span class="stale">{{ c.stale }}</span></sc-if>
+                  <sc-if value="{{ c.cit }}"><span class="cit">{{ c.cit }}</span></sc-if>
+                  <sc-if value="{{ c.nr }}"><span class="nrc">Not recorded</span></sc-if>
+                  <sc-if value="{{ c.sub }}"><span style="display:block;font-size:10px;color:#615c6e;margin-top:3px;line-height:1.45">{{ c.sub }}</span></sc-if>
+                </span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="font-size:11px;color:#615c6e;margin-top:12px;padding-top:11px;border-top:1px solid #f4f3f7;line-height:1.55">{{ p.instNote }}</div>
+        </div>
+
+        <sc-if value="{{ p.pair }}">
+          <div class="card" style="padding:14px 17px;margin-top:13px;border-color:#fde68a;background:#fffbf2">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+              <span style="font-size:13px;font-weight:800;letter-spacing:-.015em;color:#92400e">{{ p.pair.h }}</span>
+              <span style="font-size:11px;color:#92400e">{{ p.pair.meta }}</span>
+            </div>
+            <div style="font-size:11.5px;color:#3f3a49;line-height:1.65;margin-top:8px">{{ p.pair.body }}</div>
+          </div>
+        </sc-if>
+
+        <div class="prop" style="margin-top:13px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span class="propb">{{ p.aiLabel }}</span>
+            <span class="num" style="font-size:10.5px;color:#92400e;margin-left:auto">{{ p.aiCost }}</span>
+          </div>
+          <div style="font-size:12px;color:#3f3a49;line-height:1.65">{{ p.aiBody }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap">
+            <span class="acc">{{ p.aiAccept }}</span><span class="gho">Edit first</span><span class="dis">Discard</span>
+            <span style="font-size:10px;color:#615c6e;margin-left:auto">{{ p.aiFoot }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="rail"><dc-import name="DetailRail" accent="amber" page="Research" hint-size="100%,760px"></dc-import></div>
+    </div>
+  </section>
+</sc-for>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const A = { ink:'#b45309', deep:'#92400e', tint:'#fffbf2' };
+    const ROWS = ['Home','Pipeline','Delivery','Offers','Network','Research','Trust','Firm Settings'];
+    const nav = ROWS.map(label => ({ label, cls: label === 'Research' ? 'nav on' : 'nav',
+      style: label === 'Research' ? 'color:'+A.deep+';background:'+A.tint+';font-weight:700;box-shadow:inset 2px 0 0 '+A.ink : '' }));
+
+    const ARCH = { 'WORK BOARD':['#eff6ff','#1d4ed8','#dbeafe'], 'LEDGER':['#f5f5ff','#3730a3','#c7d2fe'],
+      'COLLECTION':['#f0fdf6','#065f46','#a7f3d0'], 'FEED':['#fffbeb','#92400e','#fde68a'],
+      'MATCH ENGINE':['#fdf4ff','#86198f','#f5d0fe'], 'ANALYTICS':['#f0fdff','#0e7490','#a5edf5'] };
+    const archStyle = (a) => { const c = ARCH[a]; return 'background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]; };
+    // Partner has FOUR Research zones — no Companies section, unlike Investor and Advisor.
+    const ZONES = ['Ask','Client prep','Market','Library'];
+    const zoneRow = (active) => ZONES.map(label => ({ label, cls: label === active ? 'zb on' : 'zb',
+      attn: label === 'Market' }));
+
+    const pill = (t) => {
+      const M = { 'Current':['#ecfdf5','#047857','#a7f3d0'], 'Answered':['#ecfdf5','#047857','#a7f3d0'],
+        'Indexed':['#ecfdf5','#047857','#a7f3d0'], 'Attached':['#ecfdf5','#047857','#a7f3d0'],
+        'Ageing':['#fffbeb','#92400e','#fde68a'], 'Open':['#fffbeb','#92400e','#fde68a'],
+        'Not indexed':['#fffbeb','#92400e','#fde68a'],
+        'Stale':['#fef2f2','#b91c1c','#fecaca'], 'Blocked':['#fef2f2','#b91c1c','#fecaca'],
+        'Reusable':['#f5f5ff','#3730a3','#c7d2fe'], 'Client doc':['#f0fdff','#0e7490','#a5edf5'],
+        'Flat':['#f4f4f6','#615c6e','#e4e4e8'] };
+      const c = M[t] || M['Flat'];
+      return 'display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:'
+        + c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';white-space:nowrap';
+    };
+    const cell = (text, opt) => {
+      const o = Object.assign({ text, pill:null, seam:null, ours:null, stale:null, cit:null, nr:false, sub:null, style:'' }, opt || {});
+      o.pillStyle = o.pill ? pill(o.pill) : '';
+      return o;
+    };
+    const fil = (l, i0) => l.map((label, i) => ({ label, cls: i === i0 ? 'fil on' : 'fil' }));
+    const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const nWord = (n) => ['no','one','two','three','four','five','six','seven','eight','nine','ten'][n] || String(n);
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    const plural = (n, s, p) => n === 1 ? s : (p || s + 's');
+
+    // ══ DeepSeek V4 Flash — the Research curation, as the rail declares. Cached input is the
+    // feature this bucket sells: the second question over a document costs ~30× less. ══
+    const R_IN = 0.440, R_OUT = 1.320, R_CACHED = 0.014;
+    const c4 = (n) => '≈ $' + n.toFixed(4);
+    const runCost = (tin, tout, cached) => (cached ? tin / 1e6 * R_CACHED : tin / 1e6 * R_IN) + tout / 1e6 * R_OUT;
+
+    // ══ ONE library. Ask reads over exactly this — the two pages are one system. ══
+    const LIB = [
+      { doc:'Verwood — SOW, design system v2', kind:'Client doc', added:'Jun 4, 2026', state:'Indexed', src:'ours' },
+      { doc:'Meridian Robotics — sprint 2 brief', kind:'Client doc', added:'Aug 12, 2026', state:'Indexed', src:'seam', srcT:'From client' },
+      { doc:'Halverton — Q3 product plan', kind:'Client doc', added:'Aug 25, 2026', state:'Indexed', src:'seam', srcT:'From client' },
+      { doc:'Design system build — proposal template', kind:'Reusable', added:'Mar 18, 2026', state:'Indexed', src:'ours' },
+      { doc:'Sprint team SOW — standard terms', kind:'Reusable', added:'Feb 2, 2026', state:'Indexed', src:'ours' },
+      { doc:'Thornfield — brand teardown', kind:'Reusable', added:'Aug 29, 2026', state:'Not indexed', src:'ours' }
+    ];
+    const indexed = LIB.filter(d => d.state === 'Indexed');
+    const unindexed = LIB.filter(d => d.state !== 'Indexed');
+    const clientDocs = LIB.filter(d => d.kind === 'Client doc');
+    const reusable = LIB.filter(d => d.kind === 'Reusable');
+    const seamDocs = LIB.filter(d => d.src === 'seam');
+    const libRows = LIB.map(d => ({ rowStyle: d.state === 'Not indexed' ? 'background:#fffcf5' : '', cells:[
+      cell(d.doc, d.src === 'seam' ? { seam: d.srcT } : { ours:'Ours' }),
+      cell('', { pill: d.kind }),
+      cell(d.added),
+      cell('', { pill: d.state }),
+      d.state === 'Indexed' ? cell('Answerable in Ask') : cell('Not answerable until indexed', { nr:false })
+    ]}));
+
+    // ══ Ask thread. Every answer cites; a sourceless answer is an empty state, not prose. ══
+    const THREAD = [
+      { role:'Asked', q:'What did Verwood sign up for in the design-system SOW?',
+        a:'Scope covers an audit, token set, component library and handoff — four milestones, ' + usd(48000) + ' fixed. Handoff is milestone four and has not been signed off.',
+        cites:['Verwood — SOW §2','Verwood — SOW, milestones'], cost:c4(runCost(11200, 380, false)), style:'' },
+      { role:'Asked', q:'What has Halverton\u2019s product plan committed to this quarter?',
+        a:'Two workstreams: pricing and onboarding, with pricing kickoff after the roadmap sessions. The plan names no headcount for either.',
+        cites:['Halverton — Q3 product plan'], cost:c4(runCost(9400, 340, true)) + ' · cached', style:'' },
+      { role:'Asked', q:'What is Thornfield\u2019s current burn?',
+        a:'No answer given. Nothing in the library states Thornfield\u2019s burn — the brand teardown is not indexed and carries no financials in any case.',
+        cites:[], noSource:true, cost:c4(0), style:'background:#fffcf5',
+        emptyNote:'An answer with no retrievable source is an empty state rather than a paragraph. Nothing is charged for a question the cache cannot answer, and the response names the gap instead of inferring across it.' }
+    ];
+    const asked = THREAD.length;
+    const answered = THREAD.filter(t => !t.noSource).length;
+
+    // ══ ONE client brief. Verwood. Seam-marked where founder-sourced. ══
+    const BRIEF = [
+      { k:'What they asked for', v:'Design system v2 — audit, tokens, component library, handoff.', src:'ours', sub:'From the signed SOW, Jun 4' },
+      { k:'What the engagement record says', v:'Milestones 1 and 2 signed off. Two deliverables shipped Aug 14 and Aug 21, neither opened.', src:'ours', sub:'Delivery · deliverables log' },
+      { k:'What changed on their side', v:'Marta Kowalczyk moved from Head of Design to interim CPO on Aug 18.', src:'seam', srcT:'From Verwood', sub:'Their team record, read-only' },
+      { k:'Their stated roadmap', v:'Component library needed before their Q4 release, dated Nov 1.', src:'seam', srcT:'From Verwood', sub:'Their roadmap, read-only' },
+      { k:'Still open', v:'Handoff review. Scope requests since Aug 4 exceed SOW §2 — a change order has not been raised.', src:'ours', sub:'Delivery · health, scope drift' },
+      { k:'Their budget for Q4', v:'', nr:true, src:'seam', srcT:'From Verwood', sub:'Not in anything they have shared' }
+    ];
+    const seamBrief = BRIEF.filter(b => b.src === 'seam');
+    const openItems = BRIEF.filter(b => b.k === 'Still open').length;
+    const briefRows = BRIEF.map(b => ({ rowStyle: b.nr ? 'background:#fbfbfc' : '', cells:[
+      cell(b.k, b.src === 'seam' ? { seam: b.srcT } : { ours:'Ours' }),
+      b.nr ? cell('', { nr:true, sub: b.sub }) : cell(b.v, { sub: b.sub })
+    ]}));
+
+    // ══ ONE market view. Every figure carries its run date and shows its age. ══
+    const RUNS = [
+      { metric:'Design system build — comparable range', v:usd(38000) + ' – ' + usd(62000), ran:'Aug 28, 2026', days:4, n:11 },
+      { metric:'Sprint team, 2 weeks — comparable range', v:usd(18000) + ' – ' + usd(27000), ran:'Aug 28, 2026', days:4, n:14 },
+      { metric:'Fractional product seat — monthly', v:usd(11000) + ' – ' + usd(16000), ran:'Jul 2, 2026', days:61, n:6 },
+      { metric:'Brand refresh — comparable range', v:usd(24000) + ' – ' + usd(44000), ran:'May 19, 2026', days:105, n:9 },
+      { metric:'Retainer — monthly design hours', v:'', nr:true, ran:'—', days:null, n:0 }
+    ];
+    const STALE_AT = 90, AGE_AT = 30;
+    const ageState = (d) => d === null ? null : (d > STALE_AT ? 'Stale' : (d > AGE_AT ? 'Ageing' : 'Current'));
+    const attachable = RUNS.filter(r => r.days !== null && r.days <= STALE_AT);
+    const staleRuns = RUNS.filter(r => r.days !== null && r.days > STALE_AT);
+    const marketRows = RUNS.map(r => {
+      const st = ageState(r.days);
+      return { rowStyle: st === 'Stale' ? 'background:#fffafa' : (r.nr ? 'background:#fbfbfc' : ''), cells:[
+        cell(r.metric),
+        r.nr ? cell('', { nr:true }) : cell(r.v),
+        cell(r.ran, { sub: r.n ? r.n + ' comparables' : null }),
+        r.days === null ? cell('', { nr:true }) : cell(r.days + ' d old', st === 'Stale' ? { stale:'Blocked from proposals' } : { pill: st }),
+        r.days === null ? cell('Nothing to attach') : (st === 'Stale' ? cell('Re-run before attaching') : cell('Attachable', { pill:'Attached' }))
+      ]};
+    });
+
+    const PAGES = [
+      { id:'pr1', badge:'PR1', route:'/research/ask', zone:'Ask', arch:'FEED',
+        title:'Research · Ask', h1:'Ask the library', scope:'Studio Vireo · all indexed docs',
+        blurb:'Question and answer over the document cache, with every answer citing the sources it drew on. A question the cache cannot answer returns an empty state rather than a paragraph — and costs nothing, because nothing was retrieved to reason over.',
+        sub:'Cited answers over ' + indexed.length + ' indexed documents.',
+        cmpTitle:'Ask · ' + answered + ' of ' + asked + ' answered',
+        cmpBody: cap(nWord(asked - answered)) + ' question had no retrievable source. ' + indexed.length + ' documents indexed, ' + unindexed.length + ' not.',
+        viewMore:'View more · session history and citations →',
+        filters: fil(['This session','All history','Cited','Unanswered'], 0), ops:['New session','Saved answers','Export'],
+        meter:{ body:'Each question is charged on what it retrieves. The first pass over a document pays full input; every question after it reads from cache at roughly a thirtieth of the rate — which is what makes asking the same document forty questions reasonable.',
+          rate:'$0.440 / M in · $0.014 cached', spent:'this session: ' + c4(runCost(20600, 720, false)) },
+        askbar:'Ask across the library — e.g. "which SOWs cap revisions?"', askCost:'≈ $0.005 per question',
+        adds:[ { label:'Indexed documents', value:String(indexed.length), note:'what Ask can answer over' },
+          { label:'Answered', value:answered + ' of ' + asked, note:'each with citations' },
+          { label:'No source', value:String(asked - answered), note:'returned empty, charged nothing' },
+          { label:'Session spend', value:c4(runCost(20600, 720, false)), note:'shown before each question, not after' } ],
+        thread: THREAD,
+        instTitle:'What Ask can reach', instMeta:'Reads over the library and nothing else',
+        cols:'2.2fr 1fr 1fr .9fr 1.4fr',
+        head:['Document','Kind','Added','Index state','In Ask'],
+        rows: libRows,
+        instNote:'Ask reaches exactly the ' + indexed.length + ' indexed rows — the Thornfield teardown was added two days ago and is not indexed, which is why the burn question came back empty rather than reaching for it. The cost line above every question is the design position: this surface spends money, and a founder deciding whether to ask should see the number first.',
+        aiLabel:'Draft · session brief', aiCost:c4(runCost(12800, 900, true)),
+        aiBody:'The session\u2019s answers gathered into one brief with every citation carried through, and the unanswered question named as a gap rather than dropped. Cached input, so the brief costs less than the questions that produced it.',
+        aiAccept:'Accept brief', aiFoot:'Citations preserved per claim.' },
+
+      { id:'pr2', badge:'PR2', route:'/research/client-prep', zone:'Client prep', arch:'WORK BOARD',
+        title:'Research · Client prep', h1:'Client brief — Verwood', scope:'Verwood', switcher:true,
+        blurb:'The brief the firm assembles before a pitch or a delivery checkpoint: what the client asked for, what the engagement record says, what changed on their side, what is still open. One client per brief — context changes only through the switcher, never implicitly.',
+        sub:'One client. Founder-sourced rows are read-only.',
+        cmpTitle:'Client prep · Verwood',
+        cmpBody: seamBrief.length + ' rows founder-sourced, ' + (BRIEF.length - seamBrief.length) + ' written by the firm. ' + cap(nWord(openItems)) + ' item still open.',
+        viewMore:'View more · full brief, ' + BRIEF.length + ' rows →',
+        filters: fil(['Full brief','Ours only','Founder-sourced','Open items'], 0), ops:['New brief','Attach to proposal','Export'],
+        legend: true,
+        adds:[ { label:'Brief rows', value:String(BRIEF.length), note:'assembled for the Sep 3 checkpoint' },
+          { label:'Founder-sourced', value:String(seamBrief.length), note:'read-only — from Verwood\u2019s own record' },
+          { label:'Open items', value:String(openItems), note:'handoff review, scope drift' },
+          { label:'Their Q4 budget', nr:true, note:'not in anything Verwood has shared' } ],
+        instTitle:'Verwood — brief for Sep 3 checkpoint', instMeta:'Cyan is theirs, amber is ours',
+        cols:'1.3fr 3fr', head:['Section','What it says'],
+        rows: briefRows,
+        instNote:'Two rows are founder-sourced and read-only: Marta\u2019s move to interim CPO and their Nov 1 release date came from Verwood\u2019s own record, not from anything the firm wrote — which matters, because the person who signed the SOW is no longer in the seat that reviews the handoff. Their Q4 budget reads "Not recorded" rather than being inferred from the last engagement, since guessing a client\u2019s budget in a brief the firm will pitch from is the fastest way to quote wrong.',
+        aiLabel:'Draft · checkpoint brief', aiCost:c4(runCost(14600, 1100, true)),
+        aiBody:'The six rows drafted into a one-page brief for Sep 3, keeping founder-sourced facts attributed to Verwood and firm-written facts to the firm. Points to the unraised change order as the item to settle before the release date makes it awkward.',
+        aiAccept:'Accept brief', aiFoot:'Read-only rows quoted, never rewritten.' },
+
+      { id:'pr3', badge:'PR3', route:'/research/market', zone:'Market', arch:'ANALYTICS',
+        title:'Research · Market', h1:'Sector & pricing context', scope:'Design & product services',
+        blurb:'What comparable engagements go for, and where demand is moving. A reading here is attachable to a proposal so a client can see the reasoning behind a quoted number — which is exactly why every figure carries its run date and its age, and why a stale figure is blocked from attachment rather than merely marked.',
+        sub:'Comparable ranges with run dates and attachment state.',
+        cmpTitle:'Market · ' + attachable.length + ' of ' + RUNS.length + ' attachable',
+        cmpBody: staleRuns.length + ' readings past ' + STALE_AT + ' days, blocked from proposals. ' + cap(nWord(1)) + ' has never been run.',
+        viewMore:'View more · ' + RUNS.length + ' readings, ' + attachable.length + ' current →',
+        filters: fil(['All','Current','Stale','Attached to proposals'], 0), ops:['Re-run stale','Attach to proposal','Export'],
+        adds:[ { label:'Attachable now', value:String(attachable.length), note:'within ' + STALE_AT + ' days' },
+          { label:'Stale', value:String(staleRuns.length), note:'blocked until re-run' },
+          { label:'Widest range', value:usd(38000) + '–' + usd(62000), note:'design system build, 11 comparables' },
+          { label:'Retainer rate', nr:true, note:'never run — matches the unpriced catalog draft' } ],
+        instTitle:'Readings', instMeta:'Age is a gate on attachment, not a label',
+        cols:'1.9fr 1.3fr 1.2fr 1.3fr 1.3fr',
+        head:['Reading','Comparable range','Run date','Age','Proposal attachment'],
+        rows: marketRows,
+        instNote:'The brand refresh reading is 105 days old and blocked from attachment: a client shown a range from May, presented as current reasoning behind a September quote, is a worse outcome than a proposal with no market figure at all. The fractional-seat reading is ageing at 61 days and still attachable, with its age visible on the row so the person attaching it decides knowingly. The retainer row has never been run — the same gap the catalog\u2019s unpriced retainer draft shows from the other side.',
+        aiLabel:'Reading · demand movement', aiCost:c4(runCost(16400, 1400, false)),
+        aiBody:'Findings across the ' + attachable.length + ' current readings: fixed-scope design work holds its range while fractional seats have widened, on ' + nWord(6)
+          + ' comparables — a thin base, which the reading states rather than smoothing. Points to the two stale readings as the ones to re-run before the next proposal cites them.',
+        aiAccept:'Accept reading', aiFoot:'Run dates carried into any attachment.' },
+
+      { id:'pr4', badge:'PR4', route:'/research/library', zone:'Library', arch:'COLLECTION',
+        title:'Research · Library', h1:'Document library', scope:'Studio Vireo · ' + LIB.length + ' documents',
+        blurb:'The cache Ask reads from, plus the firm\u2019s own reusable material. Library and Ask are one system: what is indexed here is precisely what Ask can answer over, and a document sitting unindexed is invisible to every question asked upstairs.',
+        sub:'Client documents and reusable material, with index state.',
+        cmpTitle:'Library · ' + LIB.length + ' documents',
+        cmpBody: indexed.length + ' indexed and answerable, ' + unindexed.length + ' not. ' + seamDocs.length + ' arrived from clients.',
+        viewMore:'View more · ' + LIB.length + ' documents, ' + reusable.length + ' reusable →',
+        filters: fil(['All','Client docs','Reusable','Not indexed'], 0), ops:['Add document','Re-index','Export'],
+        legend: true,
+        adds:[ { label:'Documents', value:String(LIB.length), note:clientDocs.length + ' client, ' + reusable.length + ' reusable' },
+          { label:'Indexed', value:String(indexed.length), note:'answerable in Ask' },
+          { label:'Not indexed', value:String(unindexed.length), note:'invisible to Ask until indexed' },
+          { label:'From clients', value:String(seamDocs.length), note:'read-only, seam-marked' } ],
+        instTitle:'Library', instMeta:'Index state is Ask\u2019s reach, stated as a column',
+        cols:'2.2fr 1fr 1fr .9fr 1.4fr',
+        head:['Document','Kind','Added','Index state','In Ask'],
+        rows: libRows,
+        pair:{ h:'Library and Ask are one system', meta:'Empty library, no Ask',
+          body:'The last column is not a status — it is Ask\u2019s reach, restated here so the relationship is visible from both ends. With an empty library Ask has no empty-state prose to fall back on: it can only report that nothing is indexed, which is why the Thornfield teardown\u2019s "Not indexed" row is a working gap rather than housekeeping. Two of these documents came from clients and are read-only; the firm can index them but cannot edit them.' },
+        instNote:'Two client documents arrived through the platform and carry the seam mark — the firm can index and read them but cannot change them, which is the right asymmetry for a record the client also sees. The Thornfield teardown is the firm\u2019s own and still unindexed, so it answers nothing: adding a document and making it answerable are two acts, and this column is where the second one becomes visible.',
+        aiLabel:'Draft · index gaps', aiCost:c4(runCost(7200, 620, true)),
+        aiBody:'Points to the ' + nWord(unindexed.length) + ' unindexed document and what it would unlock in Ask — the Thornfield teardown covers brand positioning, which is the one topic the current session could not answer over.',
+        aiAccept:'Accept draft', aiFoot:'Counted from index state.' }
+    ];
+
+    return { nav, pages: PAGES.map(p => Object.assign({ meter:null, askbar:null, thread:null, legend:null, pair:null, switcher:false }, p, {
+      archStyle: archStyle(p.arch), zones: zoneRow(p.zone) })) };
+  }
+}
+</script>
+</body>
+</html>
