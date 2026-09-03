@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { useActiveCompany as _useActiveCompany } from '../contexts/ActiveCompanyContext';
-import { api, setActiveCompanyId } from '../lib/api';
+import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
 
 /**
  * CompanySwitcher — the ONLY way the active company changes.
@@ -70,7 +70,15 @@ import { api, setActiveCompanyId } from '../lib/api';
  * they are scoped, this line goes — and the test pinning `routes/advisors.ts`
  * as unscoped fails at the same moment, so the claim cannot go stale quietly.
  */
-const SHARED_NOTICE = 'Marketplaces and your account settings are shared across your companies.';
+/**
+ * It also does not say "everything below is dedicated to the selected company".
+ * That wording was tried and it contradicts the contract above: the shared
+ * marketplaces and the account-level rows SIT BELOW this switcher and stay the
+ * same in every company by design. The positive claim is made only about what
+ * is actually scoped — the rows a person owns — and the shared half is named
+ * beside it, so neither sentence can be read as the other's bug.
+ */
+const SHARED_NOTICE = 'Projects, deals, funds and quotes belong to the company selected here. Marketplaces and your account settings are shared across your companies.';
 const ADVISOR_NOTICE = 'Practice and Expertise are not yet separated by company.';
 
 /** A date a person can compare, or nothing. Never an invented placeholder. */
@@ -127,13 +135,16 @@ function CompanySwitcher({ collapsed, role }) {
 
   // Fetch all companies the current user is a member of.
   useEffect(() => {
+    const savedId = initActiveCompanyId();
     api.listMyCompanies()
       .then(list => {
         const arr = Array.isArray(list) ? list : [];
         setCompanies(arr);
-        // Set the primary company (is_primary_admin=true comes first from the API)
-        // as active if nothing is selected yet.
-        if (arr.length > 0 && !company) { setActiveCompanyId(arr[0].id); setCompany(arr[0]); }
+        // Restore the persisted company when it is still a membership; fall
+        // back to the primary company (is_primary_admin=true comes first).
+        const restored = savedId ? arr.find((co) => co.id === savedId) : null;
+        const next = restored || arr[0] || null;
+        if (next) { setActiveCompanyId(next.id); setCompany(next); }
       })
       // A failed read used to be swallowed here, which rendered exactly like an
       // account with no companies — the one state a user reports as "I created
