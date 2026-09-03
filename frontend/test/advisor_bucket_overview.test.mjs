@@ -100,16 +100,35 @@ function block(code, name) {
   return code.slice(start, end);
 }
 
+// The two helpers below locate their span with string search and then apply a
+// LITERAL regex. Building the pattern from an argument instead — `new
+// RegExp(`const ${name} = …`)` — is what Semgrep's detect-non-literal-regexp
+// rule flags, and the repo has already answered it that way once (the
+// exported-symbol helper in cloudflare-worker/test/super_admin.test.ts).
+// Harmless here, since every argument is a literal written above, but a
+// standing finding on every PR is a cost of its own.
+
 /** The members of a top-level `const NAME = new Set([...])`. */
 function setMembers(code, name) {
-  const m = new RegExp(`const ${name} = new Set\\(\\[([^\\]]*)\\]\\)`).exec(code);
-  assert.ok(m, `${name} is gone, or is no longer a Set literal`);
-  return [...m[1].matchAll(/'([a-z][a-z-]*)'/g)].map((x) => x[1]);
+  const marker = `const ${name} = new Set([`;
+  const start = code.indexOf(marker);
+  assert.notEqual(start, -1, `${name} is gone, or is no longer a Set literal`);
+  const end = code.indexOf('])', start);
+  assert.notEqual(end, -1, `${name} is not a closed Set literal`);
+  const members = code.slice(start + marker.length, end);
+  return [...members.matchAll(/'([a-z][a-z-]*)'/g)].map((x) => x[1]);
 }
 
-/** Keys at a given indent, quoted or bare: `  foo:` / `    'this-week': {`. */
-const keysAt = (body, spaces) =>
-  [...body.matchAll(new RegExp(`^ {${spaces}}'?([a-z][a-z-]*)'?:`, 'gm'))].map((m) => m[1]);
+/** Keys at exactly the given indent, quoted or bare: `  foo:` / `    'this-week': {`. */
+const keysAt = (body, spaces) => {
+  const indent = ' '.repeat(spaces);
+  return body
+    .split('\n')
+    .filter((line) => line.startsWith(indent) && !line.startsWith(`${indent} `))
+    .map((line) => /^\s*'?([a-z][a-z-]*)'?:/.exec(line))
+    .filter(Boolean)
+    .map((m) => m[1]);
+};
 
 /** Zones with a real page: the LIVE sets plus the ZONE component maps. */
 function backedSlugs() {
