@@ -71,23 +71,34 @@ export const SIDEBAR_GROUPS = {
   // The franchisor's shell. Same product as `admin` — a super admin IS an
   // admin (migration 199 makes it an elevation, not a separate role), so every
   // admin destination stays reachable; this group is the eight-row HQ canvas
-  // laid over the top, and `resolveShellRole` picks it when the flag is set.
+  // laid over the top, and `shellRoleFor` (lib/shellRole.js) picks it when the
+  // flag is set and the holder has not switched to the plain Admin view.
   //
   // ROWS ARE ADDED AS THEIR PAGES LAND. The approved canvas has eight rows —
-  // Home, Licences, Funds, Contracts, Team, Support, Security, Settings — and
-  // four of them have no page yet. A row pointing at a route that does not
-  // exist is worse than a missing row: it looks shipped and 404s. So the four
-  // whose destinations resolve today are here, the rest arrive with their
-  // pages, and `super_admin_shell.test.mjs` fails if a row is added whose
-  // route is not registered in App.jsx.
+  // Home, Licences, Funds, Contracts, Team, Support, Security, Settings. A row
+  // pointing at a route that does not exist is worse than a missing row: it
+  // looks shipped and 404s. Seven resolve today; Security arrives with its
+  // page, and `super_admin_shell.test.mjs` fails if a row is added whose route
+  // is not registered in App.jsx.
+  //
+  // Two rows deliberately do not point where their labels first suggest:
+  //   Team  → /admin/accounts, the cross-tenant accounts table with the holder
+  //           console above it (canvas H4). /admin/team is the PUBLIC team-page
+  //           editor — a different thing wearing the same word.
+  //   Home  → /admin until the HQ Home page lands; then /hq.
   super_admin: [
     { key: 'hq', label: 'HQ', items: [
       { to: '/admin', icon: Shield, label: 'Home' },
       // The one row this tier exists for. Every route behind it is
       // super-admin-only server-side (routes/admin_licences.ts).
       { to: '/admin/licences', icon: Map, label: 'Licences' },
-      { to: '/admin/team', icon: Users, label: 'Team' },
+      { to: '/funds', icon: Landmark, label: 'Funds' },
+      // The master template library. The doc-type REGISTRY the Contracts ·
+      // Super canvas draws above it has no store; the page says so.
+      { to: '/admin/contracts', icon: FileText, label: 'Contracts' },
+      { to: '/admin/accounts', icon: Users, label: 'Team' },
       { to: '/tickets', icon: Inbox, label: 'Support' },
+      { to: '/settings', icon: UserCog, label: 'Settings' },
     ]},
   ],
 
@@ -118,11 +129,11 @@ export const SIDEBAR_GROUPS = {
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
       { to: '/admin/articles', icon: FileText, label: 'Content Queue' },
-      { to: '/admin/licences', icon: Map, label: 'Territory Licences' },
       // A subsidiary administrator's read of their OWN licence — terms,
-      // territories, seats licensed, history. /admin/licences above is HQ's
-      // ledger of every licence; this is one, read-only. Both rows are here
-      // because the same nav serves HQ and a subsidiary admin today, and
+      // territories, seats licensed, history. HQ's ledger of every licence
+      // (/admin/licences) is NOT here: every call behind it is
+      // super-admin-only server-side, so a row for it in the plain admin shell
+      // was a door that opened onto 403s. It lives in the HQ group above.
       // GET /licence/mine 404s for anyone who administers none.
       { to: '/admin/my-licence', icon: Map, label: 'My Licence' },
     ]},

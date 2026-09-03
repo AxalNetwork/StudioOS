@@ -292,10 +292,15 @@ function AdminSectionNav({ value, onChange, badges }) {
   );
 }
 
-export default function AdminPage({ onImpersonate }) {
+// `section` locks the console to one tab and drops its own header and section
+// nav, so a hosting page can compose the panel under a header of its own —
+// the HQ Accounts page mounts the Users panel this way. The tab list, the
+// fetches and the panels are untouched: one console, framed twice.
+export default function AdminPage({ onImpersonate, section = null }) {
   // Initial section honors a `?tab=` deep-link (e.g. /admin?tab=network-profiles)
   // when it names a known section; otherwise defaults to Users.
   const [tab, setTab] = useState(() => {
+    if (section && ADMIN_SECTION_VALUES.has(section)) return section;
     if (typeof window === 'undefined') return 'users';
     const t = new URLSearchParams(window.location.search).get('tab');
     return t && ADMIN_SECTION_VALUES.has(t) ? t : 'users';
@@ -463,20 +468,24 @@ export default function AdminPage({ onImpersonate }) {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-1">
-        <Shield size={24} className="text-violet-600" />
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Admin Console</h1>
-      </div>
-      <p className="text-gray-600 mb-6">Manage users, roles, and partner profiles</p>
+      {!section && (
+        <>
+          <div className="flex items-center gap-3 mb-1">
+            <Shield size={24} className="text-violet-600" />
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Admin Console</h1>
+          </div>
+          <p className="text-gray-600 mb-6">Manage users, roles, and partner profiles</p>
 
-      <AdminSectionNav
-        value={tab}
-        onChange={setTab}
-        badges={{
-          profiles: pendingProfiles,
-          kyc: kycFilter === 'pending' ? kycQueue.length : 0,
-        }}
-      />
+          <AdminSectionNav
+            value={tab}
+            onChange={setTab}
+            badges={{
+              profiles: pendingProfiles,
+              kyc: kycFilter === 'pending' ? kycQueue.length : 0,
+            }}
+          />
+        </>
+      )}
 
       {tab === 'network-profiles' && (
         <div data-testid="admin-network-profiles-panel"><AdminNetworkProfiles /></div>
