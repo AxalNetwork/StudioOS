@@ -211,19 +211,25 @@ fallback and the static assets on both hosts from one build. There is
 deliberately no `axal.vc/*` or `axal.vc/assets/*` route: a path-scoped zone
 route would take those URLs away from the assets binding and break the SPA
 fallback, and `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
-`frontend/test/apex_route_coverage.test.mjs` refuse both. Cloudflare Pages
-(`studioos-2p8.pages.dev`) is a mirror of `docs/` with no production hostname
-(`UNRESOLVED_ITEMS.md` U9). Who serves a host is settled by the deploy log's
-"Deployed studioos triggers" lines and the Pages dashboard's Domains line,
-never by prose.
+`frontend/test/apex_route_coverage.test.mjs` refuse both. The Cloudflare Pages
+mirror (`studioos-2p8.pages.dev`) was retired on 2026-09-03 (`DECISIONS.md`
+D36). Who serves a host is settled by the deploy log's "Deployed studioos
+triggers" lines, never by prose. `docs/_headers` (from
+`frontend/public/_headers`) sets the security headers on every response the
+assets binding serves; the `run_worker_first` paths get
+`middleware/securityHeaders.ts` instead.
 
 ### 2.6 `[env.preview]` (for completeness)
 
 `studioos-preview`, `workers_dev = true`. Mirrors D1/KV/AI/Queues/DOs/migrations
 /R2/Analytics/Browser/triggers, but **omits** Vectorize, the `PUBLICATIONS` and
 `BACKUPS` R2 buckets, `assets`, and `tail_consumers`. D1/KV ids are still
-`REPLACE_WITH_PREVIEW_*` placeholders, so the preview deploy is gated on the
-`CLOUDFLARE_PREVIEW_READY` repo variable.
+`REPLACE_WITH_PREVIEW_*` placeholders, so `npm run deploy:preview` cannot
+succeed until they are provisioned; no CI job deploys this environment (the
+`CLOUDFLARE_PREVIEW_READY` gate once described here was never wired), and
+Workers preview URLs are unavailable to it regardless, because Cloudflare
+generates none for a Worker that implements a Durable Object (D36 — which is
+why pull-request previews are a separate Worker per PR with no bindings).
 
 ---
 

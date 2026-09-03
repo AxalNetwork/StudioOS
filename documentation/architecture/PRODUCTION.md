@@ -91,19 +91,21 @@ app.axal.vc (custom domain)` lines are what settle who serves the hosts.
 That has been the shape since 2026-09-01 (`1d320dda9`, "Remove stale
 documentation asset files", which replaced the Pages cutover's three
 path-scoped apex routes with the whole-host `axal.vc` custom domain). The
-`studioos` Cloudflare Pages project (`studioos-2p8.pages.dev`) still receives
-a build from `cloudflare-pages-deploy.yml` on every push, but it serves no
-production hostname: it is a mirror, and a "Production" deployment in its
-dashboard is not evidence that the Worker shipped (on 2026-09-03 the mirror
-advanced twice while both hosts stayed on the previous build, because the
-Worker deploy failed in its migration step). Its retirement is
-`documentation/architecture/UNRESOLVED_ITEMS.md` U9.
+`studioos` Cloudflare Pages project (`studioos-2p8.pages.dev`) kept receiving
+a mirror build from `cloudflare-pages-deploy.yml` until 2026-09-03, when the
+mirror, that workflow and the `_worker.js` that ran only there were retired
+(`DECISIONS.md` D36) — its dashboard had shown "Production" deployments for
+two commits whose Worker deploy failed in the migration step. Nothing ships a
+build anywhere but the Worker. The static security headers on assets-binding
+responses come from `docs/_headers` (built from `frontend/public/_headers`,
+read natively by Workers static assets), and `scripts/check-spa-live.mjs`
+asserts them on every shell route after a deploy.
 
 `docs/` is still committed by hand, for review and for
 `scripts/check-docs-fresh.mjs`. **No workflow commits it** — `ci.yml` builds
 the frontend to typecheck it and then *validates* that the committed `docs/`
-matches, but never writes the directory back — while both CI deploy workflows
-*rebuild* it from source at deploy time, so the committed bytes are what
+matches, but never writes the directory back — while the deploy workflow
+*rebuilds* it from source at deploy time, so the committed bytes are what
 reviewers read, not necessarily what ships (DEPLOY.md §2.1). Run the build at
 the REPO ROOT (`npm run build`, which also prerenders the crawlable routes)
 and commit the result in the same PR as the source change.
@@ -178,7 +180,7 @@ npx wrangler deployments list --config ../wrangler.toml --env production
 npx wrangler rollback <DEPLOYMENT_ID> --config ../wrangler.toml --env production
 
 # Then revert the source on main. Reverting the docs/ commit alone changes
-# nothing live: both deploy workflows rebuild docs/ from source at deploy
+# nothing live: the deploy workflow rebuilds docs/ from source at deploy
 # time, and the next push to main would re-ship the bad build.
 git revert <SHA-of-the-source-change>
 git push

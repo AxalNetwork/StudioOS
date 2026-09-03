@@ -3,8 +3,8 @@
  *
  * Prod serves the SPA from `docs/` through the Cloudflare Worker's `[assets]`
  * binding on both `axal.vc` and `app.axal.vc` (whole-host Workers Custom
- * Domains since 2026-09-01, 1d320dda9); the Cloudflare Pages project is a
- * mirror of the same `docs/` with no production hostname. A fresh `vite build`
+ * Domains since 2026-09-01, 1d320dda9; the Cloudflare Pages mirror of the
+ * same `docs/` was retired on 2026-09-03). A fresh `vite build`
  * wipes `docs/` (`emptyOutDir`) and emits new content-hashed `assets/*`
  * filenames. Immediately after a Worker deploy, a client that still holds the
  * PREVIOUS build's `index.html` (an open tab, a cached shell) requests the

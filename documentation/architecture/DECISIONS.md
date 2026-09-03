@@ -1513,6 +1513,13 @@ that `docs/_worker.js` sets on the Pages mirror and
 `middleware/securityHeaders.ts` sets on API responses cannot be read from
 this repository. That is U10, with its one-line live check
 (`curl -sI https://axal.vc/login`); this decision claims neither answer.
+
+**Update, later on 2026-09-03.** U9 is decided: D36 retires the mirror, its
+workflow and `_worker.js`, restores `frontend/public/_headers` as the
+mechanism for the static headers, and turns U10 into a measurement made by
+`scripts/check-spa-live.mjs` on every shell route. The paragraphs above stay
+as the record of what was true when this was written.
+
 ### D35. The Super Admin is an elevation on `admin`, held by one account, with a per-browser HQ view
 
 **RESOLVED (2026-09-03; #413, #414, #415, #416, #417, #418).** The brief asked for
@@ -1556,4 +1563,57 @@ are recorded here so they are not re-learned: `WorkerRail` destructures
 `unavailable` entries as `[title, detail]` pairs (a bare string renders as its
 first two characters), and a tile's note must never assert a state — "none",
 "every admin enrolled" — while the read behind it failed. Both are guarded.
+
+### D36. Workers Static Assets is the only host: the Pages mirror is retired, `_headers` carries the static security headers, and pull-request previews are bindings-free Workers
+
+**RESOLVED (2026-09-03; the Pages retirement PR, then the preview PR).** Asked
+what the plan was for hosting the website and platform on Cloudflare Pages
+"and not Jekyll pages ever again", the owner chose Workers Static Assets — the
+shape production has had since `1d320dda9` (D34) and the one Cloudflare's own
+documentation now recommends for new projects. Three consequences.
+
+1. **The mirror is gone.** `.github/workflows/cloudflare-pages-deploy.yml`,
+   `frontend/public/_worker.js` (the Pages Advanced Mode entry that ran only
+   there) and the `.assetsignore` step that hid it from the Worker upload are
+   deleted; U9 is resolved. The Pages project (`studioos-2p8.pages.dev`) is
+   deleted from the dashboard by the owner — it shares the name `studioos`
+   with the Worker, so the entry of type *Pages* is the one to remove. The
+   GitHub-Pages-only remnants nothing reads went with it: `build-pages.sh`,
+   `frontend/public/404.html` and the `?p=` path-restore shim in
+   `frontend/index.html`, which rewrote any `/x?p=…` URL to a different path
+   before React booted (no live link carried `?p=`; `?ref=`, `?lane=`,
+   `?plan=` and `?next=` do). `CNAME` and `.nojekyll` stay until GitHub Pages
+   is switched off in the repository settings.
+2. **`_headers` is the mechanism, and the smoke check is the proof.** Workers
+   static assets read `_headers` natively and apply it to every response the
+   `[assets]` binding serves — the SPA shell on every path outside
+   `run_worker_first` — and not to responses the Worker script generates,
+   which already carry `securityHeaders.ts`. `frontend/public/_headers` is
+   restored from the copy #371 deleted, with the same values `_worker.js` set
+   (HSTS, nosniff, `X-Frame-Options: DENY`, the laxer `Referrer-Policy` the
+   two-tier rule requires, the Permissions-Policy) and, deliberately, no CSP
+   (nonce-based on the Worker; an inline boot watchdog in the shell).
+   `frontend/test/apex_truth_doc.test.mjs` pins the values to the
+   middleware's so they cannot drift a third time, and
+   `scripts/check-spa-live.mjs` asserts them on every shell route, so U10 is
+   answered by a run rather than a sentence. A `/assets/*` rule would be
+   inert (those responses come from `index.ts`) and is not written.
+3. **Previews are a per-PR Worker with no bindings, not preview URLs.** The
+   option first offered — Workers preview URLs through Workers Builds — does
+   not apply here: Cloudflare states that preview URLs are not generated for
+   Workers that implement a Durable Object, and `studioos` exports
+   `PipelineRoom` and `OnboardingChat`; Workers Builds' pull-request comment
+   depends on the same URLs. What can exist with nothing provisioned and no
+   production data in reach is a Worker per pull request (`studioos-pr-<n>`
+   from `wrangler.pr-preview.toml`: no bindings, `docs/` with the
+   single-page-application fallback, and a script of a few lines that does
+   one thing — turn the fallback HTML for a missing `/assets/*` file into a
+   real 404, as `index.ts` does on production, because an assets-only
+   Worker serves the shell for every unmatched path, navigation or not),
+   deployed on open and deleted on close, its `workers.dev` URL posted as
+   one sticky comment. `/api/*` is a 404 there, exactly as it was on the
+   mirror. A full-stack preview needs the `[env.preview]` placeholders
+   provisioned (D1, two KV namespaces, R2 buckets, and a queue a second
+   Worker could not share as a consumer) plus a rule for one shared preview
+   database across branches; that is unbuilt, not forbidden.
 

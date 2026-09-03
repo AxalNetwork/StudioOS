@@ -251,7 +251,8 @@ already produced one false "production auth is broken" report.
   message says nothing about routing). Since then `npm run deploy` ships the
   SPA and the API to both hosts together and there is no separate apex step;
   who serves a host is settled by the deploy log's `Deployed studioos
-  triggers` lines and the Pages dashboard's Domains line, never by prose.
+  triggers` lines, never by prose (the Cloudflare Pages mirror that once
+  shadowed it was retired on 2026-09-03, `DECISIONS.md` D36).
   `OAUTH_CALLBACK_BASE_URL` stays pinned until every redirect URI is
   registered; flipping it early breaks Google sign-in for everyone at once.
 - **A production incident** — `documentation/operations/INCIDENT_RESPONSE.md`.

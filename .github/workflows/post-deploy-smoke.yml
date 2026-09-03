@@ -12,10 +12,13 @@ name: post-deploy SPA smoke
 # scripts/check-spa-live.mjs as its `postdeploy` hook) or from CI via
 # cloudflare-worker-deploy.yml, which does NOT run it. So this workflow is the
 # synthetic/on-demand layer:
-# - workflow_dispatch: re-run by hand right after a deploy. A green
-#   cloudflare-pages-deploy.yml run or a "Production" row in the Pages
-#   dashboard is not evidence either host updated — that project is a mirror
-#   serving no production hostname; this probe is.
+# - workflow_dispatch: re-run by hand right after a deploy. This probe is the
+#   evidence a host updated — the deploy run's closing "Deployed studioos
+#   triggers" lines say what was bound, this says what is being served — and
+#   since 2026-09-03 it also asserts the static security headers that
+#   docs/_headers sets on every SPA shell route, so
+#   documentation/architecture/UNRESOLVED_ITEMS.md U10 is answered by this
+#   run, not by a document.
 # - schedule: catch a site that goes blank between deploys (cache purge, asset
 #   rot, Worker rollback, etc.).
 #

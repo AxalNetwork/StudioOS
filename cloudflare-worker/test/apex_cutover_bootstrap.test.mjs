@@ -110,12 +110,15 @@ test('both deploy targets keep the apex route table to the audited allowlist', a
 
   // This assertion was INVERTED on 2026-08-31, and the inversion is the whole
   // point. It used to enforce a FLOOR (">= 68 entries; the table must never
-  // shrink"), because the Worker served apex HTML and a missing route was a
-  // 404. Cloudflare Pages now owns the apex frontend, so a small table is
-  // correct and GROWING it is the hazard: re-adding a page or asset route
-  // pairs Pages-served HTML with a different Worker asset build, the entry
-  // module 404s, and the boot watchdog spins on `?__reboot=`. That is not
-  // hypothetical — it is what took the apex down before this was rewritten.
+  // shrink"), because the Worker served apex HTML through an explicit route
+  // table and a missing route was a 404. Cloudflare Pages owned the apex
+  // frontend for that one day; today the Worker answers every path of both
+  // hosts through whole-host custom domains (the Pages mirror was retired on
+  // 2026-09-03), so a small table is correct and GROWING it is the hazard:
+  // re-adding a page or asset route pairs the HTML with a different Worker
+  // asset build, the entry module 404s, and the boot watchdog spins on
+  // `?__reboot=`. That is not hypothetical — it is what took the apex down
+  // before this was rewritten.
   //
   // So: an exact allowlist, not a bound in either direction. The floor also
   // carried a hardcoded 68 that was 166 by the time it mattered, which is the

@@ -14,9 +14,10 @@ expect, and what we ask of you.
 We operate a single production deployment of StudioOS. The `studioos`
 Cloudflare Worker serves both `axal.vc` and `app.axal.vc` as whole-host
 custom domains — the SPA from its assets binding and the API at
-`/api/*` on either host — with one build behind both. The Cloudflare
-Pages project (`studioos-2p8.pages.dev`) is a mirror of the same
-bundle and serves no production hostname. Everything is continuously updated;
+`/api/*` on either host — with one build behind both, and the static
+responses carrying the headers `docs/_headers` declares. There is no
+Cloudflare Pages deployment (the mirror was retired on 2026-09-03).
+Everything is continuously updated;
 there is no notion of a "supported version" for end users. Researchers should target the live production surface or
 a publicly available preview environment.
 

@@ -77,10 +77,13 @@
   </script>
   <script data-cfasync="false">
     // Task #37 — production boot watchdog (un-bundled, so it runs even when the
-    // entry module 404s). The recurring Safari blank page happens when the apex
-    // root HTML (served by GitHub Pages) references a build hash the Worker no
-    // longer serves: the hashed entry chunk fails to load, so main.jsx — and
-    // its in-app stale-chunk recovery — never runs and the page stays blank.
+    // entry module 404s). The recurring Safari blank page happens when a cached
+    // or still-open shell references a build hash the Worker no longer serves
+    // (until 2026-09-01 the shell came from GitHub Pages and the hashes from
+    // the Worker, so the two could skew on every deploy; now both come from one
+    // `wrangler deploy` and only stale clients are in play): the hashed entry
+    // chunk fails to load, so main.jsx — and its in-app stale-chunk recovery —
+    // never runs and the page stays blank.
     // This inline script lives in the HTML itself, so it always executes,
     // detects the failure, clears the service worker + caches ONCE, and reloads
     // with a cache-busting query so Safari re-fetches fresh HTML instead of its
@@ -194,18 +197,6 @@
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" /></noscript>
   <!-- Turnstile is loaded on-demand (frontend/src/lib/turnstile.js) only by the
        few forms that render a widget, instead of globally on every page. -->
-
-  <script data-cfasync="false">
-    // GitHub Pages SPA — restore path encoded by 404.html
-    (function() {
-      var q = window.location.search;
-      if (q && q.indexOf('?p=') === 0) {
-        var decoded = decodeURIComponent(q.slice(3)).replace('~and~', '?');
-        var hash = window.location.hash || '';
-        window.history.replaceState(null, null, decoded + hash);
-      }
-    })();
-  </script>
   <script data-cfasync="false" type="module" crossorigin src="/assets/index-CmeaUZ-G.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-Dd_uD5pT.js">
   <link rel="modulepreload" crossorigin href="/assets/react-vendor-CanlMnhD.js">

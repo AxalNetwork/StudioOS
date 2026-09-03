@@ -3,7 +3,7 @@
 - [Test & tooling quirks](test-tooling-quirks.md) — nodejs-22 required; wrangler needs Node 22+; cloudflare-worker install needs --legacy-peer-deps; node:sqlite binds ?N by occurrence; Vite 8 uses oxc.target not esbuild.target; after fresh npm install clear frontend/node_modules/.vite or lazy chunks get "Importing a module script failed" / duplicate-React errors.
 - [GitHub access](github-access.md) — repo git OAuth is broken; use the GitHub connector via /tmp-installed @replit/connectors-sdk (listConnections('github') returns empty).
 - [Spin-Out Lab conventions](spinout-lab-conventions.md) — /spinout-lab: marketing when logged out, full app shell when logged in; its Worker test slices exact source strings, so new /state fields go in the wire handler.
-- [Apex asset ownership](apex-asset-ownership.md) — Cloudflare Pages must own both axal.vc HTML and /assets/*; Worker interception creates hash skew and blank pages.
+- [Apex asset ownership](apex-asset-ownership.md) — SUPERSEDED 2026-09-03 (read `CLAUDE.md` fact 4, `DECISIONS.md` D34/D36): since 2026-09-01 the `studioos` Worker serves both hosts' HTML and /assets/* from one `[assets]` build, and Cloudflare Pages is retired. The hazard that survives is the inverse — never add a path-scoped apex route.
 - [React Router redirect races](router-redirect-races.md) — guard redirects re-fire on urgent re-renders after auth/role flips; keep pending nav targets alive until the URL arrives.
 - [Owner work style](owner-work-style.md) — cancels queued follow-up tasks; wants direct in-session fixes, propose sparingly.
 - [Dev/Worker API parity](dev-worker-api-parity.md) — capability gaps must render as unavailable, never as empty data or invented values.
@@ -14,7 +14,7 @@
 - [Cloudflare cutover observability](cloudflare-cutover-observability.md) — Adaptive HTTP status counts work, but edge-TTFB fields do not; combine five-minute 5xx buckets with route/API probes.
 - [Production schema ownership](production-schema-ownership.md) — request-time DDL is dev/preview-only; production D1 migrations must create public-route schemas before deployment.
 - [Production auth verification](production-auth-verification.md) — do not assume the workspace JWT secret can mint tokens accepted by the deployed Worker; use a real production session or prove secret parity first.
-- [Pages build and routing](pages-build-routing.md) — Pages must install frontend dependencies explicitly; use advanced asset handling for SPA fallback plus real asset 404s.
+- [Pages build and routing](pages-build-routing.md) — SUPERSEDED 2026-09-03: there is no Cloudflare Pages project (retired, `DECISIONS.md` D36); the SPA fallback and the real asset 404s are the Worker's `not_found_handling` plus `index.ts`'s `/assets/*` handling, and the static headers are `frontend/public/_headers`.
 - [Investor deal scoping](investor-deal-scoping.md) — investor deal lists and deal-room reads must use the same relationship predicate in FastAPI and Worker.
 - [Desk edge-to-edge overrides](desk-edge-to-edge-overrides.md) — outer spacing resets must come after base desk rules or use higher specificity, otherwise later padding and max-width declarations restore the gap.
 - [Build cadence data honesty](build-cadence-data-honesty.md) — calendar events and roadmap changes are not operating rituals or review outcomes without explicit cadence records.

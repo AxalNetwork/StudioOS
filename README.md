@@ -9,7 +9,7 @@ GP LLC** (Delaware) — the GP signs no platform contracts and is not the
 operating entity. See [`documentation/architecture/LEGAL_ENTITIES.md`](./LEGAL_ENTITIES.md) for the
 canonical entity map.
 
-> **Architecture in one sentence:** The `studioos` Cloudflare Worker (`cloudflare-worker/`) serves both `axal.vc` and `app.axal.vc` as whole-host custom domains — the React SPA (`frontend/`, built into `docs/`) from its `[assets]` binding and the API at `/api/*` — with one build behind both hosts; D1 is the canonical user store; the Cloudflare Pages project is only a mirror of `docs/` with no production hostname; and the FastAPI in `backend/` exists only as a Replit dev convenience and is **never deployed**. Read [`CLAUDE.md`](./CLAUDE.md) before contributing. The `app.axal.vc` cutover runbook at [`documentation/architecture/MIGRATE_TO_CUSTOM_DOMAIN.md`](./documentation/architecture/MIGRATE_TO_CUSTOM_DOMAIN.md) is a dated record of the 2026-05 migration, not the current topology.
+> **Architecture in one sentence:** The `studioos` Cloudflare Worker (`cloudflare-worker/`) serves both `axal.vc` and `app.axal.vc` as whole-host custom domains — the React SPA (`frontend/`, built into `docs/`) from its `[assets]` binding and the API at `/api/*` — with one build behind both hosts; D1 is the canonical user store; there is no Cloudflare Pages deployment any more (the mirror was retired on 2026-09-03); and the FastAPI in `backend/` exists only as a Replit dev convenience and is **never deployed**. Read [`CLAUDE.md`](./CLAUDE.md) before contributing. The `app.axal.vc` cutover runbook at [`documentation/architecture/MIGRATE_TO_CUSTOM_DOMAIN.md`](./documentation/architecture/MIGRATE_TO_CUSTOM_DOMAIN.md) is a dated record of the 2026-05 migration, not the current topology.
 
 ## Repo layout
 
@@ -19,7 +19,7 @@ canonical entity map.
 | `cloudflare-worker/`| **Production API** — Hono on Cloudflare Workers, D1, KV, R2, Queues, Vectorize, Durable Objects |
 | `backend/`          | FastAPI (Python) — **Replit-dev-only**, not deployed to production    |
 | `attached_assets/`  | Design specs, screenshots, methodology docs, legal templates          |
-| `docs/`             | Built frontend bundle (Vite output) — the Worker's `[assets]` directory, mirrored to Cloudflare Pages |
+| `docs/`             | Built frontend bundle (Vite output) — the Worker's `[assets]` directory; its `_headers` sets the static security headers |
 
 ## Local development on Replit
 
