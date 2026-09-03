@@ -4,6 +4,14 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Migration 200 carried `BEGIN;`/`COMMIT;`, which D1 rejects — stripped, deferred foreign keys, guarded (PR 0c)
+
+The deploy that ran when #414 merged (Actions run 33738772717) applied 199 — `super_admins` now exists in production — and then failed at `200_service_offerings_shape.sql` with D1's "use state.storage.transaction() … instead of the SQL BEGIN TRANSACTION or SAVEPOINT statements", the rule GOTCHAS has carried since 141 hit it in July. 201–207, the advisor stores and the single-holder seed, stayed pending behind it.
+
+- `200_service_offerings_shape.sql` — `BEGIN;`/`COMMIT;` removed (a `--file` batch is already one atomic transaction on D1); `PRAGMA foreign_keys=OFF/ON` replaced by `PRAGMA defer_foreign_keys = TRUE`, which SQLite honours inside a transaction where the `foreign_keys` toggle is a no-op — the idiom `util/usersRoleRebuild.ts` already uses; the rebuild restructured from fill-scratch-then-rename to snapshot → drop → recreate under the same name → copy back, because a renamed scratch table never clears SQLite's deferred foreign-key counter and the batch dies at its end with `FOREIGN KEY constraint failed` (caught by the local reproduction, not by production). Reproduced against a local D1 seeded in production's t13 shape: the old file fails with D1's transaction message, the rename variant fails with the FK message, the shipped file applies, keeps the row a user owns, parks the orphan, leaves `service_engagements.offering_id` resolving with its `REFERENCES service_offerings(id)` clause intact, and refuses to run twice.
+- `frontend/test/migration_column_shapes.test.mjs` — fails any migration (039 excepted, ledger-recorded and never re-run) that carries BEGIN / COMMIT / END TRANSACTION / SAVEPOINT / RELEASE / ROLLBACK or a `PRAGMA foreign_keys` toggle; pins 200's `defer_foreign_keys`.
+- `GOTCHAS.md` (the BEGIN rule gains the second incident and the local-reproduction recipe), `DEPLOY.md` §4(c) (a failed file is rolled back, not half-applied).
+
 ## Super Admin — `users` is at D1's column cap, so the elevation moves to a side table (PR 0b)
 
 The first deploy that ran migrations before shipping (#413, Actions run 33734906029) failed at `199_super_admin.sql`: `ALTER TABLE users ADD COLUMN is_super_admin` hit D1's 100-column ceiling (`too many columns on sqlite_altertab_users`), which `GOTCHAS.md` had already recorded together with the fix. Because the runner is forward-only, 199 also held 200–207 out of production. The same run settled one open question: through wrangler, production's `schema_migrations` is the runner's own shape with 200 rows applied — the foreign `(name, applied_at)` table seen through the Cloudflare connection that morning is unexplained and the runner's refusal has never fired.

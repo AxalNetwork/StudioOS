@@ -169,9 +169,14 @@ verify them by hand. Run it **once per environment**. Afterwards, plain runs
 apply only genuinely new migrations.
 
 **(c) A multi-statement file failed partway.**
-Statements are not wrapped in one transaction, so the earlier ones landed and
-the file is not in the ledger. Inspect the live schema, then either make the
-file safely re-runnable or leave it and write a forward fix-up migration.
+D1 applies a `--file` batch as one implicit transaction and rolls the whole
+file back on the first error, so nothing of it landed and it is not in the
+ledger (GOTCHAS has the 2026-09-03 worked example, with the seeded local
+reproduction showing the source table untouched). Fix the file, prove it
+against a local D1 the way GOTCHAS describes, and re-run. The one exception
+is a file someone applied by hand statement-by-statement: inspect the live
+schema first, then either make the file safely re-runnable or write a
+forward fix-up.
 
 **(d) `schema_migrations exists but is not this runner's ledger`.**
 The target holds a `schema_migrations` with other columns. A read through the

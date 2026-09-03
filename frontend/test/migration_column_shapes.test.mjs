@@ -140,7 +140,7 @@ test('200 fails before it mutates anything on a database already in the target s
 });
 
 test('200 preserves the ids the service_engagements foreign key points at', () => {
-  const insert = /INSERT INTO service_offerings_new\s*\(([^)]*)\)/i.exec(codeOf(M200));
+  const insert = /INSERT INTO service_offerings\s*\(([^)]*)\)/i.exec(codeOf(M200));
   assert.ok(insert, 'the copy INSERT must name its columns explicitly');
   assert.match(insert[1], /\bid\b/,
     'id must be copied, not regenerated — service_engagements.offering_id references it');
@@ -158,17 +158,24 @@ test('200 archives the rows it cannot migrate instead of dropping them', () => {
     code.indexOf('service_offerings_orphans_pre200') < code.indexOf('DROP TABLE service_offerings'),
     'the archive has to be written while the source table still exists',
   );
-  assert.ok(
-    code.indexOf('DROP TABLE service_offerings') < code.indexOf('RENAME TO service_offerings'),
-    'drop-then-rename: a RENAME TO rewrites the REFERENCES clause in '
-    + 'service_engagements, so renaming the old table aside repoints the FK at it',
-  );
+  assert.doesNotMatch(code, /RENAME TO/i,
+    'no rename: a RENAME TO rewrites the REFERENCES clause in service_engagements, '
+    + 'and a scratch table renamed into place never clears the deferred FK counter');
+  const drop = code.indexOf('DROP TABLE service_offerings;');
+  const recreate = code.indexOf('CREATE TABLE service_offerings (');
+  const copyBack = code.search(/INSERT INTO service_offerings\s*\(/);
+  assert.ok(drop > -1 && recreate > drop && copyBack > recreate,
+    'drop, recreate under the same name, then copy back: with foreign keys deferred, '
+    + 'only INSERTs into the table the constraint names, after the drop, settle the check');
+  assert.match(code, /CREATE TABLE service_offerings_pre200_snapshot AS SELECT \* FROM service_offerings/,
+    'the rows are snapshotted before the drop and copied back from the snapshot');
+  assert.ok(code.indexOf('service_offerings_pre200_snapshot AS SELECT') < drop, 'snapshot before the drop');
 });
 
 test('the shape 200 builds is the shape routes/services.ts writes', () => {
   // The drift behind all of this was a route and a table disagreeing with
   // nothing in the build to notice. This is that check.
-  const created = /CREATE TABLE service_offerings_new \(([\s\S]*?)\n\);/.exec(codeOf(M200));
+  const created = /CREATE TABLE service_offerings \(([\s\S]*?)\n\);/.exec(codeOf(M200));
   assert.ok(created, 'could not read the target shape out of 200');
   const columns = new Set(
     created[1].split('\n')
@@ -196,4 +203,35 @@ test('the op.service checklist item queries a table and column that exist', () =
   assert.ok(!/FROM service_offerings WHERE user_id/.test(src),
     'service_offerings.user_id exists in neither declared shape');
   assert.match(src, /FROM service_offerings WHERE owner_user_id = \?/);
+});
+
+test('no migration carries a transaction statement or a foreign_keys toggle D1 cannot honour', () => {
+  // D1 rejects BEGIN / COMMIT / SAVEPOINT outright ("use
+  // state.storage.transaction() …"), runs a `--file` batch as one implicit
+  // transaction, and inside that transaction SQLite ignores
+  // `PRAGMA foreign_keys`. 141 hit the first on 2026-07-08 and 200 hit it
+  // again on 2026-09-03 (deploy run 33738772717), holding 201–207 out of
+  // production behind it. 039 predates the rule and is ledger-recorded, so it
+  // is never re-run (GOTCHAS); everything else has to be clean, and a rebuild
+  // that needs foreign keys out of the way defers them to commit instead.
+  const LEGACY = new Set(['039_project_cascade.sql']);
+  const offenders = [];
+  for (const f of readdirSync(M).filter((f) => /^\d+_.*\.sql$/.test(f) && !LEGACY.has(f))) {
+    const raw = read(`${M}/${f}`);
+    // Wrangler's own pre-flight (src/d1/trimmer.ts) reads the RAW file,
+    // comments included: it strips one "BEGIN TRANSACTION;" / "COMMIT;" pair
+    // and refuses the file if the long form still appears anywhere. A comment
+    // that spells it is enough to stop a deploy.
+    if (raw.includes('BEGIN TRANSACTION')) offenders.push(`${f}: raw text spells the long form of the opening keyword (wrangler refuses the file)`);
+    const code = raw.replace(/--.*$/gm, '');
+    for (const stmt of code.split(';')) {
+      const s = stmt.trim();
+      if (/^(BEGIN|COMMIT|END\s+TRANSACTION|SAVEPOINT|RELEASE|ROLLBACK)\b/i.test(s)) offenders.push(`${f}: ${s.slice(0, 40)}`);
+      if (/^PRAGMA\s+foreign_keys\s*=/i.test(s)) offenders.push(`${f}: ${s.slice(0, 40)}`);
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'D1 rejects transaction statements and ignores PRAGMA foreign_keys inside the batch — use PRAGMA defer_foreign_keys = TRUE');
+  assert.match(codeOf(M200), /PRAGMA\s+defer_foreign_keys\s*=\s*TRUE/i,
+    '200 drops and renames a table other tables reference; the check has to wait for commit');
 });
