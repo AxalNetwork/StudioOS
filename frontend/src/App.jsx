@@ -165,6 +165,7 @@ const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
 const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
 const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
+const HqHomePage = lazy(() => import('./pages/hq/HqHomePage'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
@@ -1137,7 +1138,7 @@ function AppInner() {
     if (mode === 'admin' && typeof opts.hq === 'boolean') {
       setHqView(opts.hq);
       writeHqView(opts.hq);
-      if (opts.hq) defaultPath = '/admin';
+      if (opts.hq) defaultPath = '/hq';
     }
     navigate(defaultPath);
   };
@@ -1215,7 +1216,7 @@ function AppInner() {
     // franchisor works, not in the shell they were checking.
     setHqView(true);
     writeHqView(true);
-    navigate('/admin');
+    navigate(isSuperAdminUser(origUser) ? '/hq' : '/admin');
     // T20 — restore the real admin's freshest profile immediately rather
     // than wait for the next throttled re-sync.
     refresh({ force: true });
@@ -1665,6 +1666,9 @@ function AppInner() {
           franchisor, with the holder console above the accounts. */}
       <Route path="/admin/contracts" element={guard(['admin'], hqOnly(<HqContractsPage />))} />
       <Route path="/admin/accounts" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />
+      {/* HQ · Home (canvas H1). The whole business on one screen; every
+          per-subsidiary figure says Not recorded until accounts carry a licence. */}
+      <Route path="/hq" element={guard(['admin'], hqOnly(<HqHomePage />))} />
       <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
       {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
           as the AdminPage 'lab-applications' tab). */}

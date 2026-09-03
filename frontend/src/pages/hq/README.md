@@ -12,6 +12,7 @@ re-checks with `requireSuperAdmin` on every call regardless.
 | `SuperAdminHolders.jsx` | The holder console: who holds the elevation, grant, revoke. Writes need TOTP + a recent step-up; the last active holder cannot be revoked. |
 | `AccountsPage.jsx` | The HQ "Team" row (canvas H4): the holder console above the Admin Console's Users panel, locked to that section. |
 | `ContractsPage.jsx` | The HQ "Contracts" row: the master template library the platform holds. The doc-type registry the canvas draws above it has no store, and the page says so. |
+| `HqHomePage.jsx` | The HQ "Home" row (canvas H1) at `/hq`: totals, one health card per licence, the licence trail and renewals, over `GET /api/admin/hq/overview`. The tenant switcher narrows this page only. |
 
 ## Rules
 

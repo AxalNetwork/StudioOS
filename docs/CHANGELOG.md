@@ -4,6 +4,13 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Super Admin — HQ Home at /hq (PR 2 of 4)
+
+- Worker `routes/admin_hq.ts`, `GET /api/admin/hq/overview` (`requireSuperAdmin`, mounted before the `/api/admin` catch-all): active accounts by role, seats licensed, countries held, every licence hydrated (reusing `admin_licences.hydrate`), renewals due within 60 days, suspended licences, the last 20 `licence_events`, the ticket queue by status (reported unreadable, never zeroed, when the table cannot be read), `escalations_available: false`, and the same `DERIVED_UNAVAILABLE` block `GET /licence/mine` sends — now exported from `routes/licence.ts` so there is one wording.
+- `pages/hq/HqHomePage.jsx` at `/hq` (canvas H1): the HQ bar with the tenant switcher (narrows the loaded payload only; says so), five totals, one health card per licence, escalations as Not recorded with the reason, the licence trail and renewals, `WorkerRail role="super_admin"`. Every per-subsidiary figure — accounts, MTD revenue, backlog, utilisation — is `<Unrecorded />`; a failed request is unreadable, not an empty platform; an empty ledger says so.
+- `sidebarConfig.js` Home → `/hq`; "Super Admin" in View-as and exit-impersonation for a holder land on `/hq`. `api.js` `hqOverview`.
+- Tests: `hq_home.test.mjs` (row and route, single endpoint with no server-side tenant, Not recorded per subsidiary, no `|| 0`, unreadable ≠ empty, super-gated endpoint with the shared honesty block, mount order, rail copy); `super_admin.test.ts` pins the endpoint.
+
 ## Super Admin — the mode: bar, View-as, seven HQ rows, HQ-only notices (PR 1 of 4)
 
 - `frontend/src/lib/shellRole.js` (new): `shellRoleFor(role, user, hqView)`, `isSuperAdminUser`, and the `hqView` localStorage toggle — moved out of `App.jsx` so `SidebarNav` and tests import the same selector. It names a sidebar, never a permission: `'super_admin'` appears in no `guard([...])` array and `lib/activeRole.js` is untouched.
@@ -13,6 +20,24 @@
 - `workspaces/shellConfig.js`: `ACCENT.super_admin` (oxblood) for `WorkerRail role="super_admin"`.
 - Worker `routes/admin.ts`: `POST /impersonate/:userId` refuses a Super Admin target unless the actor is one (`cannot_impersonate_super_admin`) — the minted token carries the target's powers.
 - Tests: `super_admin_shell.test.mjs` rewritten around the selector, the row/route rule, the access rule, the bar, the notice wrapping and the accent; `super_admin.test.ts` pins the impersonation refusal; `migration_column_shapes.test.mjs` follows the selector to `lib/shellRole.js`.
+## Migration 200 carried `BEGIN;`/`COMMIT;`, which D1 rejects — stripped, deferred foreign keys, guarded (PR 0c)
+
+The deploy that ran when #414 merged (Actions run 33738772717) applied 199 — `super_admins` now exists in production — and then failed at `200_service_offerings_shape.sql` with D1's "use state.storage.transaction() … instead of the SQL BEGIN TRANSACTION or SAVEPOINT statements", the rule GOTCHAS has carried since 141 hit it in July. 201–207, the advisor stores and the single-holder seed, stayed pending behind it.
+
+- `200_service_offerings_shape.sql` — `BEGIN;`/`COMMIT;` removed (a `--file` batch is already one atomic transaction on D1); `PRAGMA foreign_keys=OFF/ON` replaced by `PRAGMA defer_foreign_keys = TRUE`, which SQLite honours inside a transaction where the `foreign_keys` toggle is a no-op — the idiom `util/usersRoleRebuild.ts` already uses; the rebuild restructured from fill-scratch-then-rename to snapshot → drop → recreate under the same name → copy back, because a renamed scratch table never clears SQLite's deferred foreign-key counter and the batch dies at its end with `FOREIGN KEY constraint failed` (caught by the local reproduction, not by production). Reproduced against a local D1 seeded in production's t13 shape: the old file fails with D1's transaction message, the rename variant fails with the FK message, the shipped file applies, keeps the row a user owns, parks the orphan, leaves `service_engagements.offering_id` resolving with its `REFERENCES service_offerings(id)` clause intact, and refuses to run twice.
+- `frontend/test/migration_column_shapes.test.mjs` — fails any migration (039 excepted, ledger-recorded and never re-run) that carries BEGIN / COMMIT / END TRANSACTION / SAVEPOINT / RELEASE / ROLLBACK or a `PRAGMA foreign_keys` toggle; pins 200's `defer_foreign_keys`.
+- `GOTCHAS.md` (the BEGIN rule gains the second incident and the local-reproduction recipe), `DEPLOY.md` §4(c) (a failed file is rolled back, not half-applied).
+
+## Super Admin — `users` is at D1's column cap, so the elevation moves to a side table (PR 0b)
+
+The first deploy that ran migrations before shipping (#413, Actions run 33734906029) failed at `199_super_admin.sql`: `ALTER TABLE users ADD COLUMN is_super_admin` hit D1's 100-column ceiling (`too many columns on sqlite_altertab_users`), which `GOTCHAS.md` had already recorded together with the fix. Because the runner is forward-only, 199 also held 200–207 out of production. The same run settled one open question: through wrangler, production's `schema_migrations` is the runner's own shape with 200 rows applied — the foreign `(name, applied_at)` table seen through the Cloudflare connection that morning is unexplained and the runner's refusal has never fired.
+
+- `cloudflare-worker/sql/migrations/199_super_admin.sql` — rewritten before it applied anywhere that matters: `CREATE TABLE IF NOT EXISTS super_admins (user_id INTEGER PRIMARY KEY …)`, the `user_google_links` / `mi_pro_subscriptions` shape. No backfill; the holder is 207's decision.
+- `207_super_admin_single_holder.sql` — the single holder as a `DELETE` + `INSERT OR IGNORE` against the side table, idempotent, never touching `users`.
+- `cloudflare-worker/src/auth.ts` — `loadSuperAdminFlag` (one keyed lookup, fail-closed, logged) and `hydrateSuperAdmin` (admin accounts only; overwrites any `is_super_admin` a database may still carry from the old 199). `getCurrentUser` calls it beside the MI Pro hydration; `/me` and `isSuperAdmin` are unchanged consumers.
+- `routes/admin_super_admins.ts` — holders are the side table joined to `users`; a target's `is_super_admin` is derived from a `LEFT JOIN`; grant is an `INSERT OR IGNORE … WHERE LOWER(role) = 'admin'`, revoke a `DELETE`.
+- Guards: `cloudflare-worker/test/super_admin.test.ts` (199 creates the table and no longer widens `users`; nothing reads a `users` column; `getCurrentUser` hydrates; hydration overwrites; a failed read elevates nobody — the last three behavioural); `frontend/test/migration_column_shapes.test.mjs` fails any migration numbered above 198 that adds a column to `users`.
+- `GOTCHAS.md` (both bullets), `DEPLOY.md` §4(d) (adopt the legacy ledger only if a CI `dry-run` names it).
 
 ## Super Admin — make production migratable, then turn the elevation on (PR 0 of 4)
 

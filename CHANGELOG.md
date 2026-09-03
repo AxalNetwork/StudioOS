@@ -4,6 +4,13 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Super Admin — HQ Home at /hq (PR 2 of 4)
+
+- Worker `routes/admin_hq.ts`, `GET /api/admin/hq/overview` (`requireSuperAdmin`, mounted before the `/api/admin` catch-all): active accounts by role, seats licensed, countries held, every licence hydrated (reusing `admin_licences.hydrate`), renewals due within 60 days, suspended licences, the last 20 `licence_events`, the ticket queue by status (reported unreadable, never zeroed, when the table cannot be read), `escalations_available: false`, and the same `DERIVED_UNAVAILABLE` block `GET /licence/mine` sends — now exported from `routes/licence.ts` so there is one wording.
+- `pages/hq/HqHomePage.jsx` at `/hq` (canvas H1): the HQ bar with the tenant switcher (narrows the loaded payload only; says so), five totals, one health card per licence, escalations as Not recorded with the reason, the licence trail and renewals, `WorkerRail role="super_admin"`. Every per-subsidiary figure — accounts, MTD revenue, backlog, utilisation — is `<Unrecorded />`; a failed request is unreadable, not an empty platform; an empty ledger says so.
+- `sidebarConfig.js` Home → `/hq`; "Super Admin" in View-as and exit-impersonation for a holder land on `/hq`. `api.js` `hqOverview`.
+- Tests: `hq_home.test.mjs` (row and route, single endpoint with no server-side tenant, Not recorded per subsidiary, no `|| 0`, unreadable ≠ empty, super-gated endpoint with the shared honesty block, mount order, rail copy); `super_admin.test.ts` pins the endpoint.
+
 ## Super Admin — the mode: bar, View-as, seven HQ rows, HQ-only notices (PR 1 of 4)
 
 - `frontend/src/lib/shellRole.js` (new): `shellRoleFor(role, user, hqView)`, `isSuperAdminUser`, and the `hqView` localStorage toggle — moved out of `App.jsx` so `SidebarNav` and tests import the same selector. It names a sidebar, never a permission: `'super_admin'` appears in no `guard([...])` array and `lib/activeRole.js` is untouched.

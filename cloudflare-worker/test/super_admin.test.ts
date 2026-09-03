@@ -250,6 +250,15 @@ test('only a holder may impersonate a holder', () => {
     'the refusal must come before the token is minted');
 });
 
+test('the HQ overview is super-admin only, mounted before the catch-all, and says what it cannot count', () => {
+  const src = read('cloudflare-worker/src/routes/admin_hq.ts');
+  assert.doesNotMatch(src, /\brequireAdmin\b/);
+  assert.match(src, /await requireSuperAdmin\(c\)/);
+  assert.match(src, /\.\.\.DERIVED_UNAVAILABLE/);
+  const idx = read('cloudflare-worker/src/index.ts');
+  assert.ok(idx.indexOf("app.route('/api/admin/hq', adminHq)") < idx.indexOf("app.route('/api/admin', admin)"));
+});
+
 test('the SPA reaches the console through api.js', () => {
   const api = read('frontend/src/lib/api.js');
   assert.match(api, /superAdmins: \(\) => request\('\/admin\/super-admins'\)/);

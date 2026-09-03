@@ -85,10 +85,11 @@ export const SIDEBAR_GROUPS = {
   //   Team  → /admin/accounts, the cross-tenant accounts table with the holder
   //           console above it (canvas H4). /admin/team is the PUBLIC team-page
   //           editor — a different thing wearing the same word.
-  //   Home  → /admin until the HQ Home page lands; then /hq.
+  //   Home  → /hq, the HQ Home page (canvas H1). The Admin Console stays one
+  //           row away under Team, and in the admin group the holder keeps.
   super_admin: [
     { key: 'hq', label: 'HQ', items: [
-      { to: '/admin', icon: Shield, label: 'Home' },
+      { to: '/hq', icon: Shield, label: 'Home' },
       // The one row this tier exists for. Every route behind it is
       // super-admin-only server-side (routes/admin_licences.ts).
       { to: '/admin/licences', icon: Map, label: 'Licences' },
