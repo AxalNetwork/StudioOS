@@ -18,7 +18,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import {
@@ -79,30 +79,48 @@ test('no migration reads a shape-dependent column', () => {
 });
 
 test('the Super Admin migration is reachable behind a sequence that can apply', () => {
-  // 199 adds `users.is_super_admin`, the flag `shellRoleFor` keys the HQ shell
-  // on. The runner is forward-only and ordered, so 199 cannot land while any
-  // earlier pending file is unapplicable — which is how a broken 196 kept the
-  // Super Admin invisible in production rather than merely late.
+  // 199 creates `super_admins`, the side table `is_super_admin` — the flag
+  // `shellRoleFor` keys the HQ shell on — is hydrated from. The runner is
+  // forward-only and ordered, so 199 cannot land while any earlier pending
+  // file is unapplicable — which is how a broken 196 kept the Super Admin
+  // invisible in production rather than merely late.
   const seq = ['196_partner_company', '197_advisor_profile_company', '198_perk_company', '199_super_admin'];
   for (const name of seq) {
     assert.ok(read(`${M}/${name}.sql`).trim().length > 0, `${name}.sql is missing`);
   }
-  assert.match(read(`${M}/199_super_admin.sql`),
-    /ALTER TABLE users ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0/);
+  assert.match(read(`${M}/199_super_admin.sql`).replace(/--.*$/gm, ''),
+    /CREATE TABLE IF NOT EXISTS super_admins \(\s*user_id\s+INTEGER PRIMARY KEY/);
   assert.match(read('frontend/src/App.jsx'),
     /role === 'admin' && Number\(user\?\.is_super_admin \?\? 0\) === 1 \? 'super_admin' : role/,
-    'the HQ shell must still key on the flag 199 adds');
+    'the HQ shell must still key on the flag /me echoes from the side table');
+});
+
+test('no migration numbered above 198 adds a column to users', () => {
+  // D1 caps a table at 100 columns and `users` is there. The first deploy
+  // that ran migrations before shipping (#413, 2026-09-03) failed at 199's
+  // `ALTER TABLE users ADD COLUMN` with "too many columns on
+  // sqlite_altertab_users", and held 200–207 out of production behind it.
+  // 198 was the last file production had applied when it hit. GOTCHAS names
+  // the fix — a side table keyed by user_id — and this makes forgetting it a
+  // build failure instead of a failed deploy.
+  const offenders = readdirSync(M)
+    .filter((f) => /^\d+_.*\.sql$/.test(f) && parseInt(f, 10) > 198)
+    .filter((f) => /ALTER\s+TABLE\s+users\s+ADD\s+COLUMN/i.test(read(`${M}/${f}`).replace(/--.*$/gm, '')));
+  assert.deepEqual(offenders, [],
+    'users cannot take another column on D1 — keep the fact in a side table keyed by user_id (GOTCHAS)');
 });
 
 test('migration 207 sits behind 199 and names a single holder', () => {
-  // 199 backfills every admin; 207 is the decision 199's header deferred —
-  // one franchisor, by name. It has to sort after 199 or the narrowing UPDATE
-  // runs against a column that does not exist yet.
+  // 199 grants nobody; 207 is the decision 199's header defers — one
+  // franchisor, by name. It has to sort after 199 or its INSERT runs against
+  // a table that does not exist yet.
   const sql = read(`${M}/207_super_admin_single_holder.sql`);
   assert.ok(sql.trim().length > 0, '207_super_admin_single_holder.sql is missing');
-  assert.match(sql.replace(/--.*$/gm, ''), /LOWER\(email\) = 'guillaume\.lauzier@axal\.vc'/);
+  const code = sql.replace(/--.*$/gm, '');
+  assert.match(code, /LOWER\(email\) = 'guillaume\.lauzier@axal\.vc'/);
+  assert.match(code, /INTO super_admins/, '207 writes the side table 199 creates');
   assert.ok(parseInt('207', 10) > parseInt('199', 10));
-  assert.doesNotMatch(sql.replace(/--.*$/gm, ''), /ALTER TABLE/, '207 reads the column 199 adds; it must not re-add it');
+  assert.doesNotMatch(code, /ALTER TABLE/, '207 writes the table 199 creates; it must not re-shape anything');
 });
 
 /* ────────────────────────────────────────────────────────────────────────────

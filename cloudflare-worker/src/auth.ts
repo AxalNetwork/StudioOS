@@ -311,6 +311,12 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     } catch (e) {
       console.warn('[auth] mi_pro_subscriptions hydrate failed', (e as Error).message);
     }
+    // The Super Admin elevation lives in the `super_admins` side table for the
+    // same 100-column reason (migration 199). Hydrated for every request so
+    // `isSuperAdmin` reads the table's answer and never a column: a database
+    // that applied the first version of 199 still carries `users.is_super_admin`
+    // saying every admin is elevated, and SELECT * would hand that back.
+    await hydrateSuperAdmin(c.env, u);
     // Epic 3 — global sign-out: reject tokens issued before users.jwt_min_iat.
     // Normalize ms→s for any legacy ms-based iat values.
     const minIat = u.jwt_min_iat ?? 0;
@@ -418,16 +424,56 @@ export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<User>
 }
 
 /**
+ * Read the elevation for one account from the `super_admins` side table.
+ *
+ * `users` sits at D1's 100-column ceiling, so migration 199 keeps the
+ * elevation beside the row rather than on it, and `getCurrentUser`'s
+ * `SELECT *` cannot JOIN it in either (D1 also refuses a result set wider
+ * than 100 columns). One keyed lookup, for admin accounts only.
+ *
+ * FAILS CLOSED. A missing table (a database that has not applied 199) or a
+ * failed read answers 0 and is logged: the gate this feeds must never say
+ * yes because it could not ask. Every caller that holds a user row from
+ * `SELECT * FROM users` — `getCurrentUser`, the impersonation target — goes
+ * through `hydrateSuperAdmin` so the row's own `is_super_admin`, if a
+ * database still carries the column from the first version of 199, is
+ * overwritten by the table's answer.
+ */
+export async function loadSuperAdminFlag(env: Env, userId: number): Promise<0 | 1> {
+  try {
+    const row = await env.DB.prepare(
+      'SELECT user_id FROM super_admins WHERE user_id = ?',
+    ).bind(userId).first<{ user_id: number }>();
+    return row ? 1 : 0;
+  } catch (e) {
+    console.warn('[auth] super_admins hydrate failed; reading as not elevated', (e as Error).message);
+    return 0;
+  }
+}
+
+/** Set `user.is_super_admin` from the side table, unconditionally. */
+export async function hydrateSuperAdmin<T extends { id: number; role?: string | null }>(
+  env: Env, user: T,
+): Promise<T & { is_super_admin: 0 | 1 }> {
+  const isAdminRole = String(user.role ?? '').toLowerCase() === 'admin';
+  const flag: 0 | 1 = isAdminRole ? await loadSuperAdminFlag(env, Number(user.id)) : 0;
+  (user as T & { is_super_admin: 0 | 1 }).is_super_admin = flag;
+  return user as T & { is_super_admin: 0 | 1 };
+}
+
+/**
  * Is this admin also the franchisor?
  *
  * `super_admin` is an ELEVATION on `admin`, not a role beside it — see
  * migration 199. The role stays `admin` so all 468 existing `role === 'admin'`
- * checks keep passing; this column adds the one power on top.
+ * checks keep passing; a `super_admins` row adds the one power on top, and
+ * `hydrateSuperAdmin` copies it onto the user object this reads.
  *
  * D1 hands integers back as numbers and some fixtures use booleans, so the
- * check is on truthiness of a coerced number rather than `=== 1`: a column
- * that is missing entirely (a partial DB, a test fixture predating 199) reads
- * as 0 and the answer is NO. Failing closed is the whole point of the gate.
+ * check is on truthiness of a coerced number rather than `=== 1`: a value
+ * that is missing entirely (a row nobody hydrated, a test fixture predating
+ * 199) reads as 0 and the answer is NO. Failing closed is the whole point of
+ * the gate.
  */
 export function isSuperAdmin(user: Pick<User, 'role'> & { is_super_admin?: unknown }): boolean {
   if (String((user as any)?.role ?? '').toLowerCase() !== 'admin') return false;
