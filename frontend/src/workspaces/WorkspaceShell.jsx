@@ -49,6 +49,7 @@ export default function WorkspaceShell({
   intro,
   actions,
   rail = null,
+  activeSlug,
   children,
 }) {
   const location = useLocation();
@@ -71,11 +72,15 @@ export default function WorkspaceShell({
       <div className="min-w-0 flex-1">
         {bucket && (
           <div className="mb-2 flex items-center gap-2 text-[11.5px] text-axal-ink-3">
-            <Link to={`${bucket.prefix}/${bucket.zones[0].slug}`} className="hover:underline">
+            <Link to={bucket.prefix} className="hover:underline">
               {bucket.label}
             </Link>
-            <span aria-hidden="true">‹</span>
-            <b className="font-bold text-axal-ink">{zone?.label}</b>
+            {zone && (
+              <>
+                <span aria-hidden="true">‹</span>
+                <b className="font-bold text-axal-ink">{zone?.label}</b>
+              </>
+            )}
           </div>
         )}
 
@@ -114,7 +119,7 @@ export default function WorkspaceShell({
 
         {intro && <p className="mt-1.5 max-w-3xl text-xs leading-relaxed text-axal-ink-2">{intro}</p>}
 
-        {bucket && <ZoneNav bucket={bucket} role={role} className="mt-3" />}
+        {bucket && <ZoneNav bucket={bucket} role={role} activeSlug={activeSlug} className="mt-3" />}
 
         <div
           className="mt-3.5 border-t pt-3.5"
