@@ -58,6 +58,13 @@ jobs:
       - name: Build the SPA
         run: npm run build
 
+      # A brand-new Worker's first `wrangler deploy` can fail AFTER the script
+      # and assets are uploaded, when the call that switches on its workers.dev
+      # subdomain races ahead of propagation: "This Worker does not exist on
+      # your account" (code 10007). It happened on this workflow's own first
+      # run (#423). A second attempt sees the script and succeeds, and the
+      # re-upload is a no-op ("already uploaded"), so the step tries three
+      # times, 15 seconds apart, before it is a failure.
       - name: Deploy the preview Worker
         id: deploy
         env:
@@ -65,7 +72,19 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -o pipefail
-          npx --yes wrangler@4.125.0 deploy --config wrangler.pr-preview.toml --name "$PREVIEW_NAME" | tee deploy.log
+          deployed=0
+          for attempt in 1 2 3; do
+            if npx --yes wrangler@4.125.0 deploy --config wrangler.pr-preview.toml --name "$PREVIEW_NAME" 2>&1 | tee deploy.log; then
+              deployed=1
+              break
+            fi
+            echo "::warning::wrangler deploy attempt ${attempt} of 3 failed; retrying in 15s"
+            sleep 15
+          done
+          if [ "$deployed" != 1 ]; then
+            echo "::error::wrangler deploy failed three times — see the attempts above"
+            exit 1
+          fi
           url=$(grep -o 'https://[a-z0-9.-]*\.workers\.dev' deploy.log | head -n 1)
           if [ -z "$url" ]; then
             echo "::error::wrangler printed no workers.dev URL — the Worker deployed, but the preview link is unknown"
