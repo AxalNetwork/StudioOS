@@ -96,3 +96,55 @@ test('retainBuilds=1 keeps only the fresh build (no retention)', () => {
   assert.deepEqual(plan.restore, []);
   assert.equal(plan.nextLedger.builds.length, 1);
 });
+
+test('a rebuild of the same source replaces the newest entry instead of taking a slot', () => {
+  // Content-hashed names mean an identical file set IS an identical build.
+  // Rebuilding the same source locally, then again in CI, then again on a
+  // docs-only branch is routine — and when each one took a slot, a
+  // three-build window ended up holding one distinct build, deleting the very
+  // assets it existed to keep. On 2026-09-03 that dropped 1202 hashes a
+  // client on the previous shell would still have asked for.
+  const OLD = ['index-OLD.js', 'chunk-OLD.js'];
+  const CUR = ['index-CUR.js', 'chunk-CUR.js'];
+
+  const plan = planAssetRetention({
+    prevFiles: [...OLD, ...CUR],
+    newFiles: [...CUR].reverse(), // same set, different order — still the same build
+    ledgerBuilds: [
+      { ts: 't2', files: CUR },
+      { ts: 't1', files: OLD },
+    ],
+    retainBuilds: 2,
+    now: 't3',
+  });
+
+  assert.equal(plan.nextLedger.builds.length, 2, 'the identical rebuild must not add a third entry');
+  assert.equal(plan.nextLedger.builds[0].ts, 't3', 'the newest entry still records the latest build time');
+  assert.deepEqual(new Set(plan.nextLedger.builds[0].files), new Set(CUR));
+  assert.equal(plan.nextLedger.builds[1].ts, 't1', 'the older DISTINCT build must survive the rebuild');
+  // The point of the whole exercise: the older build's hashes are still kept.
+  assert.deepEqual(new Set(plan.keep), new Set([...OLD, ...CUR]));
+  assert.deepEqual(new Set(plan.restore), new Set(OLD));
+});
+
+test('a rebuild that changes even one file is a new build and does take a slot', () => {
+  const OLD = ['index-OLD.js'];
+  const CUR = ['index-CUR.js', 'chunk-CUR.js'];
+  const NEXT = ['index-CUR.js', 'chunk-NEXT.js']; // one hash differs
+
+  const plan = planAssetRetention({
+    prevFiles: [...OLD, ...CUR],
+    newFiles: NEXT,
+    ledgerBuilds: [
+      { ts: 't2', files: CUR },
+      { ts: 't1', files: OLD },
+    ],
+    retainBuilds: 2,
+    now: 't3',
+  });
+
+  assert.equal(plan.nextLedger.builds.length, 2);
+  assert.equal(plan.nextLedger.builds[0].ts, 't3');
+  assert.equal(plan.nextLedger.builds[1].ts, 't2', 'the previous build stays; the oldest ages out normally');
+  assert.deepEqual(new Set(plan.keep), new Set([...CUR, ...NEXT]));
+});
