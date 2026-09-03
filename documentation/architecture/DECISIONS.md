@@ -1566,7 +1566,7 @@ first two characters), and a tile's note must never assert a state — "none",
 
 ### D36. Workers Static Assets is the only host: the Pages mirror is retired, `_headers` carries the static security headers, and pull-request previews are bindings-free Workers
 
-**RESOLVED (2026-09-03; the Pages retirement PR, then the preview PR).** Asked
+**RESOLVED (2026-09-03; #422, then the preview PR).** Asked
 what the plan was for hosting the website and platform on Cloudflare Pages
 "and not Jekyll pages ever again", the owner chose Workers Static Assets — the
 shape production has had since `1d320dda9` (D34) and the one Cloudflare's own
@@ -1606,13 +1606,16 @@ documentation now recommends for new projects. Three consequences.
    depends on the same URLs. What can exist with nothing provisioned and no
    production data in reach is a Worker per pull request (`studioos-pr-<n>`
    from `wrangler.pr-preview.toml`: no bindings, `docs/` with the
-   single-page-application fallback, and a script of a few lines that does
-   one thing — turn the fallback HTML for a missing `/assets/*` file into a
-   real 404, as `index.ts` does on production, because an assets-only
-   Worker serves the shell for every unmatched path, navigation or not),
-   deployed on open and deleted on close, its `workers.dev` URL posted as
-   one sticky comment. `/api/*` is a 404 there, exactly as it was on the
-   mirror. A full-stack preview needs the `[env.preview]` placeholders
+   single-page-application fallback, and a script of a few lines —
+   `scripts/pr-preview-worker.mjs` — that does two things: turn the
+   fallback HTML for a missing `/assets/*` file into a real 404, as
+   `index.ts` does on production, and answer `/api/*` with a JSON 404,
+   because an assets-only Worker serves the shell for every unmatched path,
+   navigation or not), deployed on open and deleted on close by
+   `.github/workflows/pr-preview.yml`, its `workers.dev` URL posted as one
+   sticky comment. `/api/*` is a 404 there, exactly as it was on the
+   mirror; `frontend/test/pr_preview.test.mjs` keeps the config
+   binding-free. A full-stack preview needs the `[env.preview]` placeholders
    provisioned (D1, two KV namespaces, R2 buckets, and a queue a second
    Worker could not share as a consumer) plus a rule for one shared preview
    database across branches; that is unbuilt, not forbidden.

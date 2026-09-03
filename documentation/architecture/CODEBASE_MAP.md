@@ -229,7 +229,10 @@ succeed until they are provisioned; no CI job deploys this environment (the
 `CLOUDFLARE_PREVIEW_READY` gate once described here was never wired), and
 Workers preview URLs are unavailable to it regardless, because Cloudflare
 generates none for a Worker that implements a Durable Object (D36 — which is
-why pull-request previews are a separate Worker per PR with no bindings).
+why pull-request previews are a separate Worker per PR with no bindings:
+`wrangler.pr-preview.toml` at the repo root plus
+`scripts/pr-preview-worker.mjs`, deployed and deleted by
+`.github/workflows/pr-preview.yml`).
 
 ---
 

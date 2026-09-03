@@ -4,7 +4,18 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Workers Static Assets is the only host — the Cloudflare Pages mirror is retired, `_headers` is back (Pages retirement PR)
+## Pull-request previews — one Worker per PR, with no bindings (PR B)
+
+`DECISIONS.md` D36 item 3, built. Cloudflare generates no preview URL for a Worker that implements a Durable Object (`studioos` implements `PipelineRoom` and `OnboardingChat`), so the "Workers Builds preview URL" route is closed; instead every same-repository pull request gets its own Worker, `studioos-pr-<number>` on workers.dev, built from the PR's frontend and deployed from a config that binds nothing.
+
+- `wrangler.pr-preview.toml` (repo root) — `main = "scripts/pr-preview-worker.mjs"`, `[assets]` over `./docs` with the single-page-application fallback and `run_worker_first = ["/api/*", "/assets/*"]`; `workers_dev = true`, `preview_urls = false`; no D1, KV, R2, queue, DO, AI, routes or environments. The apex guards read only `wrangler.toml`, so this file cannot be mistaken for a route table.
+- `scripts/pr-preview-worker.mjs` — the two jobs an assets-only Worker cannot do (it serves the shell for every unmatched path, navigation request or not): a missing hashed `/assets/*` file becomes a plain 404 exactly as `index.ts` does on production, and `/api/*` gets a JSON 404 saying there is no API on a preview.
+- `.github/workflows/pr-preview.yml` — on opened / synchronize / reopened: `npm ci`, `npm run build`, `wrangler deploy --config wrangler.pr-preview.toml --name studioos-pr-<n>`, then one sticky comment with the workers.dev URL and the head SHA, edited in place on every push; on closed: `wrangler delete`, tolerating only a not-found. Same-repository PRs only, never Dependabot; `permissions: contents: read, pull-requests: write`; the deploy token's Workers Scripts:Edit suffices.
+- Guard `frontend/test/pr_preview.test.mjs` — the config declares only `[assets]` and no binding, route or environment key; it serves `./docs` with the SPA fallback and runs the script first for `/api/*` and `/assets/*`; the script reads only `env.ASSETS.fetch`, turns a fallback shell into a 404 and handles `/api/`; the workflow deploys the preview config under the per-PR name, never `wrangler.toml` or `--env production`, deletes on close, guards forks and never touches D1; the workflows README lists it.
+- Rows in `.github/workflows/README.md` and `scripts/README.md`; D36 item 3 and `CODEBASE_MAP.md` §2.6 point at the config. No `docs/` change.
+- Not built: a full-stack preview — the `[env.preview]` placeholders and a rule for one shared preview database across branches; D36 names what it would take.
+
+## Workers Static Assets is the only host — the Cloudflare Pages mirror is retired, `_headers` is back (Pages retirement PR, #422)
 
 The owner chose Workers Static Assets as the host of `axal.vc` and `app.axal.vc` (`DECISIONS.md` D36, resolving U9): the `studioos` Cloudflare Pages project was a mirror that proved nothing about the Worker and misled operators on 2026-09-03, and Cloudflare's own guidance now points new projects at Workers. No route, binding or API behaviour changes; the deploy path is unchanged (`cloudflare-worker-deploy.yml`: build → migrate → `wrangler deploy`).
 
