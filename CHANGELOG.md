@@ -4,6 +4,23 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Asset retention: a rebuild of the same source no longer costs a slot
+
+`planAssetRetention` added a ledger entry on every build, so rebuilding the same source consumed one of the three retention slots. Content-hashed filenames mean an identical file set *is* an identical build, and rebuilding the same tree is routine — locally, then in CI, then again on a docs-only branch. Three slots would end up holding one distinct build, and the next build then deleted from `docs/` exactly the assets the window existed to keep.
+
+- Caught in the act, not theorised: main's ledger held two distinct sets (union 1771 files). A docs-only rebuild on this branch pushed the `pre-retention` entry (1478 files) out, leaving one distinct set (union 569) and staging **1202 asset deletions**. A client holding the shell from before that deploy would have 404'd on its hashed chunks and blank-screened until the boot watchdog reloaded it — the precise failure this module was written to prevent (Task #15).
+- Fix: when the fresh file set equals the newest ledger entry's, replace that entry (advancing its timestamp) instead of unshifting a new one. A build that differs by even one hash is still a new build and takes a slot as before.
+- Two tests in `scripts/lib/assetRetention.test.mjs`, both mutation-checked: an identical rebuild must keep the older distinct build's hashes, and a one-file-different rebuild must still age the oldest out.
+
+## The GitHub Pages remnants go: `CNAME` and `.nojekyll` deleted
+
+The owner switched GitHub Pages off for the repository on 2026-09-03 (`gh api repos/AxalNetwork/StudioOS/pages` returns 404 where it had read `main:/docs` with CNAME `axal.vc`), which was the condition #422 attached to these two files. They were the last of the GitHub Pages era.
+
+- Deleted `frontend/public/CNAME` (`axal.vc`) and `frontend/public/.nojekyll`. Vite copies `frontend/public/` into `docs/`, so both were being uploaded to the Worker's asset store and served as public files at `axal.vc/CNAME` and `axal.vc/.nojekyll` — reachable, pointless, and stale the moment Pages stopped serving the apex on 2026-08-31.
+- Nothing operational read them: `git grep CNAME` across `wrangler.toml`, `cloudflare-worker/src`, `scripts/` and `.github/workflows/` finds nothing. The remaining mentions are prose in `MIGRATE_TO_CUSTOM_DOMAIN.md` and `CLOUDFLARE-CUTOVER.md`, both dated records of the era, left as they are.
+- `docs/` rebuilt through `npm run build`, so `docs/CNAME` and `docs/.nojekyll` are gone from the committed bundle.
+- `DECISIONS.md` D36 closes its own "stay until GitHub Pages is switched off" clause with what actually happened; the `pages-build-deployment` row in `.github/workflows/README.md` records that the workflow no longer runs, and stays in the table because it reappears if Pages is ever re-enabled.
+
 ## U10 answered: the security headers are on the live SPA HTML
 
 Documentation only; no code changes. The `_headers` mechanism shipped in #422 works, and this records the measurement rather than the expectation.

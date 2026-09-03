@@ -1582,8 +1582,10 @@ documentation now recommends for new projects. Three consequences.
    `frontend/public/404.html` and the `?p=` path-restore shim in
    `frontend/index.html`, which rewrote any `/x?p=…` URL to a different path
    before React booted (no live link carried `?p=`; `?ref=`, `?lane=`,
-   `?plan=` and `?next=` do). `CNAME` and `.nojekyll` stay until GitHub Pages
-   is switched off in the repository settings.
+   `?plan=` and `?next=` do). `CNAME` and `.nojekyll` stayed until GitHub
+   Pages was switched off, which the owner did on 2026-09-03 (`gh api
+   …/pages` returns 404 where it had read `main:/docs` with CNAME
+   `axal.vc`); both files went with it, and `docs/` no longer carries them.
 2. **`_headers` is the mechanism, and the smoke check is the proof.** Workers
    static assets read `_headers` natively and apply it to every response the
    `[assets]` binding serves — the SPA shell on every path outside

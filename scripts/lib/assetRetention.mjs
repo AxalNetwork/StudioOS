@@ -55,7 +55,30 @@ export function planAssetRetention({
     builds.push({ ts: 'pre-retention', files: uniq(prevFiles) });
   }
 
-  builds.unshift({ ts: now, files: uniq(newFiles) });
+  // A rebuild that produces the SAME file set as the newest entry REPLACES it
+  // rather than taking a slot of its own. Content-hashed names mean an
+  // identical set is an identical build — rebuilding the same source locally,
+  // then again in CI, then again on a docs-only branch, is routine. Counting
+  // each one shrank the window to a single distinct build, and the assets the
+  // window existed to keep were deleted from `docs/` on the next build.
+  //
+  // That is not hypothetical: on 2026-09-03 a docs-only rebuild pushed the
+  // `pre-retention` entry (1478 files) out of a three-slot ledger whose other
+  // two entries were already the same 569 files, dropping 1202 hashes that a
+  // client on the previous shell would still ask for. The timestamp still
+  // advances, so the entry records the latest build of that content.
+  const [newest] = builds;
+  const freshFiles = uniq(newFiles);
+  const sameAsNewest =
+    newest &&
+    newest.files.length === freshFiles.length &&
+    new Set(newest.files).size === new Set([...newest.files, ...freshFiles]).size;
+
+  if (sameAsNewest) {
+    builds[0] = { ts: now, files: freshFiles };
+  } else {
+    builds.unshift({ ts: now, files: freshFiles });
+  }
 
   const window = Math.max(1, Number(retainBuilds) || 1);
   const trimmed = builds.slice(0, window);
