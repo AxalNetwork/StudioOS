@@ -58,21 +58,53 @@
 -- number and `price_min`/`price_max` are two: collapsing them without saying so
 -- would invent a price.
 --
--- DROP-THEN-RENAME, not rename-then-drop. A modern SQLite `ALTER TABLE … RENAME
--- TO` REWRITES the `REFERENCES service_offerings(id)` clause in
--- `service_engagements` to follow the renamed table — so renaming the old table
--- out of the way would silently repoint the foreign key at the backup copy.
--- Dropping it and renaming the new table into the freed name leaves the
--- reference resolving to the right table by name. Same `PRAGMA foreign_keys`
--- bracket that migration 039 uses for its rebuilds.
+-- DROP, THEN RECREATE UNDER THE SAME NAME — NO RENAME AT ALL. Two reasons.
+-- A modern SQLite `ALTER TABLE … RENAME TO` REWRITES the `REFERENCES
+-- service_offerings(id)` clause in `service_engagements` to follow the renamed
+-- table, so renaming the old table aside would silently repoint the foreign
+-- key at the backup copy. And with foreign keys deferred (below), SQLite's
+-- violation counter — incremented when the DROP deletes every parent row an
+-- engagement references — is decremented ONLY by INSERTs into the table the
+-- constraint names, made AFTER the drop. A rebuild that fills a scratch table
+-- first and renames it into place at the end never decrements it, and the
+-- batch dies at its end with "FOREIGN KEY constraint failed" — observed in the
+-- local reproduction below, and the same lesson util/usersRoleRebuild.ts
+-- records from production. So: snapshot the rows, drop the old table, create
+-- the new shape under the original name, copy back from the snapshot, drop
+-- the snapshot. `id` is copied as-is, so every engagement resolves again by
+-- the time the batch ends.
+--
+-- NO TRANSACTION KEYWORDS AND NO `PRAGMA foreign_keys` BRACKET — LEARNED
+-- TWICE. The first version of this file wrapped the rebuild in the two SQL
+-- transaction keywords between `PRAGMA foreign_keys=OFF` and `=ON`, mirroring
+-- 039, and the first deploy that reached it (2026-09-03, Actions run
+-- 33738772717, right after 199 applied) failed with D1's "To execute a
+-- transaction, please use state.storage.transaction() …" — the error 141 hit
+-- on 2026-07-08 and GOTCHAS records. D1 runs a `wrangler d1 execute --file`
+-- batch as ONE implicit transaction and rolls the whole file back on the
+-- first error, so the keywords are both redundant and fatal; and inside that
+-- transaction SQLite ignores `PRAGMA foreign_keys`, so the bracket never
+-- disabled anything. What D1 provides for this — and what
+-- util/usersRoleRebuild.ts already does — is `PRAGMA defer_foreign_keys =
+-- TRUE` at the top of the batch: `service_engagements.offering_id` may
+-- dangle between the DROP and the RENAME, and the check runs when the batch
+-- ends, with the ids back under the same table name. Reproduced against a
+-- local D1 seeded in the t13 shape: the old file fails with that exact
+-- message and leaves nothing behind; this one applies. Wrangler also scans
+-- the raw file, comments included, and refuses one that spells the opening
+-- keyword's long form more than once — which is why this paragraph talks
+-- around it. `frontend/test/migration_column_shapes.test.mjs` now fails any
+-- migration carrying the keywords in a statement, or that long form anywhere.
+--
+-- `DROP TABLE IF EXISTS service_offerings_new` before the CREATE, so a re-run
+-- after a failed attempt cannot trip over a scratch table — an atomic batch
+-- leaves none, but the cost of saying so is one statement.
 
 -- Preflight. Reads nothing, writes nothing, and fails the whole file on a
 -- database that is already in the target shape. Keep it first.
 SELECT partner_id FROM service_offerings WHERE 0;
 
-PRAGMA foreign_keys=OFF;
-
-BEGIN;
+PRAGMA defer_foreign_keys = TRUE;
 
 -- 1. Orphans first, while the source table is still intact. A partner_id that
 --    no user account holds has no `users(id)` to become, and `owner_user_id` is
@@ -109,7 +141,18 @@ SELECT o.id, o.uid, o.partner_id, o.category, o.title, o.description,
 
 -- 2. The target shape, verbatim from schema.sql, plus the `company_id` that
 --    migration 196 added to the old table — it must survive the rebuild.
-CREATE TABLE service_offerings_new (
+-- 2. Snapshot every row while the source table still exists. `SELECT *`
+--    keeps the old columns verbatim; the reshaping happens in the copy-back.
+DROP TABLE IF EXISTS service_offerings_pre200_snapshot;
+
+CREATE TABLE service_offerings_pre200_snapshot AS SELECT * FROM service_offerings;
+
+-- 3. Drop the old shape and create the new one under the SAME name, so the
+--    `REFERENCES service_offerings(id)` in service_engagements keeps pointing
+--    at the live table and the copy-back below settles the deferred check.
+DROP TABLE service_offerings;
+
+CREATE TABLE service_offerings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))),
     owner_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -123,21 +166,13 @@ CREATE TABLE service_offerings_new (
     company_id INTEGER
 );
 
--- 3. Copy every row whose owner resolves, bridging partners(id) -> users.
---    MIN(u.id) keeps the copy deterministic if two accounts somehow share a
---    partner_id; the join is one-to-one in practice.
-INSERT INTO service_offerings_new
+INSERT INTO service_offerings
        (id, uid, owner_user_id, title, category, summary, price_usd, is_active, created_at, updated_at, company_id)
 SELECT o.id,
        o.uid,
        (SELECT MIN(u.id) FROM users u WHERE u.partner_id = o.partner_id),
        o.title,
        o.category,
-       -- `summary` takes the old `description`. When the offering carried a
-       -- RANGE, the range is appended in words rather than thrown away: the
-       -- target holds one price, and silently keeping the lower bound would
-       -- turn "5000 to 15000" into "5000" with nothing recording that it ever
-       -- had a ceiling.
        CASE
          WHEN o.price_min IS NOT NULL AND o.price_max IS NOT NULL AND o.price_max <> o.price_min
            THEN TRIM(COALESCE(o.description, '')
@@ -148,22 +183,12 @@ SELECT o.id,
        COALESCE(o.price_min, o.price_max),
        o.is_active,
        o.created_at,
-       -- The old shape had no `updated_at`. Seeding it from creation is the
-       -- honest value; `datetime('now')` would assert every offering was edited
-       -- the moment this migration ran.
        o.created_at,
        o.company_id
-  FROM service_offerings o
+  FROM service_offerings_pre200_snapshot o
  WHERE EXISTS (SELECT 1 FROM users u WHERE u.partner_id = o.partner_id);
 
-DROP TABLE service_offerings;
-ALTER TABLE service_offerings_new RENAME TO service_offerings;
+DROP TABLE service_offerings_pre200_snapshot;
 
--- 4. Indexes. 196's `idx_offerings_company` died with the dropped table; the
---    owner index is what `?mine=1` filters on and the old shape never had one.
 CREATE INDEX IF NOT EXISTS idx_offerings_company ON service_offerings(owner_user_id, company_id);
 CREATE INDEX IF NOT EXISTS idx_offerings_active ON service_offerings(is_active);
-
-COMMIT;
-
-PRAGMA foreign_keys=ON;
