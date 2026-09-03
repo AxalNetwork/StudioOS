@@ -1938,7 +1938,7 @@ function AppInner() {
           that /office-hours already serves. The legacy /advisor/advisory/* and
           /office-hours routes stay: Clients and Contracts are working tabs the
           canvas has no zone for. */}
-      <Route path="/practice" element={<Navigate to="/practice/opportunities" replace />} />
+      <Route path="/practice" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/opportunities" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/engagements" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/practice/delivery" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
@@ -1959,13 +1959,13 @@ function AppInner() {
           Advisor ROLE has selected no person, so they would see "no batch
           assigned" — a boundary rendered as an absence, which is the exact
           defect this whole pass exists to remove. */}
-      <Route path="/cohorts" element={<Navigate to="/cohorts/founders" replace />} />
+      <Route path="/cohorts" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/cohorts/founders" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/cohorts/guidance" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/cohorts/this-week" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/cohorts/calendar" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/cohorts/outcomes" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
-      <Route path="/expertise" element={<Navigate to="/expertise/profile" replace />} />
+      <Route path="/expertise" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/expertise/profile" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/expertise/services" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />
       <Route path="/expertise/proof" element={guard(['admin', 'advisor'], <AdvisorBucketRoutes preview={advisorRolePreview} />)} />

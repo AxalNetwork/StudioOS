@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
-import { bucketForPath, zoneForPath } from '../shellConfig';
+import { bucketForPath, zoneForPath, zonePath } from '../shellConfig';
 import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
@@ -86,6 +86,98 @@ function NoStoreYet({ heading, what, why, links = [], seam }) {
   );
 }
 
+/**
+ * One line per zone, for the zones that have a page behind them.
+ *
+ * A zone with NO store is deliberately absent from this map: its card is
+ * written from `COPY` below — the same sentence the zone's own page shows —
+ * so an overview card can never promise what the page behind it denies. That
+ * is not hypothetical. This map first shipped describing Guidance as "what
+ * you have told the batch, and who has acted on it" over a page that reads
+ * "Cohort guidance has no store"; Visibility as "what it converts" over
+ * "Nothing counts profile views"; Earnings as "what the platform took" beside
+ * a rail on the same screen saying Axal takes no cut; and Services as "how
+ * often it is booked", which `units_sold` returns null for by design. Four
+ * cards advertising a feature and one contradicting a recorded decision, on
+ * the one surface an advisor reads before choosing where to click.
+ *
+ * `frontend/test/advisor_bucket_overview.test.mjs` fails if a no-store zone
+ * reappears here, and if a blurb re-acquires the settled-money or
+ * booking-count claims.
+ */
+const ZONE_BLURB = {
+  // Practice — all five zones read a real store.
+  opportunities: 'Inbound requests and proposals — what is asking for your time.',
+  engagements: 'The engagements you have accepted, and where each one stands.',
+  delivery: 'What you have sent a client, and what is still outstanding.',
+  sessions: 'Each booked session, the amount you recorded against it, and whether you have marked it billed.',
+  earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed. Axal settles nothing and takes no cut.',
+  // Expertise — profile, services and proof are backed; thinking and
+  // visibility are not, and are written from COPY.
+  profile: 'What a founder sees before they book you.',
+  services: 'What you sell and at what price. Nothing counts how often a service is booked.',
+  proof: 'Claims you have made, and whether the person named has confirmed each one.',
+  // Cohorts — founders, this week and outcomes are backed; guidance and
+  // calendar are not, and are written from COPY.
+  founders: 'The batch an admin has put in front of you, read from the Lab’s own record.',
+  'this-week': 'Which cycles are running and where each sits in its window. What is due stays the Lab’s to say.',
+  outcomes: 'The programme’s published outcomes — company-level and anonymous, not your batch alone.',
+};
+
+/**
+ * The canvas overview a bucket root renders: the tagline, then one card per
+ * zone so the reader can open the section they came for. The sidebar row
+ * points here; the zone pills below are the same destinations.
+ */
+function BucketOverview({ bucket }) {
+  if (!bucket) return null;
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {bucket.zones.map((zone) => {
+        // An entry in COPY IS the definition of "this zone has no store": it
+        // is what the zone's own page renders. Reading it here keeps the card
+        // and the page one sentence rather than two that can drift apart.
+        const unbuilt = COPY[bucket.prefix]?.[zone.slug];
+        return (
+          <Link
+            key={zone.slug}
+            to={zonePath(bucket, zone)}
+            className={`group rounded-xl border bg-white p-4 transition-colors ${
+              unbuilt
+                ? 'border-dashed border-axal-border hover:border-axal-ink-3'
+                : 'border-axal-border hover:border-emerald-300 hover:bg-emerald-50/40'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span
+                className={`text-sm font-bold ${
+                  unbuilt ? 'text-axal-ink-2' : 'text-axal-ink group-hover:text-emerald-800'
+                }`}
+              >
+                {zone.label}
+              </span>
+              <span
+                className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"
+                style={{ background: zone.archetype.colors[0], color: zone.archetype.colors[1], borderColor: zone.archetype.colors[2] }}
+              >
+                {zone.archetype.label}
+              </span>
+            </div>
+            <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
+              {unbuilt && (
+                <span className="mr-1.5 rounded-[3px] border border-axal-border px-1 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
+                  Not built
+                </span>
+              )}
+              {unbuilt ? unbuilt.heading : ZONE_BLURB[zone.slug]}
+            </p>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 // Zones served by the legacy five-tab Advisory workspace, which carries its
 // own shell and must therefore be mounted `embedded`.
 const LIVE = {
@@ -157,7 +249,8 @@ const COPY = {
 export default function AdvisorBucketRoutes({ preview = false }) {
   const location = useLocation();
   const bucket = bucketForPath('advisor', location.pathname);
-  const zone = zoneForPath(bucket, location.pathname);
+  const isRoot = bucket && location.pathname === bucket.prefix;
+  const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
   const prefix = bucket?.prefix;
   const slug = zone?.slug;
 
@@ -167,6 +260,14 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     // and keeps the shell — the crumb, zone row and rail still say where you
     // are, which a redirect to /studio did not.
     if (preview) return <AdvisorPreviewNotice />;
+
+    // Bucket root: render the canvas overview — the zone grid that says what
+    // this bucket holds and opens each zone from there. The sidebar row must
+    // land here, not on the first zone.
+    if (isRoot) {
+      return <BucketOverview bucket={bucket} />;
+    }
+
     const Zone = ZONE[prefix]?.[slug];
     if (Zone) return <Suspense fallback={<Loading />}><Zone /></Suspense>;
 
@@ -183,7 +284,7 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       what="This zone is named by the canvas and has no surface behind it."
       why="It ships empty rather than as a placeholder that could be mistaken for real data."
     />;
-  }, [prefix, slug, preview]);
+  }, [prefix, slug, preview, isRoot, bucket]);
 
   const INTRO = {
     '/practice': 'One practice. What is coming in, what is committed, and what has been delivered.',
@@ -209,6 +310,11 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   // component on the page that must never be more confident than the body
   // beside it. It was the opposite failure and just as wrong.
   const live = Boolean(LIVE[prefix]?.has(slug) || ZONE[prefix]?.[slug]);
+  const coverage = isRoot
+    ? [`${bucket?.label || 'This bucket'} overview — ${bucket?.zones?.length || 0} zones`]
+    : [live
+      ? `${zone?.label || 'This zone'} reads the stored record`
+      : `${zone?.label || 'This zone'} has no store behind it`];
   const RAIL = {
     '/practice': {
       workspace: 'Practice',
@@ -242,23 +348,23 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   return (
     <WorkspaceShell
       role="advisor"
+      title={isRoot ? bucket?.label : undefined}
       scope={prefix === '/cohorts' ? 'One cohort' : 'One practice'}
       intro={INTRO[prefix]}
+      activeSlug={isRoot ? null : undefined}
       rail={RAIL && (
         <WorkerRail
           workspace={RAIL.workspace}
           role="advisor"
           stance={RAIL.stance}
           note={RAIL.note}
-          coverage={[live
-            ? `${zone?.label || 'This zone'} reads the stored record`
-            : `${zone?.label || 'This zone'} has no store behind it`]}
+          coverage={coverage}
           unavailable={RAIL.unavailable}
         />
       )}
     >
       {body}
-      {!preview && prefix === '/practice' && slug === 'opportunities' && (
+      {!preview && prefix === '/practice' && slug === 'opportunities' && !isRoot && (
         <Card className="mt-4 p-4">
           <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
             Still here, still working
