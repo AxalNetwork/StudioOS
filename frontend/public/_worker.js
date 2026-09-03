@@ -1,4 +1,13 @@
-// Cloudflare Pages — Advanced Mode entry point for the Axal VC frontend.
+// Cloudflare Pages — Advanced Mode entry script of the Pages MIRROR of the
+// Axal VC frontend (project `studioos`, studioos-2p8.pages.dev), which serves
+// NO production hostname. Since 2026-09-01 (1d320dda9) `axal.vc` and
+// `app.axal.vc` are both whole-host Workers Custom Domains of the `studioos`
+// Worker, served from its `[assets]` copy of `docs/` (wrangler.toml); that
+// Worker never runs this file, and `scripts/build-frontend.mjs` writes
+// `docs/.assetsignore` so the Worker's asset upload skips it. The mirror gets
+// a Direct Upload of a freshly built `docs/` on every push to `main`
+// (.github/workflows/cloudflare-pages-deploy.yml); whether to retire it is
+// documentation/architecture/UNRESOLVED_ITEMS.md U9.
 //
 // A `_worker.js` at the build-output root puts Pages in Advanced Mode: this
 // script handles EVERY request and Pages stops processing `_redirects` and
@@ -21,7 +30,10 @@
 // surface (NICE-SEC-01). These static pages deliberately use the laxer value:
 // they carry no ids or query params and want cross-origin referral
 // attribution. The split is intentional — see GOTCHAS. Values mirror
-// cloudflare-worker/src/middleware/securityHeaders.ts.
+// cloudflare-worker/src/middleware/securityHeaders.ts. Whether the
+// Worker-served hosts carry these headers on their HTML is not verifiable
+// from the repository (the assets binding answers without the Hono app) —
+// UNRESOLVED_ITEMS U10; check live with `curl -sI https://axal.vc/login`.
 const SECURITY_HEADERS = {
   'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
   'X-Content-Type-Options': 'nosniff',

@@ -15,9 +15,9 @@ disagrees with the code, the document is the thing to fix.
 | `DECISIONS.md` | Why is it built this way and not the obvious way? Numbered, D1…, each recording what was decided and what it cost. |
 | `GOTCHAS.md` | What will bite me? |
 | `PRODUCTION.md` | What production actually is, and how a deploy works. |
-| `CLOUDFLARE-CUTOVER.md` | The plan for retiring GitHub Pages at the apex. |
-| `CLOUDFLARE-PAGES-MIGRATION.md` | The frontend moves to Cloudflare Pages; the Worker keeps the API. Converges with the cutover at its step 6. |
-| `MIGRATE_TO_CUSTOM_DOMAIN.md` | Domain migration notes. |
+| `CLOUDFLARE-CUTOVER.md` | **Superseded record (2026-08).** The plan that retired GitHub Pages at the apex — executed, then overtaken: since 2026-09-01 the Worker serves both hosts (`PRODUCTION.md` has the current topology). Kept for the 5xx baseline table and the OAuth re-registration table, which is still live work. |
+| `CLOUDFLARE-PAGES-MIGRATION.md` | **Superseded record (2026-08-31).** How the apex moved to Cloudflare Pages for one day, and what bit — the failure mode that still forbids path-scoped apex routes. Pages is a mirror of `docs/` now, not a host. |
+| `MIGRATE_TO_CUSTOM_DOMAIN.md` | **Superseded record (2026-05).** The runbook that made `app.axal.vc` a Workers Custom Domain; its apex rows predate the 2026-09-01 flip that made `axal.vc` one too. |
 | `LEGAL_ENTITIES.md` | The entity set and what each is for. |
 | `SIGNALS.md` | The signals subsystem. |
 | `SOCIAL_PREVIEWS.md` | OG images and how they are generated. |

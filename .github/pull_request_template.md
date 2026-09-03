@@ -11,7 +11,7 @@ checklist catches the things linters can't.
 ## Scope
 
 - [ ] Production worker (`cloudflare-worker/`) — ⚠️ ships to axal.vc
-- [ ] Frontend SPA (`frontend/`) — ⚠️ ships to Cloudflare Pages
+- [ ] Frontend SPA (`frontend/`) — ⚠️ ships with the Worker to axal.vc and app.axal.vc
 - [ ] Replit-dev backend (`backend/`) — ✅ never deployed, dev only
 - [ ] CI / infra (`.github/`, `wrangler.toml`, scripts)
 - [ ] Docs only (`README.md`, `CLAUDE.md`, `replit.md`)

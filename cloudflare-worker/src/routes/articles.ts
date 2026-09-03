@@ -13,7 +13,8 @@
  *   - Public list shape includes `author_user_id` + `author_handle` so the
  *     FE can deep-link from cards into public profiles.
  *
- * Public reads are CORS-open for the Jekyll marketing site and edge-cached
+ * Public reads are CORS-open (a leftover of the Jekyll marketing site the
+ * Worker replaced on the apex; axal.vc is same-origin now) and edge-cached
  * for 60 days; author writes are open to any authenticated user (Task #9)
  * but still pass the same PII linter + weekly rate cap as /api/news.
  */
@@ -37,7 +38,8 @@ import { SECTORS, isValidSector } from '../data/sectors';
 
 const articles = new Hono<{ Bindings: Env }>();
 
-// Public endpoints accept CORS from the Jekyll marketing site on axal.vc.
+// Public endpoints accept CORS from axal.vc / www (historical: the Jekyll
+// marketing site; axal.vc is the same-origin SPA on this Worker now).
 articles.use('/', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));
 articles.use('/sectors', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));
 articles.use('/by-author/:user_id', cors({ origin: ['https://axal.vc', 'https://www.axal.vc'], credentials: false }));

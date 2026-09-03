@@ -193,16 +193,29 @@ Smart Placement is off.
 
 ### 2.5 The `routes` tables
 
-Both `[[routes]]` and `[[env.production.routes]]` contain **four entries each**,
-and a normalised diff of the two shows them **identical**. The table contains
-one Workers Custom Domain (`app.axal.vc`) and only three apex path routes:
-`axal.vc/api/*`, `axal.vc/landing/*`, and `axal.vc/p/*`.
+Both `[[routes]]` and `[[env.production.routes]]` contain **two entries each**,
+and a normalised diff of the two shows them **identical**: `axal.vc` and
+`app.axal.vc`, each a whole-host Workers Custom Domain (`custom_domain = true`).
+There are no zone routes at all.
 
-The apex remains on Cloudflare Pages. There is deliberately no `axal.vc/*` or
-`axal.vc/assets/*` Worker route, so Pages continues to serve the root, SPA
-fallback, and static assets from the same deployment.
-
-All zone routes carry `zone_name = "axal.vc"`.
+The apex is served by the Worker (revised 2026-09-03 — from the 2026-08-31
+Pages cutover until then this section read "the apex remains on Cloudflare
+Pages" over a four-entry table of `app.axal.vc` plus `axal.vc/api/*`,
+`axal.vc/landing/*` and `axal.vc/p/*`). `1d320dda9` (2026-09-01, "Remove stale
+documentation asset files" — a message that does not mention routing) replaced
+those three path routes with the `axal.vc` custom domain in both tables, so the
+`[assets]` binding (`directory = "./docs"`,
+`not_found_handling = "single-page-application"`, `run_worker_first` for
+`/api/*`, `/landing/*`, `/p/*` and `/assets/*`) answers the root, the SPA
+fallback and the static assets on both hosts from one build. There is
+deliberately no `axal.vc/*` or `axal.vc/assets/*` route: a path-scoped zone
+route would take those URLs away from the assets binding and break the SPA
+fallback, and `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
+`frontend/test/apex_route_coverage.test.mjs` refuse both. Cloudflare Pages
+(`studioos-2p8.pages.dev`) is a mirror of `docs/` with no production hostname
+(`UNRESOLVED_ITEMS.md` U9). Who serves a host is settled by the deploy log's
+"Deployed studioos triggers" lines and the Pages dashboard's Domains line,
+never by prose.
 
 ### 2.6 `[env.preview]` (for completeness)
 

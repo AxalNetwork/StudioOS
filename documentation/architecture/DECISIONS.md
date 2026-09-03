@@ -1409,3 +1409,107 @@ and fails if the target never reads the prop. It is deliberately not repo-wide:
 ten other mounts pass `embedded` to children that draw no shell, h1 or rail, so
 the prop is inert there rather than dropped, and failing them would flag a
 tidiness issue in the words of a correctness one.
+
+---
+
+### D34. The Worker serves `axal.vc`; Cloudflare Pages is a mirror — and `CLAUDE.md` fact 4 said otherwise for two days
+
+**RESOLVED.** `axal.vc` and `app.axal.vc` are both whole-host Workers Custom
+Domains of the `studioos` Worker: `wrangler.toml` binds each `pattern` with
+`custom_domain = true` in `[[routes]]` (top level) and again in
+`[[env.production.routes]]`, and the Worker answers every path on either host
+— `/api/*` from Hono, everything else from its own `[assets]` copy of `docs/`
+(`directory = "./docs"`, `not_found_handling = "single-page-application"`,
+`run_worker_first = ["/api/*", "/landing/*", "/p/*", "/assets/*"]`). One
+build sits behind both hosts and they ship together on every `wrangler
+deploy`: in CI, `.github/workflows/cloudflare-worker-deploy.yml` on every push
+to `main` (build → `node scripts/migrate-d1.mjs --remote` → `wrangler deploy
+--config ../wrangler.toml --env production`), or by hand with the root
+`npm run deploy` (predeploy migrations, postdeploy `check-spa-live`).
+
+**The evidence is a deploy log and a dashboard, not a document.** GitHub
+Actions run 33740754882 (2026-09-03 09:48Z) ends with `Deployed studioos
+triggers: axal.vc (custom domain), app.axal.vc (custom domain)`, and the
+Cloudflare Pages dashboard's Production card lists only
+`studioos-2p8.pages.dev` under Domains — a Pages custom domain on `axal.vc`
+would appear there, and would have blocked the Worker binding. Those two
+lines are what settle who serves a host. Prose never does, and this entry is
+prose: if it ever disagrees with them, it is the thing that is wrong.
+
+**How the file that wins every disagreement lost this one.** The timeline,
+verified from git:
+
+- 2026-08-31 10:51Z — `e1de44c2f` ("Stop apex Pages and Worker asset skew")
+  wrote the **Pages** cutover's route table: `app.axal.vc` as a custom domain
+  plus three path routes, `axal.vc/api/*`, `axal.vc/landing/*` and
+  `axal.vc/p/*`. Cloudflare Pages served the apex.
+- 2026-08-31 15:20+04 — #371 (`3788db408`) wrote `CLAUDE.md` fact 4 against
+  that table. Correct at the time.
+- 2026-09-01 09:08Z — `1d320dda9`, author "Replit Agent", message "Remove
+  stale documentation asset files". It touched `wrangler.toml` (48 lines),
+  `scripts/build-frontend.mjs` and 287 files under `docs/`, and **no
+  documentation**: it replaced the three path routes with a whole-host
+  `axal.vc` custom domain in both tables. The apex moved back to the Worker
+  in a commit whose message does not mention it.
+- 2026-09-01 22:03+04 — #374 (`118342710`) rewrote the two guard tests,
+  `cloudflare-worker/test/apex_cutover_bootstrap.test.mjs` and
+  `frontend/test/apex_route_coverage.test.mjs`, to match the toml ("the toml
+  is the deployed truth") — but their comments credited the flip to
+  `e1de44c2f`. That attribution was wrong; both files now name `1d320dda9`
+  (corrected 2026-09-03, from git).
+
+So from 2026-09-01 until 2026-09-03 fact 4 — the one passage every other
+document defers to — described a topology that the deployed config, both
+guard tests and every deploy log contradicted. The hazard was never the stale
+sentence itself. It was that someone "fixing" `wrangler.toml` to match
+`CLAUDE.md` would have taken the apex down.
+
+**What 2026-09-03 added.** The deploys after #413 (Actions run 33734906029)
+and #414 (run 33738772717) failed in the migration step, so `wrangler deploy`
+never ran and **both** hosts stayed at run #27's build (`96a6e5769`) — while
+`cloudflare-pages-deploy.yml` advanced the Pages mirror twice. Its dashboard
+showed "Production" deployments for commits whose Worker never shipped, and
+that misled the operators for a morning. The Pages project `studioos`
+(`studioos-2p8.pages.dev`) still exists and receives a Direct Upload of a
+freshly built `docs/` on every push to `main` (`eda67173d`, 2026-09-02), but
+it serves no production hostname: it is a mirror. Its "disconnected from your
+Git account" banner refers to the dashboard-side Git integration retained for
+previews and has no bearing on `axal.vc`. Whether to retire the mirror and
+its workflow is `UNRESOLVED_ITEMS.md` U9 — deliberately not decided here.
+
+**What `CLAUDE.md` says now.** Fact 4 names both hosts as Workers Custom
+Domains, the `[assets]` binding, the one-build-behind-both-hosts rule and the
+two deploy paths; dates the shape to `1d320dda9`; calls Pages a mirror whose
+dashboard proves nothing about what the Worker shipped; keeps the ban on
+path-scoped apex routes; and points at U9 and U10 instead of asserting
+either. `GOTCHAS.md` carries the general lesson: a deployed-config change can
+arrive in a commit whose message is about something else, so who serves a
+host is read from the deploy log's "Deployed studioos triggers" lines and the
+Pages dashboard's Domains line, never from prose.
+`frontend/test/apex_truth_doc.test.mjs` fails if fact 4 stops naming both
+hosts as Workers Custom Domains, if it claims Pages or GitHub Pages serves
+the apex, if `wrangler.toml` stops binding both hosts with `custom_domain =
+true`, or if a live document reclaims the apex for Pages on a line that does
+not mark itself as history.
+
+**What stays true.** The 2026-08-31 incident — Pages-served HTML paired with
+a different Worker asset build, the entry module 404ing, the `?__reboot=`
+watchdog looping — is still the reason no path-scoped apex route may exist:
+with whole-host custom domains an `axal.vc/*` or `axal.vc/assets/*` zone
+route would take those URLs away from the assets binding and break the SPA
+fallback, and both guard tests still refuse them. `docs/` stays committed by
+hand, for review and for `scripts/check-docs-fresh.mjs`; both CI deploy
+workflows rebuild it from source at deploy time and never commit it, so the
+committed bytes are what reviewers read, not necessarily what ships
+(`documentation/operations/DEPLOY.md` §2.1). GitHub Pages is decommissioned
+as the apex; if the repository still has it enabled, the auto-generated
+`pages-build-deployment` workflow publishes `docs/` to a host nothing routes
+to.
+
+**Deliberately not asserted.** On the Worker-served hosts, requests for paths
+outside `run_worker_first` are answered by the assets binding without
+invoking the Hono app, so whether the apex HTML carries the security headers
+that `docs/_worker.js` sets on the Pages mirror and
+`middleware/securityHeaders.ts` sets on API responses cannot be read from
+this repository. That is U10, with its one-line live check
+(`curl -sI https://axal.vc/login`); this decision claims neither answer.

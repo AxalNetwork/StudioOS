@@ -1,8 +1,9 @@
 # Axal StudioOS – Production Deployment Guide
 
 Single source of truth for deploying StudioOS to production. Covers the
-Cloudflare Worker (canonical production API), the GitHub Pages frontend,
-secrets, and the post-deploy checklist.
+Cloudflare Worker (canonical production API, and the SPA on both `axal.vc`
+and `app.axal.vc`), the frontend bundle it serves, secrets, and the
+post-deploy checklist.
 
 ---
 
@@ -18,7 +19,7 @@ secrets, and the post-deploy checklist.
 | File storage     | R2                         | Cloudflare R2 (`studioos-files`)       | bound as `env.FILES`                            |
 | Vector search    | Vectorize                  | Cloudflare (`axal-search`)             | bound as `env.VECTORIZE`                        |
 | Dev backend      | FastAPI (Python)           | Local Replit only                      | `backend/`                                      |
-| Frontend         | React + Vite               | **GitHub Pages** (`docs/`)             | `frontend/`                                     |
+| Frontend         | React + Vite               | **Cloudflare Workers** — the `studioos` Worker's `[assets]` copy of `docs/`, on `axal.vc` + `app.axal.vc` | `frontend/`                                     |
 
 > **Architecture reality (revised 2026-04-28):** Earlier "audit #4" notes proposed
 > making FastAPI the canonical backend with the worker as a thin proxy via
@@ -75,13 +76,37 @@ of its schema.
 
 ### Frontend
 
-`docs/` is committed by hand. **No workflow rebuilds or commits it** — `ci.yml`
-builds the frontend to typecheck it and then *validates* that the committed
-`docs/` matches (`scripts/check-docs-fresh.mjs`), but it never writes the
-directory back. That validation is the only thing standing between a source
-change and a stale production bundle, so run the build at the REPO ROOT
-(`npm run build`, which also prerenders the crawlable routes) and commit the
-result in the same PR as the source change.
+There is no separate frontend deploy. `axal.vc` and `app.axal.vc` are both
+whole-host Workers Custom Domains of the `studioos` Worker (`wrangler.toml`
+`[[routes]]` and `[[env.production.routes]]`, each `custom_domain = true`),
+and the Worker serves the SPA on both from its own `[assets]` binding
+(`directory = "./docs"`, `not_found_handling = "single-page-application"`,
+`run_worker_first` for `/api/*`, `/landing/*`, `/p/*` and `/assets/*`). One
+build sits behind both hosts and they ship together on every
+`wrangler deploy` — `npm run deploy` by hand, or
+`.github/workflows/cloudflare-worker-deploy.yml` on every push to `main`. A
+deploy's closing `Deployed studioos triggers: axal.vc (custom domain),
+app.axal.vc (custom domain)` lines are what settle who serves the hosts.
+
+That has been the shape since 2026-09-01 (`1d320dda9`, "Remove stale
+documentation asset files", which replaced the Pages cutover's three
+path-scoped apex routes with the whole-host `axal.vc` custom domain). The
+`studioos` Cloudflare Pages project (`studioos-2p8.pages.dev`) still receives
+a build from `cloudflare-pages-deploy.yml` on every push, but it serves no
+production hostname: it is a mirror, and a "Production" deployment in its
+dashboard is not evidence that the Worker shipped (on 2026-09-03 the mirror
+advanced twice while both hosts stayed on the previous build, because the
+Worker deploy failed in its migration step). Its retirement is
+`documentation/architecture/UNRESOLVED_ITEMS.md` U9.
+
+`docs/` is still committed by hand, for review and for
+`scripts/check-docs-fresh.mjs`. **No workflow commits it** — `ci.yml` builds
+the frontend to typecheck it and then *validates* that the committed `docs/`
+matches, but never writes the directory back — while both CI deploy workflows
+*rebuild* it from source at deploy time, so the committed bytes are what
+reviewers read, not necessarily what ships (DEPLOY.md §2.1). Run the build at
+the REPO ROOT (`npm run build`, which also prerenders the crawlable routes)
+and commit the result in the same PR as the source change.
 
 ### FastAPI (dev only)
 
@@ -146,11 +171,18 @@ Exempt: `/api/health`, `/api/auth/login|register|verify|me`, `/api/monitoring/me
 ## 7. Rollback
 
 ```bash
-# Worker
-npx wrangler deployments list
-npx wrangler rollback <DEPLOYMENT_ID>
+# Worker + SPA — one deployment carries the script and its [assets] bundle,
+# so both hosts (axal.vc, app.axal.vc) roll back together. Run from
+# cloudflare-worker/ with the production config, as DEPLOY.md §3 does.
+npx wrangler deployments list --config ../wrangler.toml --env production
+npx wrangler rollback <DEPLOYMENT_ID> --config ../wrangler.toml --env production
 
-# Frontend: revert the docs/ commit on main.
-git revert <SHA-of-frontend-rebuild>
+# Then revert the source on main. Reverting the docs/ commit alone changes
+# nothing live: both deploy workflows rebuild docs/ from source at deploy
+# time, and the next push to main would re-ship the bad build.
+git revert <SHA-of-the-source-change>
 git push
 ```
+
+Rollback reverts the worker (and with it the SPA), not D1 — see
+[DEPLOY.md §3](../operations/DEPLOY.md#3-capture-a-rollback-point-first).

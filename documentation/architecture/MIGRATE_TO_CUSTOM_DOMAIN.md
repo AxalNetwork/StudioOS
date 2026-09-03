@@ -1,5 +1,13 @@
 # Migrate Production to `app.axal.vc`
 
+> **Superseded record (2026-05-20 → 2026-09-01).** This is the runbook for the
+> May migration that made `app.axal.vc` a Workers Custom Domain. Its apex
+> rows are historical: since `1d320dda9` (2026-09-01) `axal.vc` is ALSO a
+> whole-host custom domain of the same Worker, GitHub Pages serves nothing,
+> and "never attach a custom domain to the apex" is the opposite of the
+> deployed truth (`CLAUDE.md` fact 4, `PRODUCTION.md`). Do not act on the
+> apex instructions below.
+
 **Status:** ⚠️ In progress — Cloudflare + code landed, operator deploy + OAuth provider updates pending.
 **Owner:** Infra.
 **Last update:** Task #36, 2026-05-20 — switched architecture from
@@ -20,8 +28,8 @@ hostname. No Cloudflare Pages project is involved.
 
 | Hostname             | Served by                                | Notes |
 |----------------------|------------------------------------------|-------|
-| `axal.vc`            | GitHub Pages (marketing)                 | **NEVER** attach Cloudflare custom domain; apex DNS stays DNS-only. |
-| `www.axal.vc`        | GitHub Pages (marketing)                 | Redirect-to-apex or duplicate site. |
+| `axal.vc`            | GitHub Pages (marketing) — *historical; superseded 2026-09-01, now a Worker custom domain* | *(was)* **NEVER** attach Cloudflare custom domain; apex DNS stays DNS-only. |
+| `www.axal.vc`        | GitHub Pages (marketing) — *historical* | Redirect-to-apex or duplicate site. |
 | `app.axal.vc`        | Cloudflare Worker (`studioos`) — both SPA assets and `/api/*` | Same-origin SPA + API on one worker. Workers Custom Domain binding (not a zone route). |
 | `cdn.axal.vc`        | R2 public bucket (optional)              | Reserved. |
 | `status.axal.vc`     | Worker (status page HTML)                | Public, allowed in CORS allowlist. |
@@ -77,8 +85,8 @@ hostname. No Cloudflare Pages project is involved.
   (`enabled: false`). The `studioos.guillaumelauzier.workers.dev`
   URL now returns 404 at the edge.
 - ✅ Legacy zone route `axal.vc/api/*` deleted (the apex no longer
-  routes any path to the worker; GitHub Pages owns the apex
-  entirely).
+  routed any path to the worker; GitHub Pages owned the apex
+  entirely at the time — superseded 2026-09-01, see the banner).
 
 ## Operator-only steps (still pending)
 

@@ -1,14 +1,17 @@
 /**
  * Task #15 — hashed-asset retention across SPA builds.
  *
- * Prod serves the SPA from `docs/` through TWO authorities: the Cloudflare
- * Worker (app routes + now `/assets/*` on the apex) and GitHub Pages (the apex
- * root `/`). A fresh `vite build` wipes `docs/` (`emptyOutDir`) and emits new
- * content-hashed `assets/*` filenames. Immediately after `npm run deploy` the
- * Worker carries the NEW build while GitHub Pages still serves the PREVIOUS
- * build's `index.html`, which references the PREVIOUS hashes. With `/assets/*`
- * now routed to the Worker, the apex root would 404 those old hashes and go
- * blank until Pages catches up — unless the Worker still carries them.
+ * Prod serves the SPA from `docs/` through the Cloudflare Worker's `[assets]`
+ * binding on both `axal.vc` and `app.axal.vc` (whole-host Workers Custom
+ * Domains since 2026-09-01, 1d320dda9); the Cloudflare Pages project is a
+ * mirror of the same `docs/` with no production hostname. A fresh `vite build`
+ * wipes `docs/` (`emptyOutDir`) and emits new content-hashed `assets/*`
+ * filenames. Immediately after a Worker deploy, a client that still holds the
+ * PREVIOUS build's `index.html` (an open tab, a cached shell) requests the
+ * PREVIOUS hashes; the Worker would 404 them and the page goes blank until a
+ * reload — unless the Worker still carries them. (Until 2026-09-01 the same
+ * window existed between the Worker and GitHub Pages, which then served the
+ * apex root `/`; that is where this module came from.)
  *
  * This module computes which prior hashes to keep so the deployed `docs/assets`
  * is the UNION of the last `retainBuilds` builds. It is a PURE function over
@@ -46,7 +49,8 @@ export function planAssetRetention({
 
   // First run with this system (no ledger yet): seed the currently-deployed
   // assets as a synthetic prior build so they are not dropped on the first
-  // retention build — otherwise the live apex root would break immediately.
+  // retention build — otherwise clients still holding the previous shell
+  // would break immediately.
   if (builds.length === 0 && prevFiles.length > 0) {
     builds.push({ ts: 'pre-retention', files: uniq(prevFiles) });
   }
