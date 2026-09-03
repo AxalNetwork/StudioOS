@@ -305,7 +305,7 @@ test('the advisor preview boundary is stated, and covers every surface that rend
   // Every Practice and Expertise zone route carries it. Cohorts deliberately
   // does not: it renders no personal practice, only Lab-sourced empties.
   const gated = (app.match(/<AdvisorBucketRoutes preview=\{advisorRolePreview\} \/>/g) || []).length;
-  assert.equal(gated, 15, 'every Practice, Expertise and Cohorts zone route must carry the gate');
+  assert.equal(gated, 18, 'every Practice, Expertise and Cohorts route must carry the gate');
 
   // COHORTS JOINED THE GATE, and the reason it did not before has expired.
   // It used to render only Lab-sourced empty cards — nothing personal, so

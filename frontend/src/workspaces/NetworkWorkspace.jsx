@@ -1,8 +1,8 @@
 import React, { Suspense, lazy, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
-import { bucketForPath, zoneForPath } from './shellConfig';
+import { bucketForPath, zoneForPath, zonePath } from './shellConfig';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
@@ -73,6 +73,37 @@ const ADVISOR_ZONE = {
  */
 const ORG_BACKED = new Set(['founder', 'investor']);
 
+function NetworkOverview({ role }) {
+  const bucket = bucketForPath(role, '/network');
+  if (!bucket) return null;
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      {bucket.zones.map((zone) => (
+        <Link
+          key={zone.slug}
+          to={zonePath(bucket, zone)}
+          className="group rounded-xl border border-axal-border bg-white p-4 transition-colors hover:border-emerald-300 hover:bg-emerald-50/40"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-bold text-axal-ink group-hover:text-emerald-800">{zone.label}</span>
+            <span
+              className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"
+              style={{ background: zone.archetype.colors[0], color: zone.archetype.colors[1], borderColor: zone.archetype.colors[2] }}
+            >
+              {zone.archetype.label}
+            </span>
+          </div>
+          <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
+            {zone.slug === 'relationships' && 'People you know and how strongly, from the records you keep here.'}
+            {zone.slug === 'introductions' && 'Double opt-in: an introduction cannot advance past a consent nobody has recorded.'}
+            {zone.slug === 'organizations' && 'Companies, funds and firms, rolled up from the people you know inside them.'}
+          </p>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 function Loading() {
   return <div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-56" /></div>;
 }
@@ -80,12 +111,13 @@ function Loading() {
 export default function NetworkWorkspace({ role = 'founder' }) {
   const location = useLocation();
   const bucket = bucketForPath(role, location.pathname);
-  const zone = zoneForPath(bucket, location.pathname);
+  const isRoot = bucket && location.pathname === bucket.prefix;
+  const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
   const slug = zone?.slug;
   // Only the investor workspace renders all three sections on one page, and
   // only its markup carries the ids in ANCHORS. Running this anywhere else
   // polled for an element that has never existed, twenty times, on every load.
-  const anchored = role === 'investor';
+  const anchored = role === 'investor' && !isRoot;
 
   useEffect(() => {
     if (!anchored || !slug) return undefined;
@@ -105,6 +137,9 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   }, [anchored, slug]);
 
   const body = useMemo(() => {
+    if (isRoot) {
+      return <NetworkOverview role={role} />;
+    }
     if (role === 'founder') {
       const Zone = FOUNDER_ZONE[slug] || FounderNetworkRelationships;
       return <Suspense fallback={<Loading />}><Zone /></Suspense>;
@@ -121,7 +156,7 @@ export default function NetworkWorkspace({ role = 'founder' }) {
       return <Suspense fallback={<Loading />}><InvestorNetworkWorkspace embedded /></Suspense>;
     }
     return <Suspense fallback={<Loading />}><NetworkPage embedded /></Suspense>;
-  }, [role, slug]);
+  }, [role, slug, isRoot]);
 
   const INTRO = {
     relationships: 'People you know and how strongly, from the records you keep here.',
@@ -134,6 +169,8 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   return (
     <WorkspaceShell
       role={role}
+      title={isRoot ? 'Network' : undefined}
+      activeSlug={isRoot ? null : undefined}
       rail={(
         <WorkerRail
           workspace="Network"
@@ -144,9 +181,11 @@ export default function NetworkWorkspace({ role = 'founder' }) {
           // relationship editor writes, and accepting an introduction spends a
           // credit. The rail is what does nothing; the page acts on your click.
           note="This rail reports what each zone reads. It drafts no outreach and sends no message — and where a zone does write, it writes on your click, never on the rail's."
-          coverage={[orgGap
-            ? 'Organizations · no store behind it on this licence'
-            : `${zone?.label || 'Relationships'} · stored records only`]}
+          coverage={[isRoot
+            ? 'Network overview — 3 zones'
+            : orgGap
+              ? 'Organizations · no store behind it on this licence'
+              : `${zone?.label || 'Relationships'} · stored records only`]}
           unavailable={[
             ['Outreach drafting', 'No message, sequence or introduction is written here. Every send is a human click.'],
             ...(orgGap
@@ -156,7 +195,7 @@ export default function NetworkWorkspace({ role = 'founder' }) {
         />
       )}
       scope={role === 'investor' ? 'One fund' : 'One book'}
-      intro={INTRO[slug] || INTRO.relationships}
+      intro={isRoot ? 'Work your relationships — people, introductions, and the organizations behind them.' : (INTRO[slug] || INTRO.relationships)}
     >
       {body}
     </WorkspaceShell>

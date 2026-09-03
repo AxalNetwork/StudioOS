@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
-import { bucketForPath, zoneForPath } from './shellConfig';
+import { bucketForPath, zoneForPath, zonePath } from './shellConfig';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -157,10 +157,47 @@ const ZONE_COPY = {
   },
 };
 
+function ResearchOverview({ role }) {
+  const bucket = bucketForPath(role, '/research');
+  if (!bucket) return null;
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {bucket.zones.map((zone) => (
+        <Link
+          key={zone.slug}
+          to={zonePath(bucket, zone)}
+          className="group rounded-xl border border-axal-border bg-white p-4 transition-colors hover:border-emerald-300 hover:bg-emerald-50/40"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-bold text-axal-ink group-hover:text-emerald-800">{zone.label}</span>
+            <span
+              className="rounded-[3px] border px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[.07em]"
+              style={{ background: zone.archetype.colors[0], color: zone.archetype.colors[1], borderColor: zone.archetype.colors[2] }}
+            >
+              {zone.archetype.label}
+            </span>
+          </div>
+          <p className="mt-2 text-[12px] leading-relaxed text-axal-ink-2">
+            {zone.slug === 'ask' && 'Cited answers over your own documents. Every answer names the sources it drew on.'}
+            {zone.slug === 'client-prep' && 'One client, everything you need before the session.'}
+            {zone.slug === 'markets' && 'Signals from the sectors you work in, with the date each one was gathered.'}
+            {zone.slug === 'companies' && 'Companies you have looked into — and whether you have a relationship or only a file.'}
+            {zone.slug === 'library' && 'The documents Ask reads from. What is indexed here is exactly what Ask can reach.'}
+            {zone.slug === 'funds' && 'Who invests at your stage, and on what terms.'}
+            {zone.slug === 'diligence' && 'The evidence behind a decision, and the questions still open against it.'}
+            {zone.slug === 'benchmarking' && 'Comparables, with the sample size on every figure.'}
+          </p>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 export default function ResearchWorkspace({ role = 'founder', user = null }) {
   const location = useLocation();
   const bucket = bucketForPath(role, location.pathname);
-  const zone = zoneForPath(bucket, location.pathname);
+  const isRoot = bucket && location.pathname === bucket.prefix;
+  const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
   const slug = zone?.slug;
 
   const accentClass = {
@@ -169,6 +206,9 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
   }[role] || 'text-axal-violet';
 
   const body = useMemo(() => {
+    if (isRoot) {
+      return <ResearchOverview role={role} />;
+    }
     if (slug === 'markets') {
       return (
         <Suspense fallback={<Loading />}>
@@ -192,17 +232,19 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     }
     const copy = ZONE_COPY[slug] || ZONE_COPY.ask;
     return <NoStoreYet {...copy} accentClass={copy.accentClass || accentClass} />;
-  }, [slug, accentClass, role, user]);
+  }, [slug, accentClass, role, user, isRoot]);
 
   // Companies has a live store for everyone, but for an advisor the store holds
   // only what they ran themselves — saying it "reads a live source" and stopping
   // there implies a client book that does not exist.
   const ownAnalysesOnly = slug === 'companies' && role === 'advisor';
-  const coverageLine = LIVE_ZONES.has(slug)
-    ? (ownAnalysesOnly
-      ? 'Companies · your own analyses, not a client book'
-      : `${zone?.label || 'This zone'} reads a live source`)
-    : `${zone?.label || 'This zone'} has no store behind it yet`;
+  const coverageLine = isRoot
+    ? `Research overview — ${bucket?.zones?.length || 0} zones`
+    : LIVE_ZONES.has(slug)
+      ? (ownAnalysesOnly
+        ? 'Companies · your own analyses, not a client book'
+        : `${zone?.label || 'This zone'} reads a live source`)
+      : `${zone?.label || 'This zone'} has no store behind it yet`;
 
   const INTRO = {
     ask: 'Cited answers over your own documents. Every answer names the sources it drew on.',
@@ -218,6 +260,8 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
   return (
     <WorkspaceShell
       role={role}
+      title={isRoot ? 'Research' : undefined}
+      activeSlug={isRoot ? null : undefined}
       rail={(
         <WorkerRail
           workspace="Research"
@@ -233,7 +277,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           ]}
         />
       )}
-      intro={INTRO[slug] || INTRO.ask}
+      intro={isRoot ? 'Know more than the room — research over your own documents, markets, and companies.' : (INTRO[slug] || INTRO.ask)}
     >
       {body}
     </WorkspaceShell>
