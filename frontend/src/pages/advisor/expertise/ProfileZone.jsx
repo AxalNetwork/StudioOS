@@ -56,9 +56,42 @@ function profileCompleteness(profile) {
   return { pct: Math.round((complete / fields.length) * 100), gaps, complete, total: fields.length };
 }
 
+/**
+ * The draft's shape, in one place, so the seed above and the read below cannot
+ * drift into a field that exists in one and not the other — a field present at
+ * load and absent at seed would reintroduce exactly the deref this fixes.
+ */
+const EMPTY_DRAFT = {
+  display_name: '', headline: '', bio: '',
+  expertise: '', sectors: '', stages: '', languages: '',
+  country: '', timezone: '', availability_note: '',
+  headshot_url: '', linkedin_url: '',
+};
+
 export default function ProfileZone() {
   const [state, setState] = useState({ loading: true, error: '', profile: null });
-  const [draft, setDraft] = useState(null);
+  // SEEDED, NOT NULL, and this is a crash fix rather than a tidy-up.
+  //
+  // Every field below reads `draft.<key>` directly inside `<ZoneBody>`'s
+  // children — `value={draft.display_name}` and eleven siblings. React
+  // evaluates a component's children WHEN THE PARENT RENDERS, before
+  // `ZoneBody` ever looks at `loading` to decide between a skeleton and them.
+  // So a null draft is dereferenced on the very first render, every time,
+  // whatever `loading` says: the page threw `Cannot read properties of null
+  // (reading 'display_name')` into RouteErrorBoundary and rendered a red
+  // error card instead of the profile, for every advisor, on every visit.
+  //
+  // The `loading` guard below cannot fix that, and #427's docblock has the
+  // mechanism backwards where it says "the children below still cannot be
+  // rendered against a null draft" — they are not rendered against it, they
+  // are CONSTRUCTED against it, which happens first and is what throws. That
+  // fix was still right about what it fixed (an unreachable error card); it
+  // simply did not touch this.
+  //
+  // Seeding with the same shape `load` builds makes every read a string at
+  // all times. The guard stays as it is: it is no longer load-bearing for the
+  // deref, but it still keeps the skeleton up until the first read lands.
+  const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState(null);
 
@@ -71,6 +104,7 @@ export default function ProfileZone() {
       // real state an advisor account can be in — the row is created by the
       // first save. An empty draft is correct here; an error would not be.
       setDraft({
+        ...EMPTY_DRAFT,
         display_name: profile?.display_name || '',
         headline: profile?.headline || '',
         bio: profile?.bio || '',
