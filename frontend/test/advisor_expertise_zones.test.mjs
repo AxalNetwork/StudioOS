@@ -275,3 +275,52 @@ test('every new store has an api method, and none of them names an advisor', () 
   const block = api.slice(api.indexOf('listMyAdvisorServices:'), api.indexOf('listMyAdvisorCohortFounders:'));
   assert.doesNotMatch(block, /advisor_id/, 'no client method passes an advisor id');
 });
+
+test('a ZoneBody caller never holds its draft as null', () => {
+  // THE BUG THIS PINS SHUT, which two PRs walked past. `ProfileZone` held
+  // `const [draft, setDraft] = useState(null)` and read `draft.display_name`
+  // — plus eleven siblings — directly inside `<ZoneBody>`'s children. React
+  // evaluates a component's children WHEN THE PARENT RENDERS, before ZoneBody
+  // looks at `loading` to choose between a skeleton and them. So the null was
+  // dereferenced on the very first render, every time, and /expertise/profile
+  // threw into RouteErrorBoundary and showed a red error card instead of the
+  // profile. For everyone. On every visit.
+  //
+  // `loading` cannot guard an expression that is BUILT before it is read, and
+  // #427's docblock had the mechanism backwards where it said "the children
+  // below still cannot be rendered against a null draft" — they are not
+  // rendered against it, they are constructed against it. The whole 1064-test
+  // suite reads source as text and saw nothing; `scripts/check-workspace-
+  // frames.mjs` renders the page and found it in one run.
+  //
+  // The fix is to seed the state with its own empty shape, so every read is a
+  // string at all times. This asserts that, for every ZoneBody caller — the
+  // component whose API invites the mistake, because it takes already-built
+  // children and only then decides whether to show them.
+  const dir = 'frontend/src/pages/advisor';
+  const files = [];
+  const walk = (d) => {
+    for (const e of readdirSync(resolve(process.cwd(), d), { withFileTypes: true })) {
+      if (e.isDirectory()) walk(`${d}/${e.name}`);
+      else if (e.name.endsWith('.jsx') && read(`${d}/${e.name}`).includes('<ZoneBody')) {
+        files.push(`${d}/${e.name}`);
+      }
+    }
+  };
+  walk(dir);
+  assert.ok(files.length >= 8, `only ${files.length} ZoneBody callers found — the scan is broken`);
+
+  for (const file of files) {
+    const src = codeOnly(read(file));
+    for (const m of src.matchAll(/const \[(\w+), set\w+\] = useState\(null\)/g)) {
+      const name = m[1];
+      // A deref that is NOT optional-chained. `x?.y` is safe to construct;
+      // `x.y` is not, and inside ZoneBody's children that is the crash.
+      const deref = new RegExp(`(?<![\\w?.])${name}\\.[a-z_]`, 'i');
+      assert.ok(!deref.test(src),
+        `${file}: \`${name}\` starts as null and is dereferenced without \`?.\`. `
+        + 'Inside <ZoneBody> children that throws on the first render, whatever '
+        + '`loading` says — seed it with its empty shape instead.');
+    }
+  }
+});
