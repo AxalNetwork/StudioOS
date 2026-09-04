@@ -2,8 +2,14 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Info } from 'lucide-react';
 import { api } from '../../../lib/api';
-import { ZoneBody, NothingYet, StatedLimit } from '../../advisor/expertise/kit';
-import { Section, StatCard, moneyUsd } from '../operations/kit';
+// Through `pages/partner/kit.jsx` rather than reaching into the advisor tree
+// and the operations kit separately — the same primitives, but `moneyUsd`
+// arrives under the name `moneyDollars`, which is the whole point of that file:
+// the figures below are `quotes.price`, REAL DOLLARS, and the cents-taking
+// helper of the identical shape is one import line away.
+import {
+  ZoneBody, NothingYet, StatedLimit, Section, StatCard, moneyDollars,
+} from '../kit';
 
 /**
  * Pipeline · Analytics — `/pipeline/analytics`.
@@ -85,14 +91,14 @@ export default function PartnerPipelineAnalyticsZone() {
           />
           <StatCard
             label="Weighted forecast"
-            value={f ? moneyUsd(f.weighted_value) : '—'}
-            hint={f ? `of ${moneyUsd(f.unweighted_value)} open` : undefined}
+            value={f ? moneyDollars(f.weighted_value) : '—'}
+            hint={f ? `of ${moneyDollars(f.unweighted_value)} open` : undefined}
           />
-          <StatCard label="Open proposals" value={p ? p.pending : '—'} hint={p ? moneyUsd(p.open_value) : undefined} />
-          <StatCard label="Won value" value={p ? moneyUsd(p.won_value) : '—'} hint={p ? `${p.accepted} accepted` : undefined} />
+          <StatCard label="Open proposals" value={p ? p.pending : '—'} hint={p ? moneyDollars(p.open_value) : undefined} />
+          <StatCard label="Won value" value={p ? moneyDollars(p.won_value) : '—'} hint={p ? `${p.accepted} accepted` : undefined} />
           <StatCard
             label="Average deal"
-            value={p?.average_deal_size != null ? moneyUsd(p.average_deal_size) : '—'}
+            value={p?.average_deal_size != null ? moneyDollars(p.average_deal_size) : '—'}
             hint={p?.average_deal_size != null ? 'across won work' : 'no wins yet'}
           />
         </div>
@@ -137,7 +143,7 @@ export default function PartnerPipelineAnalyticsZone() {
                         <td className="px-3 py-2 text-right tabular-nums">
                           {s.median_cycle_days != null ? `${s.median_cycle_days}d` : '—'}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{moneyUsd(s.won_value)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{moneyDollars(s.won_value)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -203,14 +209,14 @@ export default function PartnerPipelineAnalyticsZone() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-semibold tabular-nums">{moneyUsd(s.weighted)}</div>
-                    <div className="text-[11px] tabular-nums text-gray-400">of {moneyUsd(s.value)}</div>
+                    <div className="text-sm font-semibold tabular-nums">{moneyDollars(s.weighted)}</div>
+                    <div className="text-[11px] tabular-nums text-gray-400">of {moneyDollars(s.value)}</div>
                   </div>
                 </div>
               ))}
               <div className="flex items-center justify-between gap-3 bg-gray-50/60 p-3 dark:bg-gray-800/40">
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Weighted total</span>
-                <span className="text-sm font-bold tabular-nums">{moneyUsd(f.weighted_value)}</span>
+                <span className="text-sm font-bold tabular-nums">{moneyDollars(f.weighted_value)}</span>
               </div>
             </div>
           ) : (

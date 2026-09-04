@@ -191,6 +191,11 @@ import referencesRoutes from './routes/references';
 import comarketingRoutes from './routes/comarketing';
 import companyRoutes from './routes/company';
 import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
+// #45 — the partner workspace's own stores (migrations 208/209). Mounted under
+// `/api/partner/…` singular, which is a free first segment: `/api/partners` is
+// the public firm directory and a different path, and `/api/pipeline/vote*`
+// below belongs to deal voting rather than to a partner's deal pipeline.
+import partnerPipeline from './routes/partner_pipeline';
 import insightsRoutes from './routes/insights';
 // Signals — founder decision-engine over public company data (not a trading UI).
 import signalsRoutes from './routes/signals';
@@ -959,6 +964,11 @@ app.route('/api', companyRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
 app.route('/api/engagements', engagementsRouter);
+// #45 — the partner side of those same deals: what a firm records ABOUT its
+// quotes and engagements (negotiation stage, retainer scope, hours logged).
+// Scoped to the caller's own firm throughout; a row belonging to another firm
+// answers 404, never 403.
+app.route('/api/partner/pipeline', partnerPipeline);
 app.route('/api/insights', insightsRoutes);
 // Signals — founder-actionable opportunity engine over public-market evidence.
 app.route('/api/signals', signalsRoutes);

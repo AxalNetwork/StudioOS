@@ -213,7 +213,24 @@ for (const role of ROLES) {
     else if (p.includes('/insights/heatmap')) body = { matrix: [], stages: [], totals_by_category: {}, total_needs: 0 };
     else if (p.includes('/insights/trends')) body = { months: [], series: [] };
     else if (p.includes('/insights/feed')) body = { items: [], sectors: [], geographies: [] };
-    else if (/\/(summary|overview|analytics|profile|me|progress|status)$/.test(p)) body = {};
+    // #45 — the partner workspace's composite reads. Without these lines the
+    // generic stub is a BARE `[]`, so `r.items` is undefined and the zone
+    // renders whatever it does with no list — which is a state the real API
+    // never produces. Stubbing the real envelope means the frame check proves
+    // the EMPTY state paints, on purpose rather than by coincidence.
+    else if (p.includes('/partner/pipeline/negotiations')) body = { items: [] };
+    else if (p.includes('/partner/pipeline/retainers')) {
+      body = { items: [], retainer_count: 0, mrr_cents: null, mrr_basis: null, mrr_note: null };
+    }
+    // #45 — the partner workspace's composite reads. Without these lines the
+    // generic stub is a BARE `[]`, so `r.items` is undefined and the zone
+    // renders whatever it does with no list — a state the real API never
+    // produces. Stubbing the real envelope means the frame check proves the
+    // EMPTY state paints, on purpose rather than by coincidence.
+    else if (p.includes('/partner/pipeline/negotiations')) body = { items: [] };
+    else if (p.includes('/partner/pipeline/retainers')) {
+      body = { items: [], retainer_count: 0, mrr_cents: null, mrr_basis: null, mrr_note: null };
+    } else if (/\/(summary|overview|analytics|profile|me|progress|status)$/.test(p)) body = {};
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
   await ctx.addInitScript((u) => {

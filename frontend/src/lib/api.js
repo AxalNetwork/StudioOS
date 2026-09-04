@@ -2990,6 +2990,42 @@ export const api = {
   respondToAdvisorProofConsent: (token, data) =>
     request(`/advisors/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // ---------- The partner firm's own stores (migrations 208-209) ----------
+  // Scoped server-side on the caller's `partners` row; none takes a partner id
+  // for the same reason the advisor block above does not take an advisor id.
+  // A quote or engagement belonging to another firm answers 404, not 403 — a
+  // non-owner is not told the row exists.
+  listPartnerNegotiations: () => request('/partner/pipeline/negotiations'),
+  // PUT, not POST: one negotiation per quote is a UNIQUE index, so this is an
+  // upsert. `{touch: true}` advances the stalled clock without changing stage.
+  savePartnerNegotiation: (quoteId, data) =>
+    request(`/partner/pipeline/negotiations/${quoteId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  createPartnerNegotiationTerm: (quoteId, data) =>
+    request(`/partner/pipeline/negotiations/${quoteId}/terms`, { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerNegotiationTerm: (id, data) =>
+    request(`/partner/pipeline/negotiation-terms/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerNegotiationTerm: (id) =>
+    request(`/partner/pipeline/negotiation-terms/${id}`, { method: 'DELETE' }),
+
+  // Returns `items`, plus `mrr_cents` and the `mrr_basis` sentence saying what
+  // that total counted. `mrr_cents` is null when no retainer carries an amount:
+  // a total of zero would claim the clients pay nothing.
+  listPartnerRetainers: () => request('/partner/pipeline/retainers'),
+  savePartnerRetainer: (engagementId, data) =>
+    request(`/partner/pipeline/retainers/${engagementId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePartnerRetainer: (engagementId) =>
+    request(`/partner/pipeline/retainers/${engagementId}`, { method: 'DELETE' }),
+  // The period is in the path because it is the row's identity — hours for
+  // 2026-09 are one record, upserted, not a second row appended each save.
+  savePartnerRetainerUsage: (engagementId, period, data) =>
+    request(`/partner/pipeline/retainers/${engagementId}/usage/${period}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  // A real delete rather than writing zero: zero hours is the claim that they
+  // worked none, which is not the same as no record for the period.
+  deletePartnerRetainerUsage: (engagementId, period) =>
+    request(`/partner/pipeline/retainers/${engagementId}/usage/${period}`, { method: 'DELETE' }),
+
   listMyAdvisorCohorts: () => request('/advisors/me/cohort'),
   listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),
   listMyAdvisorCohortWeeks: (cycleId) => request(`/advisors/me/cohort/${cycleId}/weeks`),

@@ -176,7 +176,32 @@ test('no partner description survives for a zone that renders a no-store card', 
   const overlap = lines.filter((s) => copySlugs.includes(s));
   assert.deepEqual(overlap, [], `these zones render NoStoreYet and must not be described: ${overlap.join(', ')}`);
 
-  for (const claim of [/live deals at terms/i, /over-committed/i, /lead scoring reads against/i]) {
+  // THREE PHRASES WERE BANNED HERE. ONE HAS LIFTED, AND ONLY ONE.
+  //
+  // `/live deals at terms/i` was the negotiations card's own words, banned
+  // because no store carried a term. Migration 208 added `quote_negotiations`
+  // (stage, ball-in-court) and `quote_terms` (a clause with our position,
+  // theirs and the landing), `partner_pipeline.ts` reads them and
+  // `NegotiationsZone.jsx` renders them, so the sentence is now a description
+  // of a working page. It is no longer banned — but the ban is replaced rather
+  // than deleted, by the assertion below that the zone is live: if the body is
+  // ever removed from `LIVE`, saying "live deals at terms" becomes false again
+  // and this test fails again.
+  //
+  // The other two stay, and neither is a formality:
+  //   · `/over-committed/i` — 208 records hours and seats but NOTHING records
+  //     the firm's cap, so there is still no threshold to be over. The capacity
+  //     canvas hardcodes 40; a page that adopted that number would be inventing
+  //     the firm's cap and then presenting it as a finding.
+  //   · `/lead scoring reads against/i` — never matched the live line, which
+  //     reads "reads a match against". Kept so a future rewrite cannot drift
+  //     into the stronger claim.
+  const liveNow = zoneSlugs(partnerCode, 'LIVE');
+  assert.ok(
+    liveNow.includes('negotiations'),
+    'the "live deals at terms" ban lifted on the premise that negotiations is live; it is not',
+  );
+  for (const claim of [/over-committed/i, /lead scoring reads against/i]) {
     assert.doesNotMatch(blockOf(partnerCode, 'ZONE_LINES'), claim,
       `an overview line re-asserts ${claim}`);
   }

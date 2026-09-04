@@ -121,7 +121,21 @@ export function StatedLimit({ title, children }) {
       <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
         {title}
       </div>
-      <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">{children}</p>
+      {/*
+        A DIV, NOT A `<p>`, and the difference is not cosmetic. This wrapper was
+        a `<p>` while every caller passed bare text, which worked — until
+        `pages/partner/pipeline/AnalyticsZone.jsx` passed two `<p>` elements into
+        it. A `<p>` inside a `<p>` is invalid, the browser auto-closes the outer
+        one at the first inner tag, and the typography classes below then applied
+        to nothing while React logged `validateDOMNesting`. Seven of the eight
+        call sites render identically under a div carrying the same classes; the
+        eighth simply starts working.
+
+        Worth fixing here rather than at the call sites: a zone that can answer
+        less than its canvas asked for usually has more than one thing to say,
+        and "never pass a paragraph" is a rule the next author will not know.
+      */}
+      <div className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">{children}</div>
     </Card>
   );
 }
@@ -136,6 +150,14 @@ export function Field({ label, hint, children }) {
   );
 }
 
+/**
+ * THESE THREE ARE THE ADVISOR ACCENT. The emerald is not a neutral default —
+ * it is `ACCENT.advisor` from `workspaces/shellConfig.js`, and it is correct in
+ * all eleven files that import it. A partner zone must NOT reuse them: partner
+ * is amber, and `pages/partner/kit.jsx` carries the amber pair for that reason.
+ * Parameterising this file by accent would edit eleven advisor files to solve a
+ * problem that belongs to one licence.
+ */
 export const inputClass =
   'mt-1 w-full rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] '
   + 'focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 '

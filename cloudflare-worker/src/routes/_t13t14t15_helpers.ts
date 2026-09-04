@@ -80,6 +80,21 @@ export function normaliseTags(value: unknown): string {
 
 /** Map auth-helper Errors to JSON responses. Use inside `try {...} catch (e) { return mapError(c, e); }`. */
 export function mapError(c: Context<{ Bindings: Env }>, e: any) {
+  // A THROWN `Response` IS THE ANSWER, not something to describe.
+  //
+  // Every status this function can produce is 400, 401 or 403 — it reads a
+  // message and picks one. A helper that needs any OTHER status has nowhere to
+  // put it, and 404 is the one that matters: an ownership check must answer
+  // "not found" rather than "forbidden", because 403 confirms to a non-owner
+  // that the row exists. `requireOwnEngagement` and `requireOwnQuote` in
+  // `_partner_workspace_helpers.ts` therefore throw the Response itself.
+  //
+  // Without this line that Response fell through to `String(e?.message || e)`
+  // and shipped as a 400 reading `[object Response]` — which is why it is here:
+  // `partner_pipeline_stores.test.ts` asserted the 404 and got the 400. No
+  // existing caller throws a Response, so nothing else changes.
+  if (e instanceof Response) return e;
+
   const msg = String(e?.message || e || 'Error');
   const status =
     msg === 'Unauthorized' ? 401 :

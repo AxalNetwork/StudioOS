@@ -28,6 +28,11 @@ const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
 // time and forecast. Both are honest surfaces answering different questions;
 // Demand Insights keeps its own mount at /partner/insights.
 const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline/AnalyticsZone'));
+// #45 — the two Pipeline zones migration 208 gave a store to. Both read
+// `/api/partner/pipeline/*` and nothing else; neither has a legacy route,
+// because neither has ever had a surface anywhere in the product.
+const PartnerNegotiations = lazy(() => import('../../pages/partner/pipeline/NegotiationsZone'));
+const PartnerRetainers = lazy(() => import('../../pages/partner/pipeline/RetainersZone'));
 
 /**
  * Pipeline, Delivery and Offers — the Partner shell's three owned buckets.
@@ -35,11 +40,16 @@ const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline
  * THIS IS THE SHELL WITH THE MOST WORKING CODE AND THE LEAST CANONICAL URLS.
  * Its live surfaces were spread across five prefixes that share no logic —
  * `/partner/operations/*`, `/needs`, `/services`, `/perks`,
- * `/partner/insights` — and the shell mounted only some of them. Six of the
- * fifteen zones now render one: Pipeline's leads, proposals and analytics,
- * Delivery's board, and Offers' catalog and perk deals. Every legacy prefix
- * stays mounted; a zone and its legacy route are the same component at two
- * routes, which is not a fork.
+ * `/partner/insights` — and the shell mounted only some of them. Eight of the
+ * fifteen zones now render one: Pipeline's leads, proposals, negotiations,
+ * retainers and analytics, Delivery's board, and Offers' catalog and perk
+ * deals. Every legacy prefix stays mounted; a zone and its legacy route are the
+ * same component at two routes, which is not a fork.
+ *
+ * NEGOTIATIONS AND RETAINERS ARE THE TWO WITHOUT A LEGACY ROUTE. Every other
+ * live zone mounts a page that already existed somewhere; these two are new
+ * files reading stores migration 208 created, and they are the first two of the
+ * nine no-store zones to be closed.
  *
  * `/pipeline` IS NOW A SHARED PREFIX, and deliberately so. The investor shell
  * has held `/pipeline`, `/pipeline/screening`, `/pipeline/commit` and
@@ -49,9 +59,9 @@ const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline
  * on `/pipeline/screening` and an operator on `/pipeline/leads` each resolve
  * to their own bucket. Worth knowing before adding a sixth slug to either.
  *
- * WHAT IS NOT WIRED. Negotiations and retainers, four of Delivery's five
- * zones, and three of Offers' five have no surface anywhere. They ship saying
- * what they would hold. Two of those absences are worth naming rather than glossing:
+ * WHAT IS NOT WIRED. Four of Delivery's five zones and three of Offers' five
+ * have no surface anywhere. They ship saying what they would hold. Two of those
+ * absences are worth naming rather than glossing:
  *
  *   · Delivery·Capacity is the page that would show an operator over-committed
  *     while holding a granted seat inside a client's systems — a trust
@@ -117,18 +127,26 @@ function NoStoreYet({ heading, what, why, links = [], seam }) {
  * `embedded` that never reads it, and it caught this one; a prop that does
  * nothing reads as a seam that has been dealt with when it has not.
  *
- * TWO ZONES THAT USED TO BE HERE ARE NOW IN `COPY`. Pipeline · retainers and
- * Delivery · health both resolved to the operations Overview, so both looked
- * live and neither was. Neither is buildable: `engagements`
- * (sql/t13_t14_t15.sql:366) carries id, need, quote, partner, founder,
- * project, price, status, delivered/cancelled/invoiced timestamps and nothing
- * else — no recurrence, renewal date or consumption for retainers; no health,
- * risk, milestone or hours column for the board's health lens. They say so.
+ * TWO ZONES ONCE RESOLVED HERE BY ACCIDENT, and the trail is worth keeping.
+ * Pipeline · retainers and Delivery · health both fell through to the
+ * operations Overview, so both looked live and neither was; both were moved to
+ * `COPY` to say so. `engagements` (sql/t13_t14_t15.sql:366) carries id, need,
+ * quote, partner, founder, project, price, status and the
+ * delivered/cancelled/invoiced timestamps — and nothing else, which is why
+ * neither was buildable on it.
+ *
+ * Retainers is now live for the reason the card described: migration 208 added
+ * `partner_retainers` (shape, cadence, amount, retained hours, renewal) and
+ * `retainer_usage`, which are exactly the columns `engagements` lacks. Delivery
+ * · health stays in `COPY` until its own store lands — migration 208 created
+ * the tables, and nothing reads them yet.
  */
 const LIVE = {
   '/pipeline': {
     leads: (user) => <NeedsBoardPage user={user} embedded />,
     proposals: () => <PartnerEngagements view="proposals" />,
+    negotiations: () => <PartnerNegotiations />,
+    retainers: () => <PartnerRetainers />,
     analytics: () => <PartnerPipelineAnalytics />,
   },
   '/delivery': {
@@ -140,21 +158,16 @@ const LIVE = {
   },
 };
 
+// NOTHING UNDER `/pipeline` ANY MORE, and the two cards that stood here are
+// worth recording as they were. Negotiations said "terms and ball-in-court
+// state exist in the canvas record but nothing tracks them"; retainers said
+// "`engagements` carries no cadence, no renewal date and no consumption".
+// Migration 208 added `quote_negotiations`, `quote_terms`, `partner_retainers`
+// and `retainer_usage`, and both zones now read them — so both cards were
+// DELETED rather than reworded. A no-store card left standing in front of a
+// store is the same false claim as one that overstates; it merely fails in the
+// direction that looks humble.
 const COPY = {
-  '/pipeline': {
-    negotiations: {
-      heading: 'Negotiations has no tab of its own yet',
-      what: 'Live deals at terms: what they asked, what the firm will hold, whose court the ball is in, and the landing that ends it.',
-      why: 'Terms and ball-in-court state exist in the canvas record but nothing in the operations workspace tracks them — a proposal is either sent or decided, with the conversation between the two unmodelled.',
-      links: [{ to: '/pipeline/proposals', label: 'Proposals →' }],
-    },
-    retainers: {
-      heading: 'Retainers has no recurrence to read',
-      what: 'Recurring revenue, what each client is actually consuming against what they bought, and when each one renews.',
-      why: 'An engagement is a single accepted quote at a single price: `engagements` carries no cadence, no renewal date and no consumption, so there is no row that is a retainer rather than a project. Every figure on this zone would be one the store cannot distinguish from a one-off.',
-      links: [{ to: '/delivery/board', label: 'Engagement board →' }],
-    },
-  },
   '/delivery': {
     health: {
       heading: 'Health has nothing to score',
@@ -225,6 +238,13 @@ const ZONE_LINES = {
     // one. The loss taxonomy the canvas leads with stays absent — no quote
     // records why it was rejected — and the zone says so on itself.
     analytics: 'Win rate, decision cycle and weighted forecast over your own quotes, broken out by shape and by quarter.',
+    // "Live deals at terms" was banned as a phrase for as long as no store
+    // carried a term — `partner_bucket_overview.test.mjs` failed the build on
+    // it. Migration 208 carries stage, ball-in-court and clause-level positions,
+    // so the ban lifted with this line rather than the line being softened
+    // around it.
+    negotiations: 'Live deals at terms: what each side asked, where it lands, whose move it is, and how long since it moved.',
+    retainers: 'Recurring work with what each client is consuming against what they bought, and when it renews.',
   },
   '/delivery': {
     board: 'Accepted work with its lifecycle actions and the invoice ledger beside it.',
@@ -301,16 +321,17 @@ export default function PartnerBucketRoutes() {
    * same omission `AdvisorBucketRoutes` records having fixed for the advisor
    * shell, and by itself it was most of the product's rail gap.
    *
-   * NO MODEL CARD, and that is not an oversight either. The rail names a model
-   * and a per-million rate only for a surface registered in `ASSIST_SURFACES`
-   * (`ui/eadwynConfig.js`), because that registration is what binds a surface
-   * to a real aiRouter task class — and the task class is what decides the
-   * model and the price. No workspace surface on any of the four licences is
-   * registered; the four keys that exist are page-level features. Registering
-   * `pipeline`, `delivery` or `offers` to make the card appear would attach a
-   * model and a price to surfaces that call no router task, which is the exact
-   * failure `WorkspaceShell`'s own docblock records the rail slot being created
-   * to end.
+   * THE MODEL CARD IS NOW REAL, and the order it arrived in is the point. The
+   * rail names a model and a per-million rate only for a surface registered in
+   * `ASSIST_SURFACES` (`ui/eadwynConfig.js`), because that registration binds a
+   * surface to an aiRouter task class and the task class decides the model and
+   * the price. For a long time no workspace surface was registered and the card
+   * was correctly absent: registering `pipeline`, `delivery` or `offers` to
+   * make it appear would have attached a model and a price to surfaces that
+   * called no router task. `POST /api/ai/workspace/explain` came first; the
+   * single `workspace` surface followed it. `WorkerRail` reads that surface
+   * itself, so nothing here passes it — which is why this route file has no
+   * model prop to get wrong.
    *
    * `coverage` reports what THIS route reads, so it cannot be more confident
    * than the body beside it: a zone whose card says no store says the same
@@ -326,10 +347,16 @@ export default function PartnerBucketRoutes() {
     '/pipeline': {
       workspace: 'Pipeline',
       stance: 'Manual pipeline record',
-      note: 'Leads, proposals and analytics read the stored needs, quotes and engagements. No proposal is drafted, no price is suggested, and no lead is passed or pursued except on your click.',
+      note: 'Leads, proposals, negotiations, retainers and analytics read the stored needs, quotes, engagements and retainer records. No proposal is drafted, no price is suggested, no stage moves and no lead is passed or pursued except on your click.',
+      // BOTH OF THESE STAY TRUE after #45. The new zones record what a person
+      // typed — a stage, a clause position, an amount, hours used — and compute
+      // only what is derivable from it (days since a move, utilisation, MRR).
+      // Nothing drafts a position, suggests a rate or predicts a close, and the
+      // negotiations zone says on itself that a close probability is not
+      // computable from the store.
       unavailable: [
-        ['Proposal drafting', 'Every word of a quote is one you typed. Nothing here writes, rewrites or scores a proposal on your behalf.'],
-        ['Pricing suggestions', 'No rate is proposed, benchmarked or inferred from your other quotes. A price is yours.'],
+        ['Proposal drafting', 'Every word of a quote, a term position and an open question is one you typed. Nothing here writes, rewrites or scores a proposal on your behalf.'],
+        ['Pricing suggestions', 'No rate is proposed, benchmarked or inferred from your other quotes or retainers. A price is yours.'],
       ],
     },
     '/delivery': {
