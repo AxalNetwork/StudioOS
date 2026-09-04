@@ -4,6 +4,39 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Migrations 208 and 209 — the stores behind the nine unbacked partner zones
+
+Six of the fifteen partner zones render a real body. The other nine render a `NoStoreYet` card naming the column they would need, and **every one of those columns was verified absent before a line of SQL was written**: `engagements` (`sql/t13_t14_t15.sql:366`) has eighteen columns and exactly one ALTER ever added to it (`company_id`, migration 196) — no cadence, no renewal date, no consumption, no milestone, no hours, no last client contact, no acknowledgment; `quotes` (`:347`) has a four-value status and a `decided_at`, and nothing between "sent" and "decided". Fifteen tables across two files close that.
+
+| Zone | Store |
+| --- | --- |
+| Pipeline · Negotiations | `quote_negotiations`, `quote_terms` |
+| Pipeline · Retainers | `partner_retainers`, `retainer_usage` |
+| Delivery · Health | `engagement_milestones` (+ the retainer usage above) |
+| Delivery · Deliverables | `engagement_deliverables` |
+| Delivery · Capacity | `engagement_seats`, `engagement_hours` |
+| Delivery · Status reports | `engagement_status_reports`, `engagement_blockers` |
+| Offers · Visibility | `partner_surfaces`, `engagement_sources` |
+| Offers · Proof | `partner_proof_items`, `partner_proof_consents` |
+| Offers · Audience fit | `partner_fit_rules` |
+
+**Side tables, and not only because `users` is full.** `quotes` and `engagements` are each defined three times across `schema.sql`, `t13_t14_t15.sql` and the migration set; D1 keeps one table per name, so a column added to one lineage may not exist on the row that won. `check-migration-column-shapes.mjs` exists because migration 196 learned that on the production run. Every table here keys on `id`, which every definition has.
+
+**Which partner key, said out loud.** There are two live conventions — `users.id` for facts about an ACCOUNT (perks, service_offerings, partner_deals) and `partners.id` for facts about the DIRECTORY ENTITY (quotes, engagements, office hours). Everything in 208 hangs off an engagement or a quote and inherits its parent's key; the three tables in 209 that are partner-scoped take `partners.id` explicitly, with the reason in the file. No third convention.
+
+**Nothing derivable is stored.** Engagement health, retainer utilisation, days-stalled, "published" and "attested" are all computable from rows these files add. Storing one makes it a second source of truth for something three tables already say, and the two disagree the first time one of them moves. A guard scans the comment-stripped DDL for each of them by name.
+
+- **Money is integer cents** even though `engagements.price` beside it is REAL. The float half of this schema is a data migration over live fiduciary records, not a lint fix — but `check-money-cents.mjs` stops the split growing, and a retainer's monthly figure and a budget floor are new money.
+- **Consent copies migration 204 verbatim** — `consent_given`, `consent_given_at`, `consent_text`, `consent_captured_by`, `withdrawn_at` — so the advisor and partner halves can be audited by one query. Withdrawal is a state, not a delete: an attestation that can silently vanish is not evidence of anything. The difference from 204 is provenance — a partner's proof hangs off an ENGAGEMENT, so which work produced it is a foreign key rather than a typed claim.
+- **`opened_at` and `signed_off_at` are the client's to set.** Only the founder side can truthfully say a deliverable was read; a partner-side write to either would be the firm reporting a metric about itself.
+- **Attribution is a join, never a model.** `engagement_sources` is a row or it is nothing. An unattributed engagement is simply not counted, because modelling the gap would make the widest column the least true — which is the argument the Visibility zone is built on.
+
+Verified by applying both files to a real SQLite database built from the bootstrap lineages plus the full migration ledger: all fifteen tables created, and both files replay with no error. The runner is forward-only and aborts the whole deploy on the first failing statement, so a file that is not idempotent holds every later migration and the worker behind it — which is why every statement is `IF NOT EXISTS` and there is no transaction wrapper (D1 rejects `BEGIN`/`COMMIT` inside a migration; migration 200 was rewritten for it).
+
+**No manual step.** A merge to `main` applies these: the deploy workflow runs the same ledgered runner as `npm run deploy`'s predeploy hook, as a step that must succeed before `wrangler deploy`.
+
+Seven guards in `frontend/test/partner_delivery_stores.test.mjs`, ten mutation checks. One was not caught first time and the test was fixed: deleting `withdrawn_at` from the schema still passed, because the file's own header explains withdrawal-as-state at length and the check was reading the prose. It now reads the comment-stripped DDL, the same reasoning `_codeOnly.mjs` applies on the JavaScript side.
+
 ## The workspace rail names a model, because a workspace now runs one
 
 Every rail canvas — AIRail, AdvRail, PartnerRail, EmberRail, InvRail, ForgeRail — draws a **Model · this page** card with a per-million rate. The shipped rail had no such block, and the guards that kept it out said exactly why: `ASSIST_SURFACES` binds a surface to an aiRouter task class, that class decides the model and the price, and no workspace surface was registered on any of the four licences. A card would have named a model for a page that never called one. `workspace_frame_contract.test.mjs` even named the shortcut in advance — *"inventing the registration to get the card is the failure"*.
