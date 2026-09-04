@@ -4,6 +4,31 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## A registry outage no longer looks like a critical CVE
+
+`npm audit --omit=dev --audit-level=critical` exits 1 for two entirely different outcomes: a critical advisory in the dependency tree, and the advisory endpoint refusing to answer. On PR #431 the `audit (frontend npm)` job spent seven minutes on
+
+```
+npm warn audit 503 Service Unavailable - POST https://registry.npmjs.org/-/npm/v1/security/audits/quick
+npm error audit endpoint returned an error
+```
+
+and went red with a bare `Process completed with exit code 1` — on a diff that changed no dependency, and indistinguishable from a real finding without opening the log. That is the third time in one session these two jobs went red or were cancelled on a registry stall rather than a finding; the earlier round raised their timeout to 10 minutes and put `--no-audit --no-fund` on the install, which fixed `npm ci` and left `npm audit` itself exposed.
+
+**The fix is not tolerance.** A gate that could not reach the advisory database has not cleared anything, so `scripts/npm-audit-gate.mjs` still fails when the registry is unreachable — the same rule `check-docs-fresh.mjs` was hardened to in #397, where a check that could not see the history was made to refuse rather than report success. What changes is that the two outcomes are now distinguishable, and a blip is retried instead of ending the job:
+
+- **Retries only a transport failure**, four attempts with 5s/15s/30s backoff. A completed audit ends the loop on its first attempt whatever its verdict — retrying a finding would burn the timeout and blur the one distinction the script exists to draw.
+- **Classifies by payload, not exit code.** A body carrying `metadata.vulnerabilities` means the audit ran and its answer stands whatever npm exited with; a top-level `error`, or no parseable JSON, means it did not.
+- **Bounds each attempt** with `--fetch-timeout=60000`, so a hang cannot eat the job's ten minutes before anyone learns why. Four bounded attempts plus backoff fit inside that, and a guard asserts the job timeout still covers the worst case.
+- **Names the advisories** on a real finding instead of printing only an exit code.
+- **Says so explicitly** when the database was unreachable: *"THIS IS NOT A VULNERABILITY FINDING… a gate that could not ask the question must not answer it."*
+
+All three branches were exercised before pushing — clean (frontend at `critical`, worker at `critical`), a real finding (frontend at `high`, which correctly listed `image-size` and `pptxgenjs`), and an unreachable registry (a bogus registry host). The retry earned its place immediately: in two of the three live runs, attempt 1 timed out and attempt 2 succeeded.
+
+Corrected while there: the frontend job's comment justified the `critical` threshold with "recharts → lodash@4.17.23 has two high-severity advisories". The two highs it actually tolerates today are `image-size` (ICNS and JXL/HEIF parsers, both infinite-loop DoS) and `pptxgenjs`, which reaches them through `image-size` — so a reader waiting for "a lodash-free recharts major" was watching the wrong dependency. The gate now prints the live list on every run, so that comment can be checked against the log rather than trusted.
+
+Six guards in `frontend/test/npm_audit_gate.test.mjs`, nine mutation checks. One was not caught first time and the test was widened: `continue-on-error: true` added to the **worker** job passed, because the guard only scanned around the first call site — it now checks each whole job block.
+
 ## Network · Organizations stopped showing a body its heading does not name
 
 `/network/organizations` is a real route on every licence, and an operator is the one role whose Network zones fall through to the shared `NetworkPage` — which has no Organizations tab, because the roll-up needs an edge from a person to an organisation and nothing on that licence records one. The page already said so, in a "No store behind this yet" card. Underneath the card it then rendered **an unlabelled Introductions list**: `activeTab` falls to the default for a role that cannot see Contacts, and the tab row that would have named it is suppressed when the page is embedded, because the shell's zone pills already are that navigation.

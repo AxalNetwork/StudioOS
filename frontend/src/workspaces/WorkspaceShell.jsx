@@ -178,8 +178,19 @@ export default function WorkspaceShell({
         its own inner padding, and full height so the seam runs the length of
         the page rather than stopping where the text happens to end.
       */}
+      {/*
+        The width is the SAME custom property the twenty host declarations read, so
+        the shell's rail collapses with them rather than staying 280px wide
+        around a 44px spine. `w-[280px]` moved into the fallback: while
+        `--fwr-track` is undefined this is byte-for-byte the width it was.
+        Padding goes with it — 18px of inset either side of a 44px column
+        leaves 8px for the control.
+      */}
       {rail && (
-        <div className="hidden w-[280px] shrink-0 border-l border-axal-border-soft bg-white px-[18px] pb-7 pt-[18px] xl:block dark:border-gray-800 dark:bg-gray-900">
+        <div
+          className="fwr-shell-slot hidden shrink-0 border-l border-axal-border-soft bg-white px-[18px] pb-7 pt-[18px] xl:block dark:border-gray-800 dark:bg-gray-900"
+          style={{ width: 'var(--fwr-track, 280px)' }}
+        >
           <div className="sticky top-20">{rail}</div>
         </div>
       )}
