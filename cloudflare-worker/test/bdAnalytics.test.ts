@@ -16,8 +16,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  analysePipeline, weightedPipeline, analyseDelivery, DEFAULT_STAGE_WEIGHTS,
-  type QuoteRow,
+  analysePipeline, weightedPipeline, analyseDelivery, analyseByShape, analyseByQuarter,
+  DEFAULT_STAGE_WEIGHTS, type QuoteRow,
 } from '../src/services/bdAnalytics.ts';
 
 const QUOTES: QuoteRow[] = [
@@ -162,4 +162,99 @@ test('the pending status matches the live schema vocabulary', () => {
   assert.equal(p.open_value, 5_000);
   const wrong = analysePipeline([{ status: 'open', amount: 5_000 }]);
   assert.equal(wrong.pending, 0, "'open' is not a quote status in this schema");
+});
+
+// ---------- the two breakdowns the Pipeline canvas asks for ----------
+
+const SHAPED: QuoteRow[] = [
+  { status: 'accepted', amount: 20_000, created_at: '2026-01-01', decided_at: '2026-01-11', shape: 'brand' },
+  { status: 'rejected', amount: 15_000, created_at: '2026-01-05', decided_at: '2026-01-25', shape: 'brand' },
+  { status: 'submitted', amount: 9_000, created_at: '2026-08-01', shape: 'brand' },
+  { status: 'accepted', amount: 50_000, created_at: '2026-04-01', decided_at: '2026-04-06', shape: 'engineering' },
+  // Two rows that must NOT be folded into a real category.
+  { status: 'submitted', amount: 4_000, created_at: '2026-08-02', shape: null },
+  { status: 'rejected', amount: 6_000, created_at: '2026-05-01', decided_at: '2026-05-11', shape: '  ' },
+];
+
+test('by shape uses the same decided-only denominator as the headline rate', () => {
+  const rows = analyseByShape(SHAPED);
+  const brand = rows.find((r) => r.shape === 'brand')!;
+  // 1 won of 2 decided. NOT 1 of 3 — the open quote is excluded here for the
+  // same reason it is excluded from the headline win rate.
+  assert.equal(brand.win_rate_pct, 50);
+  assert.equal(brand.quote_count, 3);
+  assert.equal(brand.pending, 1);
+  assert.equal(brand.open_value, 9_000);
+  assert.equal(brand.won_value, 20_000);
+  // Median of 10 and 20 days.
+  assert.equal(brand.median_cycle_days, 15);
+});
+
+test('a shape with nothing decided reports a null win rate, never 0%', () => {
+  const rows = analyseByShape([
+    { status: 'submitted', amount: 1_000, created_at: '2026-08-01', shape: 'design' },
+    { status: 'withdrawn', amount: 2_000, created_at: '2026-08-02', decided_at: '2026-08-09', shape: 'design' },
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].win_rate_pct, null, '0% would claim a loss that never happened');
+  assert.equal(rows[0].median_cycle_days, null);
+});
+
+test('an absent or blank shape is its own bucket, not folded into a real one', () => {
+  const rows = analyseByShape(SHAPED);
+  const unrecorded = rows.find((r) => r.shape === null);
+  assert.ok(unrecorded, 'a quote whose need row is unreadable still has to be counted');
+  assert.equal(unrecorded!.quote_count, 2, 'null and whitespace are the same unrecorded bucket');
+  assert.equal(rows.filter((r) => r.shape === null).length, 1);
+  // And the headline totals are unaffected: the LEFT join keeps every quote.
+  assert.equal(rows.reduce((a, r) => a + r.quote_count, 0), SHAPED.length);
+});
+
+test('shapes come back in a stable order — count first, then name, unrecorded last', () => {
+  const rows = analyseByShape(SHAPED);
+  assert.deepEqual(rows.map((r) => r.shape), ['brand', null, 'engineering']);
+  // Same input twice must not reorder.
+  assert.deepEqual(analyseByShape(SHAPED).map((r) => r.shape), rows.map((r) => r.shape));
+  // On a TIE the named categories come first and the unrecorded bucket last,
+  // so a table never opens with a row headed "Not recorded" while a real
+  // category of the same size sits below it. Alphabetical among the named
+  // ones, so the order is a property of the data and not of insertion.
+  const tied = analyseByShape([
+    { status: 'accepted', amount: 1, created_at: '2026-01-01', decided_at: '2026-01-02', shape: null },
+    { status: 'accepted', amount: 1, created_at: '2026-01-01', decided_at: '2026-01-02', shape: 'ops' },
+    { status: 'accepted', amount: 1, created_at: '2026-01-01', decided_at: '2026-01-02', shape: 'brand' },
+  ]);
+  assert.deepEqual(tied.map((r) => r.shape), ['brand', 'ops', null]);
+});
+
+test('a quarter is the quarter the DECISION landed in, not the one the quote was sent in', () => {
+  const rows = analyseByQuarter([
+    { status: 'rejected', amount: 10_000, created_at: '2026-03-02', decided_at: '2026-07-15' },
+    { status: 'accepted', amount: 40_000, created_at: '2026-07-01', decided_at: '2026-07-20' },
+  ]);
+  assert.equal(rows.length, 1, 'both decisions landed in Q3 even though one was sent in Q1');
+  assert.equal(rows[0].quarter, '2026-Q3');
+  assert.equal(rows[0].decided, 2);
+  assert.equal(rows[0].win_rate_pct, 50);
+  assert.equal(rows[0].won_value, 40_000);
+});
+
+test('by quarter excludes open and withdrawn quotes, and orders chronologically', () => {
+  const rows = analyseByQuarter([
+    { status: 'accepted', amount: 5_000, created_at: '2025-11-01', decided_at: '2025-12-05' },
+    { status: 'submitted', amount: 9_000, created_at: '2026-08-01' },
+    { status: 'withdrawn', amount: 7_000, created_at: '2026-01-02', decided_at: '2026-02-02' },
+    { status: 'rejected', amount: 3_000, created_at: '2026-04-01', decided_at: '2026-05-09' },
+  ]);
+  assert.deepEqual(rows.map((r) => r.quarter), ['2025-Q4', '2026-Q2']);
+  assert.equal(rows[0].win_rate_pct, 100);
+  assert.equal(rows[1].win_rate_pct, 0, 'a real loss IS 0% — that is different from nothing decided');
+});
+
+test('both breakdowns are safe on empty input and on unparseable dates', () => {
+  assert.deepEqual(analyseByShape([]), []);
+  assert.deepEqual(analyseByQuarter([]), []);
+  assert.deepEqual(analyseByQuarter([{ status: 'accepted', amount: 1, decided_at: 'not a date' }]), []);
+  const noShape = analyseByShape([{ status: 'accepted', amount: 1 }]);
+  assert.equal(noShape[0].shape, null);
 });

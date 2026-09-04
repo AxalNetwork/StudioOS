@@ -20,8 +20,13 @@ import { bucketForPath, zoneForPath } from '../shellConfig';
 // and leaves /partner/operations/* exactly as it was.
 const PartnerEngagements = lazy(() => import('../../pages/partner/operations/EngagementsPage'));
 const NeedsBoardPage = lazy(() => import('../../pages/NeedsBoardPage'));
-const PartnerInsightsPage = lazy(() => import('../../pages/PartnerInsightsPage'));
 const PerksPage = lazy(() => import('../../pages/PerksPage'));
+// Pipeline · analytics used to mount `PartnerInsightsPage` — Demand Insights,
+// which answers where founder demand is concentrated across the whole board.
+// The canvas asks this zone about the FIRM'S OWN pipeline: win rate, cycle
+// time and forecast. Both are honest surfaces answering different questions;
+// Demand Insights keeps its own mount at /partner/insights.
+const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline/AnalyticsZone'));
 
 /**
  * Pipeline, Delivery and Offers — the Partner shell's three owned buckets.
@@ -120,7 +125,7 @@ const LIVE = {
   '/pipeline': {
     leads: (user) => <NeedsBoardPage user={user} embedded />,
     proposals: () => <PartnerEngagements view="proposals" />,
-    analytics: () => <PartnerInsightsPage embedded />,
+    analytics: () => <PartnerPipelineAnalytics />,
   },
   '/delivery': {
     board: () => <PartnerEngagements view="engagements" />,
@@ -215,14 +220,12 @@ const ZONE_LINES = {
   '/pipeline': {
     leads: 'Open founder needs with the RFP behind each, and the quotes you have out on them.',
     proposals: 'The proposal desk: every quote you have submitted, its status, and what it is worth.',
-    // The canvas asks Analytics for win rate, cycle time and source quality
-    // across the firm's own pipeline. This route renders Demand Insights —
-    // where founder demand is concentrated across the whole board — which is a
-    // different question, honestly answered. The firm's own win rate lives on
-    // /partner/operations/performance. Which of the two owns this zone is a
-    // product call; naming what the route actually shows is not, and the line
-    // used to promise the other one.
-    analytics: 'Demand Insights: where founder need is concentrated across the board, and how it is trending.',
+    // This line described Demand Insights for as long as the zone rendered it,
+    // and the mismatch it recorded is now closed the other way: the zone
+    // answers the canvas's question instead of the card describing a different
+    // one. The loss taxonomy the canvas leads with stays absent — no quote
+    // records why it was rejected — and the zone says so on itself.
+    analytics: 'Win rate, decision cycle and weighted forecast over your own quotes, broken out by shape and by quarter.',
   },
   '/delivery': {
     board: 'Accepted work with its lifecycle actions and the invoice ledger beside it.',

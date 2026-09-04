@@ -4,6 +4,19 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Pipeline · Analytics answers the firm's own pipeline, not the board's demand
+
+`/pipeline/analytics` rendered `PartnerInsightsPage` — Demand Insights, which answers where founder demand is concentrated across the **whole board**. Its canvas asks a different question: *"Win rate, cycle time and forecast — and the loss pattern that explains all three."* Both surfaces are honest; the zone was answering the wrong one, and the bucket-overview card underneath had to describe Demand Insights to stay truthful, which is how a zone named Analytics ended up promising board-wide demand.
+
+Nothing had to be built to fix it. `GET /api/quotes/analytics` has computed win rate, median decision cycle and the weighted forecast since build queue #122 (`services/bdAnalytics.ts`), and had exactly two consumers — `/partner/operations/performance` and the Studio home card — neither of them in the Partner shell.
+
+- **New zone** `frontend/src/pages/partner/pipeline/AnalyticsZone.jsx`: win rate with its `win_rate_basis` shown rather than a bare percentage, median cycle, weighted forecast by stage, open and won value, average deal size.
+- **Two new groupings of the same rows**, not a new store. `analyseByShape` breaks the rate out by the need's own `category`, reached through a **LEFT** join on `founder_needs` — an inner join would silently drop a quote whose need row is missing and change the denominator of the one figure the endpoint exists to compute. `analyseByQuarter` keys on **when the decision landed**, not when the quote was sent: a proposal sent in March and lost in July is a Q3 loss, and keying on `created_at` would move a result into a quarter whose outcome was still unknown at the time. Both use the headline's decided-only denominator, so a shape with four open quotes and one loss reads 0% of one decision, not 0% of five.
+- **The loss taxonomy stays absent, and says so.** `quotes` carries a status and a decision date and nothing about why — no reason, no competitor, no losing price. The endpoint returns `loss_reasons: null` with the reason attached, and the zone states it. The canvas's own instruction is that the on-price count be "stated per shape rather than asserted as a universal", which is exactly the claim a store with no reason column cannot make.
+- **Demand Insights keeps `/partner/insights`.** Its `embedded` prop is gone with the shell mount that was its only caller — a prop no route passes reads as a seam someone has dealt with.
+
+Seven tests in `cloudflare-worker/test/bdAnalytics.test.ts` and nine in `frontend/test/partner_pipeline_analytics.test.mjs`; fourteen mutation checks, each failing its own guard and no other. The one that did not fail first time was the by-shape tie-break — the fixture had no two shapes of equal size, so "unrecorded sorts last" was unpinned until a tied fixture was added.
+
 ## `request()` has a deadline, so a hung call fails instead of hanging
 
 `fetch` has no timeout and `frontend/src/lib/api.js` had no `AbortController` anywhere, so any of the ~1300 SPA calls could hang until a gateway gave up. The caller's `loading` flag stayed true and the user got a spinner that outlived the tab — the same symptom #427 fixed on `/expertise/profile`, reachable from every page, and written down nowhere when it happened.

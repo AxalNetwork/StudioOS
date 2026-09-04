@@ -16,10 +16,16 @@ const TONES = {
   neutral: 'bg-white border-gray-200 text-gray-800',
 };
 
-// `embedded`: mounted on /pipeline/analytics inside a WorkspaceShell that
-// already draws the crumb, the heading and the zone pills. The window selector
-// beside the heading is a control rather than chrome, so it survives.
-export default function PartnerInsightsPage({ embedded = false }) {
+// Demand Insights, at /partner/insights and nowhere else.
+//
+// This page briefly carried an `embedded` prop, for the spell when Pipeline's
+// Analytics zone mounted it inside a WorkspaceShell that drew its own heading.
+// That zone now answers the firm's own pipeline instead — win rate, cycle and
+// forecast, which is what its canvas asks for — so nothing mounts this page
+// inside a shell any more and the flag had no caller. A prop that no route
+// passes reads as a seam someone has dealt with, so it is gone rather than
+// left as a default nobody exercises.
+export default function PartnerInsightsPage() {
   const [windowDays, setWindowDays] = useState(180);
   const [heat, setHeat] = useState(null);
   const [trend, setTrend] = useState(null);
@@ -91,12 +97,10 @@ export default function PartnerInsightsPage({ embedded = false }) {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
-        {embedded ? <div /> : (
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Demand Insights</h1>
-            <p className="text-sm text-gray-500 mt-1">Where founder demand is concentrated and how it's trending. Updated live from the needs board.</p>
-          </div>
-        )}
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Demand Insights</h1>
+          <p className="text-sm text-gray-500 mt-1">Where founder demand is concentrated and how it's trending. Updated live from the needs board.</p>
+        </div>
         <div className="flex items-center gap-2">
           <select value={windowDays} onChange={(e) => setWindowDays(Number(e.target.value))} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
             <option value={30}>Last 30 days</option>
