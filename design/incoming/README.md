@@ -9,18 +9,29 @@ material. The app never reads it at runtime.
 
 ## Where the existing canvases live
 
-The 107 canvases from the first integration pass are in `design/canvases/`,
-sorted by whether a live route exists for them:
+The triaged canvases live in `design/canvases/`, sorted by how far each has
+been built. Counts as of 2026-09-04:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 53 — a route is running on main for this canvas. |
-| `canvases/backlog/` | 27 — triaged, no route yet. |
+| `canvases/integrated/` | 56 — the canvas is built; its zones render its bodies. |
+| `canvases/backlog/` | 26 — triaged, not built yet. |
 | `canvases/out-of-scope/` | 27 — deliberately not being built. |
 
-**A canvas that is already implemented does not belong in this folder.** Once
-its route is live, move it to `canvases/integrated/`; this queue should only
-ever hold work that is still outstanding.
+(`canvases/uploads/` holds 3 more that were never part of the triage split, and
+is not counted here. The table read 53 / 27 / 27 until 2026-09-04: one canvas
+had moved from `backlog/` to `integrated/` without the count following it, and
+two more moved out of this folder in the commit that corrected it. **If you move
+a file, move the number.**)
+
+**A canvas whose bodies are built does not belong in this folder.** Move it to
+`canvases/integrated/`; this queue should only ever hold work that is still
+outstanding.
+
+**The bar is the bodies, not the route.** A canvas whose zone routes all resolve
+but whose zones still render "no store behind this yet" is exactly what this
+queue is for — that is the state most of the list below is in. Moving it on the
+strength of a live route would empty the queue of the work it exists to track.
 
 ## The pipeline
 
@@ -68,17 +79,32 @@ which is exactly what this queue is for. Partner · Pipeline is the one bucket
 of the four whose canvas was already committed — it is in
 `design/canvases/integrated/` and is not repeated here.
 
-| Canvas | Governs | Grade |
-| --- | --- | --- |
-| `Pages · Founder Validate.dc.html` | `/validate`, `/validate/{interviews,pain-map,hypotheses,verdict}` | UPGRADE |
-| `Pages · Advisor Expertise.dc.html` | `/expertise`, `/expertise/{profile,services,proof,thinking,visibility}` | UPGRADE |
-| `Pages · Advisor Network.dc.html` | `/network/*` on the advisor licence | UPGRADE |
-| `Pages · Advisor Research.dc.html` | `/research/*` on the advisor licence | UPGRADE |
-| `Pages · Partner Delivery.dc.html` | `/delivery`, `/delivery/{board,deliverables,capacity,status-reports,health}` | UPGRADE |
-| `Pages · Partner Offers.dc.html` | `/offers`, `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` | UPGRADE |
-| `Pages · Partner Network.dc.html` | `/network/*` on the partner licence | UPGRADE |
-| `Pages · Partner Research.dc.html` | `/research/*` on the partner licence | UPGRADE |
-| `Navigation Shell · Anatomy.dc.html` | the shell itself — chrome, company switcher and the six role fills (2026-09-04 batch) | UPGRADE |
+**Two of the eight have since left**, and what remains is the honest list:
+
+| Canvas | Governs | Grade | Still outstanding |
+| --- | --- | --- | --- |
+| `Pages · Founder Validate.dc.html` | `/validate`, `/validate/{interviews,pain-map,hypotheses,verdict}` | UPGRADE | `hypotheses` and `verdict` have no store |
+| `Pages · Advisor Expertise.dc.html` | `/expertise`, `/expertise/{profile,services,proof,thinking,visibility}` | UPGRADE | `thinking` has no store; `visibility` needs an impression pipeline, not a table |
+| `Pages · Advisor Network.dc.html` | `/network/*` on the advisor licence | UPGRADE | `organizations` reads nothing for this licence |
+| `Pages · Advisor Research.dc.html` | `/research/*` on the advisor licence | UPGRADE | only `markets` and `companies` are live |
+| `Pages · Partner Network.dc.html` | `/network/*` on the partner licence | UPGRADE | `organizations` reads nothing for this licence |
+| `Pages · Partner Research.dc.html` | `/research/*` on the partner licence | UPGRADE | only `markets` and `companies` are live |
+| `Navigation Shell · Anatomy.dc.html` | the shell itself — chrome, company switcher and the six role fills (2026-09-04 batch) | UPGRADE | the rail's model card (see below) |
+
+**Moved to `canvases/integrated/` on 2026-09-04**, both by #431, which built
+their stores (migrations 208 and 209) and their bodies:
+
+| Canvas | Governs |
+| --- | --- |
+| `Pages · Partner Delivery.dc.html` | `/delivery`, `/delivery/{board,deliverables,capacity,status-reports,health}` |
+| `Pages · Partner Offers.dc.html` | `/offers`, `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` |
+
+Two things those two canvases asked for were **not** built, and are stated on
+the pages themselves rather than held open here: nothing records a firm's
+capacity **cap**, so Capacity shows real hours and seats and marks nobody over;
+and `opened_at` on a deliverable is the client's to set, so Deliverables does not
+claim it. Both are absent facts, not unbuilt bodies — which is why the canvases
+moved rather than staying in the queue for them.
 
 **Three are newer exports of canvases already in `canvases/backlog/`** —
 `AIRail.dc.html`, `Founder Workspaces Canvas.dc.html` and
@@ -147,7 +173,8 @@ intent is to land a canvas.**
 | Pages · Advisor Expertise / Network / Research | `incoming/` |
 | Pages · Advisor Cohorts | `canvases/backlog/` |
 | Pages · Partner Pipeline | `canvases/integrated/` |
-| Pages · Partner Delivery / Offers / Network / Research | `incoming/` |
+| Pages · Partner Delivery / Offers | `canvases/integrated/` (moved from `incoming/`, 2026-09-04) |
+| Pages · Partner Network / Research | `incoming/` |
 | Founder Workspaces Canvas, Investor LP Canvas, AIRail | `incoming/` |
 | Advisor Canvas | `canvases/integrated/` |
 | Partner Operator Canvas, ForgeRail | `canvases/backlog/` |

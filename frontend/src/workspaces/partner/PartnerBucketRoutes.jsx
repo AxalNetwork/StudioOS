@@ -150,11 +150,18 @@ function NoStoreYet({ heading, what, why, links = [], seam }) {
  * delivered/cancelled/invoiced timestamps — and nothing else, which is why
  * neither was buildable on it.
  *
- * Retainers is now live for the reason the card described: migration 208 added
+ * Both are live now, for the reason their cards described: migration 208 added
  * `partner_retainers` (shape, cadence, amount, retained hours, renewal) and
- * `retainer_usage`, which are exactly the columns `engagements` lacks. Delivery
- * · health stays in `COPY` until its own store lands — migration 208 created
- * the tables, and nothing reads them yet.
+ * `retainer_usage` for the first, and `engagement_milestones` and
+ * `engagement_blockers` for the second — exactly the columns `engagements`
+ * lacks. Health is computed from those rows at read time and stored nowhere,
+ * which `partner_delivery_stores.test.mjs` asserts against the schema.
+ *
+ * This paragraph said "Delivery · health stays in `COPY` until its own store
+ * lands — nothing reads them yet" until 2026-09-04, while sitting six lines
+ * above a `LIVE` map containing `health` and an empty `COPY`. It described the
+ * state of the change it was inside, which is the one thing a comment next to
+ * the code cannot be trusted to do on its own.
  */
 const LIVE = {
   '/pipeline': {
