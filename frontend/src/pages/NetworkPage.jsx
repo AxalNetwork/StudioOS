@@ -60,6 +60,17 @@ export default function NetworkPage({ embedded = false }) {
     && !['relationships', 'introductions', 'contacts'].includes(fromPath)
     ? fromPath : null;
 
+  // AND EMBEDDED, THE CARD IS THE WHOLE BODY. The note below tells the reader
+  // that "the tabs below are what this page actually holds" — which is true on
+  // this page's own mount and false inside the shell, where the tab row is
+  // suppressed because the shell's zone pills already are that navigation. So
+  // an operator on /network/organizations read the card and then an unlabelled
+  // introductions list: a body the heading above it does not name, which is
+  // the same route-says-one-thing-body-shows-another defect this bucket was
+  // reported for, surviving in the one zone that has no body at all. A zone
+  // with nothing behind it renders nothing behind it.
+  const unservedAlone = embedded && Boolean(unservedZone);
+
   const selectTab = (id) => {
     const next = new URLSearchParams(params);
     next.set('tab', id);
@@ -91,8 +102,10 @@ export default function NetworkPage({ embedded = false }) {
           </div>
           <p className="mt-1.5 max-w-2xl text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
             Grouping your network by company, fund or firm needs a link from a person you know to
-            the organisation they are in, and nothing on this licence records one. The tabs below
-            are what this page actually holds — they are not a stand-in for it.
+            the organisation they are in, and nothing on this licence records one.{' '}
+            {unservedAlone
+              ? 'Relationships and Introductions above are what this page actually holds — neither is a stand-in for it.'
+              : 'The tabs below are what this page actually holds — they are not a stand-in for it.'}
           </p>
         </div>
       )}
@@ -125,9 +138,9 @@ export default function NetworkPage({ embedded = false }) {
         </div>
       )}
 
-      {activeTab === 'contacts' && canContacts && <ContactsPanel />}
-      {activeTab === 'introductions' && <IntroductionsPanel />}
-      {activeTab === 'relationships' && <RelationshipsPanel />}
+      {!unservedAlone && activeTab === 'contacts' && canContacts && <ContactsPanel />}
+      {!unservedAlone && activeTab === 'introductions' && <IntroductionsPanel />}
+      {!unservedAlone && activeTab === 'relationships' && <RelationshipsPanel />}
     </div>
   );
 

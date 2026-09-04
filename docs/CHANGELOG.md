@@ -4,6 +4,33 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Network · Organizations stopped showing a body its heading does not name
+
+`/network/organizations` is a real route on every licence, and an operator is the one role whose Network zones fall through to the shared `NetworkPage` — which has no Organizations tab, because the roll-up needs an edge from a person to an organisation and nothing on that licence records one. The page already said so, in a "No store behind this yet" card. Underneath the card it then rendered **an unlabelled Introductions list**: `activeTab` falls to the default for a role that cannot see Contacts, and the tab row that would have named it is suppressed when the page is embedded, because the shell's zone pills already are that navigation.
+
+So the card's own sentence — *"The tabs below are what this page actually holds"* — pointed at a row that was not there, and the reader got a body the heading above it does not name. That is the same route-says-one-thing-body-shows-another defect this whole bucket was reported for, surviving in the one zone that has no body at all.
+
+A zone with nothing behind it now renders nothing behind it: embedded, the card is the whole body, and its closing sentence points at the shell pills the reader can actually reach. On the page's own mount the tab row genuinely is below, so that wording stays. Two guards in `frontend/test/advisor_network_zones.test.mjs`, four mutation checks — including the one that matters, where suppressing only the panel that happens to be the default still fails.
+
+Checked at the same time and found already correct: partner `/research/*` dispatches per zone with no doubling, and `SignalsPage` gets `mode='founder'` for an operator because `services/signals/ranking.ts` has two modes and no partner one — the only honest value available, not a dropped prop.
+
+## The service catalogue was empty on both of its partner-facing tabs
+
+`/services` is the product's only catalogue of productised partner offerings, and the Partner canvas puts it on `/offers/catalog` as *"the record Pipeline · Leads scores against"*. Neither of its two reads worked.
+
+| Tab | Called | What the worker does | What the operator saw |
+| --- | --- | --- | --- |
+| Browse catalogue | `GET /services/offerings`, read `r.offerings` | answers `c.json({ items })` (`services.ts:86`) | *"No offerings published yet"*, however many were |
+| My offerings | `GET /services/partners/:id/offerings` | **no such route** — it sat in `scripts/api-drift-baseline.json` as known-missing | *"0 offerings"* to a partner with a full catalogue |
+
+The second is worse than a mistyped key. The read had no route at all, and the `catch` that hid it was written to tolerate a *stale deployment* (`404 = catalogue route missing on this deployment`) — a reasonable thing to forgive once, and a permanent silence when the route is never coming. `?mine=1` is the arm `services.ts` added for exactly this view: it scopes on `owner_user_id` and includes inactive drafts, which is what an owner managing their own set needs.
+
+- Both reads now use `.items`; `My offerings` calls `listServiceOfferings({ mine: 1 })`; `listPartnerOfferings` is deleted and **the drift baseline shrinks by one** — it is a debt ledger that must only ever shrink, and this entry is paid off.
+- The tab was also gated on `user.partner_id`, twice — an early `setRows([])` and a "Only partner accounts can publish offerings" card. An offering is owned by a **user**, so that test could only ever hide a partner's own catalogue from them. Gated on role now, matching the tab list that already decides who sees the tab at all.
+- **`/offers/catalog` mounts the page** instead of a card pointing at it. That card said the catalog "lives at `/services` today" and declined to mount it, on the grounds that doing so would fork a second catalog. It would not — Leads and Perk deals already mount `/needs` and `/perks` at their zones — and the page it deferred to did not work. `embedded` suppresses the heading and nothing else: Browse / My offerings / Stripe Connect are views *within* the catalog, not sibling zones.
+
+Eight guards in `frontend/test/service_catalog_envelope.test.mjs`, each mutation-checked. The envelope assertion reads the shape out of the **worker source** rather than pinning a remembered one, so a route that changes its envelope says so instead of keeping this test quietly green.
+
 ## Pipeline · Analytics answers the firm's own pipeline, not the board's demand
 
 `/pipeline/analytics` rendered `PartnerInsightsPage` — Demand Insights, which answers where founder demand is concentrated across the **whole board**. Its canvas asks a different question: *"Win rate, cycle time and forecast — and the loss pattern that explains all three."* Both surfaces are honest; the zone was answering the wrong one, and the bucket-overview card underneath had to describe Demand Insights to stay truthful, which is how a zone named Analytics ended up promising board-wide demand.

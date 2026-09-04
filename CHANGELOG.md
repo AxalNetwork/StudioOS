@@ -4,6 +4,16 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Network · Organizations stopped showing a body its heading does not name
+
+`/network/organizations` is a real route on every licence, and an operator is the one role whose Network zones fall through to the shared `NetworkPage` — which has no Organizations tab, because the roll-up needs an edge from a person to an organisation and nothing on that licence records one. The page already said so, in a "No store behind this yet" card. Underneath the card it then rendered **an unlabelled Introductions list**: `activeTab` falls to the default for a role that cannot see Contacts, and the tab row that would have named it is suppressed when the page is embedded, because the shell's zone pills already are that navigation.
+
+So the card's own sentence — *"The tabs below are what this page actually holds"* — pointed at a row that was not there, and the reader got a body the heading above it does not name. That is the same route-says-one-thing-body-shows-another defect this whole bucket was reported for, surviving in the one zone that has no body at all.
+
+A zone with nothing behind it now renders nothing behind it: embedded, the card is the whole body, and its closing sentence points at the shell pills the reader can actually reach. On the page's own mount the tab row genuinely is below, so that wording stays. Two guards in `frontend/test/advisor_network_zones.test.mjs`, four mutation checks — including the one that matters, where suppressing only the panel that happens to be the default still fails.
+
+Checked at the same time and found already correct: partner `/research/*` dispatches per zone with no doubling, and `SignalsPage` gets `mode='founder'` for an operator because `services/signals/ranking.ts` has two modes and no partner one — the only honest value available, not a dropped prop.
+
 ## The service catalogue was empty on both of its partner-facing tabs
 
 `/services` is the product's only catalogue of productised partner offerings, and the Partner canvas puts it on `/offers/catalog` as *"the record Pipeline · Leads scores against"*. Neither of its two reads worked.
