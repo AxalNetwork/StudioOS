@@ -193,35 +193,62 @@ async function addMissingColumns(
  * It runs once per isolate, before the READY latch is set, and is a no-op on
  * every database that is already correct.
  */
+/**
+ * Rename only when the legacy name is present AND the correct one is absent.
+ *
+ * A table carrying BOTH is a half-finished rename somebody else is in the
+ * middle of. Attempting it there would fail as a duplicate column and log a
+ * warning on every fresh isolate for a statement that can never succeed, so it
+ * is skipped deliberately instead — which is what
+ * `advisor_slot_column_rename.test.ts` asserts, on the log rather than on the
+ * columns, because the two outcomes leave the table looking identical.
+ */
+const needsOwnerRename = (have: Set<string>) => have.has('mentor_id') && !have.has('advisor_id');
+
+const columnNames = (rows: { results?: Array<{ name: string }> } | null | undefined) =>
+  new Set((rows?.results || []).map((r) => r.name));
+
+/**
+ * UNROLLED PER TABLE, AND EVERY STRING IS A LITERAL. This began as a loop over
+ * a two-element `as const` tuple, which cost two `table === '…'` ternaries (to
+ * satisfy `check-sql-prepare`, which refuses any `${}` inside `DB.prepare`) and
+ * still put `${table}` into the log lines. Semgrep flagged the latter as an
+ * unsafe format string — not reachable here, since the only values came from a
+ * hardcoded tuple, but the finding pointed at real awkwardness. Unrolling
+ * removes the ternaries and the interpolation together.
+ *
+ * The two `try` blocks are separate on purpose: the rename is per-table, not a
+ * global bail-out, so one table already half-renamed must not stop the other.
+ */
 async function renameLegacySlotOwnerColumn(env: Env): Promise<void> {
-  for (const table of ['advisor_office_hour_slots', 'advisor_bookings'] as const) {
-    try {
-      // Two literal PRAGMAs rather than one built from `table`:
-      // `check-sql-prepare` refuses any `${}` inside `DB.prepare`, and a table
-      // name assembled at runtime is exactly what that guard is for.
-      const info = table === 'advisor_office_hour_slots'
-        ? await env.DB.prepare('PRAGMA table_info(advisor_office_hour_slots)').all<{ name: string }>()
-        : await env.DB.prepare('PRAGMA table_info(advisor_bookings)').all<{ name: string }>();
-      const have = new Set((info.results || []).map((r) => r.name));
-      // Only when the legacy name is present AND the correct one is absent.
-      // A table carrying both would be a half-finished rename somebody else is
-      // in the middle of; touching it would be the wrong move.
-      if (!have.has('mentor_id') || have.has('advisor_id')) continue;
-      if (table === 'advisor_office_hour_slots') {
-        await env.DB.prepare(
-          'ALTER TABLE advisor_office_hour_slots RENAME COLUMN mentor_id TO advisor_id',
-        ).run();
-      } else {
-        await env.DB.prepare(
-          'ALTER TABLE advisor_bookings RENAME COLUMN mentor_id TO advisor_id',
-        ).run();
-      }
-      console.info(`[advisorStoresSchema] renamed ${table}.mentor_id → advisor_id`);
-    } catch (e) {
-      // Never fatal and never cached: a failed rename must be retried on the
-      // next request rather than remembered as done.
-      console.warn(`[advisorStoresSchema] ${table} owner-column rename failed`, e);
+  try {
+    const info = await env.DB.prepare(
+      'PRAGMA table_info(advisor_office_hour_slots)',
+    ).all<{ name: string }>();
+    if (needsOwnerRename(columnNames(info))) {
+      await env.DB.prepare(
+        'ALTER TABLE advisor_office_hour_slots RENAME COLUMN mentor_id TO advisor_id',
+      ).run();
+      console.info('[advisorStoresSchema] renamed advisor_office_hour_slots.mentor_id to advisor_id');
     }
+  } catch (e) {
+    // Never fatal and never cached: a failed rename must be retried on the next
+    // request rather than remembered as done.
+    console.warn('[advisorStoresSchema] advisor_office_hour_slots owner-column rename failed', e);
+  }
+
+  try {
+    const info = await env.DB.prepare(
+      'PRAGMA table_info(advisor_bookings)',
+    ).all<{ name: string }>();
+    if (needsOwnerRename(columnNames(info))) {
+      await env.DB.prepare(
+        'ALTER TABLE advisor_bookings RENAME COLUMN mentor_id TO advisor_id',
+      ).run();
+      console.info('[advisorStoresSchema] renamed advisor_bookings.mentor_id to advisor_id');
+    }
+  } catch (e) {
+    console.warn('[advisorStoresSchema] advisor_bookings owner-column rename failed', e);
   }
 }
 
