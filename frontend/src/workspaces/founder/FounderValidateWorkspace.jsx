@@ -240,35 +240,258 @@ function PainMap({ projectId, ready }) {
 }
 
 /**
- * Hypotheses and Verdict are net-new: nothing in the product stores either.
- * They render what they WOULD hold and say plainly that the store is missing,
- * which is the honest version of a page whose backend has not been built.
+ * BOTH ZONES READ ONE ENDPOINT, AND NEITHER INVENTS A NUMBER.
+ *
+ * `NotBackedYet` used to stand here and said "nothing in the product stores
+ * either". Migration 211 gave both a store, so the card was deleted rather than
+ * reworded — a no-store card in front of a store is as false as one that
+ * overstates, it merely fails in the direction that looks humble.
+ *
+ * The card was also wrong about the past: `discovery_interviews.hypotheses_json`
+ * had held per-interview hypotheses all along, and the demo-day deck and the
+ * discovery signals score both read them. What was missing was a claim as ONE
+ * object across interviews, which is what the board is.
+ *
+ * `verdict: null` IS A REAL STATE HERE, not a loading flicker. The worker
+ * refuses a verdict when interviews touching a claim have no ICP fit recorded,
+ * because counting an unrecorded fit as "not our customer" would print
+ * "Unproven" on every claim in the product, in the same font as a verdict
+ * somebody earned.
  */
-function NotBackedYet({ title, what, feeds, from }) {
+const LANES = [
+  ['none', 'No evidence'],
+  ['testing', 'Testing'],
+  ['validated', 'Validated'],
+  ['invalidated', 'Invalidated'],
+  ['unknown', 'Fit not recorded'],
+];
+
+const VERDICT_LABEL = { validated: 'Validated', invalidated: 'Invalidated', unproven: 'Unproven' };
+
+/** One shared load, so both zones agree about the same interviews. */
+function useBoard(projectId, ready) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    if (!ready || !projectId) return undefined;
+    let alive = true;
+    setData(null); setError(null);
+    api.getValidationBoard(projectId)
+      .then((r) => { if (alive) setData(r); })
+      .catch((e) => { if (alive) setError(e); });
+    return () => { alive = false; };
+  }, [projectId, ready]);
+  return { data, error };
+}
+
+function NoVenture({ what }) {
+  return (
+    <EmptyState
+      title="No venture yet"
+      description={`${what} reads the interviews logged against a venture. Create one and the evidence stages fill from it.`}
+      action={<Link to="/projects" className="text-axal-violet underline">Go to projects</Link>}
+    />
+  );
+}
+
+/** The line that stops a zero reading as a finding. */
+function FitGap({ base }) {
+  if (!base || !base.fit_not_recorded) return null;
+  return (
+    <Card className="border-dashed bg-axal-surface-2 px-3.5 py-2.5">
+      <p className="text-[12px] leading-relaxed text-axal-ink-2">
+        <span className="font-semibold">{base.fit_not_recorded}</span>
+        {base.fit_not_recorded === 1 ? ' interview has ' : ' interviews have '}
+        no ICP fit recorded. Those cannot count toward a claim, so any verdict that
+        depends on them is withheld rather than guessed — an unrecorded fit is not
+        the same as “not our customer”.{' '}
+        <Link to="/build/discovery?tab=interviews" className="text-axal-violet underline">
+          Record it on the interview
+        </Link>
+        .
+      </p>
+    </Card>
+  );
+}
+
+function HypothesisBoard({ projectId, ready }) {
+  const { data, error } = useBoard(projectId, ready);
+  if (!ready) return <Skeleton className="h-40" />;
+  if (!projectId) return <NoVenture what="The hypothesis board" />;
+  if (error) return <ErrorState error={error} />;
+  if (!data) return <Skeleton className="h-40" />;
+
+  const items = data.hypotheses || [];
+  const live = items.filter((h) => !h.retired_at);
+  const base = data.evidence_base || {};
+  const byLane = (lane) => live.filter((h) => h.lane === lane);
+
   return (
     <div className="space-y-4">
-      <Card className="border-dashed bg-axal-surface-2 p-6">
-        <div className="max-w-2xl">
-          <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-violet">
-            No store behind this yet
-          </div>
-          <h2 className="mt-2 text-lg font-extrabold tracking-tight">{title}</h2>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{what}</p>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{feeds}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-              to={from.to}
-              className="rounded-md border border-axal-violet bg-axal-violet px-3 py-1.5 text-[11px] font-bold text-white"
-            >
-              {from.label}
-            </Link>
-          </div>
-          <p className="mt-3 text-[11px] leading-relaxed text-axal-ink-3">
-            This page ships empty on purpose. A board filled with example rows would be indistinguishable from a
-            board filled with the founder’s own, and the first person to mistake one for the other would be the
-            founder reading their own verdict.
-          </p>
+      <StatRow items={[
+        { label: 'Hypotheses', value: live.length, note: `${byLane('validated').length} validated, ${byLane('invalidated').length} invalidated` },
+        { label: 'Awaiting evidence', value: byLane('testing').length + byLane('none').length, note: 'not yet at the bar either way' },
+        { label: 'Bar per claim', value: data.bar, note: 'ICP interviews to validate · not configurable yet' },
+        // A count that cannot be computed is shown as absent, not as zero.
+        { label: 'Verdict withheld', value: byLane('unknown').length || null, note: 'claims whose evidence has no ICP fit recorded' },
+      ]} />
+
+      <FitGap base={base} />
+
+      {live.length === 0 ? (
+        <EmptyState
+          title="No hypotheses yet"
+          description="A hypothesis names what you believe and which pain themes would prove or disprove it. Add one and the interviews already logged start counting toward it. Nothing here is inferred — an empty board means an empty board, on purpose."
+          action={<Link to="/validate/pain-map" className="text-axal-violet underline">See the pain map</Link>}
+        />
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {LANES.map(([lane, label]) => {
+            const cards = byLane(lane);
+            if (!cards.length) return null;
+            return (
+              <Card key={lane} className="p-3.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">{label}</span>
+                  <span className="text-[11px] tabular-nums text-axal-ink-3">{cards.length}</span>
+                </div>
+                <ul className="mt-2.5 space-y-2.5">
+                  {cards.map((h) => (
+                    <li key={h.id} className="rounded-lg border border-axal-border-soft p-2.5">
+                      <div className="text-[12.5px] font-semibold leading-snug">
+                        <span className="text-axal-ink-3">{h.code} · </span>{h.claim}
+                      </div>
+                      <div className="mt-1 text-[11px] tabular-nums text-axal-ink-3">
+                        {h.evidence.supporting} support · {h.evidence.contradicting} contradict
+                        {h.evidence.fitUnrecorded > 0 && ` · ${h.evidence.fitUnrecorded} of unknown fit`}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-axal-ink-3">
+                        {h.bar_note || 'Distance to the bar cannot be computed until the fits above are recorded.'}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            );
+          })}
         </div>
+      )}
+
+      <p className="text-[11px] leading-relaxed text-axal-ink-3">
+        Lanes are computed from the evidence, never dragged: a claim sits where its
+        interviews put it. Verdict history, a generated summary and its screening
+        state are drawn on the canvas and are not built — so no filter for them is
+        shown here rather than one that filters nothing.
+      </p>
+    </div>
+  );
+}
+
+function ValidationSummary({ projectId, ready }) {
+  const { data, error } = useBoard(projectId, ready);
+  const [decision, setDecision] = useState(undefined);
+
+  useEffect(() => {
+    if (!ready || !projectId) return undefined;
+    let alive = true;
+    api.getValidationDecision(projectId)
+      // A 403 here is the designed outcome for a partner, not a failure: the
+      // decision is the founder's own and the board above is not.
+      .then((r) => { if (alive) setDecision(r); })
+      .catch(() => { if (alive) setDecision(null); });
+    return () => { alive = false; };
+  }, [projectId, ready]);
+
+  if (!ready) return <Skeleton className="h-40" />;
+  if (!projectId) return <NoVenture what="The validation summary" />;
+  if (error) return <ErrorState error={error} />;
+  if (!data) return <Skeleton className="h-40" />;
+
+  const live = (data.hypotheses || []).filter((h) => !h.retired_at);
+  const base = data.evidence_base || {};
+  const current = decision === undefined ? undefined : decision?.current || null;
+
+  return (
+    <div className="space-y-4">
+      <StatRow items={[
+        { label: 'Validated', value: live.filter((h) => h.verdict === 'validated').length, note: `of ${live.length} claims` },
+        { label: 'Evidence base', value: base.interviews ?? 0, note: `${base.icp ?? 0} recorded as ICP · bar is ${data.bar}` },
+        // Consent is a three-state fact; when nobody has been asked, the tile
+        // says so rather than reporting zero people willing to be quoted.
+        { label: 'Quotable', value: base.consent_not_recorded === base.interviews && base.interviews > 0 ? null : base.quotable, note: 'consent on file' },
+        { label: 'Deck anchors', value: null, note: 'the anchor rule is not built' },
+      ]} />
+
+      <FitGap base={base} />
+
+      {live.length === 0 ? (
+        <EmptyState
+          title="Nothing to reconcile yet"
+          description="The summary reads the hypothesis board. Add a claim there and its evidence appears here with the interviews behind it."
+          action={<Link to="/validate/hypotheses" className="text-axal-violet underline">See hypotheses</Link>}
+        />
+      ) : (
+        <Card className="p-4">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <span className="text-sm font-extrabold tracking-tight">Every verdict, with its receipts</span>
+            <span className="text-[11px] text-axal-ink-3">Computed from the interview log</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="text-left text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+                  <th className="py-1.5 pr-3">Hypothesis</th>
+                  <th className="py-1.5 pr-3 text-right">For</th>
+                  <th className="py-1.5 pr-3 text-right">Against</th>
+                  <th className="py-1.5 pr-3">Verdict</th>
+                  <th className="py-1.5">Bar</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-axal-border-soft">
+                {live.map((h) => (
+                  <tr key={h.id} className="align-top">
+                    <td className="py-2 pr-3">
+                      <span className="text-axal-ink-3">{h.code} · </span>{h.claim}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{h.evidence.supporting}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{h.evidence.contradicting}</td>
+                    <td className="py-2 pr-3">
+                      {h.verdict ? VERDICT_LABEL[h.verdict] : <NotRecorded />}
+                    </td>
+                    <td className="py-2 text-[11px] text-axal-ink-3">
+                      {h.bar_note || h._note || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      <Card className="p-4">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+          What the venture decided
+        </div>
+        {current === undefined ? <div className="mt-2"><Skeleton className="h-10" /></div>
+          : current === null ? (
+            <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">
+              {decision === null
+                ? 'Not shown here. A venture’s proceed, pivot or stop is its own — the board above is read by studio staff and service partners, and this is not.'
+                : 'No decision recorded. The summary above is evidence; this is the call a person makes in front of it, and nobody has made one yet.'}
+            </p>
+          ) : (
+            <>
+              <div className="mt-1.5 text-base font-extrabold capitalize tracking-tight">{current.decision}</div>
+              {current.reasoning && (
+                <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-ink-2">{current.reasoning}</p>
+              )}
+              <div className="mt-1.5 text-[11px] text-axal-ink-3">
+                Recorded {String(current.decided_at || '').slice(0, 10)}
+                {(decision?.history?.length || 0) > 1 && ` · ${decision.history.length - 1} earlier decision(s) kept`}
+              </div>
+            </>
+          )}
       </Card>
     </div>
   );
@@ -285,23 +508,9 @@ export default function FounderValidateWorkspace() {
       case 'pain-map':
         return <PainMap projectId={projectId} ready={ready} />;
       case 'hypotheses':
-        return (
-          <NotBackedYet
-            title="The hypothesis board is not built yet"
-            what="A hypothesis names what you believe, what would prove it, and what would kill it — then collects the interviews that did either. No table in the product stores one today."
-            feeds="It would read the pain themes next door as its starting claims, and feed the verdict with which claims survived contact."
-            from={{ to: '/validate/pain-map', label: 'See the pain map' }}
-          />
-        );
+        return <HypothesisBoard projectId={projectId} ready={ready} />;
       case 'verdict':
-        return (
-          <NotBackedYet
-            title="The verdict ledger is not built yet"
-            what="A verdict reconciles the hypotheses against the evidence and records what the venture decided — proceed, pivot, or stop — with the date and the reasoning attached."
-            feeds="It would read the hypothesis board above it. Until that exists there is nothing to reconcile, so this page has nothing true to show."
-            from={{ to: '/validate/hypotheses', label: 'See hypotheses' }}
-          />
-        );
+        return <ValidationSummary projectId={projectId} ready={ready} />;
       case 'interviews':
       default:
         return <Interviews projectId={projectId} ready={ready} />;
