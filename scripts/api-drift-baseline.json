@@ -12,7 +12,6 @@
     "GET /api/notifications/push/subscriptions",
     "GET /api/notifications/push/vapid-key",
     "GET /api/pipeline/votes/leaderboard",
-    "GET /api/services/partners/:p/offerings",
     "GET /api/trust/accreditation/badge/:p",
     "GET /api/trust/accreditation/status",
     "GET /api/trust/kyb/status",

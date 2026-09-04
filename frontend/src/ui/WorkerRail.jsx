@@ -1,7 +1,10 @@
-import { PanelRight, ShieldCheck } from 'lucide-react';
-import useAiSpend from '../hooks/useAiSpend';
+import { useCallback, useEffect, useId, useState } from 'react';
+import { PanelRightClose, PanelRightOpen, ShieldCheck } from 'lucide-react';
+import useAiSpend, { priceForTask } from '../hooks/useAiSpend';
+import { api } from '../lib/api';
+import { safeReadJSON, safeWriteJSON } from '../lib/storage';
 import { formatSpend, spendMeter } from './assistCost';
-import { EADWYN_GUARDRAIL } from './eadwynConfig';
+import { ASSIST_SURFACES, EADWYN_GUARDRAIL, observedRunCost } from './eadwynConfig';
 import { ACCENT } from '../workspaces/shellConfig';
 import './workerRail.css';
 
@@ -32,9 +35,13 @@ import './workerRail.css';
  * workspaces, docked right, collapsible to a spine, carrying mode, model, meter
  * and safety.
  *
- *   1. MODE — `Manual`, and fixed. The canvas's other mode ("Advisor fills the
- *      blanks") is not offered because nothing on these pages runs a model. A
- *      switch that changes nothing is a setting the user thinks they have made.
+ *   1. MODE — `Manual`, and still fixed even now that a model CAN run here.
+ *      The canvas's other mode is "AI fills the blanks", and nothing on these
+ *      pages fills a blank: the one run below drafts a note the reader keeps or
+ *      discards, on a click, and writes to nothing. Offering a toggle between
+ *      Manual and an auto-fill that does not exist would be a setting the user
+ *      thinks they have made — which is the reason this said Manual when
+ *      nothing ran at all, and the reason it still does.
  *
  *   2. COVERAGE — the honest half of what the twenty-seven copies displayed:
  *      counts of rows the page has already fetched. It is the only per-page
@@ -49,22 +56,58 @@ import './workerRail.css';
  *      the block SAYS so — an absent fact is not a zero fact, and an empty
  *      meter asserts one. (Same contract as `hooks/useAiSpend.js` states.)
  *
- *      There is deliberately NO model block. `ASSIST_SURFACES` keys a surface
- *      to an aiRouter task class, and that key decides the model and the price
- *      it reports — "getting it wrong misreports every figure on the rail". No
- *      founder workspace runs any of the router's task classes, so naming a
- *      model here would put a model on a page that never calls one.
+ *   3b. MODEL — and it took a route to earn it. There was deliberately no
+ *      model block here for a long time, because `ASSIST_SURFACES` keys a
+ *      surface to an aiRouter task class and that key decides the model and
+ *      the price it reports — "getting it wrong misreports every figure on the
+ *      rail" — and no workspace ran any of the router's task classes. Naming a
+ *      model would have put one on a page that never called it.
+ *
+ *      `POST /api/ai/workspace/explain` is what changed, not this component:
+ *      every workspace zone can now run `workspace_explain` over the Coverage
+ *      lines beside it. The card is drawn from `priceForTask` against the
+ *      router's own table, so the model and the per-million rate are the
+ *      router's, never the canvas's — worth saying because the canvases quote
+ *      `$0.293 / M in · $2.253 / M out` for this model and the router's table
+ *      says `0.50 / 0.50`. The estimate stays the caller's OWN observed
+ *      average for the task and is honestly absent until they have run it
+ *      once. The card disappears if the price lookup misses, because an
+ *      unpriced run is unknown rather than free.
  *
  *   4. SAFETY — `EADWYN_GUARDRAIL`, the product-wide boundary, imported rather
  *      than restated so this rail and `AssistRail` cannot say different things.
  *
- * NOT COLLAPSIBLE, DELIBERATELY. The canvas specifies a rail that collapses to
- * a 44px spine, and every host here is a grid item in a track fixed at 270 or
- * 286px (`grid-template-columns: minmax(0,1fr) 286px`). Narrowing the aside
- * cannot narrow the track, so a collapse would leave a 240px blank column
- * beside a spine — worse than no toggle. It needs the host grids to size that
- * track from their content, which is a layout change for the pass that also
- * brings the mode switch and the model card.
+ * COLLAPSIBLE — and the reason it was not is worth keeping, because it is what
+ * the fix had to solve. This docblock used to read "NOT COLLAPSIBLE,
+ * DELIBERATELY": every host is a grid item in a track fixed at 268-288px
+ * (`grid-template-columns: minmax(0,1fr) 286px`), so narrowing the aside could
+ * not narrow the track and a collapse would have left a 240px blank column
+ * beside a spine — worse than no toggle. That was true and it was never a
+ * reason to ship an icon that does nothing.
+ *
+ * The track is now the thing that moves. Twenty host declarations — nineteen
+ * grid tracks and `.i4-rail`'s fixed width, one per stylesheet — changed from
+ * a literal `286px` to `var(--fwr-track, 286px)`, each keeping its OWN width
+ * as the fallback, so nothing shifts by a pixel while the rail is open. Widths
+ * genuinely differ across the hosts (258 to 288px) and preserving that was the
+ * point of the fallback rather than an accident of it. `workerRail.css` then
+ * defines `--fwr-track: 44px` once, on
+ * `:root[data-worker-rail="collapsed"]`. One global custom property drives
+ * every host at the same moment, which is also what makes the preference
+ * global: the canvas describes one rail, docked right, and a reader who closed
+ * it on Build has closed it on Raise.
+ *
+ * DESKTOP ONLY, in CSS rather than in state. Below 1024px the hosts' own media
+ * rules already stack the rail under the body, where a 44px spine would be a
+ * bar across the page. Both the track override and the spine rendering sit
+ * behind `@media (min-width: 1024px)`, so the stored preference survives a
+ * narrow viewport without taking effect on one — the same arrangement
+ * `sidebarCollapsed` reaches with an `isDesktop` flag, minus the state.
+ *
+ * THE ICON IS A BUTTON NOW. It was a bare `lucide-react` SVG with
+ * `aria-hidden="true"` — correct for decoration, wrong for a control. It is a
+ * real `<button>` with `aria-expanded`, `aria-controls` naming the body it
+ * hides, a title that says what the click does, and a visible focus ring.
  *
  * STYLING. `className` takes the host page's own rail class — `a5-rail`,
  * `fr-pitch-rail`, `a7-rail` — so the page's grid column, border and background
@@ -72,6 +115,24 @@ import './workerRail.css';
  * `workerRail.css`, which is why the blocks look the same on every one of
  * them — six founder desks and twenty-four investor surfaces.
  */
+/**
+ * Where the choice lives. `sidebar_collapsed` is the existing precedent for a
+ * persisted desktop layout preference, and this follows its shape exactly —
+ * a bare snake_case key holding a JSON boolean.
+ */
+const RAIL_COLLAPSED_KEY = 'worker_rail_collapsed';
+/** What the host stylesheets key their collapsed track off. */
+const RAIL_COLLAPSED_ATTR = 'data-worker-rail';
+
+/**
+ * The one ASSIST_SURFACES key every workspace zone shares, on all four
+ * licences. One surface rather than one per bucket because the task is the
+ * same everywhere — read back the lines the page is already showing — and
+ * `/api/ai/me/spend` groups by task, so twenty surfaces over one task class
+ * would report the same average twenty times and call it per-page data.
+ */
+const WORKSPACE_SURFACE = 'workspace';
+
 export default function WorkerRail({
   workspace,
   role = 'founder',
@@ -85,7 +146,68 @@ export default function WorkerRail({
   footer = 'Read-only summary · no automated actions',
   'data-testid': testId = 'worker-rail',
 }) {
-  const { spend, loading } = useAiSpend();
+  const { spend, pricing, loading } = useAiSpend();
+  const bodyId = `${useId()}-worker-rail-body`;
+
+  // One preference for the whole product, not one per page. The stored value
+  // is read once for the initial render so the rail does not flash open before
+  // an effect closes it, and `safeReadJSON` is the repo's existing helper —
+  // localStorage throws outright in some embedded contexts, and a rail is not
+  // worth a blank page.
+  const [collapsed, setCollapsed] = useState(() => safeReadJSON(RAIL_COLLAPSED_KEY, false) === true);
+
+  // The HOSTS need to know, not just this element: the width that has to
+  // change is a grid track on an ancestor this component does not own. A data
+  // attribute on <html> is what every host stylesheet keys its
+  // `--fwr-track: 44px` off, so one write moves all twenty of them.
+  //
+  // In an effect rather than in the toggle so that a rail mounting into an
+  // already-collapsed session sets the attribute too — otherwise a reload
+  // would render the spine inside a 286px track.
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const root = document.documentElement;
+    if (collapsed) root.setAttribute(RAIL_COLLAPSED_ATTR, 'collapsed');
+    else root.removeAttribute(RAIL_COLLAPSED_ATTR);
+    // Leaving the attribute set after the last rail unmounts would shrink a
+    // track on a page that has no rail to put in it.
+    return () => root.removeAttribute(RAIL_COLLAPSED_ATTR);
+  }, [collapsed]);
+
+  const toggle = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      safeWriteJSON(RAIL_COLLAPSED_KEY, next);
+      return next;
+    });
+  }, []);
+
+  // The model card, from the router's table rather than from anything typed
+  // here. `priceForTask` returns null when either lookup misses, and the card
+  // is then absent — an unpriced run is unknown, not free.
+  const surface = ASSIST_SURFACES[WORKSPACE_SURFACE];
+  const priced = priceForTask(pricing, surface.task);
+  const observed = observedRunCost(spend, surface.task);
+
+  const [run, setRun] = useState({ state: 'idle', text: '', note: '', usage: null });
+  const canRun = coverage.length > 0;
+  const readBack = useCallback(async () => {
+    setRun({ state: 'running', text: '', note: '', usage: null });
+    try {
+      const r = await api.aiWorkspaceExplain({ workspace, zone: stance || '', coverage });
+      setRun({ state: 'done', text: r?.text || '', note: '', usage: r?.usage || null });
+    } catch (e) {
+      // A refusal is not a crash and must not read as one: the router returns
+      // a reason and a message for a spent budget or an unreachable model, and
+      // the rail shows that sentence rather than "something went wrong".
+      setRun({
+        state: 'failed',
+        text: '',
+        note: e?.body?.message || e?.message || 'The model could not be reached. Nothing was run.',
+        usage: null,
+      });
+    }
+  }, [workspace, stance, coverage]);
 
   // `recorded` false, or no report at all, are the same thing to a reader: the
   // platform cannot say what has been spent. Neither draws a bar.
@@ -110,6 +232,7 @@ export default function WorkerRail({
     <aside
       className={`fwr ${className}`.trim()}
       aria-label={`Worker AI controls · ${workspace}`}
+      data-collapsed={collapsed ? 'true' : 'false'}
       data-testid={testId}
       style={{
         '--fwr-accent-light': accent.deep,
@@ -119,11 +242,26 @@ export default function WorkerRail({
       }}
     >
       <div className="fwr-title">
-        <span>Worker AI · {workspace}</span>
-        <PanelRight size={14} aria-hidden="true" />
+        <span className="fwr-title-text">Worker AI · {workspace}</span>
+        <button
+          type="button"
+          className="fwr-toggle"
+          onClick={toggle}
+          aria-expanded={!collapsed}
+          aria-controls={bodyId}
+          title={collapsed ? `Show the Worker AI rail for ${workspace}` : `Collapse the Worker AI rail for ${workspace}`}
+          data-testid="button-worker-rail-toggle"
+        >
+          {collapsed
+            ? <PanelRightOpen size={14} aria-hidden="true" />
+            : <PanelRightClose size={14} aria-hidden="true" />}
+          <span className="fwr-sr">
+            {collapsed ? 'Show the Worker AI rail' : 'Collapse the Worker AI rail'}
+          </span>
+        </button>
       </div>
 
-      <div className="fwr-body">
+      <div className="fwr-body" id={bodyId}>
         <section className="fwr-block">
           <span>Mode</span>
           {/* `stance` is each page's own one-line description of the manual
@@ -142,6 +280,58 @@ export default function WorkerRail({
           {coverageNote && <p>{coverageNote}</p>}
           {action && <div className="fwr-action">{action}</div>}
         </section>
+
+        {/*
+          The model card, and the one control that makes it true. Absent when
+          the price lookup misses — an unpriced run is unknown, not free — so
+          this block cannot render a model without a rate beside it.
+        */}
+        {priced && (
+          <section className="fwr-block">
+            <span>Model · this page</span>
+            <strong data-testid="text-worker-rail-model">{priced.model.split('/').pop()}</strong>
+            <p className="fwr-model-id">{priced.model}</p>
+            <p>
+              {`$${priced.pin.toFixed(2)} / M in · $${priced.pout.toFixed(2)} / M out`}
+              {' · '}
+              {observed
+                ? `your typical run ${formatSpend(observed.cost)}, over ${observed.calls}`
+                : 'no runs of this yet'}
+            </p>
+            <div className="fwr-action">
+              <button
+                type="button"
+                className="fwr-run"
+                onClick={readBack}
+                disabled={!canRun || run.state === 'running'}
+                data-testid="button-worker-rail-run"
+              >
+                {run.state === 'running' ? 'Reading…' : 'Read this page back'}
+              </button>
+            </div>
+            {!canRun && (
+              <p className="fwr-absent">
+                Nothing to read back yet — this page has not loaded a summary.
+              </p>
+            )}
+            {run.state === 'done' && (run.text
+              ? (
+                <div className="fwr-draft" data-testid="text-worker-rail-draft">
+                  <p>{run.text}</p>
+                  {run.usage && (
+                    <p className="fwr-foot-note">
+                      {run.usage.model.split('/').pop()} · {formatSpend(run.usage.est_cost_usd)}
+                      {run.usage.cached ? ' · cached' : ''}
+                      {run.usage.fallback_used ? ' · fell back' : ''}
+                    </p>
+                  )}
+                </div>
+              )
+              : <p className="fwr-absent">The model returned nothing. Nothing was kept.</p>
+            )}
+            {run.state === 'failed' && <p className="fwr-absent">{run.note}</p>}
+          </section>
+        )}
 
         {unavailable.length > 0 && (
           <section className="fwr-block fwr-muted">

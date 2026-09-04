@@ -1305,7 +1305,14 @@ export const api = {
   createServiceOffering: (data) => request('/services/offerings', { method: 'POST', body: JSON.stringify(data) }),
   updateServiceOffering: (id, data) => request(`/services/offerings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteServiceOffering: (id) => request(`/services/offerings/${id}`, { method: 'DELETE' }),
-  listPartnerOfferings: (partnerId) => request(`/services/partners/${partnerId}/offerings`),
+  // `listPartnerOfferings` is gone. It called GET /services/partners/:id/offerings,
+  // a route the worker has never served — it sat in the api-drift baseline as
+  // known-missing, and its one caller swallowed the 404 as an empty list, so the
+  // partner's own catalogue read "0 offerings" whatever they had published. The
+  // real read is `listServiceOfferings({ mine: 1 })`: services.ts scopes `?mine=1`
+  // on owner_user_id and includes inactive drafts, which is what an owner
+  // managing their own set needs. `partner_id` was never the right key — an
+  // offering is owned by a user, not by a partner org row.
   engageServiceOffering: (id, data) => request(`/services/offerings/${id}/engage`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Task #51 — Stripe Connect onboarding (partner-only)
@@ -2130,6 +2137,28 @@ export const api = {
   // carry hand-written per-1M figures while the receipt is computed from
   // PRICE_USD_PER_1M_TOKENS in aiRouter. This removes that copy.
   aiPricing: () => request('/ai/pricing'),
+
+  // Read back one workspace zone — the ONLY thing a workspace surface runs a
+  // model for, and the reason the rail on those pages is allowed to name one
+  // at all. `ASSIST_SURFACES` binds a surface to an aiRouter task class and the
+  // rail's model card is drawn from that binding, so until a workspace page had
+  // a call site the card would have named a model for a page that never called
+  // one. The call came first; the registration followed.
+  //
+  // `coverage` is the rail's OWN Coverage lines — counts and labels the page
+  // has already fetched and is already showing. Not the rows: those lines are
+  // the page's summary of itself, they carry no personal data, and sending the
+  // records behind them would put a client's name in a prompt to satisfy a
+  // feature nobody asked for that of.
+  //
+  // Longer than the default deadline because a model call is not a read: 30s
+  // would abort a run the router is still paying for.
+  aiWorkspaceExplain: ({ workspace, zone, coverage }) =>
+    request('/ai/workspace/explain', {
+      method: 'POST',
+      timeoutMs: 60_000,
+      body: JSON.stringify({ workspace, zone, coverage }),
+    }),
 
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------
   // Task #13 — analytics reads auto-retry once on 5xx with a 1s backoff so
@@ -2960,6 +2989,181 @@ export const api = {
   // credential, and an attester is usually not a user of this product.
   respondToAdvisorProofConsent: (token, data) =>
     request(`/advisors/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ---------- The partner firm's own stores (migrations 208-209) ----------
+  // Scoped server-side on the caller's `partners` row; none takes a partner id
+  // for the same reason the advisor block above does not take an advisor id.
+  // A quote or engagement belonging to another firm answers 404, not 403 — a
+  // non-owner is not told the row exists.
+  listPartnerNegotiations: () => request('/partner/pipeline/negotiations'),
+  // PUT, not POST: one negotiation per quote is a UNIQUE index, so this is an
+  // upsert. `{touch: true}` advances the stalled clock without changing stage.
+  savePartnerNegotiation: (quoteId, data) =>
+    request(`/partner/pipeline/negotiations/${quoteId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  createPartnerNegotiationTerm: (quoteId, data) =>
+    request(`/partner/pipeline/negotiations/${quoteId}/terms`, { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerNegotiationTerm: (id, data) =>
+    request(`/partner/pipeline/negotiation-terms/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerNegotiationTerm: (id) =>
+    request(`/partner/pipeline/negotiation-terms/${id}`, { method: 'DELETE' }),
+
+  // Returns `items`, plus `mrr_cents` and the `mrr_basis` sentence saying what
+  // that total counted. `mrr_cents` is null when no retainer carries an amount:
+  // a total of zero would claim the clients pay nothing.
+  listPartnerRetainers: () => request('/partner/pipeline/retainers'),
+  savePartnerRetainer: (engagementId, data) =>
+    request(`/partner/pipeline/retainers/${engagementId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePartnerRetainer: (engagementId) =>
+    request(`/partner/pipeline/retainers/${engagementId}`, { method: 'DELETE' }),
+  // The period is in the path because it is the row's identity — hours for
+  // 2026-09 are one record, upserted, not a second row appended each save.
+  savePartnerRetainerUsage: (engagementId, period, data) =>
+    request(`/partner/pipeline/retainers/${engagementId}/usage/${period}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  // A real delete rather than writing zero: zero hours is the claim that they
+  // worked none, which is not the same as no record for the period.
+  deletePartnerRetainerUsage: (engagementId, period) =>
+    request(`/partner/pipeline/retainers/${engagementId}/usage/${period}`, { method: 'DELETE' }),
+
+  // ---------- Offers: visibility, proof, audience fit (migration 209) ----------
+  // Returns `items` plus `engagement_total`, `unattributed_count` and the two
+  // figures the store cannot produce — `views` and `lead_ratio`, each null with
+  // its own reason. Nothing here counts a view, because nothing records one.
+  getPartnerVisibility: () => request('/partner/offers/visibility'),
+  createPartnerSurface: (data) =>
+    request('/partner/offers/surfaces', { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerSurface: (id, data) =>
+    request(`/partner/offers/surfaces/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerSurface: (id) =>
+    request(`/partner/offers/surfaces/${id}`, { method: 'DELETE' }),
+
+  // Every engagement with the surface it names, for the attribution form. An
+  // engagement naming none is listed rather than hidden — it is what the
+  // unattributed count is counting.
+  listPartnerAttribution: () => request('/partner/offers/attribution'),
+  setPartnerEngagementSource: (engagementId, data) =>
+    request(`/partner/offers/engagements/${engagementId}/source`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  clearPartnerEngagementSource: (engagementId) =>
+    request(`/partner/offers/engagements/${engagementId}/source`, { method: 'DELETE' }),
+
+  // `is_published` on each item is DERIVED from its consent rows, never stored.
+  // There is no method to set it, and that absence is the feature.
+  listPartnerProof: () => request('/partner/offers/proof'),
+  createPartnerProof: (data) =>
+    request('/partner/offers/proof', { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerProof: (id, data) =>
+    request(`/partner/offers/proof/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerProof: (id) =>
+    request(`/partner/offers/proof/${id}`, { method: 'DELETE' }),
+  // Records the ask; it does not send it. The response carries `request_token`
+  // exactly once — the firm hands the link over by whatever channel it already
+  // has with the client, and no later read returns it.
+  requestPartnerProofConsent: (id, data) =>
+    request(`/partner/offers/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
+  // The firm can only ever RECORD a withdrawal, never grant a consent. Granting
+  // is the token holder's alone, which is what makes the record worth anything.
+  withdrawPartnerProofConsent: (id, consentId) =>
+    request(`/partner/offers/proof/${id}/consents/${consentId}/withdraw`, { method: 'POST' }),
+  // The client's own answer. Unauthenticated on purpose — the token is the
+  // credential, and the counterparty on an engagement is often not a user here.
+  respondToPartnerProofConsent: (token, data) =>
+    request(`/partner/offers/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
+
+  listPartnerFitRules: () => request('/partner/offers/fit-rules'),
+  createPartnerFitRule: (data) =>
+    request('/partner/offers/fit-rules', { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerFitRule: (id, data) =>
+    request(`/partner/offers/fit-rules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerFitRule: (id) =>
+    request(`/partner/offers/fit-rules/${id}`, { method: 'DELETE' }),
+
+  // ---------- Delivery: health, deliverables, capacity, reports (208) ----------
+  // `health` on each item is DERIVED over five tables at read time and is null
+  // when nothing is recorded — never 'on_track'. There is no method to set it,
+  // because green-because-empty is the failure the zone was written against.
+  getPartnerDeliveryHealth: () => request('/partner/delivery/health'),
+
+  listPartnerMilestones: (engagementId) =>
+    request(`/partner/delivery/engagements/${engagementId}/milestones`),
+  createPartnerMilestone: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/milestones`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerMilestone: (id, data) =>
+    request(`/partner/delivery/milestones/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerMilestone: (id) =>
+    request(`/partner/delivery/milestones/${id}`, { method: 'DELETE' }),
+
+  // `side` is what lets a report name a client-side blocker plainly. A blockers
+  // list with no side would make every delay the firm's.
+  listPartnerBlockers: (engagementId) =>
+    request(`/partner/delivery/engagements/${engagementId}/blockers`),
+  createPartnerBlocker: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/blockers`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerBlocker: (id, data) =>
+    request(`/partner/delivery/blockers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerBlocker: (id) =>
+    request(`/partner/delivery/blockers/${id}`, { method: 'DELETE' }),
+
+  // NOTE WHAT IS ABSENT: nothing here sets `opened_at` or `signed_off_at`.
+  // Those are the client's to set — only the founder side can truthfully say a
+  // thing was read — and the worker ignores them in any body. On this build
+  // every sent deliverable therefore reads unopened, and the read says why.
+  listPartnerDeliverables: () => request('/partner/delivery/deliverables'),
+  createPartnerDeliverable: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/deliverables`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerDeliverable: (id, data) =>
+    request(`/partner/delivery/deliverables/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerDeliverable: (id) =>
+    request(`/partner/delivery/deliverables/${id}`, { method: 'DELETE' }),
+
+  // Returns `people`, `seats`, and `cap_hours: null` with the reason — nothing
+  // in this product records the firm's capacity cap, so nothing is "over" it.
+  getPartnerCapacity: (period) =>
+    request(`/partner/delivery/capacity${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+  listPartnerPeople: () => request('/partner/delivery/people'),
+  grantPartnerSeat: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/seats`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerSeat: (id, data) =>
+    request(`/partner/delivery/seats/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // Revoking is a state, not a delete: a struck-through seat stays on the page
+  // rather than the fact that access once existed silently disappearing.
+  revokePartnerSeat: (id) =>
+    request(`/partner/delivery/seats/${id}/revoke`, { method: 'POST' }),
+  savePartnerHours: (engagementId, personId, period, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  deletePartnerHours: (engagementId, personId, period) =>
+    request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
+      method: 'DELETE',
+    }),
+
+  listPartnerStatusReports: () => request('/partner/delivery/status-reports'),
+  // Composes from the engagement's own rows. `blocked` is read at compose time
+  // and never copied into the report row — a prose copy would go stale the
+  // moment a blocker cleared.
+  getPartnerReportDraft: (engagementId, period) =>
+    request(`/partner/delivery/engagements/${engagementId}/report-draft/${period}`),
+  savePartnerStatusReport: (engagementId, period, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/status-reports/${period}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  // Records that a PERSON sent it. Nothing here delivers anything — no email,
+  // no notification, no client-side surface exists.
+  sendPartnerStatusReport: (id) =>
+    request(`/partner/delivery/status-reports/${id}/send`, { method: 'POST' }),
+  deletePartnerStatusReport: (id) =>
+    request(`/partner/delivery/status-reports/${id}`, { method: 'DELETE' }),
 
   listMyAdvisorCohorts: () => request('/advisors/me/cohort'),
   listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),

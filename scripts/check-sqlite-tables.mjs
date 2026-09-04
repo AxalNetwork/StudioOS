@@ -126,8 +126,12 @@ export function unknownReferences() {
       );
       for (const m of clean.matchAll(REF)) {
         const t = norm(m[1]);
-        // sqlite_master / sqlite_sequence are the engine's own tables.
-        if (known.has(t) || ctes.has(t) || NOT_A_TABLE.has(t) || t.startsWith('sqlite_')) continue;
+        // sqlite_master / sqlite_sequence are the engine's own tables, and
+        // `pragma_*` are SQLite's built-in table-valued functions
+        // (`SELECT name FROM pragma_table_info(?)`), which no migration
+        // creates and none ever will.
+        if (known.has(t) || ctes.has(t) || NOT_A_TABLE.has(t)
+            || t.startsWith('sqlite_') || t.startsWith('pragma_')) continue;
         if (!hits.has(t)) hits.set(t, []);
         hits.get(t).push(`${rel}:${line}`);
       }

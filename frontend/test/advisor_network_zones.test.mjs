@@ -79,6 +79,30 @@ test('the shared Network page takes its tab from the path, not only from ?tab=',
   assert.match(netPage, /No store behind this yet/);
 });
 
+test('an unserved zone renders its card ALONE when the shell supplies the navigation', () => {
+  const code = codeOnly(netPage);
+  // /network/organizations is a real route on every licence and this page has
+  // no tab for it, so `activeTab` falls to the default — Introductions for a
+  // role that cannot see Contacts. Embedded, the tab row is suppressed because
+  // the shell's zone pills already are that navigation, so an operator read
+  // the no-store card and then an UNLABELLED introductions list: a body the
+  // heading above it does not name. That is the same defect this bucket was
+  // reported for, surviving in the one zone that has no body at all.
+  assert.match(code, /const unservedAlone = embedded && Boolean\(unservedZone\)/);
+  const suppressed = code.match(/!unservedAlone && activeTab === /g) || [];
+  assert.equal(suppressed.length, 3,
+    'every panel must be suppressed on an unserved zone, not just the one that happens to be the default');
+});
+
+test('the unserved-zone card never points at a tab row that is not rendered', () => {
+  // The note read "The tabs below are what this page actually holds" — true on
+  // this page's own mount, false inside the shell where no tab row renders.
+  assert.match(netPage, /unservedAlone\s*\n?\s*\? 'Relationships and Introductions above/,
+    'embedded, the fallback the reader can actually reach is the shell zone pills above');
+  assert.match(netPage, /: 'The tabs below are what this page actually holds/,
+    'and on its own mount the tab row IS below, so that wording stays');
+});
+
 test('the Network rail never claims read-only over a body that writes', () => {
   const code = codeOnly(netWorkspace);
   // The old copy said the VIEW does not change records, above a relationship

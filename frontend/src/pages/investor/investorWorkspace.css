@@ -72,7 +72,7 @@
 .dark .investor-workspace .investor-subtitle { color: #c0bdcb; }
 .dark .investor-workspace .investor-locked p { color: #c7d2fe; }
 
-.investor-deals-layout { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 276px; background: #f7f7f9; }
+.investor-deals-layout { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--fwr-track, 276px); background: #f7f7f9; }
 .investor-deals-main { min-width: 0; padding: 22px 20px 30px; }
 .investor-deals-hero h1 { margin: 0; font-size: 24px; line-height: 1.15; letter-spacing: -.03em; font-weight: 800; }
 .investor-deals-hero p { margin: 6px 0 0; color: #4a4553; font-size: 13px; }

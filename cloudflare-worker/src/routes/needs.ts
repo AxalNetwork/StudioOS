@@ -14,7 +14,7 @@ import { requireAuth } from '../auth';
 import { isAdmin, isPartner, isFounder, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { issueInvoice, invoiceDto } from '../services/engagementInvoices';
 import {
-  analysePipeline, weightedPipeline, analyseDelivery,
+  analysePipeline, weightedPipeline, analyseDelivery, analyseByShape, analyseByQuarter,
   type QuoteRow as QuoteAnalyticsRow, type EngagementRow as EngagementAnalyticsRow,
 } from '../services/bdAnalytics';
 
@@ -361,6 +361,13 @@ quotesRouter.get('/me', async (c) => {
  * The win rate's denominator is decided quotes only. Open and withdrawn
  * are returned separately so the UI can show what was excluded rather
  * than presenting a bare percentage.
+ *
+ * `by_shape` and `by_quarter` were added for the Pipeline canvas's Analytics
+ * zone, which asks for the same rate decomposed two ways. Both are derived
+ * from columns the store already holds — a quote's status, its two timestamps
+ * and, through the need it answers, that need's `category`. `loss_reasons` is
+ * returned as null with its reason attached: nothing records why a quote was
+ * rejected, and a taxonomy inferred from a bare status would be a guess.
  */
 quotesRouter.get('/analytics', async (c) => {
   try {
@@ -372,19 +379,29 @@ quotesRouter.get('/analytics', async (c) => {
     // The analytics must answer for the SAME set of rows the lists show, or a
     // partner reads a win rate for one agency beside a pipeline for another.
     const analyticsCompany = admin ? null : await activeCompanyFor(c, user);
+    // `n.category AS shape` is a LEFT join on purpose: a quote whose need row
+    // is missing must still count toward the headline win rate. An INNER join
+    // would silently drop it and quietly change the denominator of the one
+    // figure this endpoint exists to compute. Unmatched rows land in the
+    // by-shape breakdown as an unrecorded shape, which is what they are.
     const quotes = await (
       admin
         ? c.env.DB.prepare(
-            'SELECT status, price AS amount, created_at, decided_at FROM quotes ORDER BY created_at DESC LIMIT 1000',
+            `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, n.category AS shape
+               FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
+              ORDER BY q.created_at DESC LIMIT 1000`,
           )
         : analyticsCompany !== null
           ? c.env.DB.prepare(
-              `SELECT status, price AS amount, created_at, decided_at FROM quotes
-                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL)
-                ORDER BY created_at DESC LIMIT 1000`,
+              `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, n.category AS shape
+                 FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
+                WHERE q.partner_id = ? AND (q.company_id = ? OR q.company_id IS NULL)
+                ORDER BY q.created_at DESC LIMIT 1000`,
             ).bind(user.partner_id ?? -1, analyticsCompany)
           : c.env.DB.prepare(
-              'SELECT status, price AS amount, created_at, decided_at FROM quotes WHERE partner_id = ? ORDER BY created_at DESC LIMIT 1000',
+              `SELECT q.status, q.price AS amount, q.created_at, q.decided_at, n.category AS shape
+                 FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
+                WHERE q.partner_id = ? ORDER BY q.created_at DESC LIMIT 1000`,
             ).bind(user.partner_id ?? -1)
     ).all<QuoteAnalyticsRow>();
     const engagements = await (
@@ -408,6 +425,14 @@ quotesRouter.get('/analytics', async (c) => {
       pipeline: analysePipeline(q),
       forecast: weightedPipeline(q),
       delivery: analyseDelivery(engagements.results || []),
+      by_shape: analyseByShape(q),
+      by_quarter: analyseByQuarter(q),
+      // The canvas's third analytic block. Said here rather than only in the
+      // page, so any future consumer of this endpoint reads the same reason.
+      loss_reasons: null,
+      loss_reasons_note:
+        'Quotes record a status and the date it was decided. There is no loss reason, '
+        + 'competitor or losing-price column anywhere, so a loss taxonomy would be inferred rather than read.',
     });
   } catch (e) { return mapError(c, e); }
 });

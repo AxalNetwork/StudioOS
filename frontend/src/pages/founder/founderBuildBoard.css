@@ -7,7 +7,7 @@
 
 .fb-board-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 286px;
+  grid-template-columns: minmax(0, 1fr) var(--fwr-track, 286px);
   min-height: 100dvh;
   background: #f8f8fa;
   border: 1px solid #dedbe4;

@@ -25,6 +25,7 @@ represents a bug that reached production once:
 | `check-workspace-frames.mjs` | A workspace route that crashes, renders nothing, or draws two headings or two AI rails. Renders the built `docs/` in Chromium with `/api/*` stubbed, so it sees what the source-reading suite cannot: it caught `/expertise/profile` throwing into the error boundary on every visit. Needs a browser, so it is **not** in `test:guards` — run it by hand after `npm run build`. |
 | `check-frontend-builds.mjs` | A frontend that does not build. Every other check here reads the source as TEXT, so a parse error passes the whole suite and surfaces one push later in CI. Runs the real bundler into a temp directory — never `docs/`. |
 | `check-folder-docs.mjs` | A folder that carries weight without explaining itself, or a README naming a file that does not exist. |
+| `npm-audit-gate.mjs` | A critical advisory in a production dependency — and, separately, a registry that did not answer. `npm audit` exits 1 for both, so a 503 from the advisory endpoint went red exactly like a real CVE. The gate retries a transport failure, names the advisories on a real finding, and still fails when the database is unreachable rather than passing on a question it could not ask. |
 | `check-dark-mode.mjs` | A surface with no dark variant. |
 
 ## The pull-request preview

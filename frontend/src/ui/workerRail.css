@@ -50,6 +50,30 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
   color: var(--fwr-faint);
 }
 
+/*
+ * THE TOGGLE. It was a bare SVG with `aria-hidden="true"` — the right markup
+ * for decoration and the wrong markup for the only control on this rail. As a
+ * button it needs a hit area a pointer can find, a focus ring a keyboard user
+ * can see, and no default chrome, in that order.
+ */
+.fwr-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: none; width: 24px; height: 24px; margin: -4px -4px -4px 0;
+  padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--fwr-faint); cursor: pointer;
+}
+.fwr-toggle:hover { color: var(--fwr-accent); background: var(--fwr-accent-soft); }
+.fwr-toggle:focus-visible {
+  outline: 2px solid var(--fwr-accent); outline-offset: 1px; color: var(--fwr-accent);
+}
+/* The label the button carries for a screen reader, since the icon alone says
+   nothing. Clipped rather than `display:none`, which would hide it from the
+   accessibility tree along with everything else. */
+.fwr-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
 .fwr-body { display: flex; flex-direction: column; min-width: 0; }
 
 .fwr-block { padding: 15px 0; border-top: 1px solid var(--fwr-line); }
@@ -77,6 +101,33 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 }
 .fwr-action a:hover { text-decoration: underline; }
 
+/* The model id under its short name — long, monospaced and deliberately quiet:
+   it is there to be checked against the router's table, not read. */
+.fwr-model-id {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9.5px; word-break: break-all;
+  color: var(--fwr-faint);
+}
+
+.fwr-run {
+  font: inherit; font-size: 11px; font-weight: 800;
+  padding: 6px 11px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--fwr-accent);
+  background: var(--fwr-accent-soft); color: var(--fwr-accent);
+}
+.fwr-run:hover:not(:disabled) { background: var(--fwr-accent); color: #fff; }
+.fwr-run:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-run:disabled { opacity: .55; cursor: not-allowed; }
+
+/* A draft, and it has to look like one. Dashed rather than solid so it does
+   not read as a stored record beside the counts above it, which are. */
+.fwr-draft {
+  margin-top: 10px; padding: 10px 11px;
+  border: 1px dashed var(--fwr-line); border-radius: 9px;
+}
+.fwr-draft p { margin: 0; color: var(--fwr-ink); font-size: 11px; line-height: 1.6; }
+.fwr-draft .fwr-foot-note { margin-top: 7px; font-size: 10px; }
+
 .fwr-meter {
   height: 4px; margin-top: 8px; border-radius: 999px;
   background: var(--fwr-line); overflow: hidden;
@@ -93,6 +144,47 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 .fwr-foot strong { display: block; font-size: 11px; color: var(--fwr-ink); }
 .fwr-foot p { margin: 4px 0 0; font-size: 10.5px; line-height: 1.5; }
 .fwr-foot-note { color: var(--fwr-faint); }
+
+/*
+ * COLLAPSED — the spine, and the track that has to shrink with it.
+ *
+ * `--fwr-track` is the whole mechanism. Every host declares its rail column as
+ * `var(--fwr-track, 286px)` with its OWN width as the fallback, so while this
+ * property is undefined each page keeps the width it has always had, to the
+ * pixel. Defining it here — once, globally — collapses all twenty at the same
+ * moment, which is what makes one stored preference move the whole product
+ * rather than one page.
+ *
+ * DESKTOP ONLY, and in CSS rather than in React state. Below 1024px the hosts'
+ * own media rules already stack the rail beneath the body, where a 44px spine
+ * would be a bar across the page rather than a column beside it. Putting both
+ * halves behind the same query means the preference is remembered on a narrow
+ * viewport without being applied to one, and there is no second source of
+ * truth about what "desktop" means.
+ */
+@media (min-width: 1024px) {
+  :root[data-worker-rail="collapsed"] { --fwr-track: 44px; }
+
+  aside.fwr[data-collapsed="true"] { padding-left: 0; padding-right: 0; align-items: center; }
+  aside.fwr[data-collapsed="true"] > .fwr-body { display: none; }
+  aside.fwr[data-collapsed="true"] .fwr-title {
+    flex-direction: column-reverse; gap: 12px; height: 100%; justify-content: flex-start;
+  }
+  aside.fwr[data-collapsed="true"] .fwr-toggle { margin: 0; }
+  /* The shell's own slot draws the padding for the rail it wraps
+     (WorkspaceShell.jsx), so it has to give that padding up too — 18px either
+     side of a 44px column leaves 8px for the control. */
+  :root[data-worker-rail="collapsed"] .fwr-shell-slot { padding-left: 0; padding-right: 0; }
+  /* The label turns with the column instead of disappearing: a 44px spine with
+     no word on it is a mystery button, and the rail's whole job is to say what
+     it is. Bottom-to-top so it reads with the head at the top, matching the
+     expanded title's position. */
+  aside.fwr[data-collapsed="true"] .fwr-title-text {
+    writing-mode: vertical-rl; transform: rotate(180deg);
+    letter-spacing: .12em; white-space: nowrap; overflow: hidden;
+    max-height: calc(100% - 40px); text-overflow: ellipsis;
+  }
+}
 
 .dark .fwr {
   --fwr-ink: #f4f3f7;

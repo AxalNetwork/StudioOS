@@ -78,6 +78,7 @@ of the four whose canvas was already committed — it is in
 | `Pages · Partner Offers.dc.html` | `/offers`, `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` | UPGRADE |
 | `Pages · Partner Network.dc.html` | `/network/*` on the partner licence | UPGRADE |
 | `Pages · Partner Research.dc.html` | `/research/*` on the partner licence | UPGRADE |
+| `Navigation Shell · Anatomy.dc.html` | the shell itself — chrome, company switcher and the six role fills (2026-09-04 batch) | UPGRADE |
 
 **Three are newer exports of canvases already in `canvases/backlog/`** —
 `AIRail.dc.html`, `Founder Workspaces Canvas.dc.html` and
@@ -107,6 +108,103 @@ and one rail, and that contract is now enforced across all four licences —
 including `.main`'s padding, which lives on `WorkspaceShell` rather than on
 the page container it used to come from. What remains per profile is the
 BODIES: the cards, tables and empty states inside the frame.
+
+## The 2026-09-04 batch — forty-two artifact links, forty already committed
+
+The owner sent forty-four `claude.ai/code/artifact/...` links (forty-two
+unique; two were pasted twice) and asked what was there, what matched and what
+was missing. **Forty of the forty-two are canvases this repository already
+holds**, and the checking is worth recording so nobody repeats it.
+
+**How they were matched.** An artifact is a bundled *render* of a canvas, not
+the canvas file. Its source sits in a `<script type="__bundler/template">` JSON
+string, and the bundler rewrites it on the way in: the Google Fonts `<link>`
+becomes ~17 KB of inlined `@font-face` rules pointing at asset ids, camelCase
+attributes are hyphenated (`onClick` → `sc-camel-on-click`,
+`dangerouslySetInnerHTML` → `sc-camel-dangerously-set-inner-h-t-m-l`), bare
+attributes gain `=""`, entities resolve (`&amp;` → `&`), and a fixed
+"Made with Claude Design" badge is appended. Undo those four and the artifact
+matches the committed `.dc.html` exactly — verified character by character, not
+by eye.
+
+**So an artifact link is good enough to identify and diff a canvas, and not
+good enough to land one.** Two of the rewrites are lossy: a component canvas's
+`data-props="{&quot;page&quot;:…}"` schema is truncated at its first quote (the
+AIRail and ForgeRail artifacts both arrive as `data-props="{`), and self-closing
+void tags are normalised in a direction this repository is not consistent about
+(`<input …/>` appears 81 times and `<input …>` 98 times across these files).
+Reconstructing a file from an artifact would therefore commit a component whose
+props schema is gone. **Send a `.dc.html` export, not an artifact link, when the
+intent is to land a canvas.**
+
+**Where the forty already live**
+
+| Canvas | Folder |
+| --- | --- |
+| Pages · Founder Build / Grow / Raise / Network / Research | `canvases/integrated/` |
+| Pages · Founder Validate | `incoming/` |
+| Pages · Investor Deals / Portfolio / Fund / Research | `canvases/integrated/` |
+| Pages · Advisor Expertise / Network / Research | `incoming/` |
+| Pages · Advisor Cohorts | `canvases/backlog/` |
+| Pages · Partner Pipeline | `canvases/integrated/` |
+| Pages · Partner Delivery / Offers / Network / Research | `incoming/` |
+| Founder Workspaces Canvas, Investor LP Canvas, AIRail | `incoming/` |
+| Advisor Canvas | `canvases/integrated/` |
+| Partner Operator Canvas, ForgeRail | `canvases/backlog/` |
+| Account, Company Settings, Team, Trust Center v2, Get Paid &amp; Invoicing, Emails, Help Center, Contracts · Super, Contracts · Subsidiary, Support · Subsidiary, Support Security · Super | `canvases/integrated/` |
+| Team · Authority (sent twice, byte-identical), Funds · Fabric, Send for Signature | `canvases/backlog/` |
+
+**The two the repository does not hold.** One is landed here; the other cannot
+be, and the difference is instructive.
+
+1. **`Navigation Shell · Anatomy.dc.html` — LANDED.** Five artboards: N1 shell
+   anatomy (one chrome, six role fills), N2 company switcher in three states,
+   N3 admin tiers (subsidiary and HQ), N4 founder and investor/LP, N5 advisor
+   and service partner. It carries no `data-props`, so nothing about it was
+   lost in the bundle, and it reconstructs cleanly.
+
+   It is a **different document** from the committed
+   `canvases/integrated/Navigation Shell.dc.html`, which is a single rendered
+   shell with no artboards — a name lookup would have said "already have it".
+   Hence the distinct filename; do not overwrite the other one.
+
+   One thing is NOT byte-faithful and is worth knowing before it is diffed
+   against a fresh export: the bundler normalises self-closing void tags, so
+   an `<img … />` in the original arrives as `<img …>`. This repository is
+   itself inconsistent about that — 81 `<input … />` against 98 `<input …>`
+   across these files — so there is nothing to restore it to. The markup is
+   semantically identical.
+
+2. **The second AIRail export — NOT landed, and it cannot be.** Same six
+   blocks in the same order as `AIRail.dc.html` in this folder, differing in
+   two lines: the Manual blurb reads "Tables, boards and models work alone. No
+   tokens." rather than "No tokens. Page works alone.", and the Usage cap is
+   bound — `of {{ plan }}` — where the committed copy hardcodes `of $40.00`.
+
+   Its artifact is corrupt, not merely lossy. `data-props="{` truncates at its
+   first quote, and because that quote opens an HTML attribute the rest of the
+   document is swallowed into it: the canvas source extracts to 5,406 bytes
+   against the committed file's 16,068, with the entire `<script
+   type="text/x-dc">` logic block — every value behind every `{{ }}` — inside
+   an attribute value. The markup survives; the component does not.
+
+   Grafting the committed file's logic onto the recovered markup would not
+   reproduce it either, and the reason is exactly the change that makes this
+   export interesting: the committed logic returns no `plan` key at all and
+   hardcodes `/ 40` in its `spendPct`. `{{ plan }}` would render unresolved.
+   **A `.dc.html` export is the only way to land this one.**
+
+   **The shipped code is already on the right side of that difference** and
+   must not be "corrected" toward the older canvas: `WorkerRail.jsx` reads
+   `spend.month.cap_usd` from the router and renders no cap at all when the
+   server does not give one. A hardcoded $40.00 would be a fabricated fact of
+   exactly the kind the rule below exists to stop.
+
+**Zone coverage is complete.** Counting the two the batch did not include but
+the repository holds — `Pages · Investor Network` and
+`Advisor Detail · Practice`, both in `canvases/integrated/` — there is a canvas
+for all twenty-one workspace buckets across the four licences. Nothing in the
+four-profile layout pass is now waiting on a missing design.
 
 ## The rule that matters most
 

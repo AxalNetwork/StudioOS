@@ -4,6 +4,139 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Migrations 208 and 209 — the stores behind the nine unbacked partner zones
+
+Six of the fifteen partner zones render a real body. The other nine render a `NoStoreYet` card naming the column they would need, and **every one of those columns was verified absent before a line of SQL was written**: `engagements` (`sql/t13_t14_t15.sql:366`) has eighteen columns and exactly one ALTER ever added to it (`company_id`, migration 196) — no cadence, no renewal date, no consumption, no milestone, no hours, no last client contact, no acknowledgment; `quotes` (`:347`) has a four-value status and a `decided_at`, and nothing between "sent" and "decided". Fifteen tables across two files close that.
+
+| Zone | Store |
+| --- | --- |
+| Pipeline · Negotiations | `quote_negotiations`, `quote_terms` |
+| Pipeline · Retainers | `partner_retainers`, `retainer_usage` |
+| Delivery · Health | `engagement_milestones` (+ the retainer usage above) |
+| Delivery · Deliverables | `engagement_deliverables` |
+| Delivery · Capacity | `engagement_seats`, `engagement_hours` |
+| Delivery · Status reports | `engagement_status_reports`, `engagement_blockers` |
+| Offers · Visibility | `partner_surfaces`, `engagement_sources` |
+| Offers · Proof | `partner_proof_items`, `partner_proof_consents` |
+| Offers · Audience fit | `partner_fit_rules` |
+
+**Side tables, and not only because `users` is full.** `quotes` and `engagements` are each defined three times across `schema.sql`, `t13_t14_t15.sql` and the migration set; D1 keeps one table per name, so a column added to one lineage may not exist on the row that won. `check-migration-column-shapes.mjs` exists because migration 196 learned that on the production run. Every table here keys on `id`, which every definition has.
+
+**Which partner key, said out loud.** There are two live conventions — `users.id` for facts about an ACCOUNT (perks, service_offerings, partner_deals) and `partners.id` for facts about the DIRECTORY ENTITY (quotes, engagements, office hours). Everything in 208 hangs off an engagement or a quote and inherits its parent's key; the three tables in 209 that are partner-scoped take `partners.id` explicitly, with the reason in the file. No third convention.
+
+**Nothing derivable is stored.** Engagement health, retainer utilisation, days-stalled, "published" and "attested" are all computable from rows these files add. Storing one makes it a second source of truth for something three tables already say, and the two disagree the first time one of them moves. A guard scans the comment-stripped DDL for each of them by name.
+
+- **Money is integer cents** even though `engagements.price` beside it is REAL. The float half of this schema is a data migration over live fiduciary records, not a lint fix — but `check-money-cents.mjs` stops the split growing, and a retainer's monthly figure and a budget floor are new money.
+- **Consent copies migration 204 verbatim** — `consent_given`, `consent_given_at`, `consent_text`, `consent_captured_by`, `withdrawn_at` — so the advisor and partner halves can be audited by one query. Withdrawal is a state, not a delete: an attestation that can silently vanish is not evidence of anything. The difference from 204 is provenance — a partner's proof hangs off an ENGAGEMENT, so which work produced it is a foreign key rather than a typed claim.
+- **`opened_at` and `signed_off_at` are the client's to set.** Only the founder side can truthfully say a deliverable was read; a partner-side write to either would be the firm reporting a metric about itself.
+- **Attribution is a join, never a model.** `engagement_sources` is a row or it is nothing. An unattributed engagement is simply not counted, because modelling the gap would make the widest column the least true — which is the argument the Visibility zone is built on.
+
+Verified by applying both files to a real SQLite database built from the bootstrap lineages plus the full migration ledger: all fifteen tables created, and both files replay with no error. The runner is forward-only and aborts the whole deploy on the first failing statement, so a file that is not idempotent holds every later migration and the worker behind it — which is why every statement is `IF NOT EXISTS` and there is no transaction wrapper (D1 rejects `BEGIN`/`COMMIT` inside a migration; migration 200 was rewritten for it).
+
+**No manual step.** A merge to `main` applies these: the deploy workflow runs the same ledgered runner as `npm run deploy`'s predeploy hook, as a step that must succeed before `wrangler deploy`.
+
+Seven guards in `frontend/test/partner_delivery_stores.test.mjs`, ten mutation checks. One was not caught first time and the test was fixed: deleting `withdrawn_at` from the schema still passed, because the file's own header explains withdrawal-as-state at length and the check was reading the prose. It now reads the comment-stripped DDL, the same reasoning `_codeOnly.mjs` applies on the JavaScript side.
+
+## The workspace rail names a model, because a workspace now runs one
+
+Every rail canvas — AIRail, AdvRail, PartnerRail, EmberRail, InvRail, ForgeRail — draws a **Model · this page** card with a per-million rate. The shipped rail had no such block, and the guards that kept it out said exactly why: `ASSIST_SURFACES` binds a surface to an aiRouter task class, that class decides the model and the price, and no workspace surface was registered on any of the four licences. A card would have named a model for a page that never called one. `workspace_frame_contract.test.mjs` even named the shortcut in advance — *"inventing the registration to get the card is the failure"*.
+
+**So the route came first and the registration followed.** `POST /api/ai/workspace/explain` runs a new aiRouter task class, `workspace_explain`, over the Coverage lines the rail is already displaying, and returns a short read-back of what the page is showing. The rail's card is then derived from `priceForTask` against the router's own table. No Cloudflare dashboard step was needed: `wrangler.toml` already declares the `[ai]` binding in the base table and both env tables.
+
+- **What it is given, and nothing else.** The `coverage` array is the rail's own summary lines — counts and labels the page has already fetched, "12 accessible positions". Not the rows behind them: those lines carry no personal data and the records do. Bounded at 12 lines of 200 characters, names at 60, and passed through the same `classifyInput` safety classifier the advisor surface runs before anything reaches the model.
+- **The prompt is a boundary, not a persona.** *"Never state a fact that is not in the lines you were given… If the lines do not support a conclusion, say which line is missing instead of reaching one anyway."* A page whose coverage reads "3 quotes out, 1 decided" cannot support a sentence about win rate, and a model that writes one has produced the same fabricated fact that `NotRecorded`, `Unrecorded` and `ZoneBody` exist across this codebase to prevent — with a model's authority behind it.
+- **A refusal keeps its reason.** `run()` never throws; it returns a refusal with a usage row. A spent budget and an unreachable model both come back as that sentence rather than a 500, because "your budget is spent" and "this page is broken" are different things to be told.
+- **Never cached.** `explain` caches for a week because a topic explanation is the same answer every time. This one reads a page's *current* figures, so a cached answer would describe a state that has moved on while looking current.
+- **The figures are the router's, not the canvas's.** The canvases quote `$0.293 / M in · $2.253 / M out` for this model; `PRICE_USD_PER_1M_TOKENS` says `0.50 / 0.50`. Whichever is right, the rail shows what will actually be charged — and the per-run estimate stays the caller's own observed average, honestly absent until they have run it once.
+- **Mode stays `Manual`.** The canvas's other mode is "AI fills the blanks", and nothing here fills a blank: the run drafts a note on a click and writes to nothing.
+
+**Four guards changed, none weakened.** Three asserted `doesNotMatch(rail, /ASSIST_SURFACES|priceForTask/)` — correct while no workspace ran a task. They now assert the stronger rule they always stood for: a surface key, a `ROUTE` entry and a worker call site must exist *together*, and the rail must not quote the canvas's numbers. The fourth required every `ASSIST_SURFACES` key to be mounted by an `<AssistLayout>` under `frontend/src/pages`; the workspace surface is rendered by `WorkerRail` from `frontend/src/workspaces`, so the rule is now about dead config rather than about a directory — and it additionally checks the rail really looks the constant up, since a constant nothing reads would satisfy the old shape while drawing no card.
+
+Eight new worker guards in `cloudflare-worker/test/ai_workspace_explain.test.ts`, fourteen mutation checks across both suites. One is behavioural: an unauthenticated POST must reach no model, asserted against an AI binding that records being called — a 401 that still ran the model would have spent someone's budget answering a stranger.
+
+## The Worker AI rail collapses now, and the track collapses with it
+
+Every canvas draws a rail that closes to a 44px spine, and the icon has sat in the corner of every rail since the component was written — as a bare `lucide-react` SVG with `aria-hidden="true"`. Not a button, no click, no state. Its docblock explained why, and the explanation was correct: every host is a grid item in a track fixed at 258-288px, so narrowing the `<aside>` could not narrow the column and a collapse would have left a 240px blank space beside a spine. A true constraint, and a bad outcome — a control that looks like a control and does nothing is worse than no control at all.
+
+**The track is the thing that moves.** Twenty host declarations — nineteen `grid-template-columns` and `.i4-rail`'s fixed width, one per stylesheet — changed from a literal `286px` to `var(--fwr-track, 286px)`, each keeping its OWN width as the fallback. Widths genuinely differ across the hosts and preserving that was the point: while the rail is open nothing moves by a pixel. `workerRail.css` then defines `--fwr-track: 44px` once, on `:root[data-worker-rail="collapsed"]`, and one custom property closes all twenty at the same moment. `WorkspaceShell`'s slot reads the same property, so the shell rail collapses with the hand-rolled grids instead of staying 280px wide around a spine.
+
+- **The preference is global and remembered.** One rail, docked right, is what the canvases describe; a reader who closed it on Build has closed it on Raise. Stored under `worker_rail_collapsed` through `safeReadJSON`/`safeWriteJSON` — the helpers exist because `localStorage` throws outright in some embedded contexts, and a rail is not worth a blank page. `sidebar_collapsed` is the precedent and this follows its shape exactly.
+- **The hosts are told through the document.** The width that has to change is a grid track on an ancestor the component does not own, so the state reaches them as a `data-worker-rail` attribute on `<html>`, set in an effect rather than in the click handler — a rail mounting into an already-collapsed session has to set it too, or a reload would render the spine inside a 286px track. The effect's cleanup removes it, so a stale attribute cannot outlive the rail and shrink a track on a page that has no rail to put in it.
+- **Desktop only, in CSS rather than in state.** Below 1024px the hosts' own media rules already stack the rail beneath the body, where a 44px spine would be a bar across the page. Both the track override and the spine rendering sit behind the same `@media (min-width: 1024px)`, so the preference survives a narrow viewport without taking effect on one — and there is no second source of truth about what "desktop" means.
+- **The icon became a control.** A real `<button>` with `aria-expanded`, `aria-controls` naming the body it hides, a clipped label for screen readers, a visible `:focus-visible` ring, and two glyphs rather than one: `PanelRightClose` when open, `PanelRightOpen` when shut. One glyph for both states is the tell of a toggle nobody wired.
+- **The spine still says what it is.** The title turns with the column rather than disappearing — a 44px strip with no word on it is a mystery button.
+
+Ten guards in `frontend/test/worker_rail_collapse.test.mjs`, thirteen mutation checks. The host list is derived by walking every stylesheet under `frontend/src` rather than typed, so a new workspace page that copies `286px` from a sibling fails the build instead of quietly becoming the one page whose rail will not close. Its single carve-out — `.fs-advisor-unavailable`, a notice panel in the same width band — is itself guarded: the test fails if that page ever grows a rail. Two guards were caught out by their own mutations and rewritten: `aria-expanded` matched as a bare substring passed a mutation that renamed the attribute to `data-was-aria-expanded`, and the dark-mode assertion sliced the stylesheet to end-of-file, sweeping in the `.dark` block it was meant to exclude.
+
+## A registry outage no longer looks like a critical CVE
+
+`npm audit --omit=dev --audit-level=critical` exits 1 for two entirely different outcomes: a critical advisory in the dependency tree, and the advisory endpoint refusing to answer. On PR #431 the `audit (frontend npm)` job spent seven minutes on
+
+```
+npm warn audit 503 Service Unavailable - POST https://registry.npmjs.org/-/npm/v1/security/audits/quick
+npm error audit endpoint returned an error
+```
+
+and went red with a bare `Process completed with exit code 1` — on a diff that changed no dependency, and indistinguishable from a real finding without opening the log. That is the third time in one session these two jobs went red or were cancelled on a registry stall rather than a finding; the earlier round raised their timeout to 10 minutes and put `--no-audit --no-fund` on the install, which fixed `npm ci` and left `npm audit` itself exposed.
+
+**The fix is not tolerance.** A gate that could not reach the advisory database has not cleared anything, so `scripts/npm-audit-gate.mjs` still fails when the registry is unreachable — the same rule `check-docs-fresh.mjs` was hardened to in #397, where a check that could not see the history was made to refuse rather than report success. What changes is that the two outcomes are now distinguishable, and a blip is retried instead of ending the job:
+
+- **Retries only a transport failure**, five attempts with 5s/10s/20s/30s backoff. A completed audit ends the loop on its first attempt whatever its verdict — retrying a finding would burn the timeout and blur the one distinction the script exists to draw.
+- **Classifies by payload, not exit code.** A body carrying `metadata.vulnerabilities` means the audit ran and its answer stands whatever npm exited with; a top-level `error`, or no parseable JSON, means it did not.
+- **Bounds each attempt** with `--fetch-timeout=90000` **and `--fetch-retries=0`**, so a hang cannot eat the job's ten minutes before anyone learns why. The second flag is the half that was missing first time round and the CI log proved it: npm retries a failed request internally (`--fetch-retries`, default 2), so a 60s `--fetch-timeout` bounded one HTTP call and not one attempt, and every timed-out attempt took ~120s against a bound that read 60.
+- **Keeps its own wall-clock deadline** (`DEADLINE_MS`, 480s against the job's 600s) and stops while there is still time to print. An attempt-count budget was tried and did not survive contact: attempts do not cost the same, because npm builds the dependency tree before it makes the request and `--fetch-timeout` bounds only the request. The log for `51fb1d756` reads 180s, 92s, 95s, 92s — and then `##[error]The operation was canceled` at the job's ten-minute mark, with BOTH audit jobs killed partway through attempt five. **A cancelled job prints nothing at all**, which is the bare indistinguishable red this whole script exists to replace, so the budget is now wall-clock and the loop asks whether a whole attempt still fits before starting one.
+- **Reports the distinct errors it saw**, not just the last: "four timeouts" and "a 400, a 500 and two timeouts" tell a reader different things about whether re-running is worth it.
+
+  **Two claims made here previously were wrong and are withdrawn.** The first: that this was "not an outage, just the frontend's larger payload", argued from one run where `audit (worker npm)` answered in 75s while the frontend timed out. On the next run both jobs failed. One observation was not enough to name a cause. The second: a rule that stopped retrying a 4xx, on the reasoning that a `400 Bad Request` is the endpoint reading the request and refusing it. Sound in general; wrong here. Running the gate's exact command against the live service five times returned a success, a 400, a 500 and two network timeouts for one unchanged dependency tree — a status code from this endpoint is not a verdict on the request, and giving up on a 400 would abandon a run a retry could finish. The rule was built, tested against the live endpoint, and removed; a guard now pins the removal, because it reads plausible enough to be reintroduced.
+- **Names the advisories** on a real finding instead of printing only an exit code.
+- **Says so explicitly** when the database was unreachable: *"THIS IS NOT A VULNERABILITY FINDING… a gate that could not ask the question must not answer it."*
+
+All three branches were exercised before pushing — clean (frontend at `critical`, worker at `critical`), a real finding (frontend at `high`, which correctly listed `image-size` and `pptxgenjs`), and an unreachable registry (a bogus registry host). The retry earned its place immediately: in two of the three live runs, attempt 1 timed out and attempt 2 succeeded.
+
+Corrected while there: the frontend job's comment justified the `critical` threshold with "recharts → lodash@4.17.23 has two high-severity advisories". The two highs it actually tolerates today are `image-size` (ICNS and JXL/HEIF parsers, both infinite-loop DoS) and `pptxgenjs`, which reaches them through `image-size` — so a reader waiting for "a lodash-free recharts major" was watching the wrong dependency. The gate now prints the live list on every run, so that comment can be checked against the log rather than trusted.
+
+Six guards in `frontend/test/npm_audit_gate.test.mjs`, nine mutation checks. One was not caught first time and the test was widened: `continue-on-error: true` added to the **worker** job passed, because the guard only scanned around the first call site — it now checks each whole job block.
+
+## Network · Organizations stopped showing a body its heading does not name
+
+`/network/organizations` is a real route on every licence, and an operator is the one role whose Network zones fall through to the shared `NetworkPage` — which has no Organizations tab, because the roll-up needs an edge from a person to an organisation and nothing on that licence records one. The page already said so, in a "No store behind this yet" card. Underneath the card it then rendered **an unlabelled Introductions list**: `activeTab` falls to the default for a role that cannot see Contacts, and the tab row that would have named it is suppressed when the page is embedded, because the shell's zone pills already are that navigation.
+
+So the card's own sentence — *"The tabs below are what this page actually holds"* — pointed at a row that was not there, and the reader got a body the heading above it does not name. That is the same route-says-one-thing-body-shows-another defect this whole bucket was reported for, surviving in the one zone that has no body at all.
+
+A zone with nothing behind it now renders nothing behind it: embedded, the card is the whole body, and its closing sentence points at the shell pills the reader can actually reach. On the page's own mount the tab row genuinely is below, so that wording stays. Two guards in `frontend/test/advisor_network_zones.test.mjs`, four mutation checks — including the one that matters, where suppressing only the panel that happens to be the default still fails.
+
+Checked at the same time and found already correct: partner `/research/*` dispatches per zone with no doubling, and `SignalsPage` gets `mode='founder'` for an operator because `services/signals/ranking.ts` has two modes and no partner one — the only honest value available, not a dropped prop.
+
+## The service catalogue was empty on both of its partner-facing tabs
+
+`/services` is the product's only catalogue of productised partner offerings, and the Partner canvas puts it on `/offers/catalog` as *"the record Pipeline · Leads scores against"*. Neither of its two reads worked.
+
+| Tab | Called | What the worker does | What the operator saw |
+| --- | --- | --- | --- |
+| Browse catalogue | `GET /services/offerings`, read `r.offerings` | answers `c.json({ items })` (`services.ts:86`) | *"No offerings published yet"*, however many were |
+| My offerings | `GET /services/partners/:id/offerings` | **no such route** — it sat in `scripts/api-drift-baseline.json` as known-missing | *"0 offerings"* to a partner with a full catalogue |
+
+The second is worse than a mistyped key. The read had no route at all, and the `catch` that hid it was written to tolerate a *stale deployment* (`404 = catalogue route missing on this deployment`) — a reasonable thing to forgive once, and a permanent silence when the route is never coming. `?mine=1` is the arm `services.ts` added for exactly this view: it scopes on `owner_user_id` and includes inactive drafts, which is what an owner managing their own set needs.
+
+- Both reads now use `.items`; `My offerings` calls `listServiceOfferings({ mine: 1 })`; `listPartnerOfferings` is deleted and **the drift baseline shrinks by one** — it is a debt ledger that must only ever shrink, and this entry is paid off.
+- The tab was also gated on `user.partner_id`, twice — an early `setRows([])` and a "Only partner accounts can publish offerings" card. An offering is owned by a **user**, so that test could only ever hide a partner's own catalogue from them. Gated on role now, matching the tab list that already decides who sees the tab at all.
+- **`/offers/catalog` mounts the page** instead of a card pointing at it. That card said the catalog "lives at `/services` today" and declined to mount it, on the grounds that doing so would fork a second catalog. It would not — Leads and Perk deals already mount `/needs` and `/perks` at their zones — and the page it deferred to did not work. `embedded` suppresses the heading and nothing else: Browse / My offerings / Stripe Connect are views *within* the catalog, not sibling zones.
+
+Eight guards in `frontend/test/service_catalog_envelope.test.mjs`, each mutation-checked. The envelope assertion reads the shape out of the **worker source** rather than pinning a remembered one, so a route that changes its envelope says so instead of keeping this test quietly green.
+
+## Pipeline · Analytics answers the firm's own pipeline, not the board's demand
+
+`/pipeline/analytics` rendered `PartnerInsightsPage` — Demand Insights, which answers where founder demand is concentrated across the **whole board**. Its canvas asks a different question: *"Win rate, cycle time and forecast — and the loss pattern that explains all three."* Both surfaces are honest; the zone was answering the wrong one, and the bucket-overview card underneath had to describe Demand Insights to stay truthful, which is how a zone named Analytics ended up promising board-wide demand.
+
+Nothing had to be built to fix it. `GET /api/quotes/analytics` has computed win rate, median decision cycle and the weighted forecast since build queue #122 (`services/bdAnalytics.ts`), and had exactly two consumers — `/partner/operations/performance` and the Studio home card — neither of them in the Partner shell.
+
+- **New zone** `frontend/src/pages/partner/pipeline/AnalyticsZone.jsx`: win rate with its `win_rate_basis` shown rather than a bare percentage, median cycle, weighted forecast by stage, open and won value, average deal size.
+- **Two new groupings of the same rows**, not a new store. `analyseByShape` breaks the rate out by the need's own `category`, reached through a **LEFT** join on `founder_needs` — an inner join would silently drop a quote whose need row is missing and change the denominator of the one figure the endpoint exists to compute. `analyseByQuarter` keys on **when the decision landed**, not when the quote was sent: a proposal sent in March and lost in July is a Q3 loss, and keying on `created_at` would move a result into a quarter whose outcome was still unknown at the time. Both use the headline's decided-only denominator, so a shape with four open quotes and one loss reads 0% of one decision, not 0% of five.
+- **The loss taxonomy stays absent, and says so.** `quotes` carries a status and a decision date and nothing about why — no reason, no competitor, no losing price. The endpoint returns `loss_reasons: null` with the reason attached, and the zone states it. The canvas's own instruction is that the on-price count be "stated per shape rather than asserted as a universal", which is exactly the claim a store with no reason column cannot make.
+- **Demand Insights keeps `/partner/insights`.** Its `embedded` prop is gone with the shell mount that was its only caller — a prop no route passes reads as a seam someone has dealt with.
+
+Seven tests in `cloudflare-worker/test/bdAnalytics.test.ts` and nine in `frontend/test/partner_pipeline_analytics.test.mjs`; fourteen mutation checks, each failing its own guard and no other. The one that did not fail first time was the by-shape tie-break — the fixture had no two shapes of equal size, so "unrecorded sorts last" was unpinned until a tied fixture was added.
+
 ## `request()` has a deadline, so a hung call fails instead of hanging
 
 `fetch` has no timeout and `frontend/src/lib/api.js` had no `AbortController` anywhere, so any of the ~1300 SPA calls could hang until a gateway gave up. The caller's `loading` flag stayed true and the user got a spinner that outlived the tab — the same symptom #427 fixed on `/expertise/profile`, reachable from every page, and written down nowhere when it happened.

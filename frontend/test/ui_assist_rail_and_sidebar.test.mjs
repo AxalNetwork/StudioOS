@@ -520,10 +520,19 @@ test('no page reaches past AssistLayout to mount AssistRail itself', () => {
   assert.deepEqual(offenders, [], 'pages mount AssistLayout, not AssistRail');
 });
 
-test('every surface eadwynConfig defines is mounted on at least one page', () => {
+test('every surface eadwynConfig defines is rendered by something', () => {
   // The reverse of the surface-name check. A surface defined and never mounted
   // is dead config that reads as shipped, which is how the rail sat exported
   // and rendered nowhere for a whole phase.
+  //
+  // TWO RAILS RENDER SURFACES NOW, and the rule is about dead config rather
+  // than about `pages/`. `AssistLayout` mounts the four page-level features by
+  // name from under `frontend/src/pages`; `WorkerRail` renders the one
+  // WORKSPACE surface for every zone on all four licences, and it lives in
+  // `frontend/src/ui` and is mounted from `frontend/src/workspaces`. Scanning
+  // only `pages/` would have called that surface dead while sixty zones drew
+  // it. What must not change is the direction of the check: config follows a
+  // mount, never the other way round.
   const surfaces = new Set(
     [...read('frontend/src/ui/eadwynConfig.js').matchAll(/^  (\w+):\s*\{$/gm)].map((m) => m[1]),
   );
@@ -531,8 +540,20 @@ test('every surface eadwynConfig defines is mounted on at least one page', () =>
   for (const f of walkJs('frontend/src/pages')) {
     for (const m of scan(read(f)).matchAll(/<AssistLayout\s+surface="([^"]+)"/g)) mounted.add(m[1]);
   }
+  // The workspace rail names its surface as a constant rather than a prop —
+  // it is the same one on every zone — so it is read from the constant.
+  const wsSurface = /const WORKSPACE_SURFACE = '([^']+)'/
+    .exec(read('frontend/src/ui/WorkerRail.jsx'))?.[1];
+  if (wsSurface) mounted.add(wsSurface);
+
   assert.deepEqual([...surfaces].filter((s) => !mounted.has(s)), [],
-    'these surfaces are configured but no page renders them');
+    'these surfaces are configured but nothing renders them');
+  // …and the workspace one is genuinely rendered, not just named: a constant
+  // nothing reads would satisfy the line above while drawing no card at all.
+  assert.ok(wsSurface, 'WorkerRail must name the surface it renders');
+  assert.match(read('frontend/src/ui/WorkerRail.jsx'),
+    /ASSIST_SURFACES\[WORKSPACE_SURFACE\]/,
+    'the constant has to be the one the rail actually looks up');
 });
 
 test('each mount wraps its own page, once, inside the exported component', () => {

@@ -78,20 +78,42 @@ test('every shell caller fills the rail slot', () => {
   }
 });
 
-test('the rail names no model and no per-run price, on any licence', () => {
-  // `ASSIST_SURFACES` binds a surface to a real aiRouter task class, and that
-  // class is what decides the model and the price. No WORKSPACE surface is
-  // registered on any of the four licences — the four keys that exist are
-  // page-level features — so a model card here would name a model for a page
-  // that never calls one. The canvases all draw one; it cannot honestly ship
-  // until the registration exists, and inventing the registration to get the
-  // card is the failure `WorkspaceShell`'s docblock records the slot ending.
+test('the rail names a model only for a surface that really runs one', () => {
+  // THE RULE DID NOT LOOSEN; THE FACTS CHANGED. This test used to assert that
+  // the rail names no model and no price at all, and that was right at the
+  // time: `ASSIST_SURFACES` binds a surface to a real aiRouter task class,
+  // that class decides the model and the price, and no WORKSPACE surface was
+  // registered on any licence — so a card here would have named a model for a
+  // page that never called one. Its comment said the card "cannot honestly
+  // ship until the registration exists, and inventing the registration to get
+  // the card is the failure WorkspaceShell's docblock records".
+  //
+  // The registration was not invented. `POST /api/ai/workspace/explain` came
+  // first, running `workspace_explain` over the Coverage lines the rail is
+  // already showing; the surface entry followed the route. What this test
+  // pins now is that ORDER, which is the thing worth protecting: a surface
+  // key, a ROUTE entry and a worker call site must all exist together, and
+  // the figures must come from the router rather than from a canvas.
   const rail = src('frontend/src/ui/WorkerRail.jsx');
-  assert.doesNotMatch(rail, /ASSIST_SURFACES|priceForTask/,
-    'the workspace rail must quote no model and no price');
+  const cfg = src('frontend/src/ui/eadwynConfig.js');
+  const task = /workspace:\s*\{[^}]*task:\s*'([a-z_]+)'/.exec(cfg)?.[1];
+  assert.ok(task, 'the workspace surface must be registered in ASSIST_SURFACES');
+  assert.ok(new RegExp(`^\\s*${task}:\\s*\\{`, 'm')
+    .test(read('cloudflare-worker/src/services/aiRouter.ts')),
+  `${task} must be a real entry in the router's ROUTE table, not a name`);
+  assert.match(read('cloudflare-worker/src/routes/ai.ts'), new RegExp(`task: '${task}'`),
+    `a worker route must run ${task}, or the card describes a call nothing makes`);
+  assert.match(rail, /priceForTask\(pricing, surface\.task\)/,
+    'the model and its rate are the router\'s, derived — never typed here');
+
+  // The canvases quote `$0.293 / M in · $2.253 / M out` for this model and the
+  // router's table says 0.50 / 0.50. Whichever is right, the rail shows what
+  // will actually be charged.
+  assert.doesNotMatch(rail, /\$0\.293|\$2\.253|Llama 3\.3 70B Fast/,
+    'the canvas figures are not the router figures');
   for (const file of SHELL_CALLERS) {
     assert.doesNotMatch(src(file), /\bINHERITED\b|\bRECOMMENDED\b|per million|\/M tokens/i,
-      `${file} puts a model card on a workspace rail`);
+      `${file} hand-writes a model card instead of letting the rail derive one`);
   }
 });
 

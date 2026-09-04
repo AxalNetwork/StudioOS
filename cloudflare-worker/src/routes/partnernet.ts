@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import { runSchemaBootstrap } from '../util/schemaBootstrap';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 
@@ -26,15 +27,24 @@ async function ensureSchema(env: Env) {
     `ALTER TABLE users ADD COLUMN verified_badges TEXT DEFAULT '[]'`,
     `ALTER TABLE users ADD COLUMN last_active TIMESTAMP`,
   ];
-  for (const a of alters) {
-    try { await env.DB.prepare(a).run(); }
-    catch (e: any) {
-      if (!/duplicate column/i.test(e?.message || '')) {
-        console.error('partnernet ALTER failed (non-duplicate):', e?.message);
-        // Don't set migrated=true if a real ALTER fails — re-attempt next request
-        return;
-      }
-    }
+  // These six columns are already on `users` in production, and `users` is at
+  // D1's 100-column limit, so re-running the ALTERs raises "too many columns"
+  // rather than "duplicate column" — SQLite checks the limit before the
+  // duplicate-name test, verified against sqlite 3.45 with the limit set to
+  // 100. The old loop treated that as a real failure and RETURNED, which
+  // abandoned the rest of this bootstrap — the CREATE TABLEs for
+  // partner_relationships and relationship_events among them — and re-ran the
+  // same six doomed statements on every request, forever, because `migrated`
+  // was never set. runSchemaBootstrap skips an ADD COLUMN whose column is
+  // already there, so in production there is nothing left to fail.
+  //
+  // Still logged rather than thrown: none of the six is load-bearing for the
+  // tables below, so a genuinely missing column must not take the partner
+  // network down with it.
+  try {
+    await runSchemaBootstrap(env, alters);
+  } catch (e: any) {
+    console.error('partnernet: users columns unavailable —', e?.message);
   }
 
   // The legacy activity_logs table (pre-partnernet) only had

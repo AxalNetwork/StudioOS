@@ -246,13 +246,22 @@ jobs:
       # deliberate `npm audit` below is what passes or fails the job. The same
       # flags are already on the install fallback further up this file.
       - run: npm ci --no-audit --no-fund
+      # Through the gate rather than `npm audit` directly, because that command
+      # exits 1 for BOTH "you have a critical CVE" and "the registry did not
+      # answer" — and this job spent seven minutes on a 503 from the advisory
+      # endpoint before going red exactly like a real finding. The gate retries
+      # a transport failure, bounds each attempt, names the advisories on a real
+      # one, and still FAILS when the database is unreachable: it just says which
+      # of the two happened. See scripts/npm-audit-gate.mjs.
+      #
+      # Threshold is `critical`, not `high`. The two highs it tolerates today
+      # are `image-size` (ICNS and JXL/HEIF parsers, both infinite-loop DoS)
+      # and `pptxgenjs`, which reaches them through `image-size` — both used
+      # only to measure and embed images while generating a deck, never on a
+      # request path. The gate prints the live list on every run, so this
+      # comment can be checked against the log rather than trusted.
       - name: npm audit (prod deps, critical fail)
-        # Threshold is `critical` (not `high`) because recharts → lodash@4.17.23
-        # has two high-severity advisories (`_.template`, `_.unset`) for which
-        # no patched lodash release exists. lodash is used internally by
-        # recharts for chart math only; not for any security-sensitive code
-        # path. Re-evaluate when recharts publishes a lodash-free major.
-        run: npm audit --omit=dev --audit-level=critical
+        run: node ../scripts/npm-audit-gate.mjs --level=critical
 
   audit-worker:
     name: audit (worker npm)
@@ -283,8 +292,11 @@ jobs:
       # deliberate `npm audit` below is what passes or fails the job. The same
       # flags are already on the install fallback further up this file.
       - run: npm ci --no-audit --no-fund
+      # Same gate as the frontend job above, and for the same reason: a registry
+      # outage must not be reported as a vulnerability. The worker's production
+      # tree currently carries nothing at any severity.
       - name: npm audit (prod deps, critical fail)
-        run: npm audit --omit=dev --audit-level=critical
+        run: node ../scripts/npm-audit-gate.mjs --level=critical
 
   audit-python:
     name: audit (python pip-audit)

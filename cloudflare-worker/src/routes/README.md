@@ -16,6 +16,7 @@ against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
 /api/legalcap      → legalcap.ts
 /api/partners      → partners.ts
 /api/partnernet    → partnernet.ts
+/api/partner/…     → partner_pipeline.ts  (the partner WORKSPACE's own stores)
 /api/capital       → capital.ts
 /api/tickets       → tickets.ts
 /api/deals         → deals.ts

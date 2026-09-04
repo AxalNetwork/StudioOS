@@ -35,6 +35,13 @@ export interface QuoteRow {
   amount?: number | null;
   created_at?: string | null;
   decided_at?: string | null;
+  /**
+   * `founder_needs.category`, joined in by the route. Optional because the
+   * headline pipeline, forecast and delivery figures never read it — only
+   * `analyseByShape` does, and it treats an absent one as unrecorded rather
+   * than folding it into a real category.
+   */
+  shape?: string | null;
 }
 
 export interface EngagementRow {
@@ -214,4 +221,149 @@ export function analyseDelivery(engagements: EngagementRow[]): DeliverySummary {
     active_value: money(activeValue),
     delivered_value: money(deliveredValue),
   };
+}
+
+// ---------- the two breakdowns the pipeline canvas asks for ----------
+
+/**
+ * The canvas at `/pipeline/analytics` asks for the win rate "broken out by
+ * shape", and for the same rate quarter over quarter. Both are derivable from
+ * rows the store already holds — a quote's status, its two timestamps and,
+ * through `need_id`, the need's own `category` — so neither is invented and
+ * neither needs a schema change.
+ *
+ * WHAT `shape` IS, EXACTLY. It is `founder_needs.category` and nothing richer:
+ * the category the founder filed the need under. No engagement-shape column
+ * exists anywhere — no retainer/project/embedded distinction is stored — so
+ * this is the only decomposition the store can honestly support, and the zone
+ * says so beside the table rather than letting a column header imply more.
+ *
+ * WHAT NEITHER OF THESE IS. The canvas's third analytic block is a loss-reason
+ * taxonomy, and it stays absent: `quotes` carries `status` and `decided_at`,
+ * with no reason, no competitor and no price-against-won column. A "lost on
+ * price" count derived from anything here would be a guess wearing a number's
+ * clothes. The zone names that gap instead of filling it.
+ */
+export interface ShapeBreakdown {
+  /** `founder_needs.category`. Null when the need row is unreadable. */
+  shape: string | null;
+  quote_count: number;
+  accepted: number;
+  rejected: number;
+  pending: number;
+  withdrawn: number;
+  /** accepted over (accepted + rejected) within this shape, 0-100. */
+  win_rate_pct: number | null;
+  median_cycle_days: number | null;
+  won_value: number;
+  open_value: number;
+}
+
+/**
+ * Win rate and cycle time per need category.
+ *
+ * Each shape's win rate uses the SAME denominator rule as the headline one —
+ * decided quotes only — so a shape with four open quotes and one loss reads
+ * 0% of one decision, not 0% of five. Shapes come back in descending quote
+ * count with the name as the tie-break and an unrecorded shape last, so the
+ * order cannot shift between two reads of identical data.
+ */
+export function analyseByShape(quotes: QuoteRow[]): ShapeBreakdown[] {
+  const by = new Map<string, { shape: string | null; accepted: number; rejected: number;
+    pending: number; withdrawn: number; won: number; open: number; cycles: number[] }>();
+
+  for (const q of quotes || []) {
+    const raw = q?.shape;
+    const shape = raw === null || raw === undefined || String(raw).trim() === '' ? null : String(raw);
+    const key = shape === null ? ' unrecorded' : shape;
+    const cur = by.get(key)
+      || { shape, accepted: 0, rejected: 0, pending: 0, withdrawn: 0, won: 0, open: 0, cycles: [] };
+    const status = String(q?.status || '');
+    const amount = Math.max(0, num(q?.amount) ?? 0);
+    if (status === 'accepted') { cur.accepted++; cur.won += amount; }
+    else if (status === 'rejected') cur.rejected++;
+    else if (PENDING.has(status)) { cur.pending++; cur.open += amount; }
+    else if (status === 'withdrawn') cur.withdrawn++;
+    if (DECIDED.has(status) && q?.created_at && q?.decided_at) {
+      const a = Date.parse(String(q.created_at));
+      const b = Date.parse(String(q.decided_at));
+      if (!Number.isNaN(a) && !Number.isNaN(b) && b >= a) cur.cycles.push((b - a) / MS_PER_DAY);
+    }
+    by.set(key, cur);
+  }
+
+  return [...by.values()]
+    .map((v) => {
+      const decided = v.accepted + v.rejected;
+      const med = median(v.cycles);
+      return {
+        shape: v.shape,
+        quote_count: v.accepted + v.rejected + v.pending + v.withdrawn,
+        accepted: v.accepted,
+        rejected: v.rejected,
+        pending: v.pending,
+        withdrawn: v.withdrawn,
+        win_rate_pct: decided > 0 ? pct(v.accepted / decided) : null,
+        median_cycle_days: med === null ? null : Math.round(med * 10) / 10,
+        won_value: money(v.won),
+        open_value: money(v.open),
+      };
+    })
+    .sort((a, b) => {
+      if (b.quote_count !== a.quote_count) return b.quote_count - a.quote_count;
+      if (a.shape === null) return b.shape === null ? 0 : 1;
+      if (b.shape === null) return -1;
+      return a.shape.localeCompare(b.shape);
+    });
+}
+
+export interface QuarterBreakdown {
+  /** Calendar quarter of the DECISION, e.g. `2026-Q3`. */
+  quarter: string;
+  accepted: number;
+  rejected: number;
+  decided: number;
+  win_rate_pct: number | null;
+  won_value: number;
+}
+
+/**
+ * Win rate quarter over quarter, keyed on WHEN THE DECISION LANDED rather
+ * than when the quote was sent. A quote sent in March and lost in July is a
+ * Q3 loss: the quarter a partner is judging is the quarter its decisions came
+ * in, and keying on `created_at` would move a result into a quarter whose
+ * outcome was still unknown at the time.
+ *
+ * Only decided quotes appear. An open quote belongs to no quarter yet, and
+ * withdrawn ones are excluded here for the same reason they are excluded from
+ * the headline rate — the partner walked away, which is not a loss. Quarters
+ * come back chronologically, because a trend is read left to right.
+ */
+export function analyseByQuarter(quotes: QuoteRow[]): QuarterBreakdown[] {
+  const by = new Map<string, { accepted: number; rejected: number; won: number }>();
+  for (const q of quotes || []) {
+    const status = String(q?.status || '');
+    if (!DECIDED.has(status)) continue;
+    const t = Date.parse(String(q?.decided_at || ''));
+    if (Number.isNaN(t)) continue;
+    const d = new Date(t);
+    const quarter = `${d.getUTCFullYear()}-Q${Math.floor(d.getUTCMonth() / 3) + 1}`;
+    const cur = by.get(quarter) || { accepted: 0, rejected: 0, won: 0 };
+    if (status === 'accepted') { cur.accepted++; cur.won += Math.max(0, num(q?.amount) ?? 0); }
+    else cur.rejected++;
+    by.set(quarter, cur);
+  }
+  return [...by.entries()]
+    .map(([quarter, v]) => {
+      const decided = v.accepted + v.rejected;
+      return {
+        quarter,
+        accepted: v.accepted,
+        rejected: v.rejected,
+        decided,
+        win_rate_pct: decided > 0 ? pct(v.accepted / decided) : null,
+        won_value: money(v.won),
+      };
+    })
+    .sort((a, b) => a.quarter.localeCompare(b.quarter));
 }

@@ -113,9 +113,25 @@ const partnerCode = codeOnly(bucketRoutes);
 function blockOf(code, name) {
   const start = code.indexOf(`const ${name} = {`);
   assert.notEqual(start, -1, `${name} is gone`);
-  const end = code.indexOf('\n};', start);
-  assert.notEqual(end, -1, `${name} is not a closed object literal`);
-  return code.slice(start, end);
+  // BRACE-BALANCED, not `indexOf('\n};')`.
+  //
+  // The line-based form worked until `COPY` became `const COPY = {};` — every
+  // zone having a store is the whole point of #45 — at which point there was no
+  // `\n};` to find and the scan ran on into the NEXT map, so `COPY` reported
+  // `ZONE_LINES`'s slugs and the overlap test failed on a file that was
+  // correct. An empty map is a legitimate state and the parser has to survive
+  // it, or the guard fails exactly when the thing it guards has been fixed.
+  const open = code.indexOf('{', start);
+  let depth = 0;
+  for (let i = open; i < code.length; i += 1) {
+    if (code[i] === '{') depth += 1;
+    else if (code[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return code.slice(start, i + 1);
+    }
+  }
+  assert.fail(`${name} is not a closed object literal`);
+  return '';
 }
 
 /**
@@ -176,7 +192,32 @@ test('no partner description survives for a zone that renders a no-store card', 
   const overlap = lines.filter((s) => copySlugs.includes(s));
   assert.deepEqual(overlap, [], `these zones render NoStoreYet and must not be described: ${overlap.join(', ')}`);
 
-  for (const claim of [/live deals at terms/i, /over-committed/i, /lead scoring reads against/i]) {
+  // THREE PHRASES WERE BANNED HERE. ONE HAS LIFTED, AND ONLY ONE.
+  //
+  // `/live deals at terms/i` was the negotiations card's own words, banned
+  // because no store carried a term. Migration 208 added `quote_negotiations`
+  // (stage, ball-in-court) and `quote_terms` (a clause with our position,
+  // theirs and the landing), `partner_pipeline.ts` reads them and
+  // `NegotiationsZone.jsx` renders them, so the sentence is now a description
+  // of a working page. It is no longer banned — but the ban is replaced rather
+  // than deleted, by the assertion below that the zone is live: if the body is
+  // ever removed from `LIVE`, saying "live deals at terms" becomes false again
+  // and this test fails again.
+  //
+  // The other two stay, and neither is a formality:
+  //   · `/over-committed/i` — 208 records hours and seats but NOTHING records
+  //     the firm's cap, so there is still no threshold to be over. The capacity
+  //     canvas hardcodes 40; a page that adopted that number would be inventing
+  //     the firm's cap and then presenting it as a finding.
+  //   · `/lead scoring reads against/i` — never matched the live line, which
+  //     reads "reads a match against". Kept so a future rewrite cannot drift
+  //     into the stronger claim.
+  const liveNow = zoneSlugs(partnerCode, 'LIVE');
+  assert.ok(
+    liveNow.includes('negotiations'),
+    'the "live deals at terms" ban lifted on the premise that negotiations is live; it is not',
+  );
+  for (const claim of [/over-committed/i, /lead scoring reads against/i]) {
     assert.doesNotMatch(blockOf(partnerCode, 'ZONE_LINES'), claim,
       `an overview line re-asserts ${claim}`);
   }

@@ -31,6 +31,28 @@ const QUOTE_TONE = {
 // the heading and the zone pills. Only the heading block is suppressed — the
 // tab row below it is a different axis (Browse / My needs / My quotes /
 // Engagements are views of this board, not sibling zones), so it stays.
+/**
+ * EVERY LIST ON THIS PAGE READ THE WRONG ENVELOPE KEY, and so every one of them
+ * was permanently empty — on `/needs`, `/partner/needs`, `/founder/post-need`
+ * and the partner's `/pipeline/leads`, for founders and operators alike.
+ *
+ * All four routes behind it answer with `{ items }`:
+ *   GET /needs             → c.json({ items })                needs.ts:134
+ *   GET /needs/:id/quotes  → c.json({ items: visible })        needs.ts:299
+ *   GET /quotes/me         → c.json({ items })                 needs.ts:349
+ *   GET /engagements       → c.json({ items: … engagementDto }) needs.ts:544
+ *
+ * This file read `.needs`, `.quotes` and `.engagements` — five reads, all
+ * `undefined`, each falling through `|| []` to an empty list that renders as
+ * "no open needs" rather than as a failure. `EngagementsPage.jsx:59` calls
+ * three of the same four methods and reads `.items` correctly, which is what
+ * made the mismatch findable: one file right, one wrong, same endpoints.
+ *
+ * It is the same shape as `agreed_price` for `price` and `claims_count` for
+ * `claim_count`: a name that reads plausibly, resolves to undefined, and is
+ * caught by a `||` default that turns the absence into a confident answer.
+ * `frontend/test/needs_envelope.test.mjs` now pins all four.
+ */
 export default function NeedsBoardPage({ user, embedded = false }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const isFounder = user?.role === 'founder';
@@ -91,7 +113,7 @@ export function BrowseTab({ user }) {
       const params = {};
       if (filters.category) params.category = filters.category;
       const r = await api.listNeeds(params);
-      let rows = r.needs || [];
+      let rows = r.items || [];
       if (filters.q) {
         const q = filters.q.toLowerCase();
         rows = rows.filter((n) => `${n.title} ${n.description}`.toLowerCase().includes(q));
@@ -180,7 +202,7 @@ export function MyNeedsTab({ user }) {
   const [error, setError] = useState(null);
 
   async function load() {
-    try { const r = await api.listNeeds({ mine_only: true }); setNeeds(r.needs || []); }
+    try { const r = await api.listNeeds({ mine_only: true }); setNeeds(r.items || []); }
     catch (e) {
       const msg = (e?.message || '').toLowerCase();
       if (e?.status === 404 || msg === 'not found') setNeeds([]);
@@ -331,8 +353,8 @@ function NeedDetailModal({ needId, user, onClose, onEdit }) {
 
   async function reload() {
     try {
-      const [n, q] = await Promise.all([api.getNeed(needId), api.listQuotesForNeed(needId).catch(() => ({ quotes: [] }))]);
-      setNeed(n); setQuotes(q.quotes || []);
+      const [n, q] = await Promise.all([api.getNeed(needId), api.listQuotesForNeed(needId).catch(() => ({ items: [] }))]);
+      setNeed(n); setQuotes(q.items || []);
     } catch (e) { setError(e.message); }
   }
   useEffect(() => { reload(); }, [needId]);
@@ -517,7 +539,7 @@ export function MyQuotesTab() {
   const [quotes, setQuotes] = useState([]);
   const [error, setError] = useState(null);
   async function load() {
-    try { const r = await api.myQuotes(); setQuotes(r.quotes || []); }
+    try { const r = await api.myQuotes(); setQuotes(r.items || []); }
     catch (e) {
       const msg = (e?.message || '').toLowerCase();
       if (e?.status === 404 || msg === 'not found') setQuotes([]);
@@ -583,7 +605,7 @@ export function EngagementsTab({ user }) {
   const isPartner = user?.role === 'partner';
 
   async function load() {
-    try { const r = await api.listEngagements(); setRows(r.engagements || []); }
+    try { const r = await api.listEngagements(); setRows(r.items || []); }
     catch (e) {
       // Defensive 404 — backend may return "Not found" if the engagements
       // route isn't shipped on this deployment or the user has no scope.

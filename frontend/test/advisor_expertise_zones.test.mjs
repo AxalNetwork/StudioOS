@@ -13,9 +13,16 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+// The three ZoneBody rules, shared with the partner tree. They lived inline
+// here and walked `pages/advisor` only, which was right until the partner zones
+// were built on the same kit; see `_zoneGuards.mjs` for why they moved rather
+// than having their globs widened.
+import {
+  assertLoadingNeverOutlivesError, assertNoNullDraftDeref, assertAbsentIsNotZero,
+} from './_zoneGuards.mjs';
 import { allZoneRoutes } from '../src/workspaces/shellConfig.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -125,11 +132,9 @@ test('an unpriced service is never rendered as free', () => {
   const services = codeOnly(read('frontend/src/pages/advisor/expertise/ServicesZone.jsx'));
   assert.match(services, /money\(row\.price_cents, row\.currency\) \?\? <Unrecorded \/>/,
     'an absent price falls back to Not recorded, not to a zero');
-  for (const page of readdirSync(resolve(process.cwd(), 'frontend/src/pages/advisor/expertise'))) {
-    const src = codeOnly(read(`frontend/src/pages/advisor/expertise/${page}`));
-    assert.doesNotMatch(src, /price_cents\s*\|\|\s*0/, `${page} coerces an absent price to zero`);
-    assert.doesNotMatch(src, /price_cents\s*\?\?\s*0/, `${page} coerces an absent price to zero`);
-  }
+  // Shared with the partner tree, which carries the same risk on different
+  // column names (`amount_cents`, `floor_cents`, `hours_used`).
+  assertAbsentIsNotZero('frontend/src/pages/advisor/expertise', ['price_cents']);
 });
 
 test('a failed read is not rendered as an empty store', () => {
@@ -190,47 +195,11 @@ function loadingExpr(tag) {
 
 test('no zone holds `loading` true past its own error', () => {
   // THE BUG THIS PINS SHUT, which shipped and was reported from production as
-  // /expertise/profile spinning forever. ZoneBody tests `loading` before
-  // `error` (asserted above), so a caller that ORs a data-presence check into
-  // `loading` makes its OWN error card unreachable: the failed read sets
-  // `error` and leaves the data null, `!data` stays true, and the skeleton
-  // renders for good with the captured message never shown.
-  //
-  // The rule: a `loading` expression may OR something in only if it also
-  // subordinates it to the error state (`… && !x.error`), so an error always
-  // beats the skeleton. ProfileZone keeps its draft guard that way, because
-  // every field in its body reads `draft.<key>` unconditionally and would
-  // throw on a null.
-  const OR = /\|\|/;
-  const SUBORDINATED = /&&\s*!\s*(?:[\w$]+\.)*error\b/;
-
-  const dir = resolve(process.cwd(), 'frontend/src/pages/advisor');
-  const files = [];
-  const walk = (d) => {
-    for (const entry of readdirSync(d, { withFileTypes: true })) {
-      const full = resolve(d, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith('.jsx')) files.push(full);
-    }
-  };
-  walk(dir);
-
-  let checked = 0;
-  for (const full of files) {
-    const code = codeOnly(readFileSync(full, 'utf8'));
-    for (const tag of zoneBodyTags(code)) {
-      const expr = loadingExpr(tag);
-      assert.ok(expr !== null, `${full} has a ZoneBody with no loading prop`);
-      checked += 1;
-      if (!OR.test(expr)) continue;
-      assert.match(expr, SUBORDINATED,
-        `${full}: loading={${expr.trim()}} ORs a guard in without subordinating it `
-        + 'to the error state, so this zone can never render its own error card');
-    }
-  }
-  // A parse that found nothing would pass silently, which is the failure mode
-  // this whole file exists to prevent.
-  assert.ok(checked >= 10, `expected every advisor ZoneBody call site, parsed ${checked}`);
+  // /expertise/profile spinning forever: a `loading` expression that ORs a
+  // data-presence check in makes the zone's OWN error card unreachable. The
+  // mechanism and the rule are in `_zoneGuards.mjs`; this asserts it over the
+  // advisor tree, and `partner_zone_bodies.test.mjs` asserts it over partner's.
+  assertLoadingNeverOutlivesError('frontend/src/pages/advisor', 10);
 });
 
 test('confirmation is the attester’s to give, and the token is shown once', () => {
@@ -278,49 +247,15 @@ test('every new store has an api method, and none of them names an advisor', () 
 
 test('a ZoneBody caller never holds its draft as null', () => {
   // THE BUG THIS PINS SHUT, which two PRs walked past. `ProfileZone` held
-  // `const [draft, setDraft] = useState(null)` and read `draft.display_name`
-  // — plus eleven siblings — directly inside `<ZoneBody>`'s children. React
-  // evaluates a component's children WHEN THE PARENT RENDERS, before ZoneBody
-  // looks at `loading` to choose between a skeleton and them. So the null was
-  // dereferenced on the very first render, every time, and /expertise/profile
-  // threw into RouteErrorBoundary and showed a red error card instead of the
-  // profile. For everyone. On every visit.
+  // `const [draft, setDraft] = useState(null)` and read `draft.display_name` —
+  // plus eleven siblings — directly inside `<ZoneBody>`'s children. React builds
+  // a component's children when the PARENT renders, before ZoneBody looks at
+  // `loading`, so the null was dereferenced on the very first render, every
+  // time, and /expertise/profile threw into RouteErrorBoundary for everyone on
+  // every visit. The whole source-reading suite saw nothing;
+  // `scripts/check-workspace-frames.mjs` found it in one run.
   //
-  // `loading` cannot guard an expression that is BUILT before it is read, and
-  // #427's docblock had the mechanism backwards where it said "the children
-  // below still cannot be rendered against a null draft" — they are not
-  // rendered against it, they are constructed against it. The whole 1064-test
-  // suite reads source as text and saw nothing; `scripts/check-workspace-
-  // frames.mjs` renders the page and found it in one run.
-  //
-  // The fix is to seed the state with its own empty shape, so every read is a
-  // string at all times. This asserts that, for every ZoneBody caller — the
-  // component whose API invites the mistake, because it takes already-built
-  // children and only then decides whether to show them.
-  const dir = 'frontend/src/pages/advisor';
-  const files = [];
-  const walk = (d) => {
-    for (const e of readdirSync(resolve(process.cwd(), d), { withFileTypes: true })) {
-      if (e.isDirectory()) walk(`${d}/${e.name}`);
-      else if (e.name.endsWith('.jsx') && read(`${d}/${e.name}`).includes('<ZoneBody')) {
-        files.push(`${d}/${e.name}`);
-      }
-    }
-  };
-  walk(dir);
-  assert.ok(files.length >= 8, `only ${files.length} ZoneBody callers found — the scan is broken`);
-
-  for (const file of files) {
-    const src = codeOnly(read(file));
-    for (const m of src.matchAll(/const \[(\w+), set\w+\] = useState\(null\)/g)) {
-      const name = m[1];
-      // A deref that is NOT optional-chained. `x?.y` is safe to construct;
-      // `x.y` is not, and inside ZoneBody's children that is the crash.
-      const deref = new RegExp(`(?<![\\w?.])${name}\\.[a-z_]`, 'i');
-      assert.ok(!deref.test(src),
-        `${file}: \`${name}\` starts as null and is dereferenced without \`?.\`. `
-        + 'Inside <ZoneBody> children that throws on the first render, whatever '
-        + '`loading` says — seed it with its empty shape instead.');
-    }
-  }
+  // The rule now lives in `_zoneGuards.mjs` so the partner zones are held to it
+  // too — they are written on the same ZoneBody and invite the same mistake.
+  assertNoNullDraftDeref('frontend/src/pages/advisor', 8);
 });

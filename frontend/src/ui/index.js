@@ -42,8 +42,10 @@ export { default as AssistRail } from './AssistRail';
 // which surfaces get it and why onboarding does not.
 export { default as AssistLayout } from './AssistLayout';
 // The workspace rail, shared by every licence. Separate from AssistRail because
-// no workspace surface runs an aiRouter task class, so it has no model or
-// per-run cost to report — see WorkerRail.jsx.
+// it reports one shared surface — every zone runs the same `workspace_explain`
+// task over the Coverage lines it is already showing — where AssistRail is
+// configured per feature. It named no model at all until that route existed;
+// see WorkerRail.jsx for why the route had to come first.
 export { default as WorkerRail } from './WorkerRail';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from './eadwynConfig';
