@@ -262,13 +262,37 @@ test('the Worker AI rail is one component, and every investor workspace has it',
     assert.ok(new RegExp(`investor:[^}]*${key}:`).test(shell),
       `ACCENT.investor has no ${key}; the rail would show its light accent on a dark ground`);
   }
-  // Still no model and no per-run price, for every licence. ASSIST_SURFACES
-  // keys a surface to an aiRouter task class and decides the model from it; no
-  // investor surface is registered, and the three investor canvases each name
-  // a DIFFERENT model. Naming one here would put a model on a page that never
-  // calls one.
-  assert.doesNotMatch(rail, /ASSIST_SURFACES|priceForTask/,
-    'no workspace surface runs an aiRouter task, so the rail must quote no model or price');
+  // One model for every licence, and it is the ROUTER'S. The three investor
+  // canvases each name a different one — which is exactly why the card is
+  // derived rather than transcribed: a rail that quoted its own canvas would
+  // give the same page three answers depending on which artboard was read
+  // last.
+  // THE RULE DID NOT LOOSEN, THE FACTS CHANGED. This used to assert that the
+  // rail names no model and no price at all, because `ASSIST_SURFACES` keys a
+  // surface to an aiRouter task class, that key decides the model, and no
+  // workspace ran one — so a card here would have named a model for a page
+  // that never called it.
+  //
+  // `POST /api/ai/workspace/explain` is what changed. The rule is now the
+  // stronger one it always stood for: the rail may name a model only for a
+  // surface that is registered AND has a worker route running that task, and
+  // the figures must come from the router's table rather than from a canvas.
+  // The canvases quote `$0.293 / M in · $2.253 / M out` for this model; the
+  // router's PRICE_USD_PER_1M_TOKENS says 0.50 / 0.50. Whichever is right, the
+  // rail must show the one that will actually be charged.
+  const cfg = codeOnly(read('frontend/src/ui/eadwynConfig.js'));
+  const task = /workspace:\s*\{[^}]*task:\s*'([a-z_]+)'/.exec(cfg)?.[1];
+  assert.ok(task, 'the workspace surface must be registered in ASSIST_SURFACES');
+  const router = read('cloudflare-worker/src/services/aiRouter.ts');
+  assert.ok(new RegExp(`^\\s*${task}:\\s*\\{`, 'm').test(router),
+    `${task} must be a real entry in the router's ROUTE table`);
+  assert.match(read('cloudflare-worker/src/routes/ai.ts'), new RegExp(`task: '${task}'`),
+    `a worker route must actually run ${task}, or the card names a model nothing calls`);
+  // Derived from the router, never typed here.
+  assert.match(rail, /priceForTask\(pricing, surface\.task\)/,
+    'the model and its rate come from the router\'s own table');
+  assert.doesNotMatch(rail, /\$0\.293|\$2\.253|Llama 3\.3 70B Fast/,
+    'the canvas figures are not the router figures');
 });
 
 test('the investor full-bleed list covers every investor root and zone route', () => {

@@ -56,6 +56,26 @@ export const ASSIST_SURFACES = {
     modeNote: 'Eadwyn drafts copy you then edit.',
     footer: { kind: 'neutral', chip: 'Draft', note: 'Nothing publishes without your click.' },
   },
+  // routes/ai.ts → POST /api/ai/workspace/explain → aiRun({ task: 'workspace_explain' })
+  //
+  // The one surface every workspace zone shares, on all four licences. It was
+  // absent for a long time and the absence was correct: the rail must not name
+  // a model for a page that never calls one, and until that route existed no
+  // workspace did. The route came first and this entry followed — which is the
+  // order the guards in workspace_frame_contract.test.mjs now enforce, having
+  // previously enforced that the card could not exist at all.
+  //
+  // ONE surface rather than one per bucket, because the task is the same on
+  // every zone — read back the lines the page is already showing — and
+  // `/api/ai/me/spend` groups by task. Twenty surfaces over one task class
+  // would report the same average twenty times and call it per-page data.
+  workspace: {
+    task: 'workspace_explain',
+    label: 'Read back',
+    unit: 'per page',
+    modeNote: 'Eadwyn reads back what this page is showing. It is given the summary lines beside it and nothing else.',
+    footer: { kind: 'screened', note: 'Drafted from this page only, and kept nowhere.' },
+  },
   // services/competitorAnalysis.ts → aiRun(…)
   market: {
     task: 'explain',

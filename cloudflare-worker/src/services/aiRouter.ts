@@ -44,7 +44,8 @@ export type TaskClass =
   | 'dd_synthesis'
   | 'brand_autofill'
   | 'brand_palette'
-  | 'brand_taglines';
+  | 'brand_taglines'
+  | 'workspace_explain';
 
 export type RefusalReason =
   | 'budget_user_day'
@@ -163,6 +164,18 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // last-resort fallback). No cache: each explanation is persona/topic-
   // specific and short-lived.
   advisor_explain: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // Workspace zones — "read back what this page is showing". Its own class
+  // rather than a reuse of `explain`, because the join key IS the reporting
+  // dimension: `ASSIST_SURFACES` binds a surface to a task, `/api/ai/me/spend`
+  // groups by task, and the rail quotes the caller's observed average FOR THAT
+  // TASK. Folding workspace runs into `explain` would average them with market
+  // comparisons and misreport both.
+  //
+  // No cache. `explain` caches for a week because a topic explanation is the
+  // same answer every time; this one reads a page's CURRENT figures, so a
+  // cached answer would describe a state that has moved on — which is worse
+  // than no answer, since it looks current.
+  workspace_explain: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },

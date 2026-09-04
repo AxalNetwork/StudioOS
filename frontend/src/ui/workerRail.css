@@ -101,6 +101,33 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 }
 .fwr-action a:hover { text-decoration: underline; }
 
+/* The model id under its short name — long, monospaced and deliberately quiet:
+   it is there to be checked against the router's table, not read. */
+.fwr-model-id {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9.5px; word-break: break-all;
+  color: var(--fwr-faint);
+}
+
+.fwr-run {
+  font: inherit; font-size: 11px; font-weight: 800;
+  padding: 6px 11px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--fwr-accent);
+  background: var(--fwr-accent-soft); color: var(--fwr-accent);
+}
+.fwr-run:hover:not(:disabled) { background: var(--fwr-accent); color: #fff; }
+.fwr-run:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-run:disabled { opacity: .55; cursor: not-allowed; }
+
+/* A draft, and it has to look like one. Dashed rather than solid so it does
+   not read as a stored record beside the counts above it, which are. */
+.fwr-draft {
+  margin-top: 10px; padding: 10px 11px;
+  border: 1px dashed var(--fwr-line); border-radius: 9px;
+}
+.fwr-draft p { margin: 0; color: var(--fwr-ink); font-size: 11px; line-height: 1.6; }
+.fwr-draft .fwr-foot-note { margin-top: 7px; font-size: 10px; }
+
 .fwr-meter {
   height: 4px; margin-top: 8px; border-radius: 999px;
   background: var(--fwr-line); overflow: hidden;

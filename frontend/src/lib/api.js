@@ -2138,6 +2138,28 @@ export const api = {
   // PRICE_USD_PER_1M_TOKENS in aiRouter. This removes that copy.
   aiPricing: () => request('/ai/pricing'),
 
+  // Read back one workspace zone — the ONLY thing a workspace surface runs a
+  // model for, and the reason the rail on those pages is allowed to name one
+  // at all. `ASSIST_SURFACES` binds a surface to an aiRouter task class and the
+  // rail's model card is drawn from that binding, so until a workspace page had
+  // a call site the card would have named a model for a page that never called
+  // one. The call came first; the registration followed.
+  //
+  // `coverage` is the rail's OWN Coverage lines — counts and labels the page
+  // has already fetched and is already showing. Not the rows: those lines are
+  // the page's summary of itself, they carry no personal data, and sending the
+  // records behind them would put a client's name in a prompt to satisfy a
+  // feature nobody asked for that of.
+  //
+  // Longer than the default deadline because a model call is not a read: 30s
+  // would abort a run the router is still paying for.
+  aiWorkspaceExplain: ({ workspace, zone, coverage }) =>
+    request('/ai/workspace/explain', {
+      method: 'POST',
+      timeoutMs: 60_000,
+      body: JSON.stringify({ workspace, zone, coverage }),
+    }),
+
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------
   // Task #13 — analytics reads auto-retry once on 5xx with a 1s backoff so
   // a transient D1 hiccup or worker cold-start doesn't surface as a red
