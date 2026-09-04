@@ -50,6 +50,57 @@ export async function ensureDiscoveryIcpFitColumn(env: Env): Promise<boolean> {
   }
 }
 
+const EVIDENCE_READY = new WeakMap<object, boolean>();
+
+/**
+ * Ensure migration 211's two interview columns exist: `quote_consent`
+ * (INTEGER, nullable) and `interviewee_company` (TEXT, nullable). Canonical
+ * migration is `211_founder_validate_evidence.sql`; this keeps the worker
+ * self-healing on an environment where it has not been applied, the same way
+ * `ensureDiscoveryIcpFitColumn` does for 161.
+ *
+ * Same contract as the icp_fit helper: reports whether the columns are usable,
+ * and caches readiness only on success. Both columns are nullable ON PURPOSE —
+ * NULL is "not recorded", and for consent that is a different fact from "no".
+ * No DEFAULT is added here for the same reason none is in the migration.
+ */
+export async function ensureDiscoveryEvidenceColumns(env: Env): Promise<boolean> {
+  const key = env.DB as unknown as object;
+  if (EVIDENCE_READY.get(key)) return true;
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(discovery_interviews)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((r) => r.name));
+    // Two literal statements rather than a loop over names: `check-sql-prepare`
+    // refuses any `${}` inside `DB.prepare`, and it is right to — a column name
+    // built at runtime is exactly the shape that guard exists to keep out, even
+    // when the only source is a const tuple three lines up. The icp_fit helper
+    // above is written the same way for the same reason.
+    if (!have.has('quote_consent')) {
+      try {
+        await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN quote_consent INTEGER`).run();
+      } catch (e) {
+        console.warn('[discoveryInterviewSchema] quote_consent ALTER failed', e);
+        const recheck = await env.DB.prepare(`PRAGMA table_info(discovery_interviews)`).all<{ name: string }>();
+        if (!(recheck.results || []).some((r) => r.name === 'quote_consent')) return false;
+      }
+    }
+    if (!have.has('interviewee_company')) {
+      try {
+        await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN interviewee_company TEXT`).run();
+      } catch (e) {
+        console.warn('[discoveryInterviewSchema] interviewee_company ALTER failed', e);
+        const recheck = await env.DB.prepare(`PRAGMA table_info(discovery_interviews)`).all<{ name: string }>();
+        if (!(recheck.results || []).some((r) => r.name === 'interviewee_company')) return false;
+      }
+    }
+    EVIDENCE_READY.set(key, true);
+    return true;
+  } catch (e) {
+    console.warn('[discoveryInterviewSchema] evidence columns bootstrap failed', e);
+    return false;
+  }
+}
+
 /**
  * Task #14 sibling: ensure `discovery_interviews.validation_rating`
  * (INTEGER 0-5) and `validation_comment` (TEXT) exist. Canonical

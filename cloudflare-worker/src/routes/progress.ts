@@ -43,6 +43,7 @@ import {
   ensureDiscoveryInterviewFeaturedColumn,
   ensureDiscoveryValidationRatingColumns,
   ensureDiscoveryIcpFitColumn,
+  ensureDiscoveryEvidenceColumns,
 } from '../services/discoveryInterviewSchema';
 import { ensureWaitlistCrmColumns } from '../services/waitlistCrmSchema';
 import { send, type SendResult } from '../services/email/send';
@@ -198,6 +199,10 @@ type InterviewRow = {
   validation_rating: number | null;
   validation_comment: string | null;
   icp_fit: string | null;
+  // Migration 211. Both nullable, and NULL is "not recorded" — for consent
+  // especially, "we never asked" and "they said no" are different facts.
+  quote_consent: number | null;
+  interviewee_company: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -256,15 +261,27 @@ function serializeInterview(r: InterviewRow) {
     validation_comment: r.validation_comment ?? null,
     // Migration 161. Null = not yet assessed (NOT "not ICP").
     icp_fit: r.icp_fit ?? null,
+    // Migration 211. Consent is three-state on purpose: true, false, or never
+    // asked. Folding null into false would report "declined" for everyone.
+    quote_consent: r.quote_consent == null ? null : Number(r.quote_consent) === 1,
+    interviewee_company: r.interviewee_company ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
+}
+
+/** Three states. `undefined`/absent keeps the existing value on update. */
+function asQuoteConsent(raw: unknown): number | null {
+  if (raw == null || raw === '') return null;
+  if (raw === true || raw === 1 || raw === '1' || raw === 'true' || raw === 'yes') return 1;
+  return 0;
 }
 
 const INTERVIEW_SELECT =
   `SELECT id, project_id, interviewee_name, interviewee_role, interview_date,
           notes, hypotheses_json, pains_json, featured,
           validation_rating, validation_comment, icp_fit,
+          quote_consent, interviewee_company,
           created_at, updated_at
      FROM discovery_interviews`;
 
@@ -299,6 +316,11 @@ progress.get('/discovery/:projectId', async (c) => {
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await ensureDiscoveryValidationRatingColumns(c.env);
   await ensureDiscoveryIcpFitColumn(c.env);
+  // The list is the entry point every client hits first, and `INTERVIEW_SELECT`
+  // names migration 211's columns — so this is where they are ensured, the same
+  // way 161's is. The later `${INTERVIEW_SELECT} WHERE id = ?` reads in this
+  // file run downstream of a list, insert or update and inherit the column.
+  await ensureDiscoveryEvidenceColumns(c.env);
   const { results } = await c.env.DB.prepare(
     `${INTERVIEW_SELECT}
       WHERE project_id = ?
@@ -348,22 +370,27 @@ progress.post('/discovery/:projectId', async (c) => {
   const validationRating = asValidationRating(body.validation_rating);
   const validationComment = asStringOrNull(body.validation_comment);
   const icpFit = asIcpFit(body.icp_fit);
+  const quoteConsent = asQuoteConsent(body.quote_consent);
+  const intervieweeCompany = asStringOrNull(body.interviewee_company);
   const nowIso = new Date().toISOString();
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await ensureDiscoveryValidationRatingColumns(c.env);
   await ensureDiscoveryIcpFitColumn(c.env);
+  await ensureDiscoveryEvidenceColumns(c.env);
   const res = await c.env.DB.prepare(
     `INSERT INTO discovery_interviews
        (project_id, interviewee_name, interviewee_role, interview_date,
         notes, hypotheses_json, pains_json, featured,
         validation_rating, validation_comment, icp_fit,
+        quote_consent, interviewee_company,
         created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     projectId, intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
     featured, validationRating, validationComment, icpFit,
+    quoteConsent, intervieweeCompany,
     nowIso, nowIso,
   ).run();
 
@@ -394,6 +421,12 @@ progress.put('/discovery/interview/:id', async (c) => {
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
 
+  // ORDER MATTERS. `INTERVIEW_SELECT` names migration 211's columns, and this
+  // read happens BEFORE the ensure block further down — so the ensure has to
+  // come first here or the read fails with "no such column" on any environment
+  // where 211 has not run. (`icp_fit` at the same spot gets away with it only
+  // because every fixture and environment has carried 161 for long enough.)
+  await ensureDiscoveryEvidenceColumns(c.env);
   const existing = await c.env.DB.prepare(`${INTERVIEW_SELECT} WHERE id = ?`)
     .bind(id).first<InterviewRow>();
   if (!existing) return c.json({ detail: 'Interview not found' }, 404);
@@ -435,6 +468,16 @@ progress.put('/discovery/interview/:id', async (c) => {
   const icpFit = Object.prototype.hasOwnProperty.call(body, 'icp_fit')
     ? asIcpFit(body.icp_fit)
     : (existing.icp_fit ?? null);
+  // Same preserve-on-omit rule for migration 211's two columns. A payload from
+  // a form that predates them must not clear what the founder already
+  // recorded — and for consent, clearing it would turn "yes" into "never
+  // asked", which is a different fact.
+  const quoteConsent = Object.prototype.hasOwnProperty.call(body, 'quote_consent')
+    ? asQuoteConsent(body.quote_consent)
+    : (existing.quote_consent == null ? null : Number(existing.quote_consent));
+  const intervieweeCompany = Object.prototype.hasOwnProperty.call(body, 'interviewee_company')
+    ? asStringOrNull(body.interviewee_company)
+    : (existing.interviewee_company ?? null);
 
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await ensureDiscoveryValidationRatingColumns(c.env);
@@ -444,12 +487,14 @@ progress.put('/discovery/interview/:id', async (c) => {
         SET interviewee_name = ?, interviewee_role = ?, interview_date = ?,
             notes = ?, hypotheses_json = ?, pains_json = ?, featured = ?,
             validation_rating = ?, validation_comment = ?, icp_fit = ?,
+            quote_consent = ?, interviewee_company = ?,
             updated_at = ?
       WHERE id = ?`,
   ).bind(
     intervieweeName, intervieweeRole, interviewDate,
     notes, JSON.stringify(hypotheses), JSON.stringify(pains),
     featured, validationRating, validationComment, icpFit,
+    quoteConsent, intervieweeCompany,
     new Date().toISOString(), id,
   ).run();
 
@@ -636,6 +681,11 @@ progress.post('/discovery/:projectId/waitlist/:signupId/promote', async (c) => {
   await ensureWaitlistCrmColumns(c.env);
   await ensureDiscoveryInterviewFeaturedColumn(c.env);
   await ensureDiscoveryValidationRatingColumns(c.env);
+  // Three `INTERVIEW_SELECT` reads follow in this handler and none of them is
+  // downstream of a list, insert or update — a promote can be the first thing
+  // a fresh isolate does. Ensured here for the same reason featured and rating
+  // are.
+  await ensureDiscoveryEvidenceColumns(c.env);
 
   const signup = await loadCustomerSignup(c.env, projectId, signupId);
   if (!signup) return c.json({ detail: 'Signup not found' }, 404);

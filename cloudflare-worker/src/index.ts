@@ -198,6 +198,7 @@ import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
 import partnerDelivery from './routes/partner_delivery';
+import founderValidate from './routes/founder_validate';
 import insightsRoutes from './routes/insights';
 // Signals — founder decision-engine over public company data (not a trading UI).
 import signalsRoutes from './routes/signals';
@@ -980,6 +981,7 @@ app.route('/api/partner/offers', partnerOffers);
 // recurring update. Health is derived over five of those tables at read time
 // and is never stored.
 app.route('/api/partner/delivery', partnerDelivery);
+app.route('/api/founder/validate', founderValidate);
 app.route('/api/insights', insightsRoutes);
 // Signals — founder-actionable opportunity engine over public-market evidence.
 app.route('/api/signals', signalsRoutes);

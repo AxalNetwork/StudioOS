@@ -1192,6 +1192,24 @@ export const api = {
   createInterview: (projectId, data) => request(`/progress/discovery/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateInterview: (id, data) => request(`/progress/discovery/interview/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteInterview: (id) => request(`/progress/discovery/interview/${id}`, { method: 'DELETE' }),
+
+  // Validate · hypotheses and · verdict (migration 211). The board is a
+  // curation layer over the same interviews `listInterviews` returns — it does
+  // not replace `hypotheses_json`, which the demo-day deck and the discovery
+  // signals score still read.
+  //
+  // `getValidationDecision` is deliberately a SEPARATE call from
+  // `getValidationBoard` rather than a field on it: the two have different
+  // audiences (a partner may read the board and not the decision), and folding
+  // them into one response would mean one 403 hiding both or neither.
+  getValidationBoard: (projectId) => request(`/founder/validate/board/${projectId}`),
+  createHypothesis: (projectId, data) => request(`/founder/validate/board/${projectId}/hypotheses`, { method: 'POST', body: JSON.stringify(data) }),
+  updateHypothesis: (id, data) => request(`/founder/validate/hypotheses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  linkHypothesisPain: (id, data) => request(`/founder/validate/hypotheses/${id}/links`, { method: 'POST', body: JSON.stringify(data) }),
+  unlinkHypothesisPain: (linkId) => request(`/founder/validate/links/${linkId}`, { method: 'DELETE' }),
+  getValidationDecision: (projectId) => request(`/founder/validate/decision/${projectId}`),
+  recordValidationDecision: (projectId, data) => request(`/founder/validate/decision/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
+  updateInterviewEvidence: (id, data) => request(`/founder/validate/interviews/${id}/evidence`, { method: 'PATCH', body: JSON.stringify(data) }),
   // Task #5 — customer-audience waitlist signups + lightweight CRM layer inside
   // Customer Discovery (promote-to-interview, product-invitation email,
   // follow-up email). Customer-audience only; project-scoped server-side.
