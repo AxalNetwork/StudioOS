@@ -19,6 +19,7 @@
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { runSchemaBootstrap } from '../util/schemaBootstrap';
 
 export type InvestorTier = 'free' | 'professional' | 'institutional';
 
@@ -187,13 +188,12 @@ export async function ensureInvestorPaywallSchema(env: Env): Promise<void> {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_dealroom_investor ON investor_dealroom_members(investor_user_id)`,
   ];
-  for (const s of stmts) {
-    try { await env.DB.prepare(s).run(); }
-    catch (e) {
-      const msg = (e as Error).message || '';
-      if (!/duplicate column/i.test(msg)) throw e;
-    }
-  }
+  // `users` is at D1's 100-column limit, so every ALTER here now raises "too
+  // many columns" — including the ones whose column already exists, because
+  // SQLite checks the limit before the duplicate-name test. This loop used to
+  // rethrow that and take the whole router down with it. See
+  // util/schemaBootstrap.ts.
+  await runSchemaBootstrap(env, stmts);
   _migrated = true;
 }
 
