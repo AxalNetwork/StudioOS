@@ -196,6 +196,7 @@ import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 // the public firm directory and a different path, and `/api/pipeline/vote*`
 // below belongs to deal voting rather than to a partner's deal pipeline.
 import partnerPipeline from './routes/partner_pipeline';
+import partnerOffers from './routes/partner_offers';
 import insightsRoutes from './routes/insights';
 // Signals — founder decision-engine over public company data (not a trading UI).
 import signalsRoutes from './routes/signals';
@@ -969,6 +970,10 @@ app.route('/api/engagements', engagementsRouter);
 // Scoped to the caller's own firm throughout; a row belonging to another firm
 // answers 404, never 403.
 app.route('/api/partner/pipeline', partnerPipeline);
+// #45 — what the firm publishes ABOUT itself: which surfaces it appears on,
+// the proof it can show (gated on a consent only the client can give), and the
+// fit rules a pass quotes instead of going silent.
+app.route('/api/partner/offers', partnerOffers);
 app.route('/api/insights', insightsRoutes);
 // Signals — founder-actionable opportunity engine over public-market evidence.
 app.route('/api/signals', signalsRoutes);

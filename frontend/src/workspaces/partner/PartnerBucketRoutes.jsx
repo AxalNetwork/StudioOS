@@ -33,6 +33,13 @@ const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline
 // because neither has ever had a surface anywhere in the product.
 const PartnerNegotiations = lazy(() => import('../../pages/partner/pipeline/NegotiationsZone'));
 const PartnerRetainers = lazy(() => import('../../pages/partner/pipeline/RetainersZone'));
+// #45 — the three Offers zones migration 209 gave a store to. These are the
+// only bucket a partner can use TODAY: their stores key on `partners.id` rather
+// than on an engagement or a quote, so a firm with no marketplace activity yet
+// still has something to record.
+const PartnerVisibility = lazy(() => import('../../pages/partner/offers/VisibilityZone'));
+const PartnerProof = lazy(() => import('../../pages/partner/offers/ProofZone'));
+const PartnerAudienceFit = lazy(() => import('../../pages/partner/offers/AudienceFitZone'));
 
 /**
  * Pipeline, Delivery and Offers — the Partner shell's three owned buckets.
@@ -155,6 +162,9 @@ const LIVE = {
   '/offers': {
     catalog: (user) => <ServiceCatalogPage user={user} embedded />,
     'perk-deals': (user) => <PerksPage user={user} embedded />,
+    visibility: () => <PartnerVisibility />,
+    proof: () => <PartnerProof />,
+    'audience-fit': () => <PartnerAudienceFit />,
   },
 };
 
@@ -193,25 +203,19 @@ const COPY = {
       why: 'It would read the deliverables log and the engagement’s blockers, neither of which is recorded. Where the blocker is on the client’s side the report has to say so plainly without treating it as an excuse, and that is a copy decision as much as a data one.',
     },
   },
-  '/offers': {
-    visibility: {
-      heading: 'Surface attribution is not built yet',
-      what: 'Which surfaces the firm appears on and what each produced — views, leads, engagements. Volume is not the ranking: a directory listing with thousands of views and no engagements reads worse than a referral with two leads and one.',
-      why: 'Engagements do not record the surface that sourced them, so the column that matters cannot be counted. Modelling it would make the widest column the least true.',
-    },
-    proof: {
-      heading: 'Proof needs a consent record that does not exist',
-      what: 'Case studies and outcomes, each carrying which engagement produced it and whether the client agreed to publish it.',
-      why: 'Consent is a gate rather than a warning — an unconsented outcome has no published form to suppress, so it simply is not one. Nothing stores that consent, which means every item here would be the firm reporting a metric about itself.',
-      seam: true,
-    },
-    'audience-fit': {
-      heading: 'Audience fit is not built yet',
-      what: 'Who the firm is for and — the working half — who it is not: a stated budget floor, sectors declined, capabilities honestly absent.',
-      why: 'This is what lets Pipeline pass a lead with a named reason instead of silence. No fit rules are stored, so a pass today has nothing to cite.',
-      links: [{ to: '/pipeline/leads', label: 'Leads →' }],
-    },
-  },
+  // AND NOTHING UNDER `/offers` ANY MORE. The three cards that stood here said
+  // "engagements do not record the surface that sourced them", "nothing stores
+  // that consent" and "no fit rules are stored". Migration 209 added
+  // `partner_surfaces` + `engagement_sources`, `partner_proof_items` +
+  // `partner_proof_consents`, and `partner_fit_rules` — one store per card, in
+  // that order — so all three were deleted rather than reworded, on the same
+  // rule as `/pipeline`: a no-store card standing in front of a store is as
+  // false as one that overstates.
+  //
+  // The consent card carried `seam: true` — the "From the client" chip — and
+  // the seam it marked is now a real boundary rather than a note about one:
+  // `/attest/partner/:token` is where the client answers, and no firm-side
+  // route can record a yes.
 };
 
 /**
@@ -259,6 +263,12 @@ const ZONE_LINES = {
     // does not send, so the catalogue was permanently empty either way.
     catalog: 'What the firm sells, at what price — the record lead scoring reads a match against.',
     'perk-deals': 'Deals that expire in public, with grants revoked when they do.',
+    // Written to what the store can support. "Views" is deliberately absent
+    // from this line as it is from the zone: nothing records an impression, so
+    // naming it here would promise a column that renders as an absence.
+    visibility: 'Where the firm appears and what each surface produced, ranked by engagements rather than by reach.',
+    proof: 'Case studies and outcomes, each showing whether the client agreed to publish it — or that nobody has.',
+    'audience-fit': 'Who the firm is for and who it is not, with the sentence a pass quotes instead of going silent.',
   },
 };
 
@@ -371,10 +381,15 @@ export default function PartnerBucketRoutes() {
     '/offers': {
       workspace: 'Offers',
       stance: 'Manual storefront record',
-      note: 'What the firm publishes is what the firm typed. No listing, perk description or claim about the practice is written here.',
+      note: 'What the firm publishes is what the firm typed. No listing, perk description, case study or fit rule is written here, and no lead is scored against one.',
+      // BOTH OF THESE FLIPPED WITH MIGRATION 209, so they are replaced rather
+      // than kept. Attribution and consent are now recorded — which means the
+      // rail would be asserting two absences the store no longer has, exactly
+      // the drift `WorkerRail`'s own docblock warns about. What remains
+      // genuinely unavailable is what nothing in this bucket does even now.
       unavailable: [
-        ['Surface attribution', 'Nothing records which surface sourced an engagement, so no listing here can be credited with the work it produced.'],
-        ['Published proof', 'An outcome is publishable only where the client agreed to it, and nothing stores that consent. Consent is a gate rather than a warning: without it there is no published form to suppress.'],
+        ['Fit scoring', 'Your fit rules are a record a person reads, not a filter that runs. No lead is scored, ranked or auto-declined against a budget floor or a declined sector — a pass is still your click and still your sentence.'],
+        ['Publishing on your say-so', 'An outcome is publishable only where the client agreed to it, and only the client can record that agreement. Nothing here can mark your own evidence as confirmed, including this rail.'],
       ],
     },
   }[prefix];

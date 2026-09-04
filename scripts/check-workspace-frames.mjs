@@ -230,6 +230,16 @@ for (const role of ROLES) {
     else if (p.includes('/partner/pipeline/negotiations')) body = { items: [] };
     else if (p.includes('/partner/pipeline/retainers')) {
       body = { items: [], retainer_count: 0, mrr_cents: null, mrr_basis: null, mrr_note: null };
+    } else if (p.includes('/partner/offers/visibility')) {
+      body = {
+        items: [], engagement_total: 0, unattributed_count: 0, unattributed_note: null,
+        lead_ratio: null, lead_ratio_note: null,
+      };
+    } else if (p.includes('/partner/offers/attribution')) body = { items: [] };
+    else if (p.includes('/partner/offers/proof')) {
+      body = { items: [], published_count: 0, self_stated_count: 0 };
+    } else if (p.includes('/partner/offers/fit-rules')) {
+      body = { items: [], unstated_count: 0, enforcement: 'none', enforcement_note: null };
     } else if (/\/(summary|overview|analytics|profile|me|progress|status)$/.test(p)) body = {};
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });

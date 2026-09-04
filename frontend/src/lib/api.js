@@ -3026,6 +3026,60 @@ export const api = {
   deletePartnerRetainerUsage: (engagementId, period) =>
     request(`/partner/pipeline/retainers/${engagementId}/usage/${period}`, { method: 'DELETE' }),
 
+  // ---------- Offers: visibility, proof, audience fit (migration 209) ----------
+  // Returns `items` plus `engagement_total`, `unattributed_count` and the two
+  // figures the store cannot produce — `views` and `lead_ratio`, each null with
+  // its own reason. Nothing here counts a view, because nothing records one.
+  getPartnerVisibility: () => request('/partner/offers/visibility'),
+  createPartnerSurface: (data) =>
+    request('/partner/offers/surfaces', { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerSurface: (id, data) =>
+    request(`/partner/offers/surfaces/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerSurface: (id) =>
+    request(`/partner/offers/surfaces/${id}`, { method: 'DELETE' }),
+
+  // Every engagement with the surface it names, for the attribution form. An
+  // engagement naming none is listed rather than hidden — it is what the
+  // unattributed count is counting.
+  listPartnerAttribution: () => request('/partner/offers/attribution'),
+  setPartnerEngagementSource: (engagementId, data) =>
+    request(`/partner/offers/engagements/${engagementId}/source`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  clearPartnerEngagementSource: (engagementId) =>
+    request(`/partner/offers/engagements/${engagementId}/source`, { method: 'DELETE' }),
+
+  // `is_published` on each item is DERIVED from its consent rows, never stored.
+  // There is no method to set it, and that absence is the feature.
+  listPartnerProof: () => request('/partner/offers/proof'),
+  createPartnerProof: (data) =>
+    request('/partner/offers/proof', { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerProof: (id, data) =>
+    request(`/partner/offers/proof/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerProof: (id) =>
+    request(`/partner/offers/proof/${id}`, { method: 'DELETE' }),
+  // Records the ask; it does not send it. The response carries `request_token`
+  // exactly once — the firm hands the link over by whatever channel it already
+  // has with the client, and no later read returns it.
+  requestPartnerProofConsent: (id, data) =>
+    request(`/partner/offers/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
+  // The firm can only ever RECORD a withdrawal, never grant a consent. Granting
+  // is the token holder's alone, which is what makes the record worth anything.
+  withdrawPartnerProofConsent: (id, consentId) =>
+    request(`/partner/offers/proof/${id}/consents/${consentId}/withdraw`, { method: 'POST' }),
+  // The client's own answer. Unauthenticated on purpose — the token is the
+  // credential, and the counterparty on an engagement is often not a user here.
+  respondToPartnerProofConsent: (token, data) =>
+    request(`/partner/offers/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
+
+  listPartnerFitRules: () => request('/partner/offers/fit-rules'),
+  createPartnerFitRule: (data) =>
+    request('/partner/offers/fit-rules', { method: 'POST', body: JSON.stringify(data) }),
+  updatePartnerFitRule: (id, data) =>
+    request(`/partner/offers/fit-rules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerFitRule: (id) =>
+    request(`/partner/offers/fit-rules/${id}`, { method: 'DELETE' }),
+
   listMyAdvisorCohorts: () => request('/advisors/me/cohort'),
   listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),
   listMyAdvisorCohortWeeks: (cycleId) => request(`/advisors/me/cohort/${cycleId}/weeks`),

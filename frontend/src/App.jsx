@@ -171,6 +171,7 @@ const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
 const AttestConsentPage = lazy(() => import('./pages/AttestConsentPage'));
+const PartnerAttestConsentPage = lazy(() => import('./pages/PartnerAttestConsentPage'));
 const AdvisorCohortAssignments = lazy(() => import('./pages/admin/AdvisorCohortAssignments'));
 const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage'));
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
@@ -2206,6 +2207,14 @@ function AppInner() {
           reason /esign/ is there — a background settings 401 must not bounce
           someone who came to answer a question. */}
       <Route path="/attest/:token" element={<AttestConsentPage />} />
+      {/* The client's side of a PARTNER firm's proof claim (migration 209). A
+          separate page against a separate table — 209 uses `consenter_*` where
+          204 uses `attester_*` — and two path segments rather than one, so
+          neither route can shadow the other. `isPublicPath` whitelists the
+          whole `/attest/` prefix, so this needs no entry of its own. Landed
+          WITH the firm-side ask: a token nobody can answer is not a consent
+          mechanism, it is a column that never gets set. */}
+      <Route path="/attest/partner/:token" element={<PartnerAttestConsentPage />} />
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />
