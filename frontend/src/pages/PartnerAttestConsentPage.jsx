@@ -43,11 +43,6 @@ const CONSENT_TEXT =
   'I confirm this is accurate, and I agree to this firm showing it publicly as '
   + 'work they did for us.';
 
-const inputClass =
-  'mt-1 w-full rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] '
-  + 'focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 '
-  + 'dark:border-gray-700 dark:bg-gray-900';
-
 export default function PartnerAttestConsentPage() {
   const { token } = useParams();
   const [agreed, setAgreed] = useState(false);

@@ -98,14 +98,20 @@ test('new money is integer cents, whatever sits beside it', () => {
   // must not grow, and a retainer amount and a budget floor are new money.
   const money = [...DDL.matchAll(/^\s*(\w*(?:amount|price|floor|fee|cost)\w*)\s+(\w+)/gim)]
     .map((m) => ({ col: m[1], type: m[2].toUpperCase() }))
-    // GROUPED EXPLICITLY, because `a|b|c$` anchors only `c` and a reader cannot
-    // tell whether that was meant. It is: `hours` and `note` are SUBSTRING
-    // matches (a `retained_hours_amount` or an `hourly_cost_note` is not a money
-    // column), while `_at` must be ANCHORED — a timestamp like `forecast_at`
-    // contains "cost" and would otherwise be demanded to be named `*_cents` and
-    // typed INTEGER. Same behaviour as the ungrouped form, stated rather than
-    // relied on; CodeQL's misleading-precedence rule was right to ask.
-    .filter((c) => !/(?:hours|note)|_at$/.test(c.col));
+    // TWO TESTS, BECAUSE THESE ARE TWO DIFFERENT TESTS.
+    //
+    // `hours` and `note` are SUBSTRING matches — an `hourly_cost_note` is not a
+    // money column — while `_at` must be ANCHORED, because a timestamp like
+    // `forecast_at` contains "cost" and would otherwise be demanded to be named
+    // `*_cents` and typed INTEGER.
+    //
+    // This was one regex, `/hours|note|_at$/`, and grouping it as
+    // `/(?:hours|note)|_at$/` did NOT satisfy CodeQL's misleading-precedence
+    // rule — correctly, since the grouped form still has one anchored and one
+    // unanchored alternative at the top level, which is the exact ambiguity the
+    // rule is about. A regex cannot be made unambiguous by parenthesising the
+    // half that was never in doubt. Two predicates say the two things.
+    .filter((c) => !/hours|note/.test(c.col) && !/_at$/.test(c.col));
   assert.ok(money.length >= 2, `expected the new money columns, saw ${money.length}`);
   for (const c of money) {
     assert.match(c.col, /_cents$/, `${c.col} holds currency and must be named *_cents`);
