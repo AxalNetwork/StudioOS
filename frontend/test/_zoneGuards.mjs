@@ -135,10 +135,28 @@ export function assertNoNullDraftDeref(root, minFiles) {
 
   for (const file of files) {
     const src = codeOnly(read(file));
-    for (const m of src.matchAll(/const \[(\w+), set\w+\] = useState\(null\)/g)) {
+    const nulls = new Set(
+      [...src.matchAll(/const \[(\w+), set\w+\] = useState\(null\)/g)].map((m) => m[1]),
+    );
+    if (!nulls.size) continue;
+    // One FIXED regex over the whole source, with the identifier CAPTURED and
+    // compared to the set — rather than a regex built per name.
+    //
+    // The earlier form interpolated a name read out of a source file into
+    // `new RegExp`, which is a regex assembled from file content: CodeQL's
+    // security-extended pack treats a file read as a threat-model source and
+    // reports it as regex injection, at high severity. It is not exploitable
+    // here — the "attacker" would have to be able to write this repository's
+    // own test-adjacent source — but a guard that trips the scanner every time
+    // it runs costs more to explain than to avoid, and the fixed form is
+    // clearer anyway: one pass, one pattern, an explicit membership test.
+    //
+    // `(?<![\w?.])` keeps the two cases the original excluded: `x?.y` is safe
+    // to construct, and `other.draft.y` is a different binding.
+    for (const m of src.matchAll(/(?<![\w?.])([A-Za-z_$][\w$]*)\.[a-zA-Z_]/g)) {
       const name = m[1];
-      const deref = new RegExp(`(?<![\\w?.])${name}\\.[a-z_]`, 'i');
-      assert.ok(!deref.test(src),
+      if (!nulls.has(name)) continue;
+      assert.fail(
         `${file}: \`${name}\` starts as null and is dereferenced without \`?.\`. `
         + 'Inside <ZoneBody> children that throws on the first render, whatever '
         + '`loading` says — seed it with its empty shape instead.');
@@ -158,13 +176,17 @@ export function assertNoNullDraftDeref(root, minFiles) {
  * `fields` are the column names that carry this risk on the tree being checked.
  */
 export function assertAbsentIsNotZero(root, fields) {
+  const watched = new Set(fields);
   for (const file of jsxFilesUnder(root)) {
     const src = codeOnly(read(file));
-    for (const field of fields) {
-      assert.doesNotMatch(src, new RegExp(`${field}\\s*\\|\\|\\s*0`),
-        `${file} coerces an absent ${field} to zero`);
-      assert.doesNotMatch(src, new RegExp(`${field}\\s*\\?\\?\\s*0`),
-        `${file} coerces an absent ${field} to zero`);
+    // Fixed pattern, captured identifier, set membership — same reasoning as
+    // rule 2 above: no regex is assembled from anything read at runtime.
+    // `(?![\d.])` is stricter than the form this replaces, which also matched
+    // `?? 0.5`; a fractional fallback is a different (and rarer) mistake, and
+    // this rule is about the zero.
+    for (const m of src.matchAll(/([A-Za-z_$][\w$]*)\s*(?:\|\||\?\?)\s*0(?![\d.])/g)) {
+      if (!watched.has(m[1])) continue;
+      assert.fail(`${file} coerces an absent ${m[1]} to zero`);
     }
   }
 }

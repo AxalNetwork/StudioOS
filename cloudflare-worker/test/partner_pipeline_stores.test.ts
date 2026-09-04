@@ -196,10 +196,25 @@ const theirs = { user: THEIRS_USER, role: 'partner' };
 const fran = { user: FOUNDER_USER, role: 'founder' };
 const orphan = { user: ORPHAN_USER, role: 'partner' };
 
-/** Every row in the two negotiation and three retainer tables, as JSON. */
+/**
+ * Every row in the four tables 208 added, as JSON.
+ *
+ * Four literal statements rather than one built by interpolating a table name.
+ * The loop form read better and was safe — the names are this file's own
+ * constants — but a query assembled with `${}` is the shape CodeQL's
+ * `js/sql-injection` reports whatever the source turns out to be, and a
+ * security alert a reviewer has to dismiss by hand costs more than four lines.
+ * If a fifth table is added, add a fifth line: a snapshot that silently omits a
+ * table would let a read write to it undetected, which is the one thing this
+ * function exists to catch.
+ */
 function snapshot(db: InstanceType<typeof DatabaseSync>): string {
-  const tables = ['quote_negotiations', 'quote_terms', 'partner_retainers', 'retainer_usage'];
-  return JSON.stringify(tables.map((t) => db.prepare(`SELECT * FROM ${t} ORDER BY id`).all()));
+  return JSON.stringify([
+    db.prepare('SELECT * FROM quote_negotiations ORDER BY id').all(),
+    db.prepare('SELECT * FROM quote_terms ORDER BY id').all(),
+    db.prepare('SELECT * FROM partner_retainers ORDER BY id').all(),
+    db.prepare('SELECT * FROM retainer_usage ORDER BY id').all(),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -587,8 +602,14 @@ test('no route writes a value it computes', () => {
   // test would still pass.
   const src = readFileSync(resolve(HERE, '../src/routes/partner_pipeline.ts'), 'utf8');
   const writes = [...src.matchAll(/(?:INSERT INTO|UPDATE)\s+\w+[\s\S]*?(?=`)/g)].join('\n');
-  for (const derived of ['health', 'utilisation', 'days_stalled', 'is_published', 'mrr']) {
-    assert.doesNotMatch(writes, new RegExp(`\\b${derived}\\b`),
+  // Word-split and set membership rather than a regex built per name. Same
+  // reasoning as `frontend/test/_zoneGuards.mjs`: nothing here needs a pattern
+  // assembled at runtime, and one that is assembled gets reported as regex
+  // injection by security-extended no matter how local its input is.
+  const DERIVED = new Set(['health', 'utilisation', 'days_stalled', 'is_published', 'mrr']);
+  const named = new Set(writes.split(/[^A-Za-z0-9_]+/).filter(Boolean));
+  for (const derived of DERIVED) {
+    assert.ok(!named.has(derived),
       `a write names \`${derived}\` — that value is derived and must not be stored`);
   }
 });
