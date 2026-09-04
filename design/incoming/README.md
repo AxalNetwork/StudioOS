@@ -78,6 +78,7 @@ of the four whose canvas was already committed — it is in
 | `Pages · Partner Offers.dc.html` | `/offers`, `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` | UPGRADE |
 | `Pages · Partner Network.dc.html` | `/network/*` on the partner licence | UPGRADE |
 | `Pages · Partner Research.dc.html` | `/research/*` on the partner licence | UPGRADE |
+| `Navigation Shell · Anatomy.dc.html` | the shell itself — chrome, company switcher and the six role fills (2026-09-04 batch) | UPGRADE |
 
 **Three are newer exports of canvases already in `canvases/backlog/`** —
 `AIRail.dc.html`, `Founder Workspaces Canvas.dc.html` and
@@ -153,26 +154,51 @@ intent is to land a canvas.**
 | Account, Company Settings, Team, Trust Center v2, Get Paid &amp; Invoicing, Emails, Help Center, Contracts · Super, Contracts · Subsidiary, Support · Subsidiary, Support Security · Super | `canvases/integrated/` |
 | Team · Authority (sent twice, byte-identical), Funds · Fabric, Send for Signature | `canvases/backlog/` |
 
-**The two the repository does not hold.** Neither is landed here, for the
-reason above; both need a `.dc.html` export before they can be.
+**The two the repository does not hold.** One is landed here; the other cannot
+be, and the difference is instructive.
 
-1. **A navigation-shell canvas of five artboards** — N1 shell anatomy, N2
-   company switcher in three states, N3 admin tiers (subsidiary and HQ), N4
-   founder and investor/LP, N5 advisor and service partner. The committed
-   `canvases/integrated/Navigation Shell.dc.html` shares the name and is a
-   *different document*: a single rendered shell with no artboards, which is
-   why a name lookup would have said "already have it".
-2. **A second AIRail export.** Same six blocks in the same order as the copy in
-   this folder, differing in two lines: the Manual blurb reads "Tables, boards
-   and models work alone. No tokens." rather than "No tokens. Page works
-   alone.", and the Usage cap is bound — `of {{ plan }}` — where the committed
-   copy hardcodes `of $40.00`.
+1. **`Navigation Shell · Anatomy.dc.html` — LANDED.** Five artboards: N1 shell
+   anatomy (one chrome, six role fills), N2 company switcher in three states,
+   N3 admin tiers (subsidiary and HQ), N4 founder and investor/LP, N5 advisor
+   and service partner. It carries no `data-props`, so nothing about it was
+   lost in the bundle, and it reconstructs cleanly.
 
-   **The shipped code is already on the right side of that second difference**
-   and must not be "corrected" toward the older canvas: `WorkerRail.jsx:93`
-   reads `spend.month.cap_usd` from the router and renders no cap at all when
-   the server does not give one. A hardcoded $40.00 would be a fabricated fact
-   of exactly the kind the rule below exists to stop.
+   It is a **different document** from the committed
+   `canvases/integrated/Navigation Shell.dc.html`, which is a single rendered
+   shell with no artboards — a name lookup would have said "already have it".
+   Hence the distinct filename; do not overwrite the other one.
+
+   One thing is NOT byte-faithful and is worth knowing before it is diffed
+   against a fresh export: the bundler normalises self-closing void tags, so
+   an `<img … />` in the original arrives as `<img …>`. This repository is
+   itself inconsistent about that — 81 `<input … />` against 98 `<input …>`
+   across these files — so there is nothing to restore it to. The markup is
+   semantically identical.
+
+2. **The second AIRail export — NOT landed, and it cannot be.** Same six
+   blocks in the same order as `AIRail.dc.html` in this folder, differing in
+   two lines: the Manual blurb reads "Tables, boards and models work alone. No
+   tokens." rather than "No tokens. Page works alone.", and the Usage cap is
+   bound — `of {{ plan }}` — where the committed copy hardcodes `of $40.00`.
+
+   Its artifact is corrupt, not merely lossy. `data-props="{` truncates at its
+   first quote, and because that quote opens an HTML attribute the rest of the
+   document is swallowed into it: the canvas source extracts to 5,406 bytes
+   against the committed file's 16,068, with the entire `<script
+   type="text/x-dc">` logic block — every value behind every `{{ }}` — inside
+   an attribute value. The markup survives; the component does not.
+
+   Grafting the committed file's logic onto the recovered markup would not
+   reproduce it either, and the reason is exactly the change that makes this
+   export interesting: the committed logic returns no `plan` key at all and
+   hardcodes `/ 40` in its `spendPct`. `{{ plan }}` would render unresolved.
+   **A `.dc.html` export is the only way to land this one.**
+
+   **The shipped code is already on the right side of that difference** and
+   must not be "corrected" toward the older canvas: `WorkerRail.jsx` reads
+   `spend.month.cap_usd` from the router and renders no cap at all when the
+   server does not give one. A hardcoded $40.00 would be a fabricated fact of
+   exactly the kind the rule below exists to stop.
 
 **Zone coverage is complete.** Counting the two the batch did not include but
 the repository holds — `Pages · Investor Network` and
