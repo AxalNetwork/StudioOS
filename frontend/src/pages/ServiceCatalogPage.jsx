@@ -11,7 +11,15 @@ const CAT_LABEL = {
   fractional_cfo: 'Fractional CFO', gtm: 'GTM', engineering: 'Engineering', marketing: 'Marketing',
 };
 
-export default function ServiceCatalogPage({ user }) {
+/**
+ * `embedded`: mounted on /offers/catalog inside a WorkspaceShell that already
+ * draws the crumb, the h1 and the zone pills. It suppresses this page's own
+ * heading block and NOTHING else — Browse / My offerings / Stripe Connect are
+ * views WITHIN the catalog rather than sibling zones, so they are this page's
+ * controls and stay, exactly as the tab rows on the Leads and Perk deals zones
+ * do.
+ */
+export default function ServiceCatalogPage({ user, embedded = false }) {
   const isPartner = user?.role === 'partner';
   const isFounder = user?.role === 'founder';
   const isAdmin = user?.role === 'admin';
@@ -25,13 +33,15 @@ export default function ServiceCatalogPage({ user }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Service Catalogue</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Productised partner offerings — fixed price, fixed scope, fixed SLA. Founders book
-          directly; engagements run through the same lifecycle as accepted quotes.
-        </p>
-      </div>
+      {!embedded && (
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Service Catalogue</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Productised partner offerings — fixed price, fixed scope, fixed SLA. Founders book
+            directly; engagements run through the same lifecycle as accepted quotes.
+          </p>
+        </div>
+      )}
 
       <div className="border-b border-gray-200 flex gap-6 overflow-x-auto dark:border-gray-800">
         {tabs.map((t) => {
@@ -68,7 +78,11 @@ export function BrowseTab({ user, isFounder }) {
       const params = {};
       if (filters.category) params.category = filters.category;
       const r = await api.listServiceOfferings(params);
-      let list = r.offerings || [];
+      // `.items`, not `.offerings`. GET /services/offerings answers
+      // `c.json({ items })` (services.ts) and always has; reading `.offerings`
+      // resolved to undefined, fell through the `|| []`, and rendered the
+      // browse catalogue as "no offerings published yet" however many were.
+      let list = r.items || [];
       if (filters.q) {
         const q = filters.q.toLowerCase();
         list = list.filter((o) => `${o.title} ${o.description} ${o.partner_name || ''}`.toLowerCase().includes(q));
@@ -225,11 +239,17 @@ export function MineTab({ user }) {
   const [loading, setLoading] = useState(false);
 
   async function load() {
-    if (!user?.partner_id) { setRows([]); return; }
     setLoading(true); setError(null);
     try {
-      const r = await api.listPartnerOfferings(user.partner_id);
-      setRows(r.offerings || []);
+      // `?mine=1` scopes on owner_user_id and includes inactive drafts — the
+      // arm services.ts added for exactly this view. The previous call went to
+      // /services/partners/:id/offerings, a route the worker has never served:
+      // it 404'd, the catch below swallowed the 404 as an empty list, and the
+      // tab reported "0 offerings" to a partner with a full catalogue. It also
+      // returned early on a missing `partner_id`, which is not the key this
+      // store uses — an offering belongs to a user, not to a partner org row.
+      const r = await api.listServiceOfferings({ mine: 1 });
+      setRows(r.items || []);
     } catch (e) {
       const msg = (e?.message || '').toLowerCase();
       if (e?.status === 404 || msg === 'not found') setRows([]);
@@ -250,7 +270,11 @@ export function MineTab({ user }) {
     try { await api.deleteServiceOffering(o.id); load(); } catch (e) { setError(e.message); }
   }
 
-  if (!user?.partner_id && user?.role !== 'admin') {
+  // Gated on ROLE, not on `partner_id`. The tab is only offered to a partner or
+  // an admin (see `tabs` above), and `?mine=1` returns nothing but the caller's
+  // own rows — so a `partner_id` test could only ever hide a partner's own
+  // catalogue from them, which is what it was doing.
+  if (user?.role !== 'partner' && user?.role !== 'admin') {
     return <Empty icon={Briefcase} text="Only partner accounts can publish offerings." />;
   }
 

@@ -21,6 +21,7 @@ import { bucketForPath, zoneForPath } from '../shellConfig';
 const PartnerEngagements = lazy(() => import('../../pages/partner/operations/EngagementsPage'));
 const NeedsBoardPage = lazy(() => import('../../pages/NeedsBoardPage'));
 const PerksPage = lazy(() => import('../../pages/PerksPage'));
+const ServiceCatalogPage = lazy(() => import('../../pages/ServiceCatalogPage'));
 // Pipeline · analytics used to mount `PartnerInsightsPage` — Demand Insights,
 // which answers where founder demand is concentrated across the whole board.
 // The canvas asks this zone about the FIRM'S OWN pipeline: win rate, cycle
@@ -32,10 +33,13 @@ const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline
  * Pipeline, Delivery and Offers — the Partner shell's three owned buckets.
  *
  * THIS IS THE SHELL WITH THE MOST WORKING CODE AND THE LEAST CANONICAL URLS.
- * Nine of its fifteen zones already have a live surface; they are just spread
- * across five prefixes that share no logic — `/partner/operations/*`,
- * `/needs`, `/services`, `/perks`, `/partner/insights`. Offers is the extreme
- * case: three of its five zones live under three different prefixes.
+ * Its live surfaces were spread across five prefixes that share no logic —
+ * `/partner/operations/*`, `/needs`, `/services`, `/perks`,
+ * `/partner/insights` — and the shell mounted only some of them. Six of the
+ * fifteen zones now render one: Pipeline's leads, proposals and analytics,
+ * Delivery's board, and Offers' catalog and perk deals. Every legacy prefix
+ * stays mounted; a zone and its legacy route are the same component at two
+ * routes, which is not a fork.
  *
  * `/pipeline` IS NOW A SHARED PREFIX, and deliberately so. The investor shell
  * has held `/pipeline`, `/pipeline/screening`, `/pipeline/commit` and
@@ -45,9 +49,9 @@ const PartnerPipelineAnalytics = lazy(() => import('../../pages/partner/pipeline
  * on `/pipeline/screening` and an operator on `/pipeline/leads` each resolve
  * to their own bucket. Worth knowing before adding a sixth slug to either.
  *
- * WHAT IS NOT WIRED. Negotiations, three of Delivery's five zones, and three
- * of Offers' five have no surface anywhere. They ship saying what they would
- * hold. Two of those absences are worth naming rather than glossing:
+ * WHAT IS NOT WIRED. Negotiations and retainers, four of Delivery's five
+ * zones, and three of Offers' five have no surface anywhere. They ship saying
+ * what they would hold. Two of those absences are worth naming rather than glossing:
  *
  *   · Delivery·Capacity is the page that would show an operator over-committed
  *     while holding a granted seat inside a client's systems — a trust
@@ -131,6 +135,7 @@ const LIVE = {
     board: () => <PartnerEngagements view="engagements" />,
   },
   '/offers': {
+    catalog: (user) => <ServiceCatalogPage user={user} embedded />,
     'perk-deals': (user) => <PerksPage user={user} embedded />,
   },
 };
@@ -176,12 +181,6 @@ const COPY = {
     },
   },
   '/offers': {
-    catalog: {
-      heading: 'The catalog lives at /services today',
-      what: 'Productised services with an engagement model and a price — the record lead scoring reads against.',
-      why: 'The live Services page is that catalog under a different name. Whether it moves here is part of the open question about retiring the legacy prefixes, so this zone links rather than forking a second catalog.',
-      links: [{ to: '/services', label: 'Open Services →' }],
-    },
     visibility: {
       heading: 'Surface attribution is not built yet',
       what: 'Which surfaces the firm appears on and what each produced — views, leads, engagements. Volume is not the ranking: a directory listing with thousands of views and no engagements reads worse than a referral with two leads and one.',
@@ -231,6 +230,14 @@ const ZONE_LINES = {
     board: 'Accepted work with its lifecycle actions and the invoice ledger beside it.',
   },
   '/offers': {
+    // This zone used to be a card reading "the catalog lives at /services
+    // today", declining to mount it on the grounds that doing so would fork a
+    // second catalog. Mounting the same component at a second route is not a
+    // fork — it is what Leads and Perk deals already do with /needs and
+    // /perks — and the card was standing in front of a page that did not
+    // work: both of its partner-facing tabs read a response shape the worker
+    // does not send, so the catalogue was permanently empty either way.
+    catalog: 'What the firm sells, at what price — the record lead scoring reads a match against.',
     'perk-deals': 'Deals that expire in public, with grants revoked when they do.',
   },
 };

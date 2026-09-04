@@ -1305,7 +1305,14 @@ export const api = {
   createServiceOffering: (data) => request('/services/offerings', { method: 'POST', body: JSON.stringify(data) }),
   updateServiceOffering: (id, data) => request(`/services/offerings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteServiceOffering: (id) => request(`/services/offerings/${id}`, { method: 'DELETE' }),
-  listPartnerOfferings: (partnerId) => request(`/services/partners/${partnerId}/offerings`),
+  // `listPartnerOfferings` is gone. It called GET /services/partners/:id/offerings,
+  // a route the worker has never served — it sat in the api-drift baseline as
+  // known-missing, and its one caller swallowed the 404 as an empty list, so the
+  // partner's own catalogue read "0 offerings" whatever they had published. The
+  // real read is `listServiceOfferings({ mine: 1 })`: services.ts scopes `?mine=1`
+  // on owner_user_id and includes inactive drafts, which is what an owner
+  // managing their own set needs. `partner_id` was never the right key — an
+  // offering is owned by a user, not by a partner org row.
   engageServiceOffering: (id, data) => request(`/services/offerings/${id}/engage`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Task #51 — Stripe Connect onboarding (partner-only)
