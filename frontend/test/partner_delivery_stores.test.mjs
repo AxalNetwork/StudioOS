@@ -160,11 +160,24 @@ test('consent is a state that can be withdrawn, not a flag that can vanish', () 
 });
 
 test('the migration numbers are free and in order', () => {
-  const nums = readdirSync(DIR).filter((f) => f.endsWith('.sql'))
-    .map((f) => Number(f.slice(0, 3))).filter(Number.isFinite);
+  const files = readdirSync(DIR).filter((f) => f.endsWith('.sql'));
+  const nums = files.map((f) => Number(f.slice(0, 3))).filter(Number.isFinite);
   for (const n of [208, 209]) {
     assert.equal(nums.filter((x) => x === n).length, 1,
       `two files numbered ${n} order by filename, which is not a decision anyone made`);
   }
-  assert.equal(Math.max(...nums), 209, 'these must be the newest migrations');
+  // THIS USED TO ASSERT `Math.max(...nums) === 209`, and that was a bad
+  // assertion however true it was when written: it said "these are the newest
+  // migrations", which stops being true the moment anyone adds one. Migration
+  // 210 is what expired it — a guard whose only failure mode is somebody doing
+  // the next correct thing is a speed bump, not a check.
+  //
+  // The durable half is what it was reaching for anyway. The runner orders by
+  // FILENAME, so a number that is not three digits sorts somewhere its author
+  // did not intend — `21_x.sql` runs before `208_x.sql`, and a file that
+  // depends on an earlier one then runs first and aborts the deploy.
+  for (const f of files) {
+    assert.match(f, /^\d{3}_/,
+      `${f}: the runner orders by filename, so every migration needs a 3-digit prefix`);
+  }
 });

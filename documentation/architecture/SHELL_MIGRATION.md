@@ -29,8 +29,8 @@ collapsed by this migration** unless product explicitly requests it.
 | --- | --- | --- |
 | Founder | yes (2026-09-02) | `Founder Workspaces Canvas.dc.html` + `Pages · Founder *` |
 | Investor / LP | yes (2026-09-02) | `Investor LP Canvas.dc.html` + `Pages · Investor *` |
-| Advisor | no | `Advisor Canvas.dc.html` + `Pages · Advisor *` |
-| Partner | no | `Partner Operator Canvas.dc.html` + `Pages · Partner *` |
+| Advisor | yes (2026-09-04) | `Advisor Canvas.dc.html` + `Pages · Advisor *` |
+| Partner | yes (2026-09-04) | `Partner Operator Canvas.dc.html` + `Pages · Partner *` |
 
 ---
 
@@ -218,15 +218,38 @@ Guard: `investor_workspaces.test.mjs` (I8).
 
 ---
 
-## Advisor and Partner (not migrated)
+## Advisor and Partner (migrated 2026-09-04)
 
-Advisor sidebar still points Practice at `/practice` but Expertise/legacy paths
-and Trust/Settings rows follow earlier product decisions documented in
-`sidebarConfig.js`. Partner shell uses `/needs` and `/partner/operations/*`
-legacy mounts inside workspace tabs.
+This section set two conditions for lifting the gate — sidebar rows pointing at
+bucket roots, and every `shellConfig.js` zone opening in `App.jsx`. **Both are
+met, so both roles joined `MIGRATED`.**
 
-Do not add these roles to `MIGRATED` until their sidebar rows point at bucket
-roots and every zone in `shellConfig.js` opens in `App.jsx`.
+What closed them, in order:
+
+- **The rows were retargeted.** Advisor's Practice, Expertise and Research
+  pointed at `/advisor/advisory/opportunities`, `/office-hours` and `/signals`;
+  Partner's Pipeline, Delivery, Offers and Research at `/needs`,
+  `/partner/operations/overview`, `/services` and `/signals`. All nine now point
+  at their bucket root and the legacy destinations moved into `match`, so a deep
+  link still lights the right row without the row landing outside its bucket
+  (`sidebarConfig.js:393-410` and `:458-481` carry the reasoning).
+- **The routes landed.** All 15 advisor zones (#430) and all 15 partner zones
+  (#431) are registered in `App.jsx`.
+
+The two rows this section used to describe as blockers were never route gaps.
+Advisor's Practice and Expertise pointed into `advisorPrivateWorkspace`, which
+sends an admin previewing the role to `/studio` — the rows opened no workspace
+at all for that viewer. Retargeting them fixed a bug, not just an IA mismatch.
+
+**Still deliberately absent, and not a migration gap:** no Trust row and no
+Practice/Company Settings row. Both are asked for by the canvases and both are
+decisions already made against them — Trust belongs to the user dropdown, and
+the pinned footer is the single entry point for settings. That constrains which
+rows exist, not where they point, so it never bore on `MIGRATED`.
+
+`frontend/test/workspace_shell_routes.test.mjs` now asserts all four shells
+against their own slice of `sidebarConfig.js`, on the roots and against the
+specific legacy targets each was pulled off.
 
 ---
 
