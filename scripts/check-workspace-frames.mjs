@@ -221,15 +221,6 @@ for (const role of ROLES) {
     else if (p.includes('/partner/pipeline/negotiations')) body = { items: [] };
     else if (p.includes('/partner/pipeline/retainers')) {
       body = { items: [], retainer_count: 0, mrr_cents: null, mrr_basis: null, mrr_note: null };
-    }
-    // #45 — the partner workspace's composite reads. Without these lines the
-    // generic stub is a BARE `[]`, so `r.items` is undefined and the zone
-    // renders whatever it does with no list — a state the real API never
-    // produces. Stubbing the real envelope means the frame check proves the
-    // EMPTY state paints, on purpose rather than by coincidence.
-    else if (p.includes('/partner/pipeline/negotiations')) body = { items: [] };
-    else if (p.includes('/partner/pipeline/retainers')) {
-      body = { items: [], retainer_count: 0, mrr_cents: null, mrr_basis: null, mrr_note: null };
     } else if (p.includes('/partner/offers/visibility')) {
       body = {
         items: [], engagement_total: 0, unattributed_count: 0, unattributed_note: null,
