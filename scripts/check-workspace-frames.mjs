@@ -39,8 +39,8 @@
  *     npm run build && node scripts/check-workspace-frames.mjs [role]
  */
 import http from 'node:http';
-import { readFileSync, existsSync, statSync } from 'node:fs';
-import { join, extname, dirname, resolve, sep } from 'node:path';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join, extname, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -68,40 +68,62 @@ if (!existsSync(join(DOCS, 'index.html'))) {
   process.exit(1);
 }
 
-const SHELL = join(DOCS, 'index.html');
-
 /**
- * A request path resolved strictly INSIDE docs/, or the SPA shell.
+ * Every file docs/ actually contains, walked once and keyed by the URL path
+ * that should serve it. The request never becomes a path — it becomes a Map
+ * key — so there is no path to traverse.
  *
- * The first version of this did `join(DOCS, decodeURIComponent(req.url))` and
- * read the result, which is a path traversal: `join` happily walks out of
- * docs/ on a `..`, and decoding first means `%2e%2e%2f` gets there too. CodeQL
- * flagged it five times and was right to. The server binds to 127.0.0.1 on an
- * ephemeral port and lives for one run, so nothing was reachable in practice —
- * but "not reachable today" is not the same as "not a traversal", and the
- * containment check costs one line.
+ * TWO GOES AT THIS, and the second is the one worth keeping. The first built
+ * `join(DOCS, decodeURIComponent(req.url))` and read it, which is a genuine
+ * traversal: `join` walks out of docs/ on a `..`, and decoding before joining
+ * lets `%2e%2e%2f` do the same. Reproduced before fixing —
+ * `/../../../../home/user/StudioOS/wrangler.toml` resolved to that file, and
+ * it exists.
  *
- * `resolve` is what does the work: it collapses `..` BEFORE the comparison, so
- * the prefix test below is a decision about the final path rather than about
- * the text of the request. The `sep` matters too — without it `/docs-evil`
- * would pass a bare `startsWith(DOCS)`.
+ * The second added `resolve` plus a containment check, which is correct at
+ * runtime — the traversals were provably contained — and CodeQL still flagged
+ * it, because its dataflow does not recognise that shape as a sanitizer and
+ * the tainted value still reached `existsSync`, `statSync` and `join`.
+ *
+ * Arguing with the scanner there would have been the wrong move. An allowlist
+ * is simply better: the only paths that can ever be opened are ones this
+ * process found on disk itself, a missing key falls back to the SPA shell
+ * exactly as an unknown route did, and the property is obvious to a reader
+ * rather than resting on `resolve` semantics. It costs one walk of ~1200
+ * files at startup, which is nothing beside launching a browser.
  */
-function resolveInsideDocs(rawUrl) {
-  let decoded;
-  try { decoded = decodeURIComponent(rawUrl.split('?')[0]); } catch { return SHELL; }
-  const candidate = resolve(DOCS, `.${decoded.startsWith('/') ? decoded : `/${decoded}`}`);
-  if (candidate !== DOCS && !candidate.startsWith(DOCS + sep)) return SHELL;
-  if (!existsSync(candidate)) return SHELL;
-  if (statSync(candidate).isDirectory()) {
-    const index = join(candidate, 'index.html');
-    return existsSync(index) ? index : SHELL;
-  }
-  return candidate;
+function indexDocs() {
+  const files = new Map();
+  const walk = (dir, prefix) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(join(dir, entry.name), `${prefix}${entry.name}/`);
+      else files.set(`${prefix}${entry.name}`, join(dir, entry.name));
+    }
+  };
+  walk(DOCS, '/');
+  return files;
+}
+
+const ASSETS = indexDocs();
+const SHELL = ASSETS.get('/index.html');
+
+/** The file to serve for a request, by lookup — never by path construction. */
+function fileFor(rawUrl) {
+  let requested;
+  try { requested = decodeURIComponent(rawUrl.split('?')[0]); } catch { return SHELL; }
+  const direct = ASSETS.get(requested);
+  if (direct) return direct;
+  // A directory request serves its index.html, which is how the prerendered
+  // routes (/login/, /pricing/) are laid out.
+  const asDir = ASSETS.get(`${requested.replace(/\/$/, '')}/index.html`);
+  // Everything else is a client route: the SPA shell answers it, exactly as
+  // the Worker's assets binding does with not_found_handling.
+  return asDir || SHELL;
 }
 
 // docs/ with an SPA fallback, which is what the Worker's assets binding does.
 const server = http.createServer((req, res) => {
-  const file = resolveInsideDocs(req.url);
+  const file = fileFor(req.url);
   res.writeHead(200, { 'content-type': MIME[extname(file)] || 'application/octet-stream' });
   res.end(readFileSync(file));
 });
