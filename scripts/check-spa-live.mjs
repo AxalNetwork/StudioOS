@@ -155,6 +155,35 @@ function routesForHost(base) {
     { path: '/admin/licences', shell: true },
     { path: '/portfolio/health', shell: true },
     { path: '/spinout-lab', shell: true },
+    // The nine partner workspace zones that stopped being no-store cards on
+    // 2026-09-04 (#431, migrations 208/209). They are checked here because
+    // they are the newest deep links in the product and every one of them is
+    // a segment the apex route table has to cover — the failure this script
+    // exists for is a deep link answering the JSON 404 or a stale shell, and
+    // nine new ones landed at once.
+    //
+    // WHAT THIS PROVES AND WHAT IT DOES NOT. It proves each path resolves to
+    // the shell with its matching assets and the static security headers. It
+    // does NOT prove the zone renders data: every one of these reads
+    // `/api/partner/*` behind `requireAuth`, so an unauthenticated fetch gets
+    // the shell either way. Rendering against real rows needs a signed-in
+    // partner session, which no CI check here has.
+    { path: '/pipeline/negotiations', shell: true },
+    { path: '/pipeline/retainers', shell: true },
+    { path: '/delivery/health', shell: true },
+    { path: '/delivery/deliverables', shell: true },
+    { path: '/delivery/capacity', shell: true },
+    { path: '/delivery/status-reports', shell: true },
+    { path: '/offers/visibility', shell: true },
+    { path: '/offers/proof', shell: true },
+    { path: '/offers/audience-fit', shell: true },
+    // The client's side of a partner proof claim — a PUBLIC route, reached by
+    // someone with no account, so a broken shell here is a dead end for a
+    // person who cannot even log in to work around it. The token is arbitrary
+    // on purpose: the page renders its ask before any token is validated, and
+    // what is under test is that the two-segment path reaches the SPA rather
+    // than being shadowed by `/attest/:token` one segment up.
+    { path: '/attest/partner/live-smoke-not-a-real-token', shell: true },
   ];
   // Apex `/` is checked leniently (`shell: false`): it was a separate
   // marketing page (GitHub Pages, then Cloudflare Pages) until 2026-09-01.
