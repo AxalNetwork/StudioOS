@@ -130,9 +130,34 @@ test('every partner zone body reads a list defensively', () => {
   // defensively costs nothing and makes the frame check's empty state real.
   for (const file of zoneBodies()) {
     const src = codeOnly(read(file));
-    if (!/\.items\b/.test(src)) continue;
-    assert.match(src, /Array\.isArray\(\s*(?:r|d|res|resp)\??\.?items\s*\)|Array\.isArray\(\s*d\?\.items\s*\)/,
-      `${file} reads \`.items\` without an Array.isArray guard`);
+    // EVERY `.items` READ IS CHECKED, not just the first, and the variable can
+    // be called anything.
+    //
+    // The first version of this rule matched `Array.isArray(` against a fixed
+    // list of variable names — r, d, res, resp — and asserted the file
+    // contained ONE such call. Both halves were wrong: a body that read
+    // `ppl?.items` guarded correctly failed because the name was not on the
+    // list, and a body with three reads passed on the strength of guarding one.
+    // The list was a stand-in for a real check.
+    // Two idioms count, and both are real guards: an `Array.isArray(x?.items)`
+    // test anywhere in the file for that name, or an array fallback at the read
+    // itself (`x.items || []`). The second is what a body does when the value
+    // is its OWN state, already normalised on the way in — demanding
+    // `Array.isArray` there would be asking a page to re-check something it
+    // guaranteed at the fetch, and it made this rule fail a correct file.
+    // What neither form permits is the thing that actually crashes:
+    // `r.items.map(…)` on a response nobody checked.
+    const guarded = new Set(
+      [...src.matchAll(/Array\.isArray\(\s*([A-Za-z_$][\w$]*)\s*\??\.\s*items\s*\)/g)]
+        .map((m) => m[1]),
+    );
+    for (const m of src.matchAll(/([A-Za-z_$][\w$]*)\s*\??\.\s*items\b(\s*(?:\|\||\?\?)\s*\[\s*\])?/g)) {
+      if (guarded.has(m[1]) || m[2]) continue;
+      assert.fail(
+        `${file} reads \`${m[1]}.items\` with neither an \`Array.isArray(${m[1]}?.items)\` `
+        + `guard nor an \`|| []\` fallback. check-workspace-frames stubs a bare [] for `
+        + 'these paths, so an unguarded read crashes on a shape the real API never sends.');
+    }
   }
 });
 

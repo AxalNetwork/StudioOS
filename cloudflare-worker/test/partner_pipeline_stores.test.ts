@@ -601,7 +601,15 @@ test('no route writes a value it computes', () => {
   // second source of truth the schema was shaped to prevent, and the schema
   // test would still pass.
   const src = readFileSync(resolve(HERE, '../src/routes/partner_pipeline.ts'), 'utf8');
-  const writes = [...src.matchAll(/(?:INSERT INTO|UPDATE)\s+\w+[\s\S]*?(?=`)/g)].join('\n');
+  // Every SQL string literal, then the write ones — not a forward scan from
+  // `INSERT INTO` to the next backtick. That form only worked for
+  // template-literal SQL: a single-quoted UPDATE ran on to whatever backtick
+  // came next and swallowed unrelated code. It happened to be harmless in this
+  // file and was not in `partner_delivery_routes.test.ts`, where it reported a
+  // DTO field as a written column.
+  const literals = [...src.matchAll(/`(?:[^`\\]|\\.)*`|'(?:[^'\\\n]|\\.)*'/g)].map((m) => m[0]);
+  const writes = literals.filter((x) => /\b(?:INSERT INTO|UPDATE)\s+\w/.test(x)).join('\n');
+  assert.ok(writes.length > 0, 'no write statements were found — the scan is broken');
   // Word-split and set membership rather than a regex built per name. Same
   // reasoning as `frontend/test/_zoneGuards.mjs`: nothing here needs a pattern
   // assembled at runtime, and one that is assembled gets reported as regex

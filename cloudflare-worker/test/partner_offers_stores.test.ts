@@ -585,7 +585,15 @@ test('an anonymous caller can only reach the consent response', async () => {
 
 test('no route writes a value it computes', () => {
   const src = readFileSync(resolve(HERE, '../src/routes/partner_offers.ts'), 'utf8');
-  const writes = [...src.matchAll(/(?:INSERT INTO|UPDATE)\s+\w+[\s\S]*?(?=`)/g)].join('\n');
+  // Every SQL string literal, then the write ones — not a forward scan from
+  // `INSERT INTO` to the next backtick. That form only worked for
+  // template-literal SQL: a single-quoted UPDATE ran on to whatever backtick
+  // came next and swallowed unrelated code. It happened to be harmless in this
+  // file and was not in `partner_delivery_routes.test.ts`, where it reported a
+  // DTO field as a written column.
+  const literals = [...src.matchAll(/`(?:[^`\\]|\\.)*`|'(?:[^'\\\n]|\\.)*'/g)].map((m) => m[0]);
+  const writes = literals.filter((x) => /\b(?:INSERT INTO|UPDATE)\s+\w/.test(x)).join('\n');
+  assert.ok(writes.length > 0, 'no write statements were found — the scan is broken');
   const named = new Set(writes.split(/[^A-Za-z0-9_]+/).filter(Boolean));
   // `is_published` and `status` are read-time derivations over the consent
   // rows. A column for either would be a second source of truth that disagrees

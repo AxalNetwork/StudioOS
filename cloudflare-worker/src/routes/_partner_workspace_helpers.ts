@@ -228,6 +228,18 @@ export interface HealthInputs {
   openBlockers: Array<{ side: string }>;
   unopenedDeliverables: number;
   utilisation: Utilisation;
+  /**
+   * Blockers that were raised and cleared. They do NOT affect the rating — a
+   * blocker that is gone says nothing about health now — but they DO count as
+   * something having been recorded, which is a different question and the one
+   * `hasSignal` below asks.
+   *
+   * Without this the two record types were treated inconsistently: a COMPLETED
+   * milestone counted as a signal (so the engagement was rated) while a CLEARED
+   * blocker did not (so it fell back to "nothing recorded"), which is false —
+   * something was recorded, and somebody dealt with it.
+   */
+  clearedBlockers?: number;
 }
 
 export interface Health {
@@ -260,15 +272,20 @@ export function healthFor(i: HealthInputs): Health {
   const clientBlockers = i.openBlockers.filter((b) => b.side === 'client').length;
   const ourBlockers = i.openBlockers.length - clientBlockers;
 
+  // "Has anything ever been recorded here" — NOT "is anything currently
+  // wrong". A completed milestone and a cleared blocker both count: somebody
+  // is running this engagement, and the honest answer is a rating rather than
+  // the not-rated card, which means "we have nothing at all to go on".
   const hasSignal = i.milestones.length > 0
     || i.openBlockers.length > 0
+    || (i.clearedBlockers ?? 0) > 0
     || i.unopenedDeliverables > 0
     || i.utilisation.utilisation_pct !== null;
 
   if (!hasSignal) {
     return {
       health: null,
-      health_note: 'Nothing is recorded against this engagement yet — no milestone, blocker, deliverable or retainer. That is silence rather than good news, so it is not rated.',
+      health_note: 'Nothing is recorded against this engagement yet — no milestone, blocker, deliverable or retainer. Silence is not good news, so it is not rated.',
       health_reasons: [],
     };
   }

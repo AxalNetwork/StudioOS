@@ -197,6 +197,7 @@ import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 // below belongs to deal voting rather than to a partner's deal pipeline.
 import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
+import partnerDelivery from './routes/partner_delivery';
 import insightsRoutes from './routes/insights';
 // Signals — founder decision-engine over public company data (not a trading UI).
 import signalsRoutes from './routes/signals';
@@ -974,6 +975,11 @@ app.route('/api/partner/pipeline', partnerPipeline);
 // the proof it can show (gated on a consent only the client can give), and the
 // fit rules a pass quotes instead of going silent.
 app.route('/api/partner/offers', partnerOffers);
+// #45 — what the firm records about work in flight: milestones, blockers,
+// what was shipped, who holds a seat inside a client's systems, and the
+// recurring update. Health is derived over five of those tables at read time
+// and is never stored.
+app.route('/api/partner/delivery', partnerDelivery);
 app.route('/api/insights', insightsRoutes);
 // Signals — founder-actionable opportunity engine over public-market evidence.
 app.route('/api/signals', signalsRoutes);

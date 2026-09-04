@@ -40,6 +40,14 @@ const PartnerRetainers = lazy(() => import('../../pages/partner/pipeline/Retaine
 const PartnerVisibility = lazy(() => import('../../pages/partner/offers/VisibilityZone'));
 const PartnerProof = lazy(() => import('../../pages/partner/offers/ProofZone'));
 const PartnerAudienceFit = lazy(() => import('../../pages/partner/offers/AudienceFitZone'));
+// #45 — the last four. Health is the one that reads across the others: it
+// derives a rating over milestones, blockers, deliverables and the retainer
+// record, and returns null rather than "on track" when none of them carries
+// anything.
+const PartnerHealth = lazy(() => import('../../pages/partner/delivery/HealthZone'));
+const PartnerDeliverables = lazy(() => import('../../pages/partner/delivery/DeliverablesZone'));
+const PartnerCapacity = lazy(() => import('../../pages/partner/delivery/CapacityZone'));
+const PartnerStatusReports = lazy(() => import('../../pages/partner/delivery/StatusReportsZone'));
 
 /**
  * Pipeline, Delivery and Offers — the Partner shell's three owned buckets.
@@ -158,6 +166,10 @@ const LIVE = {
   },
   '/delivery': {
     board: () => <PartnerEngagements view="engagements" />,
+    health: () => <PartnerHealth />,
+    deliverables: () => <PartnerDeliverables />,
+    capacity: () => <PartnerCapacity />,
+    'status-reports': () => <PartnerStatusReports />,
   },
   '/offers': {
     catalog: (user) => <ServiceCatalogPage user={user} embedded />,
@@ -177,46 +189,40 @@ const LIVE = {
 // DELETED rather than reworded. A no-store card left standing in front of a
 // store is the same false claim as one that overstates; it merely fails in the
 // direction that looks humble.
-const COPY = {
-  '/delivery': {
-    health: {
-      heading: 'Health has nothing to score',
-      what: 'Engagement health across the book with the at-risk row first — drift against milestones, an embedded seat burning its cap, a client who has gone quiet.',
-      why: 'Each of those reads a column that does not exist. `engagements` records a status, a price and the dates work was delivered, cancelled or invoiced — no milestones, no hours against a cap, no last client contact. A health pill computed from status alone would rate every live engagement identically and call it a judgement.',
-      links: [{ to: '/delivery/board', label: 'Engagement board →' }],
-    },
-    deliverables: {
-      heading: 'The shipped log is not built yet',
-      what: 'What was shipped, when, and whether the client opened it. A deliverable sent and never opened is the firm’s most expensive state — invoiced, unreviewed, and blocking the next milestone.',
-      why: 'Nothing records acknowledgment. The workspace knows an engagement’s progress but not whether anything sent against it was read.',
-      links: [{ to: '/delivery/board', label: 'Engagement board →' }],
-    },
-    capacity: {
-      heading: 'Capacity has no seat register to read',
-      what: 'People rather than projects: who is committed to what, and where the firm is over-committed.',
-      why: 'The consequential row is an over-committed person who also holds a granted seat inside a client’s systems — a trust exposure, not only a throughput one, because the grant assumes attention the calendar no longer has. There is no seat register and no hours record to build it from.',
-      links: [{ to: '/delivery/board', label: 'Engagement board →' }],
-    },
-    'status-reports': {
-      heading: 'Status reports are not a surface yet',
-      what: 'The recurring client-facing update — shipped, next, blocked — drafted with assistance and sent by a person.',
-      why: 'It would read the deliverables log and the engagement’s blockers, neither of which is recorded. Where the blocker is on the client’s side the report has to say so plainly without treating it as an excuse, and that is a copy decision as much as a data one.',
-    },
-  },
-  // AND NOTHING UNDER `/offers` ANY MORE. The three cards that stood here said
-  // "engagements do not record the surface that sourced them", "nothing stores
-  // that consent" and "no fit rules are stored". Migration 209 added
-  // `partner_surfaces` + `engagement_sources`, `partner_proof_items` +
-  // `partner_proof_consents`, and `partner_fit_rules` — one store per card, in
-  // that order — so all three were deleted rather than reworded, on the same
-  // rule as `/pipeline`: a no-store card standing in front of a store is as
-  // false as one that overstates.
-  //
-  // The consent card carried `seam: true` — the "From the client" chip — and
-  // the seam it marked is now a real boundary rather than a note about one:
-  // `/attest/partner/:token` is where the client answers, and no firm-side
-  // route can record a yes.
-};
+/**
+ * EMPTY, AND THAT IS THE POINT OF THIS PASS.
+ *
+ * Nine zones shipped a `NoStoreYet` card, and every one of those cards was TRUE
+ * when it was written. Migrations 208 and 209 built the fifteen tables they
+ * named — a store per card — and the routes and bodies now read them, so all
+ * nine cards were DELETED rather than reworded. A no-store card standing in
+ * front of a store is as false as one that overstates; it merely fails in the
+ * direction that looks humble.
+ *
+ * The four `/delivery` cards said: "no milestones, no hours against a cap, no
+ * last client contact"; "nothing records acknowledgment"; "there is no seat
+ * register and no hours record"; "it would read the deliverables log and the
+ * engagement's blockers, neither of which is recorded". 208 added
+ * `engagement_milestones`, `engagement_deliverables`, `engagement_seats`,
+ * `engagement_hours`, `engagement_blockers` and `engagement_status_reports`.
+ *
+ * TWO OF THOSE SENTENCES WERE NOT FULLY ANSWERED, and the zones say so on
+ * themselves rather than a card saying it for them:
+ *
+ *   · "an embedded seat burning its cap" — nothing records the firm's CAP.
+ *     Capacity shows real hours and real seats and refuses to mark anyone over,
+ *     because a threshold nobody set is not a finding.
+ *   · "whether the client opened it" — `opened_at` is the CLIENT'S to set and
+ *     no surface in this product lets them. Deliverables shows every sent item
+ *     as unopened and says the absence is ours, not theirs.
+ *
+ * "A client who has gone quiet" has no store at all and Health states it.
+ *
+ * The structure stays rather than being deleted with its last entry: it is what
+ * `gapsFor` and `unbuiltFrom` read, and the next zone added to this shell
+ * without a store belongs here.
+ */
+const COPY = {};
 
 /**
  * One line per zone, for the overview a bucket root renders — but only for the
@@ -252,6 +258,14 @@ const ZONE_LINES = {
   },
   '/delivery': {
     board: 'Accepted work with its lifecycle actions and the invoice ledger beside it.',
+    // "Where the firm is over-committed" and "shipped and acknowledged" were
+    // both banned phrases, and both stay unsaid — not because the stores are
+    // missing now, but because the firm's cap and the client's acknowledgment
+    // still are. These lines describe what the zones actually hold.
+    health: 'A rating read across milestones, blockers, deliverables and the retainer record — with the unrated ones counted rather than called healthy.',
+    deliverables: 'What was shipped and when, with the ones sent and not marked opened named as unknown rather than as ignored.',
+    capacity: 'Who holds a seat inside a client’s systems and what they logged this period.',
+    'status-reports': 'The recurring client update, composed from the record and sent by a person — with each blocker carrying whose side it is on.',
   },
   '/offers': {
     // This zone used to be a card reading "the catalog lives at /services
@@ -372,10 +386,15 @@ export default function PartnerBucketRoutes() {
     '/delivery': {
       workspace: 'Delivery',
       stance: 'Manual delivery record',
-      note: 'The board reads accepted work and the invoice ledger beside it. Nothing here messages a client, marks a milestone, or moves an engagement between states on its own.',
+      note: 'Every rating, milestone, blocker, seat and hour here is one a person entered, and health is read back from them at the moment you load the page. Nothing messages a client, marks a milestone, or moves an engagement between states on its own.',
+      // BOTH TUPLES REWRITTEN, because both described absences 208 filled.
+      // Health IS now rated — from stored milestones, blockers, deliverables
+      // and retainer usage — and a report IS composed from the record. What is
+      // still unavailable is narrower and truer: no words are written for you,
+      // and nothing is delivered to anyone.
       unavailable: [
-        ['Health and risk scoring', 'No engagement carries a milestone, an hours cap or a last-contact date, so nothing here can rate one at risk. A pill computed from status alone would rate every live engagement the same and call it a judgement.'],
-        ['Status reports', 'No recurring client update is drafted or sent from this bucket. What is shipped and what is blocked are not recorded, so there is nothing to draft one from.'],
+        ['Drafted words', 'A status report is composed from your own record — what was shipped, what is open, what is blocked — and every sentence in it is one you write. Nothing here drafts, rewrites or summarises on your behalf.'],
+        ['Delivery of any kind', 'Marking a report sent records that YOU sent it. No email leaves this product, no client is notified, and no client-side surface exists — which is also why every deliverable reads unopened.'],
       ],
     },
     '/offers': {

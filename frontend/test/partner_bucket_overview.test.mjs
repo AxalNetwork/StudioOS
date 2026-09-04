@@ -113,9 +113,25 @@ const partnerCode = codeOnly(bucketRoutes);
 function blockOf(code, name) {
   const start = code.indexOf(`const ${name} = {`);
   assert.notEqual(start, -1, `${name} is gone`);
-  const end = code.indexOf('\n};', start);
-  assert.notEqual(end, -1, `${name} is not a closed object literal`);
-  return code.slice(start, end);
+  // BRACE-BALANCED, not `indexOf('\n};')`.
+  //
+  // The line-based form worked until `COPY` became `const COPY = {};` — every
+  // zone having a store is the whole point of #45 — at which point there was no
+  // `\n};` to find and the scan ran on into the NEXT map, so `COPY` reported
+  // `ZONE_LINES`'s slugs and the overlap test failed on a file that was
+  // correct. An empty map is a legitimate state and the parser has to survive
+  // it, or the guard fails exactly when the thing it guards has been fixed.
+  const open = code.indexOf('{', start);
+  let depth = 0;
+  for (let i = open; i < code.length; i += 1) {
+    if (code[i] === '{') depth += 1;
+    else if (code[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return code.slice(start, i + 1);
+    }
+  }
+  assert.fail(`${name} is not a closed object literal`);
+  return '';
 }
 
 /**

@@ -3080,6 +3080,91 @@ export const api = {
   deletePartnerFitRule: (id) =>
     request(`/partner/offers/fit-rules/${id}`, { method: 'DELETE' }),
 
+  // ---------- Delivery: health, deliverables, capacity, reports (208) ----------
+  // `health` on each item is DERIVED over five tables at read time and is null
+  // when nothing is recorded — never 'on_track'. There is no method to set it,
+  // because green-because-empty is the failure the zone was written against.
+  getPartnerDeliveryHealth: () => request('/partner/delivery/health'),
+
+  listPartnerMilestones: (engagementId) =>
+    request(`/partner/delivery/engagements/${engagementId}/milestones`),
+  createPartnerMilestone: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/milestones`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerMilestone: (id, data) =>
+    request(`/partner/delivery/milestones/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerMilestone: (id) =>
+    request(`/partner/delivery/milestones/${id}`, { method: 'DELETE' }),
+
+  // `side` is what lets a report name a client-side blocker plainly. A blockers
+  // list with no side would make every delay the firm's.
+  listPartnerBlockers: (engagementId) =>
+    request(`/partner/delivery/engagements/${engagementId}/blockers`),
+  createPartnerBlocker: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/blockers`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerBlocker: (id, data) =>
+    request(`/partner/delivery/blockers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerBlocker: (id) =>
+    request(`/partner/delivery/blockers/${id}`, { method: 'DELETE' }),
+
+  // NOTE WHAT IS ABSENT: nothing here sets `opened_at` or `signed_off_at`.
+  // Those are the client's to set — only the founder side can truthfully say a
+  // thing was read — and the worker ignores them in any body. On this build
+  // every sent deliverable therefore reads unopened, and the read says why.
+  listPartnerDeliverables: () => request('/partner/delivery/deliverables'),
+  createPartnerDeliverable: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/deliverables`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerDeliverable: (id, data) =>
+    request(`/partner/delivery/deliverables/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deletePartnerDeliverable: (id) =>
+    request(`/partner/delivery/deliverables/${id}`, { method: 'DELETE' }),
+
+  // Returns `people`, `seats`, and `cap_hours: null` with the reason — nothing
+  // in this product records the firm's capacity cap, so nothing is "over" it.
+  getPartnerCapacity: (period) =>
+    request(`/partner/delivery/capacity${period ? `?period=${encodeURIComponent(period)}` : ''}`),
+  listPartnerPeople: () => request('/partner/delivery/people'),
+  grantPartnerSeat: (engagementId, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/seats`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  updatePartnerSeat: (id, data) =>
+    request(`/partner/delivery/seats/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // Revoking is a state, not a delete: a struck-through seat stays on the page
+  // rather than the fact that access once existed silently disappearing.
+  revokePartnerSeat: (id) =>
+    request(`/partner/delivery/seats/${id}/revoke`, { method: 'POST' }),
+  savePartnerHours: (engagementId, personId, period, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  deletePartnerHours: (engagementId, personId, period) =>
+    request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
+      method: 'DELETE',
+    }),
+
+  listPartnerStatusReports: () => request('/partner/delivery/status-reports'),
+  // Composes from the engagement's own rows. `blocked` is read at compose time
+  // and never copied into the report row — a prose copy would go stale the
+  // moment a blocker cleared.
+  getPartnerReportDraft: (engagementId, period) =>
+    request(`/partner/delivery/engagements/${engagementId}/report-draft/${period}`),
+  savePartnerStatusReport: (engagementId, period, data) =>
+    request(`/partner/delivery/engagements/${engagementId}/status-reports/${period}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  // Records that a PERSON sent it. Nothing here delivers anything — no email,
+  // no notification, no client-side surface exists.
+  sendPartnerStatusReport: (id) =>
+    request(`/partner/delivery/status-reports/${id}/send`, { method: 'POST' }),
+  deletePartnerStatusReport: (id) =>
+    request(`/partner/delivery/status-reports/${id}`, { method: 'DELETE' }),
+
   listMyAdvisorCohorts: () => request('/advisors/me/cohort'),
   listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),
   listMyAdvisorCohortWeeks: (cycleId) => request(`/advisors/me/cohort/${cycleId}/weeks`),
