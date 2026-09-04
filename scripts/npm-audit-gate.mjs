@@ -26,9 +26,16 @@
  *
  * WHAT IT DOES:
  *   · retries only a TRANSPORT failure (a registry error, not a finding),
- *     with backoff, because a 503 from the audit endpoint is usually a blip;
- *   · bounds each attempt with `--fetch-timeout` so a hang cannot eat the
- *     job's ten minutes before anyone learns why;
+ *     with backoff, because a failure from the audit endpoint is usually
+ *     transient — and this repository's frontend tree, at 325 packages, is
+ *     chronically marginal against it. Measured, not assumed: on the run that
+ *     prompted the retry count going up, `audit (worker npm)` answered in 75s
+ *     while `audit (frontend npm)` timed out four times against the same
+ *     endpoint in the same minutes. It is not an outage; it is a large payload
+ *     the endpoint frequently fails to serve in time;
+ *   · bounds each attempt with `--fetch-timeout` AND `--fetch-retries=0`, so
+ *     the bound is real rather than tripled by npm's own retrying, and a hang
+ *     cannot eat the job's ten minutes before anyone learns why;
  *   · on a real finding, prints the advisories at or above the threshold
  *     rather than only the exit code.
  *
@@ -39,10 +46,26 @@ import { spawnSync } from 'node:child_process';
 
 const ARGS = process.argv.slice(2);
 const LEVEL = (ARGS.find((a) => a.startsWith('--level=')) || '--level=critical').split('=')[1];
-const ATTEMPTS = Number((ARGS.find((a) => a.startsWith('--attempts=')) || '--attempts=4').split('=')[1]);
-/** Per-attempt registry timeout. Four attempts plus backoff stays inside the job's 10 minutes. */
-const FETCH_TIMEOUT_MS = 60_000;
-const BACKOFF_MS = [5_000, 15_000, 30_000];
+const ATTEMPTS = Number((ARGS.find((a) => a.startsWith('--attempts=')) || '--attempts=5').split('=')[1]);
+/**
+ * Per-attempt registry timeout — and it is only honest alongside
+ * `--fetch-retries=0` below.
+ *
+ * The first version of this script set `--fetch-timeout=60000` and assumed
+ * that bounded one attempt at a minute. It did not: npm retries a failed
+ * request internally (`--fetch-retries`, default 2), so one `npm audit`
+ * invocation was up to THREE 60s calls. The CI log shows it exactly — every
+ * timed-out attempt took ~120s, not 60. Two retry policies were nested inside
+ * each other, and the outer one's budget was computed against the inner one's
+ * being absent.
+ *
+ * So npm's own retrying is turned off and the backoff here is the only retry
+ * policy. Five genuinely-bounded attempts plus backoff is 5×90 + 65 = 515s,
+ * inside the job's 10 minutes with room to spare — and it is more shots at a
+ * flaky endpoint than the old four, which in practice were fewer.
+ */
+const FETCH_TIMEOUT_MS = 90_000;
+const BACKOFF_MS = [5_000, 10_000, 20_000, 30_000];
 
 /** Severities at or above the threshold, in npm's own order. */
 const ORDER = ['info', 'low', 'moderate', 'high', 'critical'];
@@ -51,7 +74,13 @@ const AT_OR_ABOVE = ORDER.slice(ORDER.indexOf(LEVEL));
 function runAudit() {
   return spawnSync(
     'npm',
-    ['audit', '--omit=dev', `--audit-level=${LEVEL}`, '--json', `--fetch-timeout=${FETCH_TIMEOUT_MS}`],
+    [
+      'audit', '--omit=dev', `--audit-level=${LEVEL}`, '--json',
+      `--fetch-timeout=${FETCH_TIMEOUT_MS}`,
+      // See FETCH_TIMEOUT_MS: without this, npm retries inside the call and
+      // the bound above silently becomes three times what it says.
+      '--fetch-retries=0',
+    ],
     { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
   );
 }

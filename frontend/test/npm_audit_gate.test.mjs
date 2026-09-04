@@ -86,14 +86,34 @@ test('only a transport failure is retried — a real finding is reported at once
     'an audit that produced a vulnerability table RAN, whatever npm exited with');
 });
 
-test('each attempt is bounded, so a hang cannot eat the job before anyone learns why', () => {
+test('each attempt is bounded FOR REAL — npm must not retry inside the bound', () => {
   assert.match(GATE, /--fetch-timeout=\$\{FETCH_TIMEOUT_MS\}/);
-  assert.match(GATE, /const FETCH_TIMEOUT_MS = 60_000;/);
-  // Four bounded attempts plus backoff must still fit the job's timeout.
-  const budget = 4 * 60 + (5 + 15 + 30);
+  // The half that was missing first time round, and the CI log proved it: npm
+  // retries a failed request internally (`--fetch-retries`, default 2), so a
+  // 60s `--fetch-timeout` bounded one HTTP call and not one attempt. Every
+  // timed-out attempt took ~120s against a bound that said 60. Two nested
+  // retry policies, with the outer one's budget computed as if the inner did
+  // not exist.
+  assert.match(GATE, /'--fetch-retries=0'/,
+    "without this the timeout below is silently tripled and the budget maths is wrong");
+
+  // Every bounded attempt plus its backoff must still fit the job's timeout.
+  const perAttempt = Number(GATE.match(/const FETCH_TIMEOUT_MS = ([\d_]+);/)?.[1].replace(/_/g, '') || 0) / 1000;
+  const attempts = Number(GATE.match(/'--attempts=(\d+)'/)?.[1] || 0);
+  const backoff = (GATE.match(/const BACKOFF_MS = \[([^\]]+)\]/)?.[1] || '')
+    .split(',').map((n) => Number(n.replace(/_/g, '').trim()) / 1000).reduce((a, b) => a + b, 0);
+  assert.ok(perAttempt > 0 && attempts > 0, 'could not read the gate\'s own budget');
+  const budget = attempts * perAttempt + backoff;
   const jobTimeout = Number(CI.match(/timeout-minutes: (\d+)\n\s+defaults:/)?.[1] || 0) * 60;
   assert.ok(jobTimeout >= budget,
     `the audit job's timeout (${jobTimeout}s) must cover the gate's worst case (${budget}s)`);
+  // One backoff per GAP between attempts. Fewer and the last attempts fire
+  // back to back against an endpoint that has just failed, which is the case
+  // the backoff exists for; the budget above is computed from this list, so a
+  // mismatch would also make that sum wrong.
+  const gaps = (GATE.match(/const BACKOFF_MS = \[([^\]]+)\]/)?.[1] || '').split(',').length;
+  assert.equal(gaps, attempts - 1,
+    `${attempts} attempts need ${attempts - 1} backoff intervals, found ${gaps}`);
 });
 
 test('the gate is listed with the other guards', () => {
