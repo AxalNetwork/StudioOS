@@ -37,6 +37,12 @@ function emptyInterview() {
     // must stay null end-to-end.
     validation_rating: null,
     validation_comment: '',
+    // Migration 161 / 211. All three start as NOT RECORDED. `icp_fit` has been
+    // a column since 161 with nothing on this form writing it; `quote_consent`
+    // is three-state on purpose — null is "never asked", not "no".
+    icp_fit: null,
+    quote_consent: null,
+    interviewee_company: '',
   };
 }
 
@@ -645,6 +651,37 @@ function InterviewModal({ value, onChange, onSave, onClose, suggestions = [] }) 
             </Field>
             <Field label="Date">
               <input type="date" value={value.interview_date} onChange={(e) => onChange({ ...value, interview_date: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
+            </Field>
+            <Field label="Company">
+              <input value={value.interviewee_company || ''} onChange={(e) => onChange({ ...value, interviewee_company: e.target.value })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
+            </Field>
+            {/* THE TWO FIELDS THE VALIDATE BOARD COUNTS ON. Each has a
+                "not recorded" option that is the default and is NOT the same
+                as the negative answer: an interview with no fit recorded
+                cannot count for or against a claim, and the board says so
+                rather than counting it as "not our customer". */}
+            <Field label="ICP fit">
+              <select
+                value={value.icp_fit ?? ''}
+                onChange={(e) => onChange({ ...value, icp_fit: e.target.value || null })}
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700"
+              >
+                <option value="">Not recorded</option>
+                <option value="strong">Strong — this is who we build for</option>
+                <option value="partial">Partial — adjacent to our customer</option>
+                <option value="none">Not ICP</option>
+              </select>
+            </Field>
+            <Field label="Consent to be quoted">
+              <select
+                value={value.quote_consent == null ? '' : (value.quote_consent ? 'yes' : 'no')}
+                onChange={(e) => onChange({ ...value, quote_consent: e.target.value === '' ? null : e.target.value === 'yes' })}
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700"
+              >
+                <option value="">Not asked</option>
+                <option value="yes">Yes — may be quoted</option>
+                <option value="no">No — keep private</option>
+              </select>
             </Field>
             <Field label="Pain points (comma-separated)">
               <input value={(value.pains || []).join(', ')} onChange={(e) => onChange({ ...value, pains: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
