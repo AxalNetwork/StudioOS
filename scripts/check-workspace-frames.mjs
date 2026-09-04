@@ -57,7 +57,26 @@ const EXECUTABLE = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome']
   .find((p) => existsSync(p));
 
 const { allZoneRoutes, bucketsFor } = await import(join(ROOT, 'frontend/src/workspaces/shellConfig.js'));
-const ROLES = process.argv[2] ? [process.argv[2]] : ['founder', 'investor', 'advisor', 'partner'];
+const ARGS = process.argv.slice(2);
+
+/**
+ * `--fail-reads` answers a different question from the default run, and it is
+ * the question this repository cares about most.
+ *
+ * The standing rule is that a failed read renders as a STATED failure — never
+ * as emptiness, never as a skeleton that never resolves. "No records found" and
+ * "we could not read your records" are different claims, and only one of them
+ * is true when the server returned a 500. Until now that rule was only ever
+ * asserted by reading source: a test can see that a component HAS an error
+ * branch, but not that the branch is what a user actually ends up looking at.
+ *
+ * With every /api/* answered 500 (auth and the onboarding gate excepted, or
+ * nothing under test renders at all), this reads what the page settles on and
+ * fails any route that shows a skeleton or asserts emptiness as fact.
+ */
+const FAIL_READS = ARGS.includes('--fail-reads');
+const ROLE_ARG = ARGS.find((a) => !a.startsWith('--'));
+const ROLES = ROLE_ARG ? [ROLE_ARG] : ['founder', 'investor', 'advisor', 'partner'];
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
@@ -133,6 +152,37 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch(EXECUTABLE ? { executablePath: EXECUTABLE } : {});
 const failures = [];
 
+/**
+ * How many data reads this page was refused, reset before each navigation.
+ *
+ * A route that made NO data call has no failed read to report, and asserting
+ * otherwise is a false positive rather than a finding. That is not
+ * hypothetical: the five investor `/funds*` routes render the "Institutional
+ * add-on" entitlement notice for an account without fund access — a lock shown
+ * BEFORE any call goes out — and the first version of this mode flagged all
+ * five for "saying nothing about a read that failed". They were right and the
+ * check was wrong.
+ *
+ * Counting is exact rather than a carve-out by route name, so a route that
+ * starts making a call later is asserted from that moment without anyone
+ * remembering to remove it from a list. Safe as a module-level counter because
+ * the loop below visits one page at a time.
+ */
+let failedReads = 0;
+
+/**
+ * The app frame's own calls, which every route makes and no route owns.
+ *
+ * Counting these as "the page asked for data" is what made the first version
+ * of the counter wrong. The five investor `/funds*` routes show the
+ * "Institutional add-on" lock without reading anything — and were flagged
+ * anyway, because the shell had meanwhile asked for the theme, the explainer
+ * copy, the notification badge, the company memberships and the persona. Those
+ * are the chrome's reads, not the page's, and a page cannot be asked to report
+ * a failure in a call it never made.
+ */
+const SHELL_READ = /\/api\/(settings|notifications|personas|company\/memberships|auth|onboarding|client-error)/;
+
 for (const role of ROLES) {
   const user = { id: 9, email: 'frame-check@example.test', name: 'Frame Check',
     role, is_super_admin: 0, kyc_status: 'approved', plan: 'pro' };
@@ -143,6 +193,18 @@ for (const role of ROLES) {
     (route.request().url().startsWith(base) ? route.fallback() : route.abort()));
   await ctx.route('**/api/**', async (route) => {
     const p = new URL(route.request().url()).pathname;
+    // Auth and the onboarding gate answer normally even in failure mode: a
+    // signed-out user is bounced to /login and an incomplete one to the
+    // onboarding wizard, so failing those would test neither page.
+    const gate = p.endsWith('/auth/me') || p.includes('/onboarding/progress');
+    if (FAIL_READS && !gate) {
+      if (!SHELL_READ.test(p)) failedReads += 1;
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'Internal server error' }),
+      });
+    }
     let body = [];
     if (p.endsWith('/auth/me')) body = user;
     // The onboarding gate redirects every route to /onboarding/<role> unless
@@ -152,7 +214,7 @@ for (const role of ROLES) {
     else if (p.includes('/insights/trends')) body = { months: [], series: [] };
     else if (p.includes('/insights/feed')) body = { items: [], sectors: [], geographies: [] };
     else if (/\/(summary|overview|analytics|profile|me|progress|status)$/.test(p)) body = {};
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
   await ctx.addInitScript((u) => {
     localStorage.setItem('user', JSON.stringify(u));
@@ -163,6 +225,7 @@ for (const role of ROLES) {
   let clean = 0;
   for (const path of routes) {
     const page = await ctx.newPage();
+    failedReads = 0;
     const thrown = [];
     page.on('pageerror', (e) => thrown.push(String(e).split('\n')[0].slice(0, 120)));
     try {
@@ -176,15 +239,23 @@ for (const role of ROLES) {
         () => (document.querySelector('[data-app-main]')?.innerText || '').trim().length > 0,
         null, { timeout: 8000 },
       ).catch(() => {});
-      await page.waitForTimeout(250);
+      // A failed read has a retry and an error card to get through; the
+      // healthy path only needs the paint it already waited for.
+      await page.waitForTimeout(FAIL_READS ? 2500 : 250);
       const m = await page.evaluate(() => {
         const main = document.querySelector('[data-app-main]');
         const shellBody = main?.querySelector('.min-w-0.flex-1');
+        const text = (main?.innerText || '').replace(/\s+/g, ' ').trim();
         return {
           h1: main?.querySelectorAll('h1').length ?? 0,
           rails: main?.querySelectorAll('.fwr, [data-testid$="worker-rail"]').length ?? 0,
           shellPad: shellBody ? getComputedStyle(shellBody).paddingTop : null,
-          len: (main?.innerText || '').trim().length,
+          len: text.length,
+          // A spinner still up after the read has failed is the "skeletons
+          // forever" report; `aria-busy` is what the shared ZoneBody sets.
+          skeletons: main?.querySelectorAll('[aria-busy="true"], .animate-pulse, .fn-rel-loading').length ?? 0,
+          statesFailure: /unavailable|could not|did not load|failed|error|try again|retry|not recorded/i.test(text),
+          claimsEmpty: /\bno [a-z ]{0,30}(records|available|found|yet)\b|\bnone yet\b/i.test(text),
         };
       });
       const bad = [];
@@ -196,6 +267,23 @@ for (const role of ROLES) {
       // Only where the shared shell is actually the frame — several routes
       // draw their own canvas instead, correctly, and have no shell column.
       if (m.shellPad && m.shellPad === '0px') bad.push('shell renders with no padding');
+      if (FAIL_READS && failedReads > 0) {
+        // This page asked for data and was refused. The rule is that it must
+        // not dress that up as an answer — so a spinner still spinning, or a
+        // claim that there are no records, is the failure.
+        //
+        // IT IS NOT REQUIRED TO MENTION THE FAILURE, and an earlier version of
+        // this that demanded it was wrong twice over. Investor `/funds` fires
+        // `/api/funds/analytics` and then renders the "Institutional add-on"
+        // notice — which comes from the `fundUnlocked` entitlement flag, not
+        // from that call — so the lock is a complete and true answer whether
+        // or not the analytics read succeeded. A page that answers with a
+        // stated boundary owes no report about a call it made speculatively.
+        // Asserting more than the rule says produces findings that are only
+        // ever noise, and a check people learn to ignore checks nothing.
+        if (m.skeletons) bad.push(`${m.skeletons} skeleton(s) still up after the read failed`);
+        else if (m.claimsEmpty && !m.statesFailure) bad.push('claims "no records" when the read failed');
+      }
       if (bad.length) failures.push(`${role} ${path} — ${bad.join('; ')}`);
       else clean += 1;
     } catch (e) {
@@ -211,8 +299,10 @@ await browser.close();
 server.close();
 
 if (failures.length) {
-  console.error(`\ncheck-workspace-frames: ${failures.length} route(s) do not hold the frame.\n`);
+  console.error(`\ncheck-workspace-frames${FAIL_READS ? ' --fail-reads' : ''}: ${failures.length} route(s) failed.\n`);
   for (const f of failures) console.error(`  ✗ ${f}`);
   process.exit(1);
 }
-console.log('✓ check-workspace-frames: every workspace route renders and holds the frame.');
+console.log(FAIL_READS
+  ? '✓ check-workspace-frames --fail-reads: every workspace route states a failed read rather than showing a skeleton or claiming empty.'
+  : '✓ check-workspace-frames: every workspace route renders and holds the frame.');
