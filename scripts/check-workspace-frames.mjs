@@ -40,7 +40,7 @@
  */
 import http from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
-import { join, extname, dirname, resolve } from 'node:path';
+import { join, extname, dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -68,12 +68,40 @@ if (!existsSync(join(DOCS, 'index.html'))) {
   process.exit(1);
 }
 
+const SHELL = join(DOCS, 'index.html');
+
+/**
+ * A request path resolved strictly INSIDE docs/, or the SPA shell.
+ *
+ * The first version of this did `join(DOCS, decodeURIComponent(req.url))` and
+ * read the result, which is a path traversal: `join` happily walks out of
+ * docs/ on a `..`, and decoding first means `%2e%2e%2f` gets there too. CodeQL
+ * flagged it five times and was right to. The server binds to 127.0.0.1 on an
+ * ephemeral port and lives for one run, so nothing was reachable in practice —
+ * but "not reachable today" is not the same as "not a traversal", and the
+ * containment check costs one line.
+ *
+ * `resolve` is what does the work: it collapses `..` BEFORE the comparison, so
+ * the prefix test below is a decision about the final path rather than about
+ * the text of the request. The `sep` matters too — without it `/docs-evil`
+ * would pass a bare `startsWith(DOCS)`.
+ */
+function resolveInsideDocs(rawUrl) {
+  let decoded;
+  try { decoded = decodeURIComponent(rawUrl.split('?')[0]); } catch { return SHELL; }
+  const candidate = resolve(DOCS, `.${decoded.startsWith('/') ? decoded : `/${decoded}`}`);
+  if (candidate !== DOCS && !candidate.startsWith(DOCS + sep)) return SHELL;
+  if (!existsSync(candidate)) return SHELL;
+  if (statSync(candidate).isDirectory()) {
+    const index = join(candidate, 'index.html');
+    return existsSync(index) ? index : SHELL;
+  }
+  return candidate;
+}
+
 // docs/ with an SPA fallback, which is what the Worker's assets binding does.
 const server = http.createServer((req, res) => {
-  const url = decodeURIComponent(req.url.split('?')[0]);
-  let file = join(DOCS, url);
-  if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
-  if (!existsSync(file) || statSync(file).isDirectory()) file = join(DOCS, 'index.html');
+  const file = resolveInsideDocs(req.url);
   res.writeHead(200, { 'content-type': MIME[extname(file)] || 'application/octet-stream' });
   res.end(readFileSync(file));
 });
