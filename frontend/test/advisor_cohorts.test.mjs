@@ -34,15 +34,29 @@ test('every Cohorts zone is either a page or a card naming its real gap', () => 
   const zoneBlock = bucketRoutes.slice(
     bucketRoutes.indexOf('const ZONE = {'), bucketRoutes.indexOf('const COPY = {'));
   const backed = zones.filter((z) => zoneBlock.includes(`${z}:`) || zoneBlock.includes(`'${z}':`));
-  assert.deepEqual(backed, ['founders', 'this-week', 'outcomes'],
-    'the three the store and the public Lab reads can answer');
+  // ALL FIVE, since 2026-09-04. Guidance got migration 212 — the one card in
+  // this bucket whose diagnosis was still accurate. Calendar needed no
+  // migration at all: its card said "both halves exist and nothing joins
+  // them", which was exactly right, and the zone is that join.
+  assert.deepEqual(backed, ['founders', 'guidance', 'this-week', 'calendar', 'outcomes'],
+    'every Cohorts zone reads a store now');
 
-  const copyStart = bucketRoutes.indexOf("  '/cohorts': {", bucketRoutes.indexOf('const COPY = {'));
-  assert.ok(copyStart > -1);
-  const copy = bucketRoutes.slice(copyStart);
-  for (const z of zones.filter((x) => !backed.includes(x))) {
-    assert.ok(copy.includes(`    ${z}: {`), `${z} must say which store is missing`);
-  }
+  // THE BUCKET HAS NO COPY BLOCK ANY MORE, and that is the assertion. A card
+  // in front of a working page tells an advisor a feature is missing — the
+  // failure this bucket hit with Founders, This week and Outcomes after 206,
+  // and would hit again if either of these two were left standing.
+  //
+  // SCOPED TO THE COPY OBJECT, not "everything after it". The first draft of
+  // this searched the whole remainder of the file and matched a `'/cohorts'`
+  // key in the rail's stance map three hundred lines further down — a false
+  // failure that would have sent the next reader hunting for a card that was
+  // already gone.
+  const copyStart = bucketRoutes.indexOf('const COPY = {');
+  assert.ok(copyStart > -1, 'the COPY object must still exist, even holding one bucket');
+  const copyBlock = bucketRoutes.slice(copyStart, bucketRoutes.indexOf('\n};', copyStart));
+  assert.ok(copyBlock.length > 0 && copyBlock.length < 4000, 'the COPY slice must not run away');
+  assert.ok(!copyBlock.includes("'/cohorts': {"),
+    'no Cohorts zone may carry a no-store card while its page reads a store');
 });
 
 test('the claims migration 206 falsified are gone', () => {
@@ -62,13 +76,22 @@ test('the claims migration 206 falsified are gone', () => {
   }
 });
 
-test('the two remaining cards name what is genuinely absent, not the old dependency', () => {
-  // Guidance: the heading was always true; only its REASON was stale.
-  assert.match(bucketRoutes, /nothing records a piece of guidance addressed to a batch/);
-  // Calendar: its core claim survives, but it pointed at Expertise for the
-  // advisor's own slots — those moved to Practice when /office-hours retired.
-  assert.match(bucketRoutes, /your own bookable slots are published from Practice · Opportunities/);
-  assert.doesNotMatch(bucketRoutes, /the advisor’s own slots exist under Expertise/);
+test('the last two cards are gone, and each zone carries its own remaining limit', () => {
+  // Both cards were accurate to the end — which is why the pass that closed
+  // them had to close them for real rather than reword them.
+  assert.doesNotMatch(bucketRoutes, /nothing records a piece of guidance addressed to a batch/);
+  assert.doesNotMatch(bucketRoutes, /your own bookable slots are published from Practice · Opportunities/);
+  assert.doesNotMatch(bucketRoutes, /Cohort guidance has no store/);
+  assert.doesNotMatch(bucketRoutes, /The cohort calendar is not built yet/);
+
+  // WHAT EACH ZONE STILL CANNOT SAY MOVED ONTO THE ZONE, where a reader meets
+  // it in context rather than on an overview card.
+  const guidance = read('frontend/src/pages/advisor/cohorts/GuidanceZone.jsx');
+  assert.match(guidance, /24[- ]hour commitment|24h commitment/,
+    'guidance must state that no response commitment is stored, not compute "overdue"');
+  const calendar = read('frontend/src/pages/advisor/cohorts/CalendarZone.jsx');
+  assert.match(calendar, /session brief/,
+    'calendar must state that no session brief is stored rather than counting every session unprepared');
 });
 
 test('the rail says what is true of the zone in front of it', () => {

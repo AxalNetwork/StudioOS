@@ -3187,6 +3187,19 @@ export const api = {
   listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),
   listMyAdvisorCohortWeeks: (cycleId) => request(`/advisors/me/cohort/${cycleId}/weeks`),
 
+  // Cohorts · Guidance and · Calendar, and Expertise · Thinking (PR C).
+  //
+  // Guidance is the only one of the three with a new store behind it
+  // (migration 212). Calendar is a read that joins the Lab's week windows to
+  // the advisor's own booked slots — the join the zone's card said nobody had
+  // written — and Thinking reads `articles`, which has carried an author and a
+  // view counter all along.
+  listMyAdvisorCohortGuidance: (cycleId) => request(`/advisors/me/cohort/${cycleId}/guidance`),
+  postMyAdvisorCohortGuidance: (cycleId, data) => request(`/advisors/me/cohort/${cycleId}/guidance`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMyAdvisorGuidance: (uid, data) => request(`/advisors/me/guidance/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  listMyAdvisorCohortCalendar: (cycleId) => request(`/advisors/me/cohort/${cycleId}/calendar`),
+  listMyAdvisorThinking: () => request('/advisors/me/thinking'),
+
   // ---------- Unified calendar (Task #56) ----------
   listCalendarEvents: (opts = {}) => {
     const qs = new URLSearchParams();
