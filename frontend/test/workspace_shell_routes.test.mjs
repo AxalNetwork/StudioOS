@@ -87,7 +87,7 @@ test('the shell config declares zones at all', () => {
  * The list is asserted against the sidebar itself below: a shell cannot be
  * claimed migrated here while its nav still points at legacy landings.
  */
-const MIGRATED = ['founder', 'investor'];
+const MIGRATED = ['founder', 'investor', 'advisor', 'partner'];
 
 const PREFIXES = {
   founder: ['/validate', '/build', '/raise', '/grow', '/network', '/research'],
@@ -132,12 +132,6 @@ test('a shell is only claimed migrated once its sidebar points at the new IA', (
         `founder Validate/Research must not point back at the legacy ${legacy}`);
     }
   }
-  // Advisor is deliberately NOT claimed migrated. All fifteen of its zone
-  // routes exist and its pills navigate, but three of its rows are pinned
-  // elsewhere by decisions this migration will not overturn on its own:
-  // Practice owns the /advisor/advisory subtree, Expertise is /office-hours,
-  // and neither Trust nor Company Settings may be a nav row. Claiming it
-  // migrated would mean asserting a sidebar that contradicts those.
   if (MIGRATED.includes('investor')) {
     // Scoped to the investor block for the same reason the founder one is:
     // `/deals` is also the Deal Flow row of another role, and a whole-file
@@ -155,6 +149,58 @@ test('a shell is only claimed migrated once its sidebar points at the new IA', (
     for (const zone of ['/deals/pipeline', '/portfolio/health', '/research/ask', '/market-intel']) {
       assert.ok(!new RegExp(`to: '${zone}'`).test(investor),
         `an investor row points back at ${zone}, one level below its overview`);
+    }
+  }
+  // ADVISOR AND PARTNER JOINED `MIGRATED`, AND THE EXEMPTION THAT STOOD HERE IS
+  // GONE RATHER THAN RELAXED.
+  //
+  // It read: "Advisor is deliberately NOT claimed migrated … Practice owns the
+  // /advisor/advisory subtree, Expertise is /office-hours … Claiming it
+  // migrated would mean asserting a sidebar that contradicts those." True when
+  // written — but it recorded one OPEN CALL, not a standing exemption, and
+  // `sidebarConfig.js:458-471` records that call being made: every workspace
+  // row now points at its bucket root, the legacy paths survive only in `match`
+  // so a deep link still lights the right row, and /office-hours was retired.
+  //
+  // The other half of that sentence — no Trust row, no Practice Settings row —
+  // is still true and still honoured, and was never a reason these two could
+  // not be claimed: it constrains which rows EXIST, not where they point.
+  //
+  // `to:` is matched rather than a bare path because every legacy path below is
+  // still a live route and still sits in that row's own `match` array. A check
+  // for the bare path would pass on the `match` entry and prove nothing.
+  const IA = {
+    // role: [the block that follows it in the file, roots, legacy targets]
+    partner: ['investor', ['/pipeline', '/delivery', '/offers', '/network', '/research'],
+      ['/needs', '/partner/operations/overview', '/partner/operations/engagements',
+        '/services', '/perks', '/signals']],
+    advisor: ['exploring', ['/practice', '/cohorts', '/expertise', '/network', '/research'],
+      ['/advisor/advisory', '/advisor/advisory/opportunities', '/office-hours', '/advisors',
+        '/signals', '/market-intel']],
+  };
+  for (const [role, [next, roots, legacy]] of Object.entries(IA)) {
+    if (!MIGRATED.includes(role)) continue;
+    // BOTH BOUNDS ARE ASSERTED, and that is not defensive noise — it is the
+    // whole reason this is scoped. `indexOf` returns -1 for a block that was
+    // renamed or removed, and `slice(start, -1)` then quietly returns the rest
+    // of the FILE instead of this role's rows. Every root would still be found
+    // — in some other role's block — and every legacy check would still pass.
+    // The first draft of this loop had exactly that hole: pointing `next` at a
+    // role that does not exist left all ten tests green.
+    const start = sidebar.indexOf(`\n  ${role}: [`);
+    const end = sidebar.indexOf(`\n  ${next}: [`);
+    assert.ok(start >= 0, `sidebarConfig has no ${role} block`);
+    assert.ok(end > start,
+      `sidebarConfig's ${next} block must follow ${role} — without it this check `
+      + 'reads the rest of the file and passes on another role\'s rows');
+    const block = sidebar.slice(start, end);
+    for (const root of roots) {
+      assert.ok(new RegExp(`to: '${root}'`).test(block),
+        `${role} is claimed migrated but its ${root} row does not point at the root`);
+    }
+    for (const old of legacy) {
+      assert.ok(!new RegExp(`to: '${old}'`).test(block),
+        `a ${role} row points back at the legacy ${old} instead of its bucket root`);
     }
   }
 });
