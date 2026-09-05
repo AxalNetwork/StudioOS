@@ -143,6 +143,7 @@ import brand, { renderLandingHtml, renderLandingPreview, renderTemplatePreview, 
 import decks from './routes/decks';
 import competitors from './routes/competitors';
 import deckReviewer from './routes/deck_reviewer';
+import research from './routes/research';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
 // catch-all so its `/share/:token/...` subpaths take precedence over
@@ -811,6 +812,11 @@ app.route('/api/decks', decks);
 // Cloudflare-native: D1 + R2 + Workers AI, no paid third-party APIs.
 app.route('/api/competitors', competitors);
 app.route('/api/deck-reviewer', deckReviewer);
+// Research · Library and · Ask — a per-user document store and questions
+// answered only from it. Every read is scoped `WHERE owner_user_id = ?`, and
+// its vectors are deliberately unreachable from /api/search: see the
+// VALID_TYPES comment in routes/search.ts.
+app.route('/api/research', research);
 
 // Public landing page HTML (no /api prefix). Founders publish via the
 // authenticated /api/brand/landing/by-project/:pid/publish endpoint;

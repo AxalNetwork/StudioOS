@@ -45,7 +45,8 @@ export type TaskClass =
   | 'brand_autofill'
   | 'brand_palette'
   | 'brand_taglines'
-  | 'workspace_explain';
+  | 'workspace_explain'
+  | 'research_ask';
 
 export type RefusalReason =
   | 'budget_user_day'
@@ -176,6 +177,20 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // cached answer would describe a state that has moved on — which is worse
   // than no answer, since it looks current.
   workspace_explain: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // Research · Ask — answering a question over the caller's own indexed
+  // documents, with citations.
+  //
+  // ITS OWN TASK CLASS RATHER THAN `explain`, for the reason stated above:
+  // `/api/ai/me/spend` groups by task and the rail quotes the caller's
+  // observed average for that task, so folding retrieval answers into a
+  // different class would misreport both.
+  //
+  // NO CACHE, and here that is a correctness rule rather than a freshness
+  // one. The prompt embeds the retrieved chunks, so the same question asked
+  // after a new document is uploaded must be answered against the new
+  // library. A cached answer would cite sources the caller has since changed
+  // or deleted — worse than no answer, because it looks sourced.
+  research_ask: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
