@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ShieldCheck, Lock, Upload, FileText, CheckCircle2, AlertCircle, Loader2,
+  ShieldCheck, Lock, FileText, CheckCircle2, AlertCircle, Loader2,
   Globe, IdCard, Building2, BadgeCheck, FileSignature, Search,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -86,178 +86,104 @@ function Section({ icon: Icon, title, subtitle, children }) {
 // Center implementation; they consume /trust/summary which still ships with
 // the worker. Trust v2 (this task) layers obligations + agreements on top.
 // ---------------------------------------------------------------------------
-function KybCard({ kyb, onChanged }) {
-  const [legalName, setLegalName] = useState('');
-  const [businessId, setBusinessId] = useState('');
-  const [country, setCountry] = useState('US');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-  const [info, setInfo] = useState(null);
-
-  async function start() {
-    setErr(null); setInfo(null); setBusy(true);
-    try {
-      const res = await api.startKyb({ legal_name: legalName, business_id: businessId, country });
-      setInfo(`KYB started via ${res.provider}.${res.hosted_url ? ' Open the hosted SDK to complete.' : ' Submit your verification details below.'}`);
-      onChanged?.();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-  async function submit() {
-    setErr(null); setInfo(null); setBusy(true);
-    try {
-      const res = await api.submitKyb({ legal_name: legalName, business_id: businessId, country });
-      setInfo(`Decision: ${res.decision?.result || res.status}`);
-      onChanged?.();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-
-  const verified = kyb?.status === 'verified';
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-slate-600">Status:</span>
-          <StatusPill status={kyb?.status || 'unverified'} />
-          {kyb?.provider && <span className="text-xs text-slate-500">via {kyb.provider}</span>}
-        </div>
-        {verified && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-      </div>
-      {!verified && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm dark:bg-gray-900" placeholder="Legal entity name" value={legalName} onChange={e => setLegalName(e.target.value)} />
-          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm dark:bg-gray-900" placeholder="Business ID (EIN / VAT)" value={businessId} onChange={e => setBusinessId(e.target.value)} />
-          <input className="bg-white border border-slate-300 rounded px-3 py-2 text-sm dark:bg-gray-900" placeholder="Country (ISO-2)" value={country} onChange={e => setCountry(e.target.value)} maxLength={3} />
-        </div>
-      )}
-      {!verified && (
-        <div className="flex gap-2">
-          <button disabled={busy || !legalName || !businessId} onClick={start} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}Start KYB
-          </button>
-          {kyb?.provider === 'mock' && (
-            <button disabled={busy || !legalName || !businessId} onClick={submit} className="bg-slate-700 hover:bg-slate-600 disabled:bg-slate-300 text-white text-sm px-3 py-1.5 rounded">
-              Submit verification
-            </button>
-          )}
-        </div>
-      )}
-      {info && <p className="text-emerald-700 text-sm mt-3">{info}</p>}
-      {err && <p className="text-red-600 text-sm mt-3">{err}</p>}
-    </div>
-  );
-}
-
-function AccreditationCard({ accred, onChanged }) {
-  const [basis, setBasis] = useState('income');
-  const [file, setFile] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-  const [info, setInfo] = useState(null);
-
-  async function upload() {
-    setErr(null); setInfo(null); setBusy(true);
-    try {
-      const res = await api.uploadAccreditation(basis, file);
-      setInfo(`Uploaded. Investor status: ${res.investor_status}. Awaiting admin review.`);
-      setFile(null);
-      onChanged?.();
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
-  }
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-slate-600">Status:</span>
-          <StatusPill status={accred?.status || 'unverified'} />
-          {accred?.basis && <span className="text-xs text-slate-500">basis: {accred.basis}</span>}
-        </div>
-        {accred?.verified && (
-          <span className="inline-flex items-center gap-1 px-2 py-1 rounded border border-emerald-300 bg-emerald-100 text-emerald-700 text-xs font-medium">
-            <ShieldCheck className="w-3.5 h-3.5" /> Verified Investor
-          </span>
-        )}
-      </div>
-      {!accred?.verified && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-            <select value={basis} onChange={e => setBasis(e.target.value)} className="bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-900 dark:bg-gray-900">
-              <option value="income">Income</option>
-              <option value="net_worth">Net worth</option>
-              <option value="entity">Entity</option>
-              <option value="knowledgeable_employee">Knowledgeable employee</option>
-            </select>
-            <input type="file" onChange={e => setFile(e.target.files?.[0] || null)} accept="application/pdf,image/*" className="md:col-span-2 text-sm text-slate-700" />
-          </div>
-          <button disabled={busy || !file} onClick={upload} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}Upload evidence
-          </button>
-        </>
-      )}
-      {info && <p className="text-emerald-700 text-sm mt-3">{info}</p>}
-      {err && <p className="text-red-600 text-sm mt-3">{err}</p>}
-    </div>
-  );
-}
+// KybCard and AccreditationCard USED TO LIVE HERE, and both were unreachable.
+//
+// Each was rendered only on the true branch of `legacy?.kyb ? <KybCard …>` /
+// `legacy?.accreditation ? <AccreditationCard …>`. `legacy` has exactly one
+// source — GET /api/trust/summary — and that handler returns `kyb: null` and
+// `accreditation: null` as literals, with a comment saying so: "Task AH leaves
+// the KYB+Accred cards out of scope, so they are surfaced via /api/kyc/* and
+// the obligation matrix." Both ternaries therefore always took the false
+// branch, and both tabs have been rendering <ObligationList> the whole time.
+//
+// That made their dead endpoints unreachable rather than user-facing, which is
+// the only reason nobody hit a 404: POST /trust/kyb/submit,
+// GET /trust/kyb/status and all four /trust/accreditation/* paths are absent
+// from routes/trust.ts and suppressed in scripts/api-drift-baseline.json. The
+// components are gone and so are the client methods; the baseline shrinks by
+// six entries, which is the measurable half of this change.
+//
+// What is NOT lost: POST /trust/kyb/start is real and is what the KYB
+// obligation's "Start" action already calls through ObligationList →
+// startObligation. Accreditation evidence has no upload route on either side,
+// so the tab says that rather than drawing a file input that cannot POST.
 
 function NdaCard({ items, onChanged }) {
-  const [openRole, setOpenRole] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(null);
   const [err, setErr] = useState(null);
 
-  async function open(role) {
-    setOpenRole(role); setPreview(null); setErr(null);
-    try { setPreview(await api.getNdaPreview(role)); } catch (e) { setErr(e.message); }
-  }
-  async function sign() {
-    setBusy(true); setErr(null);
-    try { await api.signNda(openRole, name); setOpenRole(null); setName(''); onChanged?.(); }
-    catch (e) { setErr(e.message); } finally { setBusy(false); }
+  /**
+   * THIS CARD WAS BROKEN TWICE OVER, and it is the one a reader could reach.
+   *
+   * Wrong data in: it was fed `legacy.ndas`, which is `pairwise_ndas` rows —
+   * {id, party_a_user_id, party_b_user_id, intermediary, nda_envelope_uuid,
+   * status, valid_until}. It read `it.role`, `it.title` and `it.signed_at`,
+   * none of which exist on that row, so every entry rendered a blank title,
+   * "role: undefined", and keyed React on `undefined`. Meanwhile the page
+   * fetched GET /trust/nda/required — which returns exactly the right thing —
+   * and threw the result away.
+   *
+   * Wrong write out: it opened a modal from GET /trust/nda/:role/preview and
+   * signed with POST /trust/nda/sign, and neither route exists. The worker
+   * signs by ENVELOPE, not by role, and returns a link into the e-sign flow
+   * rather than accepting a typed name — so an in-page signature ceremony was
+   * never the shape. `api.trustMySigningUrl` already reaches that route and is
+   * what the Agreements tab uses, so this needs no new client method.
+   */
+  async function openSigning(item) {
+    setErr(null); setBusy(item.obligation_key);
+    try {
+      const res = await api.trustMySigningUrl(item.evidence_envelope_uuid);
+      if (res?.signing_url) { window.location.href = res.signing_url; return; }
+      // A recipient row can exist without a live token — say which, rather
+      // than failing silently on a button that looked like it would work.
+      setErr(res?.status === 'expired'
+        ? 'That signing link has expired. Ask the sender to re-issue it.'
+        : res?.status === 'signed'
+          ? 'This one is already signed — reload to refresh the list.'
+          : 'No signing link is available for this agreement yet.');
+      onChanged?.();
+    } catch (e) { setErr(e.message); } finally { setBusy(null); }
   }
 
-  if (!items?.length) return <p className="text-sm text-slate-600">No template NDAs are required for your role.</p>;
+  if (!items?.length) return <p className="text-sm text-gray-600 dark:text-gray-400">No template NDAs are required for your role.</p>;
+
   return (
     <div className="space-y-2">
-      {items.map(it => (
-        <div key={it.role} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded px-3 py-2">
-          <div className="flex items-center gap-3">
-            <FileText className="w-4 h-4 text-slate-500" />
-            <div>
-              <div className="text-sm text-slate-900">{it.title}</div>
-              <div className="text-xs text-slate-500">role: {it.role}{it.signed_at ? ` · signed ${new Date(it.signed_at).toLocaleDateString()}` : ''}</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <StatusPill status={it.status} />
-            {it.status !== 'signed' && (
-              <button onClick={() => open(it.role)} className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded">Review &amp; sign</button>
-            )}
-          </div>
-        </div>
-      ))}
-      {openRole && preview && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl dark:bg-gray-900">
-            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="text-slate-900 font-semibold">{preview.title}</h3>
-              <button onClick={() => { setOpenRole(null); setPreview(null); }} className="text-slate-500 hover:text-slate-800 text-sm">Close</button>
-            </div>
-            <pre className="flex-1 overflow-auto px-5 py-4 text-xs text-slate-700 whitespace-pre-wrap font-mono">{preview.body}</pre>
-            <div className="px-5 py-3 border-t border-slate-200 space-y-2">
-              <input className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-sm dark:bg-gray-900" placeholder="Type your full legal name to sign" value={name} onChange={e => setName(e.target.value)} />
-              {err && <p className="text-red-600 text-xs">{err}</p>}
-              <div className="flex justify-end gap-2">
-                <button onClick={() => { setOpenRole(null); setPreview(null); }} className="text-sm text-slate-700 px-3 py-1.5 rounded hover:bg-slate-100">Cancel</button>
-                <button disabled={busy || !name.trim()} onClick={sign} className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white text-sm px-3 py-1.5 rounded inline-flex items-center gap-1.5">
-                  {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}I accept and sign
-                </button>
+      {items.map((it) => {
+        const label = OBLIGATION_META[it.obligation_key]?.label || it.obligation_key;
+        const signable = it.open && it.evidence_envelope_uuid;
+        return (
+          <div key={it.obligation_key} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60 px-3 py-2">
+            <div className="flex items-center gap-3 min-w-0">
+              <FileText className="w-4 h-4 flex-none text-gray-500 dark:text-gray-400" />
+              <div className="min-w-0">
+                <div className="text-sm text-gray-900 dark:text-gray-100 truncate">{label}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {it.expires_at ? `renews ${new Date(it.expires_at).toLocaleDateString()}` : 'no renewal date recorded'}
+                </div>
               </div>
             </div>
+            <div className="flex items-center gap-3 flex-none">
+              <StatusPill status={it.status} />
+              {signable && (
+                <button
+                  onClick={() => openSigning(it)}
+                  disabled={busy === it.obligation_key}
+                  className="text-xs bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white px-2 py-1 rounded inline-flex items-center gap-1.5"
+                >
+                  {busy === it.obligation_key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  Open to sign
+                </button>
+              )}
+              {it.open && !it.evidence_envelope_uuid && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">Not issued yet</span>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })}
+      {err && <p className="text-red-600 dark:text-red-400 text-xs">{err}</p>}
     </div>
   );
 }
@@ -654,9 +580,23 @@ function tabsForRole(role, obligations) {
 // ---------------------------------------------------------------------------
 // Main page.
 // ---------------------------------------------------------------------------
-export default function TrustCenterPage() {
+/**
+ * `chromeless` drops the page furniture and nothing else — D33's word for it.
+ *
+ * On `/trust` an INVESTOR is wrapped by InvestorWorkspacePage, which renders
+ * its own `<h1 className="investor-title">Trust</h1>`, and this page then drew
+ * `<h1>Trust Center</h1>` inside it. Two <h1>s in one frame is what
+ * workspace_frame_contract.test.mjs exists to stop, and it is a real reading
+ * problem before it is a lint one: a screen reader announces the page twice
+ * under two different names.
+ *
+ * The trust SCORE stays in both cases. The badge is content — it is the answer
+ * the page exists to give — not furniture.
+ */
+export default function TrustCenterPage({ chromeless = false }) {
   const [matrix, setMatrix] = useState(null);   // /api/trust/me
   const [legacy, setLegacy] = useState(null);   // /api/trust/summary (old)
+  const [requiredNdas, setRequiredNdas] = useState([]); // /api/trust/nda/required
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
@@ -676,12 +616,18 @@ export default function TrustCenterPage() {
       // /api/trust/me is the canonical obligation matrix; /trust/summary
       // continues to feed the legacy KYB/Accred/NDA cards. Both calls are
       // resilient — we render whatever loaded successfully.
-      const [m, s] = await Promise.allSettled([
+      // GET /nda/required was already being called here and its result THROWN
+      // AWAY — `try { await api.getRequiredNdas(); } catch {}` — while the NDA
+      // card was fed `summary.ndas`, which is pairwise_ndas rows in a different
+      // shape. It is a third settled promise now, and the card reads it.
+      const [m, s, n] = await Promise.allSettled([
         api.trustMe(),
-        (async () => { try { await api.getRequiredNdas(); } catch {} return api.getTrustSummary(); })(),
+        api.getTrustSummary(),
+        api.getRequiredNdas(),
       ]);
       if (m.status === 'fulfilled') setMatrix(m.value); else setMatrix({ obligations: [], role });
-      if (s.status === 'fulfilled') setLegacy(s.value); else setLegacy({ kyb: null, accreditation: null, ndas: [] });
+      if (s.status === 'fulfilled') setLegacy(s.value); else setLegacy({ ndas: [] });
+      setRequiredNdas(n.status === 'fulfilled' ? (n.value?.items || []) : []);
     } catch (e) {
       setErr(e?.message || 'Failed to load Trust Center');
     } finally { setLoading(false); }
@@ -727,45 +673,60 @@ export default function TrustCenterPage() {
     </Section>
   );
 
-  const entity = (legacy?.kyb || obligations.some(o => o.obligation_key === 'kyb_v1')) && (
+  // `legacy?.kyb` is a literal null from GET /trust/summary, so the KybCard
+  // branch this used to carry could never run. The obligation matrix is the
+  // real source and always was.
+  const entity = obligations.some(o => o.obligation_key === 'kyb_v1') && (
     <Section icon={Building2} title="Entity verification (KYB)" subtitle="Required for service-provider partners and entity investors.">
-      {legacy?.kyb
-        ? <KybCard kyb={legacy.kyb} onChanged={load} />
-        : <ObligationList
-            obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'entity')}
-            emptyText="KYB not required."
-            onStart={startObligation}
-          />}
+      <ObligationList
+        obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'entity')}
+        emptyText="KYB not required."
+        onStart={startObligation}
+      />
     </Section>
   );
 
-  const accreditation = (legacy?.accreditation || role === 'investor') && (
-    <Section icon={BadgeCheck} title="Accredited investor verification" subtitle="Upload evidence to earn the verified-investor badge.">
-      {legacy?.accreditation
-        ? <AccreditationCard accred={legacy.accreditation} onChanged={load} />
-        : <ObligationList
-            obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'accreditation')}
-            emptyText="Accreditation not required."
-            onStart={startObligation}
-          />}
+  const accreditation = role === 'investor' && (
+    <Section icon={BadgeCheck} title="Accredited investor verification" subtitle="Your accreditation obligation and its current status.">
+      <ObligationList
+        obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'accreditation')}
+        emptyText="Accreditation not required."
+        onStart={startObligation}
+      />
+      {/*
+        THE ONE THING THIS TAB CANNOT DO. The card here used to offer a basis
+        picker and a file input over POST /trust/accreditation/upload, which
+        does not exist — nor do /status, /badge/:id or /:id/review. It was
+        unreachable, so nobody hit the 404; saying so is better than leaving
+        the absence to be read as an oversight, and better than a file input
+        that cannot POST.
+      */}
+      <p className="mt-4 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+        Evidence upload is not available here. The platform records whether your accreditation obligation is
+        satisfied, but has no route to accept the document behind it — so there is no upload to offer yet.
+        Ask through the <a href="/help" className="underline hover:text-gray-700 dark:hover:text-gray-300">Help Center</a> and
+        the fund team will tell you how they need it.
+      </p>
     </Section>
   );
 
-  const agreementsLegacy = legacy?.ndas?.length ? (
+  const agreementsLegacy = requiredNdas.length ? (
     <Section icon={FileSignature} title="Template NDAs" subtitle="Standing NDAs based on your role.">
-      <NdaCard items={legacy.ndas} onChanged={load} />
+      <NdaCard items={requiredNdas} onChanged={load} />
     </Section>
   ) : null;
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <ShieldCheck className="w-7 h-7 text-emerald-600" /> Trust Center
-          </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Your obligations, agreements, and verification status — tailored to your role.</p>
-        </div>
+        {chromeless ? <div /> : (
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <ShieldCheck className="w-7 h-7 text-emerald-600" /> Trust Center
+            </h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Your obligations, agreements, and verification status — tailored to your role.</p>
+          </div>
+        )}
         <TrustScoreBadge size="md" score={score} missing={missing} label="Trust score" />
       </div>
 
