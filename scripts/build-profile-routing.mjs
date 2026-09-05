@@ -246,7 +246,30 @@ function confidenceFor(rec, liveRoutes, nav) {
   return 'Low';
 }
 
-const esc = (s) => String(s).replace(/\|/g, '\\|');
+// ROUTE_MAP.md is itself a markdown table, so its cells arrive with pipes the
+// author already escaped by hand — `/pipeline/screening\|commit\|transactions`.
+// Escaping that again produced `\\|`: GFM reads `\\` as an escaped backslash and
+// then treats the pipe as a REAL column separator, which silently split four
+// rows of the generated table into 11-13 cells against a 9-cell header.
+//
+// Normalise first, then escape exactly once. Idempotent, so a source cell that
+// is already bare and one that is pre-escaped both come out as `\|` — one
+// literal pipe, no stray backslash, column count intact.
+//
+// Escaping the backslashes instead (Copilot Autofix #444) repairs the column
+// count but leaves the reader looking at `screening\|commit` — the source's own
+// escape leaking into the rendered page.
+//
+// CodeQL then flagged the first version of this fix (alert 6031): it escaped
+// pipes and left backslashes alone, so a source cell holding `\\|` would
+// normalise to `\|` and re-escape to `\\|` — straight back to the broken
+// shape. Right about the incompleteness even though ROUTE_MAP happens to
+// contain no such cell today; a generator should not depend on that.
+//
+// So: normalise the source's own pipe escaping, then escape BOTH metacharacters
+// on the way out. `a\|b` still renders `a|b`; a genuine backslash now survives
+// as `\\` instead of being handed to the renderer bare.
+export const esc = (s) => String(s).replace(/\\\|/g, '|').replace(/([\\|])/g, '\\$1');
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function build() {
