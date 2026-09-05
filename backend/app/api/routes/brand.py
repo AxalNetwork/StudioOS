@@ -1191,7 +1191,7 @@ def waitlist(slug: str, payload: WaitlistPayload, request: Request, session: Ses
     # Honeypot — answer 200 so a bot can't distinguish the trap from success
     # (a 400 teaches it to adapt). Nothing is written. Mirrors the worker.
     if (payload.company_website or "").strip():
-        logger.warning("brand: honeypot tripped on landing %s", safe_slug)
+        logger.warning("brand: honeypot tripped on landing %s", safe_slug.replace("\r", " ").replace("\n", " "))
         return {"ok": True}
     email = (payload.email or "").strip().lower()
     if not _EMAIL_RE.match(email):
