@@ -200,6 +200,92 @@ test('the Research overview describes only its two live zones, and reads ZONE_CO
   );
 });
 
+test('Client prep blames the access rule, not a table that is actually there', () => {
+  // THE CLAIM THIS KILLS was on production until 2026-09-05: "nothing joins a
+  // booking to the client's own record". Checked against production D1 rather
+  // than schema.sql, the join is two hops —
+  // advisor_bookings.founder_user_id → users.founder_id → projects.founder_id
+  // — over the same column canAccessFounderResource reads before deciding. A
+  // card that blames a missing table for an access decision sends the next
+  // reader to write a migration that would change nothing.
+  //
+  // ASSERTED ON codeOnly, NOT THE RAW FILE, and the distinction is the point:
+  // the file's docblock quotes the dead sentence on purpose so the correction
+  // survives being re-read. What must never come back is the RENDERED copy.
+  const code = codeOnly(researchWs);
+  for (const dead of [
+    /nothing joins a booking to the client/,
+    /the project read that would reach it excludes advisors/,
+  ]) {
+    assert.doesNotMatch(code, dead, `a falsified claim is still rendered: ${dead}`);
+  }
+
+  // Scoped to ZONE_COPY, whose bounds `block` asserts at both ends. Searching
+  // the rest of the file instead is how a sibling test matched an unrelated key
+  // three hundred lines further down and failed for the wrong reason.
+  const copy = block(code, 'ZONE_COPY');
+  assert.match(copy, /access decision, not an absent table/,
+    'the card must name the access decision as the obstacle');
+  assert.match(copy, /carries their founder id and a project carries the same id/,
+    'the card must say the join exists, since claiming otherwise is what was wrong');
+});
+
+test('Client prep gives the two roles that see it their own reason', () => {
+  // `canAccessFounderResource` (cloudflare-worker/src/auth.ts) returns true
+  // outright for `partner` and matches an advisor on neither branch, so ONE
+  // sentence cannot be true for both — and RESEARCH_ZONES gives this zone to
+  // both roles. The old card stated the advisor's obstacle to a partner, and
+  // pointed them at Practice · Sessions, a bucket only the advisor shell has.
+  const code = codeOnly(researchWs);
+  assert.match(code, /function ClientPrepScopeNote\(\{ role \}\)/,
+    'the role-specific reason must be a component, not another line of shared copy');
+  assert.match(code, /slug === 'client-prep' && <ClientPrepScopeNote role=\{role\} \/>/,
+    'the note must actually render on the zone');
+
+  const start = code.indexOf('function ClientPrepScopeNote');
+  const end = code.indexOf('const LIVE_ZONES');
+  assert.ok(start > -1 && end > start,
+    'the ClientPrepScopeNote slice must be bounded at BOTH ends — an open-ended slice reads '
+    + 'the rest of the file and passes on some other component\'s copy');
+  // Collapsed, because these assert RENDERED prose and JSX text wraps wherever
+  // the line runs out. Matching source line breaks means a reflow that changes
+  // no rendered word fails the test, which trains the next reader to loosen it.
+  const note = code.slice(start, end).replace(/\s+/g, ' ');
+  assert.ok(note.length > 200 && note.length < 4000, 'the note slice must not run away');
+  assert.match(note, /role !== 'advisor' && role !== 'partner'/,
+    'no other role may be told a reason that is not theirs');
+  // PINNED BECAUSE EVERY OTHER ASSERTION HERE IS ABOUT PRESENCE AND ORDER, and
+  // flipping this one line to `role === 'partner'` changes neither: the two
+  // reasons swap readers in silence, and an advisor is told permission is not
+  // their obstacle when it is precisely their obstacle. Caught by mutation
+  // only after it had already slipped through the first eight.
+  assert.match(note, /const advisor = role === 'advisor';/,
+    'the branch predicate must select on the advisor — every ordering check below '
+    + 'reads the advisor branch as the ternary\'s first arm');
+  // The advisor half: refused by rule, and the grant shape that would open it
+  // exists for investors (data_room_grants) with no advisor equivalent.
+  assert.match(note, /revocable, expiring, and logged/,
+    'the advisor must be told what would open it, not merely that it is shut');
+  // The partner half: they PASS the guard, so permission is not the obstacle.
+  // Verified in production — no partner_* table carries a project_id.
+  assert.match(note, /passes the founder-data guard as studio staff/,
+    'a partner must not be told a rule refuses them when it does not');
+  assert.match(note, /assembly gap rather than a permission one/,
+    'the partner obstacle is the missing link, and the card must say which it is');
+
+  // Practice · Sessions is advisor-only (shellConfig: no /practice on partner),
+  // so it may only be named inside the advisor branch — everything before the
+  // `) : (` that opens the partner one.
+  const practiceAt = note.indexOf('Practice · Sessions');
+  const partnerBranchAt = note.indexOf(') : (');
+  assert.notEqual(practiceAt, -1, 'the advisor still has a half, and should be sent to it');
+  assert.notEqual(partnerBranchAt, -1, 'the ternary that splits the two branches is gone');
+  assert.ok(practiceAt < partnerBranchAt,
+    'Practice · Sessions may only be named in the advisor branch — a partner has no /practice');
+  assert.doesNotMatch(block(code, 'ZONE_COPY'), /Practice · Sessions/,
+    'the shared card must not point a partner at a bucket their shell does not carry');
+});
+
 test('the Network overview shares one INTRO map and marks Organizations where it reads nothing', () => {
   const code = codeOnly(networkWs);
   assert.match(code, /^const INTRO = \{/m, 'INTRO must be module-scope so the overview and the zone header share it');

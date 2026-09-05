@@ -30,6 +30,34 @@ import {
 const advisors = new Hono<{ Bindings: Env }>();
 
 /**
+ * THE SCHEMA SELF-HEAL RUNS FOR EVERY ADVISOR ROUTE, not just the ones that
+ * remembered to ask for it — and that gap was a live 500, not a hypothetical.
+ *
+ * `ensureAdvisorStoresSchema` renames production's legacy `mentor_id` to
+ * `advisor_id` on `advisor_office_hour_slots` and `advisor_bookings` (see that
+ * service for why the rename cannot be a migration). Until this middleware it
+ * was reached only through `requireMyAdvisor` — "the single door every store
+ * endpoint BELOW goes through", and *below* was the whole problem. The seven
+ * T13-era handlers registered above it call `myAdvisor` directly, so on any
+ * isolate whose first advisor request hit one of them, the rename had never
+ * run and the query named a column production does not have.
+ *
+ * SQLITE RESOLVES COLUMN NAMES WHEN IT PREPARES, so an empty table does not
+ * save it: `GET /bookings/me` — a FOUNDER reading their own booked sessions —
+ * threw "no such column: b.advisor_id" with zero bookings in the database.
+ * That is why this is router-level rather than seven more call sites: the next
+ * handler to touch these tables must not have to know any of the above.
+ *
+ * Cost is one bootstrap per isolate — the service latches on `READY` and every
+ * later call is a Map lookup — and it never throws, so a route needing no
+ * advisor store is unaffected either way.
+ */
+advisors.use('*', async (c, next) => {
+  await ensureAdvisorStoresSchema(c.env);
+  await next();
+});
+
+/**
  * Normalises an advisor's free-text expertise onto the canonical radar-axis
  * slugs (services/skillsTaxonomySchema.ts::RADAR_AXES), so matching and the
  * /match `gap` / `focus` filters agree on what an expertise string means.
