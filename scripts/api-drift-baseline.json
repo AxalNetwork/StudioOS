@@ -12,10 +12,6 @@
     "GET /api/notifications/push/subscriptions",
     "GET /api/notifications/push/vapid-key",
     "GET /api/pipeline/votes/leaderboard",
-    "GET /api/trust/accreditation/badge/:p",
-    "GET /api/trust/accreditation/status",
-    "GET /api/trust/kyb/status",
-    "GET /api/trust/nda/:p/preview",
     "GET /api/trust/nda/status",
     "POST /api/calendar/me/calcom",
     "POST /api/email/send-deal",
@@ -23,11 +19,7 @@
     "POST /api/legal/spinout/:p",
     "POST /api/notifications/push/subscribe",
     "POST /api/notifications/push/test",
-    "POST /api/notifications/push/unsubscribe",
-    "POST /api/trust/accreditation/:p/review",
-    "POST /api/trust/accreditation/upload",
-    "POST /api/trust/kyb/submit",
-    "POST /api/trust/nda/sign"
+    "POST /api/notifications/push/unsubscribe"
   ],
   "missing_method": [],
   "error_envelope": []

@@ -1761,3 +1761,77 @@ including certificate issuance, the public graduate list, `/stats` and
 `/fund-metrics`. A founder who runs four excellent weeks on the Find fit track
 and never files is, to all ten, a non-graduate. Opening the door was a page;
 letting them finish is a ten-site change that has to land at once.
+
+### D41. The Trust Center's three legacy cards: two were unreachable dead code, one was reachable and wrong on both sides
+
+`scripts/api-drift-baseline.json` suppressed nine `/trust/*` paths the SPA
+called with no worker route behind them — which is exactly why CI stayed green
+over them for however long they have been there. Reading each against
+`routes/trust.ts`'s eighteen declared routes gave **three different answers**,
+and the difference is the whole decision. "Three broken forms" was the wrong
+summary, and correcting it changed what to do about each.
+
+**`KybCard` and `AccreditationCard` were unreachable.** Each rendered only on
+the true branch of `legacy?.kyb ? <KybCard …>` / `legacy?.accreditation ?
+<AccreditationCard …>`. `legacy` has exactly one source, `GET /trust/summary`,
+and that handler returns both as **literal nulls** with a comment explaining
+why: *"Task AH leaves the KYB+Accred cards out of scope, so they are surfaced
+via /api/kyc/\* and the obligation matrix."* Both ternaries have always taken
+the false branch; both tabs have always rendered `<ObligationList>`. So nobody
+ever hit their 404s — the dead endpoints were dead code's dead code. Deleted,
+along with their client methods.
+
+Nothing is lost. `POST /trust/kyb/start` is real, and it is what the KYB
+obligation's Start action already calls through `ObligationList` →
+`startObligation`; it upserts `corporate_profiles` and moves `kyb_v1` to
+`in_review`, which is the whole write the deleted card's "Submit" was reaching
+for. Accreditation evidence has no upload route on either side, so the tab
+**states that** rather than drawing a file input that cannot POST.
+
+**`NdaCard` was reachable, and wrong twice over.** It was fed `summary.ndas` —
+`pairwise_ndas` rows: `{id, party_a_user_id, party_b_user_id, intermediary,
+nda_envelope_uuid, status, valid_until}` — while reading `it.role`, `it.title`
+and `it.signed_at`. None of those exist on that row, so every entry rendered a
+blank title, "role: undefined", and keyed React on `undefined`. And it signed
+through `GET /trust/nda/:role/preview` and `POST /trust/nda/sign`, neither of
+which exists.
+
+The fix needed no new endpoint and no new client method, because the page was
+**already fetching the right data and throwing it away**: `(async () => { try {
+await api.getRequiredNdas(); } catch {} return api.getTrustSummary(); })()`.
+`GET /trust/nda/required` returns `obligation_key`, `status`, `expires_at`,
+`evidence_envelope_uuid` and an `open` flag. It is a third settled promise now
+and the card reads it.
+
+Signing goes through `api.trustMySigningUrl`, whose route
+(`GET /agreements/:envelope_uuid/my_signing_url`) exists and is what the
+Agreements tab already uses. **The worker returns a LINK into the e-sign flow,
+not an acceptance** — so the typed-name modal was never the right shape, and
+the card now opens the signing URL instead of pretending to take a signature.
+
+**Measured outcome: the drift baseline goes from 22 entries to 14.** Nine dead
+client methods removed, and the ninth — `getNdaStatus`, banked and with zero
+call sites — was found by the guard written for this change, not by reading.
+
+**The guard that could not be written.** The first draft asserted every client
+`/trust/*` path against every declared route and drowned in normalisation;
+`check-api-drift.mjs` already does that properly and runs in the gate. What
+that matcher *cannot* tell you is the thing that let this rot: **a path already
+banked in the baseline is suppressed forever**, so drift stays green while the
+SPA calls something that 404s. The test asserts the narrower, durable rule —
+the Trust Center may not call a path the ledger records as having no route.
+
+**Also fixed: an investor saw two `<h1>`s.** `/trust` is wrapped by
+`InvestorWorkspacePage`, which draws `<h1 className="investor-title">Trust</h1>`,
+and the page then drew `<h1>Trust Center</h1>` inside it. `chromeless` — D33's
+prop for "drops the page furniture and nothing else" — suppresses the inner
+one for investors only. The trust score badge stays in both cases: it is
+content, the answer the page exists to give, not furniture.
+
+**Kept, deliberately, against the canvas.** `tabsForRole` still derives tabs
+from the server's obligation matrix rather than the canvas's hardcoded list,
+which disagrees with `ROLE_MATRIX` for three of four roles; the role still
+comes from `/trust/me` with `localStorage` as a first-paint fallback only; and
+both `Promise.allSettled` loads survive, so one dead endpoint degrades a card
+rather than blanking the page. The canvas's `roleTabs` and `stateTabs` are demo
+switchers and are asserted never to land.
