@@ -15,6 +15,9 @@ const PracticeEarningsZone = lazy(() => import('../../pages/advisor/practice/Ear
 const ExpertiseProfileZone = lazy(() => import('../../pages/advisor/expertise/ProfileZone'));
 const ExpertiseServicesZone = lazy(() => import('../../pages/advisor/expertise/ServicesZone'));
 const ExpertiseProofZone = lazy(() => import('../../pages/advisor/expertise/ProofZone'));
+const ExpertiseThinkingZone = lazy(() => import('../../pages/advisor/expertise/ThinkingZone'));
+const CohortsGuidanceZone = lazy(() => import('../../pages/advisor/cohorts/GuidanceZone'));
+const CohortsCalendarZone = lazy(() => import('../../pages/advisor/cohorts/CalendarZone'));
 
 /**
  * Practice, Cohorts and Expertise — one component, three buckets.
@@ -113,15 +116,23 @@ const ZONE_BLURB = {
   delivery: 'What you have sent a client, and what is still outstanding.',
   sessions: 'Each booked session, the amount you recorded against it, and whether you have marked it billed.',
   earnings: 'Billed, collected, written off and outstanding, totalled from the amounts you typed. Axal settles nothing and takes no cut.',
-  // Expertise — profile, services and proof are backed; thinking and
-  // visibility are not, and are written from COPY.
+  // Expertise — four zones read a store now. Only visibility does not, and it
+  // is written from COPY.
   profile: 'What a founder sees before they book you.',
   services: 'What you sell and at what price. Nothing counts how often a service is booked.',
   proof: 'Claims you have made, and whether the person named has confirmed each one.',
-  // Cohorts — founders, this week and outcomes are backed; guidance and
-  // calendar are not, and are written from COPY.
+  // Views are this hub's own count. Where a piece ran is not recorded anywhere,
+  // so no blurb here may imply a combined reach figure.
+  thinking: 'What you have published, and how many people opened it here.',
+  // Cohorts — all five read a store since migration 212 and the calendar join.
   founders: 'The batch an admin has put in front of you, read from the Lab’s own record.',
   'this-week': 'Which cycles are running and where each sits in its window. What is due stays the Lab’s to say.',
+  // No "how fast you reply": nothing stores a response commitment, so the
+  // blurb must not imply one is being kept.
+  guidance: 'What you have said to this batch, and which founders recorded acting on it.',
+  // "Booked" and "the batch's dates" only — an unbooked slot is availability,
+  // not an obligation, and the zone deliberately leaves those out.
+  calendar: 'The batch’s dates and your own booked sessions, on one page.',
   outcomes: 'The programme’s published outcomes — company-level and anonymous, not your batch alone.',
 };
 
@@ -138,6 +149,8 @@ const ZONE = {
   '/cohorts': {
     founders: CohortsFoundersZone,
     'this-week': CohortsThisWeekZone,
+    guidance: CohortsGuidanceZone,
+    calendar: CohortsCalendarZone,
     outcomes: CohortsOutcomesZone,
   },
   '/practice': {
@@ -148,47 +161,47 @@ const ZONE = {
     profile: ExpertiseProfileZone,
     services: ExpertiseServicesZone,
     proof: ExpertiseProofZone,
+    thinking: ExpertiseThinkingZone,
   },
 };
 
+/**
+ * ONE CARD LEFT, AND IT IS THE ONLY ONE THAT WAS STILL TRUE.
+ *
+ * Practice emptied first: Sessions and Earnings said they had "no store at
+ * all", true when written and false the moment migration 205 shipped. Cohorts
+ * emptied next — Founders, This week and Outcomes went the same way after 206.
+ *
+ * THE THREE DELETED HERE WERE CHECKED AGAINST PRODUCTION, NOT ASSUMED, and two
+ * of them turned out to be describing gaps that had already closed:
+ *
+ *   · `expertise/thinking` claimed `articles` "has no advisor owner, no reach
+ *     figure and no record of where a piece ran". `author_user_id` is NOT NULL
+ *     and `views` is a live counter incremented on every published read
+ *     (`routes/articles.ts:320`). Two of its three claims were false; the zone
+ *     now states the third on itself.
+ *   · `cohorts/calendar` said "both halves exist and nothing joins them" — the
+ *     one card whose diagnosis was exactly right and whose fix needed no
+ *     migration at all. The zone is that join.
+ *   · `cohorts/guidance` was right that nothing stored it. Migration 212 does.
+ *
+ * A card describing a closed gap is worse than no card: it tells an advisor a
+ * working feature is missing. That is why these are DELETED rather than
+ * reworded, and why every remaining card in this bucket was re-read against
+ * `PRAGMA table_info` before this pass rather than trusted.
+ *
+ * `expertise/visibility` STAYS, and stays worded exactly as it is. Nothing in
+ * the product counts a profile view — not for advisors, not for anyone — and
+ * that needs an impression pipeline, not a table. It is the one gap here that a
+ * migration cannot close, which is precisely why it is the one card left.
+ */
 const COPY = {
-  // Practice has no unbacked zone left. Sessions and Earnings had cards here
-  // saying they had "no store at all" — true when they were written, false the
-  // moment migration 205 and its two routes shipped. A card that describes a
-  // closed gap is worse than no card: it tells an advisor a working feature is
-  // missing.
   '/expertise': {
-    thinking: {
-      heading: 'Published thinking is not advisor-scoped yet',
-      what: 'What you have written, where it ran, and what it brought back — so a founder can read you before they book you.',
-      why: 'The `articles` table exists and records a date and a publication state, but it has no advisor owner, no reach figure and no record of where a piece ran. Listing articles against your name would require a join that does not exist, and reporting reach would require a number nobody stores.',
-      links: [{ to: '/articles', label: 'The articles hub as it stands →' }],
-    },
     visibility: {
       heading: 'Nothing counts profile views',
       what: 'How often your profile was shown, how often it was opened, and which searches you appeared in.',
       why: 'There is no impression or profile-view counter anywhere in the product — not for advisors, not for anyone. This needs an analytics pipeline rather than a table, and a page of plausible-looking numbers would be worse than an empty one.',
       links: [{ to: '/expertise/profile', label: 'What a founder would see →' }],
-    },
-  },
-  // Founders, This week and Outcomes are pages now — migration 206 and the
-  // public Lab reads closed those gaps. The two that remain are corrected
-  // rather than carried forward: each said its gap was the missing cohort
-  // assignment, and that is no longer what is absent.
-  '/cohorts': {
-    guidance: {
-      heading: 'Cohort guidance has no store',
-      what: 'The same guidance delivered to a whole batch, and which founders have acted on it.',
-      why: 'The cohort assignment this used to blame now exists — Founders reads it. What is genuinely missing is a store of its own: nothing records a piece of guidance addressed to a batch, and nothing records a founder acting on one. Migrations 201-206 gave the practice a profile, services, proof, consents, session amounts and a cohort link; none of them is this.',
-      seam: true,
-      links: [{ to: '/cohorts/founders', label: 'The batch itself →' }],
-    },
-    calendar: {
-      heading: 'The cohort calendar is not built yet',
-      what: 'The batch’s shared schedule — sessions, milestones and Lab dates in one place.',
-      why: 'Both halves exist and nothing joins them. The Lab’s week windows are readable per batch under This week; your own bookable slots are published from Practice · Opportunities. No surface puts them on one calendar, and the batch read is deliberately kept Lab-only so this stays true rather than half-true.',
-      seam: true,
-      links: [{ to: '/practice/opportunities', label: 'Where your slots are published →' }],
     },
   },
 };

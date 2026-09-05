@@ -154,6 +154,104 @@ async function addMissingColumns(
   }
 }
 
+/**
+ * PRODUCTION CALLS THE SLOT OWNER `mentor_id`; THIS REPOSITORY CALLS IT
+ * `advisor_id`. This converges them, and it is a fix for a live defect rather
+ * than tidying.
+ *
+ * WHAT WAS WRONG. `sql/t13_t14_t15.sql` declares `advisor_id` on both
+ * `advisor_office_hour_slots` and `advisor_bookings`; production has
+ * `mentor_id` on both, and no migration in this repository performs a rename —
+ * the two simply diverged. Every shipped query uses `advisor_id`, so against
+ * production three handlers in `routes/advisors.ts` are broken:
+ *
+ *   · `GET /:uid/slots` — "no such column" → 500. An advisor's slots cannot be
+ *     listed.
+ *   · `POST /me/slots` — the INSERT names `advisor_id` → 500. A slot cannot be
+ *     published at all.
+ *   · `DELETE /me/slots/:id` — worse, because it does not throw:
+ *     `slot.advisor_id` is `undefined` and `undefined !== m.id` is always true,
+ *     so it returns "Slot not found" forever and a slot can never be cancelled.
+ *
+ * WHY NOBODY HAS HIT IT, and why that is the reason to fix it now: production
+ * has zero advisors, zero slots and zero bookings. The rename is free while the
+ * tables are empty and stops being free the moment they are not. The tests
+ * never caught it because they build the table from the t13 shape
+ * (`advisor_stores.test.ts:102`, commented "in the LIVE (t13) shape") — so they
+ * assert against the schema production does not have.
+ *
+ * WHY THIS IS NOT A MIGRATION, which was the first instinct. SQLite has no
+ * conditional DDL and no `RENAME COLUMN IF EXISTS`. Dev, preview and every
+ * database built from `t13_t14_t15.sql` already have `advisor_id`, so a bare
+ * rename fails there with "no such column: mentor_id" — and the runner aborts
+ * the whole deploy on the first failing statement, taking every later migration
+ * and the Worker with it. A migration would fix production by breaking
+ * everywhere else. Reading `PRAGMA table_info` first is the only shape that is
+ * correct on both, and it is the pattern this file and
+ * `discoveryInterviewSchema` already use.
+ *
+ * It runs once per isolate, before the READY latch is set, and is a no-op on
+ * every database that is already correct.
+ */
+/**
+ * Rename only when the legacy name is present AND the correct one is absent.
+ *
+ * A table carrying BOTH is a half-finished rename somebody else is in the
+ * middle of. Attempting it there would fail as a duplicate column and log a
+ * warning on every fresh isolate for a statement that can never succeed, so it
+ * is skipped deliberately instead — which is what
+ * `advisor_slot_column_rename.test.ts` asserts, on the log rather than on the
+ * columns, because the two outcomes leave the table looking identical.
+ */
+const needsOwnerRename = (have: Set<string>) => have.has('mentor_id') && !have.has('advisor_id');
+
+const columnNames = (rows: { results?: Array<{ name: string }> } | null | undefined) =>
+  new Set((rows?.results || []).map((r) => r.name));
+
+/**
+ * UNROLLED PER TABLE, AND EVERY STRING IS A LITERAL. This began as a loop over
+ * a two-element `as const` tuple, which cost two `table === '…'` ternaries (to
+ * satisfy `check-sql-prepare`, which refuses any `${}` inside `DB.prepare`) and
+ * still put `${table}` into the log lines. Semgrep flagged the latter as an
+ * unsafe format string — not reachable here, since the only values came from a
+ * hardcoded tuple, but the finding pointed at real awkwardness. Unrolling
+ * removes the ternaries and the interpolation together.
+ *
+ * The two `try` blocks are separate on purpose: the rename is per-table, not a
+ * global bail-out, so one table already half-renamed must not stop the other.
+ */
+async function renameLegacySlotOwnerColumn(env: Env): Promise<void> {
+  try {
+    const info = await env.DB.prepare(
+      'PRAGMA table_info(advisor_office_hour_slots)',
+    ).all<{ name: string }>();
+    if (needsOwnerRename(columnNames(info))) {
+      await env.DB.prepare(
+        'ALTER TABLE advisor_office_hour_slots RENAME COLUMN mentor_id TO advisor_id',
+      ).run();
+      console.info('[advisorStoresSchema] renamed advisor_office_hour_slots.mentor_id to advisor_id');
+    }
+  } catch (e) {
+    // Never fatal and never cached: a failed rename must be retried on the next
+    // request rather than remembered as done.
+    console.warn('[advisorStoresSchema] advisor_office_hour_slots owner-column rename failed', e);
+  }
+
+  try {
+    const info = await env.DB.prepare(
+      'PRAGMA table_info(advisor_bookings)',
+    ).all<{ name: string }>();
+    if (needsOwnerRename(columnNames(info))) {
+      await env.DB.prepare(
+        'ALTER TABLE advisor_bookings RENAME COLUMN mentor_id TO advisor_id',
+      ).run();
+      console.info('[advisorStoresSchema] renamed advisor_bookings.mentor_id to advisor_id');
+    }
+  } catch (e) {
+    console.warn('[advisorStoresSchema] advisor_bookings owner-column rename failed', e);
+  }
+}
+
 export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
   const key = env.DB as unknown as object;
   if (READY.get(key)) return;
@@ -161,6 +259,9 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     for (const stmt of TABLES) {
       try { await env.DB.prepare(stmt).run(); } catch { /* idempotent */ }
     }
+    // Before the column adds below: those read `PRAGMA table_info` too, and a
+    // half-renamed table would make them reason about the wrong shape.
+    await renameLegacySlotOwnerColumn(env);
     await addMissingColumns(env, 'PRAGMA table_info(advisors)', PROFILE_COLUMNS);
     await addMissingColumns(env, 'PRAGMA table_info(advisor_bookings)', BOOKING_COLUMNS);
     READY.set(key, true);

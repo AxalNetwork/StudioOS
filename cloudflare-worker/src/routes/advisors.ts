@@ -21,6 +21,11 @@ import {
   computeWatchOuts,
 } from '../services/matchingVectors';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
+import { ensureCohortGuidanceSchema } from '../services/cohortGuidanceSchema';
+import {
+  guidanceCounts, oldestOpenHours, collisions, withinDays,
+  type GuidanceRow, type CalendarItem,
+} from './_advisor_cohort_helpers';
 
 const advisors = new Hono<{ Bindings: Env }>();
 
@@ -1552,6 +1557,348 @@ advisors.get('/me/cohort/:cycleId/weeks', async (c) => {
         detail: 'The Lab\u2019s week record could not be read.',
       });
     }
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * THE SAME TWO-PART GATE THE THREE ROUTES BELOW ALL USE.
+ *
+ * Extracted rather than repeated: eligibility (`mayHoldCohortAssignment`, the
+ * CURRENT role, re-read by `requireAuth` on every request so a demoted advisor
+ * loses access immediately) AND the active assignment row (an admin's grant).
+ * The founders handler above explains at length why neither is sufficient
+ * alone; three more copies of that reasoning would be three places to get it
+ * wrong.
+ */
+async function requireOwnCohort(
+  c: Context<{ Bindings: Env }>, user: User, cycleId: number,
+): Promise<Response | null> {
+  if (!mayHoldCohortAssignment(user)) {
+    return c.json({ detail: 'Only an advisor can open a cohort batch' }, 403);
+  }
+  if (!Number.isInteger(cycleId)) {
+    return c.json({ detail: 'cycleId must be a cohort cycle id' }, 400);
+  }
+  const assignment = await c.env.DB.prepare(
+    `SELECT id FROM advisor_cohort_assignments
+      WHERE advisor_user_id = ? AND cohort_cycle_id = ? AND is_active = 1`
+  ).bind(user.id, cycleId).first<{ id: number }>();
+  if (!assignment) return c.json({ detail: 'You are not assigned to this cohort' }, 403);
+  return null;
+}
+
+/**
+ * Cohorts · Guidance — what was said to the batch, and who acted on it.
+ *
+ * MIGRATION 212 IS THE ONLY NEW STORE IN THIS PASS, and this is the card it
+ * answers: "nothing records a piece of guidance addressed to a batch, and
+ * nothing records a founder acting on one."
+ *
+ * WHAT THE COUNTS DO NOT INCLUDE. There is no `overdue`. The canvas draws one
+ * against "your 24h commitment"; nothing stores a commitment and no advisor has
+ * been asked for one, so deriving 24h from a designer's example would report
+ * someone as having broken a promise they never made. `oldest_open_hours` is
+ * the fact underneath it — how long the longest-waiting question has actually
+ * waited — and the page says the commitment is not recorded.
+ *
+ * `median_response_hours` is null when nothing has been answered, never 0. See
+ * `_advisor_cohort_helpers.ts`.
+ */
+advisors.get('/me/cohort/:cycleId/guidance', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    await ensureCohortGuidanceSchema(c.env);
+    const cycleId = Number(c.req.param('cycleId'));
+    const refused = await requireOwnCohort(c, user as User, cycleId);
+    if (refused) return refused;
+
+    const rows = await c.env.DB.prepare(
+      `SELECT id, uid, asked_by_user_id, body, answer, answered_at,
+              week_number, posted_at, retired_at
+         FROM cohort_guidance
+        WHERE cohort_cycle_id = ? AND advisor_user_id = ?
+        ORDER BY posted_at DESC, id DESC
+        LIMIT 200`
+    ).bind(cycleId, user.id).all<GuidanceRow & {
+      uid: string; body: string; week_number: number | null;
+    }>();
+    const items = rows.results || [];
+
+    // Who acted, by name — the card's second sentence. A count would answer
+    // "how many" and lose "who", which is the thing an advisor with twelve
+    // founders actually needs.
+    const acks = await c.env.DB.prepare(
+      `SELECT k.guidance_id AS guidance_id, k.founder_user_id AS founder_user_id,
+              k.acted_at AS acted_at, u.name AS name
+         FROM cohort_guidance_acks k
+         JOIN cohort_guidance g ON g.id = k.guidance_id
+         LEFT JOIN users u ON u.id = k.founder_user_id
+        WHERE g.cohort_cycle_id = ? AND g.advisor_user_id = ?`
+    ).bind(cycleId, user.id).all<{
+      guidance_id: number; founder_user_id: number; acted_at: string; name: string | null;
+    }>();
+    const ackBy = new Map<number, Array<{ user_id: number; name: string | null; acted_at: string }>>();
+    for (const a of acks.results || []) {
+      if (!ackBy.has(a.guidance_id)) ackBy.set(a.guidance_id, []);
+      ackBy.get(a.guidance_id)!.push({ user_id: a.founder_user_id, name: a.name, acted_at: a.acted_at });
+    }
+
+    return c.json({
+      cohort_cycle_id: cycleId,
+      counts: guidanceCounts(items),
+      oldest_open_hours: oldestOpenHours(items, nowIso()),
+      // Named so no reader mistakes its absence for zero.
+      commitment_hours: null,
+      items: items.map((r) => ({
+        ...r,
+        kind: r.asked_by_user_id == null ? 'broadcast' : 'question',
+        acted_by: ackBy.get(r.id) || [],
+      })),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.post('/me/cohort/:cycleId/guidance', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    await ensureCohortGuidanceSchema(c.env);
+    const cycleId = Number(c.req.param('cycleId'));
+    const refused = await requireOwnCohort(c, user as User, cycleId);
+    if (refused) return refused;
+
+    const b = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const body = trimOrNull(b.body);
+    if (!body) return c.json({ detail: 'Guidance needs something to say' }, 400);
+    // A week is optional and stays NULL when unstated: guidance about the whole
+    // programme has no week, and stamping one from `posted_at` would file a
+    // general note under whichever week it happened to be typed in.
+    const raw = Number(b.week_number);
+    const week = Number.isInteger(raw) && raw >= 1 && raw <= 52 ? raw : null;
+
+    const uid = newUid();
+    await c.env.DB.prepare(
+      `INSERT INTO cohort_guidance (uid, cohort_cycle_id, advisor_user_id, body, week_number)
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind(uid, cycleId, user.id, body, week).run();
+    return c.json({ uid, body, week_number: week }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.patch('/me/guidance/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    await ensureCohortGuidanceSchema(c.env);
+    const uid = String(c.req.param('uid') || '');
+    // Ownership is the advisor column on the row itself — the assignment may
+    // since have been withdrawn, and guidance already written must still be
+    // editable by the person who wrote it and nobody else.
+    const row = await c.env.DB.prepare(
+      'SELECT id, cohort_cycle_id FROM cohort_guidance WHERE uid = ? AND advisor_user_id = ?'
+    ).bind(uid, user.id).first<{ id: number; cohort_cycle_id: number }>();
+    if (!row) return c.json({ detail: 'Guidance not found' }, 404);
+
+    const b = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const body = trimOrNull(b.body);
+    const answer = trimOrNull(b.answer);
+    const retire = b.retired === true ? nowIso() : b.retired === false ? null : undefined;
+    if (body === null && answer === null && retire === undefined) {
+      return c.json({ detail: 'Nothing to change' }, 400);
+    }
+    if (body !== null) {
+      await c.env.DB.prepare(
+        "UPDATE cohort_guidance SET body = ?, updated_at = datetime('now') WHERE id = ?"
+      ).bind(body, row.id).run();
+    }
+    if (answer !== null) {
+      // `answered_at` is stamped with the answer and never separately: the
+      // median response time is the gap between the two, so a stamp without a
+      // reply would report an answer nobody wrote.
+      await c.env.DB.prepare(
+        "UPDATE cohort_guidance SET answer = ?, answered_at = ?, updated_at = datetime('now') WHERE id = ?"
+      ).bind(answer, nowIso(), row.id).run();
+    }
+    if (retire !== undefined) {
+      await c.env.DB.prepare(
+        "UPDATE cohort_guidance SET retired_at = ?, updated_at = datetime('now') WHERE id = ?"
+      ).bind(retire, row.id).run();
+    }
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Cohorts · Calendar — the Lab's dates and the advisor's own slots, joined.
+ *
+ * THE CARD SAID "both halves exist and nothing joins them", AND IT WAS RIGHT.
+ * This is the join, and it needs no migration: `week_windows` has held the
+ * Lab's unlock/deadline pairs since migration 156, and the advisor's slots and
+ * bookings have existed since T13.
+ *
+ * THE WEEKS ROUTE ABOVE DELIBERATELY DOES NOT DO THIS. Its comment says so —
+ * "NO ADVISOR SLOTS ARE JOINED IN HERE, deliberately… joining them here would
+ * make that card false". The join belongs on the zone the card is about, which
+ * is this one, and the weeks route stays Lab-sourced entirely.
+ *
+ * MISSING PREP IS NOT COMPUTED. The canvas draws "Missing prep · session
+ * without a brief"; nothing stores a brief, so the tile reads not-recorded
+ * rather than counting every session as unprepared.
+ */
+advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    const cycleId = Number(c.req.param('cycleId'));
+    const refused = await requireOwnCohort(c, user as User, cycleId);
+    if (refused) return refused;
+
+    const cycle = await c.env.DB.prepare(
+      'SELECT year, month, start_at, end_at, status FROM cohort_cycles WHERE id = ?'
+    ).bind(cycleId).first<{
+      year: number; month: number; start_at: string; end_at: string; status: string;
+    }>();
+    if (!cycle) return c.json({ detail: 'No such cohort cycle' }, 404);
+
+    const items: CalendarItem[] = [];
+
+    // The Lab's half. A cycle predating migration 156 has no windows at all,
+    // and `windows_recorded: false` is the honest answer for it — the same rule
+    // the weeks route states. Rendering an empty calendar would say the batch
+    // has no obligations, which is the one thing this page must not claim.
+    const windows = await c.env.DB.prepare(
+      `SELECT week_number, unlock_at, deadline_at FROM week_windows
+        WHERE cohort_cycle_id = ? ORDER BY week_number ASC`
+    ).bind(cycleId).all<{ week_number: number; unlock_at: string; deadline_at: string }>()
+      .catch(() => ({ results: [] as Array<{ week_number: number; unlock_at: string; deadline_at: string }> }));
+    const weekRows = windows.results || [];
+    for (const w of weekRows) {
+      items.push({
+        kind: 'cohort', title: `Week ${w.week_number} opens`,
+        starts_at: w.unlock_at, ends_at: null, ref: `week:${w.week_number}:unlock`,
+      });
+      items.push({
+        kind: 'cohort', title: `Week ${w.week_number} deliverables due`,
+        starts_at: w.deadline_at, ends_at: null, ref: `week:${w.week_number}:deadline`,
+      });
+    }
+    if (cycle.end_at) {
+      items.push({
+        kind: 'demo_day', title: 'Demo Day', starts_at: cycle.end_at, ends_at: null,
+        ref: `cycle:${cycleId}:end`,
+      });
+    }
+
+    // The advisor's half — booked sessions only. An unbooked slot is
+    // availability, not an obligation, and putting it on the same calendar as a
+    // deadline would make a free afternoon look like a commitment.
+    // `advisor_id`, not production's legacy `mentor_id`:
+    // `ensureAdvisorStoresSchema` above renames it on first touch, so by the
+    // time this runs the column has the name the whole repository uses. Writing
+    // `mentor_id` here would be correct today and wrong the moment the rename
+    // lands, and would fail `check-sqlite-columns` against the repo's own DDL.
+    //
+    // `advisors.id` is the owner, NOT `users.id`: slots are keyed on the
+    // advisor PROFILE row, which is what `POST /me/slots` binds (`m.id` from
+    // `myAdvisor`). Passing the user id would return an empty calendar for
+    // every advisor whose two ids differ, which is all of them.
+    const me = await myAdvisor(c.env, user as User);
+    const booked = me ? await c.env.DB.prepare(
+      `SELECT s.id AS slot_id, s.starts_at AS starts_at, s.ends_at AS ends_at,
+              b.topic AS topic, u.name AS founder_name
+         FROM advisor_bookings b
+         JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+         LEFT JOIN users u ON u.id = b.founder_user_id
+        WHERE s.advisor_id = ? AND s.is_cancelled = 0
+          AND b.status IN ('pending', 'confirmed')
+        ORDER BY s.starts_at ASC
+        LIMIT 200`
+    ).bind(me.id).all<{
+      slot_id: number; starts_at: string; ends_at: string;
+      topic: string | null; founder_name: string | null;
+    }>() : { results: [] as Array<{
+      slot_id: number; starts_at: string; ends_at: string;
+      topic: string | null; founder_name: string | null;
+    }> };
+    for (const s of booked.results || []) {
+      items.push({
+        kind: 'client',
+        title: s.topic || (s.founder_name ? `Session with ${s.founder_name}` : 'Booked session'),
+        starts_at: s.starts_at, ends_at: s.ends_at, ref: `slot:${s.slot_id}`,
+      });
+    }
+
+    const now = nowIso();
+    const upcoming = withinDays(items, now, 14);
+    const clashes = collisions(upcoming);
+    return c.json({
+      cohort_cycle_id: cycleId,
+      windows_recorded: weekRows.length > 0,
+      items: upcoming,
+      collisions: clashes.map(([a, b]) => ({ a: upcoming[a].ref, b: upcoming[b].ref })),
+      counts: {
+        next_14_days: upcoming.length,
+        cohort_obligations: upcoming.filter((i) => i.kind !== 'client').length,
+        collisions: clashes.length,
+        // Nothing stores a session brief, so this is not a zero.
+        missing_prep: null,
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Expertise · Thinking — what this advisor has published.
+ *
+ * THE CARD WAS WRONG AND IS REPLACED. It said `articles` "has no advisor owner,
+ * no reach figure and no record of where a piece ran", and that listing them
+ * "would require a join that does not exist". Checked against production:
+ * `articles.author_user_id` is NOT NULL and `articles.views` is a real counter
+ * incremented on every published read (`routes/articles.ts:320`), non-zero on
+ * four published pieces today. Two of the three claims were false; only the
+ * third — where a piece ran — is a genuine absence, and the zone states it.
+ *
+ * OWN DRAFTS ARE INCLUDED, which is why this is not just the public
+ * `/articles/by-author/:user_id`. That endpoint filters `status = 'published'`
+ * because it serves a public profile. An advisor looking at their own thinking
+ * needs the drafts too, and only their own — hence the authenticated route with
+ * `author_user_id = user.id` rather than a path parameter anyone could change.
+ */
+advisors.get('/me/thinking', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (role(user) !== 'advisor') {
+      return c.json({ detail: 'Only an advisor has a thinking shelf' }, 403);
+    }
+    const rows = await c.env.DB.prepare(
+      `SELECT id, slug, title, subtitle, status, published_at, word_count,
+              read_minutes, views, sector, created_at, updated_at
+         FROM articles
+        WHERE author_user_id = ?
+        ORDER BY COALESCE(published_at, created_at) DESC
+        LIMIT 100`
+    ).bind(user.id).all<{
+      id: number; slug: string; title: string; subtitle: string | null;
+      status: string; published_at: string | null; word_count: number;
+      read_minutes: number; views: number; sector: string | null;
+    }>().catch(() => ({ results: [] as any[] }));
+    const items = rows.results || [];
+    const published = items.filter((a) => a.status === 'published');
+    const reach = published.map((a) => Number(a.views || 0));
+    return c.json({
+      items,
+      counts: {
+        published: published.length,
+        drafts: items.filter((a) => a.status !== 'published').length,
+        // Real reach, from a counter the product actually increments.
+        best_reach: reach.length ? Math.max(...reach) : null,
+        total_reach: reach.length ? reach.reduce((s, n) => s + n, 0) : null,
+        // "Where it ran" — the one claim on the old card that WAS true.
+        // Nothing records an external publication or a talk, so no number.
+        talk_reach: null,
+      },
+    });
   } catch (e) { return mapError(c, e); }
 });
 

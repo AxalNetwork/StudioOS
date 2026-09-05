@@ -53,19 +53,29 @@ test('every Expertise zone the shell declares is either backed or honestly empty
   // list. A zone in neither would fall through to the generic "Nothing here
   // yet" card — which is honest, but says nothing useful about WHY.
   const backed = dispatchMap()['/expertise'] || [];
-  assert.deepEqual(backed, ['profile', 'services', 'proof'],
-    'exactly the three zones migrations 202-204 gave a store');
+  // `thinking` joined these on 2026-09-04 and needed NO migration. Its card
+  // claimed `articles` had "no advisor owner, no reach figure" — production has
+  // `author_user_id NOT NULL` and a `views` counter incremented on every
+  // published read (`routes/articles.ts:320`). Two of that card's three claims
+  // were already false when it was written; the zone was a wiring job.
+  assert.deepEqual(backed, ['profile', 'services', 'proof', 'thinking'],
+    'the three zones migrations 202-204 gave a store, plus thinking over articles');
 
-  const copyStart = bucketRoutes.indexOf("  '/expertise': {\n    thinking:");
-  assert.ok(copyStart > -1, 'the Expertise COPY block must still start with thinking');
-  const expertiseCopy = bucketRoutes.slice(
-    copyStart,
-    bucketRoutes.indexOf("  '/cohorts': {", copyStart),
-  );
+  // ONE CARD LEFT, and the COPY block now opens with it.
+  const copyStart = bucketRoutes.indexOf("  '/expertise': {\n    visibility:");
+  assert.ok(copyStart > -1, 'the Expertise COPY block must still start with visibility');
+  const expertiseCopy = bucketRoutes.slice(copyStart, bucketRoutes.indexOf('\n};', copyStart));
   assert.ok(expertiseCopy.length > 0, 'the slice must not invert');
   for (const z of zones.filter((x) => !backed.includes(x))) {
     assert.ok(expertiseCopy.includes(`    ${z}: {`),
       `${z} has no store and must say which one is missing`);
+  }
+  // And the reverse: a card for a zone that now HAS a body would tell an
+  // advisor a working feature is missing. That is the failure this bucket has
+  // now hit three times — Sessions, Earnings, and Thinking.
+  for (const z of backed) {
+    assert.ok(!expertiseCopy.includes(`    ${z}: {`),
+      `${z} has a body now; a card in front of it is a false claim`);
   }
 });
 
@@ -93,12 +103,22 @@ test('every Practice zone is served — none is left claiming a store that exist
   assert.doesNotMatch(bucketRoutes, /no session price, paid booking or payout record/);
 });
 
-test('the two unbacked zones name the store that is absent, not a vague "coming soon"', () => {
+test('the one unbacked zone names the store that is absent, not a vague "coming soon"', () => {
   // The whole value of the empty card is that it is specific. "Not built yet"
-  // is indistinguishable from a bug; "the articles table has no advisor owner"
-  // is a fact a reader can check.
-  assert.match(bucketRoutes, /`articles` table exists and records a date and a publication state, but it has no advisor owner/);
+  // is indistinguishable from a bug; "no impression counter anywhere in the
+  // product" is a fact a reader can check.
   assert.match(bucketRoutes, /no impression or profile-view counter anywhere in the product/);
+
+  // AND THE THINKING CARD IS GONE, not reworded. It asserted three things about
+  // `articles` and two were false: `author_user_id` is NOT NULL, and `views` is
+  // a live counter. Only "no record of where a piece ran" was true, and the
+  // zone states that on itself now. A card describing a gap that had already
+  // closed is worse than no card.
+  assert.doesNotMatch(bucketRoutes, /it has no advisor owner/);
+  assert.doesNotMatch(bucketRoutes, /Published thinking is not advisor-scoped yet/);
+  const thinking = read('frontend/src/pages/advisor/expertise/ThinkingZone.jsx');
+  assert.match(thinking, /where a piece ran/i,
+    'the one true claim on the old card must survive, on the zone itself');
 });
 
 test('/office-hours is retired, and its one unique capability moved rather than vanished', () => {
