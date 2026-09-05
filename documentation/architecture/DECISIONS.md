@@ -1622,3 +1622,69 @@ documentation now recommends for new projects. Three consequences.
    Worker could not share as a consumer) plus a rule for one shared preview
    database across branches; that is unbuilt, not forbidden.
 
+
+---
+
+### D37. Research · Library and Ask are the FIRST-PARTY half of what D9/D12 withdrew, and the type that indexes them is deliberately absent from global search
+
+**Date:** 2026-09-05 · **Supersedes nothing; narrows D12.**
+
+D9 and D12 withdrew four `/advisor/research/*` tabs — companies, AI research,
+news, documents — because each rendered a fixture with no API behind it, and
+set one condition for their return: a licensed PitchBook/Crunchbase-class
+source. That condition was written about **third-party** research data, and it
+still holds: nothing here searches the web, a company database, or a market
+feed.
+
+It never governed the other half. The advisor canvas asks for Ask over *a
+client's own shared documents, a library of client histories and the advisor's
+playbooks* — first-party material the product simply had no store for.
+`ResearchWorkspace.jsx` has said "unbuilt, not forbidden" since that
+distinction was drawn. This decision records building it.
+
+**What shipped.** `research_documents` (migration 213) plus
+`routes/research.ts`: upload, list, one-time signed download, delete, and
+`POST /ask`. On **all four licences** — `library` and `ask` are in every
+`RESEARCH_ZONES` list, and they were 8 of the 16 unbacked zone slots left in
+the product.
+
+**Ask refuses rather than guesses.** Retrieval runs first; the model is called
+only when a passage clears a documented score floor. Below it the response is
+`no_source` with the score the closest passage actually reached — a 200, not
+an error, because the question was understood and "nothing here answers this"
+is the true answer. A `model_unavailable` outcome is kept separate, so a model
+failure is never reported as an empty library. An Ask box that falls back to
+general knowledge in a cited answer's voice is precisely what D12 pulled a tab
+for.
+
+**The decision most likely to be undone by someone doing the right thing.**
+`routes/search.ts` read `const VALID_TYPES = ALL_ENTITY_TYPES`, and the hourly
+re-index sweep iterates that same array. So adding `research_doc` to
+`ALL_ENTITY_TYPES` — which is what makes a type indexable at all — would also
+have published every user's private documents to every other user's global
+search box, in one line that looks exactly like following the existing
+pattern. The two lists are now separate and literal, and
+`cloudflare-worker/test/research_search_isolation.test.ts` fails if they
+re-converge.
+
+**Isolation is three layers because only two of them are ours.** `search.ts`
+has an everything-is-allowed shortcut that queries with no type filter and no
+namespace. Whether a namespace-less Vectorize query returns namespaced vectors
+would decide whether that path leaks, and it could not be confirmed from here
+(the docs do not state it; `developers.cloudflare.com` is blocked by this
+environment's egress proxy). So nothing rests on the answer: `searchSemantic`
+drops owner-private types unless asked for by name, the namespace partitions,
+and `owner_user_id` is re-checked per hit. The isolation test's fake Vectorize
+ignores namespaces deliberately, proving the two layers that are ours.
+
+A separate Vectorize index would make the leak structurally impossible rather
+than filtered, and remains the stronger option. It was not taken because it
+needs a new binding in three wrangler tables plus an index provisioned before
+deploy, and a deploy against a missing index fails — the failure mode this
+repo already hit once at the migration step.
+
+**What is still not possible, and is stated on the page rather than implied:**
+nobody can send you a document. A founder sharing their own file needs a grant
+type the product has for investors (`data_room_grants`) and for no one else.
+Adding one is a decision about a founder's privacy, not a schema change, and
+it is what `/research/client-prep` also waits on.

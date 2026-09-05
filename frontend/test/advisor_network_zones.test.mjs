@@ -271,8 +271,33 @@ test('the withdrawn Research tabs stay withdrawn, and the reason is written down
   // The distinction that keeps this honest: the advisor canvas asks for a
   // FIRST-PARTY surface, which D12's licensing condition does not govern.
   assert.match(research, /unbuilt, not forbidden/);
-  // Ask and Library still have no store and must still say so.
-  assert.match(code, /const LIVE_ZONES = new Set\(\['markets', 'companies'\]\)/);
+
+  // THE FIRST-PARTY HALF IS BUILT NOW, and this assertion flipped when it
+  // shipped. It used to read `LIVE_ZONES = new Set(['markets', 'companies'])`
+  // under a comment saying Ask and Library "still have no store and must still
+  // say so" — true when written, false the moment migration 213 and
+  // routes/research.ts landed. Updated to the new truth rather than loosened:
+  // a card left standing in front of a working page is the failure this file's
+  // sibling tests have caught three times.
+  const live = code.slice(code.indexOf('const LIVE_ZONES'), code.indexOf('])', code.indexOf('const LIVE_ZONES')));
+  assert.ok(live.length > 0 && live.length < 400, 'the LIVE_ZONES slice must not run away');
+  for (const slug of ['library', 'ask']) {
+    assert.ok(live.includes(`'${slug}'`), `${slug} has a store now and must be live`);
+  }
+  // And neither may still carry a no-store card.
+  const copyStart = code.indexOf('const ZONE_COPY = {');
+  const copyBlock = code.slice(copyStart, code.indexOf('\n};', copyStart));
+  assert.ok(copyBlock.length > 0 && copyBlock.length < 4000, 'the ZONE_COPY slice must not run away');
+  for (const slug of ['ask:', 'library:']) {
+    assert.ok(!copyBlock.includes(slug),
+      `${slug} still carries a "no store" card while its page reads a store`);
+  }
+
+  // WHAT D12 ACTUALLY GATED IS STILL GATED. The licensing condition governs
+  // third-party research, and nothing here reaches for it: Ask answers only
+  // from the caller's own uploads, and the rail says so.
+  assert.match(research, /cannot search the web, company databases or market data/,
+    'the third-party boundary D12 set must still be stated');
 });
 
 test('Companies says whose analyses it is showing', () => {

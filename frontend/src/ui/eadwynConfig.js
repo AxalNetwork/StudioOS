@@ -48,6 +48,21 @@ export const ASSIST_SURFACES = {
     modeNote: 'Eadwyn reads the deck and writes the critique.',
     footer: { kind: 'screened', note: 'Feedback is generated, not a human review.' },
   },
+  // NO ENTRY FOR RESEARCH · ASK, and the omission is deliberate.
+  //
+  // `POST /api/research/ask` runs `task: 'research_ask'`, so its spend IS
+  // attributed separately — `/api/ai/me/spend` groups by task class, on the
+  // worker side, with no help from this file. What a surface here additionally
+  // buys is a model card on an `AssistLayout` rail, and Ask has no such rail:
+  // it is a zone inside a workspace that already renders `WorkerRail`. Adding
+  // one would draw two rails on one page, which is the doubled-chrome failure
+  // this repo has fixed on Network, on Partner, and on the Research zones
+  // themselves.
+  //
+  // A first draft did add an entry here, and `ui_assist_rail_and_sidebar`
+  // caught it as dead config — correctly. The rule that test states is the
+  // right one: config follows a mount, never the other way round.
+
   // routes/brand.ts → aiRouterRun({ task: 'brand_autofill' | 'brand_palette' | …)
   brand: {
     task: 'brand_autofill',
