@@ -47,23 +47,105 @@ const OBLIGATION_META = {
   accreditation_v1:     { label: 'Accreditation evidence',      tab: 'accreditation' },
 };
 
-const STATUS_PILL = {
-  satisfied:    'bg-emerald-100 text-emerald-700 border-emerald-300',
-  signed:       'bg-emerald-100 text-emerald-700 border-emerald-300',
-  verified:     'bg-emerald-100 text-emerald-700 border-emerald-300',
-  in_review:    'bg-blue-100 text-blue-700 border-blue-300',
-  self_attested:'bg-amber-100 text-amber-700 border-amber-300',
-  pending:      'bg-amber-100 text-amber-700 border-amber-300',
-  not_started:  'bg-slate-100 text-slate-700 border-slate-300',
-  unverified:   'bg-slate-100 text-slate-700 border-slate-300',
-  waived:       'bg-slate-100 text-slate-600 border-slate-300',
-  expired:      'bg-red-100 text-red-700 border-red-300',
-  rejected:     'bg-red-100 text-red-700 border-red-300',
+// ---------------------------------------------------------------------------
+// Status → severity tone.
+//
+// This replaces a status → CSS-class map, and the difference is not cosmetic.
+// That map enumerated eleven statuses and the platform writes more than eleven:
+// `active`, `revoked` and `cancelled` are all real `pairwise_ndas.status`
+// values (trust.ts:708 branches on the first two by name) and NONE of them was
+// listed, so all three fell through to the `unverified` grey. An ACTIVE NDA —
+// signed, in force — and a REVOKED one rendered in exactly the same neutral
+// grey as an agreement nobody had started. Two opposite ends of the spectrum,
+// drawn identically.
+//
+// Mapping to four TONES instead of eleven classes does not by itself fix that;
+// the canvas this restyle came from has the same hole (its toneOf lists
+// satisfied/signed/verified/clear/none and misses active, revoked, cancelled
+// and waived). What fixes it is deriving the map from the vocabulary the
+// worker actually writes and then GUARDING it: trust_center_contract.test.mjs
+// parses the status literals out of routes/trust.ts and fails if one of them
+// has no tone here. A status the platform can produce but this file has never
+// heard of is the defect; the test is what keeps it from recurring.
+//
+// `waived` is deliberately `ok`, not neutral. computeTrustScore counts waived
+// alongside satisfied, so a grey pill beside a green score said two different
+// things about the same row. The pill still reads "waived", so the reader can
+// tell a waiver from a completion — it is the TONE that has to agree with the
+// score, not the word.
+const STATUS_TONE = {
+  // legal_obligations.status — the obligation matrix behind /trust/me
+  satisfied:     'ok',
+  waived:        'ok',
+  pending:       'prog',
+  in_review:     'prog',
+  expired:       'bad',
+  // pairwise_ndas.status — the Agreements tab
+  signed:        'ok',
+  active:        'ok',
+  revoked:       'bad',
+  cancelled:     'bad',
+  // /trust/summary's older vocabulary, still reachable through legacy reads
+  verified:      'ok',
+  self_attested: 'prog',
+  rejected:      'bad',
+  not_started:   'neutral',
+  unverified:    'neutral',
 };
 
+const TONE = {
+  ok: {
+    pill: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-200 dark:border-emerald-800',
+    bar: 'border-l-emerald-500',
+  },
+  prog: {
+    pill: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-800',
+    bar: 'border-l-amber-500',
+  },
+  bad: {
+    pill: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-200 dark:border-red-800',
+    bar: 'border-l-red-500',
+  },
+  neutral: {
+    pill: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600',
+    bar: 'border-l-slate-300 dark:border-l-slate-600',
+  },
+};
+
+function toneOf(status) {
+  return STATUS_TONE[String(status || '').toLowerCase()] || 'neutral';
+}
+
+/**
+ * A date is not a state. `expires 3/14/2027` reads the same whether it is two
+ * years out or lapsed last month, which is how an EXPIRED obligation could sit
+ * in the list looking like any other row. This says what the date means.
+ *
+ * `expires_at` has always been on the wire from /trust/me — it was rendered,
+ * just not interpreted.
+ */
+function expiryNote(iso, now = new Date()) {
+  if (!iso) return null;
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  const days = Math.round((at - now) / 86400000);
+  if (days < 0) {
+    const n = -days;
+    return { text: `Expired ${n} ${n === 1 ? 'day' : 'days'} ago`, tone: 'bad' };
+  }
+  if (days <= 30) {
+    return { text: `Expires in ${days} ${days === 1 ? 'day' : 'days'}`, tone: 'prog' };
+  }
+  return { text: `Expires ${at.toLocaleDateString()}`, tone: 'neutral' };
+}
+
 function StatusPill({ status }) {
-  const cls = STATUS_PILL[status] || STATUS_PILL.unverified;
-  return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium ${cls}`}>{status || 'pending'}</span>;
+  const t = TONE[toneOf(status)];
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium ${t.pill}`}>
+      {String(status || 'pending').replace(/_/g, ' ')}
+    </span>
+  );
 }
 
 function Section({ icon: Icon, title, subtitle, children }) {
@@ -191,6 +273,41 @@ function NdaCard({ items, onChanged }) {
 // ---------------------------------------------------------------------------
 // Obligation list — generic renderer used on every tab.
 // ---------------------------------------------------------------------------
+/**
+ * A three-number summary of the list below it, counted from the SAME array the
+ * rows render. It is deliberately not a second data source and deliberately
+ * not a second score: the badge beside it is computed by computeTrustScore,
+ * which the worker mirrors exactly (`satisfied+waived / required`, trust.ts:157).
+ * The canvas this came from proposed its own formula — partial credit for
+ * in-review, a gate penalty per open requirement — which would have put this
+ * page's number at odds with the server's AND with the same badge on /account.
+ * Counts describe; they do not re-score.
+ *
+ * A tone with nothing in it is omitted rather than shown as a zero, because
+ * "0 blocked" and "no blocked row exists" are the same fact stated two ways and
+ * the second one reads as an achievement.
+ */
+function ToneCounts({ obligations }) {
+  const n = { bad: 0, prog: 0, ok: 0, neutral: 0 };
+  for (const o of obligations) n[toneOf(o.status)] += 1;
+  const shown = [
+    ['bad', n.bad, 'blocked'],
+    ['prog', n.prog, 'in progress'],
+    ['ok', n.ok, 'satisfied'],
+    ['neutral', n.neutral, 'not started'],
+  ].filter(([, c]) => c > 0);
+  if (!shown.length) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-3">
+      {shown.map(([tone, c, label]) => (
+        <span key={tone} className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-medium ${TONE[tone].pill}`}>
+          <span className="font-bold tabular-nums">{c}</span> {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function ObligationList({ obligations, emptyText, onStart }) {
   if (!obligations.length) {
     return <p className="text-sm text-slate-600">{emptyText || 'Nothing required for this section.'}</p>;
@@ -200,15 +317,26 @@ function ObligationList({ obligations, emptyText, onStart }) {
       {obligations.map(o => {
         const meta = OBLIGATION_META[o.obligation_key] || { label: o.obligation_key };
         const open = o.required && o.status !== 'satisfied' && o.status !== 'waived';
+        const exp = expiryNote(o.expires_at);
         return (
-          <li key={o.obligation_key} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded px-3 py-2">
+          <li
+            key={o.obligation_key}
+            className={`flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(o.status)].bar} rounded px-3 py-2`}
+          >
             <div className="flex items-center gap-3 min-w-0">
-              <FileText size={16} className="text-slate-500 shrink-0" />
+              <FileText size={16} className="text-slate-500 dark:text-slate-400 shrink-0" />
               <div className="min-w-0">
                 <div className="text-sm text-slate-900 dark:text-slate-100 truncate">{meta.label}</div>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-slate-600 dark:text-slate-400">
                   {o.required ? 'Required' : 'Optional'}
-                  {o.expires_at ? ` · expires ${new Date(o.expires_at).toLocaleDateString()}` : ''}
+                  {exp ? ' · ' : ''}
+                  {exp && (
+                    <span className={exp.tone === 'bad'
+                      ? 'text-red-700 dark:text-red-300 font-medium'
+                      : exp.tone === 'prog' ? 'text-amber-700 dark:text-amber-300 font-medium' : ''}>
+                      {exp.text}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -353,6 +481,7 @@ function AgreementsTab({ obligations, onStart, role }) {
               const expired = validUntil && validUntil.getTime() < Date.now();
               const voided = a.status === 'voided' || a.status === 'revoked' || !!a.voided_at;
               const display = voided ? 'revoked' : (expired ? 'expired' : a.status);
+              const validExp = expiryNote(a.valid_until);
               const canSign = !voided && !expired && a.status !== 'active' && !!a.nda_envelope_uuid;
               const canAdminAct = isAdmin && !voided && a.status !== 'active' && !expired;
               // Backend computes the signer list on read (joining
@@ -365,16 +494,26 @@ function AgreementsTab({ obligations, onStart, role }) {
                 catch { return []; }
               })();
               return (
-                <li key={a.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded px-3 py-2 gap-2 flex-wrap">
+                <li
+                  key={a.id}
+                  className={`flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(display)].bar} rounded px-3 py-2 gap-2 flex-wrap`}
+                >
                   <div className="flex items-center gap-3 min-w-0">
-                    <Lock size={16} className="text-slate-500 shrink-0" />
+                    <Lock size={16} className="text-slate-500 dark:text-slate-400 shrink-0" />
                     <div className="min-w-0">
                       <div className="text-sm text-slate-900 dark:text-slate-100 truncate">
                         Mutual NDA · parties #{a.party_a_user_id} ↔ #{a.party_b_user_id}
                       </div>
                       <div className="text-xs text-slate-500">
                         envelope {a.nda_envelope_uuid?.slice(0, 8)}…
-                        {validUntil ? ` · valid until ${validUntil.toLocaleDateString()}` : ''}
+                        {validExp ? ' · ' : ''}
+                        {validExp && (
+                          <span className={validExp.tone === 'bad'
+                            ? 'text-red-700 dark:text-red-300 font-medium'
+                            : validExp.tone === 'prog' ? 'text-amber-700 dark:text-amber-300 font-medium' : ''}>
+                            {validExp.text.replace('Expires', 'Valid until').replace('Expired', 'Lapsed')}
+                          </span>
+                        )}
                         {signers.length > 0 ? ` · signed: ${signers.map(s => s.name || s.email).join(', ')}` : ''}
                         {voided && a.voided_reason ? ` · voided: ${a.voided_reason}` : ''}
                       </div>
@@ -566,12 +705,19 @@ function tabsForRole(role, obligations) {
   // isn't represented as an obligation.
   const tabs = [{ key: 'overview', label: 'Overview', icon: Globe }];
   const has = (tabKey) => obligations.some(o => OBLIGATION_META[o.obligation_key]?.tab === tabKey);
+  // How many obligations under a tab still need the reader's attention. Counted
+  // from the same matrix that decides whether the tab exists at all, so a badge
+  // can never disagree with the rows behind it. `waived` and `satisfied` are
+  // both `ok` and neither counts — see STATUS_TONE on why a waiver is not open.
+  const openIn = (tabKey) => obligations.filter(
+    o => OBLIGATION_META[o.obligation_key]?.tab === tabKey && toneOf(o.status) !== 'ok',
+  ).length;
   // Task #25 — surface Identity for every KYC-eligible persona (not only when the
   // obligation matrix carries a kyc_v1 row) so it's the single entry point to the
   // Identity Verification form now that the standalone "/kyc" nav item is gone.
-  if (has('identity') || KYC_ELIGIBLE_ROLES.has(role)) tabs.push({ key: 'identity', label: 'Identity', icon: IdCard });
-  if (has('entity'))        tabs.push({ key: 'entity',        label: 'Entity (KYB)',     icon: Building2 });
-  if (has('accreditation')) tabs.push({ key: 'accreditation', label: 'Accreditation',    icon: BadgeCheck });
+  if (has('identity') || KYC_ELIGIBLE_ROLES.has(role)) tabs.push({ key: 'identity', label: 'Identity', icon: IdCard, open: openIn('identity') });
+  if (has('entity'))        tabs.push({ key: 'entity',        label: 'Entity (KYB)',     icon: Building2, open: openIn('entity') });
+  if (has('accreditation')) tabs.push({ key: 'accreditation', label: 'Accreditation',    icon: BadgeCheck, open: openIn('accreditation') });
   tabs.push({ key: 'agreements', label: 'Agreements', icon: FileSignature });
   if (role === 'admin') tabs.push({ key: 'sanctions', label: 'Sanctions', icon: Search });
   return tabs;
@@ -657,6 +803,7 @@ export default function TrustCenterPage({ chromeless = false }) {
           {missing.length === 0
             ? <span className="text-emerald-700 dark:text-emerald-400 font-medium">Fully compliant — every required obligation is satisfied.</span>
             : <span>You have <strong>{missing.length}</strong> open requirement{missing.length === 1 ? '' : 's'}. Hover the score for details.</span>}
+          <ToneCounts obligations={obligations} />
         </div>
       </div>
       <ObligationList obligations={obligations} emptyText="No obligations required for your role." onStart={startObligation} />
@@ -744,6 +891,17 @@ export default function TrustCenterPage({ chromeless = false }) {
                 : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'}`}
             >
               <Icon size={14} />{t.label}
+              {t.open > 0 && (
+                <span
+                  data-testid={`trust-tab-badge-${t.key}`}
+                  // red-500 under white is 3.76:1 — under AA. red-600 holds at 4.83:1 on
+                  // both grounds, so the badge keeps one colour rather than getting a
+                  // dark variant that is harder to read than the light one.
+                  className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold text-white bg-red-600 tabular-nums"
+                >
+                  {t.open}
+                </span>
+              )}
             </button>
           );
         })}
