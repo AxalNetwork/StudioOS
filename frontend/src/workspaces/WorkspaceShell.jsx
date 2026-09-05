@@ -77,7 +77,28 @@ export default function WorkspaceShell({
     // its own inner padding (see below), so a gap would put a stripe of page
     // ground between the body and a border that is meant to be the seam
     // between them. The canvases have the two columns meeting exactly.
-    <div className={rail ? 'flex items-stretch' : ''}>
+    //
+    // `min-h-full` IS WHAT MAKES `items-stretch` MEAN ANYTHING. Stretch sizes
+    // the two columns to the ROW, and a row with no height of its own is only
+    // as tall as its tallest child — so the rail panel measured
+    // `max(page body, rail contents)` and stopped there, leaving bare ground
+    // between its bottom edge and the footer. Which of the two won produced
+    // the two different gaps: expanded, the rail's own ~600px of blocks
+    // exceeded a sparse page and the panel ended under its last block;
+    // collapsed, `.fwr-body` is `display:none` (workerRail.css) so the aside
+    // shrinks to the rotated title and the page body won instead.
+    //
+    // The height chain above this point is already definite — App.jsx's
+    // `h-screen` shell, its `flex flex-1` row, and `<main className="flex
+    // flex-1 flex-col overflow-y-auto">` — and stops at the page wrapper,
+    // which is a plain block. Percentage height resolves against it, so
+    // `min-h-full` bottoms the row out exactly at the footer, which is
+    // rendered inside `main` after the wrapper. Deliberately NOT `h-screen`
+    // or `100dvh`: those measure the viewport, which is taller than this
+    // wrapper by the 56px header plus the footer, and would push the footer
+    // off-screen. Deliberately `min-h-` and not `h-`: a page longer than the
+    // viewport must still grow. The sticky wrapper below stays for that case.
+    <div className={rail ? 'flex min-h-full items-stretch' : ''}>
       {/*
         THE SHELL OWNS ITS OWN PADDING, and this is the whole of the "one
         padding rule". Every one of the twenty-nine canvases specifies the same
