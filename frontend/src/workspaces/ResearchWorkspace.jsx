@@ -50,6 +50,17 @@ import { bucketForPath, zoneForPath } from './shellConfig';
  * shared documents, a library of client histories and the advisor's playbooks.
  * That is not third-party research data, so D12's licensing condition does not
  * govern it. It is unbuilt, not forbidden, and the cards below say which.
+ *
+ * CLIENT PREP'S CARD SAID SOMETHING FALSE UNTIL 2026-09-05, and the correction
+ * is worth keeping because the mistake is an easy one to make again. It read
+ * "nothing joins a booking to the client's own record". Checked against
+ * production rather than `schema.sql`: `advisor_bookings.founder_user_id` →
+ * `users.founder_id` → `projects.founder_id` is two hops over the column
+ * `canAccessFounderResource` itself reads. The join was never the problem —
+ * the access rule is, and it decides differently for the two roles that see
+ * this zone (see `ClientPrepScopeNote`). A card that blames a missing table
+ * for an access decision sends the next reader to write a migration that would
+ * change nothing.
  */
 
 const SignalsPage = lazy(() => import('../pages/SignalsPage'));
@@ -111,6 +122,53 @@ function CompanyScopeNote({ role }) {
   );
 }
 
+/**
+ * Client prep is refused for a DIFFERENT REASON depending on who is reading,
+ * and one sentence cannot be true for both — which is why this is a component
+ * and not another line of `ZONE_COPY`.
+ *
+ * Both roles carry this zone (`shellConfig.js` RESEARCH_ZONES.advisor and
+ * .partner), and `canAccessFounderResource` (`cloudflare-worker/src/auth.ts`)
+ * treats them oppositely: it returns true outright for `partner`, and an
+ * advisor matches neither that branch nor the owning-founder one. So the
+ * card's old "the project read that would reach it excludes advisors" was
+ * simply not a partner's obstacle, and the "on Practice · Sessions" pointer
+ * sent a partner to a bucket only the advisor shell has.
+ */
+function ClientPrepScopeNote({ role }) {
+  if (role !== 'advisor' && role !== 'partner') return null;
+  const advisor = role === 'advisor';
+  return (
+    <Card variant="sunken" padding="md" className="mb-4">
+      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+        {advisor ? 'The client’s record is closed to you by rule' : 'Permission is not what stops this for a firm'}
+      </div>
+      <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">
+        {advisor ? (
+          <>
+            The guard over founder data admits studio staff and the founder who owns the record.
+            An advisor is neither, so a client’s project is unreadable to you deliberately rather
+            than by oversight. Opening it would take a grant from the founder, and the product
+            already has that exact shape for investors — one project, one named counterparty,
+            revocable, expiring, and logged. Nothing equivalent exists for advisors, and adding
+            one is a decision about a founder’s privacy, not a schema change. The half you do
+            have — what the client wrote when they asked for the session — is on Practice ·
+            Sessions.
+          </>
+        ) : (
+          <>
+            A firm passes the founder-data guard as studio staff, so the rule is not the
+            obstacle here. What is missing is the link: no record on the firm side points at a
+            client’s project, so there is nothing to hang a brief on. That is an assembly gap
+            rather than a permission one, and it is why this zone waits on a store rather than
+            on a decision.
+          </>
+        )}
+      </p>
+    </Card>
+  );
+}
+
 // The two zones with a live source behind them. Everything else in ZONE_COPY
 // renders NoStoreYet, and the rail says so rather than implying a source.
 const LIVE_ZONES = new Set(['markets', 'companies']);
@@ -154,7 +212,7 @@ const ZONE_COPY = {
   'client-prep': {
     heading: 'The client brief is not built yet',
     what: 'One client per brief: what they asked for, what the engagement record says, what changed on their side, and what is still open.',
-    why: 'Half of it exists: a booking already carries the topic and the questions the client wrote when they booked, and that half is on Practice · Sessions. What is missing is the other side — nothing joins a booking to the client’s own record, and the project read that would reach it excludes advisors. A brief assembled from one side only would be half a brief presented as a whole one.',
+    why: 'Half of it exists: a session request already carries the topic and the questions the client wrote themselves when they asked for it. What is missing is the client’s own record — and not for want of a join. A client’s account carries their founder id and a project carries the same id, which is the very column the founder-data guard reads before it decides, so what stands in the way is an access decision, not an absent table. Which decision it is depends on who is reading; the note above says which applies to you. A brief assembled from one side only would be half a brief presented as a whole one.',
   },
 };
 
@@ -230,7 +288,12 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
       );
     }
     const copy = ZONE_COPY[slug] || ZONE_COPY.ask;
-    return <NoStoreYet {...copy} accentClass={copy.accentClass || accentClass} />;
+    return (
+      <>
+        {slug === 'client-prep' && <ClientPrepScopeNote role={role} />}
+        <NoStoreYet {...copy} accentClass={copy.accentClass || accentClass} />
+      </>
+    );
   }, [slug, accentClass, role, user, isRoot]);
 
   // Companies has a live store for everyone, but for an advisor the store holds
