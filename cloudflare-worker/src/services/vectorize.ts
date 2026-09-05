@@ -17,9 +17,22 @@ import type { Env } from '../types';
 const EMBED_MODEL = '@cf/baai/bge-base-en-v1.5';
 const MAX_INPUT_CHARS = 4000; // bge models cap around 512 tokens; ~4k chars is safe.
 
-export type EntityType = 'project' | 'deal' | 'founder' | 'partner' | 'document' | 'academy_lesson' | 'advisor' | 'investor';
+export type EntityType = 'project' | 'deal' | 'founder' | 'partner' | 'document' | 'academy_lesson' | 'advisor' | 'investor' | 'research_doc';
 
-export const ALL_ENTITY_TYPES: EntityType[] = ['project', 'deal', 'founder', 'partner', 'document', 'academy_lesson', 'advisor', 'investor'];
+/**
+ * EVERY TYPE THE HOURLY SWEEP RE-INDEXES. This is NOT the list of types a
+ * search may return — `routes/search.ts` keeps its own, deliberately shorter
+ * one, and the two must be allowed to differ.
+ *
+ * They used to be the same array (`const VALID_TYPES = ALL_ENTITY_TYPES`),
+ * which meant adding a type here so it could be indexed also published it to
+ * global search in the same edit. For `research_doc` — private documents whose
+ * vector snippet is the document's own text — that would have been a
+ * cross-account disclosure introduced by following the existing pattern
+ * exactly. `search.ts` now names its types explicitly and a test asserts
+ * `research_doc` is in this list and not in that one.
+ */
+export const ALL_ENTITY_TYPES: EntityType[] = ['project', 'deal', 'founder', 'partner', 'document', 'academy_lesson', 'advisor', 'investor', 'research_doc'];
 
 export interface SearchHit {
   id: string;
@@ -29,6 +42,14 @@ export interface SearchHit {
   url: string;
   snippet: string;
   score: number;
+  /**
+   * NULL for every directory type — they have no owner and never did. Set only
+   * for the owner-private types, where `searchSemantic` re-checks it against
+   * the caller. See the three layers documented there.
+   */
+  owner_user_id?: number | null;
+  /** Which chunk of a multi-chunk document this hit is, for a citation. */
+  chunk?: number;
 }
 
 function vectorId(type: EntityType, id: number) {
@@ -66,6 +87,12 @@ interface UpsertArgs {
   title: string;
   url: string;
   snippet?: string;
+  /** Chunk index, for documents stored as several vectors. */
+  chunk?: number;
+  /** Vectorize namespace to write into. Omitted by every directory type. */
+  namespace?: string;
+  /** Set for owner-private types; `searchSemantic` re-checks it. */
+  ownerUserId?: number;
 }
 
 export async function upsertEntity(env: Env, args: UpsertArgs): Promise<boolean> {
@@ -76,21 +103,60 @@ export async function upsertEntity(env: Env, args: UpsertArgs): Promise<boolean>
   const vector = await embedText(env, args.text);
   if (!vector) return false;
   try {
-    await env.VECTORIZE.upsert([{
-      id: vectorId(args.type, args.id),
+    const metadata: Record<string, unknown> = {
+      type: args.type,
+      entity_id: args.id,
+      title: args.title.slice(0, 200),
+      url: args.url,
+      snippet: (args.snippet || args.text).slice(0, 280),
+    };
+    if (args.ownerUserId != null) metadata.owner_user_id = args.ownerUserId;
+    if (args.chunk != null) metadata.chunk = args.chunk;
+    const vec: Record<string, unknown> = {
+      id: args.chunk == null ? vectorId(args.type, args.id) : chunkVectorId(args.type, args.id, args.chunk),
       values: vector,
-      metadata: {
-        type: args.type,
-        entity_id: args.id,
-        title: args.title.slice(0, 200),
-        url: args.url,
-        snippet: (args.snippet || args.text).slice(0, 280),
-      },
-    }]);
+      metadata,
+    };
+    if (args.namespace) vec.namespace = args.namespace;
+    await env.VECTORIZE.upsert([vec as any]);
     return true;
   } catch (e: any) {
     console.error('vectorize.upsert failed:', e?.message);
     return false;
+  }
+}
+
+/**
+ * `{type}:{id}:{chunk}` — note `searchSemantic`'s fallback still parses the
+ * entity id out of `split(':')[1]`, so a chunk id degrades correctly to its
+ * document when metadata is somehow absent. Max vector id is 64 bytes; this
+ * shape is far inside it.
+ */
+function chunkVectorId(type: EntityType, id: number, chunk: number) {
+  return `${type}:${id}:${chunk}`;
+}
+
+/**
+ * Delete every vector of a chunked document.
+ *
+ * Vectorize has `deleteByIds` and no delete-by-prefix, which is the whole
+ * reason `research_documents.chunk_count` is stored: without it the ids cannot
+ * be reconstructed and the chunks outlive the row, still answerable by a
+ * semantic query after the document is gone.
+ */
+export async function deleteChunkedEntity(
+  env: Env, type: EntityType, id: number, chunkCount: number | null | undefined,
+): Promise<void> {
+  if (!env.VECTORIZE) return;
+  // NULL means never indexed — there is nothing to remove, and Math.max below
+  // would otherwise turn it into a single bogus delete.
+  if (chunkCount == null || chunkCount <= 0) return;
+  try {
+    const ids: string[] = [];
+    for (let i = 0; i < chunkCount; i += 1) ids.push(chunkVectorId(type, id, i));
+    await env.VECTORIZE.deleteByIds(ids);
+  } catch (e: any) {
+    console.error('vectorize.deleteByIds (chunked) failed:', e?.message);
   }
 }
 
@@ -103,11 +169,56 @@ export async function deleteEntity(env: Env, type: EntityType, id: number): Prom
   }
 }
 
+/**
+ * TYPES WHOSE VECTORS ARE PRIVATE TO ONE ACCOUNT, and which therefore may
+ * never come back from a search that did not explicitly ask for them.
+ *
+ * Every other `EntityType` is a directory entity — a project, a partner, a
+ * lesson — whose snippet is safe to show anyone and whose click-through
+ * re-checks access on the way in. `research_doc` is the opposite: its snippet
+ * IS the document's own text (see the standing rule below), so a hit is itself
+ * a disclosure, before any link is followed.
+ */
+const OWNER_PRIVATE_TYPES = new Set<string>(['research_doc']);
+
 export interface SearchOpts {
   topK?: number;
   type?: EntityType;
+  /**
+   * Vectorize namespace to confine the query to. Omitted by every caller that
+   * existed before the research library, whose behaviour is unchanged.
+   */
+  namespace?: string;
+  /**
+   * Re-checked against each hit's `owner_user_id` metadata. The third of the
+   * three layers described in `searchSemantic`.
+   */
+  ownerUserId?: number;
 }
 
+/**
+ * THREE LAYERS KEEP ONE ACCOUNT'S DOCUMENTS OUT OF ANOTHER'S RESULTS, and the
+ * reason there are three is that only two of them are ours to guarantee.
+ *
+ * The trap this closes is that `routes/search.ts` has an
+ * everything-is-allowed shortcut: when a caller may see every type it queries
+ * with NO type filter and NO namespace. Whether a namespace-less Vectorize
+ * query returns namespaced vectors decides whether that path would return
+ * every user's documents — and vector stores generally search the whole index
+ * when no namespace is given. So the isolation deliberately does not rest on
+ * it:
+ *
+ *   1. `OWNER_PRIVATE_TYPES` is dropped unless `opts.type` names it. Default
+ *      is exclusion, so a caller that forgets is safe rather than exposed —
+ *      and this alone closes the shortcut above.
+ *   2. `namespace` partitions at the store.
+ *   3. `ownerUserId` is re-checked against each hit's metadata, so a hit that
+ *      crossed a namespace is still dropped.
+ *
+ * Layer 1 is enforced here, at the single function every search goes through.
+ * Adding the check at each call site instead would mean the next call site is
+ * one forgotten line away from a cross-account leak.
+ */
 export async function searchSemantic(env: Env, query: string, opts: SearchOpts = {}): Promise<SearchHit[]> {
   if (!env.VECTORIZE) return [];
   const vector = await embedText(env, query);
@@ -118,17 +229,32 @@ export async function searchSemantic(env: Env, query: string, opts: SearchOpts =
       returnMetadata: 'all',
     };
     if (opts.type) queryArgs.filter = { type: opts.type };
+    if (opts.namespace) queryArgs.namespace = opts.namespace;
     const res: any = await env.VECTORIZE.query(vector, queryArgs);
     const matches = res?.matches || [];
-    return matches.map((m: any) => ({
-      id: m.id,
-      type: (m.metadata?.type || m.id.split(':')[0]) as EntityType,
-      entity_id: Number(m.metadata?.entity_id ?? m.id.split(':')[1] ?? 0),
-      title: String(m.metadata?.title || ''),
-      url: String(m.metadata?.url || ''),
-      snippet: String(m.metadata?.snippet || ''),
-      score: Number(m.score ?? 0),
-    }));
+    return matches
+      .map((m: any) => ({
+        id: m.id,
+        type: (m.metadata?.type || m.id.split(':')[0]) as EntityType,
+        entity_id: Number(m.metadata?.entity_id ?? m.id.split(':')[1] ?? 0),
+        title: String(m.metadata?.title || ''),
+        url: String(m.metadata?.url || ''),
+        snippet: String(m.metadata?.snippet || ''),
+        score: Number(m.score ?? 0),
+        owner_user_id: m.metadata?.owner_user_id == null ? null : Number(m.metadata.owner_user_id),
+      }))
+      .filter((h: SearchHit) => {
+        // Layer 1 — the default is exclusion.
+        if (OWNER_PRIVATE_TYPES.has(h.type) && opts.type !== h.type) return false;
+        // Layer 3 — an owned hit must name an owner, and it must be the caller.
+        // A NULL owner on a private type is a malformed vector, not a public
+        // one, so it is dropped rather than allowed through.
+        if (OWNER_PRIVATE_TYPES.has(h.type)) {
+          if (opts.ownerUserId == null) return false;
+          if (h.owner_user_id !== opts.ownerUserId) return false;
+        }
+        return true;
+      });
   } catch (e: any) {
     console.error('vectorize.query failed:', e?.message);
     return [];
@@ -326,5 +452,117 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
       snippet: `${row.doc_type} • ${row.status || 'draft'} • deal #${row.deal_id}`,
     });
   }
+  if (type === 'research_doc') return indexResearchDocument(env, id);
   return false;
+}
+
+/**
+ * A research document becomes MANY vectors, which is what makes it different
+ * from every branch above.
+ *
+ * Each of those is one row embedded as one vector, and `MAX_INPUT_CHARS`
+ * (4000) never binds because a problem statement fits. A document does not: at
+ * one vector per file, Ask would see roughly the first page and answer "no
+ * source" about page twelve of a file sitting in the library — an absence it
+ * fabricated. So the file is converted to markdown, split, and stored as one
+ * vector per chunk.
+ *
+ * NEITHER THE CONVERTER NOR THE SPLITTER IS NEW. `extractDeck` handles
+ * PDF/DOC/DOCX/PPTX through `env.AI.toMarkdown` (it OCRs image-only PDFs),
+ * falls back to decoding text/markdown directly when the AI binding is absent,
+ * and never throws. `chunkMarkdown` splits on headings and blank-line runs and
+ * caps at 200 × 4000 chars, which doubles as the ceiling on what one upload
+ * can put in the index.
+ *
+ * THE SNIPPET RULE IS INVERTED HERE, AND DELIBERATELY. Every branch above
+ * keeps body text OUT of `snippet`, because a snippet is surfaced verbatim in
+ * `/api/search`. This one puts the chunk's own text in, because a citation
+ * that cannot quote its source is not a citation. That is only safe because
+ * these vectors never reach `/api/search`: `research_doc` is absent from that
+ * route's `VALID_TYPES`, `searchSemantic` drops the type unless it is asked
+ * for by name, and each vector carries `owner_user_id` which is re-checked
+ * against the caller. Remove any one of those and this snippet becomes the
+ * leak the rule above exists to prevent.
+ */
+async function indexResearchDocument(env: Env, id: number): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT id, uid, owner_user_id, title, r2_key, content_type, chunk_count
+       FROM research_documents WHERE id = ?`
+  ).bind(id).first<any>();
+  if (!row) {
+    // Deleted between enqueue and processing. `chunk_count` is gone with the
+    // row, so the exact vector ids are unknowable — clear what can be named.
+    await deleteEntity(env, 'research_doc', id);
+    return false;
+  }
+
+  const fail = async (state: string, note: string) => {
+    await env.DB.prepare(
+      `UPDATE research_documents SET index_state = ?, index_note = ?, updated_at = datetime('now') WHERE id = ?`
+    ).bind(state, note, id).run();
+    return false;
+  };
+
+  if (!env.FILES) return fail('failed', 'File storage is not configured, so this document could not be read.');
+  const obj = await env.FILES.get(row.r2_key);
+  if (!obj) return fail('failed', 'The stored file could not be found. Re-upload it to make it answerable.');
+
+  const bytes = new Uint8Array(await obj.arrayBuffer());
+  const { extractDeck, chunkMarkdown } = await import('./deckExtract');
+  const extracted = await extractDeck(env, bytes, row.content_type || '', row.title || 'document');
+
+  if (extracted.status === 'empty') {
+    return fail('unsupported', 'No text could be read from this file, so Ask cannot answer from it.');
+  }
+  if (extracted.status !== 'ok') {
+    return fail('failed', extracted.error === 'document_conversion_unavailable'
+      ? 'Document conversion is unavailable right now. This will be retried.'
+      : 'This file could not be converted to text, so Ask cannot read it.');
+  }
+
+  const chunks = extracted.chunks?.length ? extracted.chunks : chunkMarkdown(extracted.markdown);
+  if (!chunks.length) {
+    return fail('unsupported', 'No text could be read from this file, so Ask cannot answer from it.');
+  }
+
+  // Vectors from a PREVIOUS index run are removed first. Re-indexing a file
+  // that got shorter would otherwise leave the tail chunks behind, still
+  // answerable and no longer backed by the document.
+  await deleteChunkedEntity(env, 'research_doc', id, row.chunk_count);
+
+  const namespace = researchNamespace(row.owner_user_id);
+  let written = 0;
+  for (const ch of chunks) {
+    const ok = await upsertEntity(env, {
+      type: 'research_doc',
+      id,
+      chunk: ch.idx,
+      text: ch.text,
+      title: row.title,
+      url: `/research/library#${row.uid}`,
+      snippet: ch.text,
+      namespace,
+      ownerUserId: row.owner_user_id,
+    });
+    if (ok) written += 1;
+  }
+
+  if (!written) return fail('failed', 'The text was read but could not be indexed. This will be retried.');
+
+  await env.DB.prepare(
+    `UPDATE research_documents
+        SET index_state = 'indexed', index_note = NULL, chunk_count = ?,
+            indexed_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ?`
+  ).bind(written, id).run();
+  return true;
+}
+
+/**
+ * One namespace per account. 64-byte cap on the name, and 50,000 namespaces
+ * per index on Workers Paid — worth knowing before this is keyed on anything
+ * finer-grained than a user.
+ */
+export function researchNamespace(userId: number): string {
+  return `research:u${userId}`;
 }

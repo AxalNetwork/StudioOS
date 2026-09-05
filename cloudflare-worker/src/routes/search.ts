@@ -16,12 +16,37 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireAdmin } from '../auth';
-import { searchSemantic, type EntityType, ALL_ENTITY_TYPES, type SearchHit } from '../services/vectorize';
+// ALL_ENTITY_TYPES is deliberately NOT imported here any more — see VALID_TYPES
+// below. Importing it again is how the two lists would quietly re-converge.
+import { searchSemantic, type EntityType, type SearchHit } from '../services/vectorize';
 import { Jobs } from '../models/jobs';
 
 const search = new Hono<{ Bindings: Env }>();
 
-const VALID_TYPES = ALL_ENTITY_TYPES;
+/**
+ * WHAT GLOBAL SEARCH MAY RETURN — an explicit list, and it is deliberately NOT
+ * `ALL_ENTITY_TYPES`.
+ *
+ * It used to be exactly that (`const VALID_TYPES = ALL_ENTITY_TYPES`), and the
+ * two lists genuinely were the same thing while every indexed entity was a
+ * directory row. `research_doc` broke the equivalence: it is one account's
+ * private documents, and its vector snippet is the document's own text, so a
+ * hit here is a disclosure before any link is followed. But the sweep in
+ * `index.ts` iterates `ALL_ENTITY_TYPES` to decide what to re-index — so a
+ * type has to be in that list to be indexed at all.
+ *
+ * Sharing one array meant those two needs could not be expressed separately,
+ * and the natural edit — add the type so it indexes — would have published
+ * every user's documents to every other user's search box. Keeping this list
+ * literal is what makes the difference visible: a new type does not appear
+ * here unless someone types it here.
+ *
+ * `cloudflare-worker/test/research_search_isolation.test.ts` fails if
+ * `research_doc` ever appears in this list, or disappears from the sweep's.
+ */
+const VALID_TYPES: EntityType[] = [
+  'project', 'deal', 'founder', 'partner', 'document', 'academy_lesson', 'advisor', 'investor',
+];
 
 /**
  * Bootstrap the academy_lessons table on demand (matches the lazy CREATE
@@ -142,7 +167,18 @@ search.get('/', async (c) => {
  */
 const MAX_PER_CALL = 500;
 
-const TABLE_BY_TYPE: Record<EntityType, string> = {
+/**
+ * Partial on purpose: this map's domain is `VALID_TYPES`, not every
+ * `EntityType`. `research_doc` has no entry because backfill is reached from
+ * this search route and re-indexes what search can return — private documents
+ * are kept out of both. Their index health is the hourly sweep's job
+ * (`index.ts`), which walks `ALL_ENTITY_TYPES` and has its own table map.
+ *
+ * A total `Record<EntityType, string>` would demand an entry here for a type
+ * this route must never touch, and the entry would then be one `VALID_TYPES`
+ * edit away from being live.
+ */
+const TABLE_BY_TYPE: Partial<Record<EntityType, string>> = {
   project: 'projects',
   deal: 'deals',
   founder: 'founders',
@@ -170,6 +206,11 @@ search.post('/backfill', async (c) => {
   for (const type of requested) {
     if (remaining <= 0) { counts[type] = 0; nextSince[type] = sinceIn[type] ?? 0; continue; }
     const table = TABLE_BY_TYPE[type];
+    // A type with no table is skipped rather than interpolated — `${table}`
+    // goes straight into the SQL below, so `undefined` would become a query
+    // against a table called "undefined". `index.ts`'s sweep guards the same
+    // way for the same reason.
+    if (!table) { counts[type] = 0; nextSince[type] = null; continue; }
     const since = Number(sinceIn[type] ?? 0);
     // Task #5 (AV) — `users` is shared by partner+investor; filter by
     // role so each backfill type only enqueues the right rows instead

@@ -1592,6 +1592,12 @@ export default {
               partner: 'users', document: 'legal_documents',
               academy_lesson: 'academy_lessons', advisor: 'advisors',
               investor: 'users',
+              // Private per-user documents. They are swept here — this is the
+              // only path that keeps their index current — but deliberately
+              // absent from the search route's own map, because that one's
+              // domain is what search may RETURN. The two maps look alike and
+              // are not the same list; see `routes/search.ts`'s VALID_TYPES.
+              research_doc: 'research_documents',
             };
             // Lowered from 200 → 100 and batched: at most 2 batched INSERTs
             // per type instead of up to 200 sequential single-row writes.
