@@ -715,7 +715,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     // list would silently re-centre those, which is a separate decision from
     // this one.
     || activeRole === 'advisor'
-    || location.pathname === '/spinout-lab'
+    // `/spinout-lab` itself is no longer hand-typed here: it went into
+    // SHARED_FULL_BLEED, and fullBleedSurface above already implies full
+    // width. The sub-routes stay — the Lab's tool pages are full width but
+    // keep the shell's padding.
     || location.pathname.startsWith('/spinout-lab/');
   const flushSurface = fullBleedSurface;
   const sidebarGroups = getSidebarGroups(activeRole || 'founder', primaryPersonaId, user, hqView);

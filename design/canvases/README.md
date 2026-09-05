@@ -5,11 +5,16 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 54 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 57 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 26 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 27 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. |
 | `assets/`, `scraps/`, `uploads/` | — | Images and stale duplicates from the export. Not part of the 107. |
+
+The `integrated/` count read 54 until 2026-09-05 while the folder held 56 —
+two canvases were filed without the number moving. It is 57 now, counted rather
+than remembered, and `design/incoming/README.md` says the rule: if you move a
+file, move the number.
 
 Sorting is derived from the grade in
 `documentation/architecture/ROUTE_MAP.md`, which has a row for every one of the

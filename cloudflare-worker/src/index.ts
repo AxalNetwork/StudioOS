@@ -901,7 +901,8 @@ app.route('/api/skills', skillsRoutes);
 app.route('/api/values', valuesRoutes);
 // Task #13 — Radar / Spider-Graph Service (8-axis radar, team coverage, gap analysis).
 app.route('/api/radar', radarRoutes);
-// Spin-Out Lab — guided 4-week sprint for pre-incorporation founders.
+// Spin-Out Lab — guided 4-week sprint, gated on evidence. Open to founders
+// with or without an entity; see routes/spinout_lab.ts.
 app.route('/api/spinout-lab', spinoutLabRoutes);
 // Graduation-certificate registry (admin issue/revoke + owner read).
 app.route('/api/spinout-lab', spinoutCertificateRoutes);

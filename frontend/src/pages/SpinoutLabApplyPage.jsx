@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Check, Loader2, ArrowLeft } from "lucide-react";
 import { useAuth } from "../hooks/useAuthSync";
 import { spinoutLab } from "../lib/api";
-import { labJurisdiction, resolveOpenCohort } from "./SpinoutLabPage";
+import { labJurisdiction, resolveOpenCohort } from "../lib/spinoutLab";
 
 // Apply to Cohort 4 — signed-in application form (reference design:
 // Spin-Out Lab.dc.html APPLY VIEW). No contact fields: the account is the

@@ -4021,7 +4021,8 @@ export const adminArticles = {
   deleteComment: (cid) => request(`/admin/articles/comments/${cid}`, { method: 'DELETE' }),
 };
 
-// Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
+// Spin-Out Lab — 4-week guided sprint, gated on evidence. Open to founders
+// with or without an entity already.
 // Namespaced separately from `api` to keep the surface small and obvious
 // for the call sites that wire milestone completion in feature pages.
 export const spinoutLab = {
@@ -4041,6 +4042,13 @@ export const spinoutLab = {
   cohort: () => request('/spinout-lab/cohort'),
   // Public — real hero stats (companies built, total raised by graduates).
   stats: () => request('/spinout-lab/stats'),
+  // Signed in only — which cohort companies cleared which gate, and when.
+  // Deliberately gate-level and not milestone-level: `week` is already public
+  // on /cohort, so this adds a timestamp to a transition whose state is
+  // published, whereas individual milestones ("83(b) filed", "raise ask
+  // locked") are material facts about a private company that nobody consented
+  // to publish. The logged-out intro states that limit instead of calling it.
+  shipped: () => request('/spinout-lab/shipped'),
   // Cohort application — signed-in founders only; contact info comes from
   // the account. Sends a confirmation email (production Worker).
   apply: (data) => request('/spinout-lab/apply', { method: 'POST', body: JSON.stringify(data) }),

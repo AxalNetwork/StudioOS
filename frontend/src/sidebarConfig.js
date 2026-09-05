@@ -639,4 +639,13 @@ export const PARTNER_FULL_BLEED = [
  */
 export const SHARED_FULL_BLEED = [
   '/referrals',
+  // `/spinout-lab` — the Lab introduction opens with a full-bleed hero that has
+  // to run from the sidebar's right border to the viewport edge, which the
+  // shell's own `p-4 md:p-6` prevents. Role-agnostic for the same reason
+  // `/referrals` is: founder, investor and admin all open this path, at four
+  // different states (the intro, the "you're in" screen, the live workspace and
+  // the investor read), and every one of them supplies its own padding —
+  // SpinoutLabInvestorPage.jsx had to be given some in the same commit, because
+  // it had none and was relying on the shell's.
+  '/spinout-lab',
 ];

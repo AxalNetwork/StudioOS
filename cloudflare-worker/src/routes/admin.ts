@@ -990,8 +990,13 @@ admin.post('/users/:user_id/spinout-admit', async (c) => {
   ).bind(userId).first();
   if (!target) return c.json({ error: 'User not found' }, 404);
   if (target.role === 'admin') return c.json({ error: 'Admins cannot be admitted to the Lab' }, 400);
+  // Re-entry guard. `is_incorporated` is only ever set by finishing or exiting
+  // the Lab (routes/spinout_lab.ts recordMilestone / exitLab), so this refuses
+  // an alumnus, not a founder who arrived with a company — those have
+  // is_incorporated = 0 and are admitted like anyone else. The Lab is not
+  // restricted to pre-incorporation founders.
   if (Number(target.is_incorporated) === 1) {
-    return c.json({ error: 'User is already incorporated — the Lab is a pre-incorporation sprint' }, 409);
+    return c.json({ error: 'This account has already been through the Lab' }, 409);
   }
 
   const alreadyAdmitted = Number(target.spinout_lab_admitted) === 1;

@@ -14,7 +14,7 @@ each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
 **Corpus:** 107 canonical canvases at `design/canvases/`, listed
-126 times below — a canvas serving two workspaces appears under both.
+127 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 44 canvases
+## Founder — 45 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -71,6 +71,7 @@ it, where in their nav, and how do they get there.*
 | Round Manager | `/raise/capital/pipeline` | Home | Full page | Sidebar → Home → Raise | UPGRADE | High |
 | Scoring Engine | `/spinout-lab/scoring` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Signals | `/signals` | Home | Full page | Sidebar → Home → Research | UPGRADE | High |
+| Spin-Out Lab · Intro | `/spinout-lab` | Home | Full page | Sidebar → Home → Spin-Out Lab | UPGRADE | High |
 | Spin-Out Lab Workspace | `/spinout-lab` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
 | Team | `/build/team` | Home | Full page | Sidebar → Home → Grow | UPGRADE | High |
@@ -193,7 +194,7 @@ it, where in their nav, and how do they get there.*
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Pricing | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Spin-Out Lab | `/spinout-lab` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
+| Spin-Out Lab · Intro | `/spinout-lab` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Spin-Out Lab-print | `/spinout-lab/brief` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
 | Spin-Out Lab-print-1vkgcux | `/spinout-lab` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
 
@@ -208,7 +209,7 @@ it, where in their nav, and how do they get there.*
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
 | High | 67 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 32 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Medium | 33 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 27 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
