@@ -143,6 +143,7 @@ import brand, { renderLandingHtml, renderLandingPreview, renderTemplatePreview, 
 import decks from './routes/decks';
 import competitors from './routes/competitors';
 import deckReviewer from './routes/deck_reviewer';
+import research from './routes/research';
 // Task #6 — share-link viewer onboarding (signup/NDA/feedback/deal-pack)
 // + conversion tracking. MUST be mounted BEFORE the `/api/decks`
 // catch-all so its `/share/:token/...` subpaths take precedence over
@@ -811,6 +812,11 @@ app.route('/api/decks', decks);
 // Cloudflare-native: D1 + R2 + Workers AI, no paid third-party APIs.
 app.route('/api/competitors', competitors);
 app.route('/api/deck-reviewer', deckReviewer);
+// Research · Library and · Ask — a per-user document store and questions
+// answered only from it. Every read is scoped `WHERE owner_user_id = ?`, and
+// its vectors are deliberately unreachable from /api/search: see the
+// VALID_TYPES comment in routes/search.ts.
+app.route('/api/research', research);
 
 // Public landing page HTML (no /api prefix). Founders publish via the
 // authenticated /api/brand/landing/by-project/:pid/publish endpoint;
@@ -1592,6 +1598,12 @@ export default {
               partner: 'users', document: 'legal_documents',
               academy_lesson: 'academy_lessons', advisor: 'advisors',
               investor: 'users',
+              // Private per-user documents. They are swept here — this is the
+              // only path that keeps their index current — but deliberately
+              // absent from the search route's own map, because that one's
+              // domain is what search may RETURN. The two maps look alike and
+              // are not the same list; see `routes/search.ts`'s VALID_TYPES.
+              research_doc: 'research_documents',
             };
             // Lowered from 200 → 100 and batched: at most 2 batched INSERTs
             // per type instead of up to 200 sequential single-row writes.

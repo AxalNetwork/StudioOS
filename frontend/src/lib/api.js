@@ -3638,6 +3638,20 @@ export const api = {
     remove: (id) => request(`/deck-reviewer/${id}`, { method: 'DELETE' }),
     exportUrl: (id, format) => `/api/deck-reviewer/${id}/export?format=${encodeURIComponent(format || 'json')}`,
   },
+
+  // Research · Library and · Ask. Every call is scoped to the signed-in user
+  // by the worker — there is no "whose library" parameter anywhere here,
+  // because there is no route that reads somebody else's.
+  research: {
+    // FormData upload: request() detects FormData and omits the JSON
+    // Content-Type, same as the deck reviewer above.
+    upload: (formData) => request('/research/documents', { method: 'POST', body: formData }),
+    documents: () => request('/research/documents'),
+    // Returns a short-lived one-time URL, not the bytes.
+    downloadUrl: (uid) => request(`/research/documents/${encodeURIComponent(uid)}/download`),
+    remove: (uid) => request(`/research/documents/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+    ask: (question) => request('/research/ask', { method: 'POST', body: JSON.stringify({ question }) }),
+  },
 };
 
 // Task #3 — Due Diligence module. Admin/partner/investor/advisor only;

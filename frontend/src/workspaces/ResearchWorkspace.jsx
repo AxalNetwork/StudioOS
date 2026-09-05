@@ -17,12 +17,21 @@ import { bucketForPath, zoneForPath } from './shellConfig';
  *
  * ASK AND LIBRARY ARE ONE SYSTEM, and the canvases are emphatic about it: what
  * is indexed in Library is precisely what Ask can answer over, and a document
- * sitting unindexed is invisible to every question asked upstairs. Neither has
- * a backend — there is no document cache, no index state, and no retrieval
- * endpoint in the product today. They therefore ship saying so. An Ask box
- * wired to nothing would answer from the model's general knowledge and present
- * it with the confidence of a citation, which is the single worst failure
- * available on a research surface.
+ * sitting unindexed is invisible to every question asked upstairs. BOTH ARE
+ * BUILT NOW (migration 213, `routes/research.ts`), and they shipped together
+ * for that reason — one without the other is a working page pointing at a card.
+ *
+ * The rule that governed them while they were cards still governs them built:
+ * an Ask box wired to nothing answers from the model's general knowledge in
+ * exactly the voice a cited answer uses, which is the single worst failure
+ * available on a research surface. So retrieval runs first and the model is
+ * called only when there is something to quote; below the score floor Ask
+ * returns `no_source` and says what the closest passage actually scored.
+ *
+ * WHAT IS STILL NOT POSSIBLE, and the zones say so rather than implying an
+ * empty list: nobody can send you a document. A founder sharing their own file
+ * needs a grant type the product has for investors and for no one else, and
+ * adding one is a decision about a founder's privacy rather than a table.
  *
  * MARKETS AND COMPANIES ARE REAL. Markets mounts the live signals feed.
  * Companies revives `CompetitorAnalysisPage`, which has existed all along and
@@ -65,6 +74,8 @@ import { bucketForPath, zoneForPath } from './shellConfig';
 
 const SignalsPage = lazy(() => import('../pages/SignalsPage'));
 const CompetitorAnalysisPage = lazy(() => import('../pages/CompetitorAnalysisPage'));
+const LibraryZone = lazy(() => import('../pages/research/LibraryZone'));
+const AskZone = lazy(() => import('../pages/research/AskZone'));
 
 function Loading() {
   return <div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-40" /></div>;
@@ -169,27 +180,16 @@ function ClientPrepScopeNote({ role }) {
   );
 }
 
-// The two zones with a live source behind them. Everything else in ZONE_COPY
+// The zones with a live source behind them. Everything else in ZONE_COPY
 // renders NoStoreYet, and the rail says so rather than implying a source.
-const LIVE_ZONES = new Set(['markets', 'companies']);
-
-const ASK = {
-  heading: 'Ask has no library to read',
-  what: 'Ask answers questions over a cache of documents and cites the specific sources each answer drew on. The cache, the index, and the retrieval step do not exist in the product yet.',
-  why: 'An Ask box wired to nothing would still answer — from general knowledge, in the same voice a cited answer uses. That is worse than no page, so this one waits for the library rather than faking the citation. A previous Ask tab was withdrawn for exactly that (decision D12): it rendered analyses from a fixture. What is missing here is a store, not a licence — the questions this zone is for are about your own clients’ documents.',
-  link: { to: '/research/library', label: 'What the library would hold →' },
-};
-
-const LIBRARY = {
-  heading: 'The document library is not built yet',
-  what: 'The library is the cache Ask reads from, plus your own reusable material. Its most important column is the last one: whether a document is indexed, because that is precisely Ask’s reach.',
-  why: 'Nothing in the product stores documents for retrieval today — the one document endpoint is a signed download, not a listable store. Adding a document and making it answerable are two acts, and neither has a store behind it yet. The earlier Documents tab was withdrawn on the same finding (decision D12).',
-  link: { to: '/research/ask', label: 'Why Ask is empty too →' },
-};
+//
+// ASK AND LIBRARY JOINED THIS SET, and the pair had to move together. The
+// docblock above says why: what is indexed in Library is exactly what Ask can
+// answer over, so shipping one without the other would leave a working page
+// pointing at a card, or an Ask box with nothing to read.
+const LIVE_ZONES = new Set(['markets', 'companies', 'library', 'ask']);
 
 const ZONE_COPY = {
-  ask: ASK,
-  library: LIBRARY,
   funds: {
     heading: 'Fund research is not built yet',
     what: 'Which funds invest at your stage, in your sector, on what terms, and who they have already backed that looks like you.',
@@ -235,6 +235,8 @@ const ZONE_COPY = {
 const ZONE_BLURB = {
   markets: 'Signals from the sectors you work in, with the date each one was gathered.',
   companies: 'The competitor and market analyses you have run yourself.',
+  library: 'Documents you have added, and which of them Ask can actually read.',
+  ask: 'Questions answered only from your own library, with the passage each answer used.',
 };
 
 function ResearchOverview({ role }) {
@@ -287,7 +289,16 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
         </Suspense>
       );
     }
-    const copy = ZONE_COPY[slug] || ZONE_COPY.ask;
+    if (slug === 'library') {
+      return <Suspense fallback={<Loading />}><LibraryZone /></Suspense>;
+    }
+    if (slug === 'ask') {
+      return <Suspense fallback={<Loading />}><AskZone /></Suspense>;
+    }
+    // `funds` is the fallback rather than `ask`, which is now a real page: a
+    // slug with no card would otherwise render the Library's working body
+    // under some other zone's heading.
+    const copy = ZONE_COPY[slug] || ZONE_COPY.funds;
     return (
       <>
         {slug === 'client-prep' && <ClientPrepScopeNote role={role} />}
@@ -328,7 +339,13 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           note="This rail reports which zones have a store behind them. It does not run research, answer questions, or take actions."
           coverage={[coverageLine]}
           unavailable={[
-            ['Cited answers', 'No document cache, index or retrieval step exists in the product, so nothing here can cite.'],
+            // WAS "nothing here can cite", which stopped being true the moment
+            // Ask shipped. What remains unavailable is narrower and worth
+            // saying precisely: Ask cites your OWN library and nothing else,
+            // so a question needing a source you have not added has no answer
+            // here rather than a general-knowledge one.
+            ['Answers from outside your library', 'Ask reads only documents you have added. It cannot search the web, company databases or market data — those need a licensed source the product does not have.'],
+            ['Documents shared with you', 'Nobody can send you a document yet. A founder sharing their own file needs a grant the product has for investors and for nobody else.'],
             ...(ownAnalysesOnly
               ? [['Client-scoped research', 'An analysis is stored against you, not against a company, so nothing here can be filed under a client or reopened per client.']]
               : []),
