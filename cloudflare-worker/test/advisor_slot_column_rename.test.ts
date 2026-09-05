@@ -23,6 +23,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 import { ensureAdvisorStoresSchema } from '../src/services/advisorStoresSchema.ts';
 
 function coerce(a: any[]): any[] {
@@ -187,4 +188,66 @@ test('a table carrying BOTH names is SKIPPED, not attempted and swallowed', asyn
   // is per-table, not a global bail-out.
   assert.ok(cols(d, 'advisor_bookings').includes('advisor_id'));
   assert.ok(!cols(d, 'advisor_bookings').includes('mentor_id'));
+});
+
+/**
+ * EVERY ADVISOR HANDLER THAT TOUCHES THE RENAMED TABLES REACHES THE SELF-HEAL.
+ *
+ * The rename above is correct and, for its first day in production, unreached.
+ * `ensureAdvisorStoresSchema` was called from `requireMyAdvisor` — documented
+ * as "the single door every store endpoint BELOW goes through" — and seven
+ * T13-era handlers are registered ABOVE it, calling `myAdvisor` directly. On
+ * any isolate whose first advisor request hit one of those, the rename had
+ * never run.
+ *
+ * `GET /bookings/me` is the one that made this urgent: it is a FOUNDER reading
+ * their own booked sessions, and SQLite resolves column names at PREPARE time,
+ * so zero bookings does not save it — `no such column: b.advisor_id`, 500.
+ *
+ * ASSERTED AS THE INVARIANT, NOT THE MECHANISM. A router-level `use('*')` is
+ * how it is satisfied today; a future refactor may go back to per-handler
+ * calls. Either passes. What must never pass is a handler querying these two
+ * tables with no path to the bootstrap at all.
+ */
+test('no advisor handler queries the renamed tables without the bootstrap', async () => {
+  const src = readFileSync(
+    new URL('../src/routes/advisors.ts', import.meta.url), 'utf8');
+  const lines = src.split('\n');
+
+  // Router-level bootstrap satisfies every handler at once.
+  const blanket = /advisors\.use\('\*',[\s\S]{0,200}?ensureAdvisorStoresSchema\(c\.env\)/.test(src);
+
+  const starts: number[] = [];
+  lines.forEach((l, i) => {
+    if (/^advisors\.(get|post|put|patch|delete)\(/.test(l)) starts.push(i);
+  });
+  assert.ok(starts.length > 20,
+    `parse failed — only ${starts.length} handlers found, so this test proves nothing`);
+  starts.push(lines.length);
+
+  const unhealed: string[] = [];
+  for (let k = 0; k < starts.length - 1; k += 1) {
+    const body = lines.slice(starts[k], starts[k + 1]).join('\n');
+    if (!/advisor_office_hour_slots|advisor_bookings/.test(body)) continue;
+    if (!/advisor_id/.test(body)) continue;
+    const own = /ensureAdvisorStoresSchema|requireMyAdvisor|requireOwnCohort/.test(body);
+    if (!blanket && !own) unhealed.push(`line ${starts[k] + 1}: ${lines[starts[k]].trim()}`);
+  }
+
+  assert.deepEqual(unhealed, [],
+    'these handlers name advisor_id on a table production still calls mentor_id, '
+    + 'and never reach the rename that fixes it:\n  ' + unhealed.join('\n  '));
+
+  // The scan must actually be finding the handlers it claims to guard, or the
+  // assertion above passes by looking at nothing. Seven is what the gap was.
+  const touching = (() => {
+    let n = 0;
+    for (let k = 0; k < starts.length - 1; k += 1) {
+      const body = lines.slice(starts[k], starts[k + 1]).join('\n');
+      if (/advisor_office_hour_slots|advisor_bookings/.test(body) && /advisor_id/.test(body)) n += 1;
+    }
+    return n;
+  })();
+  assert.ok(touching >= 7,
+    `only ${touching} handlers touch the renamed tables — the scan has stopped seeing them`);
 });
