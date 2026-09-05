@@ -194,7 +194,15 @@ test('the three statuses that used to render grey now read correctly', () => {
     PAGE.indexOf('const STATUS_TONE = {'),
     PAGE.indexOf('};', PAGE.indexOf('const STATUS_TONE = {')),
   );
-  const toneOf = (k) => (block.match(new RegExp(`^\\s{2}${k}:\\s*'([a-z]+)'`, 'm')) || [])[1];
+  // Parsed once with a literal pattern rather than a regex built per key:
+  // Semgrep flags `new RegExp` on an interpolated value (detect-non-literal-regexp)
+  // and it is right to, even here where the three keys are literals in this file.
+  // Reading the map into a lookup is also the clearer thing to do.
+  const tones = Object.fromEntries(
+    [...block.matchAll(/^ {2}([a-z_]+):\s*'([a-z]+)'/gm)].map((m) => [m[1], m[2]]),
+  );
+  assert.ok(Object.keys(tones).length >= 10, 'STATUS_TONE parsed to almost nothing');
+  const toneOf = (k) => tones[k];
   assert.equal(toneOf('active'), 'ok', 'an in-force NDA must not read as neutral');
   assert.equal(toneOf('revoked'), 'bad', 'a revoked NDA must not read as neutral');
   assert.equal(toneOf('cancelled'), 'bad', 'a cancelled NDA must not read as neutral');
