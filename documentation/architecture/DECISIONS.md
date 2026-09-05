@@ -1892,3 +1892,67 @@ that card is company-scoped, `company_profiles` has no `entity_id`,
 pins all three so the card is reconsidered the day the link exists. The
 per-account record belongs beside the obligations that read it, in Account and
 Trust.
+
+### D42. The Corporate block was designed, half-written and never rendered; the page told the user it was already there
+
+D40 ended by saying the per-account entity record "belongs beside the
+obligations that read it, in Account and Trust". This is the Account half. It
+needed no endpoint, no migration and no client method — all three already
+existed.
+
+**What was already built.** `corporate_profiles` (one row per user, `user_id`
+is the PRIMARY KEY) carries entity name and type, registration number, a tax
+id encrypted at rest, the registered address, signing authority, UBOs,
+directors, insurance carriers and two screening flags.
+`GET/PUT /settings/profile/legal-entity` serves it with real validation: 26
+entity types, ISO country checks, per-country postal rules, an email check, a
+UBO validator that derives `ubo_disclosed` from any holding at or above 25%,
+and a cross-field guard that refuses `entity_type` without a
+`registration_number`. Every failure is a 400 naming the offending field.
+
+**What was missing was the card.** Three separate people left a marker for it
+and none of them finished:
+
+- `SettingsPage.jsx` carries the comment `Profile sub-tabs (Personal /
+  Corporate / Verification)`. There were two tabs.
+- `ENTITY_TYPE_OPTIONS` — 27 lines mapping each type to a printable label
+  ("gmbh" → "GmbH") — was written and never read.
+- `api.getLegalEntity` / `api.updateLegalEntity` had zero callers.
+
+**And the page said otherwise.** `VerificationStubCard`'s footnote read *"The
+Identity and Legal entity blocks above are already used to auto-fill
+contracts"*. There was no Legal entity block, and there never had been. A
+reader who went looking for it found the sentence, not the card. That is worse
+than an absent feature: an absence is discoverable, a false claim is not.
+
+**Two judgements in the build.**
+
+*The array columns save explicitly, not on blur.* Every scalar field saves on
+blur, matching `PersonalIdentityCard` beside it. UBOs and directors do not:
+the worker takes the whole array in one PUT and revalidates every row, so a
+per-row autosave would race its own siblings against a single endpoint. One
+Save per list, and adding a row is asserted not to write on its own.
+
+*`ubo_disclosed` is shown, never edited.* It is derived server-side from the
+rows above it. Drawn as a toggle it would invite a user to contradict their own
+table, and the next PUT would silently overrule them.
+
+**What is stated rather than drawn.** `insurance_carriers` is stored and
+validated but has no editor here; an empty table would claim "you have no
+carriers" when the truth is "this page cannot record them". The two screening
+flags — `aml_high_risk_jurisdiction` and `sanctions_last_checked_at` — render
+read-only, with an unset date reading "Not recorded", because screening sets
+them and this page does not. The canvas's "Registered agent" has no column on
+this table and is not drawn.
+
+**The company-scoped card is still absent, and that is a different object.**
+`account_canvas_coverage.test.mjs` used to be titled "Legal entity is absent on
+BOTH sides"; it now names the two records apart and still fails the day
+`company_profiles` gains `entity_id`, `jurisdiction` or `registered_address`.
+The account's entity is who signs your contracts; the company's is who the
+workspace belongs to. They must not drift into each other.
+
+A test parses the entity-type values out of both files and fails when the
+picker and the worker disagree — the same client/worker drift guard D40
+introduced for `EDIT_ROLES`, for the same reason: two copies of an enum drift,
+and a select option the worker rejects is a control that 400s.
