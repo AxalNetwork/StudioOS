@@ -195,3 +195,114 @@ test('a preset covers exactly the events the user can see', () => {
   assert.match(body, /NOTIFICATION_EVENTS\.map/);
   assert.match(body, /data\.role === 'partner' \? PARTNER_NOTIFICATION_EVENTS\.map/);
 });
+
+// ===========================================================================
+// The page now says who may edit, and refuses what it cannot do.
+//
+// Until this pass every member saw editable inputs on every field. A viewer
+// with a `role_in_company` of "CTO" — a label the worker does not recognise —
+// could type into the company name, blur, and watch the value snap back with
+// a red toast. The rule existed; only the page did not know it.
+// ===========================================================================
+
+test('the client edit rule is the worker rule, name for name', () => {
+  // TWO COPIES OF AN AUTHORISATION RULE DRIFT. This is the only thing standing
+  // between them. `canEdit` in company.ts is the boundary — a non-editor who
+  // gets past the UI still gets a 403 — but a client list that says something
+  // different draws inputs nobody can use, or hides inputs that would work.
+  const worker = read('cloudflare-worker/src/routes/company.ts');
+  const m = worker.match(/\[([^\]]*)\]\.includes\(link\.role_in_company\)/);
+  assert.ok(m, 'company.ts must still gate on a literal list of role_in_company values');
+  const workerRoles = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
+
+  const page = read(PAGE);
+  const c = page.match(/const EDIT_ROLES = \[([^\]]*)\]/);
+  assert.ok(c, 'the page must keep its EDIT_ROLES list where a reader can find it');
+  const clientRoles = [...c[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
+
+  assert.deepEqual(clientRoles, workerRoles,
+    `the page offers editing to ${clientRoles.join('/')} but the worker allows ${workerRoles.join('/')}`);
+
+  // And the primary admin passes regardless of title, on both sides.
+  assert.match(worker, /link\.is_primary_admin \|\|/);
+  assert.match(page, /mine\.is_primary_admin \|\| EDIT_ROLES\.includes/);
+});
+
+test('a member who cannot edit is told why, not just disabled', () => {
+  const s = read(PAGE);
+  assert.match(s, /You can view this company, not edit it/);
+  // The sentence that actually answers the question people ask.
+  assert.match(s, /Any other title is a label and grants no edit rights/);
+  // And the read-only path renders the VALUE, not an input the server refuses.
+  assert.match(s, /function ReadOnlyValue/);
+  // THE HELPER SPECIFICALLY, not "a canEdit somewhere". `/canEdit \? \(/` was
+  // the first attempt and it survived replacing this very branch with `true` —
+  // four other fields branch on canEdit too, so the pattern still matched
+  // while every text input had quietly become unconditional.
+  assert.match(s, /const text = \(k, extra = \{\}\) => \(canEdit \? \(/,
+    'the shared text-field helper must branch on canEdit, not merely disable');
+  // Every field reaches a ReadOnlyValue on the false side.
+  const card = s.slice(s.indexOf('function CompanyProfileCard'), s.indexOf('function ViewOnlyNotice'));
+  const branches = [...card.matchAll(/canEdit \? \(/g)].length;
+  const readOnly = [...card.matchAll(/<ReadOnlyValue /g)].length;
+  assert.equal(branches, readOnly,
+    `${branches} fields branch on canEdit but only ${readOnly} render a read-only value`);
+});
+
+test('saving acknowledges the field, and names the field it refused', () => {
+  const s = read(PAGE);
+  assert.match(s, /function FieldStatus/);
+  assert.match(s, /state: 'saved'/);
+  // The one field the server will not accept empty. Refusing it here means the
+  // message lands beside the input rather than as a toast about "a" field.
+  assert.match(s, /k === 'company_name' && !String\(v\)\.trim\(\)/);
+  assert.match(s, /Can’t be empty — not saved/);
+  // The server's own sentence, not a generic one.
+  assert.match(s, /message: e\?\.message \|\| 'Not saved'/);
+});
+
+test('the danger zone ships the two actions that exist and refuses the one that does not', () => {
+  const page = read(PAGE);
+  const worker = read('cloudflare-worker/src/routes/company.ts');
+
+  // The premise. If someone adds DELETE /company/:uid later, this fails and
+  // the card should grow a real control — which is the right time to write one.
+  assert.doesNotMatch(worker, /r\.delete\('\/company\/:uid'/,
+    'a company-delete route now exists — the danger zone should stop saying it does not');
+
+  assert.match(page, /Danger zone/);
+  assert.match(page, /Leave company/);
+  assert.match(page, /Not available from here/,
+    'company deletion has no endpoint; the card must say so rather than draw a button');
+
+  // No type-to-confirm over a route that 404s. The canvas asks for one; a
+  // confirmation dialog is a promise that something will happen.
+  const dz = page.slice(page.indexOf('function DangerZoneCard'), page.indexOf('// ---------- Members'));
+  assert.doesNotMatch(dz, /api\.deleteCompany|\/company\/\$\{uid\}',\s*\{\s*method:\s*'DELETE'/,
+    'nothing in the danger zone may call a delete-company endpoint');
+  assert.match(dz, /api\.removeCompanyMember\(uid, rights\.myUserId\)/,
+    'Leave must be the member-removal endpoint applied to yourself, not a new route');
+});
+
+test('leaving is refused for the only primary admin, on both sides', () => {
+  const page = read(PAGE);
+  assert.match(page, /canLeave: !!mine && !\(mine\.is_primary_admin && primaryAdmins <= 1\)/);
+  assert.match(page, /You are the only primary admin/);
+  // The worker enforces it too — the UI is not the guard.
+  const worker = read('cloudflare-worker/src/routes/company.ts');
+  assert.match(worker, /is_primary_admin/,
+    'the last-primary-admin rule must still live in the worker');
+});
+
+test('the empty state promises only things that exist', () => {
+  const s = read(PAGE);
+  const block = s.slice(s.indexOf('const UNLOCKS = ['), s.indexOf('];', s.indexOf('const UNLOCKS = [')));
+  assert.ok(block.length > 200, 'the unlocks cards must still be there');
+  // Each claim maps to something real. The one worth guarding is multi-company,
+  // because it is the easiest to write and the easiest to get wrong.
+  assert.match(read('frontend/src/lib/api.js'), /listMyCompanies: \(\) => request\('\/company\/memberships'\)/,
+    'the "more than one company" card claims a list endpoint that must exist');
+  // And no card may promise an invitation — same trap as the add-member copy.
+  assert.doesNotMatch(block, /\binvite\b/i,
+    'membership is granted from the other side; no card may imply an invitation');
+});

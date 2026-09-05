@@ -1761,3 +1761,65 @@ including certificate issuance, the public graduate list, `/stats` and
 `/fund-metrics`. A founder who runs four excellent weeks on the Find fit track
 and never files is, to all ten, a non-graduate. Opening the door was a page;
 letting them finish is a ten-site change that has to land at once.
+
+### D40. Company Settings shows who may edit, acknowledges each field, and refuses the one danger-zone action that has no endpoint
+
+The canvas asked for four things the page did not have. Three were free — the
+data was already on the wire — and the fourth is the interesting one.
+
+**Who may edit.** `GET /company/:uid` has always returned `members[]` with each
+member's `role_in_company` and `is_primary_admin`, and the page rendered
+editable inputs to everyone regardless. A member whose role is "CTO" — a label
+the worker does not recognise — could type into the company name, blur, and
+watch the value snap back with a red toast. The rule existed; only the page did
+not know it. `useMyRights` now mirrors `canEdit` (`company.ts:114-118`) from the
+members list already in hand: platform admin, or the caller's own link is
+primary admin, or its `role_in_company` is one of Owner / Admin / Founder.
+
+**A mirror is not a boundary**, and the comment beside it says so. The server
+still gates every write and 403s a non-editor who gets past the UI. What the
+mirror buys is honesty on screen — showing a value as a value is the difference
+between "you may not" and "that didn't work". Because two copies of an
+authorisation rule drift, `company_settings_members.test.mjs` parses the role
+list out of BOTH files and fails when they disagree.
+
+**Per-field acknowledgment.** Every field saves on blur, so a page-level "Saved"
+said only that *something* saved — a guess on a form of eleven fields, and on
+failure it named no field at all. The word now lands beside the input you left,
+and the error carries the server's own sentence. One field is refused client-side
+before the request: a blank company name, because that string is what every
+other surface calls this workspace.
+
+**The danger zone ships two of the canvas's three actions.** Transfer primary
+admin is real (`PATCH members/:userId {is_primary_admin: true}`, primary-admin
+only) and the card points at the existing "Make primary" control rather than
+shipping a second write. Leave company is real (`DELETE members/:userId` on your
+own id, with the last-primary-admin guard). **Delete company does not exist** —
+`company.ts` declares eleven routes and deletion is not one of them.
+
+The canvas gives Delete a type-the-name confirmation, which is the right design
+for a real destructive action and the wrong thing to ship over a route that
+404s: a confirmation dialog is a promise that something will happen. The limit
+is stated instead, with where to ask. Building the endpoint is deletion across
+the cap table, the raise, the data room and the metrics, and it deserves its own
+decision rather than arriving as UI polish. The test asserts `r.delete('/company/:uid')`
+still does not exist, so the day someone adds it the card is reconsidered.
+
+**The empty state's four cards each name something real** — roles are
+`role_in_company` plus migration 191's title/authority/carry; the growth fields
+say in their own description that they feed investor matching; every workspace
+narrows on the `X-Company-Id` header the switcher sets; `GET /company/memberships`
+returns a list because more than one company is normal. No card may say
+"invite": membership is granted from the other side, which is the same trap the
+add-member copy already avoids.
+
+**Not built here, and not for want of a route.** `corporate_profiles` is a
+per-account KYB record — encrypted tax id, UBOs, directors, sanctions flags —
+and `GET/PUT /settings/profile/legal-entity` is live with `api.getLegalEntity` /
+`api.updateLegalEntity` on the client and **zero consumers**. It is tempting to
+call that the canvas's missing "Legal entity" card and wire it here. It is not:
+that card is company-scoped, `company_profiles` has no `entity_id`,
+`jurisdiction` or `registered_address`, and `account_canvas_coverage.test.mjs`
+pins all three so the card is reconsidered the day the link exists. The
+per-account record belongs beside the obligations that read it, in Account and
+Trust.
