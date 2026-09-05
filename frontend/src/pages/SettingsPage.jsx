@@ -201,7 +201,7 @@ const SECTIONS = [
 // ---------- Page ------------------------------------------------------------
 
 // Map a deep-link URL path → preselected section id. The page is mounted
-// at both `/settings` (top-level) and `/settings/:section` so the bell can
+// at both `/account` (top-level) and `/account/:section` so the bell can
 // land users directly on the notification matrix.
 const PATH_TO_SECTION = {
   notifications: 'notifications',
@@ -225,7 +225,10 @@ export default function SettingsPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const initialSection = (() => {
-    const m = location.pathname.match(/^\/settings\/([^/]+)/);
+    // Both prefixes: /settings/:section still renders this page for one
+    // hop via App.jsx's redirect, and a deep link must resolve its section
+    // on that render rather than falling through to the default.
+    const m = location.pathname.match(/^\/(?:account|settings)\/([^/]+)/);
     if (m && PATH_TO_SECTION[m[1]]) return PATH_TO_SECTION[m[1]];
     return 'profile';
   })();
@@ -235,11 +238,29 @@ export default function SettingsPage() {
   const [active, setActive] = useState(initialSection);
 
   // Keep the URL in lockstep with the active section so deep links work
-  // both ways (bell → /settings/notifications, sidebar click → URL update).
+  // both ways (bell → /account/notifications, sidebar click → URL update).
+  //
+  // This effect CANONICALISES: it rewrites whatever alias you arrived on to
+  // the section's own id, so /account/security becomes /account/security-privacy
+  // and the four legacy aliases in PATH_TO_SECTION resolve to their real tab.
+  // That is deliberate and predates the rename. Two things about it are not.
+  //
+  // `account` joins `profile` as a bare-URL section. Before the rename the
+  // landing pane's id produced `/settings/account`, which read fine; after it
+  // that is `/account/account`, which reads like a mistake. The landing pane
+  // has no segment of its own — it IS the page.
+  //
+  // And the rewrite has always dropped the query and the hash, because it
+  // navigated to a bare pathname. That was survivable while nothing sent one;
+  // it is not now, when /settings?tab=… arrives from the Google OAuth link
+  // callback and /settings#security-recovery-codes from account recovery. A
+  // canonicalising hop must not eat the part of the link that said why it was
+  // sent.
   useEffect(() => {
-    const want = active === 'profile' ? '/settings' : `/settings/${active}`;
-    if (location.pathname !== want && location.pathname.startsWith('/settings')) {
-      navigate(want, { replace: true });
+    const bare = active === 'profile' || active === 'account';
+    const want = bare ? '/account' : `/account/${active}`;
+    if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
+      navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true });
     }
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   // T19 — useToast handles cleanup on unmount; replaces inline `window.setTimeout(setToast, 4500)`.
@@ -308,7 +329,7 @@ export default function SettingsPage() {
 
   const role = (data.role || '').toLowerCase();
   const sections = SECTIONS.filter(s => !s.roles || s.roles.includes(role));
-  // Render-time gate: a non-admin who deep-links to /settings/developer must
+  // Render-time gate: a non-admin who deep-links to /account/developer must
   // not get the Developer UI rendered just because the URL parsed `active`
   // before role was known. Mirror the nav filter on the content side.
   const allowedIds = new Set(sections.map(s => s.id));
@@ -316,7 +337,7 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-5xl" data-testid="settings-page" data-active-section={safeActive}>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">User Settings</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Account</h1>
       <p className="text-gray-600 dark:text-gray-400 mb-6">Account, security, notifications, and preferences for your Axal VC profile.</p>
 
       {toast && (
@@ -1947,7 +1968,7 @@ function ConnectedAccountsPanel({ flash }) {
   const link = async () => {
     setBusy(true);
     try {
-      const { url } = await api.googleStartUrl({ action: 'link', redirect: '/settings/security' });
+      const { url } = await api.googleStartUrl({ action: 'link', redirect: '/account/security' });
       if (!url) throw new Error('No redirect URL.');
       window.location.href = url;
     } catch (e) {
@@ -2362,7 +2383,7 @@ function NotificationsSection({ data, patch }) {
                 {c.label}
                 {c.key === 'slack' && !slackConnected && (
                   <div className="text-[10px] normal-case font-normal text-violet-500 tracking-normal">
-                    <a href="/settings/integrations" className="hover:underline">Connect Slack</a>
+                    <a href="/account/integrations" className="hover:underline">Connect Slack</a>
                   </div>
                 )}
                 {c.disabled && c.key !== 'slack' && (

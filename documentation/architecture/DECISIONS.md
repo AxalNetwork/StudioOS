@@ -1762,6 +1762,75 @@ including certificate issuance, the public graduate list, `/stats` and
 and never files is, to all ten, a non-graduate. Opening the door was a page;
 letting them finish is a ten-site change that has to land at once.
 
+### D39. `/settings` is `/account` and `/tickets` is `/help`; the old paths redirect permanently, because the worker sends them
+
+Two renames the product asked for, and one policy that makes them safe.
+
+**The names.** `User Settings` becomes `Account` and `Support` becomes
+`Help Center` in the top-right menu, with the routes moving to match. The
+rename is scoped to that menu: the super-admin sidebar's `Support` row keeps
+its label, because the HQ canvas names it and the ask named the dropdown.
+`MessagesPage` still links to "Tickets" for the same reason — a ticket is
+still a ticket; only the destination moved.
+
+**The policy: the redirects are permanent, and they carry the query and the
+hash.** Not a migration shim to delete in a release or two. The worker emits
+`/settings/*` into places this repo does not control the lifetime of:
+
+| Emitter | What it sends |
+| --- | --- |
+| `routes/notifications.ts`, `templates/email/layout.ts` | `/account/notifications` in outbound email, one per digest |
+| `routes/auth_google.ts` | the post-link OAuth callback path |
+| `routes/auth_recover.ts` | `#security-recovery-codes`, an anchor |
+| `services/advisor/banks.manifest.json` | 12 `page_target` entries — GENERATED, regenerated here via `cloudflare-worker/scripts/gen-question-ids.mjs`, never hand-edited |
+| `routes/tickets.ts`, `routes/github.ts` | `link: '/help'` on notification rows, and `path: /help/<id>` on the "Open ticket" CTA |
+
+Mail already sent still points at the old path. A `<Navigate to="/account">`
+would land those readers on the page but drop the section, the tab and the
+anchor that made the link worth sending, so both redirects read
+`useLocation()` and forward `pathname`, `search` **and** `hash`;
+`/settings/:section` forwards the section too.
+
+**One live 404 fixed on the way past.** `tickets.ts` has always emitted
+`path: /tickets/<id>` for its "Open ticket" CTA while `App.jsx` declared no
+`/tickets/:id` route, so that link has been landing on the catch-all. `/help/:id`
+exists now, and `/tickets/:id` redirects to it with the id intact.
+
+**Two defects the test suite could not see**, found by opening the page in a
+browser after `test:drift` went green — the same lesson as D38's contrast
+failures. `SettingsPage`'s URL-sync effect canonicalises an alias to its
+section id, which is long-standing and correct; but it navigated to a *bare
+pathname*, so it **dropped the query and the anchor** on every such hop — which
+is precisely what the OAuth callback and the recovery redirect send. And the
+landing pane's section id is `account`, so after the rename it wrote
+`/account/account`. Both fixed; both pinned in
+`frontend/test/account_canvas_coverage.test.mjs`, which is the only place a
+DOM-free suite can hold them.
+
+**Perks joins the menu as its first role-conditional entry**, for founders,
+partners and admins. `/perks` itself stays open to all six roles: the catalogue
+is a marketplace an investor or advisor may legitimately browse, and what
+narrows is the invitation, not the page. Claiming is a founder's verb and
+offering is a partner's; admin sees it because the review queue is a tab on the
+same page.
+
+**And the partner half of Perks was not gated at all.** `GET /partner`,
+`POST /partner`, `PATCH /partner/:uid` and `GET /partner/:uid/stats` were
+`requireAuth` only, so any signed-in account — founder, investor, advisor,
+`exploring` — could put a listing into the admin review queue and read its
+view/claim funnel. The submit handler's own comment says *"A partner cannot
+publish to founders directly"*, and it was right that the row is forced to
+`in_review`; nothing checked the submitter was a partner. Only the UI tab was
+gated, which is a `&&` in JSX against a URL. All four now take `requireRole(c,
+'partner')`, which admits admin unconditionally — the console and the queue
+read the same rows.
+
+"Operator Partner" is `users.role = 'partner'`. There is no partner sub-type
+column anywhere in the schema — `partner_type`, `partner_tier` and
+`partner_kind` return zero hits — and the operator/service-provider distinction
+lives in `personas.ts` as a label whose `role_alignment` is `partner`. The role
+is the whole gate.
+
 ### D41. The Trust Center's three legacy cards: two were unreachable dead code, one was reachable and wrong on both sides
 
 `scripts/api-drift-baseline.json` suppressed nine `/trust/*` paths the SPA

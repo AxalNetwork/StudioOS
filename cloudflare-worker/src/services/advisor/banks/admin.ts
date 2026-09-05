@@ -46,7 +46,7 @@ const CADENCE = ['Daily', 'Weekly', 'Monthly', 'Quarterly'];
 
 export const ADMIN_BANK: Question[] = [
   // ---- PREFERENCES ----------------------------------------------------
-  ...block('PREFS', '/settings', 'getting-started/personas', [
+  ...block('PREFS', '/account', 'getting-started/personas', [
     // KEEP verbatim — writeRouter routes this id to user_settings.digest_frequency.
     { id: 'admin.preferences.digest_freq', prompt: 'How often do you want the daily-digest summary?', kind: 'select', opts: FREQ, followups: ['admin.preferences.alert_channel'] },
     { id: 'admin.preferences.alert_channel', prompt: 'Where should operational alerts reach you?', kind: 'select', opts: ['Email', 'Slack', 'In-app only', 'Off'], followups: ['admin.preferences.timezone'] },

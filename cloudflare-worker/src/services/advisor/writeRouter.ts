@@ -774,7 +774,7 @@ export async function routeAnswer(
            organization = excluded.organization,
            updated_at = excluded.updated_at`,
       ).bind(user.id, value).run();
-      return { status: 'saved', saved_to: { table: 'user_profile_ext', column: 'organization', id: user.id, page_url: '/settings' } };
+      return { status: 'saved', saved_to: { table: 'user_profile_ext', column: 'organization', id: user.id, page_url: '/account' } };
     } catch {
       // Migration 180 adds the sidecar column; keep a truthful response during
       // the short window before the migration reaches an older environment.
@@ -784,7 +784,7 @@ export async function routeAnswer(
   if (questionId === 'role_detect.headline') {
     try {
       await env.DB.prepare(`UPDATE users SET headline = ? WHERE id = ?`).bind(value, user.id).run();
-      return { status: 'saved', saved_to: { table: 'users', column: 'headline', id: user.id, page_url: '/settings' } };
+      return { status: 'saved', saved_to: { table: 'users', column: 'headline', id: user.id, page_url: '/account' } };
     } catch {
       return { status: 'noop' };
     }

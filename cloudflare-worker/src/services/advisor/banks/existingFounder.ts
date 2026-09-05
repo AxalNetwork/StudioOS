@@ -179,7 +179,7 @@ export const EXISTING_FOUNDER_BANK: Question[] = [
   ]),
 
   // ---- OPS ------------------------------------------------------------
-  ...block('OPS', '/settings', 'getting-started/personas', [
+  ...block('OPS', '/account', 'getting-started/personas', [
     { id: 'founder.ops.tooling_stack', prompt: 'Top 5 tools your team uses daily (one per line).', skip: true },
     { id: 'founder.ops.weekly_metric_cadence', prompt: 'Do you publish a weekly metrics email / Slack? How disciplined is the cadence?' },
     { id: 'founder.ops.board_cadence', prompt: 'Board cadence — monthly, quarterly, ad-hoc, or no board yet?', kind: 'select', opts: ['Monthly','Quarterly','Ad-hoc','No board'], mi: 'partner_pulse' },

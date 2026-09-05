@@ -214,7 +214,7 @@ const FEATURE_CATALOG: FeatureEntry[] = [
   { keywords: ['investor signals', 'market intel', 'signals'],
     url: '/market-intel?tab=signals', label: 'Investor Signals', roles: ['admin', 'investor'] },
   { keywords: ['settings', 'preferences', 'account'],
-    url: '/settings', label: 'Settings', roles: ['admin', 'founder', 'partner', 'investor'] },
+    url: '/account', label: 'Settings', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['notifications', 'inbox'],
     url: '/activity', label: 'Notifications & Activity', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['docs', 'help', 'documentation'],

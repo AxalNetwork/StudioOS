@@ -129,7 +129,7 @@ export default function PartnerStudioHome({
       <div className="partner-context">
         <span><Building2 size={12} /> {previewing ? 'Firm context withheld' : (partner?.company || 'Firm not recorded')}</span>
         <span><BriefcaseBusiness size={12} /> {previewing ? 'Specialization withheld' : (partner?.specialization || 'Specialization not recorded')}</span>
-        {!previewing && <Link to="/settings" data-testid="link-partner-settings">Partner settings <ArrowUpRight size={12} /></Link>}
+        {!previewing && <Link to="/account" data-testid="link-partner-settings">Partner settings <ArrowUpRight size={12} /></Link>}
       </div>
 
       <section className="partner-assistant" data-testid="module-eadwyn">

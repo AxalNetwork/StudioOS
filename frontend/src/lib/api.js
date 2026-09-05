@@ -127,6 +127,11 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/share/deck/')
     || currentPath.startsWith('/share/captable/')
     || currentPath.startsWith('/insights')
+    // ROUTE literals, not API paths — this whole predicate reads
+    // window.location. /account/email/* is the live pair; /settings/email/*
+    // stays because confirmation links already sent still point at it, and a
+    // 401 bounce to /login is exactly what breaks an email-change flow.
+    || currentPath.startsWith('/account/email/')
     || currentPath.startsWith('/settings/email/')
     // Task #5 — Public event surface (no auth)
     || currentPath === '/events'

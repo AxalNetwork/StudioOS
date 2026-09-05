@@ -134,7 +134,7 @@ it, where in their nav, and how do they get there.*
 | GP Application Review | `/admin/lp-applications` | Admin | Full page + review drawer | Sidebar → Admin → LP Applications | UPGRADE | High |
 | Legal & Capital Engine | `/legal-capital` | Capital & Legal | Full page | Sidebar → Capital & Legal → Legal & Capital | UPGRADE | High |
 | Scoring Engine v2 | `/scoring` | Studio | Full page | Sidebar → Studio → Scoring Engine | UPGRADE | High |
-| Support · Subsidiary | `/tickets` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Support · Subsidiary | `/help` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | Admin | Full page | Sidebar → Admin → Admin Console | NEW | High |
 
 ## Super Admin — 7 canvases
@@ -146,7 +146,7 @@ it, where in their nav, and how do they get there.*
 | Founder Journey Map | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Fund Administration | `/funds/performance` · `/funds/lp-workspace` · `/lp-reports` · `/portfolio/waterfall` | HQ | Full page | Sidebar → HQ → Funds | UPGRADE | High |
 | Funds · Fabric | `/admin/fabric` · `/funds` | HQ | Full page (proposed) | Sidebar → HQ → Funds | NEW | Low |
-| Support Security · Super | `/admin/security` · `/tickets` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
+| Support Security · Super | `/admin/security` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
 ## Shell (all workspaces) — 11 canvases
@@ -169,7 +169,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Account | `/settings` · `/settings/:section` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Account | `/account` · `/account/:section` · `/settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Auth and Onboarding | `/login` · `/register` · `/onboarding/chat` · `/onboarding/persona` · `/onboarding/founder\\|investor\\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Emails | — | — (not routed) | Templates (no surface) | Not reachable yet | UPGRADE | Low |
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -178,7 +178,7 @@ it, where in their nav, and how do they get there.*
 | Liquidity & Secondaries | `/liquidity` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Messages | `/messages` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Network | `/network` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
-| Notifications | `/settings/notifications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Notifications | `/account/notifications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Perks & Products | `/perks` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Refer & Earn | `/referrals` · `/refer` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Send for Signature | `/esign/:token` | — (no nav entry) | Full page + 5-step wizard | Deep link / in-page action | NEW | Medium |

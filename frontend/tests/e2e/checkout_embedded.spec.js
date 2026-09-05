@@ -39,7 +39,7 @@ test.describe('Checkout surfaces — per product line', () => {
 
   test('Subscription checkout entrypoint renders on Settings → Billing', async ({ page }) => {
     await loginAs(page, 'founder');
-    await page.goto('/settings/billing');
+    await page.goto('/account/billing');
     const root = page.getByTestId('settings-page');
     await expect(root).toBeVisible();
     await expect(root).toHaveAttribute('data-active-section', 'billing');
@@ -105,7 +105,7 @@ test.describe('Checkout surfaces — per product line', () => {
     // must be NO app-owned <input> collecting a card number on any checkout
     // surface. The billing tab is the most deterministic place to assert it.
     await loginAs(page, 'founder');
-    await page.goto('/settings/billing');
+    await page.goto('/account/billing');
     await expect(page.getByTestId('settings-page')).toBeVisible();
 
     const cardInputs = page.locator(

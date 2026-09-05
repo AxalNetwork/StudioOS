@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
 import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
-import { Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
@@ -383,13 +383,49 @@ function ReferRedirect() {
   return <Navigate to={{ pathname: '/referrals', search: loc.search }} replace />;
 }
 
+// User Settings renamed to Account: /settings -> /account.
+//
+// THESE REDIRECTS ARE PERMANENT, not a migration shim, and query + hash are
+// preserved because both are genuinely emitted. The worker puts `/settings/*`
+// into outbound notification email (routes/notifications.ts), into the Google
+// OAuth link callback (routes/auth_google.ts), into the recovery-codes
+// redirect (routes/auth_recover.ts, which appends `#security-recovery-codes`)
+// and into the generated advisor bank manifest. Those links are already in
+// people's inboxes; a plain `<Navigate to="/account">` would land them on the
+// page but drop the section, the tab and the anchor that made the link worth
+// sending.
+function SettingsRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/account', search: loc.search, hash: loc.hash }} replace />;
+}
+
+// The section has to travel too: /settings/security?tab=… -> /account/security?tab=…
+// SettingsPage's own PATH_TO_SECTION still resolves the four legacy aliases
+// (jurisdictions, email, auth, role), so an old deep link keeps working after
+// the hop.
+function SettingsSectionRedirect() {
+  const loc = useLocation();
+  const { section } = useParams();
+  return <Navigate to={{ pathname: `/account/${section}`, search: loc.search, hash: loc.hash }} replace />;
+}
+
+// Support Hub renamed to Help Center: /tickets -> /help. The plain /tickets
+// redirect is a one-liner beside its route; this one exists because the id has
+// to travel. `tickets.ts` emits `path: /tickets/<id>` for its "Open ticket"
+// CTA, so those links must land on the ticket, not on the list.
+function TicketsRedirect() {
+  const loc = useLocation();
+  const { id } = useParams();
+  return <Navigate to={{ pathname: `/help/${id}`, search: loc.search, hash: loc.hash }} replace />;
+}
+
 // Integrations merged into Settings. Legacy /integrations (and
 // /integrations?... from OAuth callbacks / existing links) redirects into the
 // Settings "Integrations" section, preserving the query string so post-connect
 // success/error states still render on the tile that owns them.
 function IntegrationsRedirect() {
   const loc = useLocation();
-  return <Navigate to={{ pathname: '/settings/integrations', search: loc.search }} replace />;
+  return <Navigate to={{ pathname: '/account/integrations', search: loc.search }} replace />;
 }
 
 
@@ -463,14 +499,33 @@ function UserDropdown({ user, onLogout }) {
           className="absolute right-0 top-full mt-1.5 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1.5 z-50"
           role="menu"
         >
-          <Link to="/settings" onClick={() => setOpen(false)}
+          <Link to="/account" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            User Settings
+            Account
           </Link>
           <Link to="/trust" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Trust Center
           </Link>
+          {/*
+            THE ONLY ROLE-CONDITIONAL ENTRY IN THIS MENU, and the asymmetry is
+            deliberate. Every other item above and below relies on its route
+            guard to do the gating — App.jsx's `/trust` route even carries a
+            comment saying `advisor` was added to its guard *because* the
+            dropdown link has none. Perks is different: `/perks` is guarded to
+            all six roles and stays that way, because the catalogue is a
+            marketplace an investor or advisor may legitimately browse. What
+            narrows here is the INVITATION. Claiming a perk is a founder's
+            action and offering one is a partner's; putting "Perks" in front of
+            an investor would advertise a page whose two verbs are not theirs.
+            Admin sees it because the review queue lives on the same page.
+          */}
+          {['founder', 'partner', 'admin'].includes(user?.role) && (
+            <Link to="/perks" onClick={() => setOpen(false)}
+              className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+              Perks
+            </Link>
+          )}
           <Link to="/calendar" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Calendar
@@ -483,9 +538,9 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Articles
           </Link>
-          <Link to="/tickets" onClick={() => setOpen(false)}
+          <Link to="/help" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Support
+            Help Center
           </Link>
           <Link to="/docs" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
@@ -1057,9 +1112,9 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // admins (or impersonation sessions) always bypass for support purposes.
   // Investor signing endpoints (capital actions, deal-flow gating) still
   // enforce KYC server-side regardless of this client-side gate.
-  // The /kyc, /activity, /tickets routes remain reachable for everyone.
+  // The /kyc, /activity, /help routes remain reachable for everyone.
   const effectiveRole = (realUser || user)?.role;
-  const ALLOWED_BEFORE_KYC = ['/kyc', '/activity', '/tickets'];
+  const ALLOWED_BEFORE_KYC = ['/kyc', '/activity', '/help'];
   // Onboarding wizards (/onboarding/*) are always reachable so the
   // wizard-resume gate above can land users without bouncing them to
   // /kyc — otherwise the two gates form a `/kyc` ↔ `/onboarding/<role>`
@@ -1570,9 +1625,17 @@ function AppInner() {
           query-string variant for fallback share-by-link channels. */}
       <Route path="/partner-onboarding/:token" element={<PartnerOnboardPage />} />
       <Route path="/partners/onboard" element={<PartnerOnboardPage />} />
+      {/*
+        These two are UNGATED on purpose — an email-change confirmation is
+        followed from a mail client, often signed out. `isPublicPath()` in
+        lib/api.js has a matching literal; both moved together.
+      */}
+      <Route path="/account/email/confirm" element={<EmailChangeConfirmPage />} />
+      <Route path="/account/email/revoke" element={<EmailChangeRevokePage />} />
       <Route path="/settings/email/confirm" element={<EmailChangeConfirmPage />} />
       <Route path="/settings/email/revoke" element={<EmailChangeRevokePage />} />
-      <Route path="/settings/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      <Route path="/account/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 
       {/* Phase 0.1 — investor role added to every guard a partner currently
           passes. Investor-only nav is curated above (NAV_BY_ROLE.investor)
@@ -1826,7 +1889,19 @@ function AppInner() {
       <Route path="/wellbeing/expert/:uid" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <ExpertProfilePage />)} />
       <Route path="/partners" element={guard(['admin', 'partner', 'investor'], <PartnersPage />)} />
       <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
-      <Route path="/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
+      {/*
+        /tickets -> /help. The redirects are PERMANENT, not a migration shim:
+        the worker emits `/tickets` into notification payloads
+        (routes/tickets.ts, routes/github.ts) and those rows are already in
+        people's inboxes and activity feeds. `/tickets/:id` is included
+        because tickets.ts has always emitted `path: /tickets/<id>` for its
+        "Open ticket" CTA while App.jsx declared no such route — that link
+        has been landing on the catch-all 404. It resolves now.
+      */}
+      <Route path="/help" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
+      <Route path="/help/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
+      <Route path="/tickets" element={<Navigate to="/help" replace />} />
+      <Route path="/tickets/:id" element={<TicketsRedirect />} />
       {/* Products — catalog + checkout + explorer promo redemption. Open to
           every signed-in role incl. 'exploring' (that's where the Personal
           Advisor's one-time 30-day-license codes get redeemed). */}
@@ -2184,7 +2259,8 @@ function AppInner() {
           (the Settings profile section rendered at its own path so the sidebar
           item highlights independently of Settings). */}
       <Route path="/profile" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
-      <Route path="/settings" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      <Route path="/account" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      <Route path="/settings" element={<SettingsRedirect />} />
 
       {/* Task #53 — Public partner directory + profiles (no auth). The
           static /partners route below takes precedence over /partners/:slug
