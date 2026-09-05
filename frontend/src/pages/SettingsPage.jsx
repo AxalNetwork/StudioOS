@@ -602,6 +602,7 @@ function ProfileTabs({ data, onSaved, flash, patch }) {
   const [pct, setPct] = useState(0);
   const tabs = [
     { id: 'personal', label: 'Personal' },
+    { id: 'corporate', label: 'Corporate' },
     { id: 'verification', label: 'Verification' },
   ];
   return (
@@ -625,6 +626,7 @@ function ProfileTabs({ data, onSaved, flash, patch }) {
           <RolePreferencesSection data={data} patch={patch} />
         </>
       )}
+      {sub === 'corporate' && <CorporateEntityCard flash={flash} />}
       {sub === 'verification' && <VerificationStubCard data={data} />}
     </>
   );
@@ -778,6 +780,263 @@ function PersonalIdentityCard({ flash, onPctChange }) {
 }
 
 
+// ---------- Corporate / legal entity ---------------------------------------
+//
+// This block is the one named by the sub-tab comment above and promised by
+// VerificationStubCard's footnote ("The Identity and Legal entity blocks
+// above are already used to auto-fill contracts"). Until now it did not
+// exist: ENTITY_TYPE_OPTIONS was written and never read, api.getLegalEntity
+// / api.updateLegalEntity had zero callers, and the server side —
+// validation, encryption, the completeness ring — was complete the whole
+// time. The footnote was describing a card nobody had built.
+//
+// corporate_profiles.user_id is a PRIMARY KEY, so this is ONE entity per
+// account, not one per company. That is why it lives here and not in
+// Company Settings, whose "Legal entity" card would need columns
+// company_profiles does not have (see account_canvas_coverage.test.mjs).
+
+// Small editor for the two JSON array columns (ubos_json, directors_json).
+// The server takes the whole array in one PUT and revalidates every row, so
+// these save explicitly rather than on blur: a per-row autosave would race
+// its own siblings and there is no per-row endpoint to race against.
+function RowList({ label, hint, cols, rows, onChange, onSave, busy, error, addLabel }) {
+  const set = (i, k, v) => onChange(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  const add = () => onChange([...rows, Object.fromEntries(cols.map(c => [c.k, c.type === 'bool' ? false : '']))]);
+  const del = (i) => onChange(rows.filter((_, j) => j !== i));
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+      <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{label}</h3>
+      {hint && <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">{hint}</p>}
+      {rows.length === 0 && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Not recorded.</p>
+      )}
+      {rows.map((r, i) => (
+        <div key={i} className="flex flex-wrap items-end gap-2 mb-2">
+          {cols.map(c => (
+            <div key={c.k} className={c.w || 'flex-1 min-w-[8rem]'}>
+              <span className="text-[11px] text-gray-600 dark:text-gray-400 block mb-1">{c.label}</span>
+              {c.type === 'bool' ? (
+                <label className="flex items-center gap-2 h-[38px] text-xs text-gray-700 dark:text-gray-300">
+                  <input type="checkbox" checked={!!r[c.k]} disabled={busy}
+                    onChange={e => set(i, c.k, e.target.checked)} />
+                  {c.boxLabel}
+                </label>
+              ) : (
+                <input value={r[c.k] ?? ''} disabled={busy} className={inputCls}
+                  maxLength={c.maxLength} placeholder={c.placeholder}
+                  onChange={e => set(i, c.k, c.upper ? e.target.value.toUpperCase() : e.target.value)} />
+              )}
+            </div>
+          ))}
+          <button onClick={() => del(i)} disabled={busy}
+            className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg">
+            Remove
+          </button>
+        </div>
+      ))}
+      <div className="flex items-center gap-2 mt-2">
+        <button onClick={add} disabled={busy}
+          className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg">
+          {addLabel}
+        </button>
+        <button onClick={onSave} disabled={busy}
+          className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white rounded-lg">
+          Save
+        </button>
+      </div>
+      {error && <span className="text-[11px] text-red-600 dark:text-red-400 block mt-1">{error}</span>}
+    </div>
+  );
+}
+
+function CorporateEntityCard({ flash }) {
+  const [row, setRow] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [taxIdInput, setTaxIdInput] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [ubos, setUbos] = useState([]);
+  const [directors, setDirectors] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getLegalEntity()
+      .then(r => {
+        if (cancelled) return;
+        setRow(r);
+        setUbos(Array.isArray(r.ubos) ? r.ubos : []);
+        setDirectors(Array.isArray(r.directors) ? r.directors : []);
+      })
+      .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load legal entity'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Same error contract as PersonalIdentityCard: the worker throws
+  // ProfileValidationError with a `field`, so a rejection lands inline on the
+  // input that caused it instead of a toast that names nothing.
+  const save = async (patch) => {
+    setBusy(true);
+    setFieldErrors({});
+    try {
+      const updated = await api.updateLegalEntity(patch);
+      setRow(updated);
+      setUbos(Array.isArray(updated.ubos) ? updated.ubos : []);
+      setDirectors(Array.isArray(updated.directors) ? updated.directors : []);
+      try { window.dispatchEvent(new CustomEvent('axal:profile_saved')); } catch {}
+      flash('Saved');
+      if ('tax_id_number' in patch) setTaxIdInput('');
+      return true;
+    } catch (e) {
+      const errsMap = e?.data?.errors;
+      if (errsMap && typeof errsMap === 'object') setFieldErrors(errsMap);
+      else if (e?.field) setFieldErrors({ [e.field]: e.message });
+      if (!e?.field && !errsMap) flash(e.message || 'Failed to save', 'error');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (err) return <Card title="Legal entity"><div className="text-sm text-red-600 dark:text-red-400">{err}</div></Card>;
+  if (!row) return <Card title="Legal entity"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
+
+  const r = row;
+  const set = (k, v) => setRow({ ...r, [k]: v });
+  const onBlurSave = (k) => {
+    const v = r[k] ?? null;
+    save({ [k]: v === '' ? null : v });
+  };
+  const fe = (k) => fieldErrors[k]
+    ? <span className="text-[11px] text-red-600 dark:text-red-400 block mt-1">{fieldErrors[k]}</span>
+    : null;
+
+  const text = (k, label, extra = {}) => (
+    <Field label={label} hint={extra.hint}>
+      <input value={r[k] || ''} maxLength={extra.maxLength}
+        placeholder={extra.placeholder} disabled={busy} className={inputCls}
+        onChange={e => set(k, extra.upper ? e.target.value.toUpperCase() : e.target.value)}
+        onBlur={() => onBlurSave(k)} />
+      {fe(k)}
+    </Field>
+  );
+
+  // Derived server-side from the UBO rows (>= 25% ownership), so it is shown
+  // as a consequence of the table below, never as its own toggle.
+  const disclosed = !!r.ubo_disclosed;
+
+  return (
+    <Card title="Legal entity"
+      description="The company that signs on your behalf. Used to auto-fill contracts between that entity and Axal VC. Sensitive fields are encrypted at rest.">
+      <div className="grid sm:grid-cols-2 gap-3">
+        {text('entity_name', 'Legal entity name', { maxLength: 200 })}
+        <Field label="Entity type"
+          hint="Setting a type requires a registration number — the server refuses the pair otherwise.">
+          <select value={r.entity_type || ''} disabled={busy} className={inputCls}
+            onChange={e => { const v = e.target.value; set('entity_type', v); save({ entity_type: v || null }); }}>
+            {ENTITY_TYPE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          {fe('entity_type')}
+        </Field>
+        {text('registration_number', 'Registration number', { maxLength: 100 })}
+        <Field label={`Tax ID${r.has_tax_id ? ' (saved · ••••' + (r.tax_id_last4 || '••••') + ')' : ''}`}
+          hint="Encrypted at rest. Type a new value to replace.">
+          <div className="flex gap-2">
+            <input value={taxIdInput} onChange={e => setTaxIdInput(e.target.value)}
+              disabled={busy} className={inputCls} placeholder={r.has_tax_id ? 'Replace…' : 'Enter…'} />
+            <button onClick={() => taxIdInput && save({ tax_id_number: taxIdInput })}
+              disabled={busy || !taxIdInput}
+              className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white rounded-lg">Save</button>
+            {r.has_tax_id && (
+              <button onClick={() => save({ tax_id_number: null })} disabled={busy}
+                className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg">Clear</button>
+            )}
+          </div>
+          {fe('tax_id_number')}
+        </Field>
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+        <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Registered address</h3>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {text('registered_address_line1', 'Address line 1')}
+          {text('registered_address_line2', 'Address line 2')}
+          {text('registered_city', 'City', { maxLength: 100 })}
+          {text('registered_state', 'State / region', { maxLength: 100 })}
+          {text('registered_postal', 'Postal code')}
+          {text('registered_country', 'Country of incorporation (ISO α-2)', { maxLength: 2, upper: true, placeholder: 'US' })}
+        </div>
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+        <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Signing authority</h3>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {text('signing_authority_name', 'Name', { maxLength: 200 })}
+          {text('signing_authority_title', 'Title', { maxLength: 100 })}
+          {text('signing_authority_email', 'Email', { maxLength: 320 })}
+        </div>
+      </div>
+
+      <RowList
+        label="Beneficial owners"
+        hint={`Anyone holding 25% or more. ${disclosed
+          ? 'At least one owner at or above 25% is recorded.'
+          : 'No owner at or above 25% is recorded yet.'}`}
+        addLabel="Add owner"
+        busy={busy}
+        error={fieldErrors.ubos}
+        rows={ubos}
+        onChange={setUbos}
+        onSave={() => save({ ubos })}
+        cols={[
+          { k: 'name', label: 'Name', maxLength: 200 },
+          { k: 'nationality', label: 'Nationality (ISO α-2)', maxLength: 2, upper: true, placeholder: 'US', w: 'w-32' },
+          { k: 'ownership_pct', label: 'Ownership %', w: 'w-28' },
+          { k: 'is_pep', label: 'Politically exposed', type: 'bool', boxLabel: 'Yes', w: 'w-40' },
+        ]}
+      />
+
+      <RowList
+        label="Directors"
+        addLabel="Add director"
+        busy={busy}
+        error={fieldErrors.directors}
+        rows={directors}
+        onChange={setDirectors}
+        onSave={() => save({ directors })}
+        cols={[
+          { k: 'name', label: 'Name', maxLength: 200 },
+          { k: 'title', label: 'Title', maxLength: 100 },
+          { k: 'email', label: 'Email', maxLength: 320 },
+        ]}
+      />
+
+      <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+        <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Screening</h3>
+        <dl className="grid sm:grid-cols-2 gap-3 text-xs">
+          <div>
+            <dt className="text-gray-600 dark:text-gray-400">High-risk jurisdiction</dt>
+            <dd className="text-gray-900 dark:text-gray-100 mt-0.5">
+              {r.aml_high_risk_jurisdiction ? 'Flagged' : 'Not flagged'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-gray-600 dark:text-gray-400">Sanctions last checked</dt>
+            <dd className="text-gray-900 dark:text-gray-100 mt-0.5">
+              {r.sanctions_last_checked_at
+                ? new Date(r.sanctions_last_checked_at).toLocaleDateString()
+                : 'Not recorded'}
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+          Both are set by screening, not from this page. Insurance carriers are stored
+          on this record but have no editor here yet.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 function VerificationStubCard({ data }) {
   const kyc = (data.kyc_status || 'not_started').toLowerCase();
   const tone = kyc === 'approved' ? 'emerald' : kyc === 'pending' ? 'amber' : 'gray';
@@ -792,9 +1051,10 @@ function VerificationStubCard({ data }) {
         Open KYC →
       </a>
       <div className="mt-4 text-[11px] text-gray-500 dark:text-gray-400">
-        Document upload, sanctions/PEP rechecks and high-risk-jurisdiction flags are
-        wired in a follow-up slice. The Identity and Legal entity blocks above are
-        already used to auto-fill contracts.
+        Document upload and sanctions/PEP rechecks are not run from here. The
+        Personal and Corporate tabs beside this one hold the identity and entity
+        details that auto-fill contracts; Corporate also shows the screening flags
+        read-only, since screening sets them and this page does not.
       </div>
     </Card>
   );
