@@ -638,7 +638,7 @@ function DoneStep({ jurisdiction, order, raOffer, complianceProducts, navigate }
           Open Legal <ArrowRight size={14} />
         </button>
         <button
-          onClick={() => navigate('/settings/billing')}
+          onClick={() => navigate('/account/billing')}
           className="border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm px-4 py-2 rounded-md inline-flex items-center gap-1.5 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
         >
           View Billing

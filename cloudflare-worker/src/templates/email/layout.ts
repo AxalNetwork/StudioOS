@@ -63,7 +63,7 @@ function wrapChrome(
   opts: { marketing?: boolean; unsubscribeUrl?: string | null; to?: string },
 ): string {
   const root = stripTrailingSlashes(appUrl || 'https://axal.vc');
-  const prefsUrl = `${root}/settings/notifications`;
+  const prefsUrl = `${root}/account/notifications`;
   const to = opts.to || 'you';
   const kind = opts.marketing && opts.unsubscribeUrl ? 'broadcast' as const : 'transactional' as const;
   const footer = footerFor(kind, {
@@ -78,7 +78,7 @@ function textFooter(appUrl: string, opts: { marketing?: boolean; unsubscribeUrl?
   const root = stripTrailingSlashes(appUrl || 'https://axal.vc');
   const lines = ['', '---'];
   if (opts.marketing && opts.unsubscribeUrl) lines.push(`Unsubscribe: ${opts.unsubscribeUrl}`);
-  lines.push(`Notification settings: ${root}/settings/notifications`);
+  lines.push(`Notification settings: ${root}/account/notifications`);
   lines.push(`Open Axal: ${root}`);
   lines.push(COMPANY_ADDR);
   return lines.join('\n');

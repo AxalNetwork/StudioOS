@@ -151,8 +151,8 @@ export default function OnboardingChecklistPanel() {
             ))}
             <div className="px-3 py-2 bg-gray-50 dark:bg-gray-900/50">
               <a
-                href="/settings/onboarding"
-                onClick={(e) => { e.preventDefault(); navigate('/settings/onboarding'); }}
+                href="/account/onboarding"
+                onClick={(e) => { e.preventDefault(); navigate('/account/onboarding'); }}
                 className="text-[11px] text-violet-700 dark:text-violet-300 hover:underline"
               >
                 See full checklist →

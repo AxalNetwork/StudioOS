@@ -1045,7 +1045,7 @@ recover.post('/backup-codes/reprint', async (c) => {
   if (!(await hasTotpConfigured(c.env, user.id))) {
     return c.json({ error: 'totp_not_enrolled' }, 412);
   }
-  return c.json({ ok: true, redirect: '/settings#security-recovery-codes' });
+  return c.json({ ok: true, redirect: '/account#security-recovery-codes' });
 });
 
 export default recover;

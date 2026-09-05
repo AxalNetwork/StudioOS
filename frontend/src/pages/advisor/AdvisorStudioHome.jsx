@@ -216,7 +216,7 @@ export default function AdvisorStudioHome({
       <div className="advisor-evidence-strip">
         <span>Intro call filter</span>{previewing ? <span className="advisor-disabled-link">Storefront withheld</span> : <Link to="/expertise/profile" data-testid="link-storefront-filter">Open storefront <ExternalLink size={12} /></Link>}
         <span>Consent to show client outcomes</span>{previewing ? <span className="advisor-disabled-link">Clients withheld</span> : <Link to="/advisor/advisory/clients" data-testid="link-client-consent">Open clients <ExternalLink size={12} /></Link>}
-        <span>Session-note auto-send</span>{previewing ? <span className="advisor-disabled-link">Settings withheld</span> : <Link to="/settings" data-testid="link-session-settings">Open settings <ExternalLink size={12} /></Link>}
+        <span>Session-note auto-send</span>{previewing ? <span className="advisor-disabled-link">Settings withheld</span> : <Link to="/account" data-testid="link-session-settings">Open settings <ExternalLink size={12} /></Link>}
       </div>
 
       <section className="advisor-assistant-shell" data-testid="module-eadwyn">

@@ -425,7 +425,7 @@ async function exchangeCode(env: Env, code: string): Promise<IdTokenPayload | nu
 // callback can't sign them in. We never echo raw provider errors to the
 // query string because they could carry attacker-controlled text.
 function callbackError(env: Env, code: string, action: 'signin' | 'link'): Response {
-  const path = action === 'link' ? '/settings/security' : '/login';
+  const path = action === 'link' ? '/account/security' : '/login';
   const url = `${appUrl(env)}${path}?google_error=${encodeURIComponent(code)}`;
   return Response.redirect(url, 302);
 }

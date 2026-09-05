@@ -325,7 +325,7 @@ export const NEW_FOUNDER_SPINOUT_BANK: Question[] = [
   ]),
 
   // ---- Week 4 deep dive extras — operating cadence + first hires ---
-  ...lab(4, 'OPS', '/settings', 'getting-started/personas', [
+  ...lab(4, 'OPS', '/account', 'getting-started/personas', [
     { id: 'founder.lab.ops.weekly_review', prompt: 'What weekly review will you run with yourself once incorporated?' },
     { id: 'founder.lab.ops.first_hire_role', prompt: 'First hire after incorporation — what role and why?', followups: ['founder.lab.ops.first_hire_when'] },
     { id: 'founder.lab.ops.first_hire_when', prompt: 'And when do you plan to make that hire?', kind: 'short' },

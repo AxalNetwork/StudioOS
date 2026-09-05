@@ -126,7 +126,7 @@ const PAGE_ALLOWLIST: Record<string, string> = {
   '/compliance': 'Compliance',
   '/docs': 'Docs',
   '/calendar': 'Calendar',
-  '/settings/billing': 'Billing',
+  '/account/billing': 'Billing',
   '/pricing/investor': 'Investor Pricing',
   '/dashboard': 'Dashboard',
 };
@@ -412,14 +412,14 @@ async function surfacePaywall(ctx: ToolContext, args: ToolArgs): Promise<ToolEnv
   const feature = asString(args?.feature || args?.gated_tool || 'studio', 64);
   const tier = asString(args?.required_tier || 'studio', 32);
   // Real upgrade entrypoints: investors land on /pricing/investor (public),
-  // everyone else on /settings/billing (open to all roles via /settings/:section).
+  // everyone else on /account/billing (open to all roles via /account/:section).
   // The frontend PaywallModal also listens for `studioos:tier_required`; we
   // emit `action:'open_paywall'` so the CTA renderer can additionally dispatch
   // that event and pop the modal in-place — but the route is always real.
   const route = ctx.persona === 'investor'
     ? `/pricing/investor?feature=${encodeURIComponent(feature)}&required=${encodeURIComponent(tier)}`
-    : `/settings/billing?feature=${encodeURIComponent(feature)}&required=${encodeURIComponent(tier)}`;
-  const browseRoute = ctx.persona === 'investor' ? '/pricing/investor' : '/settings/billing';
+    : `/account/billing?feature=${encodeURIComponent(feature)}&required=${encodeURIComponent(tier)}`;
+  const browseRoute = ctx.persona === 'investor' ? '/pricing/investor' : '/account/billing';
   const label = `Upgrade to ${tier === 'investor_pro' ? 'Investor Pro' : 'Studio'}`;
   return {
     result: { feature, required_tier: tier, gated: true },

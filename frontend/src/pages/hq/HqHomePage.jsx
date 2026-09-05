@@ -259,7 +259,7 @@ export default function HqHomePage() {
             </div>
             <p className="text-[12.5px] leading-relaxed text-axal-ink-2">
               <Unrecorded /> — {ready ? data.escalations_reason : 'no escalation concept exists on the platform.'}{' '}
-              The <Link to="/tickets" className="underline">ticket queue</Link> is platform-wide and is not one.
+              The <Link to="/help" className="underline">ticket queue</Link> is platform-wide and is not one.
             </p>
           </Card>
 

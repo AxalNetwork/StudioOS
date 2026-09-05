@@ -177,7 +177,7 @@ export const ROLE_DETECTOR: Question[] = [
     section: 'ROLE',
     prompt: 'What firm or organization are you with? (Type "Independent" if none.)',
     input_kind: 'short', skip_allowed: true,
-    importance: 'normal', page_target: '/settings',
+    importance: 'normal', page_target: '/account',
     doc_anchor: 'getting-started/personas', validate: 'short',
   },
   {
@@ -186,7 +186,7 @@ export const ROLE_DETECTOR: Question[] = [
     section: 'ROLE',
     prompt: 'In one line, what are you working on or known for right now?',
     input_kind: 'short', skip_allowed: true,
-    importance: 'normal', page_target: '/settings',
+    importance: 'normal', page_target: '/account',
     doc_anchor: 'getting-started/personas', validate: 'short',
   },
 ];

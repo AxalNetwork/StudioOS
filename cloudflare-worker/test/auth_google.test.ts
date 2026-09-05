@@ -103,12 +103,12 @@ test('link ok — verified caller, sub free → link_ok', () => {
 test('state token roundtrips action + redirect + uid', async () => {
   const t = await __testing.signState(ENV, {
     n: 'abc', ts: Math.floor(Date.now() / 1000),
-    action: 'link', uid: 42, redirect: '/settings?tab=security',
+    action: 'link', uid: 42, redirect: '/account?tab=security',
   });
   const parsed = await __testing.verifyState(ENV, t);
   assert.equal(parsed?.action, 'link');
   assert.equal(parsed?.uid, 42);
-  assert.equal(parsed?.redirect, '/settings?tab=security');
+  assert.equal(parsed?.redirect, '/account?tab=security');
 });
 
 test('state token: tampered signature is rejected', async () => {

@@ -144,7 +144,7 @@ tickets.post('/', async (c) => {
         { label: 'Type', value: data.type },
         ...(githubIssue ? [{ label: 'GitHub', value: `<${githubIssue.html_url}|#${githubIssue.number}>` }] : []),
       ],
-      cta: { label: 'Open ticket', path: `/tickets/${ticket.id}` },
+      cta: { label: 'Open ticket', path: `/help/${ticket.id}` },
     });
     await postToChannel(c.env, {
       channel: 'review',
@@ -377,7 +377,7 @@ tickets.put('/:id{[0-9]+}', async (c) => {
         type: 'ticket_update',
         title: `Ticket #${fresh.id} updated`,
         body: `Status: ${fresh.status}${fresh.assigned_to ? ` · assigned to ${fresh.assigned_to}` : ''}.`,
-        link: '/tickets',
+        link: '/help',
         payload: { ticket_id: fresh.id, status: fresh.status },
         channels: ['in_app', 'email'],
       });

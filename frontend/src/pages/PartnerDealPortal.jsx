@@ -226,7 +226,7 @@ export default function PartnerDealPortal() {
                 <Link to="/studio" className="block px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-800 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-gray-700 dark:text-gray-300">
                   Open my workspace →
                 </Link>
-                <Link to="/settings" className="block px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-800 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-gray-700 dark:text-gray-300">
+                <Link to="/account" className="block px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-800 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-gray-700 dark:text-gray-300">
                   Settings & profile →
                 </Link>
               </div>
