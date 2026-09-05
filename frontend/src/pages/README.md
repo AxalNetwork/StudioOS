@@ -21,6 +21,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `founder/` | The founder shell's workspace tab bars. |
 | `investor/` | Investor-only workspace framing and visual-system styles. |
 | `partner/` | Partner-side operations (BD console). |
+| `research/` | The two Research zones every licence shares — Library and Ask. Not role-scoped: `RESEARCH_ZONES` lists both for founder, investor, advisor and partner, and one store keyed on `user_id` serves all four. |
 | `captable/` | Cap-table panels composed into `CapTablePage.jsx`. |
 | `raise/` | Round-manager panels. |
 | `referrals/` | The Refer & Earn canvas stylesheet for `ReferralsPage.jsx`. |
