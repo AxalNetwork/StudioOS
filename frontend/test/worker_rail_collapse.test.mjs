@@ -122,9 +122,49 @@ test('the shell rail slot reads the same property', () => {
     'WorkspaceShell must collapse with the host grids, not stay 280px around a spine');
   // Read the className itself, not the file: the comment beside it NAMES the
   // literal it replaced, and that explanation is the part worth keeping.
-  const slot = SHELL.slice(SHELL.indexOf('fwr-shell-slot'), SHELL.indexOf('sticky top-20'));
+  //
+  // Matched, not sliced. This read the span between the literals
+  // `fwr-shell-slot` and `sticky top-20`, which made a NEIGHBOURING element's
+  // class name load-bearing for this assertion: retune the sticky wrapper and
+  // `indexOf` returns -1, `slice(i, -1)` silently widens to almost the whole
+  // file, and `doesNotMatch(/w-\[280px\]/)` starts passing for a reason that
+  // has nothing to do with the slot. A capture of the slot's own attribute
+  // cannot drift that way, and fails loudly if the class is ever removed.
+  const slot = SHELL.match(/className="(fwr-shell-slot[^"]*)"/)?.[1];
+  assert.ok(slot, 'the rail slot must keep its fwr-shell-slot class — nothing else identifies it');
   assert.doesNotMatch(slot, /w-\[280px\]/,
     'the literal width would win over the property and pin the slot open');
+});
+
+test('the rail row has a height, so items-stretch has something to stretch to', () => {
+  // THE BOTTOM GAP. `items-stretch` sizes the two columns to the ROW, and a row
+  // with no height of its own is only as tall as its tallest child — so the
+  // rail panel measured max(page body, rail contents) and stopped there,
+  // leaving bare ground between its bottom edge and the footer. Measured on the
+  // built bundle before the fix: 61px of gap with the rail expanded (its own
+  // blocks won) and 231px collapsed (`.fwr-body` is display:none, so the aside
+  // shrinks to the spine and the page body won instead). Both are 0 now.
+  //
+  // This is a source assertion for a layout fact, which is a real limit: it
+  // proves the declaration is present, not that the panel reaches the footer.
+  // Nothing in a DOM-only suite can prove the latter — it needs a browser and
+  // a built bundle. Keeping the declaration named here is what stops a tidy-up
+  // removing it silently.
+  const row = SHELL.match(/className=\{rail \? '([^']*)' : ''\}/)?.[1];
+  assert.ok(row, 'the rail row must keep its conditional className — nothing else identifies it');
+  assert.match(row, /\bitems-stretch\b/, 'the two columns meet at a seam; stretch is what pairs them');
+  assert.match(row, /\bmin-h-full\b/,
+    'without a height on the row, items-stretch resolves to max(page body, rail contents) and the panel stops short of the footer');
+  // `h-screen`/`100dvh` measure the viewport, which is taller than this wrapper
+  // by the header and the footer — they would push the footer off-screen.
+  assert.doesNotMatch(row, /\bh-screen\b|\[100dvh\]|\[100vh\]/,
+    'a viewport height overshoots the scroll container and pushes the footer out of view');
+  // `min-h-` and not `h-`: a page longer than the viewport must still grow.
+  // Lookbehind, not a bare word boundary: `-` is a non-word character, so
+  // /\bh-full\b/ matches INSIDE `min-h-full` and this assertion failed against
+  // the very code it is meant to accept.
+  assert.doesNotMatch(row, /(?<!min-)\bh-full\b/,
+    'a fixed full height would clip a page longer than the viewport; the row must be free to grow');
 });
 
 test('the toggle is a button, not a decorative icon', () => {
