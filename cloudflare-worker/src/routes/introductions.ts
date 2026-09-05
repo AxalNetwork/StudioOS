@@ -288,7 +288,7 @@ introductions.post('/propositions/:uid/accept', async (c) => {
         credits: state,
         packs: Object.entries(INTRO_PACKS).map(([key, p]) => ({ key, ...p })),
         buy_path: '/products#introduction-packs',
-        refer_path: '/settings/referrals',
+        refer_path: '/account/referrals',
       },
       402,
     );
@@ -442,7 +442,7 @@ introductions.get('/credits', async (c) => {
   return c.json({
     credits,
     buy_path: '/products#introduction-packs',
-    refer_path: '/settings/referrals',
+    refer_path: '/account/referrals',
   });
 });
 

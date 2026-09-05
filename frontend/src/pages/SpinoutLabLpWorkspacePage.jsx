@@ -830,7 +830,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
                 handled directly by the GP.
               </p>
               <div className="mt-3 flex gap-2">
-                <Link to="/tickets" className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
+                <Link to="/help" className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
                   <MessageSquare size={13} /> Message the GP
                 </Link>
                 <Link to="/lp-portal" className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2 text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -1085,7 +1085,7 @@ function LpApplicationForm({ loaded, existing, onSubmitted }) {
       <div className={`${CARD} flex items-center gap-3 p-6 text-[13px] text-gray-500 dark:text-gray-400`}>
         <AlertCircle size={16} className="flex-none text-amber-500" />
         Your application status could not be loaded, so the form is hidden to avoid a duplicate
-        submission. Reload the page, or contact the fund team through <Link to="/tickets" className="font-semibold text-violet-700 dark:text-violet-400">support</Link>.
+        submission. Reload the page, or contact the fund team through <Link to="/help" className="font-semibold text-violet-700 dark:text-violet-400">the Help Center</Link>.
       </div>
     );
   }

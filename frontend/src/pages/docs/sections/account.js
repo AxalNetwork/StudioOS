@@ -20,8 +20,8 @@ export default {
         'Developer — feature flags, search index re-sync, raw user object (admins only).',
       ],
       tips: [
-        'Bookmark direct links to specific tabs (e.g. /settings/notifications) for fast access.',
-        'Old links to /settings/jurisdictions, /email, /auth, and /role still work — they redirect to the new tabs.',
+        'Bookmark direct links to specific tabs (e.g. /account/notifications) for fast access.',
+        'This page was /settings and is now /account. Old links keep working — /settings and /settings/<tab> redirect here, preserving the query string and anchor, as do the legacy /settings/jurisdictions, /email, /auth and /role tabs.',
       ],
       pitfalls: [
         'Changing your email triggers a re-verification on the new address — keep the old inbox accessible until that completes.',

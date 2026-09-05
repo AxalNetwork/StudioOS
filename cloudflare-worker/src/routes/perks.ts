@@ -55,7 +55,7 @@
 import { Hono } from 'hono';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import type { Env } from '../types';
-import { requireAuth, requireAdmin } from '../auth';
+import { requireAuth, requireAdmin, requireRole } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 
@@ -67,6 +67,32 @@ const TIERS = new Set(['free', 'growth', 'studio']);
 const REVIEWABLE = new Set(['approve', 'reject', 'pause']);
 const TEXT_MAX = 4000;
 const NAME_MAX = 200;
+
+/**
+ * The four routes below are the PARTNER side of the marketplace: list what my
+ * agency offers, submit a listing, edit it, read its funnel.
+ *
+ * They were `requireAuth` only. The submit handler's own comment says "A
+ * partner cannot publish to founders directly" — and it is right that the row
+ * is forced to `in_review` rather than `live`, so nothing reached a founder
+ * unreviewed. But nothing checked the submitter was a partner at all, so any
+ * signed-in account (founder, investor, advisor, `exploring`) could put a
+ * listing into the admin queue and read the per-listing view/claim funnel of
+ * anything it had put there. Only the UI tab was gated (`PerksPage.jsx`),
+ * which is not a gate.
+ *
+ * `requireRole` admits admin unconditionally, which is what the review queue
+ * and the partner console both want: an admin operating on a partner's behalf
+ * is the existing pattern in `PerksPage`, whose Partner console tab is shown
+ * to `partner || admin`.
+ *
+ * "Operator Partner" is `users.role = 'partner'` — there is no partner
+ * sub-type column anywhere in the schema (`partner_type`, `partner_tier` and
+ * `partner_kind` return zero hits), and the operator/service-provider
+ * distinction lives in `personas.ts` as a label whose `role_alignment` is
+ * `partner`. So the role is the whole gate; do not invent a sub-type here.
+ */
+const partnerOnly = (c: Parameters<typeof requireRole>[0]) => requireRole(c, 'partner');
 
 type PerkRow = {
   id: number; uid: string; partner_user_id: number | null; partner_name: string;
@@ -192,7 +218,7 @@ r.get('/mine', async (c) => {
 
 r.get('/partner', async (c) => {
   try {
-    const user = await requireAuth(c);
+    const user = await partnerOnly(c);
     // "What does MY agency offer" — a claim about a firm, so it narrows. The
     // catalogue below is a marketplace and deliberately does not.
     const companyId = await activeCompanyFor(c, user);
@@ -215,7 +241,7 @@ r.get('/partner', async (c) => {
 
 r.post('/partner', async (c) => {
   try {
-    const user = await requireAuth(c);
+    const user = await partnerOnly(c);
     const b = await c.req.json().catch(() => ({} as any));
     const offer = str(b?.offer, NAME_MAX);
     const partnerName = str(b?.partner_name, NAME_MAX);
@@ -249,7 +275,7 @@ r.post('/partner', async (c) => {
 
 r.patch('/partner/:uid', async (c) => {
   try {
-    const user = await requireAuth(c);
+    const user = await partnerOnly(c);
     const perk = await myPerk(c.env, c.req.param('uid'), user.id, await activeCompanyFor(c, user));
     // 404 rather than 403: a listing the caller does not own should not be
     // confirmed to exist.
@@ -280,7 +306,7 @@ r.patch('/partner/:uid', async (c) => {
 
 r.get('/partner/:uid/stats', async (c) => {
   try {
-    const user = await requireAuth(c);
+    const user = await partnerOnly(c);
     const perk = await myPerk(c.env, c.req.param('uid'), user.id, await activeCompanyFor(c, user));
     if (!perk) return c.json({ error: 'not_found' }, 404);
     const views = await c.env.DB.prepare(

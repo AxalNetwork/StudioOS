@@ -135,7 +135,7 @@ async function loadPrefs(env: Env, userId: number): Promise<Record<string, any>>
 }
 
 function resolveChannels(prefs: Record<string, any>, type: string, requested: NotifyChannel[]): NotifyChannel[] {
-  // Honor per-event, per-channel opt-outs from /settings/notifications.
+  // Honor per-event, per-channel opt-outs from /account/notifications.
   // All three channels (in_app/email/slack) are user-toggleable and
   // default-on; an explicit `false` in prefs[type][ch] suppresses that
   // channel for that event type.
@@ -185,7 +185,7 @@ function buildSlackBlocks(args: NotifyArgs, appUrl: string): Record<string, unkn
   }
   blocks.push({
     type: 'context',
-    elements: [{ type: 'mrkdwn', text: `Axal StudioOS · _Manage in <${root}/settings/notifications|Notification settings>_` }],
+    elements: [{ type: 'mrkdwn', text: `Axal StudioOS · _Manage in <${root}/account/notifications|Notification settings>_` }],
   });
   // `text` fallback is required by Slack for screen readers / push previews.
   return {
@@ -516,7 +516,7 @@ function renderDigestSlackBlocks(
     },
     {
       type: 'context',
-      elements: [{ type: 'mrkdwn', text: `Axal StudioOS · _Manage in <${root}/settings/notifications|Notification settings>_` }],
+      elements: [{ type: 'mrkdwn', text: `Axal StudioOS · _Manage in <${root}/account/notifications|Notification settings>_` }],
     },
   ];
   return {

@@ -5,9 +5,9 @@ test.describe('Settings (post-AO verification)', () => {
   test.beforeEach(() => requirePreview(test));
 
   for (const section of ['profile', 'account', 'notifications']) {
-    test(`/settings/${section} mounts AND content area is non-empty`, async ({ page }) => {
+    test(`/account/${section} mounts AND content area is non-empty`, async ({ page }) => {
       await loginAs(page, 'founder');
-      await page.goto(`/settings/${section}`);
+      await page.goto(`/account/${section}`);
       const root = page.getByTestId('settings-page');
       await expect(root).toBeVisible();
       // SettingsPage clamps `safeActive` to a section the role can see.
@@ -21,7 +21,7 @@ test.describe('Settings (post-AO verification)', () => {
 
   test('display-name save round-trips (POST /api/settings → GET reflects it)', async ({ page }) => {
     await loginAs(page, 'founder');
-    await page.goto('/settings/profile');
+    await page.goto('/account/profile');
     const root = page.getByTestId('settings-page');
     await expect(root).toBeVisible();
     // The Profile section exposes a display-name input; if it's not present

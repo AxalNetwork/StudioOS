@@ -608,7 +608,7 @@ function CrunchbaseLookupSlideOver({ project, onClose, onApplied, onError }) {
               <AlertCircle size={12} className="mt-0.5 shrink-0" />
               <span>
                 Crunchbase isn't connected.{' '}
-                <Link to="/settings/integrations" className="underline font-medium">Connect from Settings → Integrations</Link>{' '}
+                <Link to="/account/integrations" className="underline font-medium">Connect from Settings → Integrations</Link>{' '}
                 to enable enrichment.
               </span>
             </div>

@@ -109,3 +109,67 @@ test('Company Settings still owns the company half of the split', () => {
   assert.match(company, /function MembersCard/);
   assert.doesNotMatch(settings, /function CompanyProfileCard/);
 });
+
+// ===========================================================================
+// The page moved from /settings to /account, and the URL-sync effect is where
+// that hurt.
+//
+// The effect canonicalises: whatever alias you arrive on, it rewrites the URL
+// to the section's own id, so /account/security becomes
+// /account/security-privacy and the four legacy aliases in PATH_TO_SECTION
+// resolve to their real tab. That behaviour predates the rename and is fine.
+//
+// Two things about it were not fine, and neither was visible to this suite
+// until the page was opened in a browser. They are pinned here because the
+// only other way to catch them is to render.
+// ===========================================================================
+
+const syncEffect = () => {
+  const i = settings.indexOf('const bare = active ===');
+  assert.ok(i > 0, 'the URL-sync effect must still exist — nothing else keeps the URL honest');
+  return settings.slice(i, i + 500);
+};
+
+test('the landing pane has no segment of its own', () => {
+  // Before the rename the landing pane's section id produced /settings/account,
+  // which read fine. After it that is /account/account, which reads like a
+  // mistake — and is what the page actually navigated to until this was fixed.
+  const e = syncEffect();
+  assert.match(e, /active === 'profile' \|\| active === 'account'/,
+    "both the sentinel and the real landing section must map to the bare /account");
+  // The whole line, not its halves: `doesNotMatch(/`\/account\/${active}`;/)`
+  // was the first attempt and it cannot tell a conditional template from an
+  // unconditional one — the conditional ends in exactly that string too, so it
+  // failed against the code it was written to accept.
+  assert.match(e, /const want = bare \? '\/account' : `\/account\/\$\{active\}`;/,
+    'the segment must be conditional on `bare`, or the landing pane lands at /account/account');
+});
+
+test('the canonicalising rewrite keeps the query and the anchor', () => {
+  // It navigated to a bare pathname, so it dropped both. That was survivable
+  // while nothing sent one. It is not now: the Google OAuth link callback
+  // redirects to /account?tab=…, and account recovery to
+  // /account#security-recovery-codes. A hop that tidies the path must not eat
+  // the part of the link that said why it was sent.
+  const e = syncEffect();
+  assert.match(e, /navigate\(\{\s*pathname: want, search: location\.search, hash: location\.hash\s*\}/,
+    'the rewrite must carry search and hash through, not just the pathname');
+});
+
+test('both prefixes resolve a section, because /settings/* still renders this page for one hop', () => {
+  assert.match(settings, /match\(\/\^\\\/\(\?:account\|settings\)\\\/\(\[\^\/\]\+\)\/\)/,
+    'a deep link arriving on the old prefix must resolve its section on that render');
+  assert.match(settings, /\/\^\\\/\(\?:account\|settings\)\\b\//,
+    'the sync guard must recognise the old prefix or the rewrite never fires');
+});
+
+test('the email-change routes stay public under BOTH prefixes', () => {
+  // isPublicPath decides whether a 401 hard-redirects to /login. These two
+  // routes are followed from a mail client, usually signed out, and links
+  // already sent point at /settings/email/*. Losing either prefix breaks an
+  // email change at the moment the user clicks the link.
+  const api = read('frontend/src/lib/api.js');
+  assert.match(api, /startsWith\('\/account\/email\/'\)/);
+  assert.match(api, /startsWith\('\/settings\/email\/'\)/,
+    'confirmation links already in inboxes still carry the old prefix');
+});

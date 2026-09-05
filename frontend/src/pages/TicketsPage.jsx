@@ -297,7 +297,7 @@ export default function TicketsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Support Hub</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Help Center</h1>
           <p className="text-sm text-gray-600">
             {isAdmin ? 'All user tickets — ticket management and operations support' : 'Your tickets — submit and track support requests'}
           </p>

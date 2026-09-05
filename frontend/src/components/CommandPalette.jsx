@@ -69,7 +69,7 @@ const QUICK_ACTIONS = [
     label: 'Open Help',
     hint: 'Docs, ticket, contact options',
     roles: ['admin', 'founder', 'partner', 'investor', 'advisor'],
-    run: (nav) => nav('/tickets'),
+    run: (nav) => nav('/help'),
   },
 ];
 

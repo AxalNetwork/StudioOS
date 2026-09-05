@@ -58,7 +58,7 @@ const unsubHtml = (msg: string) => `<!doctype html><meta charset="utf-8"><title>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:80px auto;padding:0 16px;color:#111;">
 <h1 style="font-size:22px;font-weight:700;margin:0 0 8px;">Axal</h1>
 <p style="font-size:15px;line-height:1.55;">${msg}</p>
-<p style="font-size:13px;color:#6b7280;"><a href="/settings/notifications" style="color:#6b7280;">Open notification settings</a></p>`;
+<p style="font-size:13px;color:#6b7280;"><a href="/account/notifications" style="color:#6b7280;">Open notification settings</a></p>`;
 
 // Both GET (visible link in email) and POST (RFC 8058 one-click) hit
 // the same handler. CSRF middleware exempts the POST because there is
@@ -66,7 +66,7 @@ const unsubHtml = (msg: string) => `<!doctype html><meta charset="utf-8"><title>
 async function unsubscribeHandler(c: any) {
   const token = c.req.query('token') || '';
   const v = await verifyUnsubscribeToken(c.env, token);
-  if (!v) return c.html(unsubHtml('That unsubscribe link is invalid or expired. Open your <a href="/settings/notifications">notification settings</a> to manage email preferences.'), 400);
+  if (!v) return c.html(unsubHtml('That unsubscribe link is invalid or expired. Open your <a href="/account/notifications">notification settings</a> to manage email preferences.'), 400);
   await applyMarketingUnsub(c.env, v.userId);
   return c.html(unsubHtml('You\'ve been unsubscribed from Axal marketing emails. Transactional notifications (security, billing, contracts) will continue.'));
 }

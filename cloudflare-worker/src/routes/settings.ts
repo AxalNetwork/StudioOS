@@ -446,8 +446,8 @@ settings.post('/email-change/request', async (c) => {
             VALUES (${user.id}, ${user.email}, ${newEmail}, ${confirmHash}, ${revokeHash}, ${confirmExpires}, ${revokeExpires})`;
   await sql.end();
 
-  const confirmUrl = `${APP_URL(c.env)}/settings/email/confirm?token=${confirmRaw}`;
-  const revokeUrl = `${APP_URL(c.env)}/settings/email/revoke?token=${revokeRaw}`;
+  const confirmUrl = `${APP_URL(c.env)}/account/email/confirm?token=${confirmRaw}`;
+  const revokeUrl = `${APP_URL(c.env)}/account/email/revoke?token=${revokeRaw}`;
 
   // Reuse the existing verification email sender — it already handles
   // Gmail OAuth + branding. The subject is repurposed but the body still
@@ -1118,7 +1118,7 @@ function pickFeatureFlags(row: UserSettingsRow): Record<string, boolean> {
 function handleSettingsError(c: Context<{ Bindings: Env }>, e: unknown) {
   if (e instanceof SettingsValidationError) {
     // Task #14 — return a field-level error envelope so the
-    // /settings/notifications form can inline messages next to the
+    // /account/notifications form can inline messages next to the
     // offending input rather than firing a generic toast.
     const body: Record<string, unknown> = { error: e.message };
     if (e.field) {
@@ -1768,7 +1768,7 @@ settings.get('/integrations', async (c) => {
 });
 
 // --- Task #51 — Connected sign-in accounts (Google) ------------------------
-// Sits next to /settings/integrations but is conceptually separate: that
+// Sits next to /account/integrations but is conceptually separate: that
 // route covers Calendar/Mail/Slack OAuth links (productivity), this one
 // covers identity providers that can SIGN IN. The Settings → Security
 // panel renders it inline so the user sees "Google sign-in: linked /
@@ -1889,7 +1889,7 @@ settings.post('/developer/resync-indices', async (c) => {
   // if available, otherwise just logs an admin activity row.
   const sql = getSQL(c.env);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id)
-            VALUES ('developer_resync_indices', 'Admin requested search index re-sync from /settings/developer',
+            VALUES ('developer_resync_indices', 'Admin requested search index re-sync from /account/developer',
                     ${user.email}, ${user.id})`;
   await sql.end();
   return c.json({ ok: true, queued: true, message: 'Re-sync request logged. The next scheduled cron will pick this up.' });
