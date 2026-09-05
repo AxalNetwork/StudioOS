@@ -14,7 +14,7 @@ been built. Counts as of 2026-09-04:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 56 — the canvas is built; its zones render its bodies. |
+| `canvases/integrated/` | 57 — the canvas is built; its zones render its bodies. |
 | `canvases/backlog/` | 26 — triaged, not built yet. |
 | `canvases/out-of-scope/` | 27 — deliberately not being built. |
 
@@ -250,8 +250,13 @@ finished.
 
 Two constraints carry over from the current pass, both deliberate:
 
-- **The Spin-Out Lab is not a target.** Not for diffs, not for upgrades, not for
-  re-routing.
+- **The Spin-Out Lab's TOOL pages are not a target.** Not for diffs, not for
+  upgrades, not for re-routing. The one exception, taken deliberately and on
+  the owner's instruction, is `/spinout-lab` itself — the programme
+  introduction on both the public and the signed-in surface, re-integrated
+  from the Spin-Out Lab · Intro canvas. Its four gates still render from
+  `PIPELINE_PHASES` in `frontend/src/lib/spinoutLab.js`, never from a canvas's
+  own list, and nothing behind the Lab's gates moved. See DECISIONS D38.
 - **`/studio`, `/founder`, `/partner-portal` and `/office-hours` are untouched**
   in this pass.
 

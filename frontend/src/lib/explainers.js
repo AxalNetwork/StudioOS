@@ -209,7 +209,7 @@ export const EXPLAINERS = {
   },
   spinout_lab: {
     title: 'Spin-Out Lab',
-    body: 'A guided 4-week sprint that takes a pre-incorporation founder to ready-to-incorporate. Follow the weekly milestones to stay on track.',
+    body: 'A guided 4-week sprint through nineteen working tools, with a cohort and four gates that open on evidence. Open whether or not you already have a company. Follow the weekly milestones to stay on track.',
     docPath: 'spin-out-lab/overview',
   },
 };

@@ -1688,3 +1688,76 @@ nobody can send you a document. A founder sharing their own file needs a grant
 type the product has for investors (`data_room_grants`) and for no one else.
 Adding one is a decision about a founder's privacy, not a schema change, and
 it is what `/research/client-prep` also waits on.
+
+---
+
+### D38. The Spin-Out Lab is not a pre-incorporation programme, and never was in code — only in prose
+
+`/spinout-lab` led with a 76px `28 days` and "From idea to incorporated". Every
+doc, comment and admin error message around it said the same thing: a
+pre-incorporation sprint. **The code has never implemented that.**
+`users.is_incorporated` is written in exactly three places —
+`routes/spinout_lab.ts` `recordMilestone` (the week-4 milestone), `exitLab`
+(the escape hatch), and `services/advisor/writeRouter.ts`'s graduation write —
+and all three mean *has been through the Lab*. No path sets it for a founder
+who arrives with a company; the apply form's "Are you already incorporated?"
+answer lands in `spinout_applications.incorporated`, a different column that
+gates nothing.
+
+So an externally-incorporated founder has always been able to apply, be
+admitted and start. The only thing stopping them was a page that told them not
+to bother.
+
+**The two 409s stay.** `startLab()` and the admin `spinout-admit` handler both
+refuse a user with `is_incorporated = 1`, and both were read — including in the
+plan for this change — as the exclusion. They are not: they are re-entry
+guards, and removing them would let an alumnus re-open a sprint whose week is
+already 4 against a workspace `spinout_lab_active = 0` deliberately closed.
+What changed is the wording. The refusal now says "This account has already
+been through the Lab", and every restatement of "pre-incorporation founders"
+in the worker, the SPA, the dev backend and the user-facing explainer went with
+it.
+
+**The page now names three starting points** — Form, Find fit, Launch a line —
+as presentational emphasis over one arsenal. A track re-orders which of the
+nineteen tools lead. It does **not** change the gates: `MILESTONES` is one list
+enforced identically for everyone, `LabGates` takes no track prop so that is
+structural rather than remembered, and the page says so in words. Nothing
+records a track either, so the apply link deliberately carries no `track=`
+param — `RegisterPage` reads only `lane` and `product` and would drop it in
+silence, which is a choice that looks remembered and is not.
+
+**The cohort feed is gate-level, not milestone-level.** `GET /cohort` is public
+and already publishes every active company's working name, sector and week, so
+`GET /shipped` reporting *when* a week turned adds a timestamp to a transition
+whose state is published. Individual milestone keys are a different class of
+fact: `section83b_filed`, `founder_stock_issued`, `fundraise_ask_locked`,
+`investor_intros_secured` and `revenue_proof_added`, tied to a named company,
+are material corporate and financial statements about a private company, and
+nothing in the application flow asks a founder's consent to publish them. The
+limit lives in `weekClearsFor` rather than in the handler, and the route is
+auth-gated as defence in depth. The logged-out surface states it instead.
+
+**What the canvas asked for and did not get**, because no store holds it: the
+per-track gate definitions, the "already in your workspace" tags, three sample
+founder-to-founder asks, four sample cohort companies, and a seat count. Also
+deleted on the way past: `PHASE_STATUS = ['done', 'active', 'future',
+'future']`, which drew gate 1 complete and gate 2 live on a **public** page for
+a cohort the visitor is not in, and whose own comment conceded "the logged-out
+page has no cohort" — the same defect as the sample companies, already shipped.
+
+**The theming guard is a test, not the script.** `scripts/check-dark-mode.mjs`
+pairs six bare utilities and has no opinion about `bg-[#faf9fc]` or
+`style={{ background: '#141118' }}`, which is exactly the shape a faithful port
+of a light-only canvas takes — it passes `test:drift` and fails on a reader's
+screen. `frontend/test/spinout_lab_intro.test.mjs` asserts the hex is not
+there, that every theme-dependent token carries its `dark:` counterpart, and
+that no colour reaches the page as `var()` in a style attribute (Tailwind v4
+tree-shakes any `@theme` token no utility references).
+
+**Still open, and stated on the page rather than implied:** graduation has
+exactly one definition — `incorporation_completed`, read in ten places
+including certificate issuance, the public graduate list, `/stats` and
+`/fund-metrics`. A founder who runs four excellent weeks on the Find fit track
+and never files is, to all ten, a non-graduate. Opening the door was a page;
+letting them finish is a ten-site change that has to land at once.

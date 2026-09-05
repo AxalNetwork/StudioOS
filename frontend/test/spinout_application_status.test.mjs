@@ -34,6 +34,15 @@ const PAGE = readFileSync(
   fileURLToPath(new URL('../src/pages/SpinoutLabPage.jsx', import.meta.url)),
   'utf8',
 );
+// parseSqliteUtc moved OUT of the page and into lib/spinoutLab.js when the Lab
+// intro was rebuilt: both surfaces of /spinout-lab now render one shared
+// component, and it could not reach back up into a page without closing an
+// import cycle. Same function, same extraction technique, new home — the
+// assertions below are unchanged.
+const LIB = readFileSync(
+  fileURLToPath(new URL('../src/lib/spinoutLab.js', import.meta.url)),
+  'utf8',
+);
 
 // ---------------------------------------------------------------------------
 // parseSqliteUtc — the real function, not a source assertion.
@@ -49,7 +58,7 @@ const PAGE = readFileSync(
 // which this bare node:test runner has no loader for. The function is copied
 // by evaluating the real source text, so it cannot drift from the page.
 const parseSqliteUtc = (() => {
-  const src = PAGE.slice(PAGE.indexOf('export function parseSqliteUtc'));
+  const src = LIB.slice(LIB.indexOf('export function parseSqliteUtc'));
   const body = src.slice(0, src.indexOf('\n}\n') + 3).replace(/^export /, '');
   // eslint-disable-next-line no-new-func
   return new Function(`${body}; return parseSqliteUtc;`)();
@@ -88,8 +97,12 @@ test('decided_at being null (an undecided application) parses to null', () => {
 test('every timestamp on the page goes through the one parser', () => {
   // Two callers used `new Date(s.replace(' ', 'T'))` with no `Z` — the
   // local-time misreading above. Neither may come back.
-  const naive = PAGE.match(/new Date\(String\([^)]*\)\.replace\(' ', 'T'\)\)/g) || [];
-  assert.deepEqual(naive, [], 'a raw SQLite parse bypassing parseSqliteUtc reappeared');
+  // Both files now, since the parser and its callers live either side of the
+  // page/lib line: checking only one of them would let the bypass return in
+  // the other.
+  const re = /new Date\(String\([^)]*\)\.replace\(' ', 'T'\)\)/g;
+  assert.deepEqual(PAGE.match(re) || [], [], 'a raw SQLite parse bypassing parseSqliteUtc reappeared in the page');
+  assert.deepEqual(LIB.match(re) || [], [], 'a raw SQLite parse bypassing parseSqliteUtc reappeared in lib/spinoutLab.js');
 });
 
 // ---------------------------------------------------------------------------

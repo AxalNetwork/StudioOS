@@ -506,10 +506,13 @@ def admin_spinout_admit(
         raise HTTPException(status_code=404, detail="User not found")
     if target.role == "admin":
         raise HTTPException(status_code=400, detail="Admins cannot be admitted to the Lab")
+    # Re-entry guard, not an eligibility rule — mirrors the worker's
+    # spinout-admit handler. Refuses an alumnus, never a founder who arrived
+    # with a company.
     if int(target.is_incorporated or 0) == 1:
         raise HTTPException(
             status_code=409,
-            detail="User is already incorporated — the Lab is a pre-incorporation sprint",
+            detail="This account has already been through the Lab",
         )
     cohort = ((body or {}).get("cohort") or "").strip() or "Cohort 3"
     already_admitted = int(target.spinout_lab_admitted or 0) == 1

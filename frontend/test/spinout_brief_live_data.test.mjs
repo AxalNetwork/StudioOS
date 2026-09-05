@@ -30,6 +30,22 @@ import { fileURLToPath } from 'node:url';
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), 'utf8');
 const BRIEF = read('../src/pages/SpinoutLabBriefPage.jsx');
 const PAGE = read('../src/pages/SpinoutLabPage.jsx');
+/**
+ * The shared helpers moved OUT of the page.
+ *
+ * When the Lab intro was rebuilt, both surfaces of /spinout-lab — logged out
+ * and signed-in-not-yet-applied — became one component under
+ * `components/spinout/`. It could not import the cohort math back out of a
+ * page without closing an import cycle (the page already imports the marketing
+ * page, which now renders the component), so `useSpinoutStats`,
+ * `companiesLabel`, `openCohortCopy` and the calendar moved down to lib/.
+ *
+ * The rule these tests exist for is unchanged and so are the assertions: ONE
+ * source for the figures and ONE source for the dates, so the brief and the
+ * hero can never quote different numbers for the same cohort. Only the file
+ * they are asserted against moved.
+ */
+const LIB = read('../src/lib/spinoutLab.js');
 
 /**
  * Comments quote the very literals these tests forbid — that is the point of
@@ -98,7 +114,7 @@ test('a failed stats fetch renders an em-dash on the brief', () => {
 });
 
 test('companiesLabel returns an em-dash for null and is singular-correct', () => {
-  const src = PAGE.slice(PAGE.indexOf('export function companiesLabel'));
+  const src = LIB.slice(LIB.indexOf('export function companiesLabel'));
   const body = src.slice(0, src.indexOf('\n}\n') + 3).replace(/^export /, '');
   // eslint-disable-next-line no-new-func
   const companiesLabel = new Function(`${body}; return companiesLabel;`)();
@@ -113,9 +129,13 @@ test('companiesLabel returns an em-dash for null and is singular-correct', () =>
 // ---------------------------------------------------------------------------
 
 test('the hero panel and the brief use the same hook and label helper', () => {
-  assert.match(PAGE, /export function useSpinoutStats/);
-  assert.match(PAGE, /export function companiesLabel/);
-  assert.match(PAGE, /export function openCohortCopy/);
+  assert.match(LIB, /export function useSpinoutStats/);
+  assert.match(LIB, /export function companiesLabel/);
+  assert.match(LIB, /export function openCohortCopy/);
+  // And the page must not have grown its own copy on the way past.
+  assert.doesNotMatch(PAGE, /function useSpinoutStats/);
+  assert.doesNotMatch(PAGE, /function companiesLabel/);
+  assert.doesNotMatch(PAGE, /function openCohortCopy/);
   // The hero must consume them rather than keeping its own inlined copy.
   assert.match(PAGE, /const \{ companies, raised \} = useSpinoutStats\(\)/);
   assert.doesNotMatch(
@@ -133,11 +153,20 @@ test('the apply CTA resolves its deadline through the shared helper', () => {
 test('the cohort deadline is formatted in Delaware time', () => {
   // The cohort calendar is defined in America/New_York; formatting in the
   // viewer's zone would show the wrong day either side of midnight ET.
-  const fn = PAGE.slice(PAGE.indexOf('export function openCohortCopy'));
-  assert.match(fn.slice(0, 700), /timeZone: COHORT_TZ/);
+  //
+  // openCohortCopy now delegates every label to one formatter instead of
+  // repeating the Intl options per field — there are four labels to render
+  // since the hero gained Starts and Ends. So the zone is asserted where it is
+  // actually applied, and separately that the copy helper has not gone around
+  // it with a bare toLocaleDateString.
+  const fmt = LIB.slice(LIB.indexOf('export function cohortDateLabel'));
+  assert.match(fmt.slice(0, 700), /timeZone: COHORT_TZ/);
+  const fn = LIB.slice(LIB.indexOf('export function openCohortCopy'));
+  assert.doesNotMatch(fn.slice(0, 700), /toLocaleDateString/,
+    'openCohortCopy formatted a date itself instead of going through cohortDateLabel');
 });
 
 test('openCohortCopy swallows cohort-math failures rather than blanking the page', () => {
-  const fn = PAGE.slice(PAGE.indexOf('export function openCohortCopy'));
+  const fn = LIB.slice(LIB.indexOf('export function openCohortCopy'));
   assert.match(fn.slice(0, 700), /catch \{\s*return null;/);
 });

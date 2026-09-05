@@ -4,10 +4,11 @@ import {
   ArrowLeft, FileDown, FlaskConical, Building2, PieChart, FileCheck2,
   Presentation, LineChart, Handshake, Users, FolderOpen,
 } from "lucide-react";
+import { deliverablesFor } from "./SpinoutLabPage";
 import {
-  PIPELINE_PHASES, pipelineItemsFor, deliverablesFor, outcomeBadgesFor, labJurisdiction,
+  PIPELINE_PHASES, pipelineItemsFor, outcomeBadgesFor, labJurisdiction,
   useSpinoutStats, companiesLabel, openCohortCopy,
-} from "./SpinoutLabPage";
+} from "../lib/spinoutLab";
 
 // Program Brief — the printable slide deck for the Spin-Out Lab (reference:
 // Spin-Out Lab-print-1vkgcux.dc.html BRIEF VIEW; print paging from

@@ -1,5 +1,12 @@
 /**
- * Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
+ * Spin-Out Lab — 4-week guided sprint, gated on evidence.
+ *
+ * OPEN TO FOUNDERS WITH AN ENTITY. `users.is_incorporated` is set only by
+ * finishing (recordMilestone) or quitting (exitLab) the Lab, never by
+ * arriving with a company, so a founder who incorporated elsewhere applies,
+ * is admitted and starts like anyone else. Earlier wording here called this a
+ * "pre-incorporation sprint", which described a restriction the code has
+ * never implemented and which the public page repeated for months.
  *
  * Mounted at /api/spinout-lab. JWT-auth-gated for every route (no admin
  * escape hatch). The lab is detected from `users.spinout_lab_active`.
@@ -7,7 +14,7 @@
  *   GET  /state      → current week, days remaining, milestones, unlocked
  *                       features for the caller
  *   POST /start      → flip the lab on for the caller (idempotent; 409 if
- *                       the caller is already incorporated)
+ *                       the caller has already been through the Lab)
  *   POST /milestone  → mark a milestone done; auto-advances week when the
  *                       current week's bar is fully met. When week 4 is
  *                       met (i.e. `incorporation_completed` is recorded),
@@ -37,6 +44,7 @@ import {
   VALID_MILESTONE_KEYS,
   weekForKey,
   weekMet,
+  weekClearsFor,
   unlockedFeaturesThrough,
 } from '../services/spinoutLabCatalog';
 // Re-export so existing external imports of these names from this
@@ -56,6 +64,19 @@ function daysSince(startedAt: string | null | undefined, nowMs = Date.now()): nu
 }
 
 const SPRINT_DAYS = 28;
+
+/**
+ * Milliseconds for a SQLite `datetime('now')` string, which is UTC but carries
+ * no zone marker. Without the appended Z, V8 reads it as LOCAL time and every
+ * comparison drifts by the runtime's offset. Returns null rather than NaN so
+ * callers can drop the row instead of comparing against a NaN that is false
+ * in both directions.
+ */
+function parseTsUtc(s: string | null | undefined): number | null {
+  if (!s) return null;
+  const ms = Date.parse(s.replace(' ', 'T') + (s.includes('Z') ? '' : 'Z'));
+  return Number.isFinite(ms) ? ms : null;
+}
 
 // ---------------------------------------------------------------------------
 // Pure logic — exported so the test harness can drive the full flow against
@@ -134,13 +155,19 @@ export async function getLabState(sql: Sql, userId: number): Promise<LabState> {
 }
 
 export async function startLab(sql: Sql, userId: number): Promise<StartResult> {
-  // Refuse to re-open the Lab for users who have already incorporated —
-  // the Lab is strictly a pre-incorporation sprint.
+  // RE-ENTRY GUARD, not an eligibility rule. `users.is_incorporated` is set in
+  // exactly two places — completing the week-4 milestone (recordMilestone
+  // below) and `exitLab` — so a 1 here means "has already been through the
+  // Lab", never "arrived with a company". Founders who incorporated elsewhere
+  // have is_incorporated = 0 and are welcome: the Lab is not restricted to
+  // pre-incorporation founders, and this check has never made it so. It only
+  // stops a graduate re-opening a sprint whose week is already 4 and whose
+  // workspace `spinout_lab_active = 0` deliberately closed.
   const probe = await sql<IsIncorporatedRow>`
     SELECT is_incorporated FROM users WHERE id = ${userId}
   `;
   if (probe[0] && Number(probe[0].is_incorporated) === 1) {
-    return { ok: false, status: 409, error: 'User is already incorporated' };
+    return { ok: false, status: 409, error: 'This account has already been through the Lab' };
   }
   // Idempotent: COALESCE preserves an existing started_at and a non-zero
   // week so re-calling start() doesn't reset progress.
@@ -765,6 +792,120 @@ spinoutLab.get('/cohort', async (c) => {
     if (gradSeen.size >= 8) break;
   }
   return c.json(members);
+});
+
+// GET /shipped — which cohort companies cleared which gate, and when.
+//
+// AUTH-GATED, and this is the one route here where that needs an argument.
+// `/cohort` above is public and already publishes every active company's
+// working name, sector and week to anyone who asks. This route reports the
+// same population at the same grain — a WEEK turning — so what it adds is a
+// timestamp on a transition whose state is already published. That is why it
+// stops at the week boundary: individual milestone keys are a different class
+// of fact. `section83b_filed`, `founder_stock_issued`, `fundraise_ask_locked`,
+// `investor_intros_secured` and `revenue_proof_added`, tied to a named
+// company, are material corporate and financial statements about a private
+// company, and nothing in the application flow asks a founder's consent to
+// publish them. See weekClearsFor() in services/spinoutLabCatalog.ts, which is
+// where that limit is enforced rather than left to this handler to remember.
+//
+// The login requirement is defence in depth rather than strictly load-bearing:
+// the feed's value is peer accountability inside a cohort and its risk is bulk
+// scraping, so a session costs the product nothing and removes the anonymous
+// case. The logged-out intro renders the public directory and says plainly
+// that the feed is visible inside the Lab.
+//
+// Company-level facts only, exactly like `/cohort`: the working name from the
+// founder's project (or their application), never a founder name, email or id.
+//
+// Never throws — answers [] when the tables predate the Lab migrations, the
+// same contract as `/cohort` and `/stats`.
+type ShippedRow = {
+  user_id: number;
+  milestone_key: string;
+  completed_at: string | null;
+  cohort: string | null;
+  name: string | null;
+  sector: string | null;
+};
+
+const SHIPPED_WINDOW_DAYS = 21;
+const SHIPPED_MAX_EVENTS = 12;
+
+spinoutLab.get('/shipped', async (c) => {
+  await requireAuth(c);
+
+  let rows: ShippedRow[] = [];
+  try {
+    // EVERY milestone for the active cohort, not just recent ones: weekMet
+    // needs a founder's whole set to decide whether a week closed, so a
+    // date-filtered fetch would silently report no clears for anyone whose
+    // earlier milestones fell outside the window.
+    const res = await c.env.DB.prepare(
+      `SELECT m.user_id, m.milestone_key, m.completed_at,
+              usf.spinout_lab_cohort AS cohort, p.name, p.sector
+       FROM spinout_lab_milestones m
+       JOIN users u ON u.id = m.user_id
+       LEFT JOIN user_spinout_flags usf ON usf.user_id = u.id
+       LEFT JOIN projects p ON p.founder_id = u.founder_id AND p.deleted_at IS NULL
+       WHERE u.spinout_lab_active = 1
+       ORDER BY m.user_id ASC, m.completed_at ASC, p.id ASC
+       LIMIT 2000`,
+    ).all<ShippedRow>();
+    rows = res.results ?? [];
+  } catch {
+    return c.json([]);
+  }
+
+  // The projects LEFT JOIN repeats every milestone once per project, so fold
+  // to one row per (founder, milestone) before replaying — a duplicate would
+  // not change weekMet's answer, but it would make the row that "closed" the
+  // week ambiguous.
+  const byUser = new Map<number, { meta: ShippedRow; keys: Map<string, string | null> }>();
+  for (const r of rows) {
+    let entry = byUser.get(r.user_id);
+    if (!entry) {
+      entry = { meta: r, keys: new Map() };
+      byUser.set(r.user_id, entry);
+    }
+    if (!entry.keys.has(r.milestone_key)) entry.keys.set(r.milestone_key, r.completed_at);
+    if (!entry.meta.name && r.name) entry.meta = { ...entry.meta, name: r.name, sector: r.sector };
+  }
+
+  const cutoffMs = Date.now() - SHIPPED_WINDOW_DAYS * 86_400_000;
+  const events: Array<{
+    company: string;
+    sector: string | null;
+    cohort: string | null;
+    week: number;
+    cleared_at: string;
+  }> = [];
+
+  for (const [userId, entry] of byUser) {
+    const clears = weekClearsFor(
+      [...entry.keys].map(([milestone_key, completed_at]) => ({ milestone_key, completed_at })),
+    );
+    if (!clears.length) continue;
+    const company =
+      entry.meta.name ?? (await latestApplication(c.env, userId))?.company_name ?? null;
+    // A cohort member with no company name anywhere is skipped rather than
+    // drawn as "Untitled": the row is about a company, and we do not have one.
+    if (!company) continue;
+    for (const cl of clears) {
+      const ms = parseTsUtc(cl.cleared_at);
+      if (ms === null || ms < cutoffMs) continue;
+      events.push({
+        company,
+        sector: entry.meta.sector ?? null,
+        cohort: entry.meta.cohort ?? null,
+        week: cl.week,
+        cleared_at: cl.cleared_at,
+      });
+    }
+  }
+
+  events.sort((a, b) => b.cleared_at.localeCompare(a.cleared_at));
+  return c.json(events.slice(0, SHIPPED_MAX_EVENTS));
 });
 
 // GET /fund-metrics — auth-gated: live program + raise numbers for the LP &

@@ -179,7 +179,10 @@ export default function SpinoutLabInvestorPage() {
   const liveTiles = proofStudio.filter((t) => t.live).length;
 
   return (
-    <div className="mx-auto max-w-[1240px] px-5 sm:px-8 pb-20" data-testid="spinout-investor-page">
+    // pt-4 md:pt-6 is not decoration: `/spinout-lab` is in SHARED_FULL_BLEED
+    // (sidebarConfig.js) so the shell wrapper renders p-0, and this page had
+    // no top padding of its own — the hero would butt against the app header.
+    <div className="mx-auto max-w-[1240px] px-5 sm:px-8 pt-4 md:pt-6 pb-20" data-testid="spinout-investor-page">
 
       {/* ============ HERO ============ */}
       <div className="relative overflow-hidden rounded-3xl border border-gray-200 dark:border-gray-800">

@@ -1,4 +1,4 @@
-"""Spin-Out Lab — 4-week guided sprint for pre-incorporation founders.
+"""Spin-Out Lab — 4-week guided sprint, gated on evidence.
 
 Dev-parity port of the production Worker routes
 (cloudflare-worker/src/routes/spinout_lab.ts + services/spinoutLabCatalog.ts)
@@ -7,7 +7,7 @@ so the /spinout-lab dashboard renders against the dev backend too.
   GET  /spinout-lab/state      → current week, days remaining, milestones,
                                  unlocked features for the caller
   POST /spinout-lab/start      → flip the lab on (idempotent; 409 if the
-                                 caller is already incorporated)
+                                 caller has already been through the Lab)
   POST /spinout-lab/milestone  → mark a milestone done; auto-advances weeks;
                                  completing week 4 flips is_incorporated and
                                  turns the lab off
@@ -476,8 +476,14 @@ def start_lab(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    # Re-entry guard, not an eligibility rule — mirrors startLab() in
+    # cloudflare-worker/src/routes/spinout_lab.ts. is_incorporated is only ever
+    # set by finishing or exiting the Lab, so this refuses an alumnus. A founder
+    # who incorporated elsewhere has is_incorporated = 0 and is welcome.
     if int(user.is_incorporated or 0) == 1:
-        raise HTTPException(status_code=409, detail="User is already incorporated")
+        raise HTTPException(
+            status_code=409, detail="This account has already been through the Lab"
+        )
     user.spinout_lab_active = 1
     user.spinout_lab_week = user.spinout_lab_week or 1
     user.spinout_lab_started_at = user.spinout_lab_started_at or datetime.utcnow()
