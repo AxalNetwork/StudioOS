@@ -246,7 +246,7 @@ function confidenceFor(rec, liveRoutes, nav) {
   return 'Low';
 }
 
-const esc = (s) => String(s).replace(/\|/g, '\\|');
+const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function build() {
