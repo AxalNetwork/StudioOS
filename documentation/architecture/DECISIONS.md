@@ -2030,3 +2030,63 @@ A test parses the entity-type values out of both files and fails when the
 picker and the worker disagree — the same client/worker drift guard D40
 introduced for `EDIT_ROLES`, for the same reason: two copies of an enum drift,
 and a select option the worker rejects is a control that 400s.
+
+### D43. The Trust Center's status colours were an enumeration, and the platform writes more statuses than it enumerated
+
+The `/trust` canvas asked for a restyle. Porting its visual vocabulary turned
+up a live defect underneath, and the defect is the reason to record this.
+
+**Three real statuses drew as "unverified".** `STATUS_PILL` was a status → CSS
+class map with eleven entries. `pairwise_ndas.status` carries `active`,
+`revoked` and `cancelled` — `trust.ts:708` branches on the first two by name —
+and none of the three was listed, so all three fell through to the map's
+`unverified` grey. An NDA **in force** and an NDA **revoked** rendered
+identically to one nobody had started. Opposite ends of the spectrum, drawn the
+same, on the page whose whole job is to say where you stand.
+
+**Four tones do not fix that by themselves.** The canvas maps statuses to four
+severity tones rather than eleven classes, which reads better and is the right
+shape — but its own `toneOf` lists satisfied/signed/verified/clear/none and
+misses `active`, `revoked`, `cancelled` and `waived` exactly as the shipped map
+did. A prettier enumeration is still an enumeration.
+
+What fixes it is deriving the map from the vocabulary the worker actually
+writes, and then guarding that: `trust_center_contract.test.mjs` parses the
+status literals out of `routes/trust.ts` and fails when one of them has no tone.
+Two response-shape values (`already_active`, `envelope_issued`) are named in an
+explicit exclusion list, so ignoring them is a decision on the record rather
+than a silent gap. Deleting any of `revoked`, `cancelled` or `expired` from the
+map fails the suite; that was checked, not assumed.
+
+**`waived` now reads `ok`.** `computeTrustScore` counts waived alongside
+satisfied, so a grey pill sat beside a green score saying two different things
+about one row. The pill still prints "waived" — the reader can tell a waiver
+from a completion. It is the TONE that has to agree with the score.
+
+**The canvas's score model was refused.** It proposed partial credit for
+in-review, a −10 gate penalty per open requirement and a −5 penalty per lapsed
+optional one. The shipped number comes from `computeTrustScore`, which mirrors
+`GET /trust/score/:userId` character for character
+(`satisfied+waived / required`, `trust.ts:157`). Adopting the canvas formula
+would have put `/trust` at odds with the server AND with the same badge on
+`/account`, where SettingsPage renders it from the same helper. A page may
+present a number differently; it may not compute a different one.
+
+**Expiry is a state, not a date.** `expires_at` was already on the wire and
+already rendered — as `expires 3/14/2027`, which reads the same whether it is
+two years out or lapsed last month. `expiryNote()` says "Expired 34 days ago" /
+"Expires in 12 days" / "Expires <date>", and the first two carry their tone.
+This is the canvas's best idea and it needed no new data.
+
+**What did not land, and why.** The canvas's per-role score history
+(`PREV_SCORE`, "+8 since last month") has no table behind it — there is no score
+history anywhere. Its `roleTabs` / `stateTabs` are demo switchers; the real role
+comes from `/trust/me` and the real state from the matrix. Its `83b` key is not
+an `ObligationKey`. Its obligation lists disagree with `ROLE_MATRIX` for three of
+four roles. Its fixture names and envelope ids are fixtures. All of it is
+asserted absent, for the same reason `design/incoming/README.md` exists.
+
+The tab badges and the tone counts are both derived from the obligation array
+already in hand — no second fetch, no second source, and a count of zero is
+omitted rather than drawn, because "0 blocked" reads as an achievement when the
+truth is that no such row exists.

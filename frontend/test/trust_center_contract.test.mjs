@@ -149,3 +149,112 @@ test('an investor does not get two h1s in one frame', () => {
   // InvestorWorkspacePage is the one that draws the other heading.
   assert.match(read('frontend/src/pages/investor/InvestorWorkspacePage.jsx'), /<h1 className="investor-title"/);
 });
+
+// ===========================================================================
+// Severity tones. The restyle's real content is not the colours — it is that
+// the map is COMPLETE against the vocabulary the WORKER writes, and stays so.
+
+test('every status the WORKER writes has a tone', () => {
+  // The defect this replaces: STATUS_PILL enumerated eleven statuses while
+  // pairwise_ndas carries `active`, `revoked` and `cancelled` (trust.ts
+  // branches on the first two by name). All three fell through to the
+  // `unverified` grey, so a live NDA and a revoked one drew identically.
+  //
+  // Enumerating tones instead of classes does not fix that on its own — the
+  // canvas this came from has the same hole. Parsing the WORKER is what fixes
+  // it, so this test reads trust.ts rather than trusting either list.
+  const written = new Set();
+  // `status = 'x'` (SQL SET), `status: 'x'` (JSON out), `status === 'x'` (branch)
+  for (const m of WORKER.matchAll(/status\s*(?:=|:|===|!==)\s*'([a-z_]+)'/g)) written.add(m[1]);
+  assert.ok(written.size >= 5, `parsed only ${written.size} statuses out of trust.ts`);
+
+  const block = PAGE.slice(
+    PAGE.indexOf('const STATUS_TONE = {'),
+    PAGE.indexOf('};', PAGE.indexOf('const STATUS_TONE = {')),
+  );
+  assert.ok(block.length > 100, 'could not read STATUS_TONE');
+  const mapped = new Set([...block.matchAll(/^\s{2}([a-z_]+):/gm)].map(m => m[1]));
+
+  // Statuses that belong to other objects entirely and never reach a pill.
+  // Each is named so adding to this list is a decision, not a shrug.
+  const NOT_A_PILL = new Set([
+    'already_active',   // POST /nda/request idempotency reply, not a row status
+    'envelope_issued',  // ditto — the shape of a response, not of a record
+  ]);
+
+  const unmapped = [...written].filter(s => !mapped.has(s) && !NOT_A_PILL.has(s));
+  assert.deepEqual(unmapped, [],
+    `trust.ts writes ${unmapped.join(', ')} and STATUS_TONE has no tone for it — it would render as neutral grey`);
+});
+
+test('the three statuses that used to render grey now read correctly', () => {
+  // Pinned by name because these are the ones the old map missed, and the
+  // failure was invisible: grey is a plausible colour for anything.
+  const block = PAGE.slice(
+    PAGE.indexOf('const STATUS_TONE = {'),
+    PAGE.indexOf('};', PAGE.indexOf('const STATUS_TONE = {')),
+  );
+  const toneOf = (k) => (block.match(new RegExp(`^\\s{2}${k}:\\s*'([a-z]+)'`, 'm')) || [])[1];
+  assert.equal(toneOf('active'), 'ok', 'an in-force NDA must not read as neutral');
+  assert.equal(toneOf('revoked'), 'bad', 'a revoked NDA must not read as neutral');
+  assert.equal(toneOf('cancelled'), 'bad', 'a cancelled NDA must not read as neutral');
+});
+
+test('waived reads the same way the score counts it', () => {
+  // computeTrustScore counts waived alongside satisfied. A neutral pill beside
+  // a green score said two things about one row.
+  const badge = read('frontend/src/components/TrustScoreBadge.jsx');
+  assert.match(badge, /o\.status === 'satisfied' \|\| o\.status === 'waived'/,
+    'the score no longer counts waived — recheck its tone');
+  const block = PAGE.slice(
+    PAGE.indexOf('const STATUS_TONE = {'),
+    PAGE.indexOf('};', PAGE.indexOf('const STATUS_TONE = {')),
+  );
+  assert.match(block, /^\s{2}waived:\s+'ok',/m);
+});
+
+test('the client score formula still mirrors the WORKER, and the PAGE does not invent a third', () => {
+  // The canvas proposed partial credit for in-review plus a per-gate penalty.
+  // Shipping it would have put /trust at odds with GET /trust/score/:userId
+  // AND with the same badge on /account.
+  assert.match(WORKER, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
+  const badge = read('frontend/src/components/TrustScoreBadge.jsx');
+  assert.match(badge, /Math\.round\(\(satisfied \/ required\.length\) \* 100\)/);
+  // The PAGE consumes the shared helper and defines no rival.
+  assert.match(PAGE, /computeTrustScore\(obligations\)/);
+  assert.doesNotMatch(CODE, /reqGates|weightOf|PREV_SCORE|scoreDelta/,
+    'the canvas score model landed — it disagrees with the server');
+});
+
+test('expiry is rendered as a state, not a bare date', () => {
+  // `expires 3/14/2027` reads identically whether it is two years out or
+  // lapsed last month, which is how an expired obligation sat in the list
+  // looking ordinary.
+  assert.match(PAGE, /function expiryNote\(iso, now = new Date\(\)\)/);
+  assert.match(PAGE, /Expired \$\{n\} \$\{n === 1 \? 'day' : 'days'\} ago/);
+  assert.match(PAGE, /Expires in \$\{days\}/);
+  // and it is actually used on both row types
+  assert.match(PAGE, /const exp = expiryNote\(o\.expires_at\)/);
+  assert.match(PAGE, /const validExp = expiryNote\(a\.valid_until\)/);
+});
+
+test('the counts describe the list, they do not re-score it', () => {
+  const fn = PAGE.slice(PAGE.indexOf('function ToneCounts'), PAGE.indexOf('function ObligationList'));
+  assert.ok(fn.length > 200, 'could not read ToneCounts');
+  // Counted from the same array the rows render — no second fetch, no second source.
+  assert.match(fn, /for \(const o of obligations\) n\[toneOf\(o\.status\)\] \+= 1;/);
+  assert.doesNotMatch(fn, /api\./, 'ToneCounts must not fetch');
+  // A zero is omitted, not drawn: "0 blocked" reads as an achievement.
+  assert.match(fn, /\.filter\(\(\[, c\]\) => c > 0\)/);
+});
+
+test('the canvas demo switchers did not land', () => {
+  // roleTabs/stateTabs let the canvas flip role and completeness by hand. The
+  // real role comes from /trust/me; the real state comes from the matrix.
+  const code = CODE;
+  assert.doesNotMatch(code, /roleTabs|stateTabs/);
+  assert.doesNotMatch(code, /Guillaume Lauzier|Novacraft|Marisol Vega|AX-1183|Halverton/,
+    'canvas fixture data landed in the PAGE');
+  assert.doesNotMatch(code, /'83b'|83\(b\)/,
+    "the canvas's 83b key is not an ObligationKey");
+});
