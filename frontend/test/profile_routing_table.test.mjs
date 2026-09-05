@@ -63,20 +63,33 @@ test('no cell double-escapes a pipe', () => {
     `${hits.length} double-escaped pipe(s) — each one ends its row early`);
 });
 
-test('the generator normalises before it escapes', () => {
-  // Escaping the backslashes instead (Copilot Autofix #444) restores the column
-  // count but leaves `screening\|commit` visible to the reader. Normalising an
-  // already-escaped pipe back to a bare one, then escaping once, is idempotent
-  // and renders a plain `|`.
-  const src = readFileSync(resolve(process.cwd(), 'scripts/build-profile-routing.mjs'), 'utf8');
-  const line = src.split('\n').find((l) => l.startsWith('const esc ='));
-  assert.ok(line, 'the esc helper moved');
-  // Asserted as substrings: a regex that matches a regex literal needs four
-  // levels of escaping and stops being readable, which is how a guard ends up
-  // asserting something other than what its author meant.
-  const normalises = line.indexOf("replace(/\\\\\\|/g, '|')");
-  const escapes = line.indexOf("replace(/\\|/g, '\\\\|')");
-  assert.ok(normalises !== -1, 'esc no longer normalises an already-escaped pipe first');
-  assert.ok(escapes !== -1, 'esc no longer escapes pipes');
-  assert.ok(normalises < escapes, 'esc escapes before it normalises — order is the whole fix');
+test('esc round-trips every metacharacter shape the source can hold', async () => {
+  // Asserting BEHAVIOUR, not the text of the helper. The first version of this
+  // guard matched a regex against a regex literal — four levels of escaping,
+  // and it had stopped asserting what I meant. The second matched substrings,
+  // which broke the moment the helper legitimately changed. Cases do neither.
+  const { esc } = await import('../../scripts/build-profile-routing.mjs');
+  const cases = [
+    ['a|b',    'a\\|b', 'a bare pipe is escaped once'],
+    ['a\\|b',   'a\\|b', "the source's own escape is normalised, not doubled"],
+    ['a\\\\|b',  'a\\\\\\|b', 'a real backslash before a pipe keeps both, each escaped'],
+    ['a\\b',    'a\\\\b', 'a lone backslash is escaped rather than handed over bare'],
+    ['plain',  'plain', 'text with no metacharacter is untouched'],
+  ];
+  for (const [input, want, why] of cases) {
+    assert.equal(esc(input), want, `${why} — esc(${JSON.stringify(input)})`);
+  }
+  // Idempotence is the property that makes the order right: running it on its
+  // own output must not keep adding backslashes.
+  assert.equal(esc(esc('a|b')), esc('a|b'), 'esc is not idempotent — escaping compounds');
+});
+
+test('no escaped output can end a table row early', () => {
+  // The failure mode in one sentence: `\\|` reads as escaped-backslash plus a
+  // LIVE separator. Whatever esc emits, it must never produce that shape.
+  const doc = readFileSync(resolve(process.cwd(), DOC), 'utf8');
+  for (const row of doc.split('\n').filter((l) => l.startsWith('|'))) {
+    assert.doesNotMatch(row, /(?<!\\)\\\\\|/,
+      `row ends early on an escaped backslash + pipe:\n  ${row.slice(0, 120)}`);
+  }
 });

@@ -259,7 +259,17 @@ function confidenceFor(rec, liveRoutes, nav) {
 // Escaping the backslashes instead (Copilot Autofix #444) repairs the column
 // count but leaves the reader looking at `screening\|commit` — the source's own
 // escape leaking into the rendered page.
-const esc = (s) => String(s).replace(/\\\|/g, '|').replace(/\|/g, '\\|');
+//
+// CodeQL then flagged the first version of this fix (alert 6031): it escaped
+// pipes and left backslashes alone, so a source cell holding `\\|` would
+// normalise to `\|` and re-escape to `\\|` — straight back to the broken
+// shape. Right about the incompleteness even though ROUTE_MAP happens to
+// contain no such cell today; a generator should not depend on that.
+//
+// So: normalise the source's own pipe escaping, then escape BOTH metacharacters
+// on the way out. `a\|b` still renders `a|b`; a genuine backslash now survives
+// as `\\` instead of being handed to the renderer bare.
+export const esc = (s) => String(s).replace(/\\\|/g, '|').replace(/([\\|])/g, '\\$1');
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function build() {
