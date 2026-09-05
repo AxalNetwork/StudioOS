@@ -201,7 +201,7 @@ export function LabTracks({ value, onChange }) {
               <span className="mt-1.5 block text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
                 {t.who}
               </span>
-              <span className="mt-2 block text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-500">
+              <span className="mt-2 block text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-400">
                 Leads with {leadsWithFor(t.id)}.
               </span>
             </button>
@@ -239,7 +239,7 @@ export function LabGates({ jurisdiction }) {
 
       <ol className="mt-6 grid gap-3 lg:grid-cols-4">
         {PIPELINE_PHASES.map((phase, i) => (
-          <li key={phase.name}>
+          <li key={phase.name} className="flex flex-col">
             <div className="flex items-center gap-2.5 px-1">
               <span className="flex h-6 w-6 flex-none items-center justify-center rounded-axal-pill bg-axal-violet-deep font-mono text-[10.5px] font-bold text-white">
                 {i + 1}
@@ -248,11 +248,11 @@ export function LabGates({ jurisdiction }) {
                 {phase.days}
               </span>
             </div>
-            <div className={`mt-2.5 p-4 ${LAB_CARD}`}>
+            <div className={`mt-2.5 flex flex-1 flex-col p-4 ${LAB_CARD}`}>
               <div className="text-[16px] font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">
                 {phase.name}
               </div>
-              <ul className="mt-2.5 grid gap-1.5">
+              <ul className="mt-2.5 mb-3 grid gap-1.5">
                 {pipelineItemsFor(phase, jurisdiction).map((item) => (
                   <li key={item} className="flex gap-2 text-[12px] leading-snug text-gray-600 dark:text-gray-400">
                     <span aria-hidden="true" className="text-axal-violet-deep dark:text-violet-400">✓</span>
@@ -260,9 +260,16 @@ export function LabGates({ jurisdiction }) {
                   </li>
                 ))}
               </ul>
-              <div className={`mt-3 border-t pt-2.5 ${LAB_HAIRLINE}`}>
+              {/* mt-auto, so the four gate footers align on one line however
+                  many items a week carries — Fund has five, the rest four. */}
+              <div className={`mt-auto border-t pt-2.5 ${LAB_HAIRLINE}`}>
                 <div className={LAB_EYEBROW}>Gate opens on</div>
-                <p className="mt-1 text-[12px] leading-snug text-gray-600 dark:text-gray-400">
+                {/* Two lines' worth whether or not the sentence needs them: the
+                    footers are bottom-aligned by mt-auto, so a gate line that
+                    wraps would otherwise pull its own divider 16px above the
+                    other three. Bottoms matching is not the same as the rules
+                    matching, and the rules are what a reader sees. */}
+                <p className="mt-1 min-h-[2.06rem] text-[12px] leading-snug text-gray-600 dark:text-gray-400">
                   {phase.gate}
                 </p>
               </div>
@@ -297,7 +304,7 @@ export function LabArsenal({ track }) {
           <div key={group}>
             <div className="mb-2 flex items-baseline gap-2.5">
               <span className={LAB_EYEBROW}>{group}</span>
-              <span className="font-mono text-[10px] text-axal-muted dark:text-gray-500">
+              <span className="font-mono text-[10px] text-axal-muted dark:text-gray-400">
                 {tools.length} of {TOOL_COUNT}
               </span>
             </div>
@@ -308,7 +315,7 @@ export function LabArsenal({ track }) {
                    nobody reading this page has. */
                 <div key={t.id} className={t.lead ? LAB_TOOL_LEAD : LAB_TOOL}>
                   <div className="flex items-center justify-between gap-1.5">
-                    <span className="font-mono text-[9.5px] text-axal-muted dark:text-gray-500">
+                    <span className="font-mono text-[9.5px] text-axal-muted dark:text-gray-400">
                       {t.n}
                     </span>
                     {t.lead && <span className={LAB_TAG_LEAD}>Leads</span>}
@@ -316,7 +323,7 @@ export function LabArsenal({ track }) {
                   <div className="mt-1 text-[12.5px] font-extrabold leading-tight tracking-[-.01em] text-axal-ink dark:text-gray-100">
                     {t.name}
                   </div>
-                  <div className="mt-1 text-[11px] leading-snug text-axal-muted dark:text-gray-500">
+                  <div className="mt-1 text-[11px] leading-snug text-axal-muted dark:text-gray-400">
                     {t.blurb}
                   </div>
                 </div>
@@ -379,12 +386,12 @@ export function LabJurisdictionCard({ value, onChange, track }) {
                 className={row.soon ? LAB_CHOICE_SOON : (on ? LAB_CHOICE_ON : LAB_CHOICE)}
               >
                 <span className="flex items-center justify-between gap-1.5">
-                  <span className={`text-[12.5px] font-extrabold ${row.soon ? 'text-axal-muted dark:text-gray-500' : 'text-axal-ink dark:text-gray-100'}`}>
+                  <span className={`text-[12.5px] font-extrabold ${row.soon ? 'text-axal-muted dark:text-gray-400' : 'text-axal-ink dark:text-gray-100'}`}>
                     {row.label}
                   </span>
                   {row.soon && <span className={LAB_TAG_SOON}>Soon</span>}
                 </span>
-                <span className="mt-0.5 block text-[11px] text-axal-muted dark:text-gray-500">
+                <span className="mt-0.5 block text-[11px] text-axal-muted dark:text-gray-400">
                   {row.entity}
                 </span>
               </button>
@@ -452,7 +459,7 @@ export function LabCommunity({ surface, directory, shipped }) {
           </div>
           <div className="mt-3">
             {directory?.loading && (
-              <p className="text-[12px] text-axal-muted dark:text-gray-500">Reading the cohort…</p>
+              <p className="text-[12px] text-axal-muted dark:text-gray-400">Reading the cohort…</p>
             )}
             {!directory?.loading && directory?.error && (
               <p className="text-[12px] leading-relaxed text-amber-700 dark:text-amber-400">
@@ -461,7 +468,7 @@ export function LabCommunity({ surface, directory, shipped }) {
               </p>
             )}
             {!directory?.loading && !directory?.error && active.length === 0 && (
-              <p className="text-[12px] leading-relaxed text-axal-muted dark:text-gray-500">
+              <p className="text-[12px] leading-relaxed text-axal-muted dark:text-gray-400">
                 No company is in the sprint right now. The next cohort starts on the 1st.
               </p>
             )}
@@ -475,7 +482,7 @@ export function LabCommunity({ surface, directory, shipped }) {
                     <span className="block truncate text-[12.5px] font-bold text-axal-ink dark:text-gray-100">
                       {m.name}
                     </span>
-                    <span className="block text-[11px] text-axal-muted dark:text-gray-500">
+                    <span className="block text-[11px] text-axal-muted dark:text-gray-400">
                       {m.sector || 'Sector not recorded'} · gate {m.week} of 4
                     </span>
                   </span>
@@ -483,7 +490,7 @@ export function LabCommunity({ surface, directory, shipped }) {
               ))}
             </ul>
           </div>
-          <p className="mt-3 text-[11px] leading-relaxed text-axal-muted dark:text-gray-500">
+          <p className="mt-3 text-[11px] leading-relaxed text-axal-muted dark:text-gray-400">
             Company names and gate positions only. The cohort read returns no founder names,
             emails or ids, so none can be shown here.
           </p>
@@ -501,7 +508,7 @@ export function LabCommunity({ surface, directory, shipped }) {
             ) : (
               <>
                 {shipped?.loading && (
-                  <p className="text-[12px] text-axal-muted dark:text-gray-500">Reading…</p>
+                  <p className="text-[12px] text-axal-muted dark:text-gray-400">Reading…</p>
                 )}
                 {!shipped?.loading && shipped?.error && (
                   <p className="text-[12px] leading-relaxed text-amber-700 dark:text-amber-400">
@@ -509,7 +516,7 @@ export function LabCommunity({ surface, directory, shipped }) {
                   </p>
                 )}
                 {!shipped?.loading && !shipped?.error && events.length === 0 && (
-                  <p className="text-[12px] leading-relaxed text-axal-muted dark:text-gray-500">
+                  <p className="text-[12px] leading-relaxed text-axal-muted dark:text-gray-400">
                     No gate has been cleared in the last three weeks.
                   </p>
                 )}
@@ -520,7 +527,7 @@ export function LabCommunity({ surface, directory, shipped }) {
                       <span className="text-[12.5px] text-gray-600 dark:text-gray-400">
                         cleared {WEEK_NAME(e.week) || `gate ${e.week}`}.
                       </span>
-                      <span className="mt-0.5 block font-mono text-[10px] text-axal-muted dark:text-gray-500">
+                      <span className="mt-0.5 block font-mono text-[10px] text-axal-muted dark:text-gray-400">
                         {String(e.cleared_at || '').slice(0, 10)}
                       </span>
                     </li>
@@ -529,7 +536,7 @@ export function LabCommunity({ surface, directory, shipped }) {
               </>
             )}
           </div>
-          <p className="mt-3 text-[11px] leading-relaxed text-axal-muted dark:text-gray-500">
+          <p className="mt-3 text-[11px] leading-relaxed text-axal-muted dark:text-gray-400">
             Gates, not deliverables. Which week turned is already public; what a company
             filed inside it is not ours to publish.
           </p>

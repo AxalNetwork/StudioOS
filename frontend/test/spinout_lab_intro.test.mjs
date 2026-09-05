@@ -285,6 +285,83 @@ test('every light colour token in the style module states its dark counterpart',
   assert.ok(checked >= 6, `only ${checked} constants were actually checked — the matcher is not matching`);
 });
 
+/**
+ * WCAG relative luminance and contrast, so a "does it have a dark: variant"
+ * assertion cannot pass for a variant nobody can read.
+ */
+function contrast(fg, bg) {
+  const chan = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const lum = (h) => {
+    const [r, g, b] = chan(h).map(lin);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const [hi, lo] = [lum(fg), lum(bg)].sort((a, b) => b - a);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** The Tailwind and @theme values this page actually composes. */
+const HEX = {
+  'text-axal-ink': '#18181b',
+  'text-axal-muted': '#6b6577',
+  'text-gray-600': '#4b5563',
+  'dark:text-gray-100': '#f3f4f6',
+  'dark:text-gray-400': '#9ca3af',
+  'dark:text-gray-500': '#6b7280',
+  'bg-white': '#ffffff',
+  'dark:bg-gray-900': '#111827',
+  'dark:bg-gray-950': '#030712',
+};
+
+test('every body colour clears WCAG AA against the ground it sits on', () => {
+  // THIS IS THE ASSERTION THE "has a dark: counterpart" TEST CANNOT MAKE, and
+  // the one that caught a real defect: the arsenal blurbs, the jurisdiction
+  // sub-labels and the community notes all shipped as
+  // `text-axal-muted dark:text-gray-500`. Light was fine at 5.60:1. Dark was
+  // 3.67:1 on gray-900 and 4.16:1 on gray-950 — under AA in fourteen places,
+  // with a paired `dark:` variant present the whole time. Pairing is necessary
+  // and not sufficient; legibility is the actual rule.
+  const AA = 4.5;
+  const cases = [
+    ['muted body, light', 'text-axal-muted', 'bg-white'],
+    ['muted body, dark card', 'dark:text-gray-400', 'dark:bg-gray-900'],
+    ['muted body, dark ground', 'dark:text-gray-400', 'dark:bg-gray-950'],
+    ['lede, light', 'text-gray-600', 'bg-white'],
+    ['heading, dark', 'dark:text-gray-100', 'dark:bg-gray-900'],
+  ];
+  for (const [label, fg, bg] of cases) {
+    const r = contrast(HEX[fg], HEX[bg]);
+    assert.ok(r >= AA, `${label}: ${fg} on ${bg} is ${r.toFixed(2)}:1, under AA ${AA}:1`);
+  }
+  // And the value that failed must not come back. gray-500 is legible on
+  // white and on nothing this page renders in dark.
+  assert.ok(contrast(HEX['dark:text-gray-500'], HEX['dark:bg-gray-900']) < AA,
+    'gray-500 now clears AA on gray-900 — Tailwind changed, re-derive this test');
+  assert.doesNotMatch(INTRO_CODE, /dark:text-gray-500/,
+    'dark:text-gray-500 is under AA on both dark grounds this page uses');
+  assert.doesNotMatch(STYLES_CODE, /dark:text-gray-500/);
+});
+
+test('the four gate cards end on one line, whatever a week carries', () => {
+  // Fund has five items and the other three have four, so without an explicit
+  // stretch the "Gate opens on" footers sat at four different heights.
+  const gates = INTRO_CODE.slice(
+    INTRO_CODE.indexOf('export function LabGates'),
+    INTRO_CODE.indexOf('export function LabArsenal'),
+  );
+  assert.ok(gates.length > 200, 'the gates section moved; this slice is stale');
+  assert.match(gates, /<li key=\{phase\.name\} className="flex flex-col">/);
+  assert.match(gates, /flex flex-1 flex-col p-4/);
+  assert.match(gates, /mt-auto border-t/);
+  // mt-auto alone was not enough, and the screenshots said so: it aligns the
+  // card BOTTOMS (measured: all four at y=1335) while Build's gate line wraps
+  // to two lines and pulls its own divider 16px up (1255 against 1271). The
+  // reader sees the rules, not the bottoms, so the gate line carries a
+  // two-line floor and all four dividers land on 1271.
+  assert.match(gates, /min-h-\[2\.06rem\][^"]*text-\[12px\]/,
+    'the gate line lost its two-line floor; a wrapping gate un-aligns its divider');
+});
+
 test('colours reach the page as utilities, never as var() in a style attribute', () => {
   // Tailwind v4 tree-shakes any @theme token no utility references, so
   // var(--color-axal-violet) inside a style attribute resolves to nothing in
