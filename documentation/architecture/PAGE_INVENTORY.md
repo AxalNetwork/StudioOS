@@ -130,9 +130,9 @@ canvas behind it still shows up here.
 | HQ | Funds | `/funds` | Funds · Fabric |
 | HQ | Contracts | `/admin/contracts` | Admin · Super, Contracts · Super |
 | HQ | Team | `/admin/accounts` | Admin · Super |
-| HQ | Support | `/tickets` | Support Security · Super |
+| HQ | Support | `/help` | Support Security · Super |
 | HQ | Security | `/admin/security` | Support Security · Super |
-| HQ | Settings | `/settings` | — (no canvas; shipped ahead of the design corpus) |
+| HQ | Settings | `/account` | — (no canvas; shipped ahead of the design corpus) |
 
 ## Destinations with no canvas
 
@@ -200,6 +200,6 @@ rather than merely absent.
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
 - exploring · Home · Messages (`/messages`)
 - exploring · Account · My Profile (`/profile`)
-- super_admin · HQ · Settings (`/settings`)
+- super_admin · HQ · Settings (`/account`)
 
 **Canvas corpus:** 107. **Workspace assignments:** 127.

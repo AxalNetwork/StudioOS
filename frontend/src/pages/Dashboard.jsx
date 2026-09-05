@@ -212,7 +212,7 @@ export default function Dashboard({ activeRole, authUser }) {
             <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
             sign you out of Google globally — if you're on a shared device, also sign
             out of your Google account in this browser. You can manage this anytime
-            under <Link to="/settings/security" className="underline">Settings → Security → Connected accounts</Link>.
+            under <Link to="/account/security" className="underline">Settings → Security → Connected accounts</Link>.
           </InfoStrip>
         )}
         <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
@@ -227,7 +227,7 @@ export default function Dashboard({ activeRole, authUser }) {
       <div className="space-y-6">
         {googleNotice && (
           <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
-            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/settings/security" className="underline">Settings → Security</Link>.
+            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/account/security" className="underline">Settings → Security</Link>.
           </InfoStrip>
         )}
         <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
@@ -248,7 +248,7 @@ export default function Dashboard({ activeRole, authUser }) {
       <div className="space-y-6">
         {googleNotice && (
           <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
-            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/settings/security" className="underline">Settings → Security</Link>.
+            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/account/security" className="underline">Settings → Security</Link>.
           </InfoStrip>
         )}
         <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
@@ -268,7 +268,7 @@ export default function Dashboard({ activeRole, authUser }) {
       <div className="space-y-6">
         {googleNotice && (
           <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
-            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/settings/security" className="underline">Settings → Security</Link>.
+            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/account/security" className="underline">Settings → Security</Link>.
           </InfoStrip>
         )}
         <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
@@ -289,7 +289,7 @@ export default function Dashboard({ activeRole, authUser }) {
           <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
           sign you out of Google globally — if you're on a shared device, also sign
           out of your Google account in this browser. You can manage this anytime
-          under <Link to="/settings/security" className="underline">Settings → Security → Connected accounts</Link>.
+          under <Link to="/account/security" className="underline">Settings → Security → Connected accounts</Link>.
         </InfoStrip>
       )}
       {/* Header */}

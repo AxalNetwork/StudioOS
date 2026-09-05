@@ -104,11 +104,11 @@ export const SIDEBAR_GROUPS = {
       // Super canvas draws above it has no store; the page says so.
       { to: '/admin/contracts', icon: FileText, label: 'Contracts' },
       { to: '/admin/accounts', icon: Users, label: 'Team' },
-      { to: '/tickets', icon: Inbox, label: 'Support' },
+      { to: '/help', icon: Inbox, label: 'Support' },
       // "Security", not "Governance" (ASSUMPTIONS_LOG A4): the audit log is
       // what someone finds inside, not what they come for.
       { to: '/admin/security', icon: ShieldCheck, label: 'Security' },
-      { to: '/settings', icon: UserCog, label: 'Settings' },
+      { to: '/account', icon: UserCog, label: 'Settings' },
     ]},
   ],
 

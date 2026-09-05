@@ -65,14 +65,14 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // from the project detail page, so the row links to the project list.
     { key: 'nf.scoring',    label: 'Run your first scoring',             route: '/projects',                   autoDetect: true },
     { key: 'nf.advisor',     label: 'Book an advisor session',              route: '/advisors',                    autoDetect: true },
-    { key: 'nf.team',       label: 'Invite a team member',               route: '/settings/account',           autoDetect: true },
+    { key: 'nf.team',       label: 'Invite a team member',               route: '/account/account',           autoDetect: true },
   ],
   existingFounder: [
     { key: 'ef.persona',    label: 'Complete persona chatbot',           route: '/onboarding/persona',         autoDetect: true },
     // /integrations is partner/investor-only; founders manage connectors
     // via Settings → Integrations.
-    { key: 'ef.stripe',     label: 'Connect Stripe (verify MRR)',        route: '/settings/integrations',      autoDetect: true },
-    { key: 'ef.plaid',      label: 'Connect Plaid (verify cash)',        route: '/settings/integrations',      autoDetect: true },
+    { key: 'ef.stripe',     label: 'Connect Stripe (verify MRR)',        route: '/account/integrations',      autoDetect: true },
+    { key: 'ef.plaid',      label: 'Connect Plaid (verify cash)',        route: '/account/integrations',      autoDetect: true },
     { key: 'ef.captable',   label: 'Connect or upload cap table',        route: '/build/captable',             autoDetect: true },
     { key: 'ef.financials', label: 'Populate financial model',           route: '/build/financials',           autoDetect: true },
     { key: 'ef.83b',        label: 'Confirm 83(b) status',               route: '/spinout-lab/83b',            autoDetect: true },
@@ -89,9 +89,9 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'inv.crm',       label: 'Connect Affinity / HubSpot (optional)', route: '/integrations',            autoDetect: true },
     { key: 'inv.review',    label: 'Review 3 matched founders',          route: '/matches',                    autoDetect: true },
     { key: 'inv.intro',     label: 'Request your first intro',           route: '/matches',                    autoDetect: true },
-    { key: 'inv.target',    label: 'Set deployment target + reserve %',  route: '/settings/profile',           autoDetect: true },
+    { key: 'inv.target',    label: 'Set deployment target + reserve %',  route: '/account/profile',           autoDetect: true },
     { key: 'inv.dealroom',  label: 'Open your first deal-room',          route: '/deals',                      autoDetect: true },
-    { key: 'inv.notifs',    label: 'Configure notifications',            route: '/settings/notifications',     autoDetect: true },
+    { key: 'inv.notifs',    label: 'Configure notifications',            route: '/account/notifications',     autoDetect: true },
   ],
   operatingPartner: [
     { key: 'op.accept',     label: 'Accept partner invitation',          route: '/partner-portal',             autoDetect: true },
@@ -104,25 +104,25 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // KYB collection via the partner portal.
     { key: 'op.kyb',        label: 'Configure KYB documents',            route: '/partner-portal',             autoDetect: true },
     { key: 'op.service',    label: 'Add at least one service / offer',   route: '/services',                   autoDetect: true },
-    { key: 'op.refs',       label: 'Provide 2 references',               route: '/settings/profile',           autoDetect: true },
+    { key: 'op.refs',       label: 'Provide 2 references',               route: '/account/profile',           autoDetect: true },
     { key: 'op.referral',   label: 'Receive one-time referral code',     route: '/refer',                      autoDetect: true },
     { key: 'op.intro',      label: 'Make first qualified intro',         route: '/pipeline',                   autoDetect: true },
-    { key: 'op.notifs',     label: 'Configure notifications',            route: '/settings/notifications',     autoDetect: true },
+    { key: 'op.notifs',     label: 'Configure notifications',            route: '/account/notifications',     autoDetect: true },
   ],
   // Advisors are NOT allowed on /onboarding/persona, /trust, or
   // /integrations per App.jsx guards — advisor onboarding stays inside
   // Settings + Office Hours.
   advisor: [
-    { key: 'mt.persona',    label: 'Complete profiling chatbot',         route: '/settings/profile',           autoDetect: true },
-    { key: 'mt.tags',       label: 'Add expertise tags + sectors + stages', route: '/settings/profile',        autoDetect: true },
+    { key: 'mt.persona',    label: 'Complete profiling chatbot',         route: '/account/profile',           autoDetect: true },
+    { key: 'mt.tags',       label: 'Add expertise tags + sectors + stages', route: '/account/profile',        autoDetect: true },
     { key: 'mt.comp',       label: 'Pick comp model',                    route: '/advisors',                    autoDetect: true },
     { key: 'mt.calendar',   label: 'Connect Calendly or Google Calendar',route: '/calendar',                   autoDetect: true },
-    { key: 'mt.refs',       label: 'Provide 2 references',               route: '/settings/profile',           autoDetect: true },
-    { key: 'mt.nda',        label: 'Sign Advisor NDA + disclaimer',       route: '/settings/security',          autoDetect: true },
+    { key: 'mt.refs',       label: 'Provide 2 references',               route: '/account/profile',           autoDetect: true },
+    { key: 'mt.nda',        label: 'Sign Advisor NDA + disclaimer',       route: '/account/security',          autoDetect: true },
     { key: 'mt.capacity',   label: 'Set weekly capacity',                route: '/office-hours',               autoDetect: true },
     { key: 'mt.slots',      label: 'Surface availability slots',         route: '/office-hours',               autoDetect: true },
     { key: 'mt.booking',    label: 'Accept first session booking',       route: '/office-hours',               autoDetect: true },
-    { key: 'mt.notifs',     label: 'Configure notifications',            route: '/settings/notifications',     autoDetect: true },
+    { key: 'mt.notifs',     label: 'Configure notifications',            route: '/account/notifications',     autoDetect: true },
   ],
 };
 

@@ -141,7 +141,7 @@ github.post('/webhook', async (c) => {
             type: 'ticket_update',
             title: `New comment on ticket #${ticket.id}`,
             body: `${senderLogin || 'Someone'} commented on "${ticket.title}".`,
-            link: '/tickets',
+            link: '/help',
             payload: { ticket_id: ticket.id, github_comment_id: payload?.comment?.id },
             channels: ['in_app'],
           });
@@ -180,7 +180,7 @@ github.post('/webhook', async (c) => {
             type: 'ticket_update',
             title: `Ticket #${ticket.id} updated`,
             body: `Status: ${newStatus}.`,
-            link: '/tickets',
+            link: '/help',
             payload: { ticket_id: ticket.id, status: newStatus },
             channels: ['in_app'],
           });

@@ -43,7 +43,7 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
     return c.json({
       error: 'crunchbase_not_connected',
       message: 'Connect Crunchbase from Settings → Integrations to enable enrichment.',
-      connect_path: '/settings/integrations',
+      connect_path: '/account/integrations',
     }, 412);
   }
   try {
@@ -72,7 +72,7 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
       return c.json({
         error: 'crunchbase_unauthorized',
         message: 'Crunchbase rejected the stored API key — reconnect from Settings → Integrations.',
-        connect_path: '/settings/integrations',
+        connect_path: '/account/integrations',
       }, 412);
     }
     const msg = (e as Error).message || 'crunchbase_failed';

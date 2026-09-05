@@ -178,7 +178,7 @@ export default function MessagesPage({ user }) {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Start one above. Your assistant conversations live in the{' '}
             <span className="font-medium">Eadwyn</span> rail, and support requests are in{' '}
-            <Link to="/tickets" className="text-violet-700 hover:underline dark:text-violet-300">Tickets</Link>
+            <Link to="/help" className="text-violet-700 hover:underline dark:text-violet-300">Tickets</Link>
             {' '}— neither is folded in here, because neither is a message between two people.
           </p>
         </div>

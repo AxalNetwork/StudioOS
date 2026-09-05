@@ -107,7 +107,7 @@ export default function RecoverPage() {
         if (r?.token) localStorage.setItem('token', r.token);
         if (r?.user) localStorage.setItem('user', JSON.stringify(r.user));
         setInfo(r?.note || 'Recovery complete. Redirecting…');
-        setTimeout(() => { window.location.href = '/settings#security'; }, 1500);
+        setTimeout(() => { window.location.href = '/account#security'; }, 1500);
       } catch (e) {
         setError(e?.message || 'Could not complete recovery.');
       } finally { setBusy(false); }
@@ -132,7 +132,7 @@ export default function RecoverPage() {
       if (r?.token) localStorage.setItem('token', r.token);
       if (r?.user) localStorage.setItem('user', JSON.stringify(r.user));
       setInfo(r?.note || 'Recovery complete.');
-      setTimeout(() => { window.location.href = '/settings#security'; }, 1200);
+      setTimeout(() => { window.location.href = '/account#security'; }, 1200);
     } catch (e) { setError(e?.message || 'Invalid code.'); }
     finally { setBusy(false); }
   };
@@ -155,7 +155,7 @@ export default function RecoverPage() {
       if (r?.token) localStorage.setItem('token', r.token);
       if (r?.user) localStorage.setItem('user', JSON.stringify(r.user));
       setInfo(r?.note || 'Recovery complete.');
-      setTimeout(() => { window.location.href = '/settings#security'; }, 1500);
+      setTimeout(() => { window.location.href = '/account#security'; }, 1500);
     } catch (e) { setError(e?.message || 'Invalid code.'); }
     finally { setBusy(false); }
   };

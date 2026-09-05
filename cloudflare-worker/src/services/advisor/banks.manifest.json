@@ -1227,21 +1227,21 @@
       {
         "persona": "founder",
         "section": "OPS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "founder.ops.tooling_stack"
       },
       {
         "persona": "founder",
         "section": "OPS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "founder.ops.weekly_metric_cadence"
       },
       {
         "persona": "founder",
         "section": "OPS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "founder.ops.board_cadence",
         "mi_section": "partner_pulse"
@@ -1249,42 +1249,42 @@
       {
         "persona": "founder",
         "section": "OPS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "founder.ops.allhands_cadence"
       },
       {
         "persona": "founder",
         "section": "OPS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "founder.ops.okrs_cadence"
       },
       {
         "persona": "founder",
         "section": "OPS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "founder.ops.standup_format"
       },
       {
         "persona": "founder",
         "section": "OPS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "founder.ops.bug_triage_sla_hrs"
       },
       {
         "persona": "founder",
         "section": "OPS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "founder.ops.oncall_rotation"
       },
       {
         "persona": "founder",
         "section": "OPS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "founder.ops.knowledge_base"
       },
@@ -3934,21 +3934,21 @@
       {
         "persona": "admin",
         "section": "PREFS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "admin.preferences.digest_freq"
       },
       {
         "persona": "admin",
         "section": "PREFS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "admin.preferences.alert_channel"
       },
       {
         "persona": "admin",
         "section": "PREFS",
-        "page_target": "/settings",
+        "page_target": "/account",
         "doc_anchor": "getting-started/personas",
         "id": "admin.preferences.timezone"
       },

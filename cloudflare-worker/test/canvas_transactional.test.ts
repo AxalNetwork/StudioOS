@@ -88,7 +88,7 @@ test('M4 weekly digest is the only transactional template with digest unsubscrib
       link: 'Open Metrics',
     }],
     dashboardUrl: 'https://app.axal.vc/dashboard',
-    frequencyUrl: 'https://app.axal.vc/settings/notifications/frequency',
+    frequencyUrl: 'https://app.axal.vc/account/notifications/frequency',
     unsubscribeUrl: 'https://axal.vc/api/notifications/unsubscribe?token=abc',
   });
   assert.match(out.html, /WEEKLY DIGEST/);

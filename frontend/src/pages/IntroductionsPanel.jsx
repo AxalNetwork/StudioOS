@@ -84,7 +84,7 @@ function CreditSummary({ credits, onHistoryToggle, historyOpen }) {
             <Package size={14} /> Buy credits
           </Link>
           <Link
-            to="/settings/referrals"
+            to="/account/referrals"
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border border-violet-300 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40 text-sm font-medium"
           >
             <Gift size={14} /> Refer &amp; earn +1 each
@@ -490,7 +490,7 @@ export default function IntroductionsPanel() {
               </Link>
             ))}
             <Link
-              to="/settings/referrals"
+              to="/account/referrals"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40"
             >
               <Gift size={12} /> Refer a member

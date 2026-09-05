@@ -152,7 +152,7 @@ export default {
         "Need a hand? Open the Personal Advisor on the Studio page — it knows your startups and can answer questions or file a tracked support ticket for you right from the chat. Power users can press Ctrl/Cmd-K from anywhere to open a search bar that jumps to pages, recent activity, and documentation in one place.",
       howto: [
         'Go to the Studio page and use the Personal Advisor to ask a question or get unstuck.',
-        'Click "Open a ticket" in the Personal Advisor header to file a tracked support ticket — the advisor confirms it inline and links you to the Support Hub.',
+        'Click "Open a ticket" in the Personal Advisor header to file a tracked support ticket — the advisor confirms it inline and links you to the Help Center.',
         'Press Ctrl/Cmd-K to open the command palette from any page.',
         'Start typing — results group by pages, recent activity, doc anchors, and quick actions; Enter jumps to the highlighted result, Esc closes the palette.',
       ],
@@ -162,7 +162,7 @@ export default {
       ],
       pitfalls: [
         'The palette searches documentation by title and content — niche features are easier to find by their docs anchor than by guessing the page name.',
-        'Quiet hours and notification preferences are managed in Settings — the Personal Advisor and Support Hub are for questions and tickets.',
+        'Quiet hours and notification preferences are managed in Account — the Personal Advisor and Help Center are for questions and tickets.',
       ],
       related: [
         { label: 'Notifications', href: '#account/notifications' },

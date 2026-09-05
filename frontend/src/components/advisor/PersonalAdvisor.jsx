@@ -666,16 +666,16 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   }, [focusSection]);
 
   // Task #9 — after a ticket is filed, confirm inline in the transcript
-  // with a link back to the Support Hub (and the GitHub issue if the
+  // with a link back to the Help Center (and the GitHub issue if the
   // POST /tickets response carried one) and close the form.
   const handleTicketFiled = useCallback((t) => {
     setTicketOpen(false);
     const title = t?.title ? `"${t.title}"` : 'Your ticket';
     setMessages((m) => [...m, {
       role: 'assistant',
-      content: `${title} has been filed. You can track it and follow updates in the Support Hub.`,
+      content: `${title} has been filed. You can track it and follow updates in the Help Center.`,
       cta: {
-        primary: { label: 'View in Support Hub', route: '/tickets' },
+        primary: { label: 'View in the Help Center', route: '/help' },
         ...(t?.github_issue_url
           ? { secondary: { label: 'View on GitHub', route: t.github_issue_url, external: true } }
           : {}),
@@ -1172,7 +1172,7 @@ function CtaButtons({ cta, onCtaClick }) {
 // Task #9 — inline support-ticket form. Reuses the existing
 // POST /api/tickets endpoint via api.createTicket (no backend changes).
 // On success it calls onFiled(ticket) so the advisor can confirm in the
-// transcript with a link back to the Support Hub.
+// transcript with a link back to the Help Center.
 function AdvisorTicketPanel({ onFiled, onClose }) {
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState('medium');
