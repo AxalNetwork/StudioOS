@@ -8,6 +8,7 @@ import { zoneActionsFor } from './zoneActionsByRole';
 import NoStoreYet from './NoStoreYet';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
+import { api } from '../lib/api';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -221,7 +222,7 @@ const ZONE_BLURB = {
 function ResearchOverview({ role }) {
   const bucket = bucketForPath(role, '/research');
   if (!bucket) return null;
-  const board = boardFor(role, '/research');
+  const board = boardFor(role, '/research', api);
   if (board) return <BucketBoard bucket={bucket} role={role} board={board} />;
   return (
     <BucketOverview

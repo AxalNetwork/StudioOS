@@ -13,17 +13,26 @@
  * exist at all. The factory consults those same sets, so the board cannot
  * disagree with the zone.
  *
- * A factory returns `{ sources, sections }`: `sources` maps a key to a
- * zero-argument fetch, `sections` is one entry per zone of the bucket, in zone
+ * A factory of `(role, api)` returns `{ sources, sections }`: `sources` maps a
+ * key to a zero-argument fetch, `sections` is one entry per zone of the bucket, in zone
  * order. `bucket_board.test.mjs` enforces that ordering, and enforces that a
  * section declares either a `source` or a `gap` and never both.
  */
-const BOARDS = {};
+import partnerPipelineBoard from './partnerPipeline.js';
 
-/** The board for a bucket root, already resolved for this role, or null. */
-export function boardFor(role, prefix) {
+const BOARDS = {
+  'partner:/pipeline': partnerPipelineBoard,
+};
+
+/**
+ * The board for a bucket root, already resolved for this role, or null.
+ *
+ * `api` is passed in rather than imported by the registries, so a registry is a
+ * pure module the guard can load in Node and assert over directly.
+ */
+export function boardFor(role, prefix, api) {
   const make = BOARDS[`${role}:${prefix}`];
-  return make ? make(role) : null;
+  return make ? make(role, api) : null;
 }
 
 export default BOARDS;

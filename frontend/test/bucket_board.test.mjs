@@ -34,9 +34,20 @@ const registryFiles = () =>
   (existsSync(resolve(process.cwd(), DIR)) ? readdirSync(resolve(process.cwd(), DIR)) : [])
     .filter((f) => f.endsWith('.js') && f !== 'index.js');
 
+/**
+ * A stand-in for the API client. The registries take it as an argument rather
+ * than importing it, which is the only reason this file can load them at all:
+ * `lib/api.js` resolves its own imports extensionlessly through the bundler and
+ * Node cannot follow that. Every property answers with a thunk, so a source
+ * naming a method that does not exist still yields a function here — which is
+ * why the source test asserts the shape rather than the method name, and why
+ * `check-api-drift.mjs` remains the guard that a method is real.
+ */
+const STUB = new Proxy({}, { get: () => () => Promise.resolve({}) });
+
 const entries = () => Object.keys(BOARDS).map((key) => {
   const [role, prefix] = key.split(':');
-  return { key, role, prefix, board: boardFor(role, prefix) };
+  return { key, role, prefix, board: boardFor(role, prefix, STUB) };
 });
 
 test('every registered board key names a real bucket of that role', () => {
@@ -95,13 +106,32 @@ test('no registry string carries a literal figure', () => {
   // into a registry is a canvas placeholder that has escaped onto the page.
   const offenders = [];
   for (const file of registryFiles()) {
-    const src = codeOnly(read(`${DIR}/${file}`));
+    // `cols` is a CSS grid track list lifted verbatim from the canvas
+    // (`cols:'1.2fr 1fr 1fr .9fr 1.7fr'`). Its digits are column widths, not
+    // figures, so it is removed before the scan — and constrained separately
+    // below, so the exemption cannot be used to smuggle copy through.
+    const src = codeOnly(read(`${DIR}/${file}`)).replace(/cols:\s*'[^']*'/g, 'cols:');
     for (const [, quoted] of src.matchAll(/'([^'\\]*)'|"([^"\\]*)"/g)) {
       if (quoted && /\d/.test(quoted)) offenders.push(`${file}: "${quoted}"`);
     }
   }
   assert.deepEqual(offenders, [],
     'a figure in a registry string is the designer\'s placeholder, not the reader\'s number');
+});
+
+test('a section\'s cols value is a grid track list and nothing else', () => {
+  // The digit ban exempts `cols`. This is what stops that exemption widening:
+  // a track list is fractions, lengths and minmax(), never words a reader sees.
+  const offenders = [];
+  for (const file of registryFiles()) {
+    const src = read(`${DIR}/${file}`);
+    for (const [, value] of src.matchAll(/cols:\s*'([^']*)'/g)) {
+      if (!/^[\d.\s]*(?:(?:[\d.]+(?:fr|px|%|em|rem)|auto|min-content|max-content|minmax\([^)]*\))\s*)+$/.test(value)) {
+        offenders.push(`${file}: cols "${value}"`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], 'cols must be a CSS grid track list');
 });
 
 test('no registry restates a claim the product has already refused', () => {
@@ -133,10 +163,10 @@ test('the four route modules dispatch through boardFor, identically', () => {
   // One expression in four files. If they diverge, a root can render a board on
   // one licence and a grid on another for no reason a reader could discover.
   for (const [file, expr] of [
-    ['frontend/src/workspaces/partner/PartnerBucketRoutes.jsx', /boardFor\('partner', prefix\)/],
-    ['frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx', /boardFor\('advisor', prefix\)/],
-    ['frontend/src/workspaces/NetworkWorkspace.jsx', /boardFor\(role, '\/network'\)/],
-    ['frontend/src/workspaces/ResearchWorkspace.jsx', /boardFor\(role, '\/research'\)/],
+    ['frontend/src/workspaces/partner/PartnerBucketRoutes.jsx', /boardFor\('partner', prefix, api\)/],
+    ['frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx', /boardFor\('advisor', prefix, api\)/],
+    ['frontend/src/workspaces/NetworkWorkspace.jsx', /boardFor\(role, '\/network', api\)/],
+    ['frontend/src/workspaces/ResearchWorkspace.jsx', /boardFor\(role, '\/research', api\)/],
   ]) {
     const src = codeOnly(read(file));
     assert.match(src, expr, `${file} must ask the registry which body to render`);

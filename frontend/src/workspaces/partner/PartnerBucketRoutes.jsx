@@ -9,6 +9,7 @@ import { partnerZoneActions } from '../partnerZoneActions';
 import NoStoreYet from '../NoStoreYet';
 import BucketBoard from '../BucketBoard';
 import { boardFor } from '../boards';
+import { api } from '../../lib/api';
 
 // NOT `PartnerOperationsWorkspace`, and that is the fix rather than an
 // omission. That component is the legacy five-tab shell at
@@ -309,7 +310,7 @@ export default function PartnerBucketRoutes() {
     // The bucket root is the canvas overview — the sidebar row lands here,
     // not on the first zone. Zones stay one click away on the cards below.
     if (isRoot) {
-      const board = boardFor('partner', prefix);
+      const board = boardFor('partner', prefix, api);
       return board ? (
         <BucketBoard bucket={bucket} role="partner" board={board} />
       ) : (
