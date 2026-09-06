@@ -21,11 +21,15 @@
 import partnerPipelineBoard from './partnerPipeline.js';
 import partnerDeliveryBoard from './partnerDelivery.js';
 import partnerOffersBoard from './partnerOffers.js';
+import advisorPracticeBoard from './advisorPractice.js';
+import advisorExpertiseBoard from './advisorExpertise.js';
 
 const BOARDS = {
   'partner:/pipeline': partnerPipelineBoard,
   'partner:/delivery': partnerDeliveryBoard,
   'partner:/offers':   partnerOffersBoard,
+  'advisor:/practice':  advisorPracticeBoard,
+  'advisor:/expertise': advisorExpertiseBoard,
 };
 
 /**

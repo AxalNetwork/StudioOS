@@ -90,6 +90,36 @@ test('every section source resolves to a fetch the board declares', () => {
   }
 });
 
+test('a gap is referenced from the shared copy, never written in the registry', () => {
+  // This is the assertion that keeps a board section from being kinder than
+  // the page behind it. The copy lives in `workspaces/noStoreCopy.js` and both
+  // the route module and the registry import it; a registry that wrote its own
+  // heading/what/why could soften the reason without the page ever changing.
+  const offenders = [];
+  for (const file of registryFiles()) {
+    const src = codeOnly(read(`${DIR}/${file}`));
+    for (const [, value] of src.matchAll(/gap:\s*([^,\n]+)/g)) {
+      if (/^\{/.test(value.trim())) offenders.push(`${DIR}/${file}: inline gap literal`);
+    }
+    if (/gap:/.test(src) && !/from '\.\.\/noStoreCopy\.js'/.test(src)) {
+      offenders.push(`${DIR}/${file}: declares a gap without importing the shared copy`);
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'a gap must reference workspaces/noStoreCopy.js, so the board and the zone page cannot drift');
+});
+
+test('the shared no-store copy has exactly one definition of each reason', () => {
+  // `AdvisorBucketRoutes` used to declare this object itself. If it grows a
+  // second copy, the two can drift and only one of them is on the screen the
+  // reader happens to be looking at.
+  const routes = codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'));
+  assert.match(routes, /const COPY = ADVISOR_COPY;/,
+    'AdvisorBucketRoutes must read the shared copy rather than declaring its own');
+  assert.doesNotMatch(routes, /heading: 'Nothing counts profile views'/,
+    'the reason belongs in workspaces/noStoreCopy.js and nowhere else');
+});
+
 test('every api method a registry calls exists on the client', () => {
   // The STUB above answers any property, which is what lets this file load the
   // registries at all — and it means a typo'd method name would pass the

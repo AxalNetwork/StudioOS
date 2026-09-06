@@ -34,7 +34,7 @@ const api = codeOnly(read('frontend/src/lib/api.js'));
 function dispatchMap() {
   const block = bucketRoutes.slice(
     bucketRoutes.indexOf('const ZONE = {'),
-    bucketRoutes.indexOf('const COPY = {'),
+    bucketRoutes.indexOf('const COPY ='),
   );
   const out = {};
   for (const m of block.matchAll(/'(\/[a-z]+)': \{([^}]*)\}/g)) {
@@ -61,13 +61,18 @@ test('every Expertise zone the shell declares is either backed or honestly empty
   assert.deepEqual(backed, ['profile', 'services', 'proof', 'thinking'],
     'the three zones migrations 202-204 gave a store, plus thinking over articles');
 
-  // ONE CARD LEFT, and the COPY block now opens with it.
-  const copyStart = bucketRoutes.indexOf("  '/expertise': {\n    visibility:");
-  assert.ok(copyStart > -1, 'the Expertise COPY block must still start with visibility');
-  const expertiseCopy = bucketRoutes.slice(copyStart, bucketRoutes.indexOf('\n};', copyStart));
+  // ONE CARD LEFT, and it opens the shared no-store map.
+// The no-store copy moved out of `AdvisorBucketRoutes.jsx` into
+// `workspaces/noStoreCopy.js`, so the bucket BOARD and the zone CARD read one
+// object and cannot state different reasons. The invariants below are
+// unchanged; only the file the set is parsed from moved.
+  const noStore = read('frontend/src/workspaces/noStoreCopy.js');
+  const copyStart = noStore.indexOf('const ADVISOR_EXPERTISE_COPY = {\n  visibility:');
+  assert.ok(copyStart > -1, 'the Expertise no-store map must still start with visibility');
+  const expertiseCopy = noStore.slice(copyStart, noStore.indexOf('\n};', copyStart));
   assert.ok(expertiseCopy.length > 0, 'the slice must not invert');
   for (const z of zones.filter((x) => !backed.includes(x))) {
-    assert.ok(expertiseCopy.includes(`    ${z}: {`),
+    assert.ok(expertiseCopy.includes(`  ${z}: {`),
       `${z} has no store and must say which one is missing`);
   }
   // And the reverse: a card for a zone that now HAS a body would tell an
@@ -107,7 +112,12 @@ test('the one unbacked zone names the store that is absent, not a vague "coming 
   // The whole value of the empty card is that it is specific. "Not built yet"
   // is indistinguishable from a bug; "no impression counter anywhere in the
   // product" is a fact a reader can check.
-  assert.match(bucketRoutes, /no impression or profile-view counter anywhere in the product/);
+  // In `workspaces/noStoreCopy.js` since the bucket board landed, so the board
+  // section and the zone card state one reason rather than two that can drift.
+  assert.match(read('frontend/src/workspaces/noStoreCopy.js'),
+    /no impression or profile-view counter anywhere in the product/);
+  assert.doesNotMatch(bucketRoutes, /no impression or profile-view counter anywhere in the product/,
+    'the reason has one home; a second copy here could soften without the board changing');
 
   // AND THE THINKING CARD IS GONE, not reworded. It asserted three things about
   // `articles` and two were false: `author_user_id` is NOT NULL, and `views` is

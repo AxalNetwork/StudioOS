@@ -9,6 +9,7 @@ import NoStoreYet from '../NoStoreYet';
 import BucketBoard from '../BucketBoard';
 import { boardFor } from '../boards';
 import { api } from '../../lib/api';
+import { ADVISOR_COPY } from '../noStoreCopy';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/FoundersZone'));
@@ -171,16 +172,7 @@ const ZONE = {
  * that needs an impression pipeline, not a table. It is the one gap here that a
  * migration cannot close, which is precisely why it is the one card left.
  */
-const COPY = {
-  '/expertise': {
-    visibility: {
-      heading: 'Nothing counts profile views',
-      what: 'How often your profile was shown, how often it was opened, and which searches you appeared in.',
-      why: 'There is no impression or profile-view counter anywhere in the product — not for advisors, not for anyone. This needs an analytics pipeline rather than a table, and a page of plausible-looking numbers would be worse than an empty one.',
-      links: [{ to: '/expertise/profile', label: 'What a founder would see →' }],
-    },
-  },
-};
+const COPY = ADVISOR_COPY;
 
 export default function AdvisorBucketRoutes({ preview = false }) {
   const location = useLocation();
