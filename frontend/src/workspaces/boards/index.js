@@ -19,9 +19,13 @@
  * section declares either a `source` or a `gap` and never both.
  */
 import partnerPipelineBoard from './partnerPipeline.js';
+import partnerDeliveryBoard from './partnerDelivery.js';
+import partnerOffersBoard from './partnerOffers.js';
 
 const BOARDS = {
   'partner:/pipeline': partnerPipelineBoard,
+  'partner:/delivery': partnerDeliveryBoard,
+  'partner:/offers':   partnerOffersBoard,
 };
 
 /**

@@ -90,6 +90,27 @@ test('every section source resolves to a fetch the board declares', () => {
   }
 });
 
+test('every api method a registry calls exists on the client', () => {
+  // The STUB above answers any property, which is what lets this file load the
+  // registries at all — and it means a typo'd method name would pass the
+  // runtime tests and fail only in a browser, as an error state on a section
+  // that should have had rows. So the names are checked against the client
+  // itself, statically. This is the local half of `check-api-drift.mjs`.
+  const client = read('frontend/src/lib/api.js');
+  const declared = new Set(
+    [...client.matchAll(/^\s{2}(\w+):\s*(?:\(|async\b)/gm)].map((m) => m[1]),
+  );
+  const offenders = [];
+  for (const file of registryFiles()) {
+    const src = codeOnly(read(`${DIR}/${file}`));
+    for (const [, method] of src.matchAll(/\bapi\.(\w+)\s*\(/g)) {
+      if (!declared.has(method)) offenders.push(`${DIR}/${file}: api.${method}()`);
+    }
+  }
+  assert.deepEqual(offenders, [],
+    'a registry calls an api method the client does not declare — it would render as a dead section, not as an error');
+});
+
 test("a board's sections are its bucket's zones, in zone order", () => {
   for (const { key, role, prefix, board } of entries()) {
     const bucket = bucketsFor(role).find((b) => b.prefix === prefix);
