@@ -158,7 +158,6 @@ export default function FounderValidatePage() {
             <div className="validate-hero-line">
               <div><h1>Prove someone wants this</h1><p>Every interview, every pain, every hypothesis and the verdict they add up to — on one page.</p></div>
               <div className="validate-project-actions">
-                {projects.length > 1 && <select data-testid="select-validate-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>}
                 <Link data-testid="link-open-discovery-workspace" className="validate-open" to={detailLink} state={workspaceNavigationState}>Open workspace <ArrowUpRight size={14} /></Link>
               </div>
             </div>

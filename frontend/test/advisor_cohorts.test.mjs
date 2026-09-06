@@ -32,7 +32,7 @@ test('every Cohorts zone is either a page or a card naming its real gap', () => 
   assert.deepEqual(zones, ['founders', 'guidance', 'this-week', 'calendar', 'outcomes']);
 
   const zoneBlock = bucketRoutes.slice(
-    bucketRoutes.indexOf('const ZONE = {'), bucketRoutes.indexOf('const COPY = {'));
+    bucketRoutes.indexOf('const ZONE = {'), bucketRoutes.indexOf('const COPY ='));
   const backed = zones.filter((z) => zoneBlock.includes(`${z}:`) || zoneBlock.includes(`'${z}':`));
   // ALL FIVE, since 2026-09-04. Guidance got migration 212 — the one card in
   // this bucket whose diagnosis was still accurate. Calendar needed no
@@ -51,11 +51,16 @@ test('every Cohorts zone is either a page or a card naming its real gap', () => 
   // key in the rail's stance map three hundred lines further down — a false
   // failure that would have sent the next reader hunting for a card that was
   // already gone.
-  const copyStart = bucketRoutes.indexOf('const COPY = {');
-  assert.ok(copyStart > -1, 'the COPY object must still exist, even holding one bucket');
-  const copyBlock = bucketRoutes.slice(copyStart, bucketRoutes.indexOf('\n};', copyStart));
-  assert.ok(copyBlock.length > 0 && copyBlock.length < 4000, 'the COPY slice must not run away');
-  assert.ok(!copyBlock.includes("'/cohorts': {"),
+// The no-store copy moved out of `AdvisorBucketRoutes.jsx` into
+// `workspaces/noStoreCopy.js`, so the bucket BOARD and the zone CARD read one
+// object and cannot state different reasons. The invariants below are
+// unchanged; only the file the set is parsed from moved.
+  const noStore = read('frontend/src/workspaces/noStoreCopy.js');
+  const copyStart = noStore.indexOf('const ADVISOR_COPY = {');
+  assert.ok(copyStart > -1, 'the prefix-keyed no-store map must still exist, even holding one bucket');
+  const copyBlock = noStore.slice(copyStart, noStore.indexOf('\n};', copyStart));
+  assert.ok(copyBlock.length > 0 && copyBlock.length < 4000, 'the slice must not run away');
+  assert.ok(!copyBlock.includes("'/cohorts'"),
     'no Cohorts zone may carry a no-store card while its page reads a store');
 });
 

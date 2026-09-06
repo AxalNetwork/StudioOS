@@ -2,7 +2,7 @@ import React, { Suspense, lazy, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell from '../WorkspaceShell';
-import { bucketForPath, zoneForPath } from '../shellConfig';
+import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
 
 const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorDealsWorkspace'));
 
@@ -71,7 +71,7 @@ export default function InvestorDealsRoutes() {
     <WorkspaceShell
       role="investor"
       scope="One fund"
-      title={isRoot ? bucket?.label : undefined}
+      title={isRoot ? bucketTitle(bucket) : undefined}
       activeSlug={isRoot ? null : undefined}
       intro={INTRO[zone?.slug] || INTRO.pipeline}
       rail={(

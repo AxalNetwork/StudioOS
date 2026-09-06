@@ -3,8 +3,12 @@ import { useLocation } from 'react-router-dom';
 import { WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import BucketOverview from './BucketOverview';
-import { bucketForPath, zoneForPath } from './shellConfig';
+import { bucketForPath, bucketTitle, zoneForPath } from './shellConfig';
 import { zoneActionsFor } from './zoneActionsByRole';
+import BucketBoard from './BucketBoard';
+import { boardFor } from './boards';
+import { api } from '../lib/api';
+import { NETWORK_ORG_COPY } from './noStoreCopy';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
@@ -93,7 +97,9 @@ const INTRO = {
   organizations: 'Companies, funds and firms, rolled up from the people you know inside them.',
 };
 
-const ORG_NO_STORE = 'Organizations reads nothing on this licence — no store links a relationship to an organisation here.';
+// One object, read by the overview card, the board section and this module,
+// so a reader cannot be told a softer reason on one surface than another.
+const ORG_NO_STORE = NETWORK_ORG_COPY.heading;
 
 function NetworkOverview({ role }) {
   const bucket = bucketForPath(role, '/network');
@@ -101,6 +107,8 @@ function NetworkOverview({ role }) {
   // Organizations is the one line that is not true on every licence, so the
   // gap is per-role: ORG_BACKED is the same set the zone body and rail read.
   const unbuilt = ORG_BACKED.has(role) ? {} : { organizations: ORG_NO_STORE };
+  const board = boardFor(role, '/network', api);
+  if (board) return <BucketBoard bucket={bucket} role={role} board={board} />;
   return <BucketOverview bucket={bucket} role={role} descriptions={INTRO} unbuilt={unbuilt} />;
 }
 
@@ -181,7 +189,7 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   return (
     <WorkspaceShell
       role={role}
-      title={isRoot ? 'Network' : undefined}
+      title={isRoot ? bucketTitle(bucket) : undefined}
       activeSlug={isRoot ? null : undefined}
       rail={(
         <WorkerRail

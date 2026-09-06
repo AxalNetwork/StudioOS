@@ -1,11 +1,15 @@
 import React, { Suspense, lazy, useMemo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Card, Skeleton, WorkerRail } from '../../ui';
+import { useLocation } from 'react-router-dom';
+import { Skeleton, WorkerRail } from '../../ui';
 import { useAuth } from '../../hooks/useAuthSync';
-import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
+import WorkspaceShell from '../WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from '../BucketOverview';
-import { bucketForPath, zoneForPath } from '../shellConfig';
+import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
 import { partnerZoneActions } from '../partnerZoneActions';
+import NoStoreYet from '../NoStoreYet';
+import BucketBoard from '../BucketBoard';
+import { boardFor } from '../boards';
+import { api } from '../../lib/api';
 
 // NOT `PartnerOperationsWorkspace`, and that is the fix rather than an
 // omission. That component is the legacy five-tab shell at
@@ -91,32 +95,6 @@ const PartnerStatusReports = lazy(() => import('../../pages/partner/delivery/Sta
 
 function Loading() {
   return <div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-56" /></div>;
-}
-
-function NoStoreYet({ heading, what, why, links = [], seam }) {
-  return (
-    <Card className="border-dashed bg-axal-surface-2 p-6">
-      <div className="max-w-2xl">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
-          No store behind this yet
-        </div>
-        <h2 className="mt-2 text-lg font-extrabold tracking-tight">{heading}</h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{what}</p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{why}</p>
-        {seam && (
-          <p className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-axal-ink-3">
-            <SeamChip>From the client</SeamChip>
-            read-only — the outcome belongs to the engagement record the client can also see
-          </p>
-        )}
-        {links.length > 0 && (
-          <p className="mt-3 flex flex-wrap gap-3 text-[12px]">
-            {links.map((l) => <Link key={l.to} to={l.to} className="text-amber-700 underline">{l.label}</Link>)}
-          </p>
-        )}
-      </div>
-    </Card>
-  );
 }
 
 /**
@@ -332,7 +310,10 @@ export default function PartnerBucketRoutes() {
     // The bucket root is the canvas overview — the sidebar row lands here,
     // not on the first zone. Zones stay one click away on the cards below.
     if (isRoot) {
-      return (
+      const board = boardFor('partner', prefix, api);
+      return board ? (
+        <BucketBoard bucket={bucket} role="partner" board={board} />
+      ) : (
         <BucketOverview
           bucket={bucket}
           role="partner"
@@ -344,8 +325,9 @@ export default function PartnerBucketRoutes() {
     const live = LIVE[prefix]?.[slug];
     if (live) return <Suspense fallback={<Loading />}>{live(user)}</Suspense>;
     const copy = COPY[prefix]?.[slug];
-    if (copy) return <NoStoreYet {...copy} />;
+    if (copy) return <NoStoreYet {...copy} accentClass="text-amber-700" />;
     return <NoStoreYet
+      accentClass="text-amber-700"
       heading="Nothing here yet"
       what="This zone is named by the canvas and has no surface behind it."
       why="It ships empty rather than as a placeholder that could be mistaken for real data."
@@ -436,7 +418,7 @@ export default function PartnerBucketRoutes() {
   return (
     <WorkspaceShell
       role="partner"
-      title={isRoot ? bucket?.label : undefined}
+      title={isRoot ? bucketTitle(bucket) : undefined}
       scope="One firm"
       intro={INTRO[prefix]}
       activeSlug={isRoot ? null : undefined}

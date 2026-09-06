@@ -3718,6 +3718,23 @@ export const api = {
     downloadUrl: (uid) => request(`/research/documents/${encodeURIComponent(uid)}/download`),
     remove: (uid) => request(`/research/documents/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
     ask: (question) => request('/research/ask', { method: 'POST', body: JSON.stringify({ question }) }),
+
+    // Funds — founder-facing fund research (migration 216). Every read is
+    // owner-scoped in the worker; there is no cross-user listing to call.
+    funds: () => request('/research/funds'),
+    fundCreate: (data) => request('/research/funds', { method: 'POST', body: JSON.stringify(data || {}) }),
+    fundUpdate: (uid, data) => request(`/research/funds/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
+    fundRemove: (uid) => request(`/research/funds/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+    // Benchmarks (migration 217). A peer figure without its source and sample
+    // size is refused by the route AND by the schema's CHECK.
+    benchmarks: () => request('/research/benchmarks'),
+    benchmarkCreate: (data) => request('/research/benchmarks', { method: 'POST', body: JSON.stringify(data || {}) }),
+    benchmarkRemove: (uid) => request(`/research/benchmarks/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
+
+    // Diligence — no store of its own. Room access assembled from the grants
+    // this investor already holds.
+    diligence: () => request('/research/diligence'),
   },
 };
 

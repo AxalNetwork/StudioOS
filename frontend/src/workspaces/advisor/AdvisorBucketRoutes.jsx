@@ -1,10 +1,15 @@
 import React, { Suspense, lazy, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Card, Skeleton, WorkerRail } from '../../ui';
-import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
+import WorkspaceShell from '../WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from '../BucketOverview';
-import { bucketForPath, zoneForPath } from '../shellConfig';
+import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
 import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
+import NoStoreYet from '../NoStoreYet';
+import BucketBoard from '../BucketBoard';
+import { boardFor } from '../boards';
+import { api } from '../../lib/api';
+import { ADVISOR_COPY } from '../noStoreCopy';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/FoundersZone'));
@@ -60,34 +65,6 @@ const CohortsCalendarZone = lazy(() => import('../../pages/advisor/cohorts/Calen
 
 function Loading() {
   return <div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-56" /></div>;
-}
-
-function NoStoreYet({ heading, what, why, links = [], seam }) {
-  return (
-    <Card className="border-dashed bg-axal-surface-2 p-6">
-      <div className="max-w-2xl">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
-          No store behind this yet
-        </div>
-        <h2 className="mt-2 text-lg font-extrabold tracking-tight">{heading}</h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{what}</p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{why}</p>
-        {seam && (
-          <p className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-axal-ink-3">
-            <SeamChip>From the founder</SeamChip>
-            read-only — cohort data belongs to the Lab and to the founder, never to the practice
-          </p>
-        )}
-        {links.length > 0 && (
-          <p className="mt-3 flex flex-wrap gap-3 text-[12px]">
-            {links.map((l) => (
-              <Link key={l.to} to={l.to} className="text-emerald-700 underline">{l.label}</Link>
-            ))}
-          </p>
-        )}
-      </div>
-    </Card>
-  );
 }
 
 /**
@@ -195,16 +172,7 @@ const ZONE = {
  * that needs an impression pipeline, not a table. It is the one gap here that a
  * migration cannot close, which is precisely why it is the one card left.
  */
-const COPY = {
-  '/expertise': {
-    visibility: {
-      heading: 'Nothing counts profile views',
-      what: 'How often your profile was shown, how often it was opened, and which searches you appeared in.',
-      why: 'There is no impression or profile-view counter anywhere in the product — not for advisors, not for anyone. This needs an analytics pipeline rather than a table, and a page of plausible-looking numbers would be worse than an empty one.',
-      links: [{ to: '/expertise/profile', label: 'What a founder would see →' }],
-    },
-  },
-};
+const COPY = ADVISOR_COPY;
 
 export default function AdvisorBucketRoutes({ preview = false }) {
   const location = useLocation();
@@ -227,7 +195,10 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     if (isRoot) {
       // `unbuilt` is derived from COPY — the same object each zone page
       // renders — so a card cannot describe a store the page denies having.
-      return (
+      const board = boardFor('advisor', prefix, api);
+      return board ? (
+        <BucketBoard bucket={bucket} role="advisor" board={board} />
+      ) : (
         <BucketOverview
           bucket={bucket}
           role="advisor"
@@ -247,8 +218,9 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       return <Suspense fallback={<Loading />}><AdvisorAdvisoryWorkspace embedded /></Suspense>;
     }
     const copy = COPY[prefix]?.[slug];
-    if (copy) return <NoStoreYet {...copy} />;
+    if (copy) return <NoStoreYet {...copy} accentClass="text-emerald-700" />;
     return <NoStoreYet
+      accentClass="text-emerald-700"
       heading="Nothing here yet"
       what="This zone is named by the canvas and has no surface behind it."
       why="It ships empty rather than as a placeholder that could be mistaken for real data."
@@ -317,7 +289,7 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   return (
     <WorkspaceShell
       role="advisor"
-      title={isRoot ? bucket?.label : undefined}
+      title={isRoot ? bucketTitle(bucket) : undefined}
       scope={prefix === '/cohorts' ? 'One cohort' : 'One practice'}
       intro={INTRO[prefix]}
       activeSlug={isRoot ? null : undefined}

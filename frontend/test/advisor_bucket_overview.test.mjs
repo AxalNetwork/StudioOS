@@ -46,6 +46,8 @@ test('bucket roots render an overview grid, not a zone body', () => {
   assert.match(code, /<BucketOverview/, 'the root must render the shared overview');
   assert.match(code, /unbuilt=\{unbuiltFrom\(COPY\[prefix\]\)\}/,
     'the advisor overview must derive its gaps from COPY, the map its zone pages render');
+  assert.match(code, /const COPY = ADVISOR_COPY;/,
+    'COPY must be the shared object, so the board and the card cannot state different reasons');
 });
 
 test('Network root renders an overview for advisors', () => {
@@ -139,8 +141,21 @@ function backedSlugs() {
   return [...new Set([...live, ...keysAt(block(advisorCode, 'ZONE'), 4)])];
 }
 
-/** Zones with no store: exactly those carrying a COPY card. */
-const unbackedSlugs = () => keysAt(block(advisorCode, 'COPY'), 4);
+/**
+ * Zones with no store: exactly those carrying a no-store card.
+ *
+ * The set used to be parsed out of a `const COPY = {` literal in
+ * `AdvisorBucketRoutes.jsx`. It now lives in `workspaces/noStoreCopy.js`,
+ * imported by that module AND by the bucket board — one object with two
+ * readers, so a board section cannot state a gentler reason than the page. The
+ * invariant this helper feeds is unchanged; only where the object lives moved,
+ * and reading it from its new home is the whole fix. (Parsing the route module
+ * for a literal it no longer contains is the failure mode
+ * `partner_bucket_overview.test.mjs:117-123` already recorded once: a guard
+ * that fails exactly when the thing it guards has been improved.)
+ */
+const copyCode = codeOnly(read('frontend/src/workspaces/noStoreCopy.js'));
+const unbackedSlugs = () => keysAt(block(copyCode, 'ADVISOR_EXPERTISE_COPY'), 2);
 
 test('every zone with a store has an overview blurb, and no zone without one does', () => {
   const blurbs = keysAt(block(advisorCode, 'ZONE_BLURB'), 2);
@@ -220,10 +235,13 @@ test('Client prep blames the access rule, not a table that is actually there', (
     assert.doesNotMatch(code, dead, `a falsified claim is still rendered: ${dead}`);
   }
 
-  // Scoped to ZONE_COPY, whose bounds `block` asserts at both ends. Searching
-  // the rest of the file instead is how a sibling test matched an unrelated key
-  // three hundred lines further down and failed for the wrong reason.
-  const copy = block(code, 'ZONE_COPY');
+  // The reason moved to `workspaces/noStoreCopy.js` when the bucket board
+  // landed, so the board section and the zone card read one object and cannot
+  // state different obstacles. Scoped to that constant, whose bounds `block`
+  // asserts at both ends: searching a whole file instead is how a sibling test
+  // matched an unrelated key three hundred lines down and failed for the wrong
+  // reason.
+  const copy = block(copyCode, 'RESEARCH_CLIENT_PREP_COPY');
   assert.match(copy, /access decision, not an absent table/,
     'the card must name the access decision as the obstacle');
   assert.match(copy, /carries their founder id and a project carries the same id/,
