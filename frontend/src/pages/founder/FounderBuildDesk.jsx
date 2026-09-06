@@ -116,7 +116,6 @@ export default function FounderBuildDesk() {
           <div className="build-hero-line">
             <div><h1>Operate the company this week</h1><p>Commitments first, with execution, roadmap, cadence, and metrics serving the days ahead.</p></div>
             <div className="build-actions">
-              {projects.length > 1 && <select data-testid="select-build-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>}
               <Link data-testid="link-open-execution-workspace" className="build-open" to={executionLink} state={navigationState}>Open execution workspace <ArrowUpRight size={14} /></Link>
             </div>
           </div>
