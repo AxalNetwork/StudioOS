@@ -279,6 +279,24 @@ test('the self endpoint requires auth and never takes a user id from the request
 
 // ---------- the pricing endpoint ----------
 
+/**
+ * Just the `/pricing` handler.
+ *
+ * Both tests below used to slice `indexOf("ai.get('/pricing'")` to the END OF
+ * THE FILE, which is every route declared after it as well. That is two
+ * failures in one: the assertions were never about the pricing handler, and
+ * they passed only because nothing further down happened to use the words they
+ * ban — until a comment in `/workspace/explain` mentioned `ai_usage_logs` and
+ * the pricing endpoint was reported as leaking per-user data.
+ */
+function pricingHandler(src: string): string {
+  const from = src.indexOf("ai.get('/pricing'");
+  if (from < 0) throw new Error('the /pricing route is gone');
+  // Handlers in this file close on `});` at column 0.
+  const end = src.indexOf('\n});', from);
+  return src.slice(from, end < 0 ? src.length : end + 4);
+}
+
 test('the pricing endpoint serves the router’s own table, not a second copy', () => {
   // assistCost.js's header already argues that the estimate and the receipt
   // must come from one calculation, because "two functions drifting apart is
@@ -290,7 +308,9 @@ test('the pricing endpoint serves the router’s own table, not a second copy', 
   assert.match(routeSrc, /\bROUTE\b/, 'and so does the task → model map');
   // No hand-written figures in the route file — that would be the second copy
   // this endpoint exists to remove.
-  const body = routeSrc.slice(routeSrc.indexOf("ai.get('/pricing'"));
+  const body = pricingHandler(routeSrc);
+  assert.ok(body.includes('PRICE_USD_PER_1M_TOKENS') && body.length < 2000,
+    'the handler slice is wrong — it is either empty or swallowing the rest of the file');
   assert.doesNotMatch(body, /\bin:\s*0\.\d|\bout:\s*0\.\d/,
     'the route must not restate any price literal');
 });
@@ -298,10 +318,14 @@ test('the pricing endpoint serves the router’s own table, not a second copy', 
 test('the pricing endpoint requires auth and exposes no per-user data', () => {
   const routeSrc = readFileSync(
     resolve(process.cwd(), 'cloudflare-worker/src/routes/ai.ts'), 'utf8');
-  const body = routeSrc.slice(routeSrc.indexOf("ai.get('/pricing'"));
+  const body = pricingHandler(routeSrc);
   assert.match(body, /requireAuth\s*\(/);
   assert.doesNotMatch(body, /ai_usage_logs|user_id|loadMyAiSpend/,
     'a static table must not reach into anyone’s usage');
+  // The handler now publishes `alternates`, which is routing config and not
+  // per-user data — but it is new, so say what it is allowed to carry.
+  assert.match(body, /alternates: entry\.alternates \?\? \[\]/,
+    'the menu the rail draws must come from the router, over this endpoint');
 });
 
 test('every routed task class has a price, or the estimate is unknown not free', () => {

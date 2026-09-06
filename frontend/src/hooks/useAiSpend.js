@@ -67,3 +67,47 @@ export function priceForTask(pricing, task) {
   if (!p || typeof p.in !== 'number' || typeof p.out !== 'number') return null;
   return { model, pin: p.in, pout: p.out };
 }
+
+/**
+ * The menu for a task: every model the ROUTER says a caller may pick, joined
+ * to the copy in `ui/railModels.js` and to the price the router bills at.
+ *
+ * THE MENU IS THE ROUTER'S, NOT THE RAIL'S. `alternates` comes from
+ * `GET /api/ai/pricing`, which reads `ROUTE[task].alternates` — the same list
+ * `run()` validates against. So the rail cannot offer a model the worker would
+ * refuse, and it cannot quietly stop offering one the worker still accepts.
+ * A task with no alternates returns an empty array and the rail draws no menu,
+ * which is the correct rendering for `safety` and `embed`: they offer no choice
+ * because letting anyone choose is the thing DECISIONS D13 forbade.
+ *
+ * A model with no price row is DROPPED, not rendered at zero. `priceForTask`
+ * states the same rule for the single-model case — "an unpriced run is unknown,
+ * not free" — and it applies with more force here, where the number sits beside
+ * two other models a founder is comparing it against.
+ *
+ * A model with no copy still renders, on its id's last segment and with no
+ * sentence. That direction is ugly rather than wrong: the model is real, the
+ * router offers it, and the only thing missing is a description someone has yet
+ * to write.
+ */
+export function modelsForTask(pricing, task, { copy = {}, recommended = [] } = {}) {
+  const route = pricing?.routes?.[task];
+  if (!route || !Array.isArray(route.alternates)) return [];
+  const rec = new Set(recommended);
+  return route.alternates
+    .map((id) => {
+      const p = pricing?.prices?.[id];
+      if (!p || typeof p.in !== 'number' || typeof p.out !== 'number') return null;
+      const c = copy[id] || {};
+      return {
+        id,
+        name: c.name || id.split('/').pop(),
+        why: c.why || '',
+        tags: Array.isArray(c.tags) ? c.tags : [],
+        pin: p.in,
+        pout: p.out,
+        recommended: rec.has(id),
+      };
+    })
+    .filter(Boolean);
+}

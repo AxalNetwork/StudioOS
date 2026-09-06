@@ -214,6 +214,12 @@ ai.post('/workspace/explain', async (c) => {
       est_cost_usd: r.usage.est_cost_usd,
       cached: r.usage.cached,
       fallback_used: r.usage.fallback_used,
+      // The token counts the rail's receipt prints. Measured by the provider
+      // and already written to `ai_usage_logs`; returning them costs nothing
+      // and is the difference between a receipt and an assertion that a run
+      // happened.
+      prompt_tokens: r.usage.prompt_tokens,
+      completion_tokens: r.usage.completion_tokens,
     },
   });
 });
