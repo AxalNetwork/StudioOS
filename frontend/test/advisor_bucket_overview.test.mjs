@@ -235,10 +235,13 @@ test('Client prep blames the access rule, not a table that is actually there', (
     assert.doesNotMatch(code, dead, `a falsified claim is still rendered: ${dead}`);
   }
 
-  // Scoped to ZONE_COPY, whose bounds `block` asserts at both ends. Searching
-  // the rest of the file instead is how a sibling test matched an unrelated key
-  // three hundred lines further down and failed for the wrong reason.
-  const copy = block(code, 'ZONE_COPY');
+  // The reason moved to `workspaces/noStoreCopy.js` when the bucket board
+  // landed, so the board section and the zone card read one object and cannot
+  // state different obstacles. Scoped to that constant, whose bounds `block`
+  // asserts at both ends: searching a whole file instead is how a sibling test
+  // matched an unrelated key three hundred lines down and failed for the wrong
+  // reason.
+  const copy = block(copyCode, 'RESEARCH_CLIENT_PREP_COPY');
   assert.match(copy, /access decision, not an absent table/,
     'the card must name the access decision as the obstacle');
   assert.match(copy, /carries their founder id and a project carries the same id/,

@@ -43,6 +43,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/lib',                'API client, formatting, and browser-side helpers'],
   ['frontend/src/hooks',              'shared React state'],
   ['frontend/src/workspaces',         'the shell every workspace subpage sits in, and the config that drives it'],
+  ['frontend/src/workspaces/boards',  'one registry per composed bucket root — the sections a board draws and the store each reads'],
   ['frontend/src/data',               'static reference data — NOT a place for fixtures'],
   ['frontend/test',                   'what the frontend guarantees'],
   ['cloudflare-worker/src',           'the production worker'],

@@ -10,6 +10,14 @@ keep theirs without a condition anywhere naming them.
 | File | Role |
 | --- | --- |
 | `index.js` | The `role:prefix` → factory table, and `boardFor()`. |
+| `format.js` | Shared formatters. Two money helpers that are **not** interchangeable: newer stores hold integer cents, while `founder_needs.budget_*` and `quotes.price` are grandfathered REAL dollars. `count()` returns null for a figure that is not there, so `summary()` drops that half rather than printing a zero. |
+| `partnerPipeline.js` | P3 — leads, proposals, negotiations, retainers, analytics. |
+| `partnerDelivery.js` | P4 — board, deliverables, capacity, status reports, health. |
+| `partnerOffers.js` | P5 — catalog, perk deals, visibility, proof, audience fit. |
+| `advisorPractice.js` | V3 — opportunities, engagements, delivery, sessions, earnings. |
+| `advisorExpertise.js` | V4 — profile, services, proof, thinking, and Visibility as a gap. |
+| `network.js` | P6 and V5, one factory for both licences. The role decides only whether Organizations has a store. |
+| `research.js` | P7 and V6. Both artboards draw two sections; Ask, Markets and Companies are link cards because the design drew no section for them. |
 
 ## The rule for adding to it
 

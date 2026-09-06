@@ -32,3 +32,31 @@ export const ADVISOR_EXPERTISE_COPY = {
 export const ADVISOR_COPY = {
   '/expertise': ADVISOR_EXPERTISE_COPY,
 };
+
+/**
+ * Network · Organizations, on a licence that has no store for it.
+ *
+ * `ORG_BACKED` in `NetworkWorkspace` is `{founder, investor}`: a founder reads
+ * `contacts.organization` and the investor workspace has its own section, while
+ * an advisor is 403'd from `/api/contacts` and an operator's NetworkPage has no
+ * organizations tab at all. The heading is the exact line the overview card has
+ * always shown, so the card, the board section and the rail say one thing.
+ */
+export const NETWORK_ORG_COPY = {
+  heading: 'Organizations reads nothing on this licence — no store links a relationship to an organisation here.',
+  what: 'The companies, funds and firms behind the people you know, rolled up from the relationships you keep.',
+  why: 'The roll-up needs a person-to-organisation edge, and on this licence there is none: an advisor cannot read the contact store at all, and an operator has no organizations surface to roll up from. A count assembled from anything else would be counting something other than what the heading says.',
+};
+
+/**
+ * Research · Client prep, until a founder can grant an advisor their record.
+ *
+ * Half of a client brief already exists — the topic and questions the client
+ * wrote when they asked for the session. The other half is the client's own
+ * project record, which is closed by rule rather than absent. Task #55.
+ */
+export const RESEARCH_CLIENT_PREP_COPY = {
+  heading: 'The client brief is not built yet',
+  what: 'One client per brief: what they asked for, what the engagement record says, what changed on their side, and what is still open.',
+  why: 'Half of it exists: a session request already carries the topic and the questions the client wrote themselves when they asked for it. What is missing is the client\'s own record — and not for want of a join. A client\'s account carries their founder id and a project carries the same id, which is the very column the founder-data guard reads before it decides, so what stands in the way is an access decision, not an absent table. Which decision it is depends on who is reading; the note above says which applies to you. A brief assembled from one side only would be half a brief presented as a whole one.',
+};

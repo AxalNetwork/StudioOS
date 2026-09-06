@@ -9,6 +9,7 @@ import NoStoreYet from './NoStoreYet';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
+import { RESEARCH_CLIENT_PREP_COPY } from './noStoreCopy';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -189,11 +190,7 @@ const ZONE_COPY = {
     why: 'No benchmark set exists in the product. A benchmark drawn from three companies and presented without its base is arithmetic wearing a metric’s clothes.',
     accentClass: 'text-indigo-700',
   },
-  'client-prep': {
-    heading: 'The client brief is not built yet',
-    what: 'One client per brief: what they asked for, what the engagement record says, what changed on their side, and what is still open.',
-    why: 'Half of it exists: a session request already carries the topic and the questions the client wrote themselves when they asked for it. What is missing is the client’s own record — and not for want of a join. A client’s account carries their founder id and a project carries the same id, which is the very column the founder-data guard reads before it decides, so what stands in the way is an access decision, not an absent table. Which decision it is depends on who is reading; the note above says which applies to you. A brief assembled from one side only would be half a brief presented as a whole one.',
-  },
+  'client-prep': RESEARCH_CLIENT_PREP_COPY,
 };
 
 /**

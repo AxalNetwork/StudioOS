@@ -23,6 +23,8 @@ import partnerDeliveryBoard from './partnerDelivery.js';
 import partnerOffersBoard from './partnerOffers.js';
 import advisorPracticeBoard from './advisorPractice.js';
 import advisorExpertiseBoard from './advisorExpertise.js';
+import networkBoard from './network.js';
+import researchBoard from './research.js';
 
 const BOARDS = {
   'partner:/pipeline': partnerPipelineBoard,
@@ -30,6 +32,13 @@ const BOARDS = {
   'partner:/offers':   partnerOffersBoard,
   'advisor:/practice':  advisorPracticeBoard,
   'advisor:/expertise': advisorExpertiseBoard,
+  // Both shared roots, both licences. One factory each: the role decides only
+  // what the stores already decide — whether Organizations has one, and which
+  // Research zones exist.
+  'partner:/network':  networkBoard,
+  'advisor:/network':  networkBoard,
+  'partner:/research': researchBoard,
+  'advisor:/research': researchBoard,
 };
 
 /**

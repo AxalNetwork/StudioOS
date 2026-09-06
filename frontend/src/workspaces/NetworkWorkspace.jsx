@@ -8,6 +8,7 @@ import { zoneActionsFor } from './zoneActionsByRole';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
+import { NETWORK_ORG_COPY } from './noStoreCopy';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
@@ -96,7 +97,9 @@ const INTRO = {
   organizations: 'Companies, funds and firms, rolled up from the people you know inside them.',
 };
 
-const ORG_NO_STORE = 'Organizations reads nothing on this licence — no store links a relationship to an organisation here.';
+// One object, read by the overview card, the board section and this module,
+// so a reader cannot be told a softer reason on one surface than another.
+const ORG_NO_STORE = NETWORK_ORG_COPY.heading;
 
 function NetworkOverview({ role }) {
   const bucket = bucketForPath(role, '/network');
