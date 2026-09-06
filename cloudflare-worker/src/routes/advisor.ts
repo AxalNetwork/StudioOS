@@ -98,7 +98,7 @@ import {
   TOOL_SCHEMAS,
   type ToolEnvelope,
 } from '../services/advisor/tools';
-import { run as aiRouterRun } from '../services/aiRouter';
+import { run as aiRouterRun, audioMinutesFromBytes } from '../services/aiRouter';
 // Advisor kill switch (Task #5 staged rollout retired in Task #7 — only
 // ADVISOR_V2_DISABLED / ADVISOR_DISABLED env flags remain).
 import { isAdvisorDisabled, ADVISOR_DISABLED_MESSAGE } from '../services/advisor/rollout';
@@ -2537,7 +2537,11 @@ advisor.get('/queue', async (c) => {
 // server half of the mic feature — the UI button is a separate task. Reuses
 // the standard advisor auth + kill-switch guard (requireAuth + applyAdvisorGate).
 // ---------------------------------------------------------------------------
-const TRANSCRIBE_MODEL = '@cf/openai/whisper';
+// The model now comes from the router's `transcribe` route entry, not from
+// here. Kept as a comment rather than a constant so the next reader knows what
+// this used to pin: `@cf/openai/whisper`, chosen before there was a task class
+// for audio at all. The router's primary is `whisper-large-v3-turbo`, which is
+// faster and more accurate at the same $0.0005 per audio minute.
 // Cap the base64 payload tightly. Composer mic clips are only seconds long,
 // and `Array.from(bytes)` below expands the decoded audio into a plain JS
 // number[] (~8 bytes/element in V8), so an oversized clip — atob string +
@@ -2576,15 +2580,33 @@ advisor.post('/transcribe', async (c) => {
   }
   if (bytes.byteLength === 0) return c.json({ error: 'no_audio' }, 400);
 
-  try {
-    const out: any = await c.env.AI.run(TRANSCRIBE_MODEL, { audio: Array.from(bytes) });
-    // Whisper returns { text, word_count, words, vtt }. Silence / non-speech
-    // yields an empty (or whitespace) string — surface it as empty text.
-    const text = String(out?.text ?? '').trim();
-    return c.json({ text });
-  } catch (e) {
-    return c.json({ error: 'transcribe_failed', message: (e as Error).message }, 502);
+  // THROUGH THE ROUTER, which this call bypassed for as long as it has existed.
+  // `env.AI.run` directly meant no per-user day/month cap, no org kill switch,
+  // no fallback, and — the one that mattered most — no row in `ai_usage_logs`,
+  // so every transcription a user ran was invisible to the spend meter that
+  // claims to show what they have spent. It is metered now, at the same rate,
+  // billed on the byte length rather than on anything the client says.
+  const r = await aiRouterRun(c.env, {
+    task: 'transcribe',
+    userId: user.id,
+    audio: bytes,
+    audioMinutes: audioMinutesFromBytes(bytes.byteLength),
+  });
+  if (!r.ok) {
+    // `run` never throws; a spent budget and an unreachable model both arrive
+    // here as reasons. The mic's caller has always read `error`, so the shape
+    // it reads is preserved and the reason is added beside it.
+    return c.json({
+      error: 'transcribe_failed',
+      refusal: r.refusal ?? null,
+      message: r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
+        ? 'This month’s AI budget is spent. Nothing was transcribed.'
+        : 'The clip could not be transcribed.',
+    }, 502);
   }
+  // Whisper returns { text, word_count, words, vtt }. Silence and non-speech
+  // yield an empty string — surface it as empty text, not as an error.
+  return c.json({ text: r.output ?? '' });
 });
 
 // Re-export for tests / debug.

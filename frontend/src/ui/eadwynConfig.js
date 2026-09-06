@@ -106,12 +106,15 @@ export const ASSIST_SURFACES = {
     mode: {
       kind: 'choice',
       label: 'AI fills the blanks',
-      // Two things, not the canvas's three. "Transcribes uploads" has nowhere
-      // to write a transcript — `discovery_interviews` has no such column and
-      // no R2 path admits audio — so naming it here would be a promise the
-      // worker cannot keep. It joins this sentence in the migration that gives
-      // it a column.
-      note: 'Tags logged phrases into your themes and drafts hypothesis cards. Every one is a proposal you accept, edit or discard.',
+      // All three now. Migration 215 gave `discovery_interviews` its recording
+      // and transcript columns and a `transcribe` task class its own
+      // per-audio-minute price, so the sentence this note carried for one
+      // change — two capabilities, because the third had nowhere to write —
+      // is complete.
+      //
+      // The order is the order a founder meets them: a recording becomes text,
+      // the text's pains become themes, the themes become claims.
+      note: 'Transcribes recordings, tags logged phrases into your themes, and drafts hypothesis cards. Every one is yours to accept, edit or discard.',
       manualNote: 'Nothing runs and nothing is spent. You log interviews and group pains yourself.',
     },
   },

@@ -135,22 +135,67 @@ test('the two claims the page can no longer make are gone', () => {
     'the page promises the founder names every theme; the prompt must say so too');
 });
 
-test('transcription is named as absent rather than quietly dropped', () => {
-  // The canvas's mode note promises three things and the product has two. The
-  // third is not omitted in silence: the rail says where it is missing, and
-  // the mode note names only what runs.
-  const page = read(PAGE);
-  assert.match(page, /\['Transcription',/, 'the rail must name what it cannot do');
-  // `codeOnly` again: the comment above the note explains the omission by
-  // naming the thing omitted, which is what makes the omission legible.
+test('the mode note promises nothing the worker cannot do', () => {
+  // This began as "transcription is named as absent", because at the time the
+  // product had two of the canvas's three capabilities and the third had
+  // nowhere to write a transcript. Migration 215 gave it one — so the old
+  // assertion had to be deleted to ship the feature it was guarding, which
+  // means it was pinning a schedule rather than an invariant.
+  //
+  // The invariant underneath it is the one that mattered all along: every verb
+  // in that sentence is a promise, and a promise with no route behind it is the
+  // same class of thing as a button posting to an endpoint that does not exist.
   const cfg = codeOnly(read(CFG));
   const at = cfg.indexOf('mode: {');
   assert.ok(at > 0, 'the workspace surface no longer declares a mode');
-  const mode = cfg.slice(at, at + 700);
-  assert.doesNotMatch(mode, /[Tt]ranscrib/,
-    'the mode note promises transcription, which has nowhere to write a transcript');
-  assert.match(mode, /accept, edit or discard/,
+  const note = /note: '([^']+)'/.exec(cfg.slice(at, at + 1200))?.[1];
+  assert.ok(note, 'the mode declares no note');
+
+  const routes = read('cloudflare-worker/src/routes/founder_validate.ts');
+
+  // Each capability is a verb AND its object, and the note is checked CLAUSE BY
+  // CLAUSE against the closed set. A first version matched only the verbs and
+  // only the ones it knew, so a mutation appending "and drafts your investor
+  // update" sailed through: it matched /drafts/, and an unrecognised promise
+  // was invisible to a test that only looked for recognised ones. The whole
+  // point of this test is the promise nothing backs, which is the promise
+  // nobody thought to list.
+  const CAPABILITIES = [
+    [/transcrib\w*\s+recording/i, /founderValidate\.post\('\/interviews\/:id\/transcribe'/, 'transcription'],
+    [/tags?\s+logged\s+phrases/i, /kind === 'pain_tag'/, 'pain tagging'],
+    [/drafts?\s+hypothesis/i, /insertHypothesis/, 'hypothesis drafting'],
+  ];
+  // The first sentence is the list of promises; the second says what happens to
+  // a proposal and is checked separately below.
+  const clauses = note.split('.')[0].split(/,|\band\b/).map((c) => c.trim()).filter(Boolean);
+  assert.ok(clauses.length >= 2, `the note has ${clauses.length} clause(s) — has it been rewritten?`);
+  for (const clause of clauses) {
+    const hit = CAPABILITIES.find(([inNote]) => inNote.test(clause));
+    assert.ok(hit, `the mode note promises "${clause}", which is not a capability this workspace has`);
+    assert.match(routes, hit[1], `the mode note promises ${hit[2]} and no route does it`);
+  }
+
+  assert.match(note, /accept, edit or discard/,
     'the mode note must say a proposal is never applied on its own');
+});
+
+test('the rail still names a real gap, and not a closed one', () => {
+  // The "Unavailable here" block is where this workspace says what it cannot
+  // do. Its entry must be true: naming a gap the product has since closed is
+  // the same failure as promising something it cannot do, pointed the other
+  // way, and it is the failure the Transcription entry would now be.
+  const page = codeOnly(read(PAGE));
+  const entry = /unavailable=\{\[\['([^']+)', '([^']+)'\]\]\}/.exec(page);
+  assert.ok(entry, 'the rail no longer names anything as unavailable');
+  const [, title, detail] = entry;
+  assert.doesNotMatch(title, /[Tt]ranscri/,
+    'transcription is backed now; naming it as unavailable is a stale gap');
+  assert.ok(detail.length > 30, 'a gap has to say what is missing, not just label it');
+  // Speaker labels are the current gap and are genuinely absent: Whisper
+  // returns `words` and `vtt`, migration 215 deliberately stores neither.
+  assert.doesNotMatch(read('cloudflare-worker/sql/migrations/215_interview_recordings.sql'),
+    /ADD COLUMN transcript_words|ADD COLUMN transcript_vtt|ADD COLUMN speaker/,
+    'the schema stores what the rail says it does not');
 });
 
 test('the surface declares what off means, not just that it exists', () => {

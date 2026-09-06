@@ -2265,3 +2265,69 @@ has no transaction to wrap the two together.
 is on and writes none until the founder presses the run button. A component that
 proposed on mount would bill a founder for opening a page, once per navigation,
 with a creeping spend meter as the only symptom.
+
+---
+
+### D47. Whisper is billed by the minute, so the router grew a second price table rather than a fabricated token rate
+
+**The third thing D46 could not ship.** Migration 215 gives `discovery_interviews`
+its recording and transcript columns, `routes/founder_validate.ts` the upload and
+transcribe routes, and the mode note its third clause. The "Unavailable here"
+entry that named transcription is gone — a gap the product has since closed is
+as false as a promise it cannot keep, pointed the other way — and is replaced by
+the one that is genuinely still open: Whisper returns speaker turns and
+timestamps, and this product stores neither because it has nowhere to show them.
+
+**The structural problem, and why it could not be papered over.**
+`PRICE_USD_PER_1M_TOKENS` is the router's only price table, and
+`estimateCostUsd` answers **0** for a model that is not in it. Whisper has no
+token rate anywhere — it is sold per audio minute — so the obvious
+implementation makes a transcription free, which is the exact failure
+`ai_router_prices.test.mjs` was written for: *"a model in ROUTE with no price
+row bills as zero, and a spend cap that counts zero never trips."* A founder
+could have transcribed all day against a cap that never moved.
+
+Three options were weighed. Inventing a per-token rate for Whisper puts a
+number on the rail that Cloudflare does not publish, which is what this whole
+sequence of changes has been correcting. Special-casing the task inside
+`estimateCostUsd` hides a pricing fact inside a control-flow branch. So:
+`PRICE_USD_PER_AUDIO_MINUTE`, consulted **first**, because a per-minute model
+has no token rate to find. The price guard now accepts a model priced in either
+table and fails if one is priced in both — a model in both would bill by
+whichever branch runs first, with the other figure sitting there looking
+authoritative.
+
+**Minutes come from the bytes, never from the request.** A browser can measure a
+clip's duration exactly, and `recording_duration_sec` stores what it measured —
+for the screen. Billing reads `audioMinutesFromBytes` over the stored byte
+length instead, because a number the client chooses must not decide what a run
+costs: a caller could otherwise transcribe an hour and report a minute. The
+bitrate assumption (32 kbps, the top of what a browser's MediaRecorder produces
+for speech) makes it an estimate, and it sits one function below the token
+estimator that calls itself *"crude — ≈ 4 chars/token"*. It under-estimates
+rather than over-bills, and it is never zero.
+
+**`transcribe` offers no choice and no fallback, and both are deliberate.**
+`whisper-large-v3-turbo` is faster and more accurate than the base model at the
+same $0.0005 per minute, so a menu between them is a control that cannot change
+anything — D13's own objection. A fallback between two models at one price
+doubles the bill for a clip that is going to fail twice. The base model stays
+priced because `routes/advisor.ts`'s composer mic has been calling it since that
+feature shipped and those runs still have to cost what they cost.
+
+**The advisor mic is metered for the first time.** It called `env.AI.run`
+directly for its whole life: no per-user day or month cap, no org kill switch,
+no fallback, and — the one that mattered most — **no row in `ai_usage_logs`**, so
+every transcription a user ran was invisible to the spend meter that claims to
+show what they have spent. It goes through the router now, at the same rate.
+
+**Attaching audio is data entry; transcribing is an AI run.** The upload is
+offered whatever the rail's switch says. Transcription sits behind it, so a
+founder who turned "AI fills the blanks" off finds no control on this workspace
+that still runs a model — and the off state names the switch rather than
+disabling a button with no explanation.
+
+**An empty transcript is an answer.** NULL means never transcribed; an empty
+string means transcribed, and the clip had no speech in it. Folding the two
+together would offer "Transcribe" forever on a silent recording and charge for
+it every time.

@@ -46,6 +46,7 @@ export type TaskClass =
   | 'brand_palette'
   | 'brand_taglines'
   | 'workspace_explain'
+  | 'transcribe'
   | 'validate_tag_pains'
   | 'validate_draft_hypotheses'
   | 'research_ask';
@@ -85,6 +86,14 @@ export interface RunOptions {
   // are surfaced to the caller. Cache + safety_score parsing are bypassed
   // for streams since neither is meaningful without buffering the body.
   stream?: boolean;
+  // Minutes of audio, for a task billed by the minute. Derived server-side
+  // from the clip's byte length — see `audioMinutesFromBytes` — never taken
+  // from a request, because it decides what a run costs.
+  audioMinutes?: number;
+  // Raw audio bytes for a transcription task. Not `text`, and not `messages`:
+  // Workers AI takes `{ audio: number[] }` for Whisper, which shares nothing
+  // with the chat shape.
+  audio?: Uint8Array;
   // A model the CALLER picked, validated against `ROUTE[task].alternates`.
   // Absent means "whatever the route says", which is every internal caller.
   // A model not on that list is REFUSED, never quietly swapped for the
@@ -146,6 +155,10 @@ interface RouteEntry {
   cacheTtlSec?: number;
   // True for embedding models (response shape differs).
   isEmbed?: boolean;
+  // True for speech-to-text. A third request shape, and a third response
+  // shape: Workers AI takes `{ audio: number[] }` and answers `{ text }`,
+  // which shares nothing with either the chat or the embed path.
+  isAudio?: boolean;
 }
 
 /**
@@ -192,6 +205,49 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
   '@cf/qwen/qwen2.5-coder-32b-instruct':      { in: 0.660, out: 1.000 },
   '@cf/baai/bge-base-en-v1.5':                { in: 0.05,  out: 0.00 },
 };
+
+/**
+ * Audio models are billed by the MINUTE, not by the token, and the table above
+ * cannot express that.
+ *
+ * This is not a stylistic split. `estimateCostUsd` returns 0 for a model with
+ * no row, and `ai_router_prices.test.mjs` exists because of what that costs:
+ * "a model in ROUTE with no price row bills as zero, and a spend cap that
+ * counts zero never trips". Whisper has no token price anywhere, so folding it
+ * into the token table would mean either a fabricated per-token rate or a
+ * transcription that is free until the invoice arrives.
+ *
+ * Read from Cloudflare's audio pricing table on 2026-09-06.
+ */
+export const PRICE_USD_PER_AUDIO_MINUTE: Record<string, number> = {
+  '@cf/openai/whisper': 0.0005,
+  '@cf/openai/whisper-large-v3-turbo': 0.0005,
+};
+
+/**
+ * Minutes of audio in a clip, from its byte length.
+ *
+ * WHY NOT ASK THE CLIENT. A browser can measure a clip's duration exactly, and
+ * a number the client sends is a number the client chooses. This one drives
+ * billing and the spend cap, so it is derived server-side from a fact the
+ * server holds.
+ *
+ * WHY AN ASSUMED BITRATE IS ACCEPTABLE HERE. It is an estimate, and it sits
+ * one function below the token estimator that calls itself "crude — ≈ 4
+ * chars/token". 32 kbps is the top of the range a browser's MediaRecorder
+ * produces for opus/webm speech, so this under-estimates rather than over-bills
+ * a founder for a file we cannot decode. Cloudflare bills the real minutes
+ * either way; this is our own accounting, and it is honest about being an
+ * approximation rather than silently reporting zero.
+ *
+ * Rounded UP to a whole minute, because that is the unit the rate is quoted in.
+ */
+export const ASSUMED_AUDIO_BITRATE_BPS = 32_000;
+export function audioMinutesFromBytes(bytes: number): number {
+  const n = Number(bytes) || 0;
+  if (n <= 0) return 0;
+  return Math.max(1, Math.ceil(n / (ASSUMED_AUDIO_BITRATE_BPS / 8) / 60));
+}
 
 // Spec step 3: "fall back to a smaller Workers AI sibling
 // (tool_call → advisor_turn → role_detect; 70b → 8b)". The chain below
@@ -270,6 +326,18 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // Neither is cached. A proposal is drawn from evidence that changes every
   // time an interview is logged, which is exactly when someone would ask for
   // one again; a cached answer would describe the map as it was.
+  // Speech to text. The one task in this table billed by the MINUTE, which is
+  // why `PRICE_USD_PER_AUDIO_MINUTE` exists — see the note above it.
+  //
+  // No fallback chain and no alternates. `whisper-large-v3-turbo` is faster and
+  // more accurate at the same $0.0005/minute, so it is the primary; the base
+  // `whisper` stays priced because `routes/advisor.ts`'s composer mic has been
+  // calling it directly for as long as that feature has existed, and those runs
+  // still have to cost what they cost. Falling back between them on a failure
+  // would double the bill for a clip that is going to fail twice, and offering
+  // a CHOICE between two models at one price and no meaningful difference is a
+  // control that cannot change anything — D13's own objection.
+  transcribe: { provider: 'workers-ai', model: '@cf/openai/whisper-large-v3-turbo', isAudio: true },
   validate_tag_pains: {
     provider: 'workers-ai',
     model: MID_LLAMA,
@@ -411,7 +479,13 @@ async function setKillSwitch(store: MinimalKV, ttlSec: number): Promise<void> {
 // ---------------------------------------------------------------------------
 // Cost helper
 // ---------------------------------------------------------------------------
-export function estimateCostUsd(model: string, promptTok: number, completionTok: number): number {
+export function estimateCostUsd(
+  model: string, promptTok: number, completionTok: number, audioMinutes = 0,
+): number {
+  // Audio first: a model priced by the minute has no token rate, and asking
+  // the token table for one would answer 0.
+  const perMinute = PRICE_USD_PER_AUDIO_MINUTE[model];
+  if (perMinute != null) return Math.max(0, audioMinutes) * perMinute;
   const p = PRICE_USD_PER_1M_TOKENS[model];
   if (!p) return 0;
   return (promptTok / 1_000_000) * p.in + (completionTok / 1_000_000) * p.out;
@@ -559,6 +633,19 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   }
   const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task);
   try {
+    if (ROUTE[opts.task]?.isAudio) {
+      // `Array.from` on the bytes is what the binding expects, and it is also
+      // the memory cliff: V8 holds ~8 bytes per element, so the caller's size
+      // cap is what keeps a clip from approaching the 128 MB isolate limit.
+      // See `MAX_RECORDING_BYTES` in `routes/founder_validate.ts`.
+      const bytes = opts.audio;
+      if (!bytes || !bytes.byteLength) return { ok: false, status: 400, error: 'no audio' };
+      const out = await ai.run(model, { audio: Array.from(bytes) }, gatewayOpt) as { text?: string };
+      // Silence and non-speech transcribe to an empty string. That is an
+      // answer, not a failure: the clip contained no words, and reporting it
+      // as an error would have the caller retry and pay again.
+      return { ok: true, output: String(out?.text ?? '').trim(), prompt_tokens: 0, completion_tokens: 0 };
+    }
     if (isEmbed) {
       const text = opts.text ?? defaultContentBlob(opts);
       const out = await ai.run(model, { text }, gatewayOpt) as { data?: number[][]; shape?: number[] } | unknown;
@@ -827,7 +914,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   const latency = Date.now() - startedAt;
   const promptTok = attempt.prompt_tokens || 0;
   const completionTok = attempt.completion_tokens || 0;
-  const cost = estimateCostUsd(modelUsed, promptTok, completionTok);
+  const cost = estimateCostUsd(modelUsed, promptTok, completionTok, opts.audioMinutes || 0);
 
   // For task='safety' (llama-guard-3-8b) parse the structured response
   // into a 0..1 score so the admin dashboard can chart guardrail

@@ -31,7 +31,7 @@ import {
   serializeInterviewsCsv, serializePainMapCsv, serializeSummaryCsv,
   type ExportInterviewRow,
 } from './_founder_validate_exports';
-import { ensureDiscoveryEvidenceColumns } from '../services/discoveryInterviewSchema';
+import { ensureDiscoveryEvidenceColumns, ensureDiscoveryRecordingColumns } from '../services/discoveryInterviewSchema';
 import {
   canReadBoard, canReadDecision, canWrite,
   verdictFor, laneFor, barNoteFor, evidenceFor, isIcp, VALIDATION_BAR,
@@ -43,7 +43,7 @@ import {
   listPending, parseDraftProposals, parseTagProposals, priorPayloads,
   type HypothesisPayload, type ProposalKind, type TagPayload,
 } from './_founder_validate_proposals';
-import { run as aiRun } from '../services/aiRouter';
+import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -678,6 +678,197 @@ founderValidate.post('/proposals/:id/discard', async (c) => {
   ).bind(s.user.id, id).run();
   if (!r.meta?.changes) return json({ detail: 'That proposal has already been decided' }, 409);
   return json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// A recording, and the text it becomes.
+//
+// The third thing the mode note promises, and the one migration 214 said it
+// could not keep. Two routes, in the order a person uses them: put the audio
+// somewhere, then ask for words.
+// ---------------------------------------------------------------------------
+
+/**
+ * 20 MB, the same ceiling `research.ts` and `deck_reviewer.ts` use — and here
+ * it is a memory bound as well as a policy one. The router hands Workers AI
+ * `Array.from(bytes)`, which materialises a JS number[] at roughly 8 bytes an
+ * element against the isolate's 128 MB, so this is what keeps a transcription
+ * from OOMing rather than failing. At the 32 kbps this product assumes, 20 MB
+ * is about 83 minutes of speech.
+ */
+const MAX_RECORDING_BYTES = 20 * 1024 * 1024;
+
+/**
+ * What a browser's MediaRecorder actually produces, plus the two container
+ * types a founder is likely to drag in from a phone. An allowlist and not a
+ * prefix check on `audio/`: `audio/*` would admit anything a client cares to
+ * label, and the model has to decode it.
+ */
+const AUDIO_MIME: Record<string, string> = {
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/x-m4a': 'm4a',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+};
+
+/** The interview plus the project that owns it, or null. */
+type InterviewOwner = { id: number; project_id: number };
+async function loadInterview(env: Env, id: number): Promise<InterviewOwner | null> {
+  return env.DB.prepare(
+    'SELECT id, project_id FROM discovery_interviews WHERE id = ?',
+  ).bind(id).first<InterviewOwner>();
+}
+
+founderValidate.post('/interviews/:id/recording', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await loadInterview(c.env, id);
+  if (!owner) return notFound('Interview');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  // `FILES` is optional in types.ts, so a missing bucket is a 503 with a reason
+  // rather than a crash — the same shape data_room.ts and research.ts use.
+  if (!c.env.FILES) return json({ detail: 'storage_not_configured' }, 503);
+  if (!(await ensureDiscoveryRecordingColumns(c.env))) {
+    return json({ detail: 'recording_columns_unavailable' }, 503);
+  }
+
+  let form: FormData;
+  try { form = await c.req.formData(); } catch { return json({ detail: 'invalid_form' }, 400); }
+  // Workers-types declares FormData entries as string; at runtime an upload is
+  // a File. Narrowing out the string case is load-bearing, not defensive.
+  const entry = form.get('file') as unknown;
+  if (!entry || typeof entry === 'string') return json({ detail: 'file_required' }, 400);
+  const file = entry as File;
+
+  const mime = String(file.type || '').toLowerCase();
+  const ext = AUDIO_MIME[mime];
+  if (!ext) return json({ detail: 'unsupported_type', accepted: Object.keys(AUDIO_MIME) }, 415);
+  if (file.size > MAX_RECORDING_BYTES) {
+    return json({ detail: 'too_large', max_bytes: MAX_RECORDING_BYTES }, 413);
+  }
+  if (!file.size) return json({ detail: 'empty_file' }, 400);
+
+  // For DISPLAY only, and clamped. Billing reads the byte length instead —
+  // a number the client chooses must not decide what a run costs. See
+  // `audioMinutesFromBytes`.
+  const rawDuration = Number(form.get('duration_sec'));
+  const durationSec = Number.isFinite(rawDuration) && rawDuration > 0
+    ? Math.min(Math.round(rawDuration), 24 * 3600)
+    : null;
+
+  // DERIVED SERVER-SIDE, NEVER TAKEN FROM THE REQUEST. A caller-supplied key is
+  // a path-traversal write into another account's prefix.
+  const key = `validate-audio/${s.user.id}/${crypto.randomUUID()}.${ext}`;
+  try {
+    await c.env.FILES.put(key, await file.arrayBuffer(), {
+      httpMetadata: { contentType: mime },
+      customMetadata: {
+        owner_user_id: String(s.user.id),
+        project_id: String(owner.project_id),
+        interview_id: String(id),
+      },
+    });
+  } catch (e) {
+    console.error('[founder_validate] R2 put failed:', (e as Error).message);
+    return json({ detail: 'storage_write_failed' }, 502);
+  }
+
+  // The previous recording, if any, is orphaned rather than deleted: a delete
+  // that raced a transcription would pull the bytes out from under it. The R2
+  // lifecycle sweeps the prefix; what matters here is that the row points at
+  // one object and that object exists.
+  await c.env.DB.prepare(
+    `UPDATE discovery_interviews
+        SET recording_r2_key = ?, recording_mime = ?, recording_size_bytes = ?,
+            recording_duration_sec = ?, recording_uploaded_at = datetime('now'),
+            updated_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(key, mime, file.size, durationSec, id).run();
+
+  return json({
+    ok: true,
+    size_bytes: file.size,
+    duration_sec: durationSec,
+    // What a transcription of this clip would cost, before running it. Derived
+    // from the same function that bills it, so the quote and the charge cannot
+    // disagree.
+    estimated_audio_minutes: audioMinutesFromBytes(file.size),
+  }, 201);
+});
+
+founderValidate.post('/interviews/:id/transcribe', async (c) => {
+  const id = Number(c.req.param('id'));
+  const owner = await loadInterview(c.env, id);
+  if (!owner) return notFound('Interview');
+  const s = await scope(c, Number(owner.project_id), canWrite);
+  if (s instanceof Response) return s;
+  if (!c.env.FILES) return json({ detail: 'storage_not_configured' }, 503);
+  if (!(await ensureDiscoveryRecordingColumns(c.env))) {
+    return json({ detail: 'recording_columns_unavailable' }, 503);
+  }
+
+  const row = await c.env.DB.prepare(
+    'SELECT recording_r2_key, recording_size_bytes FROM discovery_interviews WHERE id = ?',
+  ).bind(id).first<{ recording_r2_key: string | null; recording_size_bytes: number | null }>();
+  if (!row?.recording_r2_key) {
+    return json({ error: 'no_recording', message: 'There is no recording on this interview yet.' }, 400);
+  }
+
+  // Hard guard on the prefix before reading, the idiom `services/r2.ts` states
+  // at each of its getters: never serve or read outside the prefix this feature
+  // owns, whatever the stored key says.
+  if (!row.recording_r2_key.startsWith('validate-audio/')) {
+    console.error('[founder_validate] refusing a key outside validate-audio/');
+    return json({ detail: 'storage_read_failed' }, 502);
+  }
+
+  const obj = await c.env.FILES.get(row.recording_r2_key);
+  if (!obj) return json({ error: 'no_recording', message: 'The recording could not be read.' }, 404);
+  const bytes = new Uint8Array(await obj.arrayBuffer());
+
+  const r = await aiRun(c.env, {
+    task: 'transcribe',
+    userId: s.user.id,
+    audio: bytes,
+    // From the BYTES, not from the duration the client reported.
+    audioMinutes: audioMinutesFromBytes(Number(row.recording_size_bytes || bytes.byteLength)),
+  });
+
+  if (!r.ok) {
+    return json({
+      ok: false,
+      refusal: r.refusal ?? null,
+      message: r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
+        ? 'This month’s AI budget is spent. Nothing was run.'
+        : 'The recording could not be transcribed. Nothing was charged.',
+      usage: { model: r.usage.model, est_cost_usd: 0 },
+    }, 503);
+  }
+
+  // An empty transcript is an ANSWER: the clip had no speech in it. Stored as
+  // an empty string rather than left NULL, so the page stops offering a
+  // transcription that would cost the same and return the same nothing.
+  const text = r.output ?? '';
+  await c.env.DB.prepare(
+    `UPDATE discovery_interviews
+        SET transcript = ?, transcribed_at = datetime('now'), transcribed_by_model = ?,
+            updated_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(text, r.usage.model, id).run();
+
+  return json({
+    ok: true,
+    transcript: text,
+    usage: {
+      model: r.usage.model,
+      est_cost_usd: r.usage.est_cost_usd,
+      audio_minutes: audioMinutesFromBytes(Number(row.recording_size_bytes || bytes.byteLength)),
+    },
+  });
 });
 
 export default founderValidate;

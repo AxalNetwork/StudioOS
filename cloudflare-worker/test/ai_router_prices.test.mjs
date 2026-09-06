@@ -59,6 +59,16 @@ function pricesFrom(src) {
   return out;
 }
 
+/** `'@cf/…': N` rows from the per-audio-minute table. */
+function audioPricesFrom(src) {
+  const start = src.indexOf('export const PRICE_USD_PER_AUDIO_MINUTE');
+  if (start < 0) return new Map();
+  const body = src.slice(start, src.indexOf('};', start));
+  const out = new Map();
+  for (const m of body.matchAll(/'(@cf\/[^']+)':\s*([\d.]+)/g)) out.set(m[1], Number(m[2]));
+  return out;
+}
+
 /** Every model string named inside the ROUTE map, constants resolved. */
 function routedModels(src) {
   const consts = new Map();
@@ -132,13 +142,40 @@ const PUBLISHED = {
 
 test('every model the router routes to has a price', async () => {
   const src = await source();
+  // TWO tables now, and a model priced in either one is priced. Whisper is
+  // billed per audio MINUTE and has no token rate anywhere, so a check that
+  // only knew the token table would demand a fabricated per-token figure for
+  // it — which is the same class of wrong number this file exists to keep out.
   const prices = pricesFrom(src);
+  const audio = audioPricesFrom(src);
   const routed = routedModels(src);
   assert.ok(routed.size >= 4, `only ${routed.size} routed models found — the matcher is not matching`);
   for (const m of routed) {
-    assert.ok(prices.has(m),
-      `${m} is routed to but has no price row — its runs would bill as zero and no cap would trip`);
+    assert.ok(prices.has(m) || audio.has(m),
+      `${m} is routed to but is in neither price table — its runs would bill as zero and no cap would trip`);
   }
+});
+
+test('no model is priced in both tables at once', async () => {
+  // A model in both would bill by whichever branch `estimateCostUsd` checks
+  // first, and the other figure would sit there looking authoritative. Whichever
+  // unit a model is sold in, it has exactly one.
+  const src = await source();
+  const both = [...audioPricesFrom(src).keys()].filter((m) => pricesFrom(src).has(m));
+  assert.deepEqual(both, [], `priced in both tables: ${both.join(', ')}`);
+});
+
+test('an audio model is billed by the minute, not by tokens', async () => {
+  // The whole reason the second table exists. Whisper reports no tokens at
+  // all, so the token path answers 0 for any clip — and a spend cap that
+  // counts zero never trips.
+  const src = await source();
+  const fn = src.slice(src.indexOf('export function estimateCostUsd'));
+  const body = fn.slice(0, fn.indexOf('\n}') + 2);
+  assert.match(body, /PRICE_USD_PER_AUDIO_MINUTE\[model\]/);
+  assert.ok(body.indexOf('PRICE_USD_PER_AUDIO_MINUTE') < body.indexOf('PRICE_USD_PER_1M_TOKENS'),
+    'the audio table must be consulted first; a per-minute model has no token rate to find');
+  assert.match(body, /audioMinutes/);
 });
 
 test('the router routes to no deprecated model', async () => {

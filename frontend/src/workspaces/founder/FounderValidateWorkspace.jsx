@@ -5,6 +5,7 @@ import { Card, EmptyState, ErrorState, WorkerRail, Skeleton } from '../../ui';
 import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
 import ZoneActions from '../ZoneActions';
 import ValidateProposals from './ValidateProposals';
+import InterviewRecording from './InterviewRecording';
 import useAssistMode from '../../hooks/useAssistMode';
 import LogInterviewModal from '../../components/discovery/LogInterviewModal';
 import { NewHypothesisDialog, LinkPainDialog } from './ValidateDialogs';
@@ -78,6 +79,13 @@ function StatRow({ items }) {
 function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
+  // Read here as well as on the shell: attaching a recording is data entry and
+  // is always available, transcribing spends money and sits behind the switch.
+  // The hook is one shared store, so both readers see the same answer.
+  const [fillsOn] = useAssistMode('Validate');
+  // Bumped after an upload or a transcription so the row re-reads itself
+  // rather than holding a stale copy of the record it just changed.
+  const [localKey, setLocalKey] = useState(0);
 
   useEffect(() => {
     if (!ready || !projectId) return undefined;
@@ -88,7 +96,8 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
     return () => { alive = false; };
     // `reloadKey` is the signal from the header's "Log an interview" action:
     // the modal lives on the shell, the list lives here, and this is the seam.
-  }, [projectId, ready, reloadKey]);
+    // `localKey` is the same seam for a change made inside a row.
+  }, [projectId, ready, reloadKey, localKey]);
 
   if (!ready) return <Skeleton className="h-40" />;
   if (!projectId) {
@@ -140,7 +149,8 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
             {rows.slice(0, 25).map((r) => {
               const pains = r.pain_points || r.pains || [];
               return (
-                <li key={r.id} className="flex items-start justify-between gap-4 py-2.5">
+                <li key={r.id} className="py-2.5">
+                  <div className="flex items-start justify-between gap-4">
                   {/*
                     THE REAL COLUMN NAMES. This block read `r.contact_name ||
                     r.name` and `r.company || r.segment` — four keys the worker
@@ -168,7 +178,19 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
                     <div className="mt-0.5 text-[10px] text-axal-ink-3">
                       {pains.length ? `${pains.length} pain${pains.length === 1 ? '' : 's'}` : 'no pain recorded'}
                     </div>
+                    </div>
                   </div>
+                  {/*
+                    The recording, and the text it becomes. Attaching is data
+                    entry and is always offered; transcribing spends money and
+                    sits behind the rail's switch, so a founder who turned that
+                    off finds no control here that still runs a model.
+                  */}
+                  <InterviewRecording
+                    interview={r}
+                    fillsOn={fillsOn}
+                    onChanged={() => setLocalKey((n) => n + 1)}
+                  />
                 </li>
               );
             })}
@@ -694,13 +716,13 @@ export default function FounderValidateWorkspace() {
           stance="Evidence-led view"
           note="Nothing is written without your click. Proposals are accept, edit or discard."
           coverage={[projectId ? `Venture #${projectId} selected` : 'No venture selected']}
-          // WAS "Automated grouping — nothing here groups, scores or
-          // summarises an interview for you." Half of that is now false and
-          // half is still true, so it says which half. Transcription is the
-          // one the canvas's mode note promises and the product cannot keep:
-          // `discovery_interviews` has no transcript column and no upload path
-          // admits audio.
-          unavailable={[['Transcription', 'There is nowhere to put a recording yet, so an interview is what you typed into the log.']]}
+          // The Transcription gap named here is closed by migration 215 — a
+          // recording has a home and a transcript has a column — so the entry
+          // is gone rather than left saying something untrue. What replaces it
+          // is the next honest absence: Whisper returns speaker turns and
+          // timestamps, and this product has nowhere to show either, so it
+          // stores neither.
+          unavailable={[['Speaker labels', 'A transcript is one block of text. Who said which line is not something this stores.']]}
           fills
         />
       )}

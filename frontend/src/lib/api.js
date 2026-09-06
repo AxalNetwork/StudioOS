@@ -1276,6 +1276,23 @@ export const api = {
   }),
   acceptValidateProposal: (id) => request(`/founder/validate/proposals/${id}/accept`, { method: 'POST' }),
   discardValidateProposal: (id) => request(`/founder/validate/proposals/${id}/discard`, { method: 'POST' }),
+
+  // ---------- Validate · interview recordings (migration 215) ----------
+  // `duration_sec` is what the browser measured, and it is for DISPLAY only —
+  // the worker bills a transcription on the file's byte length instead,
+  // because a number the client chooses must not decide what a run costs.
+  uploadInterviewRecording: (id, file, durationSec) => {
+    const body = new FormData();
+    body.append('file', file);
+    if (Number.isFinite(durationSec) && durationSec > 0) body.append('duration_sec', String(Math.round(durationSec)));
+    // No `Content-Type`: the browser sets the multipart boundary, and setting
+    // it by hand produces a body the worker's formData() cannot parse.
+    return request(`/founder/validate/interviews/${id}/recording`, { method: 'POST', body, timeoutMs: 120_000 });
+  },
+  transcribeInterview: (id) => request(`/founder/validate/interviews/${id}/transcribe`, {
+    // A model call is not a read, and an hour of audio is not a fast one.
+    method: 'POST', timeoutMs: 180_000,
+  }),
   // Task #5 — customer-audience waitlist signups + lightweight CRM layer inside
   // Customer Discovery (promote-to-interview, product-invitation email,
   // follow-up email). Customer-audience only; project-scoped server-side.
