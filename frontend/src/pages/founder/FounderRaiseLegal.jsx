@@ -5,6 +5,8 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseLegal.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -142,6 +144,7 @@ export default function FounderRaiseLegal() {
           <div className="fr-capital-crumb"><Link to={`/raise/status${query}`} data-testid="link-legal-back"><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Legal</strong></div>
           <div className="fr-capital-title-row"><div><p className="fr-capital-kicker">Founder / Raise</p><h1>Legal engine</h1><p className="fr-capital-subtitle">Entity, agreements, compliance calendar and signature archive.</p></div>{projects.length > 1 && <label className="fr-capital-picker"><span>Startup</span><select data-testid="select-legal-project" value={projectId || ''} onChange={(event) => chooseProject(event.target.value)}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div>
           <nav className="fr-capital-zone-nav" aria-label="Raise sections"><Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`} className="is-active" data-testid="link-legal-zone">Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><span className="fr-capital-zone-disabled">Liquidity unavailable</span></nav>
+          <ZoneActions className="mt-3" items={founderZoneActions('raise/legal', { query })} />
         </header>
         {Object.keys(errors).length > 0 && <div className="fr-capital-alert" role="alert" data-testid="status-legal-partial"><AlertCircle size={16} /><span>{errors.projects || 'Some selected-project legal sources are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <LegalSkeleton /> : errors.projects ? <UnavailableLegal onRetry={load} /> : !project ? <EmptyLegal /> : <LegalContent project={project} documents={documents} compliance={compliance} trackers={trackers} entities={entities} signed={signed} awaiting={awaiting} openCompliance={openCompliance} overdue={overdue} nextDeadline={nextDeadline} rows={visibleRows} allRows={rows} errors={errors} filter={filter} setFilter={setFilter} query={query} />}

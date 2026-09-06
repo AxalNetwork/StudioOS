@@ -28,3 +28,13 @@ a mismatch. This is the guard that catches "the UI calls an endpoint nobody
 built" before it reaches production — which has happened, in both directions.
 
 If a helper appears in two places, put it here once rather than a third time.
+
+**`csvExport.js` — a CSV of the rows a page has already loaded.** It exists
+beside `api._downloadCsv`, which asks the worker for the whole table. Most
+zone-header "Export" actions do not need that, and twenty worker routes for
+twenty zones would be twenty chances for a count on screen to disagree with a
+count in a file. What it costs is said on the button: the label reads
+"Export this view" and the filename carries the row count, because an export
+over a truncated list with no hint of the truncation is how a founder pastes
+twenty-five of two hundred rows into an investor update. Its escaping is
+`cloudflare-worker/src/services/csv.ts`'s, character for character.

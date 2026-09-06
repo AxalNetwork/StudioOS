@@ -286,3 +286,41 @@ Every `Pages · *` canvas renders a fixed 9-row sidebar that does not match
 Adopting the detail-layer pages implies an IA change, not just new routes. Note
 the canvases still model Growth and Research as "Preview", which live has already
 shipped — as mock shells.
+
+## Zone-header actions — where they come from, and the two canvases that give none
+
+Every `Pages · *` artboard carries an `ops:` array — the actions its zone header
+draws. They are the source for the header action rows, and they are copied
+verbatim rather than paraphrased: `frontend/src/workspaces/founderZoneActions.js`
+re-derives from the canvases in `frontend/test/founder_zone_actions.test.mjs`, so
+the table cannot drift from the design without failing the build.
+
+**Founder is done — twenty-one zones, fifty-eight actions.** Fifteen are exports
+that run against the rows the page has loaded, seventeen are links to a route
+that already performs the action and that a founder is allowed to open, and
+twenty-six are stated gaps. A gap renders as a sentence, never as a button.
+The three profiles that remain (investor, partner, advisor) follow the same
+shape, one pull request each.
+
+**`/research/*` is not in the founder pass and is not an oversight.** The five
+founder Research zones — Ask, Markets, Companies, Funds, Library — route to
+`workspaces/ResearchWorkspace.jsx`, which serves founder, investor, partner,
+advisor and admin from one component. Their actions belong to a shared pass over
+that surface, where one change reaches four profiles, rather than to a
+founder-only pull request that would have to branch on role inside a file whose
+whole point is that it does not.
+
+**Two canvases specify no zone-header actions at all**, which is a gap in the
+design rather than in the implementation, and is recorded here rather than
+invented in code:
+
+| Canvas | What is missing |
+| --- | --- |
+| `Pages · Partner Pipeline` | no `ops:` on any artboard — the zones have filters and tables and no header actions |
+| `Advisor Detail · Practice` | same; the Practice zones draw a header with nothing in it |
+
+Nothing was added to those pages. Inventing an action for a zone whose design
+asks for none is how a header grows a button nobody specified and nothing backs
+— the exact failure the rest of this pass exists to avoid. When those canvases
+gain an `ops:` array, the zones can have it.
+

@@ -4,6 +4,8 @@ import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, CircleDot, FileText
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderRaiseStatus.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const clean = (value) => String(value ?? '').trim();
@@ -138,6 +140,7 @@ export default function FounderRaiseStatus() {
             <Link to={query ? `/raise/status${query}` : '/raise/status'} className="is-active" data-testid="link-status-zone">Status</Link>
             <Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><span className="fr-status-zone-disabled">Liquidity unavailable</span>
           </nav>
+          <ZoneActions className="mt-3" items={founderZoneActions('raise/status', { query, view: { scope: project?.name, header: ['Record', 'Source', 'Owner', 'State', 'Holds up'], rows, cells: (r) => [r.label, r.source, r.owner, r.state, r.holds] } })} />
         </header>
         {(errors.projects || Object.keys(errors).length > 0) && <div className="fr-status-alert" role="alert" data-testid="status-raise-status-partial"><AlertCircle size={16} /><span>{errors.projects || 'Some selected-project raise records are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <StatusSkeleton /> : errors.projects ? <UnavailableStatus onRetry={load} /> : !project ? <EmptyStatus /> : <StatusContent project={project} round={round} roundInfo={roundInfo} target={target} raised={raised} coverage={coverage} rows={visibleRows} allRows={rows} blockerCount={blockerCount} openDate={openDate} documents={documents} prospects={prospects} errors={errors} filter={filter} setFilter={setFilter} query={query} />}

@@ -5,6 +5,8 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowFocus.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -84,7 +86,8 @@ export default function FounderGrowFocus() {
   const nav = [['Focus', `/grow/focus${query}`], ['Customers', `/grow/customers${query}`], ['Talent', `/grow/talent${query}`], ['Brand', `/grow/brand${query}`], ['Capital match', `/grow/capital-match${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-focus" data-testid="founder-grow-focus"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-focus-crumb"><Link to={`/build/team${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Focus</b></div><span>Founder / Grow</span><div><h1>This month&apos;s focus</h1><p>The month&apos;s metric, targets, and experiment log.</p></div>{projects.length > 1 && <label className="fg-focus-picker"><span>Startup</span><select data-testid="select-grow-focus-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-focus-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Focus' ? 'is-active' : ''}>{label}</Link>)}</nav></header>
+    <header className="a5-grow-hero"><div className="fg-focus-crumb"><Link to={`/build/team${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Focus</b></div><span>Founder / Grow</span><div><h1>This month&apos;s focus</h1><p>The month&apos;s metric, targets, and experiment log.</p></div>{projects.length > 1 && <label className="fg-focus-picker"><span>Startup</span><select data-testid="select-grow-focus-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-focus-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Focus' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <ZoneActions className="mt-3" items={founderZoneActions('grow/focus', { query, view: { scope: project?.name, header: ['Snapshot', 'MRR', 'ARR', 'Active users', 'New users', 'Churn %', 'Source'], rows: selectedRows, cells: (r) => [r.snapshot_date, r.mrr, r.arr, r.active_users, r.new_users, r.monthly_churn_pct, r.source] } })} /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-focus-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {loading ? <FocusSkeleton /> : !project ? <EmptyFocus /> : <FocusContent project={project} latest={latest} snapshots={snapshots} selectedRows={selectedRows} view={view} setView={setView} current={current} query={query} />}
   </div><FocusRail project={project} snapshots={snapshots} latest={latest} /></div></main>;

@@ -4,6 +4,8 @@ import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Clock3, Filter, Layers
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildBoard.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const STAGES = [
   ['idea', 'Idea'],
@@ -119,6 +121,7 @@ export default function FounderBuildBoard() {
               <Link to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</Link>
               <Link to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</Link>
             </nav>
+            <ZoneActions className="mt-3" items={founderZoneActions('build/board', { query: selectedId ? `?project_id=${selectedId}` : '' })} />
           </header>
 
           {status === 'error' && <div className="fb-alert" role="alert" data-testid="status-board-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-board"><RefreshCw size={13} /> Retry</button></div>}

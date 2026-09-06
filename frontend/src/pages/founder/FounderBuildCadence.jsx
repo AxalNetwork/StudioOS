@@ -4,6 +4,8 @@ import { AlertCircle, ArrowLeft, CalendarClock, CircleDot, Filter, RefreshCw } f
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildCadence.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const text = (value, fallback = 'Not recorded') => value === null || value === undefined || String(value).trim() === '' ? fallback : String(value);
 
@@ -45,6 +47,7 @@ export default function FounderBuildCadence() {
       <div className="fb-cadence-crumb"><Link to={`/execution${query}`}><ArrowLeft size={13} /> Execution</Link><span>/</span><strong>Cadence</strong></div>
       <div className="fb-cadence-title-row"><div><p>Founder / Build</p><h1>Operating cadence</h1><span>Ritual scheduler, review archive and templates for the selected startup.</span></div>{projects.length > 1 && <label><span>Startup</span><select data-testid="select-cadence-project" value={selectedId || ''} onChange={(event) => { const id = Number(event.target.value); setSelectedId(id); setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(id)); return next; }, { replace: true }); }}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div>
       <nav aria-label="Build sections"><Link to={`/build/this-week${query}`}>This week</Link><Link to={`/build/board${query}`}>Board</Link><Link to={`/build/roadmap${query}`}>Roadmap</Link><Link to={`/build/cadence${query}`} className="is-active">Cadence</Link><Link to={`/build/kpi${query}`}>KPI entry</Link></nav>
+      <ZoneActions className="mt-3" items={founderZoneActions('build/cadence', { query })} />
     </header>
     {status === 'error' && <div className="fb-cadence-alert" role="alert"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <CadenceSkeleton />}

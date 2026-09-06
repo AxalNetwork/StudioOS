@@ -55,3 +55,19 @@ exactly that and lit the first pill on every overview; see `DECISIONS.md` D44 an
 once, in `shellConfig.js` — which is the whole reason this folder replaced
 `FounderWorkspaceTabs`, `PartnerWorkspaceTabs`, `WorkspaceTabs` and three bespoke
 investor workspaces all solving the same problem four ways.
+
+**A zone header's actions come from the canvas, and each one is either wired or
+stated.** `founderZoneActions.js` holds the founder profile's twenty-one zones:
+the labels are copied from the `ops:` array of the zone's artboard, and each is
+an export that runs (`frontend/src/lib/csvExport.js`), a link to a route that performs it, or
+a `note` saying nothing does. `ZoneActions.jsx` renders a note as text and never
+as a button, because a button is a promise.
+`frontend/test/founder_zone_actions.test.mjs` re-derives the labels from the
+canvases and re-checks every link against `App.jsx`'s guards.
+
+**Two of those checks exist because a source test cannot see the screen.** A row
+placed inside the Network zones' `{!embedded && <header>}` rendered nowhere —
+that guard is false on the only route that mounts them — and a page that names a
+variable it does not have throws at render while the bundle builds clean. Both
+shipped into this folder and both were found by a browser, so both now have an
+assertion.

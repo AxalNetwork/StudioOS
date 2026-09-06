@@ -4,6 +4,8 @@ import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'luc
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -87,6 +89,12 @@ export default function FounderNetworkRelationships({ embedded = false }) {
 
   return <main className={`fn-rel${embedded ? ' is-embedded' : ''}`} data-testid="founder-network-relationships"><div className="fn-rel-shell"><section className="fn-rel-main">
     {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Relationships</strong></div><div className="fn-rel-title-row"><div><h1>Relationship book</h1><p>Project-linked contacts, relationship context and explicit last activity.</p></div>{projects.length > 1 && <label><span>Startup</span><select data-testid="select-network-relationships-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div><nav aria-label="Network sections"><Link className="is-active" to={`/network/relationships${query}`}>Relationships</Link><Link to={`/network/introductions${query}`}>Introductions</Link><Link to={`/network/organizations${query}`}>Organizations</Link></nav></header>}
+    {/* Outside the header on purpose. These three zones only ever render
+        through NetworkWorkspace, which passes `embedded` and draws the crumb,
+        heading and zone nav itself — so everything inside that guard is dead
+        on the route a founder actually opens. The actions row placed in there
+        rendered nowhere, which a source test cannot see and a browser found. */}
+    <ZoneActions className="mt-3" items={founderZoneActions('network/relationships', { query, view: { scope: project?.name, header: ['Person', 'Email', 'Context', 'Type', 'Last activity'], rows: visible, cells: (r) => [r.name, r.email, r.landing_page_name || r.source, r.audience, r.last_activity_at] } })} />
     {errors.length > 0 && <div className="fn-rel-alert" data-testid="status-network-relationships-partial"><AlertCircle size={15} /><span>{`Some selected-project sources are unavailable: ${errors.join(', ')}.`}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <RelationshipSkeleton />}
     {status === 'empty' && <NoProject />}

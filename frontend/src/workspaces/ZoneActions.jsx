@@ -69,7 +69,7 @@ export default function ZoneActions({ items = [], className = '' }) {
             <span
               key={key}
               data-testid={item.testid}
-              className="text-[11px] font-semibold text-gray-500 dark:text-gray-400"
+              className="text-[11px] font-semibold text-gray-600 dark:text-gray-300"
               title={item.note}
             >
               {item.label} — {item.note}
@@ -78,7 +78,7 @@ export default function ZoneActions({ items = [], className = '' }) {
         }
         if (item.to) {
           return (
-            <Link key={key} to={item.to} data-testid={item.testid} className={GHOST}>
+            <Link key={key} to={item.to} data-testid={item.testid} title={item.title} className={GHOST}>
               {item.label}
             </Link>
           );

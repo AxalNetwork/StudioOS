@@ -2331,3 +2331,65 @@ disabling a button with no explanation.
 string means transcribed, and the clip had no speech in it. Folding the two
 together would offer "Transcribe" forever on a silent recording and charge for
 it every time.
+
+### D48. A zone header's actions are the canvas's own list, and an action nothing performs is a sentence rather than a button
+
+**The request was that every subpage carry its data-entry options** — Validate's
+"Log an interview / Export transcripts" existed on the canvas and nowhere on the
+screen, and the same was true across the profile. The obvious way to satisfy it
+is to draw every label the canvases name. That is also the way to fail it
+silently: a page then *looks* finished and does nothing, which is worse than the
+empty header it replaced, because the reader now believes they tried.
+
+**So the labels come from the design and the behaviour comes from the code, and
+the two are allowed to disagree in public.** `founderZoneActions.js` lists, for
+each of the founder's twenty-one zones, exactly the `ops:` array of its artboard
+in the canvas's own order — nothing invented, nothing dropped. Each entry is one
+of three things:
+
+- **an export that runs here**, over the rows the page has loaded;
+- **a link to a route that already performs it** and that a founder is allowed to
+  open;
+- **a stated gap** — rendered as text, never as a control.
+
+Fifty-eight actions: fifteen, seventeen and twenty-six.
+
+**A gap names what the reader can do instead, and never names a path.** Prose is
+not checked by anything, so a sentence saying "go to /matches" is an unchecked
+link wearing a sentence — and `/matches` is exactly the route a founder cannot
+open. Notes name surfaces the way a person would; the checked `to:` field carries
+the path, and every one of them is re-verified against `App.jsx`'s guard on each
+build.
+
+**Four labels lost their link during that verification**, which is the clearest
+evidence the check earns its place: `/matches` (where the introduction request
+lives) is admin, partner and investor only; `/contacts` redirects to a Network
+tab a founder's desk does not read; `/build/discovery` renders the Validate page
+for a founder, so the waitlist invite panel behind it is not theirs to reach; and
+`/build/team` renders the Grow desk rather than the team page. A link that lands
+somewhere the reader may not open is the same broken promise as a dead button,
+only slower to discover.
+
+**The export is client-side, and says so on the button.** Twenty worker routes
+for twenty zones would be twenty chances for a count on screen to disagree with a
+count in a file. `lib/csvExport.js` writes the rows the page has loaded, which on
+most zones is a capped page — so the label reads "Export this view" and the
+filename carries the row count. "Export" over a truncated list with no hint of
+the truncation is how a founder pastes twenty-five of two hundred rows into an
+investor update. Its escaping is the worker's, character for character; two older
+copies in this repo leave a bare carriage return unquoted, which splits a record
+for any RFC 4180 reader.
+
+**Two defects here were invisible to the whole suite and obvious in a browser**,
+and both now have an assertion. The Network zones' action row was placed inside
+their `{!embedded && <header>}` block, which is false on the only route that
+mounts them, so it rendered nowhere on three pages while every source assertion
+passed. And one page was handed `project?.name` when it has no `project` — a
+ReferenceError that blanks the route at render, which esbuild bundles happily and
+no lint step exists to catch.
+
+**Two canvases give no actions to record**, and nothing was invented for them:
+`Pages · Partner Pipeline` and `Advisor Detail · Practice` carry no `ops:` array
+on any artboard. The gap is written down in `ROUTE_MAP.md` instead. Inventing an
+action for a zone whose design asks for none is how a header grows a button
+nobody specified and nothing backs — the failure this entry exists to prevent.

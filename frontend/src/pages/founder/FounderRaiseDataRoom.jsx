@@ -5,6 +5,8 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseDataRoom.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -116,6 +118,7 @@ export default function FounderRaiseDataRoom() {
           <div className="fr-capital-crumb"><Link to={`/raise/status${query}`} data-testid="link-data-room-back"><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Data room</strong></div>
           <div className="fr-capital-title-row"><div><p className="fr-capital-kicker">Founder / Raise</p><h1>Data room</h1><p className="fr-capital-subtitle">Permission matrix, per-investor grants, view analytics and gap analysis.</p></div>{projects.length > 1 && <label className="fr-capital-picker"><span>Startup</span><select data-testid="select-data-room-project" value={projectId || ''} onChange={(event) => chooseProject(event.target.value)}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div>
           <nav className="fr-capital-zone-nav" aria-label="Raise sections"><Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`} className="is-active" data-testid="link-data-room-zone">Data room</Link><span className="fr-capital-zone-disabled">Liquidity unavailable</span></nav>
+          <ZoneActions className="mt-3" items={founderZoneActions('raise/data-room', { query, view: { scope: project?.name, header: ['Investor', 'Email', 'Status', 'NDA signed', 'Expires'], rows: grants, cells: (g) => [g.investor_name, g.investor_email, g.status, g.nda_signed ? 'yes' : 'no', g.expires_at] } })} />
         </header>
         {(projectError || roomError) && <div className="fr-capital-alert" role="alert" data-testid="status-data-room-partial"><AlertCircle size={16} /><span>{projectError || roomError}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <RoomSkeleton /> : projectError ? <UnavailableRoom onRetry={load} /> : !project ? <EmptyRoom /> : <RoomContent project={project} files={files} folders={folders} grants={grants} activeGrants={activeGrants} access={access} fileActivity={fileActivity} mostViewed={mostViewed} roomError={roomError} view={view} setView={setView} query={query} />}

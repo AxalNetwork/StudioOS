@@ -5,6 +5,8 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
 import './founderNetworkIntroductions.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -81,6 +83,18 @@ export default function FounderNetworkIntroductions({ embedded = false }) {
 
   return <main className={`fn-rel fn-intro${embedded ? ' is-embedded' : ''}`} data-testid="founder-network-introductions"><div className="fn-rel-shell"><section className="fn-rel-main">
     {!embedded && <header className="fn-rel-header"><div className="fn-rel-crumb"><Link to={`/network${query}`}><ArrowLeft size={13} /> Network</Link><span>‹</span><strong>Introductions</strong></div><div className="fn-rel-title-row"><div><h1>Introductions</h1><p>Asks and offers ledger with privacy-filtered counterpart and state records.</p></div></div><nav aria-label="Network sections"><Link to={`/network/relationships${query}`}>Relationships</Link><Link className="is-active" to={`/network/introductions${query}`}>Introductions</Link><Link to={`/network/organizations${query}`}>Organizations</Link></nav></header>}
+    {/* Outside the header on purpose. These three zones only ever render
+        through NetworkWorkspace, which passes `embedded` and draws the crumb,
+        heading and zone nav itself — so everything inside that guard is dead
+        on the route a founder actually opens. The actions row placed in there
+        rendered nowhere, which a source test cannot see and a browser found.
+
+        `scope: null` because this page never resolves a project RECORD — it
+        has the id from the URL and nothing else — so the export filename
+        carries the zone and the row count without a venture name. Naming a
+        variable that does not exist here is not a build error in a module;
+        it is a ReferenceError that blanks the whole page at render. */}
+    <ZoneActions className="mt-3" items={founderZoneActions('network/introductions', { query, view: { scope: null, header: ['Introduction', 'Counterpart company', 'Counterpart role', 'Direction', 'State'], rows: visible, cells: (r) => [introductionLabel(r), counterpart(r).company, counterpart(r).role, direction(r), stateLabel(r)] } })} />
     {status === 'error' && <div className="fn-rel-alert" data-testid="status-network-introductions-error"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <IntroductionSkeleton />}
     {status === 'ready' && <><div className="fn-intro-context"><div><span>Ledger scope</span><strong>Introductions where you are a participant</strong><small>Contact details remain privacy-filtered until connected</small></div><div><span>Source</span><strong>Secure introductions</strong><small>Direction and state are stored on each record</small></div></div>

@@ -5,6 +5,8 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowPartnerships.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -82,7 +84,8 @@ export default function FounderGrowPartnerships() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-partnerships" data-testid="founder-grow-partnerships"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-partnerships-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Partnerships</b></div><span>Founder / Grow</span><div><h1>Partnerships</h1><p>Partner pipeline, proposals and retainers.</p></div>{projects.length > 1 && <label className="fg-partnerships-picker"><span>Startup</span><select data-testid="select-grow-partnerships-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-partnerships-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Partnerships' ? 'is-active' : ''}>{label}</Link>)}</nav></header>
+    <header className="a5-grow-hero"><div className="fg-partnerships-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Partnerships</b></div><span>Founder / Grow</span><div><h1>Partnerships</h1><p>Partner pipeline, proposals and retainers.</p></div>{projects.length > 1 && <label className="fg-partnerships-picker"><span>Startup</span><select data-testid="select-grow-partnerships-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-partnerships-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Partnerships' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <ZoneActions className="mt-3" items={founderZoneActions('grow/partnerships', { query, view: { scope: project?.name, header: ['Partner', 'Type', 'Status', 'State', 'Created'], rows: visible, cells: (r) => [r.title, r.type, r.status, r.state, r.created_at] } })} /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-partnerships-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {loading ? <PartnershipsSkeleton /> : !project ? <EmptyPartnerships /> : <PartnershipsContent project={project} pitches={pitches} attributions={attributions} visible={visible} view={view} setView={setView} query={query} error={error} signedCount={signedCount} motionCount={motionCount} />}
   </div><PartnershipsRail project={project} pitches={pitches} attributions={attributions} error={error} /></div></main>;

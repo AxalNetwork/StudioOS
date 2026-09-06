@@ -4,6 +4,8 @@ import { AlertCircle, ArrowLeft, CheckCircle2, Database, Download, FileText, Fil
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildKpi.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const FIELDS = [
   { key: 'mrr', label: 'MRR', unit: '$' },
@@ -125,6 +127,7 @@ export default function FounderBuildKpi() {
               <Link to={linkFor('/build/cadence')}>Cadence</Link>
               <Link to={linkFor('/build/kpi')} className="is-active" data-testid="link-kpi-zone">KPI entry</Link>
             </nav>
+            <ZoneActions className="mt-3" items={founderZoneActions('build/kpi', { query: projectId ? `?project_id=${projectId}` : '' })} />
           </header>
 
           {status === 'error' && <div className="fb-kpi-alert" role="alert" data-testid="status-kpi-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-kpi"><RefreshCw size={13} /> Retry</button></div>}
