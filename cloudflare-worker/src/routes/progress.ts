@@ -55,6 +55,7 @@ import {
   normPhrase,
   type PainGroupRow,
 } from '../services/painGroups';
+import { upsertPainAlias } from './_founder_validate_writes';
 import { syncStripeForUser } from '../integrations/providers/stripe';
 import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Snapshot as SaasSnapshot } from '../services/saasMetrics';
 
@@ -944,16 +945,14 @@ progress.post('/pain-groups/:projectId/assign', async (c) => {
     if (!g || g.project_id !== projectId) return c.json({ detail: 'Group not found' }, 404);
   }
 
-  // Upsert the alias (UNIQUE(project_id, phrase_norm) → exactly one group).
-  await c.env.DB.prepare(
-    `INSERT INTO pain_group_aliases
-       (project_id, group_id, phrase_norm, display_phrase, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(project_id, phrase_norm)
-       DO UPDATE SET group_id = excluded.group_id,
-                     display_phrase = excluded.display_phrase,
-                     updated_at = excluded.updated_at`,
-  ).bind(projectId, groupId, norm, display, nowIso, nowIso).run();
+  // Upsert the alias (UNIQUE(project_id, phrase_norm) → exactly one group),
+  // through the shared writer that accepting an AI tag proposal also calls.
+  // Two copies of this statement is how the two paths would start disagreeing
+  // about whether re-assigning a phrase is an insert or an update — and the
+  // phrase an AI tagger is most likely to propose is one a founder has already
+  // grouped by hand, which an insert would fail on.
+  const assigned = await upsertPainAlias(c.env, projectId, groupId, display);
+  if (!assigned) return c.json({ detail: 'Group not found' }, 404);
 
   return c.json(await getPainGroupsView(c.env, projectId));
 });

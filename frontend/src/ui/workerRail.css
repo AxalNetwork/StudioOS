@@ -115,6 +115,35 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 }
 
 /*
+ * THE MODE CARDS. Two, and only on a workspace that has something to fill in.
+ *
+ * Buttons with `role="radio"` rather than real inputs, unlike the model menu
+ * below: there are exactly two, the copy is the control, and a fieldset of two
+ * would add a legend and a wrapper for no gain. Both carry `aria-checked`, so
+ * the group still announces which is chosen.
+ */
+.fwr-modes { display: grid; gap: 6px; margin-top: 9px; }
+.fwr-mode {
+  font: inherit; text-align: left; cursor: pointer;
+  padding: 9px 11px; border-radius: 9px;
+  border: 1px solid var(--fwr-line); background: var(--fwr-paper); color: var(--fwr-ink);
+}
+.fwr-mode:hover { border-color: var(--fwr-accent); }
+.fwr-mode:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-mode[data-selected="true"] {
+  border-color: var(--fwr-accent);
+  background: var(--fwr-accent-soft);
+  box-shadow: 0 0 0 2px var(--fwr-accent-soft);
+}
+.fwr-mode b { display: block; font-size: 12px; font-weight: 700; }
+.fwr-mode[data-selected="true"] b { color: var(--fwr-accent); }
+.fwr-mode span {
+  display: block; margin-top: 3px;
+  color: var(--fwr-muted); font-size: 10.5px; line-height: 1.45;
+}
+.dark .fwr-mode { background: transparent; }
+
+/*
  * THE MODEL MENU.
  *
  * A fieldset of real radios with the input clipped by `.fwr-sr`, so the card is

@@ -46,6 +46,8 @@ export type TaskClass =
   | 'brand_palette'
   | 'brand_taglines'
   | 'workspace_explain'
+  | 'validate_tag_pains'
+  | 'validate_draft_hypotheses'
   | 'research_ask';
 
 export type RefusalReason =
@@ -257,6 +259,33 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],
     alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
+  // The two halves of "AI fills the blanks" on Validate. TWO CLASSES AND NOT
+  // ONE, for the reason this table states two entries above: `/api/ai/me/spend`
+  // groups by task, and the rail quotes the caller's observed average per task.
+  // Folding a tagging run in with a drafting run would average a job that reads
+  // a list of phrases against one that reads the whole pain map and writes
+  // prose, and misreport both.
+  //
+  // Neither is cached. A proposal is drawn from evidence that changes every
+  // time an interview is logged, which is exactly when someone would ask for
+  // one again; a cached answer would describe the map as it was.
+  validate_tag_pains: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
+  validate_draft_hypotheses: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    // No 3b here, and the asymmetry is deliberate rather than an oversight.
+    // Tagging picks from a list someone else wrote and a shallower model can
+    // do it; drafting writes the sentence a founder will put in front of an
+    // investor. Offering a model that writes a worse claim, to save a
+    // hundredth of a cent, is not a trade worth putting on screen.
+    alternates: [MID_LLAMA, SMALL_LLAMA],
   },
   // Research · Ask — answering a question over the caller's own indexed
   // documents, with citations.

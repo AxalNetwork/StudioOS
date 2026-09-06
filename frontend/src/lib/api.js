@@ -1261,6 +1261,21 @@ export const api = {
     api._downloadCsv(`/founder/validate/summary/${projectId}/export.csv`, 'validation-summary.csv'),
   recordValidationDecision: (projectId, data) => request(`/founder/validate/decision/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateInterviewEvidence: (id, data) => request(`/founder/validate/interviews/${id}/evidence`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  // ---------- Validate · "AI fills the blanks" (migration 214) ----------
+  // A proposal is written by the worker and decided by a person. Nothing here
+  // fires unless the founder turned the mode on AND asked for a run — the
+  // mode does not poll, and `listValidateProposals` reads rows that already
+  // exist rather than creating any.
+  listValidateProposals: (projectId) => request(`/founder/validate/proposals/${projectId}`),
+  // `timeoutMs` for the same reason `aiWorkspaceExplain` carries one: a model
+  // call is not a read, and the 30s default would abort a run still being
+  // paid for.
+  proposeValidate: (projectId, data) => request(`/founder/validate/propose/${projectId}`, {
+    method: 'POST', timeoutMs: 60_000, body: JSON.stringify(data),
+  }),
+  acceptValidateProposal: (id) => request(`/founder/validate/proposals/${id}/accept`, { method: 'POST' }),
+  discardValidateProposal: (id) => request(`/founder/validate/proposals/${id}/discard`, { method: 'POST' }),
   // Task #5 — customer-audience waitlist signups + lightweight CRM layer inside
   // Customer Discovery (promote-to-interview, product-invitation email,
   // follow-up email). Customer-audience only; project-scoped server-side.

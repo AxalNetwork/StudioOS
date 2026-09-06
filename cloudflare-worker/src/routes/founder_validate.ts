@@ -37,6 +37,13 @@ import {
   verdictFor, laneFor, barNoteFor, evidenceFor, isIcp, VALIDATION_BAR,
   type ProjectRef,
 } from './_founder_validate_helpers';
+import { insertHypothesis, upsertPainAlias } from './_founder_validate_writes';
+import {
+  DRAFT_PROMPT, MAX_PROMPT_ITEMS, PROPOSAL_KINDS, TAG_PROMPT, TASK_FOR_KIND,
+  listPending, parseDraftProposals, parseTagProposals, priorPayloads,
+  type HypothesisPayload, type ProposalKind, type TagPayload,
+} from './_founder_validate_proposals';
+import { run as aiRun } from '../services/aiRouter';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -206,19 +213,13 @@ founderValidate.post('/board/:projectId/hypotheses', async (c) => {
   const claim = trimOrNull(b.claim);
   if (!claim) return json({ detail: 'A hypothesis needs a claim' }, 400);
 
-  // `code` is what a person reads and repeats, so it is allocated from the
-  // highest ever used rather than the current count — retiring H2 must not
-  // hand "H2" to a different claim later.
-  const max = await c.env.DB.prepare(
-    "SELECT COALESCE(MAX(CAST(substr(code, 2) AS INTEGER)), 0) AS n FROM hypotheses WHERE project_id = ? AND code GLOB 'H*'",
-  ).bind(s.project.id).first<{ n: number }>();
-  const code = `H${Number(max?.n || 0) + 1}`;
-
-  const r = await c.env.DB.prepare(
-    `INSERT INTO hypotheses (project_id, code, claim, sort_order)
-     VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM hypotheses WHERE project_id = ?))`,
-  ).bind(s.project.id, code, claim, s.project.id).run();
-  return json({ id: r.meta?.last_row_id, code, claim }, 201);
+  // Through the shared writer, which is also what accepting an AI proposal
+  // calls. `code` is allocated from the highest ever used rather than the
+  // current count — retiring H2 must not hand "H2" to a different claim later
+  // — and a second insert with its own idea of that rule is exactly how the
+  // allocation would quietly start handing out duplicates.
+  const row = await insertHypothesis(c.env, s.project.id, claim);
+  return json(row, 201);
 });
 
 founderValidate.patch('/hypotheses/:id', async (c) => {
@@ -455,6 +456,227 @@ founderValidate.patch('/interviews/:id/evidence', async (c) => {
       "UPDATE discovery_interviews SET interviewee_company = ?, updated_at = datetime('now') WHERE id = ?",
     ).bind(trimOrNull(b.interviewee_company), id).run();
   }
+  return json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// "AI fills the blanks" — proposals, and the two decisions a person makes
+// about each one.
+//
+// Nothing here runs unless the founder asked for it. The rail's toggle is off
+// until they turn it on (DECISIONS D17 amended), and even on, a proposal is
+// written only when this route is called. The mode does not poll.
+// ---------------------------------------------------------------------------
+
+/** Rows a run may be built from, capped so a long project cannot run away. */
+const CAP = MAX_PROMPT_ITEMS;
+
+founderValidate.post('/propose/:projectId', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canWrite);
+  if (s instanceof Response) return s;
+
+  const b = await c.req.json().catch(() => ({} as any));
+  const kind = String(b.kind || '') as ProposalKind;
+  if (!PROPOSAL_KINDS.has(kind)) return json({ detail: 'kind must be pain_tag or hypothesis' }, 400);
+  // Passed through unvalidated: `run()` owns the allow-list, and a second copy
+  // here is a second thing to keep true.
+  const model = String(b.model || '').trim().slice(0, 120) || undefined;
+
+  const view = await getPainGroupsView(c.env, s.project.id);
+  const groups = view.groups.map((g) => ({ id: Number(g.id), title: String(g.title) }));
+  const already = await priorPayloads(c.env, s.project.id, kind);
+
+  let systemPrompt: string;
+  let facts: string;
+  if (kind === 'pain_tag') {
+    // Only phrases that are not already in a theme, and only themes that
+    // exist. With neither there is nothing to sort, and saying so is better
+    // than spending a run to be told the same thing by a model.
+    const ungrouped = view.ungrouped.map((u) => String(u.display_phrase)).slice(0, CAP);
+    if (!groups.length) {
+      return json({ error: 'no_themes', message: 'There are no pain themes to sort into yet. Group one phrase by hand first.' }, 400);
+    }
+    if (!ungrouped.length) {
+      return json({ error: 'nothing_to_propose', message: 'Every logged phrase is already in a theme.' }, 400);
+    }
+    systemPrompt = TAG_PROMPT;
+    facts = [
+      'Themes:',
+      ...groups.map((g) => `  ${g.id}: ${g.title}`),
+      '',
+      'Ungrouped phrases:',
+      ...ungrouped.map((p) => `  - ${p}`),
+    ].join('\n');
+  } else {
+    if (!groups.length) {
+      return json({ error: 'nothing_to_propose', message: 'There are no pain themes to draft a claim from yet.' }, 400);
+    }
+    systemPrompt = DRAFT_PROMPT;
+    facts = [
+      'Pain themes, with how many interviews mentioned each:',
+      ...view.groups.slice(0, CAP).map((g) => `  - ${g.title} (${g.count} of ${view.interview_total} interviews)`),
+    ].join('\n');
+  }
+
+  const r = await aiRun(c.env, {
+    task: TASK_FOR_KIND[kind] as any,
+    userId: s.user.id,
+    model,
+    systemPrompt,
+    messages: [{ role: 'user', content: facts }],
+    maxTokens: 500,
+    temperature: 0.3,
+  });
+
+  // `run` never throws — a spent budget and an unreachable model both arrive
+  // as refusals with their reason intact, and both must keep it.
+  if (!r.ok) {
+    return json({
+      ok: false,
+      refusal: r.refusal ?? null,
+      message: r.refusal === 'model_not_offered'
+        ? 'That model is no longer offered for this. Nothing was run.'
+        : r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
+          ? 'This month’s AI budget is spent. Nothing was run.'
+          : 'The model could not be reached. Nothing was run, and nothing was charged.',
+      usage: { model: r.usage.model, est_cost_usd: 0 },
+    }, 503);
+  }
+
+  // EVERY item is matched back against something that exists before it can
+  // become a row. See `_founder_validate_proposals.ts` for what each parser
+  // refuses and why.
+  const items: Array<TagPayload | HypothesisPayload> = kind === 'pain_tag'
+    ? parseTagProposals(r.output || '', view.ungrouped.map((u) => String(u.display_phrase)), groups)
+    : parseDraftProposals(r.output || '', [
+      ...(await c.env.DB.prepare('SELECT claim FROM hypotheses WHERE project_id = ?')
+        .bind(s.project.id).all<{ claim: string }>()).results.map((h) => String(h.claim)),
+      // Anything already offered, accepted or thrown away, counts as taken.
+      ...already.map((p) => { try { return String(JSON.parse(p)?.claim || ''); } catch { return ''; } }),
+    ]);
+
+  const created: Array<{ id: number; kind: string; payload: unknown }> = [];
+  for (const payload of items) {
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO validate_proposals (project_id, kind, payload_json, model, task, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      s.project.id, kind, JSON.stringify(payload),
+      // The model that ACTUALLY ran, from the router's usage metadata. Not the
+      // one that was asked for: the router falls back to a smaller sibling
+      // under load, and recording the request would put one model's name over
+      // another model's sentence.
+      r.usage.model, r.usage.task, s.user.id,
+    ).run();
+    created.push({ id: Number(ins.meta?.last_row_id || 0), kind, payload });
+  }
+
+  return json({
+    ok: true,
+    proposals: created,
+    usage: {
+      model: r.usage.model,
+      est_cost_usd: r.usage.est_cost_usd,
+      prompt_tokens: r.usage.prompt_tokens,
+      completion_tokens: r.usage.completion_tokens,
+      fallback_used: r.usage.fallback_used,
+    },
+  }, 201);
+});
+
+founderValidate.get('/proposals/:projectId', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
+  if (s instanceof Response) return s;
+  const rows = await listPending(c.env, s.project.id);
+  return json({
+    proposals: rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      model: row.model,
+      created_at: row.created_at,
+      payload: (() => { try { return JSON.parse(row.payload_json); } catch { return null; } })(),
+    })).filter((p) => p.payload !== null),
+  });
+});
+
+type ProposalRow = {
+  id: number; project_id: number; kind: string; payload_json: string; status: string;
+};
+
+/** The proposal plus the project that owns it, or null. */
+async function loadProposal(env: Env, id: number): Promise<ProposalRow | null> {
+  return env.DB.prepare(
+    'SELECT id, project_id, kind, payload_json, status FROM validate_proposals WHERE id = ?',
+  ).bind(id).first<ProposalRow>();
+}
+
+founderValidate.post('/proposals/:id/accept', async (c) => {
+  const id = Number(c.req.param('id'));
+  const row = await loadProposal(c.env, id);
+  if (!row) return notFound('Proposal');
+  const s = await scope(c, Number(row.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  // CLAIM FIRST, atomically. `WHERE status = 'pending'` is what stops two
+  // founders both accepting one proposal and writing the row twice — the same
+  // idiom `routes/pipeline.ts` uses on `decision_gates`. D1's HTTP API has no
+  // multi-statement transaction to wrap the claim and the write together, so
+  // the claim goes first and the write follows; a write that then fails puts
+  // the row back to pending rather than leaving an "accepted" proposal that
+  // wrote nothing.
+  const claim = await c.env.DB.prepare(
+    `UPDATE validate_proposals
+        SET status = 'accepted', decided_by = ?, decided_at = datetime('now')
+      WHERE id = ? AND status = 'pending'`,
+  ).bind(s.user.id, id).run();
+  if (!claim.meta?.changes) {
+    return json({ detail: 'That proposal has already been decided' }, 409);
+  }
+
+  const revert = async () => {
+    await c.env.DB.prepare(
+      "UPDATE validate_proposals SET status = 'pending', decided_by = NULL, decided_at = NULL WHERE id = ?",
+    ).bind(id).run();
+  };
+
+  let payload: any;
+  try { payload = JSON.parse(row.payload_json); } catch { payload = null; }
+  if (!payload) { await revert(); return json({ detail: 'That proposal could not be read' }, 422); }
+
+  try {
+    if (row.kind === 'pain_tag') {
+      const ok = await upsertPainAlias(c.env, row.project_id, Number(payload.pain_group_id), String(payload.phrase));
+      // The theme may have been renamed away or deleted since the proposal was
+      // written. That is not an error in the proposal and not a 500: it is a
+      // proposal that no longer applies, and it goes back to pending so the
+      // founder sees it rather than silently losing it.
+      if (!ok) { await revert(); return json({ detail: 'That theme no longer exists' }, 409); }
+      return json({ ok: true, kind: row.kind });
+    }
+    const written = await insertHypothesis(c.env, row.project_id, String(payload.claim || '').trim());
+    return json({ ok: true, kind: row.kind, hypothesis: written }, 201);
+  } catch (e) {
+    await revert();
+    return json({ detail: 'That proposal could not be applied', error: (e as Error).message }, 500);
+  }
+});
+
+founderValidate.post('/proposals/:id/discard', async (c) => {
+  const id = Number(c.req.param('id'));
+  const row = await loadProposal(c.env, id);
+  if (!row) return notFound('Proposal');
+  const s = await scope(c, Number(row.project_id), canWrite);
+  if (s instanceof Response) return s;
+
+  // Discarded, never deleted. What the machine suggested and a person rejected
+  // is a fact about both, and the propose path reads it back so the same
+  // suggestion is not offered twice.
+  const r = await c.env.DB.prepare(
+    `UPDATE validate_proposals
+        SET status = 'discarded', decided_by = ?, decided_at = datetime('now')
+      WHERE id = ? AND status = 'pending'`,
+  ).bind(s.user.id, id).run();
+  if (!r.meta?.changes) return json({ detail: 'That proposal has already been decided' }, 409);
   return json({ ok: true });
 });
 
