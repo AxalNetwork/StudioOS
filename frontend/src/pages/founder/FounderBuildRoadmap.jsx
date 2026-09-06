@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Filter, GitBranch, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, GitBranch, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildRoadmap.css';

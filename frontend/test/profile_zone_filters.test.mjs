@@ -178,7 +178,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
  * A zone nobody mounts is not silently exempt — MOUNTED counts them, and the
  * count only ever goes up.
  */
-const MOUNTED = 5;
+const MOUNTED = 11;
 
 function mountingFile(zone) {
   const dirs = ['frontend/src/pages/founder', 'frontend/src/workspaces'];

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Filter, Link2, RefreshCw, Sparkles, SquareStack } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Link2, RefreshCw, Sparkles, SquareStack } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderRaisePitch.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -34,6 +35,10 @@ export default function FounderRaisePitch() {
   const [projectId, setProjectId] = useState(Number(requestedId) || null);
   const [versions, setVersions] = useState([]);
   const [engagement, setEngagement] = useState(null);
+  // The canvas's two live views. Both cards are on the page either way — this
+  // decides which one leads, because a deck's versions and a deck's readers are
+  // different questions and the answer to one is not hidden inside the other.
+  const [view, setView] = useState('analytics');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(true);
   const lastAutoLoad = useRef(null);
@@ -120,19 +125,22 @@ export default function FounderRaisePitch() {
           <nav className="fr-pitch-zone-nav" aria-label="Raise sections">
             <Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`} className="is-active" data-testid="link-pitch-zone">Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><span className="fr-pitch-zone-disabled">Liquidity unavailable</span>
           </nav>
-          <ZoneActions className="mt-3" items={founderZoneActions('raise/pitch', { query })} />
+          <ZoneToolbar
+              filters={founderZoneFilters('raise/pitch', { value: view, onChange: setView })}
+              actions={founderZoneActions('raise/pitch', { query })}
+            />
         </header>
         {Object.keys(errors).length > 0 && <div className="fr-pitch-alert" role="alert" data-testid="status-pitch-partial"><AlertCircle size={16} /><span>{errors.projects || errors.versions || 'Some pitch sources are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
-        {loading ? <PitchSkeleton /> : errors.projects ? <UnavailablePitch onRetry={load} /> : !project ? <EmptyPitch /> : <PitchContent project={project} versions={versions} current={current} analytics={analytics} engagementError={errors.engagement} query={query} />}
+        {loading ? <PitchSkeleton /> : errors.projects ? <UnavailablePitch onRetry={load} /> : !project ? <EmptyPitch /> : <PitchContent view={view} project={project} versions={versions} current={current} analytics={analytics} engagementError={errors.engagement} query={query} />}
       </section>
       <PageRail project={project} versions={versions} analytics={analytics} />
     </div>
   </main>;
 }
 
-function PitchContent({ project, versions, current, analytics, engagementError, query }) {
+function PitchContent({ view, project, versions, current, analytics, engagementError, query }) {
   const slideCount = Array.isArray(current?.slides) ? current.slides.length : null;
-  return <div className="fr-pitch-content">
+  return <div className={`fr-pitch-content${view === 'versions' ? ' is-versions-first' : ''}`}>
     <div className="fr-pitch-context"><div><span className="fr-pitch-label">Selected startup</span><strong data-testid="text-pitch-project">{text(project.name)}</strong><span>{text(project.sector, 'Sector not recorded')}</span></div><div className="fr-pitch-context-right"><span className="fr-pitch-label">Current deck</span><strong>{current ? `${displayVersion(current)} · ${text(current.title, 'Untitled deck')}` : 'No current deck recorded'}</strong><span>{current ? `Created ${formatDate(current.created_at)}` : 'Version source returned no decks'}</span></div></div>
     <div className="fr-pitch-stat-strip">
       <Stat label="Versions" value={versions.length || 'Unavailable'} note={versions.length ? `${displayVersion(current)} current when flagged` : 'No deck versions recorded'} muted={!versions.length} />
@@ -142,7 +150,10 @@ function PitchContent({ project, versions, current, analytics, engagementError, 
     </div>
     <section className="fr-pitch-card fr-pitch-analytics">
       <div className="fr-pitch-card-head"><div><BarChart3 size={16} /><h2>Share analytics, per investor</h2></div><span>{engagementError ? 'Source unavailable' : 'Updates when returned by source'}</span></div>
-      <div className="fr-pitch-toolbar"><div className="fr-pitch-filters"><Filter size={13} /><button type="button" className="is-selected">Shares</button><button type="button" disabled>Versions</button><button type="button" disabled>Variants unavailable</button><button type="button" disabled>Analytics</button></div><div className="fr-pitch-actions"><span><SquareStack size={13} /> Draft actions unavailable</span><Link to={`/raise/pitch?mode=workspace${project.id ? `&project_id=${project.id}` : ''}`} data-testid="link-open-pitch-editor"><FileText size={13} /> Open editor</Link></div></div>
+      {/* Its filter row moved to the zone header. Variants and Shares
+          joined it there as prose: a deck stores versions rather than
+          narrative variants, and share links live in the deck builder. */}
+      <div className="fr-pitch-toolbar"><Link to={`/raise/pitch?mode=workspace${project.id ? `&project_id=${project.id}` : ''}`} data-testid="link-open-pitch-editor"><FileText size={13} /> Open editor</Link></div>
       {analytics.rows.length ? <div className="fr-pitch-table-wrap"><table><thead><tr><th>Investor</th><th>Version</th><th>Views</th><th>Avg time</th><th>Last activity</th></tr></thead><tbody>{analytics.rows.map((row, index) => <tr key={row.id || index} data-testid={`row-pitch-share-${row.id || index}`}><td><strong>{row.investor}</strong><small>{row.source}</small></td><td>{row.version}</td><td>{row.views}</td><td>{row.avgTime}</td><td>{row.lastActivity}</td></tr>)}</tbody></table></div> : <div className="fr-pitch-inline-empty"><Link2 size={18} /><div><strong>{engagementError ? 'Share analytics source unavailable.' : 'No share analytics are recorded.'}</strong><p>This page does not invent investor names, views, activity, or drop-off behavior.</p></div></div>}
       <p className="fr-pitch-note">Share rows and slide behavior are shown only when the engagement source returns them. The read-only collection view never mints, revokes, or edits a share link.</p>
     </section>

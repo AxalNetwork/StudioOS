@@ -21,3 +21,18 @@ test('A4 Raise desk uses selected-project source records and preserves the pitch
   assert.match(desk, /No project-linked exit model or secondary is recorded/);
   assert.doesNotMatch(desk, /Kestrel|DeepSeek|Llama|FLUX|QwQ|Granite|\$620,000|\$1\.5M|\$435k|\$185k|Oct 14|22 days|9 investors|full ratchet|anti-dilution|2x participating|Slack|cohort retention|\$14\.20/i);
 });
+
+test('a per-share price is not rendered by the whole-dollar formatter', () => {
+  // Found by rendering FR3's new 409A panel: a real fair market value of $0.31
+  // printed as "$0", because `money()` carries maximumFractionDigits: 0. It is
+  // the right formatter for a cap, a SAFE and a payout and the wrong one for a
+  // share price — and this particular share price is what an option strike is
+  // set from, so a figure rounded away is not a rounded figure, it is a
+  // different one. `perShare()` exists to keep them apart.
+  const capital = read('frontend/src/pages/founder/FounderRaiseCapital.jsx');
+  assert.match(capital, /const perShare = /, 'the per-share formatter is gone');
+  assert.match(capital, /minimumFractionDigits: 2, maximumFractionDigits: 4/);
+  assert.match(capital, /fair_market_value != null \? perShare\(/,
+    'the 409A fair market value is back on the whole-dollar formatter');
+  assert.doesNotMatch(capital, /fair_market_value != null \? money\(/);
+});
