@@ -136,6 +136,28 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Model an exit', to: '/raise/capital/model' },
     { label: 'Export', kind: 'export' },
   ],
+
+  // ── Research ─────────────────────────────────────────────────────────────
+  'research/ask': [
+    { label: 'New brief', note: 'the question box below starts one' },
+    { label: 'Export session', kind: 'export' },
+    { label: 'Clear history', note: 'no session history is stored to clear' },
+  ],
+  'research/markets': [
+    { label: 'New deep-dive', note: 'signals are gathered on a schedule, not started here' },
+    { label: 'Export', kind: 'export' },
+    { label: 'Cite in deck', note: 'nothing carries a signal into the deck builder' },
+  ],
+  'research/companies': [
+    { label: 'Add company', note: 'the analysis form below adds one' },
+    { label: 'Compare', note: 'analyses are read one at a time; no comparison view is stored' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'research/library': [
+    { label: 'Upload', note: 'the add-document form below takes a file or a link' },
+    { label: 'New collection', note: 'collections are not stored' },
+    { label: 'Export', kind: 'export' },
+  ],
 };
 
 export const founderZoneActions = makeZoneActions(FOUNDER_ZONE_ACTIONS);

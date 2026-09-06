@@ -363,23 +363,52 @@ views"* would be noise rather than honesty. The exclusion is listed in
 `frontend/test/profile_zone_actions.test.mjs`, which checks the excluded set
 exactly, so it cannot quietly grow.
 
+**The shared surfaces are done too, and they are the reason each profile keeps
+its own table.** `/network/*` and `/research/*` are single components answering
+four licences. Their zone BODIES are identical and their zone ACTIONS are not:
+`/research/markets` says "Cite in deck" to a founder, "Cite in a memo" to an
+investor, "Add source" to an advisor and "Attach to proposal" to a partner, from
+one line of code. So the body stays shared and `workspaces/zoneActionsByRole.js`
+picks the table by the role the shell has already resolved. An unknown role gets
+an EMPTY list rather than a default profile's — a header quietly showing a
+founder's actions to an operator is the same broken promise as a dead button and
+much harder to notice.
+
+Those bodies take the row as a RENDER PROP called with the rows they loaded
+(`AskZone`, `LibraryZone`, `SignalsPage`, `CompetitorAnalysis`,
+`RelationshipsPanel`, `IntroductionsPanel`), so each page renders what it is
+handed and learns nothing about licences. `/signals`, `/build/competitors`,
+`/relationships` and `/network` for an operator pass nothing and get nothing.
+
 ## The four profiles, totalled
 
 | Profile | Zones | Actions | Exports | Links | Stated gaps |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Founder | 21 | 58 | 15 | 17 | 26 |
-| Investor | 14 | 42 | 9 | 1 | 32 |
-| Partner | 10 | 30 | 10 | 0 | 20 |
-| Advisor | 4 | 12 | 4 | 1 | 7 |
-| **Total** | **49** | **142** | **38** | **19** | **85** |
+| Founder | 25 | 70 | 19 | 17 | 34 |
+| Investor | 17 | 51 | 12 | 1 | 38 |
+| Partner | 15 | 45 | 15 | 0 | 30 |
+| Advisor | 10 | 30 | 10 | 1 | 19 |
+| **Total** | **67** | **196** | **56** | **19** | **121** |
 
-Fifty-seven of the hundred and forty-two run today. The other eighty-five say so
-on the page, in a sentence, rather than as a button that does nothing.
+Seventy-five of the hundred and ninety-six run today. The other hundred and
+twenty-one say so on the page, in a sentence, rather than as a button that does
+nothing.
 
-**What is left is one shared pass, not a fifth profile.** `/network/*` and
-`/research/*` are single components serving four licences each — twenty-three
-more zones between them, whose actions differ by role while their bodies do not.
-They belong to a change that reaches every profile at once.
+**Seven zones are excluded, each for a reason the guard checks exactly** (a
+profile's `excluded` list is asserted against what its canvases specify, so an
+exclusion cannot grow by accident):
+
+| Zone | Why |
+| --- | --- |
+| `research/funds` (founder) | a card in `ResearchWorkspace`'s `ZONE_COPY`, not a body |
+| `research/diligence`, `research/benchmarking` (investor) | the same |
+| `research/client-prep` (partner, advisor) | the same |
+| `expertise/visibility` (advisor) | a card whose whole page is already the gap statement |
+| `network/organizations` (advisor) | a card: nothing links a person an advisor knows to an organisation |
+| `network/organizations` (partner) | **`NetworkPage` has no organizations tab at all**, so this route lands on contacts — a row there would act on the wrong list |
+
+The last of those is a live product gap rather than a design one, and is recorded
+here rather than papered over.
 
 **`/research/*` is in no profile's pass, and is not an oversight.** The five
 founder Research zones (and the investor, advisor and partner lists beside

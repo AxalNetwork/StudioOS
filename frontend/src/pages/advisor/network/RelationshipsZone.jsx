@@ -6,6 +6,7 @@ import {
   NothingYet, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
   ghostButtonClass, inputClass,
 } from '../expertise/kit';
+import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 
 /**
  * Network · Relationships — the book, and the referrals beside it.
@@ -175,6 +176,7 @@ export default function RelationshipsZone() {
           blurb="Links between StudioOS accounts, strongest first. Both sides see the row."
         />
         <ZoneBody
+          actions={advisorZoneActions('network/relationships', { view: { header: ['Person', 'Email', 'Type', 'Status', 'Referred by', 'Referred org', 'Next step'], rows: state.rows, cells: (r) => [r.other?.name, r.other?.email, r.relationship_type, r.status, r.referred_name, r.referred_org, r.next_step] } })}
           loading={state.loading}
           error={state.error}
           isEmpty={!state.rows.length}

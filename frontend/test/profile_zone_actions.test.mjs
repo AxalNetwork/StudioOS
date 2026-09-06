@@ -41,26 +41,30 @@ const APP = read('frontend/src/App.jsx');
 const PROFILES = {
   founder: {
     table: 'frontend/src/workspaces/founderZoneActions.js',
-    pages: ['frontend/src/pages/founder'],
+    pages: ['frontend/src/pages/founder', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     call: 'founderZoneActions',
     canvas: /^Pages · Founder /,
-    buckets: /^(build|grow|network|raise)\//,
-    zones: 21,
+    buckets: /^(build|grow|network|raise|research)\//,
+    zones: 25,
     links: 17,
-    exports: 15,
+    exports: 19,
+    // `research/funds` is a card in `ResearchWorkspace`'s ZONE_COPY, not a body.
+    excluded: ['research/funds'],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
     live: (route) => route.replace(/^\//, ''),
   },
   investor: {
     table: 'frontend/src/workspaces/investorZoneActions.js',
-    pages: ['frontend/src/pages/investor'],
+    pages: ['frontend/src/pages/investor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     call: 'investorZoneActions',
     canvas: /^Pages · Investor /,
-    buckets: /^(deals|funds|portfolio|network)\//,
-    zones: 14,
+    buckets: /^(deals|funds|portfolio|network|research)\//,
+    zones: 17,
     links: 1,
-    exports: 9,
+    exports: 12,
+    // Both are cards in `ResearchWorkspace`'s ZONE_COPY, not bodies.
+    excluded: ['research/diligence', 'research/benchmarking'],
     embeddedGuards: 1,
     // `Pages · Investor Fund` names /fund/*; the router and shellConfig.js both
     // say /funds/*, and "accounting" is mounted at the slug "ledger". The
@@ -78,25 +82,35 @@ const PROFILES = {
     // Partner zone bodies are spread over three subtrees, and two of them are
     // shared pages the bucket router hands a render prop to. All of it is in
     // scope: a zone mounted from `PartnerBucketRoutes` counts as mounted.
-    pages: ['frontend/src/pages/partner', 'frontend/src/workspaces/partner'],
+    pages: ['frontend/src/pages/partner', 'frontend/src/workspaces'],
     extra: ['frontend/src/pages/ServiceCatalogPage.jsx', 'frontend/src/pages/PerksPage.jsx'],
     call: 'partnerZoneActions',
+    // Delivery and Offers ship from `integrated`; Network and Research from
+    // `incoming`. Both are read, so a canvas that moves between them does not
+    // silently drop out of this check.
+    canvasDirs: ['design/canvases/integrated', 'design/incoming'],
     canvas: /^Pages · Partner /,
     // `/pipeline` is absent on purpose — `Pages · Partner Pipeline` carries no
     // `ops:` on any artboard, so `canvasOps` finds nothing there and this
     // pattern must not claim it does. `/network` and `/research` are the shared
     // surfaces, and their canvases live in `design/incoming/` which this reader
     // does not open.
-    buckets: /^(delivery|offers)\//,
-    zones: 10,
+    buckets: /^(delivery|offers|network|research)\//,
+    zones: 15,
     links: 0,
-    exports: 10,
+    exports: 15,
+    // `network/organizations`: `NetworkPage` has no organizations tab at all, so
+    // a partner opening that route lands on contacts — a row there would act on
+    // the wrong list. `research/client-prep` is a card, not a body.
+    excluded: ['network/organizations', 'research/client-prep'],
     embeddedGuards: 0,
-    live: (route) => route.replace(/^\//, ''),
+    // `Pages · Partner Research` names /research/market; the router and
+    // shellConfig.js both say `markets`.
+    live: (route) => (route === '/research/market' ? 'research/markets' : route.replace(/^\//, '')),
   },
   advisor: {
     table: 'frontend/src/workspaces/advisorZoneActions.js',
-    pages: ['frontend/src/pages/advisor'],
+    pages: ['frontend/src/pages/advisor', 'frontend/src/workspaces'],
     call: 'advisorZoneActions',
     // The only advisor artboard set that carries an `ops:` array. `Advisor
     // Detail · Practice`, `Advisor Canvas` and the backlog Cohorts export are
@@ -104,17 +118,19 @@ const PROFILES = {
     // does not open `design/incoming/` for the other two profiles either — so
     // it must for this one, since Expertise ships from there.
     canvasDirs: ['design/incoming'],
-    canvas: /^Pages · Advisor Expertise/,
-    buckets: /^expertise\//,
-    zones: 4,
+    canvas: /^Pages · Advisor /,
+    buckets: /^(expertise|network|research)\//,
+    zones: 10,
     links: 1,
-    exports: 4,
+    exports: 10,
     embeddedGuards: 0,
     // The fifth artboard. `expertise/visibility` is not a zone body at all — it
     // is the one card left in AdvisorBucketRoutes' COPY, and its whole page is
     // already the gap statement ("Nothing counts profile views"). Listed here
     // so the exclusion is checked rather than silent.
-    excluded: ['expertise/visibility'],
+    // `expertise/visibility` and `network/organizations` are cards whose whole
+    // page is already the gap statement; `research/client-prep` is a card too.
+    excluded: ['expertise/visibility', 'network/organizations', 'research/client-prep'],
     live: (route) => route.replace(/^\//, ''),
   },
 };
@@ -339,9 +355,20 @@ for (const [name, profile] of Object.entries(PROFILES)) {
   test(`${name}: every zone is mounted, exactly once`, () => {
     const table = tableLabels(SRC);
     const seen = new Map();
+    const sharedSites = [];
     for (const f of pageFiles(profile)) {
       const src = read(f);
-      for (const m of src.matchAll(new RegExp(`${profile.call}\\('([^']+)'`, 'g'))) {
+      // Two mount shapes. A profile's own page calls its own builder; a SHARED
+      // surface — `/network/*`, `/research/*` — calls `zoneActionsFor(role, …)`
+      // and serves four licences from one call site. A shared site counts as a
+      // mount for every profile whose table declares that zone, and for none
+      // that does not: `research/companies` exists for a founder and an advisor
+      // and not for an investor, from the same line of code.
+      const own = [...src.matchAll(new RegExp(`${profile.call}\\('([^']+)'`, 'g'))];
+      for (const m of src.matchAll(/zoneActionsFor\([^,]+,\s*'([^']+)'/g)) {
+        if (table[m[1]]) sharedSites.push([m[1], f, src, m.index]);
+      }
+      for (const m of own) {
         assert.ok(table[m[1]], `${f} names a zone the table does not declare: ${m[1]}`);
         assert.ok(!seen.has(m[1]), `${m[1]} is mounted by ${seen.get(m[1])} and ${f}`);
         // CALLING the builder is not mounting it. Renaming the prop from
@@ -354,6 +381,38 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         seen.set(m[1], f);
       }
     }
+    // A shared site is the FALLBACK, not a second mount. `NetworkWorkspace`
+    // routes a founder to their own page, an investor to theirs, an advisor to
+    // theirs, and everyone else to the shared `NetworkPage` — so per profile
+    // exactly one of the two shapes is live, and a profile with its own page
+    // for a zone is already accounted for.
+    for (const [key, f, src, at] of sharedSites) {
+      if (seen.has(key)) continue;
+      // The call's result has to flow into a prop something renders. An arrow
+      // and a ternary are both legitimate shapes between the two, so this looks
+      // for a prop-open that is still UNCLOSED at the call rather than for an
+      // exact spelling: `zoneActions={(kind, rows) => kind === 'x' ? call(…)`
+      // is fine, and `data-x={(rows) => call(…)` is not.
+      // No fixed window: the two branches of a ternary can be far apart, and the
+      // second one failed a 320-character one on correct code.
+      const before = src.slice(0, at);
+      const opens = [...before.matchAll(/\b(?:actions|items|zoneActions)=\{/g)];
+      const open = opens.length ? opens[opens.length - 1] : null;
+      // Braces are BALANCED, not counted: a `{` and a `}` tally that merely
+      // comes out even lets an earlier, closed prop vouch for a later broken
+      // one. Walk from just past the prop's own `{` and require the depth to
+      // still be inside it when the call is reached.
+      let depth = open ? 1 : 0;
+      if (open) {
+        for (let n = open.index + open[0].length; n < at && depth > 0; n += 1) {
+          if (before[n] === '{') depth += 1;
+          else if (before[n] === '}') depth -= 1;
+        }
+      }
+      assert.ok(open && depth > 0,
+        `${f} calls the builder for ${key} but does not hand the result to anything`);
+      seen.set(key, f);
+    }
     assert.equal(seen.size, profile.zones,
       `${profile.zones} zones declared, ${seen.size} mounted`);
   });
@@ -362,7 +421,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     let checked = 0;
     for (const f of pageFiles(profile)) {
       const src = read(f);
-      if (!src.includes(`${profile.call}(`)) continue;
+      if (!src.includes(`${profile.call}(`) && !src.includes('zoneActionsFor(')) continue;
       for (const header of src.matchAll(/header: \[([^\]]*)\]/g)) {
         const after = src.slice(header.index);
         const open = after.search(/cells: \([a-z]+\) => \[/);
@@ -383,6 +442,27 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     assert.ok(checked >= 3, `expected every exporting zone to be checked, saw ${checked}`);
   });
 }
+
+test('the shared surfaces dispatch on the role, and refuse an unknown one', () => {
+  // `/network/*` and `/research/*` are one component each, answering four
+  // licences. Hardcoding a profile there — or falling back to one — would show
+  // a founder's actions to an operator from the same line of code, which is the
+  // same broken promise as a dead button and much harder to notice. Two
+  // mutations proved nothing was holding this shut.
+  const src = read('frontend/src/workspaces/zoneActionsByRole.js');
+  const fn = src.slice(src.indexOf('export function zoneActionsFor'));
+  const body = fn.slice(0, fn.indexOf('\n}') + 2);
+  assert.match(body, /BY_ROLE\[role\]/, 'the dispatcher no longer looks the role up');
+  assert.match(body, /return fn \? fn\(key, opts\) : \[\];/,
+    'an unknown role must get an empty list, never a default profile');
+  assert.doesNotMatch(body, /founderZoneActions|investorZoneActions|partnerZoneActions|advisorZoneActions/,
+    'the dispatcher names a profile directly instead of choosing one');
+  // And the map is complete: a licence missing from it silently shows nothing.
+  const map = src.slice(src.indexOf('const BY_ROLE'), src.indexOf('};', src.indexOf('const BY_ROLE')));
+  for (const role of Object.keys(PROFILES)) {
+    assert.match(map, new RegExp(`\\b${role}:`), `${role} is not in the dispatcher's map`);
+  }
+});
 
 test('one builder, so the rules cannot drift apart between profiles', () => {
   // Four tables and four copies of "what an empty export says" is how this repo

@@ -4,6 +4,7 @@ import { api } from '../../../lib/api';
 import {
   NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading, ghostButtonClass,
 } from '../expertise/kit';
+import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 
 /**
  * Network · Introductions — the propositions this advisor may answer.
@@ -119,6 +120,7 @@ export default function IntroductionsZone() {
           )}
         />
         <ZoneBody
+          actions={advisorZoneActions('network/introductions', { view: { header: ['Counterpart', 'Role', 'Country', 'Headline', 'Status'], rows: state.rows, cells: (r) => [r.target?.name, r.target?.role, r.target?.country, r.target?.headline, r.status] } })}
           loading={state.loading}
           error={state.error}
           isEmpty={!state.rows.length}

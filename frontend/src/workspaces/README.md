@@ -59,7 +59,7 @@ investor workspaces all solving the same problem four ways.
 **A zone header's actions come from the canvas, and each one is either wired or
 stated.** `zoneActionBuilder.js` holds the rules; `founderZoneActions.js`,
 `investorZoneActions.js`, `partnerZoneActions.js` and `advisorZoneActions.js`
-hold each profile's answers — forty-nine zones and a hundred and forty-two
+hold each profile's answers — sixty-seven zones and a hundred and ninety-six
 actions between them. The labels are copied from
 the `ops:` array of the zone's artboard, and each is an export that runs
 (`frontend/src/lib/csvExport.js`), a link to a route that performs it, or a
@@ -91,3 +91,10 @@ called with the rows their tab loaded, so the caller decides and the page learns
 nothing about licences. Wiring from a bucket router instead would be one edit
 rather than ten — and would cost every export its rows, which is most of what
 this pass delivers.
+
+**A surface serving more than one licence asks `zoneActionsByRole.js`.**
+`/network/*` and `/research/*` are one component each answering four roles: the
+bodies are the same and the actions are not, so the body stays shared and the
+answers stay in each profile's table. An unknown role gets an empty list, never
+a default profile's. Six shared bodies take the row as a render prop called with
+the rows they loaded, which is what lets "export this view" mean anything there.

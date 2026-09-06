@@ -30,7 +30,12 @@ import PartnerWorkspaceShell from './partner/PartnerWorkspaceShell';
 // The query param still wins where it is set, because notification deep links
 // (`?tab=introductions&intro=<uid>`) depend on it; the path is the fallback
 // beneath it, and the hardcoded default is the fallback beneath that.
-export default function NetworkPage({ embedded = false }) {
+/**
+ * `zoneActions` is forwarded, not interpreted: the caller hands this page a
+ * `(zone, rows) => items` function and it calls it with whichever panel is on
+ * screen. `/network` for an operator passes nothing and gets nothing.
+ */
+export default function NetworkPage({ embedded = false, zoneActions = null }) {
   const { role } = useAuth();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
@@ -139,8 +144,8 @@ export default function NetworkPage({ embedded = false }) {
       )}
 
       {!unservedAlone && activeTab === 'contacts' && canContacts && <ContactsPanel />}
-      {!unservedAlone && activeTab === 'introductions' && <IntroductionsPanel />}
-      {!unservedAlone && activeTab === 'relationships' && <RelationshipsPanel />}
+      {!unservedAlone && activeTab === 'introductions' && <IntroductionsPanel zoneActions={zoneActions && ((rows) => zoneActions('introductions', rows))} />}
+      {!unservedAlone && activeTab === 'relationships' && <RelationshipsPanel zoneActions={zoneActions && ((rows) => zoneActions('relationships', rows))} />}
     </div>
   );
 

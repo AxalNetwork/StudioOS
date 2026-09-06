@@ -51,6 +51,40 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Drafting history', note: 'only the current draft is stored; there is no revision history' },
     { label: 'Export', kind: 'export' },
   ],
+
+  // ── Network ──────────────────────────────────────────────────────────────
+  'network/relationships': [
+    { label: 'Log interaction', note: 'no interaction log is stored' },
+    { label: 'Add person', note: 'an advisor’s book is built from accepted introductions, not typed in' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'network/introductions': [
+    { label: 'New introduction', note: 'introductions arrive as propositions; none is composed here' },
+    { label: 'Consent log', note: 'consent is recorded per introduction, not as a log' },
+    { label: 'Export', kind: 'export' },
+  ],
+
+  // ── Research ─────────────────────────────────────────────────────────────
+  'research/ask': [
+    { label: 'New session', note: 'the question box below starts one' },
+    { label: 'Saved answers', note: 'no answer is saved; the citations below belong to this question' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'research/markets': [
+    { label: 'Re-run stale', note: 'signals are gathered on a schedule; nothing re-runs one' },
+    { label: 'Add source', note: 'sources are not configurable' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'research/companies': [
+    { label: 'Add company', note: 'the analysis form below adds one' },
+    { label: 'Open in Ask', note: 'Ask answers from the library, and an analysis is not a library document' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'research/library': [
+    { label: 'Add document', note: 'the add-document form below takes a file or a link' },
+    { label: 'Re-index', note: 'indexing runs on upload; there is no re-run control' },
+    { label: 'Export', kind: 'export' },
+  ],
 };
 
 export const advisorZoneActions = makeZoneActions(ADVISOR_ZONE_ACTIONS);

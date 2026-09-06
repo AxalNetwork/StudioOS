@@ -8,6 +8,7 @@ import SignalFilterBar from '../components/signals/SignalFilterBar';
 import SignalKPIStrip from '../components/signals/SignalKPIStrip';
 import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
 import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
+import ZoneActions from '../workspaces/ZoneActions';
 
 /**
  * SignalsPage — "Public-market evidence for what to build next".
@@ -32,7 +33,13 @@ import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
  * for admins on the same route, hiding Refresh. Only /signals passed `user`,
  * which is why the advisor view appeared to work when tested there.
  */
-export default function SignalsPage({ user, embedded = false, mode: modeProp = null }) {
+/**
+ * `zoneActions` is a render prop, called with the signals on screen.
+ * `/research/markets` is one route for four licences whose zone actions differ,
+ * so the caller decides what the row says and this page renders it. `/signals`
+ * passes nothing and gets nothing. See `workspaces/zoneActionsByRole.js`.
+ */
+export default function SignalsPage({ user, embedded = false, mode: modeProp = null, zoneActions }) {
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
   // Two different questions, so two props. `user` answers "who is this?" and
   // gates the admin-only Refresh. `mode` answers "which workspace am I in?"
@@ -114,6 +121,7 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
 
   const content = (
     <div className="space-y-5 pb-10">
+      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(signals)} />}
       {/* Header */}
       {mode !== 'advisor' && !embedded && <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
         <div>
