@@ -2407,6 +2407,25 @@ link on the investor's zone and a stated gap on the founder's identical one. Fou
 copies of the builder would have been four places for "what an empty export says"
 to drift; four copies of the answers would have been wrong.
 
+**The partner pass is the mirror image of the investor's, and shows the rule
+cuts both ways.** Ten zones, thirty actions, and every one of the ten can export
+what it is showing — Delivery and Offers have had real stores since migrations
+208 and 209. The twenty gaps are all writes, and each one is refused for a
+reason its own zone already documents rather than for want of a route: a
+deliverable's `opened_at` is the client's to set, so "Chase unopened" would be
+the firm writing a metric about itself; no cadence is stored, so "Draft all" has
+nothing to schedule. An honest pass is not a pessimistic one — it reports what is
+there as readily as what is not.
+
+**Where the row goes is decided by where the rows are.** Seven partner zones
+share `ZoneBody`, which now renders the action row above all four of its states:
+a stated gap is as true while a store is loading, or failed, or empty, as it is
+with rows on screen, and an export with nothing loaded says so itself. Two more
+are shared pages (`ServiceCatalogPage`, `PerksPage`) that take the row as a
+RENDER PROP called with the rows their tab loaded — the caller decides, and the
+shared page learns nothing about licences. The alternative, wiring from the
+bucket router, would have cost every one of those exports its rows.
+
 **Two canvases give no actions to record**, and nothing was invented for them:
 `Pages · Partner Pipeline` and `Advisor Detail · Practice` carry no `ops:` array
 on any artboard. The gap is written down in `ROUTE_MAP.md` instead. Inventing an

@@ -7,6 +7,7 @@ import {
   NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass,
 } from '../kit';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 
 /**
  * Delivery · Health — `/delivery/health`.
@@ -374,6 +375,7 @@ export default function PartnerHealthZone() {
 
   return (
     <ZoneBody
+      actions={partnerZoneActions('delivery/health', { view: { header: ['Engagement', 'Founder', 'Utilisation %', 'Milestones', 'Deliverables sent', 'Open blockers'], rows: items, cells: (r) => [r.need_title, r.founder_name, r.utilisation_pct, r.milestone_count, r.deliverables_sent, r.open_blockers?.length ?? 0] } })}
       loading={state.loading}
       error={state.error}
       onRetry={load}

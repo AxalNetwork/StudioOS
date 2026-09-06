@@ -5,6 +5,8 @@ import {
   Chip, Section, SlideOver, EmptyState, Badge, RowCard, SearchInput, FilterChips,
   formatDay, formatRelativeDay, moneyUsd,
 } from './kit';
+import ZoneActions from '../../../workspaces/ZoneActions';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 
 // Engagements — the live BD pipeline (Wave 1a; previously fixture projects).
 //
@@ -156,6 +158,18 @@ export default function EngagementsPage({ view: initialView = DEFAULT_VIEW }) {
 
   return (
     <div className="space-y-5">
+      {/* This page is two zones: `/delivery/board` renders it with
+          view="engagements" and `/pipeline/proposals` with view="proposals".
+          Only the first has canvas actions — `Pages · Partner Pipeline`
+          specifies none — and the reader can switch views without changing
+          route, so the row follows what is on screen rather than the URL. */}
+      {view === 'engagements' && (
+        <ZoneActions items={partnerZoneActions('delivery/board', { view: {
+          header: ['Engagement', 'Founder', 'Project', 'Category', 'Status', 'Price'],
+          rows: engagements,
+          cells: (e) => [e.need_title, e.founder_name, e.project_name, e.need_category, e.status, e.price],
+        } })} />
+      )}
       {error && (
         <div className="rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-900/20 px-4 py-2.5 text-sm text-rose-700 dark:text-rose-300">{error}</div>
       )}

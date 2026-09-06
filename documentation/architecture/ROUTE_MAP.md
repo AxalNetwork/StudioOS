@@ -324,7 +324,25 @@ and `shellConfig.js` agrees with the router. The tables key on the live routes
 and `frontend/test/profile_zone_actions.test.mjs` carries the mapping explicitly, rather
 than fuzzy-matching a canvas route to a page that is not at it.
 
-Partner and advisor remain, one pull request each.
+**Partner — ten zones, thirty actions, and every one of the ten can export.**
+Ten exports, no links, twenty stated gaps. This is the first bucket set in the
+pass where an export is the rule rather than the exception, because migrations
+208 and 209 gave Delivery and Offers real stores. The writes are the gaps, and
+each has a reason its own zone already documents: `opened_at` and
+`signed_off_at` are the CLIENT'S to set, so "Chase unopened" would be the firm
+writing a metric about itself; no cadence is stored, so "Draft all" has nothing
+to schedule; consent belongs to the founder, so "Ask for consent" needs a
+founder-side surface that does not exist.
+
+Three partner bucket sets are absent from the table and none is an oversight.
+`/pipeline` is the `ops:`-less canvas recorded below. `/network`'s three zones
+render `NetworkPage`, whose bodies are three further shared components used by
+more than one licence — threading a partner-only row through four such files is
+the shared-surface pass, not this one. `/research` is that same shared surface.
+Worth knowing while `/network` waits: **`NetworkPage` has no organizations tab
+at all**, so a partner opening `/network/organizations` lands on contacts.
+
+Advisor remains.
 
 **`/research/*` is in no profile's pass, and is not an oversight.** The five
 founder Research zones (and the investor, advisor and partner lists beside

@@ -4,6 +4,7 @@ import {
   Trash2, AlertCircle, X, Check, ExternalLink, Package, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import ZoneActions from '../workspaces/ZoneActions';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
 const CAT_LABEL = {
@@ -19,7 +20,16 @@ const CAT_LABEL = {
  * controls and stay, exactly as the tab rows on the Leads and Perk deals zones
  * do.
  */
-export default function ServiceCatalogPage({ user, embedded = false }) {
+/**
+ * `zoneActions` is a render prop, and it is deliberately not a role check.
+ * `/offers/catalog` mounts this page as a partner zone and wants the zone's
+ * header actions above the list; `/services` mounts the same page for admins
+ * and investors and wants nothing. The caller decides, this page only renders
+ * what it is handed — so the partner's table stays in the partner's file and
+ * this shared page learns nothing about licences. It is called with the rows
+ * the tab has loaded, because an export of "this view" needs the view.
+ */
+export default function ServiceCatalogPage({ user, embedded = false, zoneActions }) {
   const isPartner = user?.role === 'partner';
   const isFounder = user?.role === 'founder';
   const isAdmin = user?.role === 'admin';
@@ -56,7 +66,7 @@ export default function ServiceCatalogPage({ user, embedded = false }) {
       </div>
 
       {tab === 'browse' && <BrowseTab user={user} isFounder={isFounder} />}
-      {tab === 'mine' && (isPartner || isAdmin) && <MineTab user={user} />}
+      {tab === 'mine' && (isPartner || isAdmin) && <MineTab user={user} zoneActions={zoneActions} />}
       {tab === 'stripe' && isPartner && <StripeTab />}
     </div>
   );
@@ -231,7 +241,7 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
 // ---------------------------------------------------------------------------
 // Mine — partner manages their own offerings
 // ---------------------------------------------------------------------------
-export function MineTab({ user }) {
+export function MineTab({ user, zoneActions }) {
   const [rows, setRows] = useState([]);
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -280,6 +290,7 @@ export function MineTab({ user }) {
 
   return (
     <div className="space-y-4">
+      {zoneActions && <ZoneActions items={zoneActions(rows)} />}
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-500">{rows.length} offering{rows.length === 1 ? '' : 's'}</div>
         <button onClick={() => { setEditing(null); setShowForm(true); }}

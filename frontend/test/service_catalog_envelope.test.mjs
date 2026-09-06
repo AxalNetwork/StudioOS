@@ -86,8 +86,16 @@ test('My offerings is gated on role, not on a partner_id the store does not use'
 
 test('/offers/catalog mounts the catalogue rather than a card pointing at it', () => {
   const code = codeOnly(ROUTES);
-  assert.match(code, /catalog:\s*\(user\)\s*=>\s*<ServiceCatalogPage user=\{user\} embedded \/>/,
+  // The invariant is that the ROUTE MOUNTS THE CATALOGUE, not that the mount
+  // expression has exactly two props. It grew a third (`zoneActions`, the zone
+  // header's action row) and this assertion failed on correct code — which
+  // means it was pinning the expression rather than the rule. Rewritten to the
+  // rule: the component itself, embedded, at this key.
+  const mount = code.slice(code.indexOf('catalog:'), code.indexOf("'perk-deals':"));
+  assert.match(mount, /<ServiceCatalogPage\b/,
     'the same component at a second route is what Leads and Perk deals already do');
+  assert.match(mount, /\buser=\{user\}/, 'the catalogue is mounted without its user');
+  assert.match(mount, /\bembedded\b/, 'the catalogue is mounted unembedded, so it draws a second heading');
   const copyAt = code.indexOf('const COPY');
   const copyBlock = code.slice(copyAt, code.indexOf('const ZONE_LINES', copyAt));
   assert.doesNotMatch(copyBlock, /catalog:/,
@@ -96,7 +104,9 @@ test('/offers/catalog mounts the catalogue rather than a card pointing at it', (
 
 test('the embedded flag suppresses the heading and nothing else', () => {
   const code = codeOnly(PAGE);
-  assert.match(code, /function ServiceCatalogPage\(\{ user, embedded = false \}\)/);
+  // Same correction as above: the rule is what `embedded` DOES, not how many
+  // props sit beside it in the signature.
+  assert.match(code, /function ServiceCatalogPage\(\{[^}]*\buser\b[^}]*\bembedded = false\b[^}]*\}\)/);
   const guards = code.match(/!embedded/g) || [];
   assert.equal(guards.length, 1,
     'Browse / My offerings / Stripe Connect are views WITHIN the catalog, not sibling zones — '

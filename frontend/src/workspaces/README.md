@@ -57,8 +57,8 @@ once, in `shellConfig.js` — which is the whole reason this folder replaced
 investor workspaces all solving the same problem four ways.
 
 **A zone header's actions come from the canvas, and each one is either wired or
-stated.** `zoneActionBuilder.js` holds the rules; `founderZoneActions.js` and
-`investorZoneActions.js` hold each profile's answers. The labels are copied from
+stated.** `zoneActionBuilder.js` holds the rules; `founderZoneActions.js`,
+`investorZoneActions.js` and `partnerZoneActions.js` hold each profile's answers. The labels are copied from
 the `ops:` array of the zone's artboard, and each is an export that runs
 (`frontend/src/lib/csvExport.js`), a link to a route that performs it, or a
 `note` saying nothing does. `ZoneActions.jsx` renders a note as text and never as
@@ -80,3 +80,12 @@ that guard is false on the only route that mounts them — and a page that names
 variable it does not have throws at render while the bundle builds clean. Both
 shipped into this folder and both were found by a browser, so both now have an
 assertion.
+
+**A row goes where the rows are.** Three shapes are in use and the choice is not
+stylistic: a page that owns its list renders the row itself; seven partner zones
+pass it to `ZoneBody` (in `frontend/src/pages/advisor/expertise/kit.jsx`), which renders it
+above all four of its states; and two shared pages take it as a render prop
+called with the rows their tab loaded, so the caller decides and the page learns
+nothing about licences. Wiring from a bucket router instead would be one edit
+rather than ten — and would cost every export its rows, which is most of what
+this pass delivers.

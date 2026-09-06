@@ -7,6 +7,7 @@ import {
   NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 
 /**
  * Delivery · Deliverables — `/delivery/deliverables`.
@@ -188,6 +189,7 @@ export default function PartnerDeliverablesZone() {
 
   return (
     <ZoneBody
+      actions={partnerZoneActions('delivery/deliverables', { view: { header: ['Deliverable', 'Need', 'Version', 'Sent', 'Opened', 'Signed off'], rows: items, cells: (r) => [r.title, r.need_title, r.version, r.sent_at, r.opened_at, r.signed_off_at] } })}
       loading={state.loading}
       error={state.error}
       onRetry={load}

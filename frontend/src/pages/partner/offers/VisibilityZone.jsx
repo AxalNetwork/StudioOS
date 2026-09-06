@@ -6,6 +6,7 @@ import {
   StatCard, Section, Field, SaveNote, NotComputable, NoPartnerProfile,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 
 /**
  * Offers · Visibility — `/offers/visibility`.
@@ -204,6 +205,7 @@ export default function PartnerVisibilityZone() {
 
   return (
     <ZoneBody
+      actions={partnerZoneActions('offers/visibility', { view: { header: ['Service', 'Kind', 'Price', 'Active', 'Engagements', 'Won value'], rows: items, cells: (r) => [r.name, r.kind, r.price, r.is_active, r.engagement_count, r.won_value] } })}
       loading={state.loading}
       error={state.error}
       onRetry={load}

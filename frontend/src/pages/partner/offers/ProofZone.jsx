@@ -5,6 +5,7 @@ import {
   StatCard, Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 
 /**
  * Offers · Proof — `/offers/proof`.
@@ -327,6 +328,7 @@ export default function PartnerProofZone() {
 
   return (
     <ZoneBody
+      actions={partnerZoneActions('offers/proof', { view: { header: ['Proof', 'Kind', 'Need', 'Founder', 'Published', 'Outcome'], rows: items, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, r.is_published, r.outcome_note] } })}
       loading={state.loading}
       error={state.error}
       onRetry={load}
