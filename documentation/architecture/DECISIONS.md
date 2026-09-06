@@ -2434,10 +2434,30 @@ excluded outright: it is not a body but a card whose entire page already states
 the gap it would repeat. The exclusion is listed in the guard, which checks the
 excluded set exactly, so a second zone cannot join it quietly.
 
-**Across the four profiles: forty-nine zones, a hundred and forty-two actions,
-fifty-seven of which run.** The other eighty-five are sentences. That ratio is
-the deliverable — a reader now knows, on every zone, which of the things the
-design promised they can actually do.
+**The shared surfaces close it, and they are why the tables are per profile.**
+`/network/*` and `/research/*` are one component each, answering four licences.
+The bodies are identical; the actions are not — `/research/markets` says "Cite in
+deck" to a founder, "Cite in a memo" to an investor, "Add source" to an advisor
+and "Attach to proposal" to a partner, from one line of code. So the body stays
+shared and `zoneActionsByRole.js` picks the table by the role the shell resolved,
+returning an EMPTY list for a role it does not know: a header quietly showing one
+licence's actions to another is the same broken promise as a dead button and far
+harder to spot. Six shared bodies take the row as a render prop called with the
+rows they loaded, so each learns nothing about licences and the routes that are
+not zones (`/signals`, `/build/competitors`, `/relationships`) pass nothing.
+
+**Across the four profiles: sixty-seven zones, a hundred and ninety-six actions,
+seventy-five of which run.** The other hundred and twenty-one are sentences. That
+ratio is the deliverable — a reader now knows, on every zone, which of the things
+the design promised they can actually do.
+
+**Seven zones are excluded and each exclusion is checked, not asserted.** Six are
+cards whose entire page already states the gap their actions would repeat. The
+seventh is a live product gap rather than a design one: `NetworkPage` has no
+organizations tab at all, so a partner opening `/network/organizations` lands on
+contacts, and a header row there would act on the wrong list. A profile's
+excluded list is compared exactly against what its canvases specify, so an
+exclusion cannot grow by accident.
 
 **Two canvases give no actions to record**, and nothing was invented for them:
 `Pages · Partner Pipeline` and `Advisor Detail · Practice` carry no `ops:` array

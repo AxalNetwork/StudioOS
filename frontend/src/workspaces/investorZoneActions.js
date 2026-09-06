@@ -108,6 +108,23 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Merge duplicates', note: 'organizations are derived from the relationship book, so there is nothing to merge' },
     { label: 'Export', kind: 'export' },
   ],
+
+  // ── Research ─────────────────────────────────────────────────────────────
+  'research/ask': [
+    { label: 'New brief', note: 'the question box below starts one' },
+    { label: 'Export session', kind: 'export' },
+    { label: 'Clear history', note: 'no session history is stored to clear' },
+  ],
+  'research/markets': [
+    { label: 'New deep-dive', note: 'signals are gathered on a schedule, not started here' },
+    { label: 'Export', kind: 'export' },
+    { label: 'Cite in a memo', note: 'nothing carries a signal into a memo' },
+  ],
+  'research/library': [
+    { label: 'Upload', note: 'the add-document form below takes a file or a link' },
+    { label: 'New collection', note: 'collections are not stored' },
+    { label: 'Export', kind: 'export' },
+  ],
 };
 
 export const investorZoneActions = makeZoneActions(INVESTOR_ZONE_ACTIONS);

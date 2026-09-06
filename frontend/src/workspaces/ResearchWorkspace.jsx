@@ -4,6 +4,7 @@ import { Card, WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from './BucketOverview';
 import { bucketForPath, zoneForPath } from './shellConfig';
+import { zoneActionsFor } from './zoneActionsByRole';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -271,7 +272,12 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     if (slug === 'markets') {
       return (
         <Suspense fallback={<Loading />}>
-          <SignalsPage user={user} mode={role === 'advisor' ? 'advisor' : 'founder'} embedded />
+          <SignalsPage user={user} mode={role === 'advisor' ? 'advisor' : 'founder'} embedded
+            zoneActions={(rows) => zoneActionsFor(role, 'research/markets', { view: {
+              header: ['Signal', 'Type', 'Sector', 'Niche', 'Region', 'Confidence', 'Freshness', 'Updated'],
+              rows,
+              cells: (g) => [g.title, g.type, g.sector, g.niche, g.region, g.confidence_score, g.freshness_score, g.updated_at],
+            } })} />
         </Suspense>
       );
     }
@@ -285,15 +291,39 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
               dimension to switch between, which is why no company selector
               appears here and why one must not be invented. */}
           <CompanyScopeNote role={role} />
-          <CompetitorAnalysisPage chromeless />
+          <CompetitorAnalysisPage chromeless
+            zoneActions={(rows) => zoneActionsFor(role, 'research/companies', { view: {
+              header: ['Analysis', 'Mode', 'Edited', 'Updated'],
+              rows,
+              cells: (a) => [a.title, a.mode, a.edited, a.updated_at],
+            } })} />
         </Suspense>
       );
     }
     if (slug === 'library') {
-      return <Suspense fallback={<Loading />}><LibraryZone /></Suspense>;
+      return (
+        <Suspense fallback={<Loading />}>
+          <LibraryZone zoneActions={(rows) => zoneActionsFor(role, 'research/library', { view: {
+            header: ['Document', 'Kind', 'Index state', 'Passages', 'Size (bytes)', 'Added'],
+            rows,
+            cells: (d) => [d.title, d.kind, d.index_state, d.chunk_count, d.size_bytes, d.created_at],
+          } })} />
+        </Suspense>
+      );
     }
     if (slug === 'ask') {
-      return <Suspense fallback={<Loading />}><AskZone /></Suspense>;
+      return (
+        <Suspense fallback={<Loading />}>
+          {/* The citations of the answer ON SCREEN, which is the whole session
+              this surface stores: nothing keeps a history, and the zone says so
+              rather than offering to export one that does not exist. */}
+          <AskZone zoneActions={(rows) => zoneActionsFor(role, 'research/ask', { view: {
+            header: ['#', 'Document', 'Score', 'Passage'],
+            rows,
+            cells: (c) => [c.n, c.title, c.score, c.chunk],
+          } })} />
+        </Suspense>
+      );
     }
     // `funds` is the fallback rather than `ask`, which is now a real page: a
     // slug with no card would otherwise render the Library's working body

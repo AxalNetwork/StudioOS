@@ -4,6 +4,7 @@ import { WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import BucketOverview from './BucketOverview';
 import { bucketForPath, zoneForPath } from './shellConfig';
+import { zoneActionsFor } from './zoneActionsByRole';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
@@ -146,7 +147,29 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     if (role === 'investor') {
       return <Suspense fallback={<Loading />}><InvestorNetworkWorkspace embedded zone={slug} /></Suspense>;
     }
-    return <Suspense fallback={<Loading />}><NetworkPage embedded /></Suspense>;
+    // The partner (and operator) arm. `NetworkPage`'s panels are shared with
+    // other licences, so the row comes in as a function of the tab and its rows
+    // rather than being wired inside them. Organizations is deliberately absent:
+    // this page has no organizations tab at all, so a partner opening
+    // `/network/organizations` lands on contacts — a real gap, recorded in
+    // ROUTE_MAP rather than papered over with a header row on the wrong list.
+    return (
+      <Suspense fallback={<Loading />}>
+        <NetworkPage embedded zoneActions={(kind, rows) => (
+          kind === 'relationships'
+            ? zoneActionsFor(role, 'network/relationships', { view: {
+                header: ['Person', 'Type', 'Status', 'Strength', 'Added'],
+                rows,
+                cells: (r) => [r.other?.name || r.other?.email, r.relationship_type, r.status, r.strength_score, r.created_at],
+              } })
+            : zoneActionsFor(role, 'network/introductions', { view: {
+                header: ['Counterpart', 'Status', 'Score', 'Source'],
+                rows,
+                cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source],
+              } })
+        )} />
+      </Suspense>
+    );
   }, [role, slug, isRoot]);
 
   const orgGap = slug === 'organizations' && !ORG_BACKED.has(role);

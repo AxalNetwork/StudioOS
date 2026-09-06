@@ -5,6 +5,7 @@ import {
   Field, NothingYet, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass,
 } from '../advisor/expertise/kit';
+import ZoneActions from '../../workspaces/ZoneActions';
 
 /**
  * Research · Library — the documents you hold, and how far Ask can see into them.
@@ -56,7 +57,12 @@ function fmtBytes(n) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function LibraryZone() {
+/**
+ * `zoneActions` is the same render prop `AskZone` takes, for the same reason:
+ * one route, four licences, four different sets of zone actions. Called with
+ * the documents on screen so "export this view" has a view.
+ */
+export default function LibraryZone({ zoneActions }) {
   const [state, setState] = useState({ loading: true, error: '', payload: null });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
@@ -122,6 +128,7 @@ export default function LibraryZone() {
 
   return (
     <div className="space-y-4">
+      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(items)} />}
       <ZoneHeading
         title="Your library"
         blurb="The documents Ask reads from. What is answerable here is exactly what Ask can cite."

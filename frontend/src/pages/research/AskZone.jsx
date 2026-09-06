@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import {
   NothingYet, StatedLimit, ZoneBody, ZoneHeading, buttonClass, inputClass,
 } from '../advisor/expertise/kit';
+import ZoneActions from '../../workspaces/ZoneActions';
 
 /**
  * Research · Ask — answers drawn only from your own library, or no answer.
@@ -27,7 +28,13 @@ import {
  *     that as no_source would blame the library and send someone off to
  *     upload a document that would not have helped.
  */
-export default function AskZone() {
+/**
+ * `zoneActions` is a render prop, called with the citations of the answer on
+ * screen. `/research/ask` is one route for four licences and their zone actions
+ * differ, so the caller — which knows the role — decides what the row says, and
+ * this page renders whatever it is handed. See `workspaces/zoneActionsByRole.js`.
+ */
+export default function AskZone({ zoneActions }) {
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
@@ -61,6 +68,7 @@ export default function AskZone() {
 
   return (
     <div className="space-y-4">
+      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(result?.citations || [])} />}
       <ZoneHeading
         title="Ask your library"
         blurb="Answers drawn only from documents you have added, with the passage each answer used."

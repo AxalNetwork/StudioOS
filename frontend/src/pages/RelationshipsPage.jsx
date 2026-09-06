@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Loader2, X, Award } from 'lucide-react';
 import { api } from '../lib/api';
 import { useEscapeClose } from '../components/useEscapeClose';
+import ZoneActions from '../workspaces/ZoneActions';
 
 const REL_TYPES = [
   { id: 'co_investor', label: 'Co-Investor', color: 'bg-emerald-100 text-emerald-700' },
@@ -15,7 +16,13 @@ const REL_TYPES = [
 // partner summary, relationships grid, and create/edit modals. Rendered by
 // NetworkPage as the "Relationships" tab. The page-level title lives in the
 // NetworkPage container.
-export function RelationshipsPanel() {
+/**
+ * `zoneActions` is a render prop, called with the relationships on screen.
+ * `/network/relationships` is one route for four licences whose zone actions
+ * differ; `/relationships` passes nothing and gets nothing. See
+ * `workspaces/zoneActionsByRole.js`.
+ */
+export function RelationshipsPanel({ zoneActions }) {
   const [summary, setSummary] = useState(null);
   const [rels, setRels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +48,7 @@ export function RelationshipsPanel() {
 
   return (
     <div className="space-y-6">
+      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(rels)} />}
       <p className="text-sm text-gray-600 dark:text-gray-400">Your partner graph and relationship strength.</p>
 
       {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded p-2 text-sm">{err}</div>}

@@ -5,6 +5,7 @@ import {
   Save, ExternalLink, ChevronRight, Search, AlertCircle, Check,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import ZoneActions from '../workspaces/ZoneActions';
 
 // Competitor Analysis — in-house, Cloudflare-native competitive intelligence.
 // Discovery + controlled public-web crawl + Workers AI synthesis. Prefills from
@@ -65,7 +66,13 @@ async function fetchMarkdown(url) {
   return res.text();
 }
 
-export default function CompetitorAnalysis({ project = null, embedded = false, chromeless = false }) {
+/**
+ * `zoneActions` is a render prop, called with the saved analyses on screen —
+ * the ones this reader can actually see, after the embedded scoping below.
+ * `/research/companies` is one route for four licences whose zone actions
+ * differ; `/build/competitors` passes nothing and gets nothing.
+ */
+export default function CompetitorAnalysis({ project = null, embedded = false, chromeless = false, zoneActions }) {
   // Page furniture only. Never gate data or controls on this.
   const bare = embedded || chromeless;
   const navigate = useNavigate();
@@ -276,6 +283,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
 
   return (
     <div ref={sectionRef} className={bare ? '' : 'max-w-5xl mx-auto py-6 px-4'}>
+      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(visibleSaved)} />}
       {!bare && (
         <>
           <button onClick={() => navigate(-1)} className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-3">

@@ -90,6 +90,35 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Pass reasons', note: 'a pass reason is not a stored field on a fit rule' },
     { label: 'Export', kind: 'export' },
   ],
+
+  // ── Network ──────────────────────────────────────────────────────────────
+  'network/relationships': [
+    { label: 'Assign owner', note: 'no owner field is stored on a relationship' },
+    { label: 'Log interaction', note: 'no interaction log is stored' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'network/introductions': [
+    { label: 'New introduction', note: 'introductions arrive as propositions; none is composed here' },
+    { label: 'Consent log', note: 'consent is recorded per introduction, not as a log' },
+    { label: 'Export', kind: 'export' },
+  ],
+
+  // ── Research ─────────────────────────────────────────────────────────────
+  'research/ask': [
+    { label: 'New session', note: 'the question box below starts one' },
+    { label: 'Saved answers', note: 'no answer is saved; the citations below belong to this question' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'research/markets': [
+    { label: 'Re-run stale', note: 'signals are gathered on a schedule; nothing re-runs one' },
+    { label: 'Attach to proposal', note: 'nothing carries a signal onto a proposal' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'research/library': [
+    { label: 'Add document', note: 'the add-document form below takes a file or a link' },
+    { label: 'Re-index', note: 'indexing runs on upload; there is no re-run control' },
+    { label: 'Export', kind: 'export' },
+  ],
 };
 
 export const partnerZoneActions = makeZoneActions(PARTNER_ZONE_ACTIONS);

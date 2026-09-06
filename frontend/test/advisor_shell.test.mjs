@@ -262,14 +262,24 @@ test('an advisor never gets two headers or two rails on one page', () => {
     ['frontend/src/pages/NetworkPage.jsx', 'Network'],
   ]) {
     const src = codeOnly(read(file));
-    assert.match(src, /\{ embedded = false \}/, `${msg} must accept embedded`);
+    // `{ embedded = false }` exactly would fail the moment the component takes
+    // a second prop — NetworkPage now also takes the zone action row — so what
+    // is asserted is that `embedded` is a destructured prop defaulting to false,
+    // whatever sits beside it.
+    assert.match(src, /\{[^}]*\bembedded = false\b[^}]*\}/, `${msg} must accept embedded`);
     assert.match(src, /embedded=\{embedded\}/, `${msg} must pass embedded to its inner shell`);
   }
   const bucketRoutes = codeOnly(read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'));
   assert.match(bucketRoutes, /<AdvisorAdvisoryWorkspace embedded \/>/,
     'the Practice workspace carries its own shell and must be mounted embedded');
-  assert.match(codeOnly(read('frontend/src/workspaces/NetworkWorkspace.jsx')),
-    /<NetworkPage embedded \/>/, 'the shared network shell must mount NetworkPage embedded');
+  // Bounded to the mount's own tag rather than pinned to its exact spelling:
+  // it grew the partner arm's zone action row and `<NetworkPage embedded />`
+  // stopped matching correct code. `embedded` present is the rule.
+  const netMount = codeOnly(read('frontend/src/workspaces/NetworkWorkspace.jsx'))
+    .match(/<NetworkPage\b[\s\S]*?\/>/);
+  assert.ok(netMount, 'the shared network shell no longer mounts NetworkPage');
+  assert.match(netMount[0], /\bembedded\b/,
+    'the shared network shell must mount NetworkPage embedded');
 
   // The Expertise zone pages take the other route to the same guarantee: they
   // render a BODY and carry no shell of their own, so there is no second

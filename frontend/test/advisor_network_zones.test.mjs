@@ -164,8 +164,15 @@ test('Signals is given both who you are and which workspace you are in', () => {
   // `user` was never passed on /research/*, so `mode` fell to founder for every
   // role: no advisor ordering, no advisor strip, no advisor_note — a field the
   // engine returns already. `isAdmin` was false for admins on the same route.
-  assert.match(codeOnly(research), /<SignalsPage user=\{user\} mode=\{[^}]*\} embedded \/>/,
-    'the Research workspace must pass both');
+  // The rule is that BOTH reach the page, not that the mount has exactly three
+  // props: it grew a fourth (the zone header's action row) and this assertion
+  // failed on correct code. Bounded to the mount's own tag so a `user` three
+  // components away cannot vouch for it.
+  const mount = codeOnly(research).match(/<SignalsPage\b[\s\S]*?\/>/);
+  assert.ok(mount, 'the Research workspace no longer mounts SignalsPage');
+  assert.match(mount[0], /user=\{user\}/, 'the Research workspace must pass the user');
+  assert.match(mount[0], /mode=\{/, 'the Research workspace must pass the mode');
+  assert.match(mount[0], /\bembedded\b/, 'Signals must be told the shell owns the chrome');
   for (const line of app.split('\n').filter((l) => l.includes('<SignalsPage'))) {
     assert.match(line, /user=\{user\}/, `SignalsPage mounted without a user: ${line.trim()}`);
   }
@@ -177,7 +184,10 @@ test('Signals is given both who you are and which workspace you are in', () => {
   // Advisor role has `user.role === 'admin'` and would otherwise get an advisor
   // shell wrapped around a body that ordered itself for a founder.
   const sig = codeOnly(read('frontend/src/pages/SignalsPage.jsx'));
-  assert.match(sig, /function SignalsPage\(\{ user, embedded = false, mode: modeProp = null \}\)/);
+  // Destructured props, not an exact signature: this page took a fourth (the
+  // zone header's action row, passed only from `/research/markets`) and the
+  // exact-spelling version failed on correct code.
+  assert.match(sig, /function SignalsPage\(\{[^}]*\buser\b[^}]*\bembedded = false\b[^}]*\bmode: modeProp = null\b[^}]*\}\)/);
   assert.match(sig, /const mode = modeProp/);
   // The debug line that logged the signed-in user's role to the browser console
   // on every render is gone and must not come back.
@@ -323,6 +333,12 @@ test('`chromeless` is not `embedded`, and the difference is load-bearing', () =>
   // The mode default and the project fetch stay on `embedded` alone.
   assert.match(comp, /useState\(embedded \? 'startup' : 'custom'\)/);
   assert.match(comp, /if \(embedded\) \{\s*\n\s*const list = await api\.competitors\.list\(\)/);
-  assert.match(codeOnly(research), /<CompetitorAnalysisPage chromeless \/>/,
+  // Same correction: what matters is which flag is asked for, not that it is
+  // the only prop. `chromeless` present and `embedded` absent is the rule.
+  const cmount = codeOnly(research).match(/<CompetitorAnalysisPage\b[\s\S]*?\/>/);
+  assert.ok(cmount, 'Research no longer mounts the competitor analysis');
+  assert.match(cmount[0], /\bchromeless\b/,
     'Research · Companies must ask for the layout flag, not the lock');
+  assert.doesNotMatch(cmount[0], /\bembedded\b/,
+    'Research · Companies must not lock the analysis to a startup it was not handed');
 });
