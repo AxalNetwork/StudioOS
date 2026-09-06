@@ -5,15 +5,32 @@ import { makeZoneActions } from './zoneActionBuilder';
  * actually does. `zoneActionBuilder.js` states the three outcomes and the rules
  * they follow; this file is the investor's answers.
  *
- * WHAT THIS PASS FOUND, AND IT IS THE POINT RATHER THAN AN EMBARRASSMENT. Nine
- * of these forty-two actions run today. Deals and Fund are read-only shells —
- * `InvestorDealsWorkspace` calls `listDeals` and two invitation methods and
- * nothing else; `FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal` and
- * nothing else; `InvestorFundCalls` and `InvestorFundAccounting` call no API at
- * all. So "New call", "Add LP", "Record wire", "Close vote" and the rest have
- * no flow anywhere to link to, and every one of them says so instead of drawing
- * a button. A header full of working buttons would be a lie about a bucket that
- * cannot yet be operated; this is the map of what to build next.
+ * WHAT THIS PASS FOUND, AND THE DISTINCTION IT TOOK A SECOND LOOK TO GET RIGHT.
+ * Nine of these forty-two actions run today, and the twelve Deals and Fund gaps
+ * are not all the same kind of gap. The SCREENS are read-only —
+ * `InvestorDealsWorkspace` calls `listDeals` and two invitation methods,
+ * `FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal`, and
+ * `InvestorFundCalls` and `InvestorFundAccounting` call no API at all. But
+ * "read-only screen" is not "no such capability", and two of these labels are
+ * exactly that difference: `api.fundAddLP` and `api.fundCapitalCall` both exist
+ * and both reach a worker route that serves them (`funds.ts` declares
+ * `post('/:id/lps')` and `post('/:id/capital-call')`). What is missing there is
+ * a form, not a store.
+ *
+ * The first version of these two notes said "nothing writes an LP" and "never
+ * issued", which was read off the page's imports without following the chain to
+ * `api.js` — the same one-step-short reading this whole pass exists to catch,
+ * committed inside it. They now say where the gap actually is, because a reader
+ * deciding what to build next needs to know it is an afternoon of form rather
+ * than a migration. `frontend/test/profile_zone_actions.test.mjs` ties both
+ * notes to those two API methods, so if either is removed the note stops being
+ * true in the other direction and the build says so.
+ *
+ * The other ten are gaps in the store as well as the screen: no rubric, no
+ * minutes, no conditions, no wire record, no journal source, no reconciliation
+ * state. "Configure stages" is one of those — `advanceDeal` moves ONE deal
+ * between stages, and the label asks to edit the stage SET, which nothing
+ * stores.
  *
  * THE SAME LABEL IS NOT THE SAME ANSWER ACROSS PROFILES. `/network/*` serves
  * every licence and the investor artboard's ops are word-for-word the founder's
@@ -55,12 +72,12 @@ export const INVESTOR_ZONE_ACTIONS = {
 
   // ── Fund ─────────────────────────────────────────────────────────────────
   'funds/lps': [
-    { label: 'Add LP', note: 'the fund workspace reads the register; nothing writes an LP' },
+    { label: 'Add LP', note: 'adding an LP is served by the API; no screen offers the form yet' },
     { label: 'Export register', kind: 'export' },
     { label: 'Comms log', note: 'no LP correspondence is stored' },
   ],
   'funds/calls': [
-    { label: 'New call', note: 'capital calls are read here, never issued' },
+    { label: 'New call', note: 'issuing a call is served by the API; no screen offers the form yet' },
     { label: 'Send reminders', note: 'nothing on this desk sends mail' },
     { label: 'Export wires', note: 'no wire schedule is stored to export' },
   ],

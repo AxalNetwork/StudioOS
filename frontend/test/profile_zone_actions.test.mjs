@@ -99,9 +99,10 @@ const PROFILES = {
     zones: 15,
     links: 0,
     exports: 15,
-    // `network/organizations`: `NetworkPage` has no organizations tab at all, so
-    // a partner opening that route lands on contacts — a row there would act on
-    // the wrong list. `research/client-prep` is a card, not a body.
+    // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
+    // suppresses every body, so that route already renders its own heading above
+    // a card stating the gap — there is nothing for a row to sit over.
+    // `research/client-prep` is a card, not a body.
     excluded: ['network/organizations', 'research/client-prep'],
     embeddedGuards: 0,
     // `Pages · Partner Research` names /research/market; the router and
@@ -442,6 +443,40 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     assert.ok(checked >= 3, `expected every exporting zone to be checked, saw ${checked}`);
   });
 }
+
+test('a gap note describes the screen, never a capability the API already has', () => {
+  // THE ERROR THIS EXISTS TO STOP, committed inside the pass it belongs to.
+  // `funds/lps` said "nothing writes an LP" and `funds/calls` said "never
+  // issued" — both read off the pages' imports and both false: `api.fundAddLP`
+  // and `api.fundCapitalCall` exist and reach worker routes that serve them.
+  // What is missing on those two zones is a form, not a store, and a reader
+  // deciding what to build next is exactly the person the wrong version misled.
+  //
+  // The tie runs both ways. If either method is removed, its note stops being
+  // true in the OTHER direction and this fails; if either note goes back to
+  // denying the capability, this fails too.
+  const api = read('frontend/src/lib/api.js');
+  const worker = read('cloudflare-worker/src/routes/funds.ts');
+  const table = read('frontend/src/workspaces/investorZoneActions.js');
+  const DENIALS = /nothing writes|never issued|no such|is not stored|cannot be/i;
+
+  for (const [zone, label, method, route] of [
+    ['funds/lps', 'Add LP', 'fundAddLP', "post('/:id/lps'"],
+    ['funds/calls', 'New call', 'fundCapitalCall', "post('/:id/capital-call'"],
+  ]) {
+    assert.match(api, new RegExp(`\\n  ${method}:`), `api.js no longer declares ${method}`);
+    assert.ok(worker.includes(route), `funds.ts no longer serves ${route}`);
+    const at = table.indexOf(`'${zone}'`);
+    assert.ok(at > 0, `${zone} left the table`);
+    const entry = table.slice(at, table.indexOf('],', at));
+    const note = entry.match(new RegExp(`\\{ label: '${label}', note: '([^']*)'`));
+    assert.ok(note, `${zone}'s "${label}" is no longer a stated gap — if it was wired, delete this row`);
+    assert.doesNotMatch(note[1], DENIALS,
+      `${zone} "${label}" denies a capability ${method} provides: "${note[1]}"`);
+    assert.match(note[1], /no screen offers the form yet/,
+      `${zone} "${label}" must say where the gap actually is`);
+  }
+});
 
 test('the shared surfaces dispatch on the role, and refuse an unknown one', () => {
   // `/network/*` and `/research/*` are one component each, answering four

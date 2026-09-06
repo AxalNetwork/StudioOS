@@ -2388,15 +2388,27 @@ passed. And one page was handed `project?.name` when it has no `project` — a
 ReferenceError that blanks the route at render, which esbuild bundles happily and
 no lint step exists to catch.
 
-**The investor pass says the same thing about a much emptier profile, and that
-is the result rather than a shortfall.** Fourteen zones, forty-two actions, ten
-of which run: nine exports, one link, thirty-two stated gaps. Deals and Fund are
-read-only shells — `InvestorDealsWorkspace` calls `listDeals` and two invitation
-methods, `FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal`, and
-`InvestorFundCalls` and `InvestorFundAccounting` call no API at all — so "New
-call", "Add LP", "Record wire" and "Close vote" have nowhere to link to. A header
-full of working buttons there would be a lie about a bucket that cannot yet be
-operated. What it is instead is the map of what to build next.
+**The investor pass says the same thing about a much emptier profile**, and
+correcting it taught the sharpest lesson in this entry. Fourteen zones,
+forty-two actions, ten of which run. The investor SCREENS are read-only —
+`InvestorDealsWorkspace` calls `listDeals` and two invitation methods,
+`FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal`, and
+`InvestorFundCalls` and `InvestorFundAccounting` call no API at all.
+
+**A read-only screen is not a missing capability, and the first version of these
+notes conflated the two.** `api.fundAddLP` and `api.fundCapitalCall` exist and
+reach worker routes that serve them, so "Add LP" and "New call" are missing a
+form rather than a store — but their notes said "nothing writes an LP" and
+"never issued", read off the pages' imports without following the chain one step
+further to `api.js`. That is the same one-step-short reading this whole entry is
+against, committed inside it, and it is the reason a gap note now describes the
+SCREEN rather than asserting what the product cannot do. The guard ties both
+notes to those two API methods, so removing either makes the note wrong in the
+other direction and fails the build.
+
+The other ten Deals and Fund gaps are gaps in the store as well: no rubric, no
+minutes, no conditions, no wire record, no journal source, no reconciliation
+state.
 
 **The same label is not the same answer across profiles, which is why the tables
 are per profile and only the builder is shared.** `/network/*` serves every
@@ -2453,11 +2465,14 @@ the design promised they can actually do.
 
 **Seven zones are excluded and each exclusion is checked, not asserted.** Six are
 cards whose entire page already states the gap their actions would repeat. The
-seventh is a live product gap rather than a design one: `NetworkPage` has no
-organizations tab at all, so a partner opening `/network/organizations` lands on
-contacts, and a header row there would act on the wrong list. A profile's
-excluded list is compared exactly against what its canvases specify, so an
-exclusion cannot grow by accident.
+seventh, partner `network/organizations`, was recorded as a live bug and is not
+one: `NetworkPage` catches a slug it has no tab for and suppresses every body, so
+that route already renders its own heading above a card stating the gap. The
+claim that it "lands on contacts" was wrong twice over — a partner has no
+contacts tab either — and came from reading the `activeTab` fallback without the
+twenty lines below it that gate every body. A profile's excluded list is compared
+exactly against what its canvases specify, so an exclusion cannot grow by
+accident.
 
 **Two canvases give no actions to record**, and nothing was invented for them:
 `Pages · Partner Pipeline` and `Advisor Detail · Practice` carry no `ops:` array
