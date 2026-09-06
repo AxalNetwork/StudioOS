@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { PanelRightClose, PanelRightOpen, ShieldCheck } from 'lucide-react';
-import useAiSpend, { priceForTask } from '../hooks/useAiSpend';
+import useAiSpend, { modelsForTask, priceForTask } from '../hooks/useAiSpend';
 import { api } from '../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
-import { formatSpend, spendMeter } from './assistCost';
+import { formatCost, formatRate, formatSpend, spendMeter } from './assistCost';
 import { ASSIST_SURFACES, EADWYN_GUARDRAIL, observedRunCost } from './eadwynConfig';
+import { MODEL_COPY, RECOMMENDED_BY_TASK } from './railModels';
 import { ACCENT } from '../workspaces/shellConfig';
 import './workerRail.css';
 
@@ -67,12 +68,28 @@ import './workerRail.css';
  *      every workspace zone can now run `workspace_explain` over the Coverage
  *      lines beside it. The card is drawn from `priceForTask` against the
  *      router's own table, so the model and the per-million rate are the
- *      router's, never the canvas's — worth saying because the canvases quote
- *      `$0.293 / M in · $2.253 / M out` for this model and the router's table
- *      says `0.50 / 0.50`. The estimate stays the caller's OWN observed
- *      average for the task and is honestly absent until they have run it
- *      once. The card disappears if the price lookup misses, because an
- *      unpriced run is unknown rather than free.
+ *      router's, never the canvas's. The card disappears if the price lookup
+ *      misses, because an unpriced run is unknown rather than free.
+ *
+ *      AND IT IS A MENU NOW. `ROUTE[task].alternates` — the list `run()`
+ *      validates a caller's pick against — reaches this component over
+ *      `/api/ai/pricing`, so the rail offers exactly what the worker will
+ *      accept and cannot drift from it in either direction. What is typed
+ *      rather than derived is the name, the sentence and the recommendation,
+ *      and those live in `railModels.js` so this file holds no editorial copy
+ *      about a model at all.
+ *
+ *      DECISIONS D13 removed this menu, and named the condition for its
+ *      return: "a caller must never be able to route a `safety` call away from
+ *      the guard model". That is now structural — `safety` declares no
+ *      alternates, so there is nothing to pick from — rather than a rule
+ *      somebody has to remember.
+ *
+ *      The estimate stays the caller's OWN observed average for the task
+ *      (D16), honestly absent until they have run it once, and sits BELOW the
+ *      menu rather than inside a card: `/api/ai/me/spend` groups by task, not
+ *      by model, so printing it under one entry would attribute an average
+ *      across models to whichever is selected.
  *
  *   4. SAFETY — `EADWYN_GUARDRAIL`, the product-wide boundary, imported rather
  *      than restated so this rail and `AssistRail` cannot say different things.
@@ -121,6 +138,20 @@ import './workerRail.css';
  * a bare snake_case key holding a JSON boolean.
  */
 const RAIL_COLLAPSED_KEY = 'worker_rail_collapsed';
+/**
+ * The chosen model, per WORKSPACE rather than per zone.
+ *
+ * The Validate canvas settles this and says why in its own rail block:
+ * "Inherited from Validate — Mode and model are chosen on the workspace, not
+ * re-picked here." A founder picks once for Validate and every zone under it
+ * follows; picking again on `/validate/hypotheses` would be four settings for
+ * one decision.
+ *
+ * Per workspace and not global, because the trade differs: a page with four
+ * summary lines does not need the model a page with forty does.
+ */
+const MODEL_KEY_PREFIX = 'worker_rail_model:';
+const modelKeyFor = (workspace) => `${MODEL_KEY_PREFIX}${String(workspace || '').toLowerCase().trim()}`;
 /** What the host stylesheets key their collapsed track off. */
 const RAIL_COLLAPSED_ATTR = 'data-worker-rail';
 
@@ -188,18 +219,52 @@ export default function WorkerRail({
   const surface = ASSIST_SURFACES[WORKSPACE_SURFACE];
   const priced = priceForTask(pricing, surface.task);
   const observed = observedRunCost(spend, surface.task);
+  // The menu, built from the ROUTER's `alternates` and joined to the copy in
+  // `railModels.js`. Empty until `/api/ai/pricing` answers, and empty forever
+  // for a task that offers no choice — in which case the block below falls
+  // back to the single `priced` card it has always drawn.
+  const models = modelsForTask(pricing, surface.task, {
+    copy: MODEL_COPY,
+    recommended: RECOMMENDED_BY_TASK[surface.task] || [],
+  });
+
+  // The founder's choice, read once for the first render so the menu does not
+  // flash the default before an effect corrects it. `safeReadJSON` because
+  // localStorage throws outright in some embedded contexts and a rail is not
+  // worth a blank page.
+  const [chosen, setChosen] = useState(() => safeReadJSON(modelKeyFor(workspace), null));
+  const chooseModel = useCallback((id) => {
+    setChosen(id);
+    safeWriteJSON(modelKeyFor(workspace), id);
+  }, [workspace]);
+  // A stored id the router no longer offers is not a selection. Falling back to
+  // the primary — `models[0]`, which `alternates` puts first — means the menu
+  // renders something selected rather than nothing, and the run that follows
+  // is one the worker will accept.
+  const activeModel = models.some((m) => m.id === chosen) ? chosen : (models[0]?.id ?? null);
 
   const [run, setRun] = useState({ state: 'idle', text: '', note: '', usage: null });
   const canRun = coverage.length > 0;
   const readBack = useCallback(async () => {
     setRun({ state: 'running', text: '', note: '', usage: null });
     try {
-      const r = await api.aiWorkspaceExplain({ workspace, zone: stance || '', coverage });
+      const r = await api.aiWorkspaceExplain({
+        workspace, zone: stance || '', coverage, model: activeModel || undefined,
+      });
       setRun({ state: 'done', text: r?.text || '', note: '', usage: r?.usage || null });
     } catch (e) {
       // A refusal is not a crash and must not read as one: the router returns
       // a reason and a message for a spent budget or an unreachable model, and
       // the rail shows that sentence rather than "something went wrong".
+      //
+      // `model_not_offered` is the one refusal the rail can act on rather than
+      // only report: the saved choice is the problem, so it goes. Leaving it
+      // would have every subsequent click fail the same way with no way out
+      // short of clearing site data.
+      if (e?.body?.refusal === 'model_not_offered') {
+        setChosen(null);
+        safeWriteJSON(modelKeyFor(workspace), null);
+      }
       setRun({
         state: 'failed',
         text: '',
@@ -207,7 +272,7 @@ export default function WorkerRail({
         usage: null,
       });
     }
-  }, [workspace, stance, coverage]);
+  }, [workspace, stance, coverage, activeModel]);
 
   // `recorded` false, or no report at all, are the same thing to a reader: the
   // platform cannot say what has been spent. Neither draws a bar.
@@ -282,21 +347,95 @@ export default function WorkerRail({
         </section>
 
         {/*
-          The model card, and the one control that makes it true. Absent when
-          the price lookup misses — an unpriced run is unknown, not free — so
-          this block cannot render a model without a rate beside it.
+          The model block. Absent when the price lookup misses — an unpriced
+          run is unknown, not free — so this block cannot render a model
+          without a rate beside it.
+
+          WHERE THE PARTS COME FROM, because they come from three places and
+          mixing them up is how the old card came to quote a wrong rate for
+          months. The MENU and every id and price in it are the router's, over
+          `/api/ai/pricing`. The name, the sentence and the tags are editorial
+          and live in `railModels.js`. The ESTIMATE is neither: it is this
+          caller's own measured average, and it is deliberately NOT inside a
+          model's card — `/api/ai/me/spend` groups by task, not by model, so
+          printing it under one entry would attribute an average across models
+          to whichever one happens to be selected. It sits under the menu,
+          labelled for what it is.
         */}
         {priced && (
           <section className="fwr-block">
             <span>Model · this page</span>
-            <strong data-testid="text-worker-rail-model">{priced.model.split('/').pop()}</strong>
-            <p className="fwr-model-id">{priced.model}</p>
-            <p>
-              {`$${priced.pin.toFixed(2)} / M in · $${priced.pout.toFixed(2)} / M out`}
-              {' · '}
+            {surface.modeNote && <p className="fwr-mode-note">{surface.modeNote}</p>}
+
+            {models.length > 1 ? (
+              <>
+                {/* Real radios, visually hidden behind the cards. A group of
+                    buttons would need arrow-key handling and an aria-checked
+                    dance to reach what a fieldset of radios gives for free. */}
+                <fieldset className="fwr-models">
+                  <legend className="fwr-sr">{`Model for ${workspace}`}</legend>
+                  {models.map((m) => (
+                    <label
+                      key={m.id}
+                      className="fwr-model"
+                      data-selected={m.id === activeModel ? 'true' : 'false'}
+                      data-testid={`option-worker-rail-model-${m.id.split('/').pop()}`}
+                    >
+                      <input
+                        type="radio"
+                        className="fwr-sr"
+                        name={`fwr-model-${bodyId}`}
+                        value={m.id}
+                        checked={m.id === activeModel}
+                        onChange={() => chooseModel(m.id)}
+                      />
+                      <span className="fwr-model-head">
+                        <b>{m.name}</b>
+                        {m.recommended && <i className="fwr-badge">RECOMMENDED</i>}
+                        {!m.recommended && (
+                          <i className="fwr-model-inline">
+                            {`${formatRate(m.pin)} / ${formatRate(m.pout)}`}
+                          </i>
+                        )}
+                      </span>
+                      {/* Id, tags and the full rate line only for a
+                          recommended entry — the canvas gates all three on the
+                          same `recommended` flag, so the fuller treatment is
+                          what marks it out rather than the badge alone. */}
+                      {m.recommended && <span className="fwr-model-id">{m.id}</span>}
+                      {m.why && <span className="fwr-model-why">{m.why}</span>}
+                      {m.recommended && m.tags.length > 0 && (
+                        <span className="fwr-tags">
+                          {m.tags.map((t) => <i key={t}>{t}</i>)}
+                        </span>
+                      )}
+                      {m.recommended && (
+                        <span className="fwr-model-rate">
+                          {`${formatRate(m.pin)} / M in · ${formatRate(m.pout)} / M out`}
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </fieldset>
+                <p data-testid="text-worker-rail-model-note">
+                  {`Remembered for ${workspace}. Every zone here uses it.`}
+                </p>
+              </>
+            ) : (
+              <>
+                <strong data-testid="text-worker-rail-model">{priced.model.split('/').pop()}</strong>
+                <p className="fwr-model-id">{priced.model}</p>
+                <p>{`${formatRate(priced.pin)} / M in · ${formatRate(priced.pout)} / M out`}</p>
+              </>
+            )}
+
+            {/* Measured, never modelled (DECISIONS D16). Absent until they
+                have run it once, because a number nobody measured is worth
+                less than saying so. */}
+            <p className="fwr-estimate">
               {observed
-                ? `your typical run ${formatSpend(observed.cost)}, over ${observed.calls}`
-                : 'no runs of this yet'}
+                ? `Your runs of this have averaged ${formatCost(observed.cost)}, over ${observed.calls}.`
+                : 'No runs of this yet, so there is no average to show.'}
             </p>
             <div className="fwr-action">
               <button
@@ -318,11 +457,31 @@ export default function WorkerRail({
               ? (
                 <div className="fwr-draft" data-testid="text-worker-rail-draft">
                   <p>{run.text}</p>
+                  {/*
+                    The receipt, and it is a receipt for THIS run rather than a
+                    stored "last run". The canvas draws a persistent one —
+                    model, tokens in and out, and a cost, for the most recent
+                    run — and nothing serves it: `/api/ai/me/spend` groups by
+                    task and returns totals, not the latest row. So this says
+                    what the click just did and disappears with the page, which
+                    is true, rather than claiming a history it does not have.
+
+                    `formatCost` and not `formatSpend`: a read-back costs
+                    fractions of a cent, and two decimal places round that to
+                    zero, which reads as free.
+                  */}
                   {run.usage && (
-                    <p className="fwr-foot-note">
-                      {run.usage.model.split('/').pop()} · {formatSpend(run.usage.est_cost_usd)}
+                    <p className="fwr-foot-note" data-testid="text-worker-rail-receipt">
+                      {MODEL_COPY[run.usage.model]?.name || run.usage.model.split('/').pop()}
+                      {typeof run.usage.prompt_tokens === 'number'
+                        && typeof run.usage.completion_tokens === 'number'
+                        ? ` · ${run.usage.prompt_tokens.toLocaleString()} in / ${run.usage.completion_tokens.toLocaleString()} out`
+                        : ''}
+                      {' · '}{formatCost(run.usage.est_cost_usd)}
                       {run.usage.cached ? ' · cached' : ''}
-                      {run.usage.fallback_used ? ' · fell back' : ''}
+                      {/* Named, because it means the answer above is not from
+                          the model the founder picked. */}
+                      {run.usage.fallback_used ? ' · the model was busy, a smaller one answered' : ''}
                     </p>
                   )}
                 </div>
@@ -372,6 +531,21 @@ export default function WorkerRail({
                 </>
               )}
         </section>
+
+        {/*
+          The safety row the canvas puts last. It is not the guardrail below it
+          and must not be folded into it: the guardrail is the product-wide
+          boundary on what Eadwyn will ever do, this is what happens to THIS
+          page's text. `ASSIST_SURFACES.workspace.footer` has carried the
+          sentence since the surface was registered and nothing on this rail
+          read it.
+        */}
+        {surface.footer?.kind === 'screened' && (
+          <div className="fwr-screened" data-testid="text-worker-rail-screened">
+            <i>Screened</i>
+            <p>{surface.footer.note}</p>
+          </div>
+        )}
 
         <footer className="fwr-foot">
           <ShieldCheck size={13} />

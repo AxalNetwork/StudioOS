@@ -2222,11 +2222,16 @@ export const api = {
   //
   // Longer than the default deadline because a model call is not a read: 30s
   // would abort a run the router is still paying for.
-  aiWorkspaceExplain: ({ workspace, zone, coverage }) =>
+  // `model` is the founder's pick from the rail's menu, and it is OPTIONAL on
+  // purpose: omitted means "whatever the route says", which is what every
+  // caller sent before the menu existed and what a page with no stored choice
+  // sends now. The worker validates it against the task's `alternates` and
+  // refuses an unlisted one rather than substituting — see aiRouter.ts.
+  aiWorkspaceExplain: ({ workspace, zone, coverage, model }) =>
     request('/ai/workspace/explain', {
       method: 'POST',
       timeoutMs: 60_000,
-      body: JSON.stringify({ workspace, zone, coverage }),
+      body: JSON.stringify({ workspace, zone, coverage, model }),
     }),
 
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------

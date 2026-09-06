@@ -140,3 +140,43 @@ test('the frontend sends only what the rail already shows', () => {
   assert.match(method, /timeoutMs: 60_000/,
     'a model call is not a read; the 30s default would abort a run still being paid for');
 });
+
+test('the model the caller picks is the model the route asks for', () => {
+  // The gap this closes is silent and expensive. The rail lets a founder pick
+  // a cheaper model and renders that model's rate beside it; a route that
+  // reads `model` and forgets to forward it would run the 70b at eight times
+  // the price the screen just quoted, report success, and log the run under a
+  // model the founder did not choose. Nothing else in the stack notices —
+  // `run()` is happy, the usage row is consistent with itself, and only the
+  // invoice disagrees.
+  const handler = SRC.slice(SRC.indexOf("ai.post('/workspace/explain'"));
+  assert.match(handler, /const model = String\(body\?\.model \|\| ''\)/,
+    'the route no longer reads a caller-chosen model');
+  const runCall = handler.slice(handler.indexOf('aiRun('), handler.indexOf('aiRun(') + 400);
+  assert.match(runCall, /^\s*model,\s*$/m,
+    'the route reads `model` and does not pass it to aiRun');
+});
+
+test('the route keeps no allow-list of its own', () => {
+  // `run()` owns the list. A second copy here is a second thing to keep true,
+  // and the failure mode of the copy going stale is the worst one available:
+  // the route rejects a model the router would happily run, or forwards one it
+  // will not, and the two disagree without anything failing.
+  const handler = SRC.slice(SRC.indexOf("ai.post('/workspace/explain'"));
+  assert.doesNotMatch(handler, /alternates/,
+    'the route is re-deriving what models are offered instead of letting run() decide');
+  assert.doesNotMatch(handler, /@cf\//,
+    'the route names a model id; the router is the only place that may');
+});
+
+test('a model the task does not offer comes back as its own reason', () => {
+  // Distinct from a spent budget and from an unreachable model, because the
+  // fix is different: the request itself is wrong and re-running it unchanged
+  // fails identically. The rail reads this to clear the saved choice — an
+  // answer of "the model could not be reached" would have it retry forever.
+  assert.match(SRC, /model_not_offered/);
+  assert.match(SRC, /no longer offered for this page/);
+  const refusal = SRC.slice(SRC.indexOf('if (!r.ok)'));
+  assert.ok(refusal.indexOf('model_not_offered') < refusal.indexOf('budget_user_month'),
+    'the request-was-wrong case must be distinguished before the budget cases');
+});

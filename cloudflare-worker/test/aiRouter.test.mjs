@@ -303,3 +303,144 @@ test('embedding cache hit on second identical input', async () => {
   assert.equal(db._rows[0].cached, 0);
   assert.equal(db._rows[1].cached, 1);
 });
+
+// --------------------------------------------------------------------------
+// The caller-chosen model. Everything below is about ONE property: a model the
+// task does not offer never becomes an argument to `env.AI.run`.
+//
+// The source-level guard (`ai_router_prices.test.mjs`) holds the LISTS shut —
+// `safety` and `embed` declare none, every alternate is priced. These hold the
+// BEHAVIOUR shut, which is the half a source test cannot see: it can prove the
+// list is empty and still not prove that an empty list refuses.
+// --------------------------------------------------------------------------
+
+test('a model on the task\'s list is the one that runs', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeAI([() => ({ response: 'ok', usage: { prompt_tokens: 9, completion_tokens: 3 } })]);
+  const db = makeDB();
+  const env = baseEnv({ ai, kv: makeKV(), db });
+
+  const r = await run(env, {
+    task: 'workspace_explain',
+    userId: 5,
+    model: '@cf/meta/llama-3.2-3b-instruct',
+    messages: [{ role: 'user', content: 'read this page back' }],
+  });
+
+  assert.equal(r.ok, true, `expected ok, got ${JSON.stringify(r)}`);
+  assert.equal(ai.calls.length, 1);
+  assert.equal(ai.calls[0].model, '@cf/meta/llama-3.2-3b-instruct');
+  assert.equal(r.usage.model, '@cf/meta/llama-3.2-3b-instruct');
+  assert.equal(r.usage.fallback_used, false, 'a chosen model is not a fallback');
+  // And it is BILLED at its own rate, not the primary's. 9 in + 3 out at
+  // 0.051 / 0.335 per M is a different number from the 70b's 0.293 / 2.253;
+  // an implementation that ran the 3b and priced it as the primary would pass
+  // every assertion above and this one catches it.
+  const expected = (9 / 1e6) * 0.051 + (3 / 1e6) * 0.335;
+  assert.ok(Math.abs(r.usage.est_cost_usd - expected) < 1e-12,
+    `cost ${r.usage.est_cost_usd} is not the 3b's rate (${expected})`);
+  assert.equal(db._rows[0].model, '@cf/meta/llama-3.2-3b-instruct');
+});
+
+test('a model NOT on the list never reaches env.AI.run', async () => {
+  const { run, __resetForTest } = await loadRouter();
+  __resetForTest();
+  const ai = makeAI([() => ({ response: 'should never happen', usage: {} })]);
+  const db = makeDB();
+  const env = baseEnv({ ai, kv: makeKV(), db });
+
+  const r = await run(env, {
+    task: 'workspace_explain',
+    userId: 5,
+    model: '@cf/deepseek-ai/deepseek-v4-pro-0813',   // real model, not offered here
+    messages: [{ role: 'user', content: 'hello' }],
+  });
+
+  assert.equal(r.ok, false);
+  assert.equal(r.refusal, 'model_not_offered');
+  assert.equal(ai.calls.length, 0, 'the model was called anyway — this is the whole property');
+  // Refused, NOT silently run on the primary. A router that quietly substituted
+  // would return ok:true here, and a founder would read the 3b's rate beside a
+  // 70b's answer.
+  assert.ok(!r.output, 'a refusal must carry no output');
+  assert.equal(db._rows.length, 1, 'a refusal is still a recorded event');
+  assert.equal(db._rows[0].refusal, 'model_not_offered');
+  assert.equal(db._rows[0].est_cost_usd, 0);
+});
+
+test('safety cannot be routed off the guard model, by any request', async () => {
+  const { run, ROUTE, __resetForTest } = await loadRouter();
+  __resetForTest();
+  assert.equal(ROUTE.safety.model, '@cf/meta/llama-guard-3-8b');
+  assert.deepEqual(ROUTE.safety.alternates ?? [], []);
+
+  for (const attempt of [
+    '@cf/meta/llama-3.3-70b-instruct-fp8-fast',   // a model the router does route to
+    '@cf/meta/llama-guard-3-8b',                  // even the guard model itself
+  ]) {
+    __resetForTest();
+    const ai = makeAI([() => ({ response: 'safe', usage: {} })]);
+    const env = baseEnv({ ai, kv: makeKV(), db: makeDB() });
+    const r = await run(env, { task: 'safety', userId: 1, model: attempt, text: 'check me' });
+    assert.equal(r.refusal, 'model_not_offered', `${attempt} was accepted for task=safety`);
+    assert.equal(ai.calls.length, 0);
+  }
+
+  // …and with no `model` at all it still runs, on the guard model. The rule is
+  // "no override", not "no safety calls".
+  __resetForTest();
+  const ai = makeAI([() => ({ response: 'safe', usage: { prompt_tokens: 4, completion_tokens: 1 } })]);
+  const env = baseEnv({ ai, kv: makeKV(), db: makeDB() });
+  const ok = await run(env, { task: 'safety', userId: 1, text: 'check me' });
+  assert.equal(ok.ok, true);
+  assert.equal(ai.calls[0].model, '@cf/meta/llama-guard-3-8b');
+});
+
+test('a fallback\'s answer is not cached under the primary\'s name', async () => {
+  // `explain` is the cached task (7 days). When the 70b fails and the 8b
+  // answers, the text in hand is the 8b's. Caching it under the 70b's key
+  // would hand the next caller a smaller model's answer labelled with the
+  // 70b's name and rate — for a week.
+  //
+  // This is also the only reachable half of the cache-key change: no task
+  // today has BOTH a cacheTtlSec and alternates, so a chosen model cannot yet
+  // collide with a cached one. `ai_router_prices.test.mjs` holds that half at
+  // the source, because the day a task grows both, the bug would be silent.
+  const { run, ROUTE, __resetForTest } = await loadRouter();
+  __resetForTest();
+  assert.ok(ROUTE.explain.cacheTtlSec > 0, 'explain is no longer a cached task');
+  assert.deepEqual(ROUTE.explain.fallbackChain, ['@cf/meta/llama-3.1-8b-instruct-fp8']);
+
+  const kv = makeKV();
+  const ai = makeAI([
+    () => { throw new Error('70b 503'); },
+    () => ({ response: 'from the 8b', usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+    () => ({ response: 'from the 70b', usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+  ]);
+  const env = baseEnv({ ai, kv, db: makeDB() });
+  const ask = () => run(env, { task: 'explain', userId: 3, topic: 'runway', text: 'what is runway' });
+
+  const first = await ask();
+  assert.equal(first.ok, true, `expected ok, got ${JSON.stringify(first)}`);
+  assert.equal(first.output, 'from the 8b');
+  assert.equal(first.usage.fallback_used, true);
+  assert.equal(ai.calls.length, 2);
+
+  // The primary has recovered. The next ask must MISS — the stored row belongs
+  // to the 8b — and reach the 70b.
+  const second = await ask();
+  assert.equal(second.usage.cached, false,
+    'the 8b\'s answer was served back as the 70b\'s');
+  assert.equal(second.output, 'from the 70b');
+  assert.equal(second.usage.fallback_used, false);
+  assert.equal(ai.calls.length, 3);
+  assert.equal(ai.calls[2].model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+
+  // …and a third, with the primary still healthy, is a hit. The cache still
+  // works; it just stopped lying about whose answer it holds.
+  const third = await ask();
+  assert.equal(third.usage.cached, true, 'the primary never cached its own answer');
+  assert.equal(third.output, 'from the 70b');
+  assert.equal(ai.calls.length, 3);
+});

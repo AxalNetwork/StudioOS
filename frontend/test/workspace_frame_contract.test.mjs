@@ -106,11 +106,21 @@ test('the rail names a model only for a surface that really runs one', () => {
   assert.match(rail, /priceForTask\(pricing, surface\.task\)/,
     'the model and its rate are the router\'s, derived — never typed here');
 
-  // The canvases quote `$0.293 / M in · $2.253 / M out` for this model and the
-  // router's table says 0.50 / 0.50. Whichever is right, the rail shows what
-  // will actually be charged.
+  // This used to ban the display name "Llama 3.3 70B Fast" alongside the two
+  // figures, because at the time naming a model and typing its card were the
+  // same act. They are not any more: the name is editorial copy in
+  // `ui/railModels.js` and the rate is derived from the router, so the ban
+  // follows the FIGURES into that file rather than following the name.
+  //
+  // Deliberately not "the name may not appear anywhere". A menu has to call
+  // the 70b something, and "llama-3.3-70b-instruct-fp8-fast" is an identifier
+  // rather than a name. What must never be typed is what it COSTS.
   assert.doesNotMatch(rail, /\$0\.293|\$2\.253|Llama 3\.3 70B Fast/,
     'the canvas figures are not the router figures');
+  const copy = src('frontend/src/ui/railModels.js');
+  assert.doesNotMatch(copy, /\$\s*\d|\/\s*M\s+(in|out)\b|per million/i,
+    'railModels.js is copy about a model, never a price for one — the figures come '
+    + 'from /api/ai/pricing so a rate on screen is a rate the router bills');
   for (const file of SHELL_CALLERS) {
     assert.doesNotMatch(src(file), /\bINHERITED\b|\bRECOMMENDED\b|per million|\/M tokens/i,
       `${file} hand-writes a model card instead of letting the rail derive one`);
