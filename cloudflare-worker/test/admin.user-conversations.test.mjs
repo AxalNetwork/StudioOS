@@ -16,7 +16,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
@@ -24,15 +24,36 @@ import { transpileTs as transpile } from './_transpile-ts.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Transpile the helper AND the modules it imports, preserving the relative
+ * layout so its own `import` specifiers resolve.
+ *
+ * It used to write a single file into a flat temp dir, which worked only while
+ * the helper imported nothing. The moment `csvEsc` moved to
+ * `services/csv.ts` — one escaper for the worker, instead of three copies that
+ * had drifted apart over carriage returns — every test in this file failed with
+ * `Cannot find module '/tmp/services/csv'`. Mirroring the tree is the fix, and
+ * it makes the test exercise the real dependency graph rather than a file
+ * pretending to have none.
+ */
+const TS_DEPS = [
+  ['routes/admin.conversations.helpers.ts', 'routes/admin.conversations.helpers.mjs'],
+  ['services/csv.ts', 'services/csv.mjs'],
+];
+
 async function loadHelpers() {
-  const src = await readFile(
-    resolve(__dirname, '../src/routes/admin.conversations.helpers.ts'),
-    'utf8',
-  );
   const tmp = await mkdtemp(join(tmpdir(), 'admin-conv-helpers-'));
-  const out = join(tmp, 'helpers.mjs');
-  await writeFile(out, transpile(src));
-  return await import(pathToFileURL(out).href);
+  let entry = '';
+  for (const [from, to] of TS_DEPS) {
+    const src = await readFile(resolve(__dirname, '../src', from), 'utf8');
+    const out = join(tmp, to);
+    await mkdir(dirname(out), { recursive: true });
+    // `.ts` specifiers are extensionless in source; point them at the .mjs we
+    // just wrote, or Node resolves a file that is not there.
+    await writeFile(out, transpile(src).replace(/from '(\.\.?\/[^']+)'/g, "from '$1.mjs'"));
+    if (!entry) entry = out;
+  }
+  return await import(pathToFileURL(entry).href);
 }
 
 // ---------------------------------------------------------------------------

@@ -42,6 +42,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/ui',                 'the design-system primitives everything else composes'],
   ['frontend/src/lib',                'API client, formatting, and browser-side helpers'],
   ['frontend/src/hooks',              'shared React state'],
+  ['frontend/src/workspaces',         'the shell every workspace subpage sits in, and the config that drives it'],
   ['frontend/src/data',               'static reference data — NOT a place for fixtures'],
   ['frontend/test',                   'what the frontend guarantees'],
   ['cloudflare-worker/src',           'the production worker'],
