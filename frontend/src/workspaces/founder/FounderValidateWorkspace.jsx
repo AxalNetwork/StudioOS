@@ -584,6 +584,26 @@ export default function FounderValidateWorkspace() {
     setBoardKey((n) => n + 1);
   };
 
+  // One shape for all three exports. The failure that matters is a 403 on the
+  // summary — `canReadDecision` excludes partners — and it must read as a
+  // refusal in the header rather than as a file that silently never arrives.
+  const [busy, setBusy] = useState('');
+  const [exportError, setExportError] = useState('');
+  const runExport = async (key, fn) => {
+    setBusy(key); setExportError('');
+    try {
+      await fn(projectId);
+    } catch (e) {
+      setExportError(e?.message || 'The export could not be produced.');
+    } finally {
+      setBusy('');
+    }
+  };
+  const exportAction = (label, testid, fn) => ({
+    label, testid, disabled: !projectId, busy: busy === testid,
+    onClick: () => runExport(testid, fn),
+  });
+
   const body = useMemo(() => {
     switch (zone?.slug) {
       case 'pain-map':
@@ -618,6 +638,10 @@ export default function FounderValidateWorkspace() {
         // 400. The body already explains the state, so this just stays shut.
         disabled: !projectId,
       },
+      exportAction('Export interviews', 'action-export-interviews', api.exportValidateInterviews),
+    ],
+    'pain-map': [
+      exportAction('Export map', 'action-export-pain-map', api.exportValidatePainMap),
     ],
     hypotheses: [
       { label: 'New hypothesis', testid: 'action-new-hypothesis', onClick: () => setHypOpen(true), disabled: !projectId },
@@ -631,9 +655,14 @@ export default function FounderValidateWorkspace() {
         disabled: !projectId,
       },
     ],
-    // Pain map and Verdict are drawn with Export and "Send to Problem slide".
-    // Neither route exists yet, and a button is a promise — so they stay off
-    // this row until they are built rather than shipping as a 404.
+    verdict: [
+      exportAction('Export summary', 'action-export-summary', api.exportValidateSummary),
+    ],
+    // "Send to Problem slide" is on the canvas for Pain map and Verdict and is
+    // NOT here. It has no endpoint — and more to the point, the pain themes
+    // already feed the deck's slide 2 (`pain_groups` is curated for exactly
+    // that, see progress.ts), so a button that "sends" would be theatre over a
+    // pipe that already runs. What it should become is a link that says so.
   };
   const actions = ACTIONS[zone?.slug] ? <ZoneActions items={ACTIONS[zone.slug]} /> : null;
 
@@ -662,6 +691,14 @@ export default function FounderValidateWorkspace() {
       intro={INTRO[zone?.slug] || INTRO.interviews}
       actions={actions}
     >
+      {exportError && (
+        <p
+          data-testid="status-export-error"
+          className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+        >
+          {exportError}
+        </p>
+      )}
       {body}
       <LogInterviewModal
         open={logOpen}

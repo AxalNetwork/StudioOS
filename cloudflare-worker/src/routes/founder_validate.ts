@@ -25,7 +25,12 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { loadPainGroupModel, normPhrase } from '../services/painGroups';
+import { loadPainGroupModel, normPhrase, getPainGroupsView } from '../services/painGroups';
+import { csvResponse, stamp } from '../services/csv';
+import {
+  serializeInterviewsCsv, serializePainMapCsv, serializeSummaryCsv,
+  type ExportInterviewRow,
+} from './_founder_validate_exports';
 import { ensureDiscoveryEvidenceColumns } from '../services/discoveryInterviewSchema';
 import {
   canReadBoard, canReadDecision, canWrite,
@@ -121,23 +126,29 @@ async function loadEvidenceBase(env: Env, projectId: number) {
 // The board
 // ---------------------------------------------------------------------------
 
-founderValidate.get('/board/:projectId', async (c) => {
-  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
-  if (s instanceof Response) return s;
-
-  const hyps = await c.env.DB.prepare(
+/**
+ * The board, built once.
+ *
+ * Extracted when the CSV export arrived: a second copy of this orchestration
+ * would be a second answer to "what lane is H3 in", and the two would part
+ * company the first time either was edited. The counts are derived, never
+ * stored, precisely so there is one answer — deriving them twice from two
+ * places gives that away again.
+ */
+async function buildBoard(env: Env, projectId: number) {
+  const hyps = await env.DB.prepare(
     `SELECT id, code, claim, sort_order, retired_at
        FROM hypotheses WHERE project_id = ? ORDER BY sort_order, id`,
-  ).bind(s.project.id).all<any>().catch(() => ({ results: [] as any[] }));
+  ).bind(projectId).all<any>().catch(() => ({ results: [] as any[] }));
 
-  const linkRes = await c.env.DB.prepare(
+  const linkRes = await env.DB.prepare(
     `SELECT l.id, l.hypothesis_id, l.pain_group_id, l.direction
        FROM hypothesis_pain_links l
        JOIN hypotheses h ON h.id = l.hypothesis_id
       WHERE h.project_id = ?`,
-  ).bind(s.project.id).all<any>().catch(() => ({ results: [] as any[] }));
+  ).bind(projectId).all<any>().catch(() => ({ results: [] as any[] }));
 
-  const { interviews, model } = await loadEvidenceBase(c.env, s.project.id);
+  const { interviews, model } = await loadEvidenceBase(env, projectId);
   const linksBy = new Map<number, any[]>();
   for (const l of linkRes.results || []) {
     if (!linksBy.has(l.hypothesis_id)) linksBy.set(l.hypothesis_id, []);
@@ -167,8 +178,7 @@ founderValidate.get('/board/:projectId', async (c) => {
   const fitMissing = interviews.filter((i) => i.row.icp_fit == null).length;
   const consentMissing = interviews.filter((i) => i.row.quote_consent == null).length;
 
-  return json({
-    project: { id: s.project.id, name: s.project.name },
+  return {
     bar: VALIDATION_BAR,
     hypotheses: items,
     pain_groups: model.groups,
@@ -179,7 +189,14 @@ founderValidate.get('/board/:projectId', async (c) => {
       quotable: interviews.filter((i) => i.row.quote_consent === 1).length,
       consent_not_recorded: consentMissing,
     },
-  });
+  };
+}
+
+founderValidate.get('/board/:projectId', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
+  if (s instanceof Response) return s;
+  const board = await buildBoard(c.env, s.project.id);
+  return json({ project: { id: s.project.id, name: s.project.name }, ...board });
 });
 
 founderValidate.post('/board/:projectId/hypotheses', async (c) => {
@@ -279,6 +296,94 @@ founderValidate.delete('/links/:id', async (c) => {
 // ---------------------------------------------------------------------------
 // The founder's decision — narrower audience than everything above
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// The three exports
+//
+// GET, not POST: none of these takes a filter, so the URL is the whole request
+// and a person can bookmark or curl it. (`admin.ts`'s transcript export is a
+// POST precisely because it does take filters.)
+//
+// Each caps its rows. A Worker materialises the whole body in memory, so an
+// unbounded export is an outage waiting for the venture that logs 40,000
+// interviews — and `X-Export-Rows` tells the caller what it actually got, so a
+// truncated file cannot be mistaken for a complete one.
+// ---------------------------------------------------------------------------
+
+/**
+ * Row cap, written as a literal in the SQL below rather than interpolated.
+ *
+ * `scripts/check-sql-prepare.mjs` refuses ANY `${…}` inside a `DB.prepare`
+ * template — a constant reads the same as a variable at the point the query
+ * text is built, and the guard is right to not try to tell them apart. Keeping
+ * the number in one place means keeping it in the statement, so there is no
+ * second copy to drift: 5000 is enough that no real venture reaches it, and
+ * small enough that a bug cannot exhaust a Worker's memory. `admin.ts`'s
+ * transcript export uses the same figure for the same reason.
+ */
+
+/** `Acme_Robotics-interviews-2026-09-06.csv` — the worker's two filename idioms at once. */
+const exportName = (projectName: string, what: string) =>
+  `${String(projectName || 'venture').replace(/[^A-Za-z0-9._-]/g, '_')}-${what}-${stamp()}.csv`;
+
+founderValidate.get('/interviews/:projectId/export.csv', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
+  if (s instanceof Response) return s;
+
+  // 211's columns are ensured before they are named, the same way the board
+  // does it: on an environment where the migration has not run, "no such
+  // column" would otherwise read as "no interviews".
+  await ensureDiscoveryEvidenceColumns(c.env);
+  const res = await c.env.DB.prepare(
+    `SELECT id, interviewee_name, interviewee_role, interviewee_company,
+            interview_date, icp_fit, quote_consent, featured,
+            validation_rating, validation_comment, notes, pains_json
+       FROM discovery_interviews WHERE project_id = ?
+      ORDER BY interview_date DESC, id DESC LIMIT 5000`,
+  ).bind(s.project.id).all<ExportInterviewRow>().catch(() => ({ results: [] as ExportInterviewRow[] }));
+
+  const rows = res.results || [];
+  return csvResponse(
+    serializeInterviewsCsv(rows),
+    exportName(s.project.name, 'interviews'),
+    { 'X-Export-Rows': String(rows.length) },
+  );
+});
+
+founderValidate.get('/pain-map/:projectId/export.csv', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
+  if (s instanceof Response) return s;
+  const view = await getPainGroupsView(c.env, s.project.id);
+  return csvResponse(
+    serializePainMapCsv(view),
+    exportName(s.project.name, 'pain-map'),
+    { 'X-Export-Rows': String(view.groups.length + view.ungrouped.length) },
+  );
+});
+
+// `canReadDecision`, NOT `canReadBoard`: this file carries the founder's own
+// proceed/pivot/stop, which partners may not read. Gating the whole export on
+// the stricter of the two rules is easier to reason about than one that
+// silently drops a section for some callers — and the board itself is still
+// readable in the app by anyone `canReadBoard` admits.
+founderValidate.get('/summary/:projectId/export.csv', async (c) => {
+  const s = await scope(c, Number(c.req.param('projectId')), canReadDecision);
+  if (s instanceof Response) return s;
+
+  const board = await buildBoard(c.env, s.project.id);
+  const cur = await c.env.DB.prepare(
+    `SELECT decision, reasoning, decided_at FROM validation_decisions
+      WHERE project_id = ? AND superseded_at IS NULL
+      ORDER BY decided_at DESC, id DESC LIMIT 1`,
+  ).bind(s.project.id).first<{ decision: string; reasoning: string | null; decided_at: string | null }>()
+    .catch(() => null);
+
+  return csvResponse(
+    serializeSummaryCsv(board.hypotheses as any, cur || null),
+    exportName(s.project.name, 'validation-summary'),
+    { 'X-Export-Rows': String(board.hypotheses.length) },
+  );
+});
 
 founderValidate.get('/decision/:projectId', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canReadDecision);

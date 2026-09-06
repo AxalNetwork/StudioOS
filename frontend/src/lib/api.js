@@ -1213,6 +1213,52 @@ export const api = {
   linkHypothesisPain: (id, data) => request(`/founder/validate/hypotheses/${id}/links`, { method: 'POST', body: JSON.stringify(data) }),
   unlinkHypothesisPain: (linkId) => request(`/founder/validate/links/${linkId}`, { method: 'DELETE' }),
   getValidationDecision: (projectId) => request(`/founder/validate/decision/${projectId}`),
+  // Validate · the three exports.
+  //
+  // ONE DOWNLOAD HELPER, NOT THREE. The blob → Content-Disposition →
+  // synthesised `<a download>` dance is written out five times in this file
+  // already (financials, the two advisor transcript exports, the audit CSV,
+  // the market-intel render). A sixth, seventh and eighth would be the same
+  // twelve lines with a different fallback filename, and they had already
+  // drifted: one reads `Content-Disposition`, one reads `content-disposition`,
+  // one revokes the object URL immediately and one after sixty seconds.
+  //
+  // A plain `<a href>` cannot do this: the API authenticates on the
+  // Authorization header and a link click sets no headers, which is the same
+  // reason `downloadDataRoom` fetches the blob rather than linking to it.
+  _downloadCsv: async (path, fallbackName) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`/api${path}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      // The worker answers a refusal as JSON with a `detail`, so a 403 reads
+      // as "Forbidden" rather than as a downloaded file containing the word.
+      let detail = res.statusText || 'Export failed';
+      try { const e = await res.json(); detail = e?.detail || e?.error || detail; } catch { /* not JSON */ }
+      const err = new Error(detail); err.status = res.status; throw err;
+    }
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '')
+      .match(/filename="?([^"]+)"?/)?.[1] || fallbackName;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    return { filename, rows: Number(res.headers.get('X-Export-Rows') || 0) };
+  },
+  // Named for what they contain. The canvas calls the first "Export
+  // transcripts"; `discovery_interviews` stores no transcript, no recording and
+  // no severity, so this is the interview log — see
+  // `_founder_validate_exports.ts`.
+  exportValidateInterviews: (projectId) =>
+    api._downloadCsv(`/founder/validate/interviews/${projectId}/export.csv`, 'interviews.csv'),
+  exportValidatePainMap: (projectId) =>
+    api._downloadCsv(`/founder/validate/pain-map/${projectId}/export.csv`, 'pain-map.csv'),
+  exportValidateSummary: (projectId) =>
+    api._downloadCsv(`/founder/validate/summary/${projectId}/export.csv`, 'validation-summary.csv'),
   recordValidationDecision: (projectId, data) => request(`/founder/validate/decision/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateInterviewEvidence: (id, data) => request(`/founder/validate/interviews/${id}/evidence`, { method: 'PATCH', body: JSON.stringify(data) }),
   // Task #5 — customer-audience waitlist signups + lightweight CRM layer inside

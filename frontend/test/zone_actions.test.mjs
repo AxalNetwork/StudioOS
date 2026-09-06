@@ -112,16 +112,29 @@ test('every write handler calls an api method that exists', () => {
   }
 });
 
-test('a zone whose endpoints do not exist yet draws no action', () => {
-  // Pain map and Verdict: the canvas gives them Export and "Send to Problem
-  // slide"; the worker has neither route. They must not appear in the map.
-  for (const slug of ['pain-map', 'verdict']) {
-    assert.ok(!new RegExp(`['"]?${slug}['"]?\\s*:`).test(block),
-      `${slug} has entries in ACTIONS — every one needs a live route first`);
+test('every api method the action map names is one that exists', () => {
+  // THIS ASSERTION MOVED, and the move is the point. It first read "pain-map
+  // and verdict must have no entries", which was true only while their export
+  // routes did not exist — and it failed, correctly, the moment they did. A
+  // test that has to be deleted to ship the next zone was pinning a schedule,
+  // not an invariant. The invariant is that an action reaches a route.
+  const named = [...block.matchAll(/\bapi\.([A-Za-z0-9_]+)\b/g)].map((m) => m[1]);
+  assert.ok(named.length >= 3, `only ${named.length} api methods named in ACTIONS — the matcher is not matching`);
+  for (const m of new Set(named)) {
+    assert.ok(methods.has(m), `ACTIONS names api.${m}, which frontend/src/lib/api.js does not define`);
   }
-  // And the map must still be reachable: a zone with no entry renders nothing.
+  // A zone with no backed action renders no row at all, rather than an empty one.
   assert.match(src, /ACTIONS\[zone\?\.slug\] \? <ZoneActions/,
     'the action row must be absent, not empty, for a zone with no backed action');
+});
+
+test('"Send to Problem slide" is not drawn, because it would be theatre', () => {
+  // The canvas gives it to Pain map and Verdict. There is no endpoint — and
+  // the pain themes ALREADY feed the deck's slide 2, since `pain_groups` is
+  // curated for exactly that. A button that "sends" would be a control over a
+  // pipe that already runs, which is a worse lie than a missing button.
+  assert.ok(!/Send to Problem slide/.test(block),
+    'a "send" button over a feed that is already live must not ship');
 });
 
 test('ZoneActions renders a limit as text, never as a button', () => {

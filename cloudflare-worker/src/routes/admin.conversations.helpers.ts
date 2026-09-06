@@ -6,6 +6,11 @@
 // Keep these functions pure — no `env`, no DB, no `fetch`. Inputs in,
 // strings/objects out.
 
+// One escaper for the whole worker. This file held the only correct copy —
+// see services/csv.ts for the two that still disagree with it about carriage
+// returns, and why fixing those is its own commit.
+import { csvEsc } from '../services/csv';
+
 export type TranscriptRow = {
   conversation_id: number;
   role: string;
@@ -20,12 +25,6 @@ export type WriteMap = Map<string, string>; // `${conv_id}:${question_id}` -> 't
 function safeParseJson(s: string | null): any {
   if (!s) return null;
   try { return JSON.parse(s); } catch { return null; }
-}
-
-function csvEsc(v: unknown): string {
-  if (v == null) return '';
-  const s = String(v);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 export const TRANSCRIPT_CSV_HEADER = [
