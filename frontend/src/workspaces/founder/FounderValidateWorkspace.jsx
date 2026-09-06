@@ -5,6 +5,7 @@ import { Card, EmptyState, ErrorState, WorkerRail, Skeleton } from '../../ui';
 import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
 import ZoneActions from '../ZoneActions';
 import LogInterviewModal from '../../components/discovery/LogInterviewModal';
+import { NewHypothesisDialog, LinkPainDialog } from './ValidateDialogs';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 
 /**
@@ -304,8 +305,16 @@ const LANES = [
 
 const VERDICT_LABEL = { validated: 'Validated', invalidated: 'Invalidated', unproven: 'Unproven' };
 
-/** One shared load, so both zones agree about the same interviews. */
-function useBoard(projectId, ready) {
+/**
+ * One shared load, so both zones agree about the same interviews.
+ *
+ * It is called ONCE, at the top of this file's default export, and handed down
+ * — rather than by each zone that wants it. That is what lets the header's
+ * "New hypothesis" and "Link to a pain" actions refresh the board they just
+ * wrote to: `reloadKey` is the only channel between a dialog above the body and
+ * the data below it.
+ */
+function useBoard(projectId, ready, reloadKey = 0) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   useEffect(() => {
@@ -316,7 +325,7 @@ function useBoard(projectId, ready) {
       .then((r) => { if (alive) setData(r); })
       .catch((e) => { if (alive) setError(e); });
     return () => { alive = false; };
-  }, [projectId, ready]);
+  }, [projectId, ready, reloadKey]);
   return { data, error };
 }
 
@@ -350,8 +359,8 @@ function FitGap({ base }) {
   );
 }
 
-function HypothesisBoard({ projectId, ready }) {
-  const { data, error } = useBoard(projectId, ready);
+function HypothesisBoard({ projectId, ready, board, onNew }) {
+  const { data, error } = board;
   if (!ready) return <Skeleton className="h-40" />;
   if (!projectId) return <NoVenture what="The hypothesis board" />;
   if (error) return <ErrorState error={error} />;
@@ -378,7 +387,11 @@ function HypothesisBoard({ projectId, ready }) {
         <EmptyState
           title="No hypotheses yet"
           description="A hypothesis names what you believe and which pain themes would prove or disprove it. Add one and the interviews already logged start counting toward it. Nothing here is inferred — an empty board means an empty board, on purpose."
-          action={<Link to="/validate/pain-map" className="text-axal-violet underline">See the pain map</Link>}
+          action={(
+            <button type="button" onClick={onNew} data-testid="link-empty-new-hypothesis" className="text-axal-violet underline">
+              Add a hypothesis
+            </button>
+          )}
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -423,8 +436,8 @@ function HypothesisBoard({ projectId, ready }) {
   );
 }
 
-function ValidationSummary({ projectId, ready }) {
-  const { data, error } = useBoard(projectId, ready);
+function ValidationSummary({ projectId, ready, board }) {
+  const { data, error } = board;
   const [decision, setDecision] = useState(undefined);
 
   useEffect(() => {
@@ -549,11 +562,26 @@ export default function FounderValidateWorkspace() {
   // The modal lives here rather than in `Interviews` because the button that
   // opens it lives in the SHELL's header, above the body — one owner for both.
   const [logOpen, setLogOpen] = useState(false);
+  const [hypOpen, setHypOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [boardKey, setBoardKey] = useState(0);
+  const board = useBoard(projectId, ready, boardKey);
+
   const saveInterview = async (payload) => {
     await api.createInterview(projectId, payload);
     setLogOpen(false);
     setReloadKey((n) => n + 1);
+  };
+  const saveHypothesis = async (payload) => {
+    await api.createHypothesis(projectId, payload);
+    setHypOpen(false);
+    setBoardKey((n) => n + 1);
+  };
+  const saveLink = async (hypothesisId, payload) => {
+    await api.linkHypothesisPain(hypothesisId, payload);
+    setLinkOpen(false);
+    setBoardKey((n) => n + 1);
   };
 
   const body = useMemo(() => {
@@ -561,14 +589,14 @@ export default function FounderValidateWorkspace() {
       case 'pain-map':
         return <PainMap projectId={projectId} ready={ready} />;
       case 'hypotheses':
-        return <HypothesisBoard projectId={projectId} ready={ready} />;
+        return <HypothesisBoard projectId={projectId} ready={ready} board={board} onNew={() => setHypOpen(true)} />;
       case 'verdict':
-        return <ValidationSummary projectId={projectId} ready={ready} />;
+        return <ValidationSummary projectId={projectId} ready={ready} board={board} />;
       case 'interviews':
       default:
         return <Interviews projectId={projectId} ready={ready} reloadKey={reloadKey} onLog={() => setLogOpen(true)} />;
     }
-  }, [zone?.slug, projectId, ready, reloadKey]);
+  }, [zone?.slug, projectId, ready, reloadKey, board]);
 
   // WHY THIS IS THE FIRST ZONE PAGE IN THE PRODUCT TO USE `actions`.
   // `WorkspaceShell` has had the slot since it was written, and every caller
@@ -580,8 +608,8 @@ export default function FounderValidateWorkspace() {
   //
   // The other three zones get their actions as their endpoints land. A zone
   // with nothing backed draws nothing — a button is a promise.
-  const actions = zone?.slug === 'interviews' ? (
-    <ZoneActions items={[
+  const ACTIONS = {
+    interviews: [
       {
         label: 'Log an interview',
         testid: 'action-log-interview',
@@ -590,8 +618,24 @@ export default function FounderValidateWorkspace() {
         // 400. The body already explains the state, so this just stays shut.
         disabled: !projectId,
       },
-    ]} />
-  ) : null;
+    ],
+    hypotheses: [
+      { label: 'New hypothesis', testid: 'action-new-hypothesis', onClick: () => setHypOpen(true), disabled: !projectId },
+      {
+        label: 'Link to a pain',
+        testid: 'action-link-pain',
+        onClick: () => setLinkOpen(true),
+        // Nothing to link until the board has both ends of a link. The dialog
+        // says which end is missing; the button opens it either way so the
+        // reader learns that rather than finding a control that does nothing.
+        disabled: !projectId,
+      },
+    ],
+    // Pain map and Verdict are drawn with Export and "Send to Problem slide".
+    // Neither route exists yet, and a button is a promise — so they stay off
+    // this row until they are built rather than shipping as a 404.
+  };
+  const actions = ACTIONS[zone?.slug] ? <ZoneActions items={ACTIONS[zone.slug]} /> : null;
 
   const INTRO = {
     interviews: 'Every conversation logged against this venture. The same records Discovery writes — one log, two doors.',
@@ -624,6 +668,14 @@ export default function FounderValidateWorkspace() {
         interview={null}
         onClose={() => setLogOpen(false)}
         onSave={saveInterview}
+      />
+      <NewHypothesisDialog open={hypOpen} onClose={() => setHypOpen(false)} onSave={saveHypothesis} />
+      <LinkPainDialog
+        open={linkOpen}
+        hypotheses={(board.data?.hypotheses || []).filter((h) => !h.retired_at)}
+        painGroups={board.data?.pain_groups || []}
+        onClose={() => setLinkOpen(false)}
+        onSave={saveLink}
       />
     </WorkspaceShell>
   );
