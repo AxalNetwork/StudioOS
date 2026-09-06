@@ -71,7 +71,7 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
         ).bind(
           payload.project_id, result.market, result.team, result.product,
           result.capital, result.total, result.rationale,
-          env.AI ? '@cf/meta/llama-3.1-8b-instruct' : null,
+          env.AI ? '@cf/meta/llama-3.1-8b-instruct-fp8' : null,
         ).run();
       } catch (e: any) {
         // Logged, not swallowed. A silent catch here is what hid the broken

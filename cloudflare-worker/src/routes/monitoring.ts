@@ -222,7 +222,7 @@ Rate-limit blocks: ${blockedCount[0]?.c ?? 0}
 5xx errors: ${errCount[0]?.c ?? 0}
 
 Detected anomalies: ${anomalies.length === 0 ? 'none' : anomalies.map(a => `${a.endpoint} (${a.type})`).join(', ')}`;
-      const r: any = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      const r: any = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
         messages: [
           { role: 'system', content: 'You write short, factual SRE alert summaries.' },
           { role: 'user', content: prompt },
