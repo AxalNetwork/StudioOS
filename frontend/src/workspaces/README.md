@@ -58,7 +58,9 @@ investor workspaces all solving the same problem four ways.
 
 **A zone header's actions come from the canvas, and each one is either wired or
 stated.** `zoneActionBuilder.js` holds the rules; `founderZoneActions.js`,
-`investorZoneActions.js` and `partnerZoneActions.js` hold each profile's answers. The labels are copied from
+`investorZoneActions.js`, `partnerZoneActions.js` and `advisorZoneActions.js`
+hold each profile's answers — forty-nine zones and a hundred and forty-two
+actions between them. The labels are copied from
 the `ops:` array of the zone's artboard, and each is an export that runs
 (`frontend/src/lib/csvExport.js`), a link to a route that performs it, or a
 `note` saying nothing does. `ZoneActions.jsx` renders a note as text and never as

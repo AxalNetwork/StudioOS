@@ -6,6 +6,7 @@ import {
   Field, NothingYet, Pill, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
 } from './kit';
+import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 
 /**
  * Expertise · Services — what you sell, and what you charge for it.
@@ -213,6 +214,7 @@ export default function ServicesZone() {
       </Card>
 
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
+        actions={advisorZoneActions('expertise/services', { view: { header: ['Service', 'Active', 'Price (cents)', 'Units sold'], rows: state.items, cells: (r) => [r.title, r.is_active, r.price_cents, r.units_sold] } })}
         isEmpty={state.items.length === 0} empty={empty}>
         <div className="space-y-3">
           {state.items.map((row) => (

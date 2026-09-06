@@ -2426,6 +2426,19 @@ RENDER PROP called with the rows their tab loaded — the caller decides, and th
 shared page learns nothing about licences. The alternative, wiring from the
 bucket router, would have cost every one of those exports its rows.
 
+**The advisor pass is four zones, and the shape of what is missing is the whole
+story.** Only one advisor artboard set carries an `ops:` array; Practice's five
+zones and Cohorts' five have no header actions in any canvas, so there was
+nothing to copy and nothing was invented. `expertise/visibility` is the one zone
+excluded outright: it is not a body but a card whose entire page already states
+the gap it would repeat. The exclusion is listed in the guard, which checks the
+excluded set exactly, so a second zone cannot join it quietly.
+
+**Across the four profiles: forty-nine zones, a hundred and forty-two actions,
+fifty-seven of which run.** The other eighty-five are sentences. That ratio is
+the deliverable — a reader now knows, on every zone, which of the things the
+design promised they can actually do.
+
 **Two canvases give no actions to record**, and nothing was invented for them:
 `Pages · Partner Pipeline` and `Advisor Detail · Practice` carry no `ops:` array
 on any artboard. The gap is written down in `ROUTE_MAP.md` instead. Inventing an

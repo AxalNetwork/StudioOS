@@ -342,7 +342,44 @@ the shared-surface pass, not this one. `/research` is that same shared surface.
 Worth knowing while `/network` waits: **`NetworkPage` has no organizations tab
 at all**, so a partner opening `/network/organizations` lands on contacts.
 
-Advisor remains.
+**Advisor — four zones, twelve actions.** One link, four exports, seven gaps.
+Four zones is the whole advisor scope, and that is a fact about the canvases
+rather than a shortfall: only `design/incoming/Pages · Advisor Expertise` carries
+an `ops:` array at all. `Advisor Detail · Practice`, `Advisor Canvas` and the
+backlog `Pages · Advisor Cohorts` are rendered exports with no header actions on
+any artboard, so Practice's five zones and Cohorts' five have nothing to copy.
+
+Three of the seven gaps are the good kind — the thing the label asks for is on
+the page already, so the note points down rather than apologising: every profile
+field is editable in place, a service is added from the form below, consent is
+requested from each proof's own row.
+
+`expertise/visibility` is the fifth artboard and is deliberately excluded. It is
+not a zone body at all but the one card left in `AdvisorBucketRoutes`' `COPY`,
+and its whole page is already the gap statement — nothing in this product counts
+a profile view, for anyone, and that needs an impression pipeline rather than a
+table. Three more "not stored" lines above a page headed *"Nothing counts profile
+views"* would be noise rather than honesty. The exclusion is listed in
+`frontend/test/profile_zone_actions.test.mjs`, which checks the excluded set
+exactly, so it cannot quietly grow.
+
+## The four profiles, totalled
+
+| Profile | Zones | Actions | Exports | Links | Stated gaps |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Founder | 21 | 58 | 15 | 17 | 26 |
+| Investor | 14 | 42 | 9 | 1 | 32 |
+| Partner | 10 | 30 | 10 | 0 | 20 |
+| Advisor | 4 | 12 | 4 | 1 | 7 |
+| **Total** | **49** | **142** | **38** | **19** | **85** |
+
+Fifty-seven of the hundred and forty-two run today. The other eighty-five say so
+on the page, in a sentence, rather than as a button that does nothing.
+
+**What is left is one shared pass, not a fifth profile.** `/network/*` and
+`/research/*` are single components serving four licences each — twenty-three
+more zones between them, whose actions differ by role while their bodies do not.
+They belong to a change that reaches every profile at once.
 
 **`/research/*` is in no profile's pass, and is not an oversight.** The five
 founder Research zones (and the investor, advisor and partner lists beside

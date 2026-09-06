@@ -94,6 +94,29 @@ const PROFILES = {
     embeddedGuards: 0,
     live: (route) => route.replace(/^\//, ''),
   },
+  advisor: {
+    table: 'frontend/src/workspaces/advisorZoneActions.js',
+    pages: ['frontend/src/pages/advisor'],
+    call: 'advisorZoneActions',
+    // The only advisor artboard set that carries an `ops:` array. `Advisor
+    // Detail · Practice`, `Advisor Canvas` and the backlog Cohorts export are
+    // rendered HTML with no header actions on any artboard, and this reader
+    // does not open `design/incoming/` for the other two profiles either — so
+    // it must for this one, since Expertise ships from there.
+    canvasDirs: ['design/incoming'],
+    canvas: /^Pages · Advisor Expertise/,
+    buckets: /^expertise\//,
+    zones: 4,
+    links: 1,
+    exports: 4,
+    embeddedGuards: 0,
+    // The fifth artboard. `expertise/visibility` is not a zone body at all — it
+    // is the one card left in AdvisorBucketRoutes' COPY, and its whole page is
+    // already the gap statement ("Nothing counts profile views"). Listed here
+    // so the exclusion is checked rather than silent.
+    excluded: ['expertise/visibility'],
+    live: (route) => route.replace(/^\//, ''),
+  },
 };
 
 /** The zone → labels map, read out of a profile's own literal. */
@@ -113,19 +136,22 @@ function tableLabels(src) {
 
 /** Every matching artboard's `route` and its `ops` array, from the canvases. */
 function canvasOps(profile) {
-  const dir = 'design/canvases/integrated';
-  const files = readdirSync(resolve(root, dir)).filter((f) => profile.canvas.test(f));
-  assert.ok(files.length, `no canvases matched ${profile.canvas}`);
   const out = {};
-  for (const f of files) {
-    const src = read(`${dir}/${f}`);
-    for (const chunk of src.split(/route:\s*'/).slice(1)) {
-      const route = chunk.slice(0, chunk.indexOf("'"));
-      const ops = chunk.match(/ops:\s*\[([^\]]*)\]/);
-      if (!ops) continue;
-      out[profile.live(route)] = [...ops[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
+  let seen = 0;
+  for (const dir of profile.canvasDirs || ['design/canvases/integrated']) {
+    const files = readdirSync(resolve(root, dir)).filter((f) => profile.canvas.test(f));
+    seen += files.length;
+    for (const f of files) {
+      const src = read(`${dir}/${f}`);
+      for (const chunk of src.split(/route:\s*'/).slice(1)) {
+        const route = chunk.slice(0, chunk.indexOf("'"));
+        const ops = chunk.match(/ops:\s*\[([^\]]*)\]/);
+        if (!ops) continue;
+        out[profile.live(route)] = [...ops[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
+      }
     }
   }
+  assert.ok(seen, `no canvases matched ${profile.canvas}`);
   return out;
 }
 
@@ -171,9 +197,19 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       assert.deepEqual(labels, canvas[zone], `${zone} does not match its artboard's ops`);
     }
     // And nothing in a canvas for one of this profile's own buckets was skipped.
-    const specified = Object.keys(canvas).filter((r) => profile.buckets.test(r));
+    // An excluded zone is one the canvas specifies and this table deliberately
+    // does not carry. Checking the set exactly means an exclusion cannot grow
+    // by accident — a new unbacked zone fails here rather than vanishing.
+    const excluded = profile.excluded || [];
+    const specified = Object.keys(canvas)
+      .filter((r) => profile.buckets.test(r))
+      .filter((r) => !excluded.includes(r));
     assert.deepEqual(specified.sort(), Object.keys(table).sort(),
       'an artboard specifies actions for a zone this table does not cover');
+    for (const skip of excluded) {
+      assert.ok(canvas[skip], `${skip} is excluded but no artboard specifies it`);
+      assert.ok(!table[skip], `${skip} is both excluded and declared`);
+    }
   });
 
   test(`${name}: every link is a route this licence is allowed to open`, () => {
@@ -191,8 +227,14 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       assert.ok(i > 0, `${path} is not a route App.jsx mounts`);
       // The guard is the first `[...]` after the path — either a bare array or
       // one wrapped in labRoles(...), which only ever ADDS the caller's own role.
-      const roles = APP.slice(i, i + 400).match(/guard\((?:labRoles\()?\[([^\]]*)\]/);
-      assert.ok(roles, `${path} does not go through guard()`);
+      const decl = APP.slice(i, i + 400);
+      // `authOnly(…)` is the one legitimate alternative to `guard([…])`: it
+      // gates on being signed in and on nothing else, so it is MORE permissive
+      // than any role list and every licence may open it. `/articles/draft`,
+      // where an advisor writes a new piece, is mounted that way.
+      if (/authOnly\(/.test(decl.slice(0, decl.indexOf('/>') + 2))) continue;
+      const roles = decl.match(/guard\((?:labRoles\()?\[([^\]]*)\]/);
+      assert.ok(roles, `${path} goes through neither guard() nor authOnly()`);
       assert.match(roles[1], new RegExp(`'${name}'`), `${path} is mounted, but not for a ${name}`);
     }
   });
@@ -202,8 +244,13 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // A note is prose and nothing verifies it, so a note that says "go to
     // /matches" is an unchecked link wearing a sentence. Notes name surfaces the
     // way a person would; the checked field carries the path.
-    const notes = [...SRC.matchAll(/note: '([^']*)'/g)].map((m) => m[1]);
-    assert.ok(notes.length >= 20, `expected the stated gaps, found ${notes.length}`);
+    const notes = [...SRC.matchAll(/^ {4}\{ label: '[^']+', note: '([^']*)'/gm)].map((m) => m[1]);
+    // Exact rather than a floor: every action is a link, an export or a gap,
+    // and nothing is untyped. An entry that is none of the three would render
+    // as a dead button — which is the one thing this whole pass forbids.
+    const actions = [...SRC.matchAll(/^ {4}\{ label: '/gm)].length;
+    assert.equal(profile.links + profile.exports + notes.length, actions,
+      `${name} has ${actions} actions but ${profile.links} links, ${profile.exports} exports and ${notes.length} gaps`);
     for (const note of notes) {
       assert.doesNotMatch(note, /(^|\s)\/[a-z]/, `a note carries an unchecked path: "${note}"`);
     }
@@ -261,7 +308,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // real assertion is the one inside the loop; the number of DISTINCT names a
     // profile references is not a fact worth pinning (partner's ten zones name
     // eight between them, because most of them call their list `items`).
-    assert.ok(checked >= 5, `the name extractor found almost nothing: ${checked}`);
+    assert.ok(checked >= 2, `the name extractor found almost nothing: ${checked}`);
   });
 
   test(`${name}: a zone row is never sealed inside a header that does not render`, () => {

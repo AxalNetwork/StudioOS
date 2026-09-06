@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
 import { NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from './kit';
+import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 
 /**
  * Expertise · Thinking — what you have published, and how far it reached.
@@ -54,6 +55,7 @@ export default function ThinkingZone() {
       />
 
       <ZoneBody
+        actions={advisorZoneActions('expertise/thinking', { view: { header: ['Title', 'Subtitle', 'Sector', 'Status', 'Published', 'Words', 'Read minutes', 'Views'], rows: items, cells: (a) => [a.title, a.subtitle, a.sector, a.status, a.published_at, a.word_count, a.read_minutes, a.views] } })}
         loading={state.loading}
         error={state.error}
         onRetry={load}
