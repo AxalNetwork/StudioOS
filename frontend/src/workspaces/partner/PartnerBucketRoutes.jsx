@@ -4,7 +4,7 @@ import { Card, Skeleton, WorkerRail } from '../../ui';
 import { useAuth } from '../../hooks/useAuthSync';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from '../BucketOverview';
-import { bucketForPath, zoneForPath } from '../shellConfig';
+import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
 import { partnerZoneActions } from '../partnerZoneActions';
 
 // NOT `PartnerOperationsWorkspace`, and that is the fix rather than an
@@ -436,7 +436,7 @@ export default function PartnerBucketRoutes() {
   return (
     <WorkspaceShell
       role="partner"
-      title={isRoot ? bucket?.label : undefined}
+      title={isRoot ? bucketTitle(bucket) : undefined}
       scope="One firm"
       intro={INTRO[prefix]}
       activeSlug={isRoot ? null : undefined}

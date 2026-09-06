@@ -43,7 +43,7 @@ module here carries the same two lines:
 ```js
 const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
 // … then, on the shell:
-title={isRoot ? bucket?.label : undefined}
+title={isRoot ? bucketTitle(bucket) : undefined}   // the tagline, not the label
 activeSlug={isRoot ? null : undefined}
 ```
 

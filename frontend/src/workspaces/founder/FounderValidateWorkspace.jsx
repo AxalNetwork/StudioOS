@@ -9,7 +9,7 @@ import InterviewRecording from './InterviewRecording';
 import useAssistMode from '../../hooks/useAssistMode';
 import LogInterviewModal from '../../components/discovery/LogInterviewModal';
 import { NewHypothesisDialog, LinkPainDialog } from './ValidateDialogs';
-import { bucketForPath, zoneForPath } from '../shellConfig';
+import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
 
 /**
  * Validate — the four evidence stages, as four routes.
@@ -727,7 +727,7 @@ export default function FounderValidateWorkspace() {
         />
       )}
       scope="One venture"
-      title={isRoot ? bucket?.label : undefined}
+      title={isRoot ? bucketTitle(bucket) : undefined}
       activeSlug={isRoot ? null : undefined}
       intro={INTRO[zone?.slug] || INTRO.interviews}
       actions={actions}

@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Card, WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from './BucketOverview';
-import { bucketForPath, zoneForPath } from './shellConfig';
+import { bucketForPath, bucketTitle, zoneForPath } from './shellConfig';
 import { zoneActionsFor } from './zoneActionsByRole';
 
 /**
@@ -359,7 +359,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
   return (
     <WorkspaceShell
       role={role}
-      title={isRoot ? 'Research' : undefined}
+      title={isRoot ? bucketTitle(bucket) : undefined}
       activeSlug={isRoot ? null : undefined}
       rail={(
         <WorkerRail

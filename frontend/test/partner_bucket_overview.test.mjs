@@ -80,8 +80,16 @@ test('PartnerBucketRoutes renders an overview grid at each bucket root', () => {
     'every partner zone without a live page must carry its own gap line');
   assert.match(bucketRoutes, /activeSlug=\{isRoot \? null : undefined\}/,
     'the root must light no zone pill');
-  assert.match(bucketRoutes, /title=\{isRoot \? bucket\?\.label : undefined\}/,
-    'the root must title itself with the bucket, not the first zone');
+  // Was `/title=\{isRoot \? bucket\?\.label : undefined\}/`, which pinned one
+  // expression rather than the rule its own message states. The rule is that a
+  // root titles itself from the BUCKET and never from a zone or a literal — and
+  // the title is now the bucket's tagline, because that is what every canvas
+  // draws as the h1 (P3 "Win the work" over `/pipeline`). The label survives in
+  // the crumb, so the root no longer says "Pipeline" twice.
+  assert.match(bucketRoutes, /title=\{isRoot \? bucketTitle\(bucket\) : undefined\}/,
+    'the root must title itself from the bucket, not the first zone');
+  assert.doesNotMatch(bucketRoutes, /title=\{isRoot \? ['"`]/,
+    'a root title must be derived from the bucket, never a hardcoded string');
 });
 
 test('WorkspaceShell resolves no zone when activeSlug is null', () => {

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import BucketOverview from './BucketOverview';
-import { bucketForPath, zoneForPath } from './shellConfig';
+import { bucketForPath, bucketTitle, zoneForPath } from './shellConfig';
 import { zoneActionsFor } from './zoneActionsByRole';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
@@ -181,7 +181,7 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   return (
     <WorkspaceShell
       role={role}
-      title={isRoot ? 'Network' : undefined}
+      title={isRoot ? bucketTitle(bucket) : undefined}
       activeSlug={isRoot ? null : undefined}
       rail={(
         <WorkerRail

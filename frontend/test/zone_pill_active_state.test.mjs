@@ -222,7 +222,13 @@ test('the two route modules that resolve a zone carry the root opt-out', () => {
     assert.match(src, /location\.pathname === bucket\.prefix/, `${file} must compute isRoot`);
     assert.match(src, /activeSlug=\{isRoot \? null : undefined\}/,
       `${file} must light no pill on a bucket root`);
-    assert.match(src, /title=\{isRoot \? bucket\?\.label : undefined\}/,
+    // Was `bucket?.label`. Same invariant, one level up: the root's heading is
+    // derived from the BUCKET rather than from a zone it is not on — and it is
+    // now the tagline, which is what every canvas draws as the h1. The label
+    // still appears, in the crumb.
+    assert.match(src, /title=\{isRoot \? bucketTitle\(bucket\) : undefined\}/,
       `${file} must title itself after the bucket on a root, not after a zone it is not on`);
+    assert.doesNotMatch(src, /title=\{isRoot \? ['"`]/,
+      `${file} must derive its root title, never hardcode it`);
   }
 });

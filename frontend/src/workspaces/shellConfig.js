@@ -249,7 +249,7 @@ export const SHELLS = {
     // was reconciled against its own depth files.
     rows: [
       { kind: 'link', label: 'Home', to: '/studio' },
-      { kind: 'bucket', label: 'Practice', prefix: '/practice', tagline: 'Win and deliver',
+      { kind: 'bucket', label: 'Practice', prefix: '/practice', tagline: 'Run my advisory business',
         zones: [
           { slug: 'opportunities', label: 'Opportunities', archetype: A.MATCH_ENGINE, legacy: '/advisor/advisory/opportunities' },
           { slug: 'engagements', label: 'Engagements', archetype: A.WORK_BOARD, legacy: '/advisor/advisory/engagements' },
@@ -268,7 +268,7 @@ export const SHELLS = {
           { slug: 'calendar', label: 'Calendar', archetype: A.WORK_BOARD },
           { slug: 'outcomes', label: 'Outcomes', archetype: A.ANALYTICS },
         ] },
-      { kind: 'bucket', label: 'Expertise', prefix: '/expertise', tagline: 'Be findable',
+      { kind: 'bucket', label: 'Expertise', prefix: '/expertise', tagline: 'Package what I know',
         zones: [
           { slug: 'profile', label: 'Profile', archetype: A.COLLECTION },
           { slug: 'services', label: 'Services', archetype: A.LEDGER },
@@ -318,8 +318,8 @@ export const SHELLS = {
           { slug: 'proof', label: 'Proof', archetype: A.COLLECTION },
           { slug: 'audience-fit', label: 'Audience fit', archetype: A.MATCH_ENGINE },
         ] },
-      { kind: 'bucket', label: 'Network', prefix: '/network', zones: NETWORK_ZONES },
-      { kind: 'bucket', label: 'Research', prefix: '/research', zones: RESEARCH_ZONES.partner },
+      { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work our relationships', zones: NETWORK_ZONES },
+      { kind: 'bucket', label: 'Research', prefix: '/research', tagline: "Know the client's world", zones: RESEARCH_ZONES.partner },
       { kind: 'link', label: 'Trust', to: '/trust' },
       { kind: 'link', label: 'Firm Settings', to: '/company-settings' },
     ],
@@ -340,6 +340,31 @@ export function bucketForPath(role, pathname) {
     .filter((b) => path === b.prefix || path.startsWith(`${b.prefix}/`))
     .sort((a, b) => b.prefix.length - a.prefix.length)[0] || null;
 }
+
+/**
+ * The heading a bucket ROOT gives itself.
+ *
+ * Every `Pages · …` and operator canvas draws a bucket root with its TAGLINE as
+ * the h1 — "Win the work" over `/pipeline`, "Package what I know" over
+ * `/expertise` — and the bucket's own noun only in the crumb above it. The
+ * shells have carried `tagline` since they were written and nothing rendered
+ * it, so a root drew `bucket.label` in both places and said "Pipeline" twice.
+ *
+ * The field was always meant to be that h1. Five of the seven partner/advisor
+ * buckets already matched their artboard verbatim, and
+ * `founder_shell_canvas.test.mjs:17` / `investor_shell_canvas.test.mjs:17`
+ * already pin the founder and investor sets to their canvases. The two advisor
+ * strings that did NOT match — Practice was "Win and deliver" against V3's "Run
+ * my advisory business", Expertise "Be findable" against V4's "Package what I
+ * know" — were drift, and are corrected here rather than papered over with a
+ * second field. The two partner buckets that carried no tagline at all now
+ * carry theirs from P6 and P7.
+ *
+ * Falls back to the label, so a bucket added without a tagline degrades to
+ * today's behaviour instead of rendering an empty h1. `workspace_taglines`
+ * fails the build in that case, which is the real fix.
+ */
+export const bucketTitle = (bucket) => bucket?.tagline || bucket?.label;
 
 /** The zone within a bucket that a pathname resolves to. Defaults to the first. */
 export function zoneForPath(bucket, pathname) {
