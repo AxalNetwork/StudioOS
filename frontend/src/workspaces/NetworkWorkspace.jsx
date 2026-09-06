@@ -149,10 +149,14 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     }
     // The partner (and operator) arm. `NetworkPage`'s panels are shared with
     // other licences, so the row comes in as a function of the tab and its rows
-    // rather than being wired inside them. Organizations is deliberately absent:
-    // this page has no organizations tab at all, so a partner opening
-    // `/network/organizations` lands on contacts — a real gap, recorded in
-    // ROUTE_MAP rather than papered over with a header row on the wrong list.
+    // rather than being wired inside them. Organizations is deliberately absent,
+    // and NOT because the route misbehaves: `NetworkPage` catches a slug it has
+    // no tab for (`unservedZone`) and suppresses every body (`unservedAlone`),
+    // so that route already renders its own heading above a card saying the
+    // roll-up needs an edge from a person to an organisation that nothing
+    // stores. A header row would add nothing to a page that is entirely that
+    // statement. (An earlier version of this comment said the route "lands on
+    // contacts". It does not, and a partner has no contacts tab either.)
     return (
       <Suspense fallback={<Loading />}>
         <NetworkPage embedded zoneActions={(kind, rows) => (

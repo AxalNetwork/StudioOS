@@ -301,14 +301,26 @@ already performs the action and that a founder is allowed to open, and
 twenty-six are stated gaps. A gap renders as a sentence, never as a button.
 
 **Investor — fourteen zones, forty-two actions, and only ten of them run.** Nine
-exports, one link, thirty-two stated gaps. That ratio is the finding, not a
-shortfall in the pass: Deals and Fund are read-only shells.
-`InvestorDealsWorkspace` calls `listDeals` and two invitation methods and
-nothing else; `FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal` and
-nothing else; `InvestorFundCalls` and `InvestorFundAccounting` call no API at
-all. "New call", "Add LP", "Record wire" and "Close vote" have no flow anywhere
-to link to, so each says so. The header is now an accurate map of what an
-investor can and cannot do, and of what to build next.
+exports, one link, thirty-two stated gaps. The investor SCREENS are read-only:
+`InvestorDealsWorkspace` calls `listDeals` and two invitation methods,
+`FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal`, and
+`InvestorFundCalls` and `InvestorFundAccounting` call no API at all.
+
+**But a read-only screen is not a missing capability, and two of these labels
+are exactly that difference.** `api.fundAddLP` and `api.fundCapitalCall` both
+exist and both reach a worker route that serves them — `routes/funds.ts`
+declares `post('/:id/lps')` and `post('/:id/capital-call')`. "Add LP" and "New
+call" are missing a FORM, not a store, and their notes say so. The first version
+of this section called the whole bucket "read-only shells" with "no flow
+anywhere", which was read off the pages' imports without following the chain to
+`api.js`; it is corrected here because a reader deciding what to build next is
+the person that error misleads.
+
+The other ten Deals and Fund gaps are gaps in the store as well as the screen —
+no rubric, no minutes, no conditions, no wire record, no journal source, no
+reconciliation state. ("Configure stages" is one of them: `advanceDeal` moves
+one deal between stages; the label asks to edit the stage set, which nothing
+stores.)
 
 **The same label is not the same answer across profiles.** `/network/*` serves
 every licence and the investor artboard's ops are word-for-word the founder's —
@@ -339,8 +351,6 @@ Three partner bucket sets are absent from the table and none is an oversight.
 render `NetworkPage`, whose bodies are three further shared components used by
 more than one licence — threading a partner-only row through four such files is
 the shared-surface pass, not this one. `/research` is that same shared surface.
-Worth knowing while `/network` waits: **`NetworkPage` has no organizations tab
-at all**, so a partner opening `/network/organizations` lands on contacts.
 
 **Advisor — four zones, twelve actions.** One link, four exports, seven gaps.
 Four zones is the whole advisor scope, and that is a fact about the canvases
@@ -405,10 +415,16 @@ exclusion cannot grow by accident):
 | `research/client-prep` (partner, advisor) | the same |
 | `expertise/visibility` (advisor) | a card whose whole page is already the gap statement |
 | `network/organizations` (advisor) | a card: nothing links a person an advisor knows to an organisation |
-| `network/organizations` (partner) | **`NetworkPage` has no organizations tab at all**, so this route lands on contacts — a row there would act on the wrong list |
+| `network/organizations` (partner) | `NetworkPage` catches a slug it has no tab for (`unservedZone`) and suppresses every body (`unservedAlone`), so the route renders its own heading above a card stating the gap — there is nothing for a row to sit over |
 
-The last of those is a live product gap rather than a design one, and is recorded
-here rather than papered over.
+**Two corrections to an earlier version of this section**, both made after
+re-checking rather than re-reading. It said the partner organizations route
+"lands on contacts" — it does not, and a partner has no contacts tab either; the
+page already states that zone's gap itself. And it called investor Deals and
+Fund "read-only shells" with no flow to link to, which conflated a read-only
+screen with a missing capability for the two labels whose API exists. Both
+errors came from stopping one step short in the same chain this pass is about,
+and both made the product look worse than it is.
 
 **`/research/*` is in no profile's pass, and is not an oversight.** The five
 founder Research zones (and the investor, advisor and partner lists beside

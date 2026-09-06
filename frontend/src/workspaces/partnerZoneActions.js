@@ -19,9 +19,13 @@ import { makeZoneActions } from './zoneActionBuilder';
  *     further shared components (`RelationshipsPanel`, `IntroductionsPanel`,
  *     `ContactsPanel`) used by more than one licence. Threading a partner-only
  *     row through four files that four licences render is the shared-surface
- *     pass, not this one. Worth knowing while it waits: `NetworkPage` has no
- *     organizations tab at all, so a partner opening `/network/organizations`
- *     lands on contacts.
+ *     pass, not this one. `network/organizations` is excluded for a different
+ *     reason: `NetworkPage` renders that zone as a stated gap, not
+ *     as another tab's list: `unservedZone` catches a slug it has no tab for
+ *     and `unservedAlone` suppresses every body, so the reader gets the
+ *     Organizations heading above a card explaining the roll-up needs an edge
+ *     from a person to an organisation that nothing stores. That is already the
+ *     honest answer, and a header row would add nothing to it.
  *
  *   `/research` — same shared surface as every other profile's.
  *
