@@ -1,10 +1,11 @@
 import React, { Suspense, lazy, useMemo } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { Card, WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from './BucketOverview';
 import { bucketForPath, bucketTitle, zoneForPath } from './shellConfig';
 import { zoneActionsFor } from './zoneActionsByRole';
+import NoStoreYet from './NoStoreYet';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -80,31 +81,6 @@ const AskZone = lazy(() => import('../pages/research/AskZone'));
 
 function Loading() {
   return <div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-40" /></div>;
-}
-
-/**
- * The honest state for a zone with no store behind it. It names what the zone
- * would hold, what would fill it, and — where one exists — the live surface
- * that answers the nearest question today.
- */
-function NoStoreYet({ heading, what, why, link, accentClass = 'text-axal-violet' }) {
-  return (
-    <Card className="border-dashed bg-axal-surface-2 p-6">
-      <div className="max-w-2xl">
-        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
-          No store behind this yet
-        </div>
-        <h2 className="mt-2 text-lg font-extrabold tracking-tight">{heading}</h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{what}</p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink-2">{why}</p>
-        {link && (
-          <p className="mt-3 text-[12px]">
-            <Link to={link.to} className={`${accentClass} underline`}>{link.label}</Link>
-          </p>
-        )}
-      </div>
-    </Card>
-  );
 }
 
 /**
