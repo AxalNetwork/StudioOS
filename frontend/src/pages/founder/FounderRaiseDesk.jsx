@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Folder, Landmark, Scale, Sparkles, Target } from 'lucide-react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
+import { zonePillClass } from './deskZoneNav';
 import './founderRaiseDesk.css';
 
 // Six labels, six routes. This was a six-deep ternary chain ending in an
@@ -101,7 +102,7 @@ export default function FounderRaiseDesk() {
           <div className="raise-heading"><div><h1>Get capital, stay legal</h1><p>Pitch, capital planning, legal readiness, data room, and liquidity in one fundraising workspace.</p></div>
             {projects.length > 1 && <select data-testid="select-raise-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
           </div>
-          <nav className="raise-anchors" aria-label="Raise desk sections">{SECTIONS.map(([label, slug]) => <Link data-testid={`link-raise-anchor-${slug}`} to={`/raise/${slug}${query}`} key={label}>{label}</Link>)}</nav>
+          <nav className="raise-anchors" aria-label="Raise desk sections">{SECTIONS.map(([label, slug]) => <NavLink data-testid={`link-raise-anchor-${slug}`} to={`/raise/${slug}${query}`} key={label} className={zonePillClass}>{label}</NavLink>)}</nav>
         </header>
         {(projectError || Object.keys(errors).length > 0) && <div className="raise-error" data-testid="status-raise-partial"><AlertCircle size={16} /><span>{projectError || 'Some selected-project records are unavailable.'}</span><button data-testid="button-retry-raise" type="button" onClick={() => setReload((value) => value + 1)}>Retry</button></div>}
         <RaiseSections loading={loading} project={project} data={data} errors={errors} query={query} state={state} />

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowUpRight, Landmark, Radar, RefreshCw, Search } from 'lucide-react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
+import { zonePillClass } from './deskZoneNav';
 import './founderResearchDesk.css';
 
 export const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
@@ -110,7 +111,7 @@ export default function FounderResearchDesk() {
         <header className="a7-hero"><div className="a7-kicker">Founder / Research</div><h1>Go deep on a market or company</h1><p>The page opens as a question, not a menu.</p>
           <div className="a7-question"><Search size={16} /><input data-testid="input-research-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question about a market or company" /><Link data-testid="link-explore-evidence" to="/signals?mode=workspace" state={state}>Open signals <ArrowUpRight size={14} /></Link></div>
           <div className="a7-honesty">Question-based briefs are not connected in this overview. Questions remain local here; open Signals to inspect stored evidence.</div>
-          <nav className="a7-anchors" aria-label="Research sections">{SECTIONS.map(([label, to], index) => <Link data-testid={`link-research-anchor-${index}`} key={label} to={`${to}${query}`} state={state}>{label}</Link>)}</nav>
+          <nav className="a7-anchors" aria-label="Research sections">{SECTIONS.map(([label, to], index) => <NavLink data-testid={`link-research-anchor-${index}`} key={label} to={`${to}${query}`} state={state} className={zonePillClass}>{label}</NavLink>)}</nav>
         </header>
         {error && <div className="a7-error" data-testid="status-research-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-research" type="button" onClick={() => setRetry((value) => value + 1)}><RefreshCw size={13} />Retry</button></div>}
         <section className="a7-card a7-brief" id="a7-ask"><SectionHead title="Sourced brief" meta={freshness ? `Updated ${prettyDate(freshness)}` : 'Stored market evidence'} />

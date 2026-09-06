@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, FileText, Layers3, MessageSquare, Quote, Target } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import DiscoveryPage from '../DiscoveryPage';
+import { zonePillClass } from './deskZoneNav';
 import './founderValidate.css';
 import './founderValidateWorkspace.css';
 
@@ -162,7 +163,7 @@ export default function FounderValidatePage() {
               </div>
             </div>
             <nav aria-label="Evidence sections" className="validate-anchors">
-              {SECTIONS.map(([label, to], index) => <Link data-testid={`link-anchor-${index}`} key={label} to={`${to}${query}`}>{label}</Link>)}
+              {SECTIONS.map(([label, to], index) => <NavLink data-testid={`link-anchor-${index}`} key={label} to={`${to}${query}`} className={zonePillClass}>{label}</NavLink>)}
             </nav>
           </header>
           {state === 'error' && <div className="validate-error" data-testid="status-validate-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-validate" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}

@@ -31,7 +31,6 @@ export function AdvisorWorkspaceShell({
   title,
   description,
   icon: Icon = Radio,
-  anchors = [],
   tabs = [],
   children,
   rail = true,
@@ -75,19 +74,17 @@ export function AdvisorWorkspaceShell({
             })}
           </nav>
         )}
-        {anchors.length > 0 && (
-          <nav className="flex gap-1.5 overflow-x-auto no-scrollbar" aria-label="Workspace sections">
-            {anchors.map((anchor, index) => (
-              <a
-                key={anchor.href}
-                href={anchor.href}
-                className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold ${index === 0 ? TONE.active : TONE.idle}`}
-              >
-                {anchor.label}
-              </a>
-            ))}
-          </nav>
-        )}
+        {/*
+          A SECOND STRIP USED TO RENDER HERE and it is gone, not moved. It
+          marked its current item by list position — the same paint-the-first-
+          one defect the founder desks carried in CSS — so it claimed the
+          reader was on the first section whatever they were looking at. It was
+          also unreachable: the prop defaulted to an empty list and no caller in
+          the repo ever passed one, so nothing rendered and nobody saw the lie.
+          Removed rather than repaired, because a second strip of in-page
+          fragment links beside the real zone pills is not something this shell
+          should offer: the pills are the navigation, and they come from the URL.
+        */}
       </div>
 
       <div className={rail ? 'grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_280px]' : ''}>

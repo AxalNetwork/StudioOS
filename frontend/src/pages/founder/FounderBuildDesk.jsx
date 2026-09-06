@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowUpRight, ChevronRight, ClipboardCheck, KanbanSquare, LineChart, Route, Target } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import ExecutionPage from '../ExecutionPage';
+import { zonePillClass } from './deskZoneNav';
 import './founderBuildDesk.css';
 
 const clean = (value) => String(value || '').trim();
@@ -120,18 +121,22 @@ export default function FounderBuildDesk() {
             </div>
           </div>
           <nav aria-label="Operating desk sections" className="build-anchors">
-            {['This week', 'Board', 'Cadence', 'Roadmap', 'KPI entry'].map((label, index) => label === 'This week'
-              ? <Link data-testid={`link-build-anchor-${index}`} key={label} to={weekLink}>{label}</Link>
-              : label === 'Roadmap'
-                ? <Link data-testid={`link-build-anchor-${index}`} key={label} to={roadmapLink}>{label}</Link>
-              : label === 'KPI entry'
-                ? <Link data-testid={`link-build-anchor-${index}`} key={label} to={kpiLink}>{label}</Link>
-              : label === 'Cadence'
-                ? <Link data-testid={`link-build-anchor-${index}`} key={label} to={cadenceLink}>{label}</Link>
+            {
               // Board was the one pill that never became a link: it fell
-              // through to `href="#build-1"`, an anchor onto a section of this
-              // page, while /build/board sat unreachable from the desk.
-              : <Link data-testid={`link-build-anchor-${index}`} key={label} to={boardLink}>{label}</Link>)}
+              // through to an in-page anchor onto a section of this page,
+              // while /build/board sat unreachable from the desk. Pairing each
+              // label with its target here, rather than in a five-arm ternary
+              // ending in that fallthrough, keeps the pairing a table.
+              //
+              // These are `//` lines inside the expression rather than a JSX
+              // block comment on purpose: `codeOnly` strips whole-line `//`
+              // comments and cannot strip `{/* … */}`, so prose here would read
+              // to founder_shell's anchor ban as if it were markup.
+              [['This week', weekLink], ['Board', boardLink], ['Cadence', cadenceLink],
+                ['Roadmap', roadmapLink], ['KPI entry', kpiLink]].map(([label, to], index) => (
+                  <NavLink data-testid={`link-build-anchor-${index}`} key={label} to={to} className={zonePillClass}>{label}</NavLink>
+                ))
+            }
           </nav>
         </header>
         {state === 'error' && <div className="build-error" data-testid="status-build-error"><AlertCircle size={16} /> {error} <button data-testid="button-retry-build" onClick={() => setReloadKey((value) => value + 1)}>Retry</button></div>}

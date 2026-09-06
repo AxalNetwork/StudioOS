@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BriefcaseBusiness, ChevronRight, CircleDot, Handshake, Rocket, Sparkles, Target, Users } from 'lucide-react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, NavLink, useLocation, useSearchParams } from 'react-router-dom';
 import { api, jobs as jobsApi } from '../../lib/api';
 import { WorkerRail } from '../../ui';
+import { zonePillClass } from './deskZoneNav';
 import './founderGrowDesk.css';
 
 // Seven labels, seven routes. This was a seven-deep ternary chain ending in an
@@ -93,7 +94,7 @@ export default function FounderGrowDesk() {
   return <main className="a5-grow" data-testid="founder-grow-desk"><div className="a5-grow-canvas"><div className="a5-grow-main">
      <header className="a5-grow-hero"><span>Founder / Grow</span><div><h1>Get customers, people, reach</h1><p>One metric organizes the work around your startup this month.</p></div>
       {projects.length > 1 && <select data-testid="select-grow-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
-     <nav aria-label="Grow desk sections">{SECTIONS.map(([label, slug]) => <Link data-testid={`link-grow-anchor-${slug}`} to={`/grow/${slug}${query}`} key={label}>{label}</Link>)}</nav>
+     <nav aria-label="Grow desk sections">{SECTIONS.map(([label, slug]) => <NavLink data-testid={`link-grow-anchor-${slug}`} to={`/grow/${slug}${query}`} key={label} className={zonePillClass}>{label}</NavLink>)}</nav>
     </header>
     {error && <div className="a5-grow-error" data-testid="status-grow-partial"><AlertCircle size={15} />{error}<button data-testid="button-retry-grow" type="button" onClick={() => setReload((count) => count + 1)}>Retry</button></div>}
     <GrowSections data={data} project={project} loading={loading} query={query} state={state} />

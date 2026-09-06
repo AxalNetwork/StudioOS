@@ -166,11 +166,17 @@ test('Company Settings is the pinned footer only, never a nav row', () => {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 test('every advisor workspace row lands inside its own bucket', () => {
-  // Not "on its overview": the four Advisor canvases specify zone pages only,
-  // with no overview artboard, so a bucket root that resolves to its first
-  // zone IS the landing. What must not happen is a row pointing OUTSIDE its
-  // bucket — which is where Practice, Expertise and Research were, and two of
-  // those destinations bounce an admin previewing the role to /studio.
+  // Not "on its overview" — this check is about a row's bucket, not its
+  // landing. It used to reason that "a bucket root that resolves to its first
+  // zone IS the landing" for advisors, because the four Advisor canvases draw
+  // zone pages and no overview artboard. That stopped being true:
+  // `AdvisorBucketRoutes` now renders a `BucketOverview` on each root and
+  // passes `activeSlug={isRoot ? null : undefined}`, which
+  // `advisor_bucket_overview.test.mjs` pins. A root lights no zone.
+  //
+  // What must not happen is a row pointing OUTSIDE its bucket — which is where
+  // Practice, Expertise and Research were, and two of those destinations bounce
+  // an admin previewing the role to /studio.
   const shell = codeOnly(read('frontend/src/workspaces/shellConfig.js'));
   const block = shell.slice(shell.indexOf("  advisor: {\n    accent:"), shell.indexOf('  partner: {'));
   const prefixes = [...block.matchAll(/prefix: '([^']+)'/g)].map((m) => m[1]);

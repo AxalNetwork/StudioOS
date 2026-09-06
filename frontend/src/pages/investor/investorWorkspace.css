@@ -78,7 +78,6 @@
 .investor-deals-hero p { margin: 6px 0 0; color: #4a4553; font-size: 13px; }
 .investor-deals-hero nav { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
 .investor-deals-hero nav a { border: 1px solid var(--inv-line); border-radius: 999px; background: #fff; color: var(--inv-muted); padding: 5px 11px; font-size: 11px; font-weight: 700; }
-.investor-deals-hero nav a:first-child { border-color: var(--inv-indigo-line); background: var(--inv-indigo-soft); color: var(--inv-indigo); }
 .investor-deals-card { min-width: 0; margin-top: 14px; border: 1px solid var(--inv-line); border-radius: 12px; background: #fff; padding: 16px; }
 .investor-deals-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 11px; scroll-margin-top: 20px; }
 .investor-deals-section-head h2 { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: -.02em; }
