@@ -2479,3 +2479,60 @@ accident.
 on any artboard. The gap is written down in `ROUTE_MAP.md` instead. Inventing an
 action for a zone whose design asks for none is how a header grows a button
 nobody specified and nothing backs — the failure this entry exists to prevent.
+
+---
+
+### D49. A filter is a claim about the data, so a filter with no store is a sentence — and the one that looked live was worse than the four that looked dead
+
+**D48** settled the right-hand half of a zone header: the canvas's `ops:` list,
+verbatim, with anything nothing performs rendered as prose. This is the
+left-hand half — the `filters:` list on the same rule-bordered row — and it
+needed the same rule for a sharper reason.
+
+**A dead action does nothing visible. A dead filter returns an empty set, and
+an empty set reads as an answer.** `/grow/customers` shipped a live "Stalled"
+chip whose predicate was, literally, `return []`. Selecting it told a founder
+they had no stalled accounts. Nothing in this product stores customer activity
+at all, so the honest statement is that the question cannot be asked — and the
+page said the opposite, in the product's own voice, using the product's own
+empty-state styling. That is absent-is-not-empty failing in the one place where
+the failure is indistinguishable from data.
+
+The four `disabled` buttons on `/raise/capital` were the visible version of the
+same problem and cost less, because a greyed control at least admits it does
+nothing. They were also the more embarrassing find: `load()` was already making
+three parallel calls whose results — the SAFE inputs, the compare variants, the
+409A read — are exactly what those buttons promised, sitting in scope, unused.
+
+**Seventy-five canvas labels across eighteen founder zones: forty-six are chips
+that narrow real rows, twenty-three are sentences, two are groups filled from
+the store.** `/raise/status` had simply omitted its fourth filter rather than
+state it, so a reader hunting for the canvas's "Timeline" found neither the
+control nor the reason.
+
+**A sample figure in an artboard label is that artboard's mock data, not a
+count.** `All 14`, `All 14 mo` and `Aug 2026` would state a number this
+account has not got. A live entry writes `{n}` and the page supplies the real
+figure; with no figure the clause is dropped, so the chip reads `All` rather
+than `All 14`. Rendering added the zero case: an empty ledger produced
+`All 0 months`, which is not a filter name but a broken string, and the count
+that is genuinely absent already has a place to be said in the stat strip.
+
+**`Backend`, `GTM`, `Distributed SaaS`, `Agencies` and `Enterprise` are sample
+NAMES for one-chip-per-record groups**, so the pages supply the roles, sources
+and stages they actually hold. Customers is the one where the substitution
+changes the meaning: the canvas names market segments and a customer record
+stores the source it was captured from. Those are different things, and the
+sentence saying so is a **standing** clarification rather than a fallback —
+it is needed most precisely when the chips are present to be misread. It
+originally disappeared at exactly that moment; a guard assertion caught it,
+which rendering would not have, because the page looked fine either way.
+
+**The guard takes nothing on trust that it can check.** It re-derives all
+seventy-five labels from the canvases, and — after mutation-checking showed it
+believed `key:` without evidence — it also requires every live key to appear in
+the page that would have to implement it, with the mount itself stripped first
+so a declaration cannot satisfy the search for its own key. Turning "Stalled"
+back on now fails the build. What it still cannot prove is that a predicate is
+*correct*, only that the page knows the key exists; that limit is written into
+the test rather than left for a reader to discover.
