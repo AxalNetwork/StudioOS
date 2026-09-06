@@ -55,6 +55,11 @@ export type RefusalReason =
   | 'kill_switch'
   | 'safety_block'
   | 'misconfigured'
+  // The caller named a model this task does not offer. Distinct from
+  // 'misconfigured' (an unknown TASK) because the fix is different: a stale
+  // saved preference in someone's browser, not a coding error, and the caller
+  // is expected to clear it and re-run on the primary.
+  | 'model_not_offered'
   | 'all_models_failed';
 
 export interface RunOptions {
@@ -78,6 +83,12 @@ export interface RunOptions {
   // are surfaced to the caller. Cache + safety_score parsing are bypassed
   // for streams since neither is meaningful without buffering the body.
   stream?: boolean;
+  // A model the CALLER picked, validated against `ROUTE[task].alternates`.
+  // Absent means "whatever the route says", which is every internal caller.
+  // A model not on that list is REFUSED, never quietly swapped for the
+  // primary: reporting success under a model the caller did not ask for is
+  // the class of lie this router exists to avoid.
+  model?: string;
 }
 
 export interface UsageMeta {
@@ -112,6 +123,23 @@ interface RouteEntry {
   // latency. The router tries the primary, then each entry in
   // `fallbackChain` until one succeeds or the chain is exhausted.
   fallbackChain?: string[];
+  // Models a CALLER may pick for this task, primary first. Empty or absent
+  // means the caller may pick nothing — `opts.model` is refused outright,
+  // even when it names the primary.
+  //
+  // NOT `fallbackChain`, which is a different question. That list is what the
+  // router degrades to when a model fails; this one is what a person is
+  // allowed to choose while everything is working. A model can be on one and
+  // not the other: the deprecated 8b was a fallback for years and was never
+  // something to offer, and a costlier sibling can be worth offering while
+  // being the wrong thing to degrade TO under load.
+  //
+  // DECISIONS D13 removed the rail's model menu because "a caller must never
+  // be able to route a `safety` call away from the guard model", and left the
+  // menu's return conditional on solving that. This is the solution, and it is
+  // structural rather than a check: `safety` and `embed` declare no
+  // alternates, so no value of `opts.model` reaches them.
+  alternates?: string[];
   // KV cache TTL in seconds. Undefined → no cache.
   cacheTtlSec?: number;
   // True for embedding models (response shape differs).
@@ -155,6 +183,10 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
   '@cf/meta/llama-3.1-8b-instruct':           { in: 0.282, out: 0.827 },
   '@cf/meta/llama-3.1-8b-instruct-fp8':       { in: 0.152, out: 0.287 },
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { in: 0.293, out: 2.253 },
+  // Offered as a workspace_explain alternate: six times cheaper to prompt and
+  // shallower, which is a trade a founder may reasonably want to make on a
+  // read-back. Priced here because an alternate with no row would bill as zero.
+  '@cf/meta/llama-3.2-3b-instruct':            { in: 0.051, out: 0.335 },
   '@cf/qwen/qwen2.5-coder-32b-instruct':      { in: 0.660, out: 1.000 },
   '@cf/baai/bge-base-en-v1.5':                { in: 0.05,  out: 0.00 },
 };
@@ -214,7 +246,18 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // same answer every time; this one reads a page's CURRENT figures, so a
   // cached answer would describe a state that has moved on — which is worse
   // than no answer, since it looks current.
-  workspace_explain: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // The one task every workspace zone runs, on all four licences — and the
+  // first to offer a choice. The three are genuinely different trades and a
+  // founder can tell them apart from the rail: the 70b reads across the whole
+  // page, the fp8 8b is a fifth the price with a 32k window, the 3.2 3b is
+  // cheaper still and shallower. Primary FIRST, because the rail sends back
+  // whatever it renders selected and that includes the default.
+  workspace_explain: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
   // Research · Ask — answering a question over the caller's own indexed
   // documents, with citations.
   //
@@ -371,7 +414,7 @@ function defaultContentBlob(opts: RunOptions): string {
   return '';
 }
 
-async function cacheKeyFor(opts: RunOptions): Promise<string | null> {
+async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | null> {
   const route = ROUTE[opts.task];
   if (!route.cacheTtlSec) return null;
   const seed = opts.contentHash
@@ -379,7 +422,13 @@ async function cacheKeyFor(opts: RunOptions): Promise<string | null> {
     || defaultContentBlob(opts);
   if (!seed) return null;
   const hash = await sha256Hex(seed);
-  return `ai_cache:${opts.task}:${hash}`;
+  // The MODEL is part of the key, not just the task and the content. Once a
+  // task offers alternates, two callers asking the same question of different
+  // models would otherwise share one entry, and the second would be handed the
+  // first one's answer under their own model's name and rate. Adding the
+  // segment orphans the entries written before it; they expire on their own
+  // TTL and the next call repopulates.
+  return `ai_cache:${opts.task}:${model}:${hash}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -579,6 +628,36 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     return { ok: false, refusal: 'misconfigured', error: `unknown task ${opts.task}`, usage };
   }
 
+  // ---- The caller's model, if they named one -----------------------------
+  // The whole security property of the model menu lives in these four lines:
+  // a model that is not on this task's `alternates` list never reaches
+  // `env.AI.run`, and a task with no list accepts no override at all. That is
+  // why `safety` cannot be routed off llama-guard however the request is
+  // shaped — not because a check rejects it, but because there is nothing to
+  // check against.
+  //
+  // Refusing rather than falling back to the primary is deliberate. The rail
+  // remembers a founder's choice in their browser; a model retired from the
+  // list months later would otherwise run as something else and report
+  // success, and they would read a rate on screen for a model that did not
+  // run. A refusal names the problem and the rail clears the preference.
+  const offered = route.alternates ?? [];
+  if (opts.model && !offered.includes(opts.model)) {
+    const usage: UsageMeta = {
+      task: opts.task, model: route.model, latency_ms: 0,
+      prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+      fallback_used: false, cached: false, safety_score: null,
+    };
+    await recordUsage(env, opts.userId, usage, 'model_not_offered');
+    return {
+      ok: false,
+      refusal: 'model_not_offered',
+      error: `${opts.model} is not offered for ${opts.task}`,
+      usage,
+    };
+  }
+  const primaryModel = opts.model || route.model;
+
   const store = kv(env);
   const caps = budgetCaps(env);
 
@@ -586,13 +665,13 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // Streaming requests bypass the cache (caching a stream would require
   // buffering the entire response, defeating the latency benefit).
   if (store && route.cacheTtlSec && !opts.stream) {
-    const ck = await cacheKeyFor(opts);
+    const ck = await cacheKeyFor(opts, primaryModel);
     if (ck) {
       try {
         const hit = await store.get(ck, 'json') as { output?: string; embedding?: number[] } | null;
         if (hit) {
           const usage: UsageMeta = {
-            task: opts.task, model: route.model, latency_ms: Date.now() - startedAt,
+            task: opts.task, model: primaryModel, latency_ms: Date.now() - startedAt,
             prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
             fallback_used: false, cached: true, safety_score: null,
           };
@@ -612,7 +691,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   if (store) {
     if (await killSwitchOn(store)) {
       const usage: UsageMeta = {
-        task: opts.task, model: route.model, latency_ms: 0,
+        task: opts.task, model: primaryModel, latency_ms: 0,
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
@@ -629,7 +708,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     ]);
     if (d >= caps.userDay) {
       const usage: UsageMeta = {
-        task: opts.task, model: route.model, latency_ms: 0,
+        task: opts.task, model: primaryModel, latency_ms: 0,
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
@@ -638,7 +717,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     }
     if (m >= caps.userMonth) {
       const usage: UsageMeta = {
-        task: opts.task, model: route.model, latency_ms: 0,
+        task: opts.task, model: primaryModel, latency_ms: 0,
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
@@ -648,7 +727,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     if (o >= caps.orgMonth) {
       await setKillSwitch(store, 35 * 86400);
       const usage: UsageMeta = {
-        task: opts.task, model: route.model, latency_ms: 0,
+        task: opts.task, model: primaryModel, latency_ms: 0,
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
@@ -689,15 +768,21 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     return first;
   };
 
-  let attempt = await callWai(route.model);
-  let modelUsed = route.model;
+  let attempt = await callWai(primaryModel);
+  let modelUsed = primaryModel;
   let fallbackUsed = false;
   let lastError = attempt.error;
 
   // Workers AI multi-hop fallback chain (spec: tool_call → advisor_turn →
   // role_detect, i.e. qwen32b → llama-70b → llama-8b).
-  if (!attempt.ok && route.fallbackChain?.length) {
-    for (const sibling of route.fallbackChain) {
+  //
+  // The chain skips the model that just failed. It never contained the route's
+  // own primary, so this only bites once a caller can PICK one: a founder who
+  // chose the 8b would otherwise have the router answer its failure by calling
+  // the 8b again, wait out a second timeout, and report the same error.
+  const chain = (route.fallbackChain ?? []).filter((m) => m !== primaryModel);
+  if (!attempt.ok && chain.length) {
+    for (const sibling of chain) {
       const next = await callWai(sibling);
       if (next.ok) {
         attempt = next;
@@ -766,8 +851,15 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
 
   // ---- Cache write -----------------------------------------------------
   // Skip cache write for streamed responses (see cache-lookup note above).
+  //
+  // Keyed on `modelUsed`, not on what was ASKED for. When the primary failed
+  // and a sibling answered, the text in hand is the sibling's; storing it
+  // under the primary's key would hand the next caller a fallback's answer
+  // labelled with the primary's name and rate. Keying it honestly also means
+  // the next call to the primary misses and tries again — which is what you
+  // want, because by then the primary may have recovered.
   if (store && route.cacheTtlSec && !opts.stream && attempt.stream == null) {
-    const ck = await cacheKeyFor(opts);
+    const ck = await cacheKeyFor(opts, modelUsed);
     if (ck) {
       try {
         await store.put(

@@ -413,10 +413,17 @@ test('every assist surface names a task class the router actually routes', () =>
   const tasks = [...cfg.matchAll(/^\s*task:\s*'([a-z_]+)'/gm)].map((m) => m[1]);
   assert.ok(tasks.length >= 4, 'the surfaces must declare their task classes');
   const router = read('cloudflare-worker/src/services/aiRouter.ts');
+  // An entry opens `  name: {` at column 2; `provider:` may be on that line or
+  // on the next. It used to have to be on the same line, and the first ROUTE
+  // entry that grew a field and wrapped made every task read as unrouted —
+  // failing on correct code, and worse, it would have gone on passing had the
+  // wrapped entry been the ONLY one a surface named.
   const routed = new Set(
-    [...router.matchAll(/^\s{2}([a-z_]+):\s*\{ provider:/gm)].map((m) => m[1]),
+    [...router.matchAll(/^ {2}([a-z_]+):\s*\{/gm)].map((m) => m[1]),
   );
   assert.ok(routed.size > 5, 'the ROUTE map must have been parsed');
+  assert.ok(routed.has('workspace_explain') && routed.has('safety'),
+    'the parser is matching something other than ROUTE entries');
   for (const t of tasks) {
     assert.ok(routed.has(t), `task "${t}" is not in aiRouter's ROUTE map`);
   }

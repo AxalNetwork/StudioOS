@@ -55,14 +55,27 @@ ai.get('/me/spend', async (c) => {
  * It still requires auth, because it describes internal wiring and there is no
  * reason to serve it anonymously.
  *
- * Static per deploy, so it is cacheable; the router's own price comment says
- * the figures only have to be stable, not perfect.
+ * Static per deploy, so it is cacheable. The figures are Cloudflare's published
+ * rates and the rail renders them to a founder, so "roughly right" is not the
+ * standard — `cloudflare-worker/test/ai_router_prices.test.mjs` pins them.
  */
 ai.get('/pricing', async (c) => {
   await requireAuth(c);
-  const routes: Record<string, { model: string; fallback_chain: string[] }> = {};
+  const routes: Record<string, {
+    model: string;
+    fallback_chain: string[];
+    alternates: string[];
+  }> = {};
   for (const [task, entry] of Object.entries(ROUTE)) {
-    routes[task] = { model: entry.model, fallback_chain: entry.fallbackChain ?? [] };
+    routes[task] = {
+      model: entry.model,
+      fallback_chain: entry.fallbackChain ?? [],
+      // What a CALLER may pick, primary first. An empty list is the answer for
+      // most tasks and for `safety` it is the point: the rail renders a menu
+      // from this, so a task with nothing here renders no menu and cannot
+      // offer a choice that would be refused.
+      alternates: entry.alternates ?? [],
+    };
   }
   return c.json({
     ok: true,
@@ -121,10 +134,16 @@ const WORKSPACE_EXPLAIN_PROMPT = [
 ai.post('/workspace/explain', async (c) => {
   const user = await requireAuth(c);
 
-  const body = await c.req.json<{ workspace?: string; zone?: string; coverage?: unknown }>()
-    .catch(() => null);
+  const body = await c.req.json<{
+    workspace?: string; zone?: string; coverage?: unknown; model?: string;
+  }>().catch(() => null);
   const workspace = String(body?.workspace || '').trim().slice(0, 60);
   const zone = String(body?.zone || '').trim().slice(0, 60);
+  // Passed through UNVALIDATED and on purpose: `run()` owns the allow-list,
+  // and a second copy of it here is a second thing to keep true. The length
+  // clamp is not validation, it is a bound on what gets logged if someone
+  // posts a megabyte.
+  const model = String(body?.model || '').trim().slice(0, 120) || undefined;
   const coverage = (Array.isArray(body?.coverage) ? body!.coverage : [])
     .slice(0, 12)
     .map((line) => String(line).trim().slice(0, 200))
@@ -161,6 +180,7 @@ ai.post('/workspace/explain', async (c) => {
   const r = await aiRun(c.env, {
     task: 'workspace_explain',
     userId: user.id,
+    model,
     systemPrompt: WORKSPACE_EXPLAIN_PROMPT,
     messages: [{ role: 'user', content: `Page: ${subject}\n\nWhat the page is showing:\n${facts}` }],
     maxTokens: 320,
@@ -174,9 +194,14 @@ ai.post('/workspace/explain', async (c) => {
     return c.json({
       ok: false,
       refusal: r.refusal ?? null,
-      message: r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
-        ? 'This month\u2019s AI budget is spent. Nothing was run.'
-        : 'The model could not be reached. Nothing was run, and nothing was charged.',
+      // `model_not_offered` says something the other refusals do not: the
+      // request itself was wrong, and re-running it unchanged will fail the
+      // same way. The rail reads this and drops the saved choice.
+      message: r.refusal === 'model_not_offered'
+        ? 'That model is no longer offered for this page. Nothing was run.'
+        : r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
+          ? 'This month\u2019s AI budget is spent. Nothing was run.'
+          : 'The model could not be reached. Nothing was run, and nothing was charged.',
       usage: { model: r.usage.model, est_cost_usd: 0 },
     }, 503);
   }
