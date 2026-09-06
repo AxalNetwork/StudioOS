@@ -4,8 +4,9 @@ import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Filter, GitBranch, Ref
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildRoadmap.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const text = (value, fallback = 'Not recorded') => {
   if (value === null || value === undefined || String(value).trim() === '') return fallback;
@@ -36,6 +37,10 @@ export default function FounderBuildRoadmap() {
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(requestedId ? Number(requestedId) : null);
   const [okrs, setOkrs] = useState([]);
+  // The canvas's three live views over the one stored record: source order,
+  // grouped by kanban column, and only the items that name a dependency. Its
+  // fourth, Scenarios, has no store and says so in the header row.
+  const [view, setView] = useState('timeline');
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
 
@@ -75,6 +80,14 @@ export default function FounderBuildRoadmap() {
   const sortedOkrs = useMemo(() => [...okrs].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)), [okrs]);
   const quarters = useMemo(() => new Set(sortedOkrs.map((item) => item.quarter).filter(Boolean)).size, [sortedOkrs]);
   const dependencies = sortedOkrs.filter((item) => item.dependency || item.dependencies || item.blocks);
+  const visibleItems = view === 'dependencies' ? dependencies : sortedOkrs;
+  // "Board" is the same items read down their stored kanban column instead of
+  // in source order. Nothing is added, dropped or re-scored by the regrouping.
+  const boardOrder = useMemo(() => {
+    const rank = { now: 0, next: 1, later: 2, done: 3 };
+    return [...sortedOkrs].sort((a, b) => (rank[a.kanban_status] ?? 9) - (rank[b.kanban_status] ?? 9));
+  }, [sortedOkrs]);
+  const rows = view === 'board' ? boardOrder : visibleItems;
 
   return (
     <main className="fb-roadmap" data-testid="founder-build-roadmap">
@@ -93,7 +106,10 @@ export default function FounderBuildRoadmap() {
               <Link to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</Link>
               <Link to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</Link>
             </nav>
-            <ZoneActions className="mt-3" items={founderZoneActions('build/roadmap', { query: selectedId ? `?project_id=${selectedId}` : '', view: { scope: selectedProject?.name, header: ['Objective', 'Quarter', 'Key results', 'Column'], rows: sortedOkrs, cells: (i) => [i.objective, i.quarter, (i.key_results || []).length, i.kanban_status] } })} />
+            <ZoneToolbar
+              filters={founderZoneFilters('build/roadmap', { value: view, onChange: setView })}
+              actions={founderZoneActions('build/roadmap', { query: selectedId ? `?project_id=${selectedId}` : '', view: { scope: selectedProject?.name, header: ['Objective', 'Quarter', 'Key results', 'Column'], rows: sortedOkrs, cells: (i) => [i.objective, i.quarter, (i.key_results || []).length, i.kanban_status] } })}
+            />
           </header>
 
           {status === 'error' && <div className="fb-roadmap-alert" role="alert" data-testid="status-roadmap-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-roadmap"><RefreshCw size={13} /> Retry</button></div>}
@@ -109,9 +125,12 @@ export default function FounderBuildRoadmap() {
                 <Stat label="At risk" value="Unavailable" note="Risk is not stored on roadmap items" muted />
               </div>
               <section className="fb-roadmap-card fb-roadmap-instrument">
-                <div className="fb-roadmap-card-head"><div><GitBranch size={16} /><h2>Roadmap timeline</h2></div><span>{sortedOkrs.length} stored item{sortedOkrs.length === 1 ? '' : 's'} · source order</span></div>
-                <div className="fb-roadmap-toolbar"><div className="fb-roadmap-filters"><Filter size={13} /><button type="button" className="is-selected">Timeline</button><Link to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Board editor</Link><button type="button" disabled>Dependencies</button><button type="button" disabled>Scenarios</button></div><Link className="fb-roadmap-secondary-action" to={`/execution/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Edit roadmap</Link></div>
-                {sortedOkrs.length ? <div className="fb-roadmap-table-wrap"><table><thead><tr><th>Item</th><th>Quarter</th><th>State</th><th>Blocks</th></tr></thead><tbody>{sortedOkrs.map((item) => <RoadmapRow key={item.id} item={item} />)}</tbody></table></div> : <div className="fb-roadmap-inline-empty"><CircleDot size={18} /><div><strong>No roadmap items are recorded.</strong><p>Use the existing roadmap editor to add an objective and key results for this startup.</p><Link to={`/execution/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Open roadmap editor</Link></div></div>}
+                <div className="fb-roadmap-card-head"><div><GitBranch size={16} /><h2>{view === 'dependencies' ? 'Dependency chain' : view === 'board' ? 'Roadmap board' : 'Roadmap timeline'}</h2></div><span>{rows.length} stored item{rows.length === 1 ? '' : 's'} · {view === 'dependencies' ? 'items naming a dependency' : view === 'board' ? 'grouped by stored column' : 'source order'}</span></div>
+                                {/* Its filter row moved to the zone header, where the canvas
+                    draws it and where the two views this store cannot serve can
+                    state their reason next to the two it can. */}
+                <div className="fb-roadmap-toolbar"></div>
+                {rows.length ? <div className="fb-roadmap-table-wrap"><table><thead><tr><th>Item</th><th>Quarter</th><th>State</th><th>Blocks</th></tr></thead><tbody>{rows.map((item) => <RoadmapRow key={item.id} item={item} />)}</tbody></table></div> : <div className="fb-roadmap-inline-empty"><CircleDot size={18} /><div><strong>No roadmap items are recorded.</strong><p>Use the existing roadmap editor to add an objective and key results for this startup.</p><Link to={`/execution/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Open roadmap editor</Link></div></div>}
                 <p className="fb-roadmap-note">Quarter and state come from stored roadmap items. Dependency links, risk labels, and downstream blocks are shown only when explicitly returned by the source; no relationships are inferred from item names or order.</p>
               </section>
               <div className="fb-roadmap-lower-grid"><DependencySummary dependencies={dependencies} /><SourceSummary okrCount={sortedOkrs.length} quarterCount={quarters} /></div>

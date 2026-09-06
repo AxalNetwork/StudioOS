@@ -4,8 +4,9 @@ import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Clock3, Filter, Layers
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildBoard.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const STAGES = [
   ['idea', 'Idea'],
@@ -15,6 +16,22 @@ const STAGES = [
   ['spinout_ready', 'Spin-Out Ready'],
   ['iterate', 'Iterate'],
 ];
+/**
+ * "Stale > 7d" over the one timestamp a stored card actually carries.
+ *
+ * The canvas's other three header filters are lanes and "Mine", and neither is
+ * a stored field — a card records a stage and an owner NAME, which is not the
+ * account reading the page. `founderZoneFilters.js` states both, so this is the
+ * only one of the four that needs a predicate.
+ */
+const STALE_AFTER_DAYS = 7;
+function matchesLane(task, lane) {
+  if (lane !== 'stale') return true;
+  const stamp = new Date(task.updated_at || task.created_at).getTime();
+  if (!Number.isFinite(stamp)) return false;   // undated is not the same as fresh
+  return (Date.now() - stamp) / 86400000 > STALE_AFTER_DAYS;
+}
+
 const TASK_STATUS = [
   ['all', 'All tasks'],
   ['todo', 'Backlog'],
@@ -41,6 +58,10 @@ export default function FounderBuildBoard() {
   const [selectedId, setSelectedId] = useState(requestedId ? Number(requestedId) : null);
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
+  // The canvas's header filter, which asks a different question from the
+  // in-card status row below it: that one narrows by where a card IS, this one
+  // by whether anyone has touched it. They compose rather than fight.
+  const [lane, setLane] = useState('all');
   const [taskFilter, setTaskFilter] = useState('all');
   const [query, setQuery] = useState('');
 
@@ -93,8 +114,8 @@ export default function FounderBuildBoard() {
   const filteredTasks = useMemo(() => tasks.filter((task) => {
     const matchesStatus = taskFilter === 'all' || task.status === taskFilter;
     const haystack = `${task.title || ''} ${task.description || ''} ${task.assigned_to || ''}`.toLowerCase();
-    return matchesStatus && haystack.includes(query.toLowerCase());
-  }), [tasks, taskFilter, query]);
+    return matchesStatus && matchesLane(task, lane) && haystack.includes(query.toLowerCase());
+  }), [tasks, taskFilter, lane, query]);
   const counts = useMemo(() => ({
     total: tasks.length,
     todo: tasks.filter((task) => task.status === 'todo').length,
@@ -121,7 +142,10 @@ export default function FounderBuildBoard() {
               <Link to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</Link>
               <Link to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</Link>
             </nav>
-            <ZoneActions className="mt-3" items={founderZoneActions('build/board', { query: selectedId ? `?project_id=${selectedId}` : '' })} />
+            <ZoneToolbar
+              filters={founderZoneFilters('build/board', { value: lane, onChange: setLane })}
+              actions={founderZoneActions('build/board', { query: selectedId ? `?project_id=${selectedId}` : '' })}
+            />
           </header>
 
           {status === 'error' && <div className="fb-alert" role="alert" data-testid="status-board-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-board"><RefreshCw size={13} /> Retry</button></div>}

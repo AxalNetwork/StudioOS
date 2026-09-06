@@ -77,6 +77,23 @@ export const accentLinkClass = (role) => ({
   advisor: 'text-emerald-700', partner: 'text-amber-700',
 }[role] || 'text-axal-violet');
 
+/**
+ * The class a licence's SELECTED filter chip wears — the canvas's `.fil.on`,
+ * which is the same tint/border/ink triple as `ACCENT` above and, like
+ * `accentLinkClass`, has to be written out whole because Tailwind reads class
+ * names at build time and cannot see a hex value assembled at runtime.
+ *
+ * An unselected chip is not in here on purpose: it is grey in all four
+ * canvases, so it lives in `ZoneToolbar` with the rest of the neutral
+ * treatment and only the selected state varies by licence.
+ */
+export const accentChipClass = (role) => ({
+  founder: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300',
+  investor: 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300',
+  advisor: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  partner: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300',
+}[role] || 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300');
+
 export const SEAM = { ink: '#0e7490', tint: '#f0fdff', border: '#a5edf5' };
 
 const A = ARCHETYPE;
