@@ -105,6 +105,7 @@
     "scope.sql @ routes/funds.ts": 1,
     "scope.sql @ routes/liquidity.ts": 1,
     "scope.sql @ routes/lp_reports.ts": 2,
+    "scope.sql @ routes/research.ts": 1,
     "scope.sql @ routes/spinout_lab.ts": 1,
     "scope.sql @ services/aiSpend.ts": 2,
     "scope.sql @ services/fundGpAccess.ts": 1,

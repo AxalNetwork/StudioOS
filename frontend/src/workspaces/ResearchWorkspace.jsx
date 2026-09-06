@@ -82,6 +82,9 @@ const SignalsPage = lazy(() => import('../pages/SignalsPage'));
 const CompetitorAnalysisPage = lazy(() => import('../pages/CompetitorAnalysisPage'));
 const LibraryZone = lazy(() => import('../pages/research/LibraryZone'));
 const AskZone = lazy(() => import('../pages/research/AskZone'));
+const FundsZone = lazy(() => import('../pages/research/FundsZone'));
+const BenchmarkingZone = lazy(() => import('../pages/research/BenchmarkingZone'));
+const DiligenceZone = lazy(() => import('../pages/research/DiligenceZone'));
 
 function Loading() {
   return <div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-40" /></div>;
@@ -168,28 +171,13 @@ function ClientPrepScopeNote({ role }) {
 // docblock above says why: what is indexed in Library is exactly what Ask can
 // answer over, so shipping one without the other would leave a working page
 // pointing at a card, or an Ask box with nothing to read.
-const LIVE_ZONES = new Set(['markets', 'companies', 'library', 'ask']);
+// Migrations 216 and 217 gave `funds` and `benchmarking` a store; `diligence`
+// needed none — its canvas artboard is "room access", assembled from the
+// `data_room_grants` an investor already holds. All three leave ZONE_COPY here
+// and join the zones that read something.
+const LIVE_ZONES = new Set(['markets', 'companies', 'library', 'ask', 'funds', 'benchmarking', 'diligence']);
 
 const ZONE_COPY = {
-  funds: {
-    heading: 'Fund research is not built yet',
-    what: 'Which funds invest at your stage, in your sector, on what terms, and who they have already backed that looks like you.',
-    why: 'This is founder-facing fund research and does not overlap the investor-only fund pages, which are GP back-office tooling behind a different license. Nothing sources it today.',
-    link: { to: '/raise/status', label: 'Your live raise →' },
-  },
-  diligence: {
-    heading: 'Diligence evidence lives in its own surface today',
-    what: 'The canvas puts diligence evidence under Research, alongside the questions being asked of it.',
-    why: 'The live diligence case tooling already exists and is where this work happens now. Folding it in here is a routing decision that has not been made, so this zone links rather than duplicating.',
-    link: { to: '/due-diligence', label: 'Open due diligence →' },
-    accentClass: 'text-indigo-700',
-  },
-  benchmarking: {
-    heading: 'Benchmarking is not built yet',
-    what: 'Comparable companies at the same stage, on the metrics a decision actually turns on, with the sample size stated on every figure.',
-    why: 'No benchmark set exists in the product. A benchmark drawn from three companies and presented without its base is arithmetic wearing a metric’s clothes.',
-    accentClass: 'text-indigo-700',
-  },
   'client-prep': RESEARCH_CLIENT_PREP_COPY,
 };
 
@@ -210,6 +198,9 @@ const ZONE_COPY = {
  * LIVE_ZONES reappears here.
  */
 const ZONE_BLURB = {
+  funds: 'Every fund you have researched, whether they write at your stage, and whether you have a route in.',
+  diligence: 'The rooms founders have opened to you, and how much of each they actually staged.',
+  benchmarking: 'What you are measuring, what the peer set says, and how many it was measured over.',
   markets: 'Signals from the sectors you work in, with the date each one was gathered.',
   companies: 'The competitor and market analyses you have run yourself.',
   library: 'Documents you have added, and which of them Ask can actually read.',
@@ -300,10 +291,49 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
         </Suspense>
       );
     }
-    // `funds` is the fallback rather than `ask`, which is now a real page: a
-    // slug with no card would otherwise render the Library's working body
-    // under some other zone's heading.
-    const copy = ZONE_COPY[slug] || ZONE_COPY.funds;
+    if (slug === 'funds') {
+      return (
+        <Suspense fallback={<Loading />}>
+          <FundsZone zoneActions={(rows) => zoneActionsFor(role, 'research/funds', { view: {
+            scope: null,
+            zone: 'funds',
+            header: ['Fund', 'Cheque min (cents)', 'Cheque max (cents)', 'Stage fit', 'Path', 'State', 'Pass reason'],
+            rows,
+            cells: (f) => [f.name, f.cheque_min_cents, f.cheque_max_cents, f.stage_fit, f.path, f.status, f.pass_reason],
+          } })} />
+        </Suspense>
+      );
+    }
+    if (slug === 'benchmarking') {
+      return (
+        <Suspense fallback={<Loading />}>
+          <BenchmarkingZone zoneActions={(rows) => zoneActionsFor(role, 'research/benchmarking', { view: {
+            scope: null,
+            zone: 'benchmarking',
+            header: ['Metric', 'Ours', 'Peer', 'Peer source', 'Sample size', 'As of', 'Read'],
+            rows,
+            cells: (b) => [b.metric, b.our_value, b.peer_value, b.peer_source, b.peer_sample_size, b.peer_as_of, b.reading],
+          } })} />
+        </Suspense>
+      );
+    }
+    if (slug === 'diligence') {
+      return (
+        <Suspense fallback={<Loading />}>
+          <DiligenceZone zoneActions={(rows) => zoneActionsFor(role, 'research/diligence', { view: {
+            scope: null,
+            zone: 'diligence',
+            header: ['Company', 'Open to you', 'In the room', 'Behind an NDA', 'You last opened'],
+            rows,
+            cells: (r) => [r.project_name, r.file_open, r.file_total, r.withheld_behind_nda, r.last_opened_at],
+          } })} />
+        </Suspense>
+      );
+    }
+    // `client-prep` is the fallback now that funds, benchmarking and diligence
+    // all render real pages: a slug with no card would otherwise show some
+    // other zone's body under this zone's heading.
+    const copy = ZONE_COPY[slug] || ZONE_COPY['client-prep'];
     return (
       <>
         {slug === 'client-prep' && <ClientPrepScopeNote role={role} />}
