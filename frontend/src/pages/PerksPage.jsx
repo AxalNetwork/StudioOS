@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
+import ZoneActions from '../workspaces/ZoneActions';
 
 /**
  * Perks & Products — /perks. One route, three audiences.
@@ -401,7 +402,7 @@ function MyPerks() {
  * Partner: submissions                                                *
  * ------------------------------------------------------------------ */
 
-function PartnerConsole() {
+function PartnerConsole({ zoneActions }) {
   const [items, setItems] = useState(null);
   const [form, setForm] = useState({
     partner_name: '', offer: '', category: '', blurb: '', detail: '',
@@ -442,6 +443,7 @@ function PartnerConsole() {
 
   return (
     <div className="space-y-6">
+      {zoneActions && <ZoneActions items={zoneActions(items || [])} />}
       {/* Canvas stats strip — computed from submissions, not asserted. */}
       {items && items.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -617,7 +619,13 @@ function ReviewQueue() {
 // its own page container, so the page drops its `max-w-6xl px-4 py-6` too
 // rather than centring a second column inside the first. The tab row stays:
 // Perks / My perks / My listings are views of this page, not sibling zones.
-export default function PerksPage({ user, embedded = false }) {
+/**
+ * `zoneActions` is the same render prop `ServiceCatalogPage` takes, for the same
+ * reason: `/offers/perk-deals` mounts this page as a partner zone and wants the
+ * zone's header actions; `/perks` mounts it for five other licences and wants
+ * none. The caller decides; this page learns nothing about roles.
+ */
+export default function PerksPage({ user, embedded = false, zoneActions }) {
   const role = String(user?.role || '').toLowerCase();
   const isPartner = role === 'partner';
   const isAdmin = role === 'admin';
@@ -627,7 +635,12 @@ export default function PerksPage({ user, embedded = false }) {
     if (isAdmin) t.push({ k: 'review', label: 'Review queue', icon: ClipboardCheck });
     return t;
   }, [isPartner, isAdmin]);
-  const [tab, setTab] = useState('browse');
+  // `/offers/perk-deals` is the partner's OWN listings — that is what the zone
+  // is called and what all three of its canvas actions are about. Landing a
+  // partner on the public browse tab there showed them everyone else's perks
+  // and hid their own; the zone row went with it. `zoneActions` is only passed
+  // when this page is mounted as that zone, so it doubles as the signal.
+  const [tab, setTab] = useState(zoneActions && (isPartner || isAdmin) ? 'partner' : 'browse');
 
   return (
     <div className={embedded ? '' : 'mx-auto max-w-6xl px-4 py-6'}>
@@ -657,7 +670,7 @@ export default function PerksPage({ user, embedded = false }) {
       <div className="mt-5">
         {tab === 'browse' && <Catalogue />}
         {tab === 'mine' && <MyPerks />}
-        {tab === 'partner' && <PartnerConsole />}
+        {tab === 'partner' && <PartnerConsole zoneActions={zoneActions} />}
         {tab === 'review' && <ReviewQueue />}
       </div>
     </div>

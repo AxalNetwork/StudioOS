@@ -2145,3 +2145,302 @@ later in the file, so it won: no desk had ever shown an accent pill in dark
 mode. The new `.dark … a.is-active` rules out-specify it, and each was measured
 at 5.90:1 against its own ground — above AA, and checked by computing relative
 luminance rather than by observing that a dark variant exists.
+
+---
+
+### D45. The model menu returns, on the condition D13 set for it — and the condition is an empty list, not a check
+
+**D13 removed the menu and wrote down what would have to be true for it to come
+back:** *"making the router honour a validated preference is real work with a
+safety edge (a caller must never be able to route a `safety` call away from the
+guard model) and belongs to its own change if it is ever wanted."* This is that
+change, and the product owner asked for it in as many words: *"multi model
+selection options, only one model appears while there should be many other
+options."*
+
+**The safety edge is answered structurally.** `RouteEntry` grows `alternates` —
+the models a caller **may pick**, primary first — and `safety` and `embed`
+declare none, so there is no value of `opts.model` that reaches them. A test can
+hold an empty list shut in a way it cannot hold a conditional shut, and
+`ai_router_prices.test.mjs` fails if a future edit gives either task a list.
+
+**`alternates` is not `fallbackChain`.** One is what the router degrades *to*
+when a model fails; the other is what a person may *choose* while everything
+works. A model belongs on one and not the other more often than not — the
+deprecated 8b was a fallback for years and was never something to offer.
+
+**An unlisted model refuses rather than substituting.** New `RefusalReason`,
+`model_not_offered`. The rail remembers a founder's choice in their browser; a
+model retired from the list months later would otherwise run as something else
+and report success, and they would read one model's rate beside another model's
+answer. It is distinguished from a spent budget because the fix is different —
+re-running it unchanged fails identically — and the rail acts on it by dropping
+the saved choice.
+
+**What is typed and what is derived.** Which models exist, their ids and their
+rates come from `GET /api/ai/pricing`, which reads the router's own tables. The
+display name, the one-line why and the recommendation are editorial judgements
+with nothing to derive them from, and live in `frontend/src/ui/railModels.js`,
+which may not contain a price. The canvas's own why-sentences were **not**
+transcribed: its Validate entry for the 70b describes reading across interviews
+with Whisper, which is not the work `workspace_explain` does.
+
+**D16 is untouched, and is the reason for one visible departure from the
+design.** The canvas prints an estimate inside each recommended model's card.
+`/api/ai/me/spend` groups by **task**, not by model, so an average printed there
+would attribute a figure across every model the caller has used to whichever is
+selected. It sits below the menu instead, saying what it is, and is absent until
+they have run once.
+
+**No exemption was added to the regulated-wording lexicon for the RECOMMENDED
+badge, and none was needed.** `scripts/check-regulated-wording.mjs` treats a
+literal as prose only when it contains a space, on its own stated rule that "a
+literal that looks like an identifier is not prose". A bare badge passes; the
+moment the word appears inside a sentence it is prose and the scanner is right
+to flag it. `worker_rail_models.test.mjs` keeps it that way, so the lexicon
+still has no exceptions to reason about.
+
+---
+
+### D46. "AI fills the blanks" ships with the branch D17 required, off by default, and names two things rather than the canvas's three
+
+**D17 refused this toggle** because *"no page branches on an assist mode.
+Turning the switch off would change nothing any of the six surfaces does, so
+shipping it puts a control on screen that cannot affect the product"* — and
+noted that a surface *"that ever grows real manual behaviour declares `kind:
+'choice'`"*. Founder Validate now branches: off writes no proposal and spends
+nothing; on offers proposals a founder accepts or discards.
+
+**The switch appears only where it branches.** Forty-seven pages mount
+`WorkerRail` and one has proposals. The surface declares the capability; the
+host passes `fills` to say this page has any. A globally-rendered toggle would
+be exactly the dead control D17 refused, one page over.
+
+**Off is the default, and the canvas draws it on.** Every run spends the
+founder's own budget against their own monthly cap, so a mode that is on before
+they chose it spends money they did not agree to spend. `useAssistMode` defaults
+to `false` — the hook D14 listed by name as still genuinely missing, now that
+something reads it. It is a module store rather than per-component state because
+two components read one answer: the rail draws the switch, the page decides
+whether to offer proposals, and `useState` in each would leave the page as it was
+until a reload.
+
+**Two capabilities, not three.** The canvas's mode note reads *"Transcribes
+uploads, tags quotes to pains, drafts hypothesis cards."* Tagging and drafting
+back onto stores that exist — `pain_group_aliases` (106) and `hypotheses` (211).
+Transcription does not: `discovery_interviews` has no transcript, recording-key
+or duration column, no R2 allowlist in the worker admits an audio MIME, and
+`PRICE_USD_PER_1M_TOKENS` cannot express a per-audio-minute rate. So the note
+names what runs, and the rail says under "Unavailable here" where the third one
+is missing. It joins the sentence in the migration that gives it a column.
+
+**A model proposes; it never decides, and it never names a theme.** Every item
+is matched back against something that exists in the project before it can become
+a row — an invented phrase, a hallucinated `pain_group_id`, a claim that restates
+one the founder already has, and a claim they already threw away are all dropped.
+The tagger sorts phrases into themes the founder wrote and cannot create one:
+naming the thing the venture is about is not a thing to hand over, and the page
+has said "founder-curated" for as long as it has existed. Two on-screen strings
+that were true before this and are false after it were corrected in the same
+change rather than left standing.
+
+**`validate_proposals` records which model wrote each proposal**, which
+`decision_gates` — the shape it copies — does not: that table returns a
+hardcoded model string in its HTTP response and stores none, so the name can
+drift from what ran. Since the rail now lets a founder choose a model, and since
+the router falls back to a smaller sibling under load, "which one wrote this"
+stopped being trivia. It is written from the router's usage metadata, so it is
+the model that actually ran rather than the one that was asked for.
+
+**Accepting and typing produce the same row.** `insertHypothesis` and
+`upsertPainAlias` are the single writers, called by both the manual routes and
+the accept path. The `H1, H2 …` allocation reads the highest code ever used so a
+retired H2 is never reissued; a second insert with its own idea of that rule is
+how it would quietly start handing out duplicates. The accept path claims the row
+with `WHERE id = ? AND status = 'pending'` before applying it — `decision_gates`'
+own idiom — and puts it back to pending if applying fails, because D1's HTTP API
+has no transaction to wrap the two together.
+
+**Nothing proposes on its own.** The band reads existing proposals when the mode
+is on and writes none until the founder presses the run button. A component that
+proposed on mount would bill a founder for opening a page, once per navigation,
+with a creeping spend meter as the only symptom.
+
+---
+
+### D47. Whisper is billed by the minute, so the router grew a second price table rather than a fabricated token rate
+
+**The third thing D46 could not ship.** Migration 215 gives `discovery_interviews`
+its recording and transcript columns, `routes/founder_validate.ts` the upload and
+transcribe routes, and the mode note its third clause. The "Unavailable here"
+entry that named transcription is gone — a gap the product has since closed is
+as false as a promise it cannot keep, pointed the other way — and is replaced by
+the one that is genuinely still open: Whisper returns speaker turns and
+timestamps, and this product stores neither because it has nowhere to show them.
+
+**The structural problem, and why it could not be papered over.**
+`PRICE_USD_PER_1M_TOKENS` is the router's only price table, and
+`estimateCostUsd` answers **0** for a model that is not in it. Whisper has no
+token rate anywhere — it is sold per audio minute — so the obvious
+implementation makes a transcription free, which is the exact failure
+`ai_router_prices.test.mjs` was written for: *"a model in ROUTE with no price
+row bills as zero, and a spend cap that counts zero never trips."* A founder
+could have transcribed all day against a cap that never moved.
+
+Three options were weighed. Inventing a per-token rate for Whisper puts a
+number on the rail that Cloudflare does not publish, which is what this whole
+sequence of changes has been correcting. Special-casing the task inside
+`estimateCostUsd` hides a pricing fact inside a control-flow branch. So:
+`PRICE_USD_PER_AUDIO_MINUTE`, consulted **first**, because a per-minute model
+has no token rate to find. The price guard now accepts a model priced in either
+table and fails if one is priced in both — a model in both would bill by
+whichever branch runs first, with the other figure sitting there looking
+authoritative.
+
+**Minutes come from the bytes, never from the request.** A browser can measure a
+clip's duration exactly, and `recording_duration_sec` stores what it measured —
+for the screen. Billing reads `audioMinutesFromBytes` over the stored byte
+length instead, because a number the client chooses must not decide what a run
+costs: a caller could otherwise transcribe an hour and report a minute. The
+bitrate assumption (32 kbps, the top of what a browser's MediaRecorder produces
+for speech) makes it an estimate, and it sits one function below the token
+estimator that calls itself *"crude — ≈ 4 chars/token"*. It under-estimates
+rather than over-bills, and it is never zero.
+
+**`transcribe` offers no choice and no fallback, and both are deliberate.**
+`whisper-large-v3-turbo` is faster and more accurate than the base model at the
+same $0.0005 per minute, so a menu between them is a control that cannot change
+anything — D13's own objection. A fallback between two models at one price
+doubles the bill for a clip that is going to fail twice. The base model stays
+priced because `routes/advisor.ts`'s composer mic has been calling it since that
+feature shipped and those runs still have to cost what they cost.
+
+**The advisor mic is metered for the first time.** It called `env.AI.run`
+directly for its whole life: no per-user day or month cap, no org kill switch,
+no fallback, and — the one that mattered most — **no row in `ai_usage_logs`**, so
+every transcription a user ran was invisible to the spend meter that claims to
+show what they have spent. It goes through the router now, at the same rate.
+
+**Attaching audio is data entry; transcribing is an AI run.** The upload is
+offered whatever the rail's switch says. Transcription sits behind it, so a
+founder who turned "AI fills the blanks" off finds no control on this workspace
+that still runs a model — and the off state names the switch rather than
+disabling a button with no explanation.
+
+**An empty transcript is an answer.** NULL means never transcribed; an empty
+string means transcribed, and the clip had no speech in it. Folding the two
+together would offer "Transcribe" forever on a silent recording and charge for
+it every time.
+
+### D48. A zone header's actions are the canvas's own list, and an action nothing performs is a sentence rather than a button
+
+**The request was that every subpage carry its data-entry options** — Validate's
+"Log an interview / Export transcripts" existed on the canvas and nowhere on the
+screen, and the same was true across the profile. The obvious way to satisfy it
+is to draw every label the canvases name. That is also the way to fail it
+silently: a page then *looks* finished and does nothing, which is worse than the
+empty header it replaced, because the reader now believes they tried.
+
+**So the labels come from the design and the behaviour comes from the code, and
+the two are allowed to disagree in public.** `founderZoneActions.js` lists, for
+each of the founder's twenty-one zones, exactly the `ops:` array of its artboard
+in the canvas's own order — nothing invented, nothing dropped. Each entry is one
+of three things:
+
+- **an export that runs here**, over the rows the page has loaded;
+- **a link to a route that already performs it** and that a founder is allowed to
+  open;
+- **a stated gap** — rendered as text, never as a control.
+
+Fifty-eight actions: fifteen, seventeen and twenty-six.
+
+**A gap names what the reader can do instead, and never names a path.** Prose is
+not checked by anything, so a sentence saying "go to /matches" is an unchecked
+link wearing a sentence — and `/matches` is exactly the route a founder cannot
+open. Notes name surfaces the way a person would; the checked `to:` field carries
+the path, and every one of them is re-verified against `App.jsx`'s guard on each
+build.
+
+**Four labels lost their link during that verification**, which is the clearest
+evidence the check earns its place: `/matches` (where the introduction request
+lives) is admin, partner and investor only; `/contacts` redirects to a Network
+tab a founder's desk does not read; `/build/discovery` renders the Validate page
+for a founder, so the waitlist invite panel behind it is not theirs to reach; and
+`/build/team` renders the Grow desk rather than the team page. A link that lands
+somewhere the reader may not open is the same broken promise as a dead button,
+only slower to discover.
+
+**The export is client-side, and says so on the button.** Twenty worker routes
+for twenty zones would be twenty chances for a count on screen to disagree with a
+count in a file. `lib/csvExport.js` writes the rows the page has loaded, which on
+most zones is a capped page — so the label reads "Export this view" and the
+filename carries the row count. "Export" over a truncated list with no hint of
+the truncation is how a founder pastes twenty-five of two hundred rows into an
+investor update. Its escaping is the worker's, character for character; two older
+copies in this repo leave a bare carriage return unquoted, which splits a record
+for any RFC 4180 reader.
+
+**Two defects here were invisible to the whole suite and obvious in a browser**,
+and both now have an assertion. The Network zones' action row was placed inside
+their `{!embedded && <header>}` block, which is false on the only route that
+mounts them, so it rendered nowhere on three pages while every source assertion
+passed. And one page was handed `project?.name` when it has no `project` — a
+ReferenceError that blanks the route at render, which esbuild bundles happily and
+no lint step exists to catch.
+
+**The investor pass says the same thing about a much emptier profile, and that
+is the result rather than a shortfall.** Fourteen zones, forty-two actions, ten
+of which run: nine exports, one link, thirty-two stated gaps. Deals and Fund are
+read-only shells — `InvestorDealsWorkspace` calls `listDeals` and two invitation
+methods, `FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal`, and
+`InvestorFundCalls` and `InvestorFundAccounting` call no API at all — so "New
+call", "Add LP", "Record wire" and "Close vote" have nowhere to link to. A header
+full of working buttons there would be a lie about a bucket that cannot yet be
+operated. What it is instead is the map of what to build next.
+
+**The same label is not the same answer across profiles, which is why the tables
+are per profile and only the builder is shared.** `/network/*` serves every
+licence and the investor artboard's ops are word-for-word the founder's — but
+`/matches`, where `introductionsRequest` lives, is guarded
+`['admin', 'partner', 'investor']`. "Request an intro" is therefore a working
+link on the investor's zone and a stated gap on the founder's identical one. Four
+copies of the builder would have been four places for "what an empty export says"
+to drift; four copies of the answers would have been wrong.
+
+**The partner pass is the mirror image of the investor's, and shows the rule
+cuts both ways.** Ten zones, thirty actions, and every one of the ten can export
+what it is showing — Delivery and Offers have had real stores since migrations
+208 and 209. The twenty gaps are all writes, and each one is refused for a
+reason its own zone already documents rather than for want of a route: a
+deliverable's `opened_at` is the client's to set, so "Chase unopened" would be
+the firm writing a metric about itself; no cadence is stored, so "Draft all" has
+nothing to schedule. An honest pass is not a pessimistic one — it reports what is
+there as readily as what is not.
+
+**Where the row goes is decided by where the rows are.** Seven partner zones
+share `ZoneBody`, which now renders the action row above all four of its states:
+a stated gap is as true while a store is loading, or failed, or empty, as it is
+with rows on screen, and an export with nothing loaded says so itself. Two more
+are shared pages (`ServiceCatalogPage`, `PerksPage`) that take the row as a
+RENDER PROP called with the rows their tab loaded — the caller decides, and the
+shared page learns nothing about licences. The alternative, wiring from the
+bucket router, would have cost every one of those exports its rows.
+
+**The advisor pass is four zones, and the shape of what is missing is the whole
+story.** Only one advisor artboard set carries an `ops:` array; Practice's five
+zones and Cohorts' five have no header actions in any canvas, so there was
+nothing to copy and nothing was invented. `expertise/visibility` is the one zone
+excluded outright: it is not a body but a card whose entire page already states
+the gap it would repeat. The exclusion is listed in the guard, which checks the
+excluded set exactly, so a second zone cannot join it quietly.
+
+**Across the four profiles: forty-nine zones, a hundred and forty-two actions,
+fifty-seven of which run.** The other eighty-five are sentences. That ratio is
+the deliverable — a reader now knows, on every zone, which of the things the
+design promised they can actually do.
+
+**Two canvases give no actions to record**, and nothing was invented for them:
+`Pages · Partner Pipeline` and `Advisor Detail · Practice` carry no `ops:` array
+on any artboard. The gap is written down in `ROUTE_MAP.md` instead. Inventing an
+action for a zone whose design asks for none is how a header grows a button
+nobody specified and nothing backs — the failure this entry exists to prevent.

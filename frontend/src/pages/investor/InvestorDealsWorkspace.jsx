@@ -9,6 +9,8 @@ import { reportError } from '../../lib/log';
 import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { investorZoneActions } from '../../workspaces/investorZoneActions';
 
 const STAGES = [
   { id: 'sourcing', label: 'Sourcing' },
@@ -53,11 +55,17 @@ function Empty({ children }) {
   return <div className="investor-deals-empty">{children}</div>;
 }
 
-function SectionHeading({ id, title, detail }) {
+function SectionHeading({ id, title, detail, actions }) {
+  // The Deals bucket's four zones are four SECTIONS of this one page — the
+  // router scrolls to `#deals-<slug>` rather than mounting four components — so
+  // each zone's action row belongs to its own heading. One row after the
+  // ZoneNav would claim to act on whichever section the reader happened to be
+  // looking at.
   return (
     <div className="investor-deals-section-head" id={id}>
       <h2>{title}</h2>
       {detail && <span>{detail}</span>}
+      {actions?.length ? <ZoneActions className="basis-full" items={actions} /> : null}
     </div>
   );
 }
@@ -122,7 +130,8 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
     () => Object.fromEntries(STAGES.map((stage) => [stage.id, deals.filter((deal) => deal.stage === stage.id)])),
     [deals],
   );
-  const screening = grouped.screening[0] || grouped.diligence[0] || null;
+  const screeningRows = [...grouped.screening, ...grouped.diligence];
+  const screening = screeningRows[0] || null;
   const commit = grouped.commit[0] || null;
   const closing = grouped.closing[0] || null;
   const invited = state.invitations.filter((item) => item.status === 'invited');
@@ -185,7 +194,7 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
         )}
 
         <section className="investor-deals-card">
-          <SectionHeading id="deals-pipeline" title="Pipeline" detail={`${deals.length} live deal${deals.length === 1 ? '' : 's'}`} />
+          <SectionHeading id="deals-pipeline" title="Pipeline" detail={`${deals.length} live deal${deals.length === 1 ? '' : 's'}`} actions={investorZoneActions('deals/pipeline', { view: { header: ['Deal', 'Stage', 'Sector', 'Target', 'Committed'], rows: deals, cells: (d) => [d.name, d.stage, d.sector, d.target, d.committed] } })} />
           <div className="investor-pipeline-grid">
             {STAGES.map((stage) => (
               <div className="investor-pipeline-column" key={stage.id}>
@@ -203,7 +212,7 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
 
         <div className="investor-deals-decisions">
           <section className="investor-deals-card investor-screening">
-            <SectionHeading id="deals-screening" title="Screening desk" detail={screening?.name} />
+            <SectionHeading id="deals-screening" title="Screening desk" detail={screening?.name} actions={investorZoneActions('deals/screening', { view: { header: ['Deal', 'Stage', 'Sector', 'Target', 'Committed'], rows: screeningRows, cells: (d) => [d.name, d.stage, d.sector, d.target, d.committed] } })} />
             {screening ? (
               <>
                 <div className="investor-provenance"><Database size={13} /><strong>{screening.source}</strong><span>Only fields shared with you are shown.</span></div>
@@ -221,7 +230,7 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
 
           <div className="investor-deals-stack">
             <section className="investor-deals-card">
-              <SectionHeading id="deals-commit" title="Commit room" detail={commit?.name} />
+              <SectionHeading id="deals-commit" title="Commit room" detail={commit?.name} actions={investorZoneActions('deals/commit')} />
               {commit ? (
                 <dl className="investor-facts compact">
                   <div><dt>Deal status</dt><dd>{commit.raw.status || 'Not recorded'}</dd></div>
@@ -231,7 +240,7 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
               ) : <Empty>No deals are currently at commit.</Empty>}
             </section>
             <section className="investor-deals-card">
-              <SectionHeading id="deals-closing" title="Closing" detail={closing?.name} />
+              <SectionHeading id="deals-closing" title="Closing" detail={closing?.name} actions={investorZoneActions('deals/closing')} />
               {closing ? (
                 <div className="investor-closing-list">
                   <div><CheckCircle2 size={14} /> Deal reached closing <span>Recorded</span></div>

@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuthSync';
 import WorkspaceShell, { SeamChip } from '../WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from '../BucketOverview';
 import { bucketForPath, zoneForPath } from '../shellConfig';
+import { partnerZoneActions } from '../partnerZoneActions';
 
 // NOT `PartnerOperationsWorkspace`, and that is the fix rather than an
 // omission. That component is the legacy five-tab shell at
@@ -179,8 +180,20 @@ const LIVE = {
     'status-reports': () => <PartnerStatusReports />,
   },
   '/offers': {
-    catalog: (user) => <ServiceCatalogPage user={user} embedded />,
-    'perk-deals': (user) => <PerksPage user={user} embedded />,
+    // These two zones are shared pages, so the zone's actions arrive as a
+    // render prop rather than being wired inside them: the page renders what
+    // the caller hands it and learns nothing about licences, and the rows for
+    // "export this view" come from the tab that actually loaded them.
+    catalog: (user) => <ServiceCatalogPage user={user} embedded zoneActions={(rows) => partnerZoneActions('offers/catalog', { view: {
+      header: ['Offering', 'Category', 'Price', 'Currency', 'SLA days', 'Listed'],
+      rows,
+      cells: (o) => [o.title, o.category, o.price, o.currency, o.sla_days, o.listed],
+    } })} />,
+    'perk-deals': (user) => <PerksPage user={user} embedded zoneActions={(rows) => partnerZoneActions('offers/perk-deals', { view: {
+      header: ['Offer', 'Partner', 'Category', 'Kind', 'Tier', 'Status', 'Claims'],
+      rows,
+      cells: (p) => [p.offer, p.partner_name, p.category, p.kind, p.required_tier, p.status, p.claim_count],
+    } })} />,
     visibility: () => <PartnerVisibility />,
     proof: () => <PartnerProof />,
     'audience-fit': () => <PartnerAudienceFit />,

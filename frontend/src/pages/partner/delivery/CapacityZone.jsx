@@ -7,6 +7,7 @@ import {
   NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 
 /**
  * Delivery · Capacity — `/delivery/capacity`.
@@ -111,6 +112,7 @@ export default function PartnerCapacityZone() {
 
   return (
     <ZoneBody
+      actions={partnerZoneActions('delivery/capacity', { view: { header: ['Person', 'Live seats'], rows: people, cells: (p) => [p.name, p.live_seats] } })}
       loading={state.loading}
       error={state.error}
       onRetry={load}

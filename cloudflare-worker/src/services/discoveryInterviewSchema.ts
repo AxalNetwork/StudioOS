@@ -101,6 +101,73 @@ export async function ensureDiscoveryEvidenceColumns(env: Env): Promise<boolean>
   }
 }
 
+const RECORDING_READY = new WeakMap<object, boolean>();
+
+/**
+ * Ensure migration 215's eight recording columns exist. Canonical migration is
+ * `215_interview_recordings.sql`; this keeps the worker self-healing on an
+ * environment where it has not been applied, the same way the two helpers above
+ * do for 161 and 211.
+ *
+ * Reports usability rather than assuming it, and caches readiness only on
+ * success — a failed ALTER remembered as ready is a 500 on every later request
+ * instead of one degraded reply.
+ *
+ * Eight literal statements rather than a loop: `check-sql-prepare` refuses any
+ * `${}` inside `DB.prepare`, and it is right to. A column name built at runtime
+ * is exactly the shape that guard exists to keep out, even when the only source
+ * is a const tuple in the same file.
+ */
+export async function ensureDiscoveryRecordingColumns(env: Env): Promise<boolean> {
+  const key = env.DB as unknown as object;
+  if (RECORDING_READY.get(key)) return true;
+  try {
+    const info = await env.DB.prepare(`PRAGMA table_info(discovery_interviews)`).all<{ name: string }>();
+    const have = new Set((info.results || []).map((r) => r.name));
+    const missing: string[] = [];
+    if (!have.has('recording_r2_key')) {
+      await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN recording_r2_key TEXT`).run().catch(() => missing.push('recording_r2_key'));
+    }
+    if (!have.has('recording_mime')) {
+      await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN recording_mime TEXT`).run().catch(() => missing.push('recording_mime'));
+    }
+    if (!have.has('recording_size_bytes')) {
+      await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN recording_size_bytes INTEGER`).run().catch(() => missing.push('recording_size_bytes'));
+    }
+    if (!have.has('recording_duration_sec')) {
+      await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN recording_duration_sec INTEGER`).run().catch(() => missing.push('recording_duration_sec'));
+    }
+    if (!have.has('recording_uploaded_at')) {
+      await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN recording_uploaded_at TEXT`).run().catch(() => missing.push('recording_uploaded_at'));
+    }
+    if (!have.has('transcript')) {
+      await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN transcript TEXT`).run().catch(() => missing.push('transcript'));
+    }
+    if (!have.has('transcribed_at')) {
+      await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN transcribed_at TEXT`).run().catch(() => missing.push('transcribed_at'));
+    }
+    if (!have.has('transcribed_by_model')) {
+      await env.DB.prepare(`ALTER TABLE discovery_interviews ADD COLUMN transcribed_by_model TEXT`).run().catch(() => missing.push('transcribed_by_model'));
+    }
+    if (missing.length) {
+      // Known-absent columns whose ALTER failed. Re-read once: a concurrent
+      // isolate may have added them between the PRAGMA and here.
+      const recheck = await env.DB.prepare(`PRAGMA table_info(discovery_interviews)`).all<{ name: string }>();
+      const now = new Set((recheck.results || []).map((r) => r.name));
+      const still = missing.filter((m) => !now.has(m));
+      if (still.length) {
+        console.warn('[discoveryInterviewSchema] recording columns unavailable', still);
+        return false;
+      }
+    }
+    RECORDING_READY.set(key, true);
+    return true;
+  } catch (e) {
+    console.warn('[discoveryInterviewSchema] recording bootstrap failed', e);
+    return false;
+  }
+}
+
 /**
  * Task #14 sibling: ensure `discovery_interviews.validation_rating`
  * (INTEGER 0-5) and `validation_comment` (TEXT) exist. Canonical

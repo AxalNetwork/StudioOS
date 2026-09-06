@@ -6,6 +6,7 @@ import {
   Field, NothingYet, Pill, SaveNote, ZoneBody, ZoneHeading,
   buttonClass, ghostButtonClass, inputClass,
 } from './kit';
+import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 
 /**
  * Expertise · Proof — what you claim, and who has confirmed it.
@@ -253,6 +254,7 @@ export default function ProofZone() {
       </Card>
 
       <ZoneBody loading={state.loading} error={state.error} onRetry={load}
+        actions={advisorZoneActions('expertise/proof', { view: { header: ['Proof', 'Kind', 'Detail', 'Consents recorded'], rows: state.items, cells: (r) => [r.title, r.kind, r.detail, (r.consents || []).length] } })}
         isEmpty={state.items.length === 0} empty={empty}>
         <div className="space-y-3">
           {state.items.map((row) => {

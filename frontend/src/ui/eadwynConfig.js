@@ -90,6 +90,33 @@ export const ASSIST_SURFACES = {
     unit: 'per page',
     modeNote: 'Eadwyn reads back what this page is showing. It is given the summary lines beside it and nothing else.',
     footer: { kind: 'screened', note: 'Drafted from this page only, and kept nowhere.' },
+    // THE FIRST SURFACE TO DECLARE A REAL CHOICE, and DECISIONS D17 is the
+    // reason it took this long. D17 refused a mode toggle "until a page
+    // branches on the mode", because "turning the switch off would change
+    // nothing any of the six surfaces does, so shipping it puts a control on
+    // screen that cannot affect the product". Founder Validate now branches:
+    // off, no proposal is ever written and nothing is spent; on, Eadwyn tags
+    // logged phrases into themes the founder named and drafts hypothesis
+    // cards, each as a proposal to accept or throw away.
+    //
+    // `manualNote` is what OFF means, in the founder's terms rather than as
+    // the absence of something. The AssistRail machinery has rendered it
+    // behind `kind: 'choice'` since it was written and no surface has ever
+    // emitted one.
+    mode: {
+      kind: 'choice',
+      label: 'AI fills the blanks',
+      // All three now. Migration 215 gave `discovery_interviews` its recording
+      // and transcript columns and a `transcribe` task class its own
+      // per-audio-minute price, so the sentence this note carried for one
+      // change — two capabilities, because the third had nowhere to write —
+      // is complete.
+      //
+      // The order is the order a founder meets them: a recording becomes text,
+      // the text's pains become themes, the themes become claims.
+      note: 'Transcribes recordings, tags logged phrases into your themes, and drafts hypothesis cards. Every one is yours to accept, edit or discard.',
+      manualNote: 'Nothing runs and nothing is spent. You log interviews and group pains yourself.',
+    },
   },
   // services/competitorAnalysis.ts → aiRun(…)
   market: {
@@ -135,17 +162,24 @@ export function eadwynConfig({ surface, spend, pricing }) {
   return {
     product: 'Eadwyn',
     accent: 'violet',
-    // 'fixed', not 'choice': the surface's AI is on because the surface IS the
-    // AI feature. There is no persisted per-page mode yet, and a toggle that
-    // forgets is worse than none.
-    mode: { kind: 'fixed', label: `${s.label} assist` },
+    // 'fixed' unless the surface says otherwise. Four of the five surfaces
+    // ARE their AI feature — turning "Deck reviewer assist" off on the deck
+    // reviewer would be a control over the page's only reason to exist — so
+    // 'fixed' stays the default and a 'choice' has to be declared, with a page
+    // that branches on it.
+    mode: s.mode?.kind === 'choice'
+      ? { kind: 'choice', label: s.mode.label, manualNote: s.mode.manualNote }
+      : { kind: 'fixed', label: `${s.label} assist` },
     guardrail: EADWYN_GUARDRAIL,
     defaultPage: surface,
     planCap: spend?.month?.cap_usd ?? 0,
     totalSpend: spend?.month?.spend_usd ?? 0,
     pages: {
       [surface]: {
-        modeNote: s.modeNote,
+        modeNote: s.mode?.kind === 'choice' ? s.mode.note : s.modeNote,
+        // What OFF means. AssistRail renders it under the card when the toggle
+        // is off, and it has had nothing to render since it was written.
+        manualNote: s.mode?.manualNote,
         // The model the router routes this task to — named, not chosen.
         model: priced ? { id: priced.model, name: priced.model.split('/').pop() } : null,
         run: {

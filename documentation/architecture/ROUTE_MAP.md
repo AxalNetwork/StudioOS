@@ -286,3 +286,121 @@ Every `Pages · *` canvas renders a fixed 9-row sidebar that does not match
 Adopting the detail-layer pages implies an IA change, not just new routes. Note
 the canvases still model Growth and Research as "Preview", which live has already
 shipped — as mock shells.
+
+## Zone-header actions — where they come from, and the two canvases that give none
+
+Every `Pages · *` artboard carries an `ops:` array — the actions its zone header
+draws. They are the source for the header action rows, and they are copied
+verbatim rather than paraphrased: `frontend/src/workspaces/founderZoneActions.js`
+re-derives from the canvases in `frontend/test/founder_zone_actions.test.mjs`, so
+the table cannot drift from the design without failing the build.
+
+**Founder — twenty-one zones, fifty-eight actions.** Fifteen are exports that
+run against the rows the page has loaded, seventeen are links to a route that
+already performs the action and that a founder is allowed to open, and
+twenty-six are stated gaps. A gap renders as a sentence, never as a button.
+
+**Investor — fourteen zones, forty-two actions, and only ten of them run.** Nine
+exports, one link, thirty-two stated gaps. That ratio is the finding, not a
+shortfall in the pass: Deals and Fund are read-only shells.
+`InvestorDealsWorkspace` calls `listDeals` and two invitation methods and
+nothing else; `FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal` and
+nothing else; `InvestorFundCalls` and `InvestorFundAccounting` call no API at
+all. "New call", "Add LP", "Record wire" and "Close vote" have no flow anywhere
+to link to, so each says so. The header is now an accurate map of what an
+investor can and cannot do, and of what to build next.
+
+**The same label is not the same answer across profiles.** `/network/*` serves
+every licence and the investor artboard's ops are word-for-word the founder's —
+but `/matches`, where `introductionsRequest` lives, is guarded
+`['admin', 'partner', 'investor']`. "Request an intro" is a working link on the
+investor's zone and a stated gap on the founder's identical one. That is why
+each profile keeps its own table and only the builder is shared.
+
+**The canvas's Fund routes are not the live ones.** `Pages · Investor Fund`
+names `/fund/lps`, `/fund/calls`, `/fund/accounting`, `/fund/reporting`; the
+router mounts `/funds/lps`, `/funds/calls`, `/funds/ledger`, `/funds/reporting`,
+and `shellConfig.js` agrees with the router. The tables key on the live routes
+and `frontend/test/profile_zone_actions.test.mjs` carries the mapping explicitly, rather
+than fuzzy-matching a canvas route to a page that is not at it.
+
+**Partner — ten zones, thirty actions, and every one of the ten can export.**
+Ten exports, no links, twenty stated gaps. This is the first bucket set in the
+pass where an export is the rule rather than the exception, because migrations
+208 and 209 gave Delivery and Offers real stores. The writes are the gaps, and
+each has a reason its own zone already documents: `opened_at` and
+`signed_off_at` are the CLIENT'S to set, so "Chase unopened" would be the firm
+writing a metric about itself; no cadence is stored, so "Draft all" has nothing
+to schedule; consent belongs to the founder, so "Ask for consent" needs a
+founder-side surface that does not exist.
+
+Three partner bucket sets are absent from the table and none is an oversight.
+`/pipeline` is the `ops:`-less canvas recorded below. `/network`'s three zones
+render `NetworkPage`, whose bodies are three further shared components used by
+more than one licence — threading a partner-only row through four such files is
+the shared-surface pass, not this one. `/research` is that same shared surface.
+Worth knowing while `/network` waits: **`NetworkPage` has no organizations tab
+at all**, so a partner opening `/network/organizations` lands on contacts.
+
+**Advisor — four zones, twelve actions.** One link, four exports, seven gaps.
+Four zones is the whole advisor scope, and that is a fact about the canvases
+rather than a shortfall: only `design/incoming/Pages · Advisor Expertise` carries
+an `ops:` array at all. `Advisor Detail · Practice`, `Advisor Canvas` and the
+backlog `Pages · Advisor Cohorts` are rendered exports with no header actions on
+any artboard, so Practice's five zones and Cohorts' five have nothing to copy.
+
+Three of the seven gaps are the good kind — the thing the label asks for is on
+the page already, so the note points down rather than apologising: every profile
+field is editable in place, a service is added from the form below, consent is
+requested from each proof's own row.
+
+`expertise/visibility` is the fifth artboard and is deliberately excluded. It is
+not a zone body at all but the one card left in `AdvisorBucketRoutes`' `COPY`,
+and its whole page is already the gap statement — nothing in this product counts
+a profile view, for anyone, and that needs an impression pipeline rather than a
+table. Three more "not stored" lines above a page headed *"Nothing counts profile
+views"* would be noise rather than honesty. The exclusion is listed in
+`frontend/test/profile_zone_actions.test.mjs`, which checks the excluded set
+exactly, so it cannot quietly grow.
+
+## The four profiles, totalled
+
+| Profile | Zones | Actions | Exports | Links | Stated gaps |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Founder | 21 | 58 | 15 | 17 | 26 |
+| Investor | 14 | 42 | 9 | 1 | 32 |
+| Partner | 10 | 30 | 10 | 0 | 20 |
+| Advisor | 4 | 12 | 4 | 1 | 7 |
+| **Total** | **49** | **142** | **38** | **19** | **85** |
+
+Fifty-seven of the hundred and forty-two run today. The other eighty-five say so
+on the page, in a sentence, rather than as a button that does nothing.
+
+**What is left is one shared pass, not a fifth profile.** `/network/*` and
+`/research/*` are single components serving four licences each — twenty-three
+more zones between them, whose actions differ by role while their bodies do not.
+They belong to a change that reaches every profile at once.
+
+**`/research/*` is in no profile's pass, and is not an oversight.** The five
+founder Research zones (and the investor, advisor and partner lists beside
+them) — Ask, Markets, Companies, Funds, Library — route to
+`workspaces/ResearchWorkspace.jsx`, which serves founder, investor, partner,
+advisor and admin from one component. Their actions belong to a shared pass over
+that surface, where one change reaches four profiles, rather than to a
+founder-only pull request that would have to branch on role inside a file whose
+whole point is that it does not.
+
+**Two canvases specify no zone-header actions at all**, which is a gap in the
+design rather than in the implementation, and is recorded here rather than
+invented in code:
+
+| Canvas | What is missing |
+| --- | --- |
+| `Pages · Partner Pipeline` | no `ops:` on any artboard — the zones have filters and tables and no header actions |
+| `Advisor Detail · Practice` | same; the Practice zones draw a header with nothing in it |
+
+Nothing was added to those pages. Inventing an action for a zone whose design
+asks for none is how a header grows a button nobody specified and nothing backs
+— the exact failure the rest of this pass exists to avoid. When those canvases
+gain an `ops:` array, the zones can have it.
+

@@ -6,6 +6,7 @@ import {
   StatCard, Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyCents, dollarsToCents,
 } from '../kit';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 
 /**
  * Offers · Audience fit — `/offers/audience-fit`.
@@ -230,6 +231,7 @@ export default function PartnerAudienceFitZone() {
 
   return (
     <ZoneBody
+      actions={partnerZoneActions('offers/audience-fit', { view: { header: ['Rule', 'Kind', 'Referred to'], rows: items, cells: (r) => [r.statement, r.kind, r.referred_to] } })}
       loading={state.loading}
       error={state.error}
       onRetry={load}

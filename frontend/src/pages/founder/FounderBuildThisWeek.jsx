@@ -4,6 +4,8 @@ import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, ClipboardCheck, Filter
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildThisWeek.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const text = (value, fallback = 'Not recorded') => {
   if (value === null || value === undefined || String(value).trim() === '') return fallback;
@@ -97,6 +99,7 @@ export default function FounderBuildThisWeek() {
               <Link to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</Link>
               <Link to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</Link>
             </nav>
+            <ZoneActions className="mt-3" items={founderZoneActions('build/this-week', { query: selectedId ? `?project_id=${selectedId}` : '', view: { scope: selectedProject?.name, header: ['Commitment', 'Objective', 'Current', 'Target', 'Unit'], rows: commitments, cells: (r) => [r.text, r.objective, r.current, r.target, r.unit] } })} />
           </header>
 
           {status === 'error' && <div className="fb-week-alert" role="alert" data-testid="status-week-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-week"><RefreshCw size={13} /> Retry</button></div>}

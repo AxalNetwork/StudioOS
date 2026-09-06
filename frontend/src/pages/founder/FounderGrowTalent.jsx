@@ -5,6 +5,8 @@ import { api, jobs as jobsApi } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowTalent.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -77,7 +79,8 @@ export default function FounderGrowTalent() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-talent" data-testid="founder-grow-talent"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-talent-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Talent</b></div><span>Founder / Grow</span><div><h1>Talent</h1><p>Roles, ranked candidates, job posts and applications.</p></div>{projects.length > 1 && <label className="fg-talent-picker"><span>Startup</span><select data-testid="select-grow-talent-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-talent-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Talent' ? 'is-active' : ''}>{label}</Link>)}</nav></header>
+    <header className="a5-grow-hero"><div className="fg-talent-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Talent</b></div><span>Founder / Grow</span><div><h1>Talent</h1><p>Roles, ranked candidates, job posts and applications.</p></div>{projects.length > 1 && <label className="fg-talent-picker"><span>Startup</span><select data-testid="select-grow-talent-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-talent-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Talent' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <ZoneActions className="mt-3" items={founderZoneActions('grow/talent', { query, view: { scope: project?.name, header: ['Candidate', 'Applied', 'Status'], rows: visible, cells: (r) => [r.name || r.member?.name, r.created_at, r.status] } })} /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-talent-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {loading ? <TalentSkeleton /> : !project ? <EmptyTalent /> : <TalentContent project={project} jobs={jobs} applications={applications} visible={visible} selectedJob={selectedJob} selectedJobId={selectedJobId} view={view} setView={setView} query={query} applicantCount={applicantCount} shortlistCount={shortlistCount} error={error} />}
   </div><TalentRail project={project} jobs={jobs} applications={applications} error={error} /></div></main>;

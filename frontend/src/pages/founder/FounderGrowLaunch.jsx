@@ -5,6 +5,8 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowLaunch.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -78,7 +80,8 @@ export default function FounderGrowLaunch() {
   const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Capital match', `/grow/capital-match${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-launch" data-testid="founder-grow-launch"><div className="a5-grow-canvas"><div className="a5-grow-main">
-    <header className="a5-grow-hero"><div className="fg-launch-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Launch</b></div><span>Founder / Grow</span><div><h1>Launch calendar</h1><p>Events, co-marketing and the article calendar.</p></div>{projects.length > 1 && <label className="fg-launch-picker"><span>Startup</span><select data-testid="select-grow-launch-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-launch-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Launch' ? 'is-active' : ''}>{label}</Link>)}</nav></header>
+    <header className="a5-grow-hero"><div className="fg-launch-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Launch</b></div><span>Founder / Grow</span><div><h1>Launch calendar</h1><p>Events, co-marketing and the article calendar.</p></div>{projects.length > 1 && <label className="fg-launch-picker"><span>Startup</span><select data-testid="select-grow-launch-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-launch-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Launch' ? 'is-active' : ''}>{label}</Link>)}</nav>
+    <ZoneActions className="mt-3" items={founderZoneActions('grow/launch', { query, view: { scope: project?.name, header: ['Item', 'Starts', 'Ends', 'State'], rows: events, cells: (r) => [r.title, r.start_at, r.end_at, r.status || r.state] } })} /></header>
     {sourceErrors.length > 0 && <div className="a5-grow-error" data-testid="status-grow-launch-partial"><AlertCircle size={15} /><span>{`Some selected-project sources are unavailable: ${sourceErrors.join(', ')}.`}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {loading ? <LaunchSkeleton /> : !project ? <EmptyLaunch /> : <LaunchContent project={project} events={events} attributions={attributions} upcoming={upcoming} visible={visible} view={view} setView={setView} query={query} sourceErrors={sourceErrors} leadsAttributed={leadsAttributed} />}
   </div><LaunchRail project={project} events={events} attributions={attributions} sourceErrors={sourceErrors} /></div></main>;

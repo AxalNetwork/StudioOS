@@ -4,6 +4,9 @@ import { api } from '../../lib/api';
 import { Card, EmptyState, ErrorState, WorkerRail, Skeleton } from '../../ui';
 import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
 import ZoneActions from '../ZoneActions';
+import ValidateProposals from './ValidateProposals';
+import InterviewRecording from './InterviewRecording';
+import useAssistMode from '../../hooks/useAssistMode';
 import LogInterviewModal from '../../components/discovery/LogInterviewModal';
 import { NewHypothesisDialog, LinkPainDialog } from './ValidateDialogs';
 import { bucketForPath, zoneForPath } from '../shellConfig';
@@ -76,6 +79,13 @@ function StatRow({ items }) {
 function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
+  // Read here as well as on the shell: attaching a recording is data entry and
+  // is always available, transcribing spends money and sits behind the switch.
+  // The hook is one shared store, so both readers see the same answer.
+  const [fillsOn] = useAssistMode('Validate');
+  // Bumped after an upload or a transcription so the row re-reads itself
+  // rather than holding a stale copy of the record it just changed.
+  const [localKey, setLocalKey] = useState(0);
 
   useEffect(() => {
     if (!ready || !projectId) return undefined;
@@ -86,7 +96,8 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
     return () => { alive = false; };
     // `reloadKey` is the signal from the header's "Log an interview" action:
     // the modal lives on the shell, the list lives here, and this is the seam.
-  }, [projectId, ready, reloadKey]);
+    // `localKey` is the same seam for a change made inside a row.
+  }, [projectId, ready, reloadKey, localKey]);
 
   if (!ready) return <Skeleton className="h-40" />;
   if (!projectId) {
@@ -138,7 +149,8 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
             {rows.slice(0, 25).map((r) => {
               const pains = r.pain_points || r.pains || [];
               return (
-                <li key={r.id} className="flex items-start justify-between gap-4 py-2.5">
+                <li key={r.id} className="py-2.5">
+                  <div className="flex items-start justify-between gap-4">
                   {/*
                     THE REAL COLUMN NAMES. This block read `r.contact_name ||
                     r.name` and `r.company || r.segment` — four keys the worker
@@ -166,7 +178,19 @@ function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
                     <div className="mt-0.5 text-[10px] text-axal-ink-3">
                       {pains.length ? `${pains.length} pain${pains.length === 1 ? '' : 's'}` : 'no pain recorded'}
                     </div>
+                    </div>
                   </div>
+                  {/*
+                    The recording, and the text it becomes. Attaching is data
+                    entry and is always offered; transcribing spends money and
+                    sits behind the rail's switch, so a founder who turned that
+                    off finds no control here that still runs a model.
+                  */}
+                  <InterviewRecording
+                    interview={r}
+                    fillsOn={fillsOn}
+                    onChanged={() => setLocalKey((n) => n + 1)}
+                  />
                 </li>
               );
             })}
@@ -221,7 +245,13 @@ function PainMap({ projectId, ready }) {
   return (
     <div className="space-y-4">
       <StatRow items={[
-        { label: 'Themes', value: groups.length, note: 'founder-curated, never AI-grouped' },
+        // WAS "founder-curated, never AI-grouped", and that stopped being
+        // true when migration 214 landed. What is still true, and is the
+        // distinction worth keeping, is that a THEME is only ever named by a
+        // person: Eadwyn sorts phrases into themes the founder wrote, and the
+        // proposal parser refuses any group id that is not already one of
+        // theirs.
+        { label: 'Themes', value: groups.length, note: 'you name them; nothing else does' },
         { label: 'Interviews behind them', value: total, note: 'the denominator for every frequency below' },
         { label: 'Ungrouped phrases', value: ungrouped.length, note: 'logged, not yet themed' },
         { label: 'Severity tiering', value: null, note: 'need / good / nice is not a field a pain carries yet' },
@@ -604,6 +634,10 @@ export default function FounderValidateWorkspace() {
     onClick: () => runExport(testid, fn),
   });
 
+  // Shared with the rail's switch through a module store — see
+  // hooks/useAssistMode.js for why not a provider.
+  const [fillsOn] = useAssistMode('Validate');
+
   const body = useMemo(() => {
     switch (zone?.slug) {
       case 'pain-map':
@@ -680,9 +714,16 @@ export default function FounderValidateWorkspace() {
         <WorkerRail
           workspace="Validate"
           stance="Evidence-led view"
-          note="This workspace does not generate, transcribe, or change records. It keeps the evidence surface readable."
+          note="Nothing is written without your click. Proposals are accept, edit or discard."
           coverage={[projectId ? `Venture #${projectId} selected` : 'No venture selected']}
-          unavailable={[['Automated grouping', 'Pain themes are founder-curated. Nothing here groups, scores or summarises an interview for you.']]}
+          // The Transcription gap named here is closed by migration 215 — a
+          // recording has a home and a transcript has a column — so the entry
+          // is gone rather than left saying something untrue. What replaces it
+          // is the next honest absence: Whisper returns speaker turns and
+          // timestamps, and this product has nowhere to show either, so it
+          // stores neither.
+          unavailable={[['Speaker labels', 'A transcript is one block of text. Who said which line is not something this stores.']]}
+          fills
         />
       )}
       scope="One venture"
@@ -698,6 +739,36 @@ export default function FounderValidateWorkspace() {
         >
           {exportError}
         </p>
+      )}
+      {/*
+        The proposal band, above the records it is about. Two zones have one,
+        because two things can be filled in: the pain map sorts phrases into
+        themes, the hypothesis board drafts claims. The other two zones have
+        nothing a model can propose — an interview is a conversation someone
+        had, and a verdict is computed from evidence rather than suggested —
+        so they draw nothing rather than an empty band.
+
+        `key` on the zone so switching zones remounts it: the two kinds hold
+        different lists and different copy, and a stale list flashing under a
+        new heading is worse than a moment's blank.
+      */}
+      {zone?.slug === 'pain-map' && (
+        <ValidateProposals
+          key="pain-map"
+          projectId={projectId}
+          kind="pain_tag"
+          enabled={fillsOn}
+          onApplied={() => setBoardKey((n) => n + 1)}
+        />
+      )}
+      {zone?.slug === 'hypotheses' && (
+        <ValidateProposals
+          key="hypotheses"
+          projectId={projectId}
+          kind="hypothesis"
+          enabled={fillsOn}
+          onApplied={() => setBoardKey((n) => n + 1)}
+        />
       )}
       {body}
       <LogInterviewModal

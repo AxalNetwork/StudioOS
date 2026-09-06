@@ -1,5 +1,6 @@
 import React from 'react';
 import { Card, Pill, Skeleton } from '../../../ui';
+import ZoneActions from '../../../workspaces/ZoneActions';
 
 /**
  * Shared pieces for the five Expertise zones.
@@ -67,12 +68,20 @@ export function ZoneHeading({ title, blurb, action }) {
  * which asserts that nothing exists. Reading the error first means the page
  * can only ever claim a store is empty when it actually read the store.
  */
-export function ZoneBody({ loading, error, isEmpty, empty, onRetry, children }) {
+export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, children }) {
+  // `actions` renders ABOVE all four states, on purpose. A zone's header row is
+  // as true while the store is loading, or failed, or empty, as it is when rows
+  // are on screen — "no cadence is stored, so there is no set of reports to
+  // draft" does not become false because the fetch is in flight. An export with
+  // nothing loaded says so itself (see `zoneActionBuilder.js`), so the row can
+  // sit here without ever offering a file that does not exist.
+  const row = actions?.length ? <ZoneActions className="mb-3" items={actions} /> : null;
+  const wrap = (body) => (row ? <>{row}{body}</> : body);
   if (loading) {
-    return <div className="space-y-3" aria-busy="true"><Skeleton className="h-9" /><Skeleton className="h-28" /></div>;
+    return wrap(<div className="space-y-3" aria-busy="true"><Skeleton className="h-9" /><Skeleton className="h-28" /></div>);
   }
   if (error) {
-    return (
+    return wrap(
       <Card variant="dashed" padding="lg">
         <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
           Source unavailable
@@ -88,11 +97,11 @@ export function ZoneBody({ loading, error, isEmpty, empty, onRetry, children }) 
             Try again
           </button>
         )}
-      </Card>
+      </Card>,
     );
   }
-  if (isEmpty) return empty;
-  return children;
+  if (isEmpty) return wrap(empty);
+  return wrap(children);
 }
 
 /** An empty store the page genuinely read — different from one it could not. */

@@ -5,6 +5,7 @@ import {
   Field, SaveNote, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, inputClass,
 } from './kit';
+import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 
 /**
  * Expertise · Profile — what the market finds when it finds you.
@@ -177,6 +178,7 @@ export default function ProfileZone() {
     // resting on React batching the two setState calls in `load`, which it
     // does today and need not tomorrow.
     <ZoneBody
+      actions={advisorZoneActions('expertise/profile', { view: { header: ['Display name', 'Headline', 'Bio', 'Expertise', 'Sectors', 'Stages', 'Country', 'Timezone', 'Languages', 'LinkedIn', 'Availability'], rows: draft ? [draft] : [], cells: (d) => [d.display_name, d.headline, d.bio, d.expertise, d.sectors, d.stages, d.country, d.timezone, d.languages, d.linkedin_url, d.availability_note] } })}
       loading={state.loading || (!draft && !state.error)}
       error={state.error}
       onRetry={load}

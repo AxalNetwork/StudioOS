@@ -4,6 +4,8 @@ import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Filter, Land
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -130,6 +132,7 @@ export default function FounderRaiseCapital() {
           <nav className="fr-capital-zone-nav" aria-label="Raise sections">
             <Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`} className="is-active" data-testid="link-capital-zone">Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><span className="fr-capital-zone-disabled">Liquidity unavailable</span>
           </nav>
+          <ZoneActions className="mt-3" items={founderZoneActions('raise/capital', { query })} />
         </header>
         {Object.keys(errors).length > 0 && <div className="fr-capital-alert" role="alert" data-testid="status-capital-partial"><AlertCircle size={16} /><span>{errors.projects || errors.capTable || 'Some capital sources are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <CapitalSkeleton /> : errors.projects ? <UnavailableCapital onRetry={load} /> : !project ? <EmptyCapital /> : <CapitalContent project={project} scenario={scenario} result={result} latestRound={latestRound} ledger={ledger} ledgerTotal={ledgerTotal} foundersNow={foundersNow} safes={safes} safeTotal={safeTotal} variants={variants} waterfall={waterfall} safeHarbour={safeHarbour} errors={errors} query={query} />}

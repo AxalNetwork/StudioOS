@@ -595,14 +595,35 @@ test('the tabbed advisory page only shows the rail on its AI tab', () => {
 });
 
 test('no surface declares a mode toggle nothing reads', () => {
-  // D17. No page branches on an assist mode, so a toggle would be a control
-  // that cannot affect the product — D13's objection to the model menu, one
-  // control over. Every surface is `fixed` until a page grows real manual
-  // behaviour, at which point `kind: 'choice'` turns the switch back on.
+  // D17's rule, stated as the rule rather than as its consequence at the time.
+  //
+  // It used to read `doesNotMatch(cfg, /kind: 'choice'/)`, and the failure
+  // message beside it already said what was actually meant: "a surface
+  // declaring 'choice' must also have a page that reads the mode". When no
+  // page read one, banning the word and enforcing the rule were the same
+  // assertion. Founder Validate now branches on it — off writes no proposal
+  // and spends nothing — so they have come apart, and a test you must delete
+  // to ship the feature it was guarding was pinning a schedule rather than an
+  // invariant.
+  //
+  // What is left is the invariant: every 'choice' is read by something, and a
+  // surface with no `manualNote` has not said what off MEANS, which is the
+  // half that makes the switch honest.
   const cfg = scan(read('frontend/src/ui/eadwynConfig.js'));
-  assert.match(cfg, /kind: 'fixed'/);
-  assert.doesNotMatch(cfg, /kind: 'choice'/,
-    "a surface declaring 'choice' must also have a page that reads the mode");
+  assert.match(cfg, /kind: 'fixed'/, 'the default must still be fixed');
+
+  const choosers = [...cfg.matchAll(/^ {2}([a-z_]+): \{[\s\S]*?kind: 'choice'/gm)].map((m) => m[1]);
+  const readers = [
+    ['frontend/src/ui/WorkerRail.jsx', /ASSIST_SURFACES\[WORKSPACE_SURFACE\]/],
+    ['frontend/src/ui/AssistRail.jsx', /config\.mode\.kind === 'choice'/],
+  ];
+  for (const surface of choosers) {
+    assert.match(cfg, new RegExp(`${surface}:[\\s\\S]*?manualNote:`),
+      `${surface} declares a choice without saying what off means`);
+    const readBySomething = readers.some(([file, re]) => re.test(scan(read(file))));
+    assert.ok(readBySomething,
+      `${surface} declares 'choice' and no component reads a mode`);
+  }
   // The component keeps the capability — this is a config decision, not a
   // deletion, so the switch is one config change away.
   const rail = scan(read('frontend/src/ui/AssistRail.jsx'));

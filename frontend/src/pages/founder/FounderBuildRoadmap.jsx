@@ -4,6 +4,8 @@ import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Filter, GitBranch, Ref
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildRoadmap.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const text = (value, fallback = 'Not recorded') => {
   if (value === null || value === undefined || String(value).trim() === '') return fallback;
@@ -91,6 +93,7 @@ export default function FounderBuildRoadmap() {
               <Link to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</Link>
               <Link to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</Link>
             </nav>
+            <ZoneActions className="mt-3" items={founderZoneActions('build/roadmap', { query: selectedId ? `?project_id=${selectedId}` : '', view: { scope: selectedProject?.name, header: ['Objective', 'Quarter', 'Key results', 'Column'], rows: sortedOkrs, cells: (i) => [i.objective, i.quarter, (i.key_results || []).length, i.kanban_status] } })} />
           </header>
 
           {status === 'error' && <div className="fb-roadmap-alert" role="alert" data-testid="status-roadmap-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-roadmap"><RefreshCw size={13} /> Retry</button></div>}

@@ -6,6 +6,8 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import './investorPortfolioCanvas.css';
 import './investorPortfolioPositions.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { investorZoneActions } from '../../workspaces/investorZoneActions';
 
 const money = (value) => {
   if (value == null || !Number.isFinite(Number(value))) return 'Unavailable';
@@ -84,6 +86,7 @@ export default function InvestorPortfolioPositions() {
   return <div className="i4-shell ip1-shell"><main className="i4-portfolio ip1-positions" data-testid="investor-portfolio-positions">
     <header className="i4-heading"><div><div className="i4-eyebrow">Portfolio / Positions</div><h1>Positions book</h1><p>Lots, marks history and ownership changes from the investor-accessible portfolio ledger.</p></div><button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh positions book"><RefreshCw size={15} /></button></header>
     <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
+    <ZoneActions className="mb-3" items={investorZoneActions('portfolio/positions', { view: { header: ['Company', 'Stage', 'Invested', 'FMV', 'Multiple', 'Mark basis'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.total_invested, r.fmv, r.multiple, r.mark_basis] } })} />
     {state.error && <div className="i4-error" data-testid="status-investor-positions-error"><span>{String(state.error).toLowerCase() === 'not found' ? 'Position source unavailable in local development. No empty portfolio claim is being made.' : state.error}</span><button type="button" onClick={load}>Retry</button></div>}
     {anyPartial && !state.loading && <div className="i4-partial" data-testid="status-investor-positions-partial">Some supporting portfolio sources are unavailable. Affected metrics and cells are labelled rather than treated as zero.</div>}
     {state.loading ? <Skeleton /> : !state.error && <><div className="ip1-filters"><div><button className={filter === 'attention' ? 'is-active' : ''} onClick={() => setFilter('attention')}>Needs attention</button><button className={filter === 'all' ? 'is-active' : ''} onClick={() => setFilter('all')}>All</button><button className={filter === 'stage' ? 'is-active' : ''} onClick={() => setFilter('stage')}>By stage</button><button className={filter === 'marked' ? 'is-active' : ''} onClick={() => setFilter('marked')}>Marked down</button></div>{filter === 'stage' && <label>Stage<select value={stage} onChange={(event) => setStage(event.target.value)}><option value="all">All recorded stages</option>{stages.map((item) => <option key={item} value={item}>{title(item)}</option>)}</select></label>}</div>

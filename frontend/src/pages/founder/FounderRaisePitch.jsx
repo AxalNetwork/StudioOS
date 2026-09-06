@@ -4,6 +4,8 @@ import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Filter, Link
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderRaisePitch.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -118,6 +120,7 @@ export default function FounderRaisePitch() {
           <nav className="fr-pitch-zone-nav" aria-label="Raise sections">
             <Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`} className="is-active" data-testid="link-pitch-zone">Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><span className="fr-pitch-zone-disabled">Liquidity unavailable</span>
           </nav>
+          <ZoneActions className="mt-3" items={founderZoneActions('raise/pitch', { query })} />
         </header>
         {Object.keys(errors).length > 0 && <div className="fr-pitch-alert" role="alert" data-testid="status-pitch-partial"><AlertCircle size={16} /><span>{errors.projects || errors.versions || 'Some pitch sources are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <PitchSkeleton /> : errors.projects ? <UnavailablePitch onRetry={load} /> : !project ? <EmptyPitch /> : <PitchContent project={project} versions={versions} current={current} analytics={analytics} engagementError={errors.engagement} query={query} />}

@@ -5,6 +5,8 @@ import { bucketForPath } from '../../workspaces/shellConfig';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import './investorPortfolioCanvas.css';
 import './investorPortfolioValueAdd.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { investorZoneActions } from '../../workspaces/investorZoneActions';
 
 const FILTERS = [['all', 'All'], ['delivered', 'Delivered'], ['outstanding', 'Outstanding'], ['company', 'By company']];
 
@@ -18,6 +20,7 @@ export default function InvestorPortfolioValueAdd() {
 
   return <div className="i4-shell ip3-shell"><main className="i4-portfolio ip3-value-add" data-testid="investor-portfolio-value-add"><header className="i4-heading"><div><div className="i4-eyebrow">Portfolio / Value-add</div><h1>Value-add desk</h1><p>Support ledger — introductions, hours and outcomes per company.</p></div><button type="button" className="i4-icon-button" onClick={reset} aria-label="Reset value-add filters"><RefreshCw size={15} /></button></header>
     <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
+    <ZoneActions className="mb-3" items={investorZoneActions('portfolio/value-add')} />
     <div className="ip3-filters"><div>{FILTERS.map(([id, label]) => <button key={id} className={filter === id ? 'is-active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div></div>
     <div className="i4-partial" data-testid="status-investor-value-add-unavailable">Support ledger unavailable. This page does not present an empty support history or infer work from introductions, messages, calendar events, or portfolio updates.</div>
     <section className="i4-stats"><Stat label="Delivered" note="No support ledger source" /><Stat label="Hours logged" note="No explicit hours field" /><Stat label="Outstanding" note="No promise state recorded" /><Stat label="No support at all" note="Cannot be determined without the ledger" /></section>

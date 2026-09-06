@@ -44,6 +44,7 @@ import {
   ensureDiscoveryValidationRatingColumns,
   ensureDiscoveryIcpFitColumn,
   ensureDiscoveryEvidenceColumns,
+  ensureDiscoveryRecordingColumns,
 } from '../services/discoveryInterviewSchema';
 import { ensureWaitlistCrmColumns } from '../services/waitlistCrmSchema';
 import { send, type SendResult } from '../services/email/send';
@@ -55,6 +56,7 @@ import {
   normPhrase,
   type PainGroupRow,
 } from '../services/painGroups';
+import { upsertPainAlias } from './_founder_validate_writes';
 import { syncStripeForUser } from '../integrations/providers/stripe';
 import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Snapshot as SaasSnapshot } from '../services/saasMetrics';
 
@@ -203,6 +205,13 @@ type InterviewRow = {
   // especially, "we never asked" and "they said no" are different facts.
   quote_consent: number | null;
   interviewee_company: string | null;
+  // Migration 215. Every one nullable: a row logged before a recording existed
+  // has none of them, and that is the ordinary case rather than an error.
+  recording_uploaded_at: string | null;
+  recording_duration_sec: number | null;
+  transcript: string | null;
+  transcribed_at: string | null;
+  transcribed_by_model: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -265,6 +274,17 @@ function serializeInterview(r: InterviewRow) {
     // asked. Folding null into false would report "declined" for everyone.
     quote_consent: r.quote_consent == null ? null : Number(r.quote_consent) === 1,
     interviewee_company: r.interviewee_company ?? null,
+    // Migration 215. The KEY is deliberately not serialised: it is an internal
+    // R2 path and the page has no use for it — `recording_uploaded_at` answers
+    // "is there a recording" without handing out a storage address.
+    recording_uploaded_at: r.recording_uploaded_at ?? null,
+    recording_duration_sec: r.recording_duration_sec == null ? null : Number(r.recording_duration_sec),
+    // NULL means never transcribed; an EMPTY STRING means transcribed and the
+    // clip had no speech in it. Folding them together would have the page offer
+    // "Transcribe" forever on a silent recording, and charge for it each time.
+    transcript: r.transcript ?? null,
+    transcribed_at: r.transcribed_at ?? null,
+    transcribed_by_model: r.transcribed_by_model ?? null,
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
@@ -282,6 +302,8 @@ const INTERVIEW_SELECT =
           notes, hypotheses_json, pains_json, featured,
           validation_rating, validation_comment, icp_fit,
           quote_consent, interviewee_company,
+          recording_uploaded_at, recording_duration_sec,
+          transcript, transcribed_at, transcribed_by_model,
           created_at, updated_at
      FROM discovery_interviews`;
 
@@ -321,6 +343,9 @@ progress.get('/discovery/:projectId', async (c) => {
   // way 161's is. The later `${INTERVIEW_SELECT} WHERE id = ?` reads in this
   // file run downstream of a list, insert or update and inherit the column.
   await ensureDiscoveryEvidenceColumns(c.env);
+  // 215's columns are named in INTERVIEW_SELECT, so a database without them
+  // fails the whole read rather than degrading. Bootstrapped beside 211's.
+  await ensureDiscoveryRecordingColumns(c.env);
   const { results } = await c.env.DB.prepare(
     `${INTERVIEW_SELECT}
       WHERE project_id = ?
@@ -378,6 +403,9 @@ progress.post('/discovery/:projectId', async (c) => {
   await ensureDiscoveryValidationRatingColumns(c.env);
   await ensureDiscoveryIcpFitColumn(c.env);
   await ensureDiscoveryEvidenceColumns(c.env);
+  // 215's columns are named in INTERVIEW_SELECT, so a database without them
+  // fails the whole read rather than degrading. Bootstrapped beside 211's.
+  await ensureDiscoveryRecordingColumns(c.env);
   const res = await c.env.DB.prepare(
     `INSERT INTO discovery_interviews
        (project_id, interviewee_name, interviewee_role, interview_date,
@@ -427,6 +455,9 @@ progress.put('/discovery/interview/:id', async (c) => {
   // where 211 has not run. (`icp_fit` at the same spot gets away with it only
   // because every fixture and environment has carried 161 for long enough.)
   await ensureDiscoveryEvidenceColumns(c.env);
+  // 215's columns are named in INTERVIEW_SELECT, so a database without them
+  // fails the whole read rather than degrading. Bootstrapped beside 211's.
+  await ensureDiscoveryRecordingColumns(c.env);
   const existing = await c.env.DB.prepare(`${INTERVIEW_SELECT} WHERE id = ?`)
     .bind(id).first<InterviewRow>();
   if (!existing) return c.json({ detail: 'Interview not found' }, 404);
@@ -686,6 +717,9 @@ progress.post('/discovery/:projectId/waitlist/:signupId/promote', async (c) => {
   // a fresh isolate does. Ensured here for the same reason featured and rating
   // are.
   await ensureDiscoveryEvidenceColumns(c.env);
+  // 215's columns are named in INTERVIEW_SELECT, so a database without them
+  // fails the whole read rather than degrading. Bootstrapped beside 211's.
+  await ensureDiscoveryRecordingColumns(c.env);
 
   const signup = await loadCustomerSignup(c.env, projectId, signupId);
   if (!signup) return c.json({ detail: 'Signup not found' }, 404);
@@ -944,16 +978,14 @@ progress.post('/pain-groups/:projectId/assign', async (c) => {
     if (!g || g.project_id !== projectId) return c.json({ detail: 'Group not found' }, 404);
   }
 
-  // Upsert the alias (UNIQUE(project_id, phrase_norm) → exactly one group).
-  await c.env.DB.prepare(
-    `INSERT INTO pain_group_aliases
-       (project_id, group_id, phrase_norm, display_phrase, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(project_id, phrase_norm)
-       DO UPDATE SET group_id = excluded.group_id,
-                     display_phrase = excluded.display_phrase,
-                     updated_at = excluded.updated_at`,
-  ).bind(projectId, groupId, norm, display, nowIso, nowIso).run();
+  // Upsert the alias (UNIQUE(project_id, phrase_norm) → exactly one group),
+  // through the shared writer that accepting an AI tag proposal also calls.
+  // Two copies of this statement is how the two paths would start disagreeing
+  // about whether re-assigning a phrase is an insert or an update — and the
+  // phrase an AI tagger is most likely to propose is one a founder has already
+  // grouped by hand, which an insert would fail on.
+  const assigned = await upsertPainAlias(c.env, projectId, groupId, display);
+  if (!assigned) return c.json({ detail: 'Group not found' }, 404);
 
   return c.json(await getPainGroupsView(c.env, projectId));
 });

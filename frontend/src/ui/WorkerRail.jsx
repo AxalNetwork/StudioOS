@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { PanelRightClose, PanelRightOpen, ShieldCheck } from 'lucide-react';
 import useAiSpend, { modelsForTask, priceForTask } from '../hooks/useAiSpend';
+import useAssistMode from '../hooks/useAssistMode';
 import { api } from '../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
 import { formatCost, formatRate, formatSpend, spendMeter } from './assistCost';
@@ -174,6 +175,13 @@ export default function WorkerRail({
   coverageNote,
   unavailable = [],
   action = null,
+  // Does THIS workspace have fill-the-blanks work? The surface declares the
+  // capability and its copy; the host declares whether this page has any.
+  // Passing it is what draws the second mode card and its switch, so the
+  // switch exists exactly where flipping it changes something — which is
+  // DECISIONS D17's rule, and the reason a globally-rendered toggle would
+  // reintroduce the dead control D17 refused.
+  fills = false,
   footer = 'Read-only summary · no automated actions',
   'data-testid': testId = 'worker-rail',
 }) {
@@ -242,6 +250,11 @@ export default function WorkerRail({
   // renders something selected rather than nothing, and the run that follows
   // is one the worker will accept.
   const activeModel = models.some((m) => m.id === chosen) ? chosen : (models[0]?.id ?? null);
+
+  // Shared with the page, which decides whether to offer proposals, through a
+  // module store rather than a provider — see hooks/useAssistMode.js.
+  const [fillsOn, setFillsOn] = useAssistMode(workspace);
+  const modeChoice = surface.mode?.kind === 'choice' && fills ? surface.mode : null;
 
   const [run, setRun] = useState({ state: 'idle', text: '', note: '', usage: null });
   const canRun = coverage.length > 0;
@@ -332,9 +345,44 @@ export default function WorkerRail({
           {/* `stance` is each page's own one-line description of the manual
               mode — "Read-only source coverage", "Manual operating view" —
               kept from the rail it replaced. Every rail still opens with the
-              same word, which is the parity that matters. */}
-          <strong data-testid="text-worker-rail-mode">Manual{stance ? ` · ${stance}` : ''}</strong>
-          {note && <p>{note}</p>}
+              same word, which is the parity that matters.
+
+              Where there is nothing to fill in, this stays exactly what it
+              has always been: one line, no card, no switch. */}
+          {!modeChoice ? (
+            <>
+              <strong data-testid="text-worker-rail-mode">Manual{stance ? ` · ${stance}` : ''}</strong>
+              {note && <p>{note}</p>}
+            </>
+          ) : (
+            <div className="fwr-modes" role="radiogroup" aria-label={`Mode for ${workspace}`}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={!fillsOn}
+                className="fwr-mode"
+                data-selected={!fillsOn ? 'true' : 'false'}
+                onClick={() => setFillsOn(false)}
+                data-testid="button-worker-rail-mode-manual"
+              >
+                <b data-testid="text-worker-rail-mode">Manual{stance ? ` · ${stance}` : ''}</b>
+                <span>{modeChoice.manualNote}</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={fillsOn}
+                className="fwr-mode"
+                data-selected={fillsOn ? 'true' : 'false'}
+                onClick={() => setFillsOn(true)}
+                data-testid="button-worker-rail-mode-fills"
+              >
+                <b>{modeChoice.label}</b>
+                <span>{modeChoice.note}</span>
+              </button>
+            </div>
+          )}
+          {note && modeChoice && <p>{note}</p>}
         </section>
 
         <section className="fwr-block">

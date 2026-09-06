@@ -6,6 +6,8 @@ import { bucketForPath } from '../../workspaces/shellConfig';
 import { api } from '../../lib/api';
 import './investorFundLanding.css';
 import './investorFundLPs.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { investorZoneActions } from '../../workspaces/investorZoneActions';
 
 const titleCase = (value) => String(value || 'Unrecorded').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 const cents = (value) => value == null || value === '' ? null : Number(value);
@@ -50,6 +52,7 @@ export default function InvestorFundLPs() {
 
   return <div className="i6-fund ip1-fund-shell"><main className="i6-main ip1-fund-main" data-testid="investor-fund-lps"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>LPs</b></div><h1>LP registry</h1><p>Registry, KYC state, documents and comms log.</p></div><button className="i6-refresh" type="button" onClick={load} disabled={state.loading} aria-label="Refresh LP register"><RefreshCw size={14} className={state.loading ? 'i6-spin' : ''} /></button></header>
     <ZoneNav bucket={bucketForPath('investor', '/funds')} role="investor" activeSlug="lps" className="my-3" />
+    <ZoneActions className="mb-3" items={investorZoneActions('funds/lps', { view: { scope: state.fund?.name, header: ['LP', 'Type', 'Commitment', 'Paid to date', 'State', 'KYC'], rows: visible, cells: (lp) => [lp.name || lp.email, lp.lp_type || lp.type, lpCommitment(lp), lpPaid(lp), lp.status, lp.kyc_status || lp.kyc] } })} />
     <div className="i6-filters">{[['all', 'All LPs'], ['behind', 'Behind'], ['kyc', 'KYC pending'], ...types.map((type) => [type.toLowerCase(), titleCase(type)])].map(([id, label]) => <button type="button" key={id} className={filter === id ? 'is-active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div>
     {state.error && <div className="i6-load-error ip1-fund-unavailable" data-testid="status-fund-lps-unavailable"><AlertCircle size={14} /> <span>LP registry unavailable. No LP count, commitment, payment, KYC, or delinquency claim is being made. <small>{state.error}</small></span></div>}
     <section className="i6-summary ip1-fund-summary"><div><div className="i6-kicker">{state.fund?.name || 'Fund record unavailable'}</div><strong className="i6-money">{state.error ? 'Unavailable' : money(totalCommitted)}</strong><span className="i6-caption">committed</span></div><dl className="i6-summary-stats"><div><dt>LPs</dt><dd>{state.error ? 'Unavailable' : rows.length}</dd></div><div><dt>Largest position</dt><dd>{state.error ? 'Unavailable' : money(largest)}</dd></div><div><dt>KYC outstanding</dt><dd>{state.error ? 'Unavailable' : kycOutstanding}</dd></div></dl><p>Figures appear only when a fund record and its authorized LP register are available. Share of fund is computed from returned commitment rows.</p></section>
