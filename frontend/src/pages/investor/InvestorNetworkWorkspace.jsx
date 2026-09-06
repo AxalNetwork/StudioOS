@@ -6,6 +6,8 @@ import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorNetworkWorkspace.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { investorZoneActions } from '../../workspaces/investorZoneActions';
 
 /**
  * A section heading's right-hand detail, in the order the body already reads
@@ -60,8 +62,16 @@ const introductionContext = (prop) => {
   return reason || prop?.breakdown?.relationship_context || 'Context is retained with the proposition and reviewed before consent.';
 };
 
-function SectionHeading({ id, title, detail }) {
-  return <div className="inw-section-head" id={id}><h2>{title}</h2><span data-testid={`text-${id}-detail`}>{detail}</span></div>;
+function SectionHeading({ id, title, detail, actions }) {
+  // The action row belongs to the SECTION, not to the page header — that header
+  // sits behind `{!embedded && …}` and is false on every zone route, because
+  // NetworkWorkspace supplies the crumb and the zone nav itself. A row placed
+  // in there renders nowhere, which is exactly what happened on the founder's
+  // three Network zones and took a browser to see. Per section also answers
+  // `/network` itself, where all three sections show at once and no single row
+  // could be right.
+  return <div className="inw-section-head" id={id}><h2>{title}</h2><span data-testid={`text-${id}-detail`}>{detail}</span>
+    {actions?.length ? <ZoneActions className="basis-full" items={actions} /> : null}</div>;
 }
 
 function Skeleton({ rows = 4 }) {
@@ -213,7 +223,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
               const touch = relationships.length === 0 ? 'no ties recorded'
                 : touchCoverage ? `${coldCount} going cold` : 'last-touch coverage unavailable';
               return `${ties} ties · ${touch}`;
-            })} />
+            })} actions={investorZoneActions('network/relationships', { view: { header: ['Person', 'Organization', 'Type'], rows: relationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
             {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : (
               <div className="inw-table" data-testid="table-relationship-book">
                 <div className="inw-table-head"><span>Person</span><span>Type</span><span>Strength</span><span>Context</span><span>Last touch</span></div>
@@ -229,7 +239,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
             {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} />
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} actions={investorZoneActions('network/introductions', { view: { header: ['Introduction', 'Status', 'Score', 'Source'], rows: propositionRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
               {errors.introductions ? <Alert>{errors.introductions}</Alert> : introductions === null ? <Skeleton rows={4} /> : propositionRows.length === 0 ? <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div> : <>
                 {actionError && <Alert>{actionError}</Alert>}
                 <div className="inw-proposition-list">{visiblePropositions.map((prop) => {
@@ -245,7 +255,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
             </section>}
 
             {shows('organizations') && <section className="inw-card" aria-labelledby="organizations">
-              <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => `${organizations.length} relationship-backed organizations`)} />
+              <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => `${organizations.length} relationship-backed organizations`)} actions={investorZoneActions('network/organizations', { view: { header: ['Organization', 'People', 'Recorded types'], rows: organizations, cells: (o) => [o.name, o.people.size, [...o.types].join(' + ')] } })} />
               {errors.organizations ? <Alert>{errors.organizations}</Alert> : relationships === null ? <Skeleton rows={4} /> : organizations.length === 0 ? <div className="inw-empty" data-testid="empty-organizations">No organization identity is recorded on your relationship records yet.</div> : <div className="inw-org-list">{organizations.slice(0, 6).map((org) => <div className="inw-org" key={org.name} data-testid={`row-organization-${safeKey(org.name)}`}><div><strong>{org.name}</strong><span>{[...org.types].join(' · ') || 'Attributed relationship'}</span></div><b>{org.people.size} known</b></div>)}</div>}
               <p className="inw-footnote">Organizations appear only when explicitly attached to a relationship record. Names and email domains are never used to infer a firm.</p>
             </section>}

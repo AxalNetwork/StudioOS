@@ -6,6 +6,8 @@ import { AlertCircle, Inbox, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import './investorPortfolioCanvas.css';
 import './investorPortfolioUpdates.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { investorZoneActions } from '../../workspaces/investorZoneActions';
 
 const money = (value) => value == null || !Number.isFinite(Number(value)) ? '—' : `$${Math.round(Number(value)).toLocaleString()}`;
 const title = (value, fallback = 'Not recorded') => String(value ?? '').trim().replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) || fallback;
@@ -71,6 +73,7 @@ export default function InvestorPortfolioUpdates() {
 
   return <div className="i4-shell ip2-shell"><main className="i4-portfolio ip2-updates" data-testid="investor-portfolio-updates"><header className="i4-heading"><div><div className="i4-eyebrow">Portfolio / Updates</div><h1>Updates &amp; KPI collection</h1><p>Inbox, cadence compliance and source-preserved founder updates from the investor-accessible portfolio.</p></div><button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh portfolio updates"><RefreshCw size={15} /></button></header>
     <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
+    <ZoneActions className="mb-3" items={investorZoneActions('portfolio/updates', { view: { header: ['Company', 'Stage', 'Arrived', 'State', 'Update'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.arrived, r.status, r.update?.title] } })} />
     {state.error && <div className="i4-error" data-testid="status-investor-updates-error"><span>{String(state.error).toLowerCase() === 'not found' ? 'Portfolio update source unavailable in local development. No empty inbox claim is being made.' : state.error}</span><button type="button" onClick={load}>Retry</button></div>}
     {partial && !state.loading && <div className="i4-partial" data-testid="status-investor-updates-partial">Some portfolio sources are temporarily unavailable. Affected metrics and cells are labelled rather than treated as zero.</div>}
     {state.loading ? <Skeleton /> : <><div className="ip2-filters"><div><button className={filter === 'period' ? 'is-active' : ''} onClick={() => setFilter('period')}>This period</button><button className={filter === 'overdue' ? 'is-active' : ''} onClick={() => setFilter('overdue')}>Overdue</button><button className={filter === 'parse' ? 'is-active' : ''} onClick={() => setFilter('parse')}>Parse review</button><button className={filter === 'rules' ? 'is-active' : ''} onClick={() => setFilter('rules')}>Rules</button></div></div>

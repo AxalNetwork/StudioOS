@@ -1,27 +1,15 @@
-import { exportView } from '../lib/csvExport';
+import { makeZoneActions } from './zoneActionBuilder';
 
 /**
- * Every founder zone's header actions — the canvas's labels, and for each one
- * either a thing that happens or a sentence saying why it does not.
+ * The founder profile's twenty-one zones, and what each of their canvas actions
+ * actually does. `zoneActionBuilder.js` states the three outcomes and the rules
+ * they follow; this file is the founder's answers.
  *
  * WHERE THE LABELS COME FROM. Verbatim from the `ops:` array of the zone's
  * artboard in `design/canvases/integrated/Pages · Founder {Build,Grow,Network,
- * Raise}.dc.html`, in the canvas's own order. Nothing is invented and nothing
- * is dropped: a zone whose canvas asks for three actions lists three here, even
+ * Raise}.dc.html`, in the canvas's own order. Nothing is invented and nothing is
+ * dropped: a zone whose canvas asks for three actions lists three here, even
  * when all three are gaps, because the gap is the answer the reader needs.
- *
- * THE THREE OUTCOMES, AND WHY THE MIDDLE ONE EXISTS.
- *
- *   `export` — runs here, over the rows the page has loaded. See
- *              `lib/csvExport.js` for what "the rows the page has loaded"
- *              costs and why the label says "this view".
- *   `to`     — the flow is built, on another route, and this is a link to it.
- *              `/raise/capital/cap-table` really does add an instrument; the
- *              cap-table zone does not. Sending the reader there is the honest
- *              answer, and a far better one than rebuilding the form.
- *   `note`   — nothing performs this yet. Rendered as text, never as a button
- *              (`ZoneActions` enforces that), and it names what the reader CAN
- *              do wherever something adjacent exists.
  *
  * EVERY `to` WAS CHECKED AGAINST THE ROUTER, NOT ASSUMED. Each one is a path
  * `App.jsx` mounts with a guard that admits `founder`, and lands on a component
@@ -31,24 +19,14 @@ import { exportView } from '../lib/csvExport';
  * tab a founder's Network desk does not read; `/build/discovery` renders
  * `FounderValidatePage` for a founder, so the waitlist invite panel behind it
  * is not theirs to reach; and `/build/team` renders the Grow desk, not
- * `TeamBuildingPage`. All four are notes below. A link that 404s, or that
- * lands on a page the reader is not allowed to open, is the same broken
- * promise as a button that does nothing — it is just slower to discover.
+ * `TeamBuildingPage`. All four are notes below. A link that 404s, or that lands
+ * on a page the reader is not allowed to open, is the same broken promise as a
+ * button that does nothing — it is just slower to discover.
  *
- * `frontend/test/founder_zone_actions.test.mjs` re-derives the labels from the
- * canvases and re-checks every `to` against `App.jsx`, so this table cannot
- * drift from either without failing the build.
+ * `frontend/test/profile_zone_actions.test.mjs` re-derives the labels from the canvases
+ * and re-checks every `to` against `App.jsx`, so this table cannot drift from
+ * either without failing the build.
  */
-
-/** Merge a page's `?project_id=…` into a link that may carry its own query. */
-export function withQuery(to, query) {
-  if (!query) return to;
-  const [path, own = ''] = String(to).split('?');
-  const params = new URLSearchParams(own);
-  for (const [k, v] of new URLSearchParams(String(query).replace(/^\?/, ''))) params.set(k, v);
-  const s = params.toString();
-  return s ? `${path}?${s}` : path;
-}
 
 export const FOUNDER_ZONE_ACTIONS = {
   // ── Build ────────────────────────────────────────────────────────────────
@@ -160,43 +138,4 @@ export const FOUNDER_ZONE_ACTIONS = {
   ],
 };
 
-/**
- * Build the `items` array `ZoneActions` renders for one zone.
- *
- * `view` is the export payload: `{ scope, header, rows, cells }`. `cells` maps
- * one loaded record to the array of values under `header`, so the file carries
- * the columns the page is showing rather than whatever keys the API happens to
- * return — and it runs on the click, not on every render.
- *
- * An export over nothing loaded is offered as a SENTENCE rather than a button.
- * A file with a header row and no body reads as "there is no data" when the
- * truth is almost always "it has not loaded yet".
- */
-export function founderZoneActions(key, { query = '', view = null } = {}) {
-  const spec = FOUNDER_ZONE_ACTIONS[key];
-  if (!spec) return [];
-  const slug = key.split('/').pop();
-  return spec.map((item) => {
-    const testid = `action-${slug}-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-    if (item.kind === 'export') {
-      const rows = view?.rows || [];
-      if (!rows.length) {
-        return { label: item.label, testid, note: 'nothing loaded to export yet' };
-      }
-      return {
-        label: `${item.label} · this view`,
-        testid,
-        onClick: () => exportView({
-          scope: view.scope,
-          zone: view.zone || slug,
-          header: view.header,
-          rows: view.cells ? rows.map(view.cells) : rows,
-        }),
-      };
-    }
-    if (item.to) {
-      return { label: item.label, testid, to: withQuery(item.to, query), title: item.linkNote };
-    }
-    return { label: item.label, testid, note: item.note };
-  });
-}
+export const founderZoneActions = makeZoneActions(FOUNDER_ZONE_ACTIONS);

@@ -6,6 +6,8 @@ import { bucketForPath } from '../../workspaces/shellConfig';
 import { api } from '../../lib/api';
 import './investorFundLanding.css';
 import './investorFundReporting.css';
+import ZoneActions from '../../workspaces/ZoneActions';
+import { investorZoneActions } from '../../workspaces/investorZoneActions';
 
 const FILTERS = [['all', 'All periods'], ['published', 'Published'], ['drafted', 'Drafted'], ['delivery', 'Delivery']];
 const titleCase = (value) => String(value || 'Unrecorded').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -47,6 +49,7 @@ export default function InvestorFundReporting() {
 
   return <div className="i6-fund if4-shell"><main className="i6-main if4-main" data-testid="investor-fund-reporting"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>Reporting</b></div><h1><FileBarChart size={19} /> LP reporting</h1><p>Pack builder, archive and per-LP delivery status.</p></div><button type="button" className="if4-refresh" onClick={load} disabled={state.loading} aria-label="Refresh reporting archive"><RefreshCw size={14} className={state.loading ? 'if4-spin' : ''} /></button></header>
     <ZoneNav bucket={bucketForPath('investor', '/funds')} role="investor" activeSlug="reporting" className="my-3" />
+    <ZoneActions className="mb-3" items={investorZoneActions('funds/reporting', { view: { scope: state.fund?.name, header: ['Period', 'State', 'Issued', 'Delivered'], rows: visible, cells: (r) => [periodOf(r), statusOf(r), r.issued_at, r.delivery_count ?? r.delivered_count] } })} />
     <div className="if4-filters">{FILTERS.map(([id, label]) => <button type="button" key={id} className={filter === id ? 'is-active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div>
     {state.error && <div className="i6-load-error if4-unavailable"><AlertCircle size={14} /> <span>Reporting archive unavailable. No period count, publication state, or delivery claim is being made.</span></div>}
     {!state.loading && !state.error && !state.rows.length && <div className="i6-load-error if4-unavailable" data-testid="status-fund-reporting-unavailable"><AlertCircle size={14} /> <span>No reporting archive is available in this environment. Current pack, period, and per-LP delivery values remain unavailable.</span></div>}

@@ -57,13 +57,22 @@ once, in `shellConfig.js` — which is the whole reason this folder replaced
 investor workspaces all solving the same problem four ways.
 
 **A zone header's actions come from the canvas, and each one is either wired or
-stated.** `founderZoneActions.js` holds the founder profile's twenty-one zones:
-the labels are copied from the `ops:` array of the zone's artboard, and each is
-an export that runs (`frontend/src/lib/csvExport.js`), a link to a route that performs it, or
-a `note` saying nothing does. `ZoneActions.jsx` renders a note as text and never
-as a button, because a button is a promise.
-`frontend/test/founder_zone_actions.test.mjs` re-derives the labels from the
-canvases and re-checks every link against `App.jsx`'s guards.
+stated.** `zoneActionBuilder.js` holds the rules; `founderZoneActions.js` and
+`investorZoneActions.js` hold each profile's answers. The labels are copied from
+the `ops:` array of the zone's artboard, and each is an export that runs
+(`frontend/src/lib/csvExport.js`), a link to a route that performs it, or a
+`note` saying nothing does. `ZoneActions.jsx` renders a note as text and never as
+a button, because a button is a promise.
+`frontend/test/profile_zone_actions.test.mjs` re-derives the labels from the canvases and
+re-checks every link against `App.jsx`'s guards, for every profile.
+
+**The builder is shared and the tables are not, deliberately.** The rules are
+identical across licences and the answers are not: `/matches` is where
+`introductionsRequest` lives and is guarded `['admin', 'partner', 'investor']`,
+so the identical canvas label "Request an intro" is a link on the investor's
+`/network/introductions` and a stated gap on the founder's. Four tables each
+carrying their own copy of "what an empty export says" is how this repo ended up
+with three CSV escapers that disagree.
 
 **Two of those checks exist because a source test cannot see the screen.** A row
 placed inside the Network zones' `{!embedded && <header>}` rendered nowhere —

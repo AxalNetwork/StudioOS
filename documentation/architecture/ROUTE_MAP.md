@@ -295,15 +295,40 @@ verbatim rather than paraphrased: `frontend/src/workspaces/founderZoneActions.js
 re-derives from the canvases in `frontend/test/founder_zone_actions.test.mjs`, so
 the table cannot drift from the design without failing the build.
 
-**Founder is done — twenty-one zones, fifty-eight actions.** Fifteen are exports
-that run against the rows the page has loaded, seventeen are links to a route
-that already performs the action and that a founder is allowed to open, and
+**Founder — twenty-one zones, fifty-eight actions.** Fifteen are exports that
+run against the rows the page has loaded, seventeen are links to a route that
+already performs the action and that a founder is allowed to open, and
 twenty-six are stated gaps. A gap renders as a sentence, never as a button.
-The three profiles that remain (investor, partner, advisor) follow the same
-shape, one pull request each.
 
-**`/research/*` is not in the founder pass and is not an oversight.** The five
-founder Research zones — Ask, Markets, Companies, Funds, Library — route to
+**Investor — fourteen zones, forty-two actions, and only ten of them run.** Nine
+exports, one link, thirty-two stated gaps. That ratio is the finding, not a
+shortfall in the pass: Deals and Fund are read-only shells.
+`InvestorDealsWorkspace` calls `listDeals` and two invitation methods and
+nothing else; `FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal` and
+nothing else; `InvestorFundCalls` and `InvestorFundAccounting` call no API at
+all. "New call", "Add LP", "Record wire" and "Close vote" have no flow anywhere
+to link to, so each says so. The header is now an accurate map of what an
+investor can and cannot do, and of what to build next.
+
+**The same label is not the same answer across profiles.** `/network/*` serves
+every licence and the investor artboard's ops are word-for-word the founder's —
+but `/matches`, where `introductionsRequest` lives, is guarded
+`['admin', 'partner', 'investor']`. "Request an intro" is a working link on the
+investor's zone and a stated gap on the founder's identical one. That is why
+each profile keeps its own table and only the builder is shared.
+
+**The canvas's Fund routes are not the live ones.** `Pages · Investor Fund`
+names `/fund/lps`, `/fund/calls`, `/fund/accounting`, `/fund/reporting`; the
+router mounts `/funds/lps`, `/funds/calls`, `/funds/ledger`, `/funds/reporting`,
+and `shellConfig.js` agrees with the router. The tables key on the live routes
+and `frontend/test/profile_zone_actions.test.mjs` carries the mapping explicitly, rather
+than fuzzy-matching a canvas route to a page that is not at it.
+
+Partner and advisor remain, one pull request each.
+
+**`/research/*` is in no profile's pass, and is not an oversight.** The five
+founder Research zones (and the investor, advisor and partner lists beside
+them) — Ask, Markets, Companies, Funds, Library — route to
 `workspaces/ResearchWorkspace.jsx`, which serves founder, investor, partner,
 advisor and admin from one component. Their actions belong to a shared pass over
 that surface, where one change reaches four profiles, rather than to a

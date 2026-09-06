@@ -2388,6 +2388,25 @@ passed. And one page was handed `project?.name` when it has no `project` — a
 ReferenceError that blanks the route at render, which esbuild bundles happily and
 no lint step exists to catch.
 
+**The investor pass says the same thing about a much emptier profile, and that
+is the result rather than a shortfall.** Fourteen zones, forty-two actions, ten
+of which run: nine exports, one link, thirty-two stated gaps. Deals and Fund are
+read-only shells — `InvestorDealsWorkspace` calls `listDeals` and two invitation
+methods, `FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal`, and
+`InvestorFundCalls` and `InvestorFundAccounting` call no API at all — so "New
+call", "Add LP", "Record wire" and "Close vote" have nowhere to link to. A header
+full of working buttons there would be a lie about a bucket that cannot yet be
+operated. What it is instead is the map of what to build next.
+
+**The same label is not the same answer across profiles, which is why the tables
+are per profile and only the builder is shared.** `/network/*` serves every
+licence and the investor artboard's ops are word-for-word the founder's — but
+`/matches`, where `introductionsRequest` lives, is guarded
+`['admin', 'partner', 'investor']`. "Request an intro" is therefore a working
+link on the investor's zone and a stated gap on the founder's identical one. Four
+copies of the builder would have been four places for "what an empty export says"
+to drift; four copies of the answers would have been wrong.
+
 **Two canvases give no actions to record**, and nothing was invented for them:
 `Pages · Partner Pipeline` and `Advisor Detail · Practice` carry no `ops:` array
 on any artboard. The gap is written down in `ROUTE_MAP.md` instead. Inventing an
