@@ -123,9 +123,13 @@ test('primary 5xx triggers smaller-model fallback (one hop)', async () => {
   const { run, ROUTE, __resetForTest } = await loadRouter();
   __resetForTest();
   assert.equal(ROUTE.tool_call.model, '@cf/qwen/qwen2.5-coder-32b-instruct');
+  // The small sibling is `-fp8`, not the bare 8b: Cloudflare marked
+  // `@cf/meta/llama-3.1-8b-instruct` Deprecated 5/30/2026, and it terminated
+  // every chain in this table. `ai_router_prices.test.mjs` bans the deprecated
+  // id outright; this one pins the two hops and their order.
   assert.deepEqual(ROUTE.tool_call.fallbackChain, [
     '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-    '@cf/meta/llama-3.1-8b-instruct',
+    '@cf/meta/llama-3.1-8b-instruct-fp8',
   ]);
 
   const ai = makeAI([
@@ -172,9 +176,9 @@ test('multi-hop fallback chain reaches second sibling on cascading failure', asy
   const r = await run(env, { task: 'tool_call', userId: 11, text: 'do thing' });
   assert.equal(r.ok, true);
   assert.equal(r.usage.fallback_used, true);
-  assert.equal(r.usage.model, '@cf/meta/llama-3.1-8b-instruct');
+  assert.equal(r.usage.model, '@cf/meta/llama-3.1-8b-instruct-fp8');
   assert.equal(ai.calls.length, 3);
-  assert.equal(ai.calls[2].model, '@cf/meta/llama-3.1-8b-instruct');
+  assert.equal(ai.calls[2].model, '@cf/meta/llama-3.1-8b-instruct-fp8');
   assert.equal(r.output, 'small-llama saved the day');
 });
 

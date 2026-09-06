@@ -80,7 +80,11 @@ function envWith(ai: any, kv: any, db: any, extra: Record<string, unknown> = {})
 test('onboarding_chat is registered with the advisor model chain', () => {
   assert.ok(ROUTE.onboarding_chat, 'onboarding_chat route must exist');
   assert.equal(ROUTE.onboarding_chat.model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
-  assert.deepEqual(ROUTE.onboarding_chat.fallbackChain, ['@cf/meta/llama-3.1-8b-instruct']);
+  // `-fp8`, not the bare 8b: Cloudflare marked `@cf/meta/llama-3.1-8b-instruct`
+  // Deprecated 5/30/2026, so the whole chain used to terminate on a model
+  // scheduled for removal. Same family and size, wider context, cheaper both
+  // ways — see `ai_router_prices.test.mjs`, which bans the deprecated id.
+  assert.deepEqual(ROUTE.onboarding_chat.fallbackChain, ['@cf/meta/llama-3.1-8b-instruct-fp8']);
 });
 
 test('onboarding_chat NEVER routes through the advisor gateway, even when configured', async () => {

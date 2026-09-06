@@ -177,7 +177,7 @@ const logAi = (env: Env, userId: number, kind: string, meta: any = {}) =>
 async function llm(env: Env, system: string, prompt: string, maxTokens = 400): Promise<string | null> {
   if (!env.AI) return null;
   try {
-    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
       messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], max_tokens: maxTokens,
     });
     return (out?.response || '').trim() || null;
@@ -357,7 +357,7 @@ legalcap.post('/legal/generate', async (c) => {
   await logAi(c.env, user.id, 'legal_doc_generate', { type, deal_id: dealId });
 
   // Sensitive content stored as JSON (template + filled vars + body) — no raw PII in logs
-  const contentJson = JSON.stringify({ template: type, vars, body, model: ai ? '@cf/meta/llama-3.1-8b-instruct' : 'template-only' });
+  const contentJson = JSON.stringify({ template: type, vars, body, model: ai ? '@cf/meta/llama-3.1-8b-instruct-fp8' : 'template-only' });
 
   const doc: any = await c.env.DB.prepare(`INSERT INTO legal_documents (deal_id, type, status, content, generated_by) VALUES (?, ?, 'generated', ?, ?) RETURNING id, deal_id, type, status, generated_by, created_at`)
     .bind(dealId, type, contentJson, user.id).first();

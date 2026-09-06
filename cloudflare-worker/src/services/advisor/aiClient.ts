@@ -43,12 +43,19 @@ import type { Env } from '../../types';
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+// The fallback was `@cf/meta/llama-3.1-8b-instruct`, which Cloudflare marks
+// DEPRECATED with the date 5/30/2026 — already past. It is the model this
+// client reaches for exactly when the primary is failing, so it was the least
+// visible place in the worker for a model to stop answering. `-fp8` is the same
+// family and size, cheaper on both sides, and has a 32,000-token context
+// against the deprecated model's 7,968 — which matters here, because a long
+// advisor turn is precisely what makes the primary 500 in the first place.
 export type AdvisorModel =
   | '@cf/meta/llama-3.3-70b-instruct-fp8-fast'  // PRIMARY
-  | '@cf/meta/llama-3.1-8b-instruct';           // 500/429 fallback only
+  | '@cf/meta/llama-3.1-8b-instruct-fp8';       // 500/429 fallback only
 
 export const ADVISOR_PRIMARY_MODEL: AdvisorModel = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-export const ADVISOR_FALLBACK_MODEL: AdvisorModel = '@cf/meta/llama-3.1-8b-instruct';
+export const ADVISOR_FALLBACK_MODEL: AdvisorModel = '@cf/meta/llama-3.1-8b-instruct-fp8';
 
 export interface AdvisorTurnOptions {
   userId: number;

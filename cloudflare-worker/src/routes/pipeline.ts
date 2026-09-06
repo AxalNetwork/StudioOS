@@ -90,7 +90,7 @@ const logAction = (env: Env, actionType: string, performedBy: number | null, det
 async function llmText(env: Env, system: string, prompt: string): Promise<string | null> {
   if (!env.AI) return null;
   try {
-    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
       messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], max_tokens: 400,
     });
     return (out?.response || '').trim() || null;
@@ -448,7 +448,7 @@ pipeline.post('/decision-gate/review', async (c) => {
 
   await logAction(c.env, 'ai_call', user.id, { kind: 'decision_gate_review', deal_id: dealId });
   await logAction(c.env, 'decision_gate_review', user.id, { deal_id: dealId, gate_id: gate.id, recommendation: aiRec });
-  return c.json({ ...gate, model: ai ? '@cf/meta/llama-3.1-8b-instruct' : 'rule-based', traction_score: traction });
+  return c.json({ ...gate, model: ai ? '@cf/meta/llama-3.1-8b-instruct-fp8' : 'rule-based', traction_score: traction });
 });
 
 pipeline.patch('/decision-gate/decide', async (c) => {

@@ -118,18 +118,45 @@ interface RouteEntry {
   isEmbed?: boolean;
 }
 
-// Per-1M-token rough USD prices used for budget accounting. The exact
-// numbers don't have to be perfect — we just need them to be stable so
-// caps trip in roughly the right place. Workers AI pricing is per-token
-// (May 2026 published rates).
-//
-// Stored separately so test harnesses can swap them.
+/**
+ * Per-1M-token USD prices, taken from Cloudflare's published Workers AI
+ * pricing table.
+ *
+ * THIS COMMENT USED TO SAY THE NUMBERS DID NOT HAVE TO BE PERFECT — "we just
+ * need them to be stable so caps trip in roughly the right place". That stopped
+ * being true when `ui/WorkerRail.jsx` began rendering the rate beside the model
+ * name: these figures are now shown to a founder deciding whether to run
+ * something, so a wrong one is a wrong price quoted to a customer, not a
+ * slightly-off budget cap.
+ *
+ * Every previous value was wrong, and the most-used one was wrong by 4.5x:
+ *
+ *   model                                    was          published
+ *   llama-guard-3-8b                         0.20 / 0.20  0.484 / 0.030
+ *   llama-3.1-8b-instruct                    0.20 / 0.20  0.282 / 0.827
+ *   llama-3.3-70b-instruct-fp8-fast          0.50 / 0.50  0.293 / 2.253
+ *   qwen2.5-coder-32b-instruct               0.40 / 0.40  0.660 / 1.000
+ *
+ * Note the shape the old table could not express and the real one needs: input
+ * and output are NOT symmetric. Llama Guard is dear to prompt and nearly free
+ * to answer (it emits one word); the 70b is the reverse by a factor of eight.
+ * A table that set them equal mispriced every task in the same direction as the
+ * traffic — long prompts, short answers — and understated the total.
+ *
+ * Stored separately so test harnesses can swap them, and pinned by
+ * `cloudflare-worker/test/ai_router_prices.test.mjs` so a future edit has to
+ * mean it.
+ */
 export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }> = {
-  '@cf/meta/llama-guard-3-8b':                { in: 0.20, out: 0.20 },
-  '@cf/meta/llama-3.1-8b-instruct':           { in: 0.20, out: 0.20 },
-  '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { in: 0.50, out: 0.50 },
-  '@cf/qwen/qwen2.5-coder-32b-instruct':      { in: 0.40, out: 0.40 },
-  '@cf/baai/bge-base-en-v1.5':                { in: 0.05, out: 0.00 },
+  '@cf/meta/llama-guard-3-8b':                { in: 0.484, out: 0.030 },
+  // Kept for callers that still name it, and for accounting on runs already
+  // recorded against it. It is DEPRECATED (5/30/2026) and is no longer routed
+  // to — see SMALL_LLAMA below.
+  '@cf/meta/llama-3.1-8b-instruct':           { in: 0.282, out: 0.827 },
+  '@cf/meta/llama-3.1-8b-instruct-fp8':       { in: 0.152, out: 0.287 },
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { in: 0.293, out: 2.253 },
+  '@cf/qwen/qwen2.5-coder-32b-instruct':      { in: 0.660, out: 1.000 },
+  '@cf/baai/bge-base-en-v1.5':                { in: 0.05,  out: 0.00 },
 };
 
 // Spec step 3: "fall back to a smaller Workers AI sibling
@@ -137,7 +164,18 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
 // implements that two-step degradation for tool_call (qwen32b →
 // llama-3.3-70b → llama-3.1-8b) and one-step for everything else that
 // has a smaller sibling.
-const SMALL_LLAMA = '@cf/meta/llama-3.1-8b-instruct';
+// `@cf/meta/llama-3.1-8b-instruct` — which this was until now — carries
+// Cloudflare's DEPRECATED marker with the date 5/30/2026, already past. It was
+// the `role_detect` model and the fallback for every other task class in this
+// table, so the whole chain terminated on a model scheduled for removal.
+//
+// `-fp8` is the same family and size, has a 32,000-token context against the
+// deprecated model's 7,968, and is cheaper on both sides (0.152/0.287 against
+// 0.282/0.827). There is also a `-fp8-fast` at 0.045/0.384 — cheaper to prompt,
+// dearer to answer — which suits a classifier better than a fallback; taking it
+// here would change the failure behaviour of every task at once, so it is a
+// deliberate second step rather than a side effect of this one.
+const SMALL_LLAMA = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const MID_LLAMA   = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 export const ROUTE: Record<TaskClass, RouteEntry> = {

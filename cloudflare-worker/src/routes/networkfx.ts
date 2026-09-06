@@ -78,7 +78,7 @@ const logAction = (env: Env, actionType: string, performedBy: number | null, det
 async function llmText(env: Env, system: string, prompt: string): Promise<string | null> {
   if (!env.AI) return null;
   try {
-    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
       messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], max_tokens: 350,
     });
     return (out?.response || '').trim() || null;
@@ -312,7 +312,7 @@ networkfx.get('/syndicates/:id/recommendations', async (c) => {
     'You are a venture-studio analyst. Suggest a brief 2-sentence rationale for forming this syndicate and what kind of investor would be ideal.',
     `Syndicate: name="${synd.name}", description="${synd.description || ''}", target=$${synd.target_cents ? synd.target_cents/100 : 'open'}, min=$${synd.min_commitment_cents/100}, deal_id=${synd.deal_id || 'none'}.`);
   await logAction(c.env, 'ai_call', user.id, { kind: 'syndicate_recs', syndicate_id: id });
-  return c.json({ rationale: ai || 'AI analysis unavailable.', candidates: recs, model: ai ? '@cf/meta/llama-3.1-8b-instruct' : 'unavailable' });
+  return c.json({ rationale: ai || 'AI analysis unavailable.', candidates: recs, model: ai ? '@cf/meta/llama-3.1-8b-instruct-fp8' : 'unavailable' });
 });
 
 // ============================================================
@@ -428,7 +428,7 @@ networkfx.post('/marketplace/match', async (c) => {
   // Hydrate
   const byId = new Map(profiles.map((p: any) => [p.user_id, p]));
   const hydrated = recs.map((r: any) => ({ ...r, profile: byId.get(r.user_id) || null })).filter((r: any) => r.profile);
-  return c.json({ need, recommendations: hydrated, model: ai ? '@cf/meta/llama-3.1-8b-instruct' : 'rule-based' });
+  return c.json({ need, recommendations: hydrated, model: ai ? '@cf/meta/llama-3.1-8b-instruct-fp8' : 'rule-based' });
 });
 
 // ============================================================

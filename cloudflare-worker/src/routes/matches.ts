@@ -56,7 +56,7 @@ async function ensureSchema(env: Env) {
 async function llmJson(env: Env, system: string, userPrompt: string): Promise<any | null> {
   if (!env.AI) return null;
   try {
-    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
       messages: [
         { role: 'system', content: system + '\n\nReply ONLY with valid JSON, no prose, no markdown fences.' },
         { role: 'user', content: userPrompt },
@@ -132,7 +132,7 @@ async function scoreOneDeal(env: Env, user: any, prefs: any, project: any): Prom
   );
   const score = (llm && typeof llm.score === 'number') ? Math.max(0, Math.min(100, llm.score)) : rule.score;
   const explanation = (llm?.explanation && typeof llm.explanation === 'string') ? llm.explanation.slice(0, 500) : rule.reasons.join('; ');
-  return { score, explanation, model: llm ? '@cf/meta/llama-3.1-8b-instruct' : 'rule-based' };
+  return { score, explanation, model: llm ? '@cf/meta/llama-3.1-8b-instruct-fp8' : 'rule-based' };
 }
 
 matches.get('/deal-flow', async (c) => {
@@ -272,7 +272,7 @@ matches.get('/referral-scores', async (c) => {
       );
       const score = (llm && typeof llm.score === 'number') ? Math.max(0, Math.min(100, llm.score)) : ruleScore;
       const explanation = (llm?.explanation && typeof llm.explanation === 'string') ? llm.explanation.slice(0, 300) : ruleExpl;
-      const model = llm ? '@cf/meta/llama-3.1-8b-instruct' : 'rule-based';
+      const model = llm ? '@cf/meta/llama-3.1-8b-instruct-fp8' : 'rule-based';
       await upsertScore(c.env, { user_id: user.id, score_type: 'referral', deal_id: null, target_user_id: r.referred_user_id, score, explanation, model });
       enriched.push({ referral: r, score, explanation, cached: false });
       llmBudget--;
