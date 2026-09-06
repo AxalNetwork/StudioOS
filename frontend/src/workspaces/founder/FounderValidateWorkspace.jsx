@@ -3,6 +3,8 @@ import { useLocation, Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Card, EmptyState, ErrorState, WorkerRail, Skeleton } from '../../ui';
 import WorkspaceShell, { NotRecorded } from '../WorkspaceShell';
+import ZoneActions from '../ZoneActions';
+import LogInterviewModal from '../../components/discovery/LogInterviewModal';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 
 /**
@@ -23,10 +25,17 @@ import { bucketForPath, zoneForPath } from '../shellConfig';
  * fit is not a migration, so they are linked from Interviews rather than
  * deleted.
  *
- * HYPOTHESES AND VERDICT HAVE NO BACKEND YET. Nothing in the product stores a
- * hypothesis board or a reconciled verdict. They ship as honest empty states
- * that say so and name what would fill them — not as fabricated boards, and
- * not as a 404 behind a sidebar row that promises a page.
+ * HYPOTHESES AND VERDICT HAVE A BACKEND NOW, and this header used to say they
+ * did not. Migration 211 added `hypotheses`, `hypothesis_pain_links` and
+ * `validation_decisions`, plus `discovery_interviews.quote_consent` — so the
+ * boards read live records and the consent column is real. Two things are still
+ * absent and are still said out loud rather than drawn: nothing WRITES
+ * `quote_consent` from any screen, and `interview_pain_severities` exists with
+ * no reader and no writer.
+ *
+ * THE HEADER'S ACTION SLOT. `WorkspaceShell` has always had one; until this
+ * change no workspace zone page in the product passed it, which is why a page
+ * built to log interviews had no way to log one. See `../ZoneActions.jsx`.
  */
 
 const useProjectId = () => {
@@ -63,7 +72,7 @@ function StatRow({ items }) {
   );
 }
 
-function Interviews({ projectId, ready }) {
+function Interviews({ projectId, ready, reloadKey = 0, onLog }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
 
@@ -74,7 +83,9 @@ function Interviews({ projectId, ready }) {
       .then((r) => { if (alive) setRows(Array.isArray(r) ? r : (r?.interviews || [])); })
       .catch((e) => { if (alive) setError(e); });
     return () => { alive = false; };
-  }, [projectId, ready]);
+    // `reloadKey` is the signal from the header's "Log an interview" action:
+    // the modal lives on the shell, the list lives here, and this is the seam.
+  }, [projectId, ready, reloadKey]);
 
   if (!ready) return <Skeleton className="h-40" />;
   if (!projectId) {
@@ -90,21 +101,31 @@ function Interviews({ projectId, ready }) {
   if (!rows) return <Skeleton className="h-40" />;
 
   const withPain = rows.filter((r) => (r.pain_points || r.pains || []).length > 0);
+  // Migration 211 gave an interview `quote_consent`, and it is three-state on
+  // purpose — true, false, or never asked. Folding null into false would report
+  // "declined" for every interview logged before the column existed, so the
+  // count below is consenting interviews only and the note carries the rest.
+  const consented = rows.filter((r) => r.quote_consent === true).length;
+  const consentUnasked = rows.filter((r) => r.quote_consent === null || r.quote_consent === undefined).length;
 
   return (
     <div className="space-y-4">
       <StatRow items={[
         { label: 'Interviews logged', value: rows.length, note: 'the base every later stage counts against' },
         { label: 'With a pain recorded', value: withPain.length, note: 'an interview with no pain feeds nothing downstream' },
-        { label: 'Consent to quote', value: null, note: 'no consent field is stored on an interview yet' },
-        { label: 'Deck-eligible', value: null, note: 'eligibility needs the consent field above' },
+        { label: 'Consent to quote', value: consented, note: consentUnasked ? `${consentUnasked} never asked — not the same as declined` : 'recorded on the interview' },
+        { label: 'Deck-eligible', value: consented, note: 'an interview may be quoted in the deck only with consent on file' },
       ]} />
 
       {rows.length === 0 ? (
         <EmptyState
           title="No interviews logged"
           description="Log the first conversation and the pain map, hypotheses and verdict all start from it. Nothing here is inferred — an empty log means an empty page, on purpose."
-          action={<Link to="/build/discovery?tab=interviews" className="text-axal-violet underline">Log an interview</Link>}
+          action={(
+            <button type="button" onClick={onLog} data-testid="link-empty-log-interview" className="text-axal-violet underline">
+              Log an interview
+            </button>
+          )}
         />
       ) : (
         <Card className="p-4">
@@ -117,16 +138,30 @@ function Interviews({ projectId, ready }) {
               const pains = r.pain_points || r.pains || [];
               return (
                 <li key={r.id} className="flex items-start justify-between gap-4 py-2.5">
+                  {/*
+                    THE REAL COLUMN NAMES. This block read `r.contact_name ||
+                    r.name` and `r.company || r.segment` — four keys the worker
+                    has never emitted. `serializeInterview` returns
+                    `interviewee_name`, `interviewee_role` and
+                    `interviewee_company`, so every row in this log rendered
+                    "Unnamed contact" and "No segment recorded" no matter what
+                    had been typed into it. The date was the same mistake one
+                    step quieter: `r.date` is undefined, so it fell through to
+                    `created_at` and showed when the row was written rather than
+                    when the conversation happened.
+                  */}
                   <div className="min-w-0">
                     <div className="truncate text-xs font-semibold text-axal-ink">
-                      {r.contact_name || r.name || 'Unnamed contact'}
+                      {r.interviewee_name || <NotRecorded>Name not recorded</NotRecorded>}
                     </div>
                     <div className="mt-0.5 truncate text-[11px] text-axal-ink-3">
-                      {r.company || r.segment || <NotRecorded>No segment recorded</NotRecorded>}
+                      {r.interviewee_company || r.interviewee_role || <NotRecorded>No company recorded</NotRecorded>}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
-                    <div className="text-[11px] tabular-nums text-axal-ink-2">{r.date || r.created_at?.slice(0, 10) || '—'}</div>
+                    <div className="text-[11px] tabular-nums text-axal-ink-2">
+                      {r.interview_date || <NotRecorded>No date</NotRecorded>}
+                    </div>
                     <div className="mt-0.5 text-[10px] text-axal-ink-3">
                       {pains.length ? `${pains.length} pain${pains.length === 1 ? '' : 's'}` : 'no pain recorded'}
                     </div>
@@ -136,9 +171,10 @@ function Interviews({ projectId, ready }) {
             })}
           </ul>
           <p className="mt-3 border-t border-axal-border-soft pt-3 text-[11px] leading-relaxed text-axal-ink-3">
-            These are the same records Discovery writes — one log, two doors. Consent to quote is not a field an
-            interview carries yet, so both consent columns read “Not recorded” rather than defaulting to yes;
-            an interview presumed quotable is the one mistake this stage cannot make.
+            These are the same records Discovery writes — one log, two doors. Consent to quote is a real field on
+            an interview and it is three-state: yes, no, or never asked. Never-asked is counted apart from
+            declined rather than folded into it, and nothing here presumes an interview quotable — that is the one
+            mistake this stage cannot make. No screen writes the field yet, so on most rows it is still unasked.
           </p>
         </Card>
       )}
@@ -510,6 +546,16 @@ export default function FounderValidateWorkspace() {
   const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
   const zone = zoneForPath(bucket, location.pathname);
 
+  // The modal lives here rather than in `Interviews` because the button that
+  // opens it lives in the SHELL's header, above the body — one owner for both.
+  const [logOpen, setLogOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const saveInterview = async (payload) => {
+    await api.createInterview(projectId, payload);
+    setLogOpen(false);
+    setReloadKey((n) => n + 1);
+  };
+
   const body = useMemo(() => {
     switch (zone?.slug) {
       case 'pain-map':
@@ -520,9 +566,32 @@ export default function FounderValidateWorkspace() {
         return <ValidationSummary projectId={projectId} ready={ready} />;
       case 'interviews':
       default:
-        return <Interviews projectId={projectId} ready={ready} />;
+        return <Interviews projectId={projectId} ready={ready} reloadKey={reloadKey} onLog={() => setLogOpen(true)} />;
     }
-  }, [zone?.slug, projectId, ready]);
+  }, [zone?.slug, projectId, ready, reloadKey]);
+
+  // WHY THIS IS THE FIRST ZONE PAGE IN THE PRODUCT TO USE `actions`.
+  // `WorkspaceShell` has had the slot since it was written, and every caller
+  // passing it was a Spin-Out Lab page — so `/validate/interviews`, a page
+  // whose whole job is logging interviews, offered no way to log one. The
+  // create path was never missing: `api.createInterview` and
+  // `components/discovery/LogInterviewModal` have both been in place all along,
+  // used by Discovery and by the Lab. Only this door was.
+  //
+  // The other three zones get their actions as their endpoints land. A zone
+  // with nothing backed draws nothing — a button is a promise.
+  const actions = zone?.slug === 'interviews' ? (
+    <ZoneActions items={[
+      {
+        label: 'Log an interview',
+        testid: 'action-log-interview',
+        onClick: () => setLogOpen(true),
+        // No venture means no `project_id` to write against; the button would
+        // 400. The body already explains the state, so this just stays shut.
+        disabled: !projectId,
+      },
+    ]} />
+  ) : null;
 
   const INTRO = {
     interviews: 'Every conversation logged against this venture. The same records Discovery writes — one log, two doors.',
@@ -547,8 +616,15 @@ export default function FounderValidateWorkspace() {
       title={isRoot ? bucket?.label : undefined}
       activeSlug={isRoot ? null : undefined}
       intro={INTRO[zone?.slug] || INTRO.interviews}
+      actions={actions}
     >
       {body}
+      <LogInterviewModal
+        open={logOpen}
+        interview={null}
+        onClose={() => setLogOpen(false)}
+        onSave={saveInterview}
+      />
     </WorkspaceShell>
   );
 }
