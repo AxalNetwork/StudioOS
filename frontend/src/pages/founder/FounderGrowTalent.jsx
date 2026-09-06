@@ -5,8 +5,9 @@ import { api, jobs as jobsApi } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowTalent.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -80,7 +81,10 @@ export default function FounderGrowTalent() {
 
   return <main className="a5-grow fg-talent" data-testid="founder-grow-talent"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-talent-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Talent</b></div><span>Founder / Grow</span><div><h1>Talent</h1><p>Roles, ranked candidates, job posts and applications.</p></div>{projects.length > 1 && <label className="fg-talent-picker"><span>Startup</span><select data-testid="select-grow-talent-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-talent-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Talent' ? 'is-active' : ''}>{label}</Link>)}</nav>
-    <ZoneActions className="mt-3" items={founderZoneActions('grow/talent', { query, view: { scope: project?.name, header: ['Candidate', 'Applied', 'Status'], rows: visible, cells: (r) => [r.name || r.member?.name, r.created_at, r.status] } })} /></header>
+    <ZoneToolbar
+              filters={founderZoneFilters('grow/talent', { value: view, onChange: setView, dynamic: { roles: jobs.slice(0, 3).map((job) => ({ key: String(job.id), label: text(job.title, 'Untitled role') })) } })}
+              actions={founderZoneActions('grow/talent', { query, view: { scope: project?.name, header: ['Candidate', 'Applied', 'Status'], rows: visible, cells: (r) => [r.name || r.member?.name, r.created_at, r.status] } })}
+            /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-talent-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {loading ? <TalentSkeleton /> : !project ? <EmptyTalent /> : <TalentContent project={project} jobs={jobs} applications={applications} visible={visible} selectedJob={selectedJob} selectedJobId={selectedJobId} view={view} setView={setView} query={query} applicantCount={applicantCount} shortlistCount={shortlistCount} error={error} />}
   </div><TalentRail project={project} jobs={jobs} applications={applications} error={error} /></div></main>;
@@ -88,7 +92,10 @@ export default function FounderGrowTalent() {
 
 function TalentContent({ project, jobs, applications, visible, selectedJob, selectedJobId, view, setView, query, applicantCount, shortlistCount, error }) {
   return <div className="a5-sections"><div className="fg-talent-context"><div><span>Selected startup</span><strong data-testid="text-grow-talent-project">{text(project.name)}</strong></div><div><span>Talent source</span><strong>{error ? 'Unavailable' : jobs.length ? 'Stored job postings' : 'No linked roles'}</strong></div></div>
-    <div className="fg-talent-tabs"><div>{[['all', 'All roles'], ...jobs.slice(0, 3).map((job) => [String(job.id), text(job.title, 'Untitled role')]), ['shortlisted', 'Shortlisted']].map(([key, label]) => <button type="button" className={view === key ? 'is-active' : ''} key={key} onClick={() => setView(key)}>{label}</button>)}</div><div className="fg-talent-actions"><Link to={`/build/team?mode=workspace&project_id=${project.id}`} data-testid="link-open-grow-talent-workspace"><BriefcaseBusiness size={13} /> Open workspace</Link></div></div>
+        {/* Its tabs are the zone header's now. The canvas's Backend and GTM are
+        sample role names, so the chips there are the roles actually linked
+        to this startup — and when none is, that is what the row says. */}
+    <div className="fg-talent-tabs"><div className="fg-talent-actions"><Link to={`/build/team?mode=workspace&project_id=${project.id}`} data-testid="link-open-grow-talent-workspace"><BriefcaseBusiness size={13} /> Open workspace</Link></div></div>
     <div className="fg-talent-stats"><Stat label="Applicants" value={error ? 'Unavailable' : applicantCount} note={error ? 'Applicant source unavailable' : `across ${jobs.length} linked role${jobs.length === 1 ? '' : 's'}`} muted={Boolean(error)} /><Stat label="Shortlisted" value={error ? 'Unavailable' : shortlistCount} note={error ? 'Applicant source unavailable' : applications.length ? `${Math.round((shortlistCount / applications.length) * 100)}% of applicants` : 'No applicants recorded'} muted={Boolean(error)} /><Stat label="Time to screen" value="Unavailable" note="No screening-event source connected" muted /><Stat label="Reserved" value="Unavailable" note="No project equity-reservation source connected" muted /></div>
     <section className="a5-card fg-talent-table"><Head icon={Users} title={`Ranked candidates · ${text(selectedJob?.title, 'selected role')}`} meta="The score always says why" />{!jobs.length ? <EmptyTable error={error} /> : <CandidateTable rows={visible} />}</section>
     <section className="a5-focus fg-talent-read"><div className="a5-head"><div><Sparkles size={15} /><h2>Read the match honestly</h2></div><span>Source-derived</span></div><p>{error ? 'The selected-project talent source is unavailable, so FG2 cannot determine whether roles or applications exist. Candidate ranking, screening time, and reserved shares remain unavailable.' : selectedJob ? `The current role is ${text(selectedJob.title)}. Candidate fit scores and rank explanations are ${visible.length ? 'not recorded by the source' : 'not available because no candidates are returned'}; FG2 does not score people from application text.` : 'No role is linked to this startup, so candidate ranking, screening time, and reserved shares remain unavailable.'}</p><Link className="a5-link" to={`/build/team?mode=workspace&project_id=${project.id}`}>Open talent workspace <ChevronRight size={14} /></Link></section>

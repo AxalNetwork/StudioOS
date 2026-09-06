@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, Filter, RefreshCw, Sparkles, Users } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, RefreshCw, Sparkles, Users } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowCustomers.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -64,8 +65,7 @@ export default function FounderGrowCustomers() {
   const sources = useMemo(() => [...new Set(customers.map((row) => sourceLabel(row.source)))], [customers]);
   const visible = useMemo(() => {
     if (view === 'all') return customers;
-    if (view === 'stalled') return [];
-    return customers.filter((row) => view === 'shortlisted' ? ['invited', 'followed_up', 'promoted'].includes(String(row.crm_status || '').toLowerCase()) : sourceLabel(row.source) === view);
+    return customers.filter((row) => sourceLabel(row.source) === view);
   }, [customers, view]);
   const grouped = useMemo(() => sources.map((source) => {
     const rows = customers.filter((row) => sourceLabel(row.source) === source);
@@ -75,7 +75,10 @@ export default function FounderGrowCustomers() {
 
   return <main className="a5-grow fg-customers" data-testid="founder-grow-customers"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-customers-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Customers</b></div><span>Founder / Grow</span><div><h1>Customer pipeline</h1><p>Pipeline, segments, sequences and step conversion.</p></div>{projects.length > 1 && <label className="fg-customers-picker"><span>Startup</span><select data-testid="select-grow-customers-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-customers-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Customers' ? 'is-active' : ''}>{label}</Link>)}</nav>
-    <ZoneActions className="mt-3" items={founderZoneActions('grow/customers', { query, view: { scope: project?.name, header: ['Account', 'Email', 'Source', 'Recorded stage', 'Captured'], rows: visible, cells: (r) => [r.name, r.email, r.source, r.crm_status, r.created_at] } })} /></header>
+    <ZoneToolbar
+              filters={founderZoneFilters('grow/customers', { value: view, onChange: setView, dynamic: { sources: sources.map((source) => ({ key: source, label: source })) } })}
+              actions={founderZoneActions('grow/customers', { query, view: { scope: project?.name, header: ['Account', 'Email', 'Source', 'Recorded stage', 'Captured'], rows: visible, cells: (r) => [r.name, r.email, r.source, r.crm_status, r.created_at] } })}
+            /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-customers-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {loading ? <CustomersSkeleton /> : !project ? <EmptyCustomers /> : <CustomersContent project={project} customers={customers} visible={visible} grouped={grouped} sources={sources} view={view} setView={setView} query={query} error={error} />}
   </div><CustomersRail project={project} customers={customers} grouped={grouped} error={error} /></div></main>;
@@ -83,9 +86,15 @@ export default function FounderGrowCustomers() {
 
 function CustomersContent({ project, customers, visible, grouped, sources, view, setView, query, error }) {
   return <div className="a5-sections"><div className="fg-customers-context"><div><span>Selected startup</span><strong data-testid="text-grow-customers-project">{text(project.name)}</strong></div><div><span>Customer source</span><strong>{error ? 'Unavailable' : customers.length ? 'Stored discovery records' : 'No records recorded'}</strong></div></div>
-    <div className="fg-customers-tabs"><div><button type="button" className={view === 'all' ? 'is-active' : ''} onClick={() => setView('all')}><Filter size={12} /> All</button>{sources.map((source) => <button type="button" className={view === source ? 'is-active' : ''} key={source} onClick={() => setView(source)}>{source}</button>)}<button type="button" className={view === 'stalled' ? 'is-active' : ''} onClick={() => setView('stalled')}>Stalled</button></div><div className="fg-customers-actions"><Link to={`/build/discovery?mode=workspace&project_id=${project.id}`} data-testid="link-open-grow-customers-workspace"><BarChart3 size={13} /> Open workspace</Link></div></div>
+        {/* Its tabs are the zone header's now. "Stalled" is prose there: its
+        predicate here was `return []`, so selecting it answered "you have no
+        stalled accounts" when the truth is that nothing stores activity at
+        all. The canvas's three segment names are sample data, and a customer
+        record stores the source it was captured from rather than a segment,
+        so the chips are the stored sources and the row says so. */}
+    <div className="fg-customers-tabs"><div className="fg-customers-actions"><Link to={`/build/discovery?mode=workspace&project_id=${project.id}`} data-testid="link-open-grow-customers-workspace"><BarChart3 size={13} /> Open workspace</Link></div></div>
     <div className="fg-customers-stats"><Stat label="Accounts" value={error ? 'Unavailable' : customers.length} note={error ? 'Customer source unavailable' : `${grouped.length} source${grouped.length === 1 ? '' : 's'}`} muted={Boolean(error)} /><Stat label="Weighted ARR" value="Unavailable" note="No opportunity-value source connected" muted /><Stat label="Worst step" value="Unavailable" note="No funnel-step events connected" muted /><Stat label="Stalled > 14d" value="Unavailable" note="No activity timeline connected" muted /></div>
-    <section className="a5-card fg-customers-table"><Head icon={Users} title="Customer records, by source" meta={view === 'all' ? 'Source rows are grouped from stored records' : view === 'stalled' ? 'Activity source unavailable' : `${visible.length} matching record${visible.length === 1 ? '' : 's'}`} />{error ? <EmptyTable error /> : view === 'stalled' ? <UnavailableTable /> : view === 'all' ? <SourceTable rows={grouped} /> : <CustomerTable rows={visible} />}</section>
+    <section className="a5-card fg-customers-table"><Head icon={Users} title="Customer records, by source" meta={view === 'all' ? 'Source rows are grouped from stored records' : `${visible.length} matching record${visible.length === 1 ? '' : 's'}`} />{error ? <EmptyTable error /> : view === 'all' ? <SourceTable rows={grouped} /> : <CustomerTable rows={visible} />}</section>
     <section className="a5-focus fg-customers-read"><div className="a5-head"><div><Sparkles size={15} /><h2>Read the pipeline honestly</h2></div><span>Source-derived</span></div><p>{error ? 'The selected-project customer source is unavailable, so FG3 cannot determine whether accounts or segments exist. Conversion, weighted value, stalled age, and sequence outcomes remain unavailable.' : customers.length ? `FG3 groups ${customers.length} stored customer record${customers.length === 1 ? '' : 's'} by their recorded source. It does not turn source labels into market segments or infer conversion from CRM status.` : 'No customer discovery records are stored for this startup, so account counts, segments, conversion, weighted value, and sequence outcomes remain unavailable.'}</p><Link className="a5-link" to={`/build/discovery?mode=workspace&project_id=${project.id}`}>Open customer discovery <ChevronRight size={14} /></Link></section>
   </div>;
 }
@@ -98,7 +107,6 @@ function CustomerTable({ rows }) {
   return <div className="fg-customers-table-wrap"><table><thead><tr><th>Account</th><th>Source</th><th>Stage</th><th>Captured</th><th>Sequence result</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || index}><td><strong>{text(row.name || row.email, 'Customer name not recorded')}</strong><small>{row.email && row.name ? row.email : 'Contact detail not recorded'}</small></td><td>{sourceLabel(row.source)}</td><td><span className="fg-customers-pill">{statusLabel(row.crm_status)}</span></td><td>{dateLabel(row.created_at)}</td><td className="fg-customers-reason">Not recorded</td></tr>)}</tbody></table></div>;
 }
 function EmptyTable({ error }) { return <div className="a5-empty"><Users size={18} /><div><b>{error ? 'Customer source unavailable.' : 'No selected-project customer records are recorded.'}</b><p>FG3 does not infer accounts, conversion, segments, or sequence outcomes.</p></div></div>; }
-function UnavailableTable() { return <div className="a5-empty"><Filter size={18} /><div><b>Stalled filtering is unavailable.</b><p>No activity timeline or last-contact source is connected, so signup dates are not treated as stalled age.</p></div></div>; }
 function Head({ icon: Icon, title, meta }) { return <div className="a5-head"><div><Icon size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-customers-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function CustomersRail({ project, customers, grouped, error }) {

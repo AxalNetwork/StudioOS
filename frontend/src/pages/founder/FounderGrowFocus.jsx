@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BarChart3, CheckCircle2, ChevronRight, RefreshCw, Sparkles, Target } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BarChart3, CheckCircle2, ChevronRight, RefreshCw, Target } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowFocus.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -80,14 +81,17 @@ export default function FounderGrowFocus() {
       const cutoff = Date.now() - (183 * 24 * 60 * 60 * 1000);
       return snapshots.filter((row) => !dateValue(row.snapshot_date) || dateValue(row.snapshot_date).getTime() >= cutoff);
     }
-    return view === 'latest' ? snapshots.slice(0, 1) : [];
+    return snapshots.slice(0, 1);
   }, [snapshots, view]);
   const current = latest?.mrr != null ? `${moneyValue(latest.mrr)} MRR` : latest?.active_users != null ? `${numberValue(latest.active_users)} active users` : latest ? 'Snapshot recorded' : 'Not recorded';
   const nav = [['Focus', `/grow/focus${query}`], ['Customers', `/grow/customers${query}`], ['Talent', `/grow/talent${query}`], ['Brand', `/grow/brand${query}`], ['Capital match', `/grow/capital-match${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-focus" data-testid="founder-grow-focus"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-focus-crumb"><Link to={`/build/team${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Focus</b></div><span>Founder / Grow</span><div><h1>This month&apos;s focus</h1><p>The month&apos;s metric, targets, and experiment log.</p></div>{projects.length > 1 && <label className="fg-focus-picker"><span>Startup</span><select data-testid="select-grow-focus-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-focus-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Focus' ? 'is-active' : ''}>{label}</Link>)}</nav>
-    <ZoneActions className="mt-3" items={founderZoneActions('grow/focus', { query, view: { scope: project?.name, header: ['Snapshot', 'MRR', 'ARR', 'Active users', 'New users', 'Churn %', 'Source'], rows: selectedRows, cells: (r) => [r.snapshot_date, r.mrr, r.arr, r.active_users, r.new_users, r.monthly_churn_pct, r.source] } })} /></header>
+    <ZoneToolbar
+              filters={founderZoneFilters('grow/focus', { value: view, onChange: setView })}
+              actions={founderZoneActions('grow/focus', { query, view: { scope: project?.name, header: ['Snapshot', 'MRR', 'ARR', 'Active users', 'New users', 'Churn %', 'Source'], rows: selectedRows, cells: (r) => [r.snapshot_date, r.mrr, r.arr, r.active_users, r.new_users, r.monthly_churn_pct, r.source] } })}
+            /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-focus-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {loading ? <FocusSkeleton /> : !project ? <EmptyFocus /> : <FocusContent project={project} latest={latest} snapshots={snapshots} selectedRows={selectedRows} view={view} setView={setView} current={current} query={query} />}
   </div><FocusRail project={project} snapshots={snapshots} latest={latest} /></div></main>;
@@ -95,9 +99,13 @@ export default function FounderGrowFocus() {
 
 function FocusContent({ project, latest, snapshots, selectedRows, view, setView, current, query }) {
   return <div className="a5-sections"><div className="fg-focus-context"><div><span>Selected startup</span><strong data-testid="text-grow-focus-project">{safeText(project.name)}</strong></div><div><span>Metric source</span><strong>{snapshots.length ? 'Stored metric snapshots' : 'Unavailable'}</strong></div></div>
-    <div className="fg-focus-tabs"><div>{[['latest', 'Latest'], ['six-months', 'Last 6 mo'], ['experiments', 'Experiments'], ['targets', 'Targets']].map(([key, label]) => <button type="button" className={view === key ? 'is-active' : ''} key={key} onClick={() => setView(key)}>{label}</button>)}</div><div className="fg-focus-actions"><Link to={`/build/metrics${query}`} data-testid="link-open-grow-metrics"><BarChart3 size={13} /> Open metrics</Link></div></div>
+        {/* Its four tabs are the zone header's now. Two of them — Experiments
+        and Targets — had no store behind them and rendered an Unavailable
+        panel once clicked; they state their reason in the row instead, so
+        the reader learns it without having to try. */}
+    <div className="fg-focus-tabs"><div className="fg-focus-actions"><Link to={`/build/metrics${query}`} data-testid="link-open-grow-metrics"><BarChart3 size={13} /> Open metrics</Link></div></div>
     <div className="fg-focus-stats"><Stat label="Current" value={current} note={latest ? `Snapshot ${formatDate(latest.snapshot_date)}` : 'No metric snapshot recorded'} /><Stat label="Target" value="Not recorded" note="No target source connected" muted /><Stat label="Experiments" value="Unavailable" note="No experiment log source connected" muted /><Stat label="Moved the metric" value="Not recorded" note="No experiment effects are claimed" muted /></div>
-    <section className="a5-card fg-focus-log"><Head icon={view === 'experiments' ? Sparkles : Target} title={view === 'experiments' ? 'Experiment log' : view === 'targets' ? 'Metric targets' : 'Metric snapshot log'} meta={view === 'latest' ? 'Latest stored record' : view === 'six-months' ? 'Snapshots returned from the last six months' : 'Source unavailable'} />{view === 'experiments' || view === 'targets' ? <Unavailable view={view} /> : <SnapshotTable rows={selectedRows} latest={latest} />}</section>
+    <section className="a5-card fg-focus-log"><Head icon={Target} title="Metric snapshot log" meta={view === 'latest' ? 'Latest stored record' : 'Snapshots returned from the last six months'} /><SnapshotTable rows={selectedRows} latest={latest} /></section>
     <section className="a5-focus fg-focus-read"><div className="a5-head"><div><CheckCircle2 size={15} /><h2>Read this month honestly</h2></div><span>Source-derived</span></div><p>{latest ? `The latest stored snapshot is ${formatDate(latest.snapshot_date)}. ${latest.mrr != null ? `MRR is ${moneyValue(latest.mrr)}.` : latest.active_users != null ? `Active users are ${numberValue(latest.active_users)}.` : 'The snapshot does not include a primary metric value.'} No target or experiment effect is inferred from this record.` : 'There is no stored metric snapshot for this startup, so current performance, targets, and experiment effects remain unavailable.'}</p><Link className="a5-link" to={`/build/metrics${query}`}>Open the metrics composer <ChevronRight size={14} /></Link></section>
   </div>;
 }
@@ -105,7 +113,6 @@ function SnapshotTable({ rows, latest }) {
   if (!rows.length) return <div className="a5-empty"><Target size={18} /><div><b>{latest ? 'No snapshots match this view.' : 'No metric snapshots are recorded.'}</b><p>FG1 only displays stored project metrics.</p></div></div>;
   return <div className="fg-focus-table-wrap"><table><thead><tr><th>Snapshot</th><th>MRR / ARR</th><th>Active users</th><th>New users</th><th>Churn</th><th>Effect on metric</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || index}><td><strong>{formatDate(row.snapshot_date)}</strong><small>{safeText(row.source, 'Source not recorded')}</small></td><td>{row.mrr != null ? `${moneyValue(row.mrr)} / ${moneyValue(row.arr)}` : row.arr != null ? moneyValue(row.arr) : 'Not recorded'}</td><td>{numberValue(row.active_users)}</td><td>{numberValue(row.new_users)}</td><td>{row.monthly_churn_pct != null ? `${row.monthly_churn_pct}%` : 'Not recorded'}</td><td><span className="fg-focus-pill">Not claimed</span></td></tr>)}</tbody></table></div>;
 }
-function Unavailable({ view }) { return <div className="a5-empty fg-focus-unavailable"><Sparkles size={18} /><div><b>{view === 'experiments' ? 'No experiment log source is connected.' : 'No target source is connected.'}</b><p>FG1 does not convert metric snapshots into experiments, wins, targets, or effect sizes.</p></div></div>; }
 function Head({ icon: Icon, title, meta }) { return <div className="a5-head"><div><Icon size={15} /><h2>{title}</h2></div><span>{meta}</span></div>; }
 function Stat({ label, value, note, muted }) { return <div className={`fg-focus-stat ${muted ? 'is-muted' : ''}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function FocusRail({ project, snapshots, latest }) {

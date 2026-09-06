@@ -147,6 +147,27 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     });
     const role = withRoles.find((i) => i.label === 'Backend engineer');
     assert.ok(role && !role.note && role.active, 'a supplied role is not a live chip');
+    // The same group in the zone whose substitution is the least obvious: the
+    // canvas names three market SEGMENTS, and a customer record stores the
+    // SOURCE it was captured from. The chips are the stored sources, and the
+    // note beside them is what keeps that from reading as a segment breakdown.
+    const bySource = profile.build('grow/customers', {
+      value: 'referral',
+      dynamic: { sources: [{ key: 'waitlist', label: 'Waitlist' }, { key: 'referral', label: 'Referral' }] },
+    });
+    assert.deepEqual(bySource.filter((i) => !i.note).map((i) => i.label), ['All', 'Waitlist', 'Referral']);
+    assert.ok(bySource.find((i) => i.label === 'Referral').active, 'the supplied source cannot be selected');
+    assert.ok(bySource.some((i) => i.note && /no market segment is stored/.test(i.note)),
+      'the segment/source difference stopped being stated');
+    // And it renders as a bare sentence, not "One chip per segment — …", since
+    // with chips present there is no dead filter left to name.
+    const standing = groupFilterNotes(bySource).find((g) => /no market segment/.test(g.note));
+    assert.deepEqual(standing.labels, [], 'the standing note still names a filter that is not missing');
+    // A fallback note keeps its label, because there the label IS the missing thing.
+    const fallback = groupFilterNotes(profile.build('grow/talent', { value: 'all' }))
+      .find((g) => /no job post is linked/.test(g.note));
+    assert.deepEqual(fallback.labels, ['One chip per role']);
+
     const without = profile.build('grow/talent', { value: 'all' });
     assert.ok(without.some((i) => i.note && /no job post is linked/.test(i.note)),
       'an empty dynamic group draws nothing and explains nothing');
@@ -178,7 +199,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
  * A zone nobody mounts is not silently exempt — MOUNTED counts them, and the
  * count only ever goes up.
  */
-const MOUNTED = 11;
+const MOUNTED = 18;
 
 function mountingFile(zone) {
   const dirs = ['frontend/src/pages/founder', 'frontend/src/workspaces'];
@@ -244,3 +265,4 @@ test('every zone that has a filter table also has an action table for the same z
     assert.ok(actions.includes(`'${zone}':`), `${zone} has filters but no actions`);
   }
 });
+

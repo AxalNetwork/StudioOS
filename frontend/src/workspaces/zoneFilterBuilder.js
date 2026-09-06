@@ -81,7 +81,18 @@ export function makeZoneFilters(TABLE) {
       if (item.dynamic) {
         const supplied = dynamic[item.dynamic] || [];
         if (!supplied.length) return [{ label: item.label || first, testid: id(first), note: item.note }];
-        return supplied.map((one) => chip(one.key, one.label));
+        const chips = supplied.map((one) => chip(one.key, one.label));
+        // A note plays one of two roles, and `/grow/customers` is where the
+        // difference bites. For `/grow/talent` it is a fallback: no job post is
+        // linked, so there are no chips and the note stands in for them. For
+        // customers it is a STANDING clarification — the canvas names three
+        // market segments, the chips are the sources a record was captured
+        // from, and the sentence saying those are not the same thing is needed
+        // most precisely when the chips ARE there to be misread. `noteAlways`
+        // keeps it; without it the clarification disappeared at the moment it
+        // started mattering, which a guard caught and rendering would not have.
+        if (!item.noteAlways) return chips;
+        return [...chips, { label: null, testid: id(first) + '-note', note: item.note }];
       }
       if (item.note) return [{ label: item.label || first, testid: id(first), note: item.note }];
       return [chip(item.key, item.label || first)];
@@ -120,5 +131,7 @@ export function groupFilterNotes(items) {
     if (!byNote.has(item.note)) { byNote.set(item.note, []); order.push(item.note); }
     byNote.get(item.note).push(item.label);
   }
-  return order.map((note) => ({ note, labels: byNote.get(note) }));
+  // `labels` is empty for a standing note (see `noteAlways` above): there is
+  // no dead filter to name, only a sentence about the live ones beside it.
+  return order.map((note) => ({ note, labels: byNote.get(note).filter(Boolean) }));
 }

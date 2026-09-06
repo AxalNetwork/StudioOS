@@ -176,6 +176,9 @@ export const FOUNDER_ZONE_FILTERS = {
       dynamic: 'sources',
       label: 'One chip per segment',
       note: 'no market segment is stored on a customer record',
+      // Standing, not a fallback: with the source chips showing, this sentence
+      // is the only thing stopping them being read as a segment breakdown.
+      noteAlways: true,
     },
     { canvas: 'Stalled', note: 'no activity timeline is stored, so no account can be called stalled' },
   ],

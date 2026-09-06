@@ -89,7 +89,7 @@ export default function ZoneToolbar({ filters = [], actions = [], role = 'founde
           data-testid={`filter-note-${labels.length}`}
           className="m-0 text-[11px] font-semibold text-gray-600 dark:text-gray-300"
         >
-          {sentenceList(labels)} — {note}
+          {labels.length ? `${sentenceList(labels)} — ` : ''}{note}
         </p>
       ))}
       <ZoneActions items={actions} className="ml-auto" />

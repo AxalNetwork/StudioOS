@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Link2, RefreshCw, Sparkles, SquareStack } from 'lucide-react';
+import { AlertCircle, ArrowLeft, BarChart3, ChevronRight, FileText, Link2, RefreshCw, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderRaisePitch.css';
