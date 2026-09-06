@@ -35,10 +35,16 @@ const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorD
 export default function InvestorDealsRoutes() {
   const location = useLocation();
   const bucket = bucketForPath('investor', location.pathname);
+  // Same root opt-out as NetworkWorkspace, ResearchWorkspace,
+  // AdvisorBucketRoutes and PartnerBucketRoutes. `/deals` serves DealsPage
+  // today so this is unreachable — but `zoneForPath` answers a bucket root
+  // with its first zone, so a root mounted here would light "Pipeline" and
+  // scroll to `#deals-pipeline` as if the reader had asked for it.
+  const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
   const zone = zoneForPath(bucket, location.pathname);
 
   useEffect(() => {
-    if (!zone) return undefined;
+    if (!zone || isRoot) return undefined;
     // The section may not be mounted on the first paint — the workspace loads
     // its deals before it renders them — so retry briefly rather than once.
     let tries = 0;
@@ -65,6 +71,8 @@ export default function InvestorDealsRoutes() {
     <WorkspaceShell
       role="investor"
       scope="One fund"
+      title={isRoot ? bucket?.label : undefined}
+      activeSlug={isRoot ? null : undefined}
       intro={INTRO[zone?.slug] || INTRO.pipeline}
       rail={(
         <WorkerRail

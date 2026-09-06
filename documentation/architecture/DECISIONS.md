@@ -2090,3 +2090,58 @@ The tab badges and the tone counts are both derived from the obligation array
 already in hand — no second fetch, no second source, and a count of zero is
 omitted rather than drawn, because "0 blocked" reads as an achievement when the
 truth is that no such row exists.
+
+### D44. A zone pill takes its accent from the URL, never from being first in the DOM
+
+**What shipped.** Four founder landing desks marked the reader's current zone
+from CSS position alone — `.validate-anchors a:first-child`,
+`.raise-anchors a:first-child`, `.a5-grow-hero nav a:first-child`,
+`.a6-hero a:first-child`. There was no route logic anywhere in those strips. So
+landing on `/validate` lit **Interviews**, `/raise` lit **Status**, `/grow` lit
+**Focus** and `/network` lit **Relationships**, while the reader sat on the
+bucket overview — which is *above* the zones and is not one of them. Measured on
+the built bundle in Chromium before the fix: one accent pill on each of those
+four roots, in light mode.
+
+**It also leaked past its own page.** All seven `/grow/*` zone pages import
+`founderGrowDesk.css` beside their own stylesheet and reuse its `.a5-grow-hero`
+header, so `/grow/talent` rendered **two** accent pills at once — "Focus" from
+the desk's `:first-child` and "Talent" from the page's own `is-active`. That was
+measured, not reasoned: chunk load order decides whether the desk's stylesheet
+is present, so it had to be seen.
+
+**And the mirror defect counted too.** `founderResearchDesk.css` styled
+`.a7-anchors a.active` — a class `FounderResearchDesk` never set — and
+`.build-anchors` had no active rule at all, so those two desks could never mark
+a zone even when they were on one. Six strips, three different wrong answers.
+
+**The rule.** A pill is current when `NavLink` says the pathname matches it, and
+the class it gets is `is-active` — the vocabulary six zone-page stylesheets had
+already settled on (`.fr-status-zone-nav a.is-active` and five siblings). One
+shared helper, `frontend/src/pages/founder/deskZoneNav.js`, so the rule has one
+definition. `NavLink` matches on pathname, so the `?project_id=` these links
+carry rides along without affecting the match, and it sets `aria-current="page"`
+— which these strips previously had no way to convey except by colour.
+
+**`zoneForPath`'s `|| bucket.zones[0]` fallback is unchanged and is not the
+bug.** It is correct on a zone route, `ZoneNav` already honours an explicit
+`activeSlug={null}`, and `partner_bucket_overview.test.mjs` pins the contract
+that makes opting out the caller's job. Every `WorkspaceShell`-framed root was
+already opting out correctly; the desks simply never went through `ZoneNav`.
+
+**Positional active-marking was a habit, not an incident**, which is why the
+guard bans the selector *shape* rather than the four rules that existed. The
+same idea sat in three investor stylesheets — `.investor-deals-hero nav
+a:first-child` (inert only because `ZoneNav` sets its colours inline, so it
+would have resurfaced the moment those moved to classes) and the fully dead
+`.inw-anchors` / `.ir-anchors` blocks — and in `AdvisorWorkspaceShell`, whose
+`anchors` strip marked item 0 active and which no caller ever rendered. All
+removed. A test naming the four founder rules would have passed the day someone
+wrote a fifth.
+
+**Dark mode was a second, quieter bug.** Each desk stylesheet ends with a
+`.dark … nav a{…}` idle rule at *equal* specificity to the positional accent but
+later in the file, so it won: no desk had ever shown an accent pill in dark
+mode. The new `.dark … a.is-active` rules out-specify it, and each was measured
+at 5.90:1 against its own ground — above AA, and checked by computing relative
+luminance rather than by observing that a dark variant exists.

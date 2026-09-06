@@ -501,6 +501,13 @@ export default function FounderValidateWorkspace() {
   const location = useLocation();
   const { projectId, ready } = useProjectId();
   const bucket = bucketForPath('founder', location.pathname);
+  // The root opt-out every sibling route module carries — NetworkWorkspace,
+  // ResearchWorkspace, AdvisorBucketRoutes, PartnerBucketRoutes. `zoneForPath`
+  // answers a bucket root with its FIRST zone, so without this a root that
+  // mounted here would light "Interviews" in the pill row and title itself
+  // Interviews. `/validate` routes elsewhere today, which is precisely why
+  // this was the one module missing the guard: nothing made it visible.
+  const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
   const zone = zoneForPath(bucket, location.pathname);
 
   const body = useMemo(() => {
@@ -537,6 +544,8 @@ export default function FounderValidateWorkspace() {
         />
       )}
       scope="One venture"
+      title={isRoot ? bucket?.label : undefined}
+      activeSlug={isRoot ? null : undefined}
       intro={INTRO[zone?.slug] || INTRO.interviews}
     >
       {body}
