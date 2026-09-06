@@ -5,6 +5,8 @@ import WorkspaceShell from './WorkspaceShell';
 import BucketOverview from './BucketOverview';
 import { bucketForPath, bucketTitle, zoneForPath } from './shellConfig';
 import { zoneActionsFor } from './zoneActionsByRole';
+import BucketBoard from './BucketBoard';
+import { boardFor } from './boards';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
@@ -101,6 +103,8 @@ function NetworkOverview({ role }) {
   // Organizations is the one line that is not true on every licence, so the
   // gap is per-role: ORG_BACKED is the same set the zone body and rail read.
   const unbuilt = ORG_BACKED.has(role) ? {} : { organizations: ORG_NO_STORE };
+  const board = boardFor(role, '/network');
+  if (board) return <BucketBoard bucket={bucket} role={role} board={board} />;
   return <BucketOverview bucket={bucket} role={role} descriptions={INTRO} unbuilt={unbuilt} />;
 }
 

@@ -6,6 +6,8 @@ import BucketOverview, { unbuiltFrom } from '../BucketOverview';
 import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
 import AdvisorPreviewNotice from '../../pages/advisor/AdvisorPreviewNotice';
 import NoStoreYet from '../NoStoreYet';
+import BucketBoard from '../BucketBoard';
+import { boardFor } from '../boards';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/FoundersZone'));
@@ -200,7 +202,10 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     if (isRoot) {
       // `unbuilt` is derived from COPY — the same object each zone page
       // renders — so a card cannot describe a store the page denies having.
-      return (
+      const board = boardFor('advisor', prefix);
+      return board ? (
+        <BucketBoard bucket={bucket} role="advisor" board={board} />
+      ) : (
         <BucketOverview
           bucket={bucket}
           role="advisor"

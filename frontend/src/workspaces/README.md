@@ -14,10 +14,13 @@ modules that mount bodies into it. The pages themselves live in
 | `WorkspaceShell.jsx` | The frame: crumb, `<h1>` with its archetype badge, the zone pill row, the page body, and the Worker AI rail as a slot. Also exports `NotRecorded` and `SeamChip`. |
 | `ZoneNav.jsx` | The zone pill row. Each pill is a real `NavLink`; the current one comes from the URL. `activeSlug={null}` is overview mode — a bucket root is above its zones and lights none of them. |
 | `ZoneActions.jsx` | The zone header's action row — what a reader can *do* on the page. One ghost variant, because that is what every canvas draws. An action with no live endpoint states its limit instead of rendering a button. |
-| `BucketOverview.jsx` | The body a bucket root renders: the bucket's zones as cards. |
+| `BucketOverview.jsx` | The body a bucket root renders when the canvas corpus draws **no root artboard** for it: the bucket's zones as cards. Advisor `/cohorts` and every founder and investor bucket. |
+| `BucketBoard.jsx` | The body a bucket root renders when the corpus **does** draw one: an h1, then one section per zone, each with a real count, a short table of real rows and a footnote. Partner ×5, advisor ×4. |
+| `useBucketSources.js` | A board's parallel fetch, one state per source. It reads the endpoints the **zone pages already read**, so the overview's number is the zone's number by construction — and so the honest `*_note` beside a null figure travels with it instead of being re-copied. |
+| `NoStoreYet.jsx` | The honest state for a zone with no store: what it would hold, what would fill it, and the nearest live surface. Shared by the three route modules and by a gapped board section. |
 | `NetworkWorkspace.jsx` | `/network/*` for founder, advisor and partner — one shared path, one zone list. |
 | `ResearchWorkspace.jsx` | `/research/*`, shared path, per-role zone list. |
-| `bucketOverview.css` | The overview grid. |
+| `bucketOverview.css` | The overview grid. `BucketBoard` has no stylesheet — its only dynamic value is a per-section `grid-template-columns` from the canvas, which is an inline style. |
 
 ## Subfolders
 
@@ -27,6 +30,7 @@ modules that mount bodies into it. The pages themselves live in
 | `investor/` | `InvestorDealsRoutes.jsx` — the four `/deals/*` zones. |
 | `advisor/` | `AdvisorBucketRoutes.jsx` — `/practice/*`, `/cohorts/*`, `/expertise/*`. |
 | `partner/` | `PartnerBucketRoutes.jsx` — `/pipeline/*`, `/delivery/*`, `/offers/*`. |
+| `boards/` | One registry per composed bucket root, keyed `role:prefix` in `index.js`. Plain object literals, never JSX — `_codeOnly.mjs` cannot strip a JSX comment, so prose in a component file can match a ban before the code does. A section declares either a `source` or a `gap`, never both; `summary`, `rows` and `footnote` take the source payload as their **only** argument, which is why a gapped section cannot print a figure. |
 
 ## The rule for adding to it
 

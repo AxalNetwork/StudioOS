@@ -66,6 +66,17 @@ export const ACCENT = {
   super_admin: { ink: '#881337', deep: '#9f1239', tint: '#fff5f7', border: '#f9c8d2', deepDark: '#fb7185', tintDark: '#2c1018' },
 };
 
+/**
+ * The class a licence's inline links wear. Tailwind needs the class name whole
+ * at build time, so this cannot be derived from `ACCENT`'s hex values — but it
+ * belongs beside them rather than copied into each workspace, which is where it
+ * lived until a second caller needed it.
+ */
+export const accentLinkClass = (role) => ({
+  founder: 'text-axal-violet', investor: 'text-indigo-700',
+  advisor: 'text-emerald-700', partner: 'text-amber-700',
+}[role] || 'text-axal-violet');
+
 export const SEAM = { ink: '#0e7490', tint: '#f0fdff', border: '#a5edf5' };
 
 const A = ARCHETYPE;

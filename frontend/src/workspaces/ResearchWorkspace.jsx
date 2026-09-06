@@ -3,9 +3,11 @@ import { useLocation } from 'react-router-dom';
 import { Card, WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from './BucketOverview';
-import { bucketForPath, bucketTitle, zoneForPath } from './shellConfig';
+import { accentLinkClass, bucketForPath, bucketTitle, zoneForPath } from './shellConfig';
 import { zoneActionsFor } from './zoneActionsByRole';
 import NoStoreYet from './NoStoreYet';
+import BucketBoard from './BucketBoard';
+import { boardFor } from './boards';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -219,6 +221,8 @@ const ZONE_BLURB = {
 function ResearchOverview({ role }) {
   const bucket = bucketForPath(role, '/research');
   if (!bucket) return null;
+  const board = boardFor(role, '/research');
+  if (board) return <BucketBoard bucket={bucket} role={role} board={board} />;
   return (
     <BucketOverview
       bucket={bucket}
@@ -236,10 +240,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
   const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
   const slug = zone?.slug;
 
-  const accentClass = {
-    founder: 'text-axal-violet', investor: 'text-indigo-700',
-    advisor: 'text-emerald-700', partner: 'text-amber-700',
-  }[role] || 'text-axal-violet';
+  const accentClass = accentLinkClass(role);
 
   const body = useMemo(() => {
     if (isRoot) {
