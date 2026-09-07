@@ -358,15 +358,25 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // Read through `codeOnly`, and check EVERY guard rather than the first: the
     // comment explaining this rule quotes `{!embedded &&` itself, and a file
     // can carry more than one guarded block. Both bit this assertion.
+    // BOTH COMPONENTS, because a file used to stop being checked the moment it
+    // migrated. `ZoneToolbar` is `ZoneActions` plus the filters half and the
+    // canvas's rule — it renders `<ZoneActions>` internally — so a row sealed
+    // inside a dead `{!embedded && <header>}` is exactly as invisible either
+    // way. The old `if (!src.includes('<ZoneActions')) continue;` skipped the
+    // whole file, which meant converting a page silently dropped it out of
+    // `guarded` and could take the count under `embeddedGuards` — or worse,
+    // leave a genuinely sealed row unchecked while the count was still met by
+    // other files.
+    const ROW = /<Zone(Actions|Toolbar)\b/;
     let guarded = 0;
     for (const f of pageFiles(profile)) {
       const src = codeOnly(read(f));
-      if (!src.includes('<ZoneActions')) continue;
+      if (!ROW.test(src)) continue;
       for (const m of src.matchAll(/\{!embedded &&/g)) {
         const close = src.indexOf('</header>}', m.index);
         if (close < 0) continue;
         guarded += 1;
-        assert.ok(!src.slice(m.index, close).includes('<ZoneActions'),
+        assert.ok(!ROW.test(src.slice(m.index, close)),
           `${f} hides its actions behind !embedded, on a route that is always embedded`);
       }
     }

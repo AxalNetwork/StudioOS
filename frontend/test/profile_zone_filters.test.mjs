@@ -214,6 +214,44 @@ function canvasFilters(profile) {
   return out;
 }
 
+/**
+ * What a `<ZoneToolbar>` mount must say about its licence — null when correct,
+ * the complaint when not.
+ *
+ * A SHARED BODY PASSES THE VARIABLE; A LICENCE'S OWN PAGE NAMES ITSELF.
+ * `LibraryZone` serves four licences from one file, so `role="advisor"` there
+ * would be false three times out of four — the only correct mount is
+ * `role={role}`, threaded down from the workspace that resolved it. A page
+ * under `pages/investor/` has no such excuse: it serves one licence, and a
+ * literal is the thing that can be checked. `ZoneToolbar` defaults `role` to
+ * `'founder'`, so an omitted prop on any other licence paints violet chips on
+ * an indigo page and nothing else catches it.
+ *
+ * Whether a zone is shared comes from `bodies`, the same map that located the
+ * file — so a zone cannot quietly claim the variable exemption without also
+ * being declared shared.
+ *
+ * Extracted from the loop so the rule can be exercised directly. Its three
+ * cases arrived before the tables that will use two of them, and a hook nothing
+ * runs is a hook nobody notices breaking.
+ */
+function roleMountVerdict({ mount, licence, shared }) {
+  const claimed = mount.match(/role=["'](\w+)["']/)?.[1];
+  if (shared) {
+    return /role=\{role\}/.test(mount)
+      ? null
+      : `serves every licence, so it must pass role={role}, not role="${claimed}"`;
+  }
+  if (licence === 'founder') {
+    return claimed === undefined || claimed === 'founder'
+      ? null
+      : `mounts a founder ZoneToolbar claiming role="${claimed}"`;
+  }
+  return claimed === licence
+    ? null
+    : `mounts a ZoneToolbar with role="${claimed}", so it wears founder violet`;
+}
+
 for (const [name, profile] of Object.entries(PROFILES)) {
   test(`${name}: every artboard's filters are accounted for, in canvas order`, () => {
     const canvas = canvasFilters(profile);
@@ -456,14 +494,8 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       for (const segment of codeOnly(page.src).split('<ZoneToolbar').slice(1)) {
         const mount = segment.slice(0, segment.indexOf('/>'));
         checked += 1;
-        const claimed = mount.match(/role=["'](\w+)["']/)?.[1];
-        if (name === 'founder') {
-          assert.ok(claimed === undefined || claimed === 'founder',
-            `${page.path} mounts a founder ZoneToolbar claiming role="${claimed}"`);
-        } else {
-          assert.equal(claimed, name,
-            `${page.path} mounts a ZoneToolbar with role="${claimed}", so it wears founder violet`);
-        }
+        const wrong = roleMountVerdict({ mount, licence: name, shared: Boolean(profile.bodies?.[zone]) });
+        assert.equal(wrong, null, `${page.path}: ${wrong}`);
       }
     }
     assert.ok(checked >= profile.mounted,
@@ -504,6 +536,64 @@ test('an excluded zone must be specified by a canvas and must not be declared', 
     'an exclusion naming no artboard slipped through');
 });
 
+test('a shared zone declares its body, because searching for it cannot work', () => {
+  // `mountingFile` finds a page by searching for the profile's OWN builder name
+  // with a literal zone key. On `/network/*` and `/research/*` the workspace
+  // calls `zoneFiltersFor(role, …)` and hands the body a bound builder, so the
+  // body never names the zone and the workspace never names the licence —
+  // nothing to search for. The search would miss them twice over anyway: it
+  // does not recurse into `pages/advisor/network/`, and partner's Network body
+  // is a loose file in none of its `pages` entries.
+  //
+  // Asserted directly because the first table to use it has not landed yet, and
+  // a hook nothing runs is a hook nobody notices breaking — the same reason
+  // `live()` and `excluded` carry their own tests below and above.
+  const shared = 'frontend/src/pages/research/LibraryZone.jsx';
+  const found = mountingFile(
+    { call: 'founderZoneFilters', pages: [], bodies: { 'research/library': shared } },
+    'research/library',
+  );
+  assert.equal(found?.path, shared, 'a declared body is not returned');
+  assert.match(found.src, /export default function LibraryZone/, 'the declared body was not read');
+
+  // The search still works for a page that imports its own licence's table.
+  const own = mountingFile(
+    { call: 'founderZoneFilters', pages: ['frontend/src/pages/founder'] },
+    'build/kpi',
+  );
+  assert.match(own?.path || '', /FounderBuildKpi\.jsx$/, 'the direct-import search stopped working');
+
+  // And a zone that is neither declared nor findable is null, not a throw —
+  // `mounted` counts what it finds, so an undeclared body must fail the count
+  // rather than crash the run.
+  assert.equal(mountingFile({ call: 'founderZoneFilters', pages: [] }, 'network/relationships'), null);
+});
+
+test('a shared body passes role={role}; a licence’s own page names its licence', () => {
+  const V = (mount, licence, shared) => roleMountVerdict({ mount, licence, shared });
+
+  // Shared: the variable is the only correct answer, because one file serves
+  // four licences and any literal is false three times out of four.
+  assert.equal(V('role={role} filters={x}', 'advisor', true), null);
+  assert.match(V('role="advisor" filters={x}', 'advisor', true), /must pass role=\{role\}/);
+  assert.match(V('filters={x}', 'advisor', true), /must pass role=\{role\}/,
+    'an omitted prop on a shared body silently defaults to founder');
+
+  // A licence's own page: the literal is checkable, so it is required —
+  // except for founder, which IS the default and may omit it.
+  assert.equal(V('role="investor" filters={x}', 'investor', false), null);
+  assert.equal(V('filters={x}', 'founder', false), null);
+  assert.equal(V('role="founder" filters={x}', 'founder', false), null);
+  assert.match(V('filters={x}', 'investor', false), /role="undefined"/,
+    'an investor page that omits the prop wears founder violet');
+  assert.match(V('role="founder" filters={x}', 'investor', false), /wears founder violet/);
+  assert.match(V('role="investor" filters={x}', 'founder', false), /claiming role="investor"/,
+    'the leak runs both ways and both are caught');
+  // The variable is NOT a way out for a single-licence page: it cannot be
+  // checked there, and `role` may not even be in scope.
+  assert.match(V('role={role} filters={x}', 'investor', false), /role="undefined"/);
+});
+
 test('canvasFilters maps a canvas route onto the route the router mounts', () => {
   // The hook exists for the investor Fund canvas, which says `/fund/*` where
   // the router says `/funds/*` and mounts `accounting` at the slug `ledger`.
@@ -527,6 +617,24 @@ test('canvasFilters maps a canvas route onto the route the router mounts', () =>
  * outright beats scanning the folder.
  */
 function mountingFile(profile, zone) {
+  // A SHARED SURFACE IS FOUND BY MAP, NOT BY SEARCH, and it has to be.
+  //
+  // The needle below is the profile's OWN builder name with a literal zone key
+  // — `founderZoneFilters('build/kpi'`. That works for a page that imports its
+  // licence's table directly, which is every zone in Build, Raise, Grow, Fund,
+  // Portfolio and Deals. It cannot work for `/network/*` and `/research/*`:
+  // there the workspace calls `zoneFiltersFor(role, 'research/markets', …)` and
+  // hands the BODY a bound builder, so the body never names the zone and the
+  // workspace never names the licence. Two further reasons the search would
+  // miss them anyway: it does not recurse, and advisor's Network zones live in
+  // `pages/advisor/network/`; and partner's is the loose file
+  // `pages/NetworkPage.jsx`, in none of its `pages` entries.
+  //
+  // So a shared zone declares its body outright. Written down rather than
+  // fuzzy-matched, for the same reason `live()` is — a body that moves fails
+  // here loudly instead of silently dropping out of `mounted`.
+  const declared = profile.bodies?.[zone];
+  if (declared) return { path: declared, src: read(declared) };
   const needle = `${profile.call}('${zone}'`;
   for (const entry of profile.pages) {
     const full = resolve(root, entry);
