@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { AlertCircle, Calculator } from 'lucide-react';
 import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
@@ -6,16 +6,34 @@ import { bucketForPath } from '../../workspaces/shellConfig';
 import { useFundAnalytics, fmtCents } from '../../lib/fundAnalytics';
 import './investorFundLanding.css';
 import './investorFundAccounting.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
+import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 
-const FILTERS = [['summary', 'Summary'], ['journal', 'Journal'], ['fees', 'Fees'], ['audit', 'Audit trail']];
 const amount = (value) => value == null ? null : Number(value);
 const money = (value) => value == null || !Number.isFinite(Number(value)) ? 'Unavailable' : fmtCents(value);
 
+// The one ledger view the fund analytics contract can produce, named here so
+// the chip in the header row and the table below are one fact rather than two
+// strings. A constant and not state because there is nothing to switch to —
+// the header row names Journal, Fees and Audit trail and says why. It is the
+// same shape `/build/this-week` uses for the single live chip in its row.
+const VIEW = 'summary';
+
+/**
+ * `const unsupported = filter !== 'summary'` was three dead filters in one line.
+ *
+ * Journal, Fees and Audit trail were chips you could press, and pressing one
+ * replaced the ledger with a panel explaining that the data contract does not
+ * return those rows. That is the right sentence in the wrong place: the reader
+ * had to spend a click to be told the filter could not run, and the empty table
+ * they saw first read as an answer about this fund. The sentence now sits in
+ * the header row where the canvas draws the filter, so it is read instead of
+ * discovered, and `Summary` — which is real, and is every line below — stops
+ * being one of four equals and becomes the only view there is.
+ */
 export default function InvestorFundAccounting() {
   const { items, loading, error, unavailable } = useFundAnalytics();
-  const [filter, setFilter] = useState('summary');
   const fund = items[0] || null;
   const hasSource = Boolean(fund);
   const values = useMemo(() => {
@@ -35,16 +53,13 @@ export default function InvestorFundAccounting() {
     ['Fee drawn to date', null, 'Fee draw ledger is not recorded'],
     ['Distributions to LPs', values.distributed, hasSource ? 'Recorded fund distributions' : 'Fund analytics unavailable'],
   ];
-  const unsupported = filter !== 'summary';
-
   return <div className="i6-fund if3-shell"><main className="i6-main if3-main" data-testid="investor-fund-accounting"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>Accounting</b></div><h1><Calculator size={19} /> Fund accounting</h1><p>NAV, fees, expenses, journal and audit trail.</p></div></header>
     <ZoneNav bucket={bucketForPath('investor', '/funds')} role="investor" activeSlug="ledger" className="my-3" />
-    <ZoneActions className="mb-3" items={investorZoneActions('funds/ledger')} />
-    <div className="if3-filters">{FILTERS.map(([id, label]) => <button type="button" key={id} className={filter === id ? 'is-active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div>
+    <ZoneToolbar role="investor" className="mb-3" filters={investorZoneFilters('funds/ledger', { value: VIEW })} actions={investorZoneActions('funds/ledger')} />
     {error && <div className="i6-load-error if3-unavailable"><AlertCircle size={14} /> <span>Fund accounting source unavailable. No accounting totals are being treated as zero.</span></div>}
     {!loading && !error && !hasSource && <div className="i6-load-error if3-unavailable" data-testid="status-fund-accounting-unavailable"><AlertCircle size={14} /> <span>No fund accounting record is available in this environment. Committed, called, deployed, distributed, NAV, and fee values remain unavailable.</span></div>}
     <section className="if3-stats"><Stat label="Collected" value={hasSource ? values.called : null} note="Not the same as called when a separate receipt ledger exists" /><Stat label="Deployed" value={hasSource ? values.deployed : null} note="Fund deployment rollup" /><Stat label="Dry powder" value={values.dryPowder} note="Collected less deployed when both records exist" /><Stat label="Fee accrued" value={null} note={unavailable.fee_accrual || 'Accrual ledger unavailable'} /></section>
-    <section className="i6-card if3-ledger"><header><div><h2>Ledger</h2><span>{unsupported ? `${FILTERS.find(([id]) => id === filter)?.[1]} source unavailable` : 'Every supported line derives from fund analytics'}</span></div><span>Read-only collection</span></header>{loading ? <div className="i6-skeleton" /> : unsupported ? <div className="i6-empty if3-empty"><AlertCircle size={17} /><div><strong>{FILTERS.find(([id]) => id === filter)?.[1]} is unavailable.</strong><p>The current data contract does not return journal entries, fee movements, or audit-trail rows for this fund.</p></div></div> : <table><thead><tr><th>Line</th><th>Amount</th><th>State</th><th>Note</th></tr></thead><tbody>{lines.map(([label, value, note]) => <tr key={label}><td>{label}</td><td>{money(value)}</td><td><span className={value == null ? 'if3-state unavailable' : 'if3-state recorded'}>{value == null ? 'Unavailable' : 'Recorded'}</span></td><td>{note}</td></tr>)}</tbody></table>}<p className="i6-footnote">No expense section is shown: an absent expense ledger does not mean expenses were zero. NAV, RVPI, TVPI, IRR, and period accruals remain unavailable until their underlying records exist.</p></section>
+    <section className="i6-card if3-ledger"><header><div><h2>Ledger</h2><span>Every supported line derives from fund analytics</span></div><span>Read-only collection</span></header>{loading ? <div className="i6-skeleton" /> : <table><thead><tr><th>Line</th><th>Amount</th><th>State</th><th>Note</th></tr></thead><tbody>{lines.map(([label, value, note]) => <tr key={label}><td>{label}</td><td>{money(value)}</td><td><span className={value == null ? 'if3-state unavailable' : 'if3-state recorded'}>{value == null ? 'Unavailable' : 'Recorded'}</span></td><td>{note}</td></tr>)}</tbody></table>}<p className="i6-footnote">No expense section is shown: an absent expense ledger does not mean expenses were zero. NAV, RVPI, TVPI, IRR, and period accruals remain unavailable until their underlying records exist.</p></section>
     <section className="i6-card if3-boundary"><header><div><h2>Accounting boundary</h2><span>Source-preserved · no write</span></div></header><p>IF3 does not reconcile, close periods, export a journal, attach a fee note, or change LP capital accounts. Open the existing Fund Ops accounting workspace for authorized operations.</p></section>
     <footer className="i6-footnote">Fund source-preserved · no journal export, reconcile, close, or AI write action from this page.</footer>
   </main><WorkerRail

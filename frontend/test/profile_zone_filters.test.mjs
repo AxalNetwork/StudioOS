@@ -27,6 +27,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
 import { FOUNDER_ZONE_FILTERS, founderZoneFilters } from '../src/workspaces/founderZoneFilters.js';
+import { INVESTOR_ZONE_FILTERS, investorZoneFilters } from '../src/workspaces/investorZoneFilters.js';
 import { canvasFilterLabels, groupFilterNotes } from '../src/workspaces/zoneFilterBuilder.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -55,6 +56,52 @@ const PROFILES = {
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.
     live: (route) => route.replace(/^\//, ''),
+  },
+
+  investor: {
+    table: INVESTOR_ZONE_FILTERS,
+    build: investorZoneFilters,
+    call: 'investorZoneFilters',
+    // All five investor page canvases, because this table grows one bucket at a
+    // time and `excluded` below is what records how far it has got. Founder can
+    // narrow by canvas name — its carve-out is two whole components shared with
+    // another licence — but a bucket-by-bucket build needs the full canvas set
+    // visible so each zone left out is named rather than filtered away.
+    canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
+    pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
+    actions: 'frontend/src/workspaces/investorZoneActions.js',
+    zones: 4,
+    mounted: 4,
+    // Fund only, so far. Every other canvas route, with why it is not here yet:
+    excluded: [
+      // Portfolio — next; three zones through `PortfolioWorkspace`'s delegates.
+      'portfolio/positions', 'portfolio/updates', 'portfolio/value-add',
+      // Deals — after that; its four routes now each render one zone, so the
+      // toolbar has an unambiguous header to sit in.
+      'deals/pipeline', 'deals/screening', 'deals/commit', 'deals/closing',
+      // Network and Research are the shared surfaces. `NetworkWorkspace` and
+      // `ResearchWorkspace` render these eight slugs for founder too, with
+      // different labels per licence, and founder's halves are carved out of
+      // this file for exactly that reason. Giving investor a toolbar there
+      // while founder has none would show a zone header on one licence and
+      // nothing on the other, from one component. They land together.
+      'network/relationships', 'network/introductions', 'network/organizations',
+      'research/ask', 'research/diligence', 'research/benchmarking',
+      'research/markets', 'research/library',
+    ],
+    // `Call 3` names one specific stored record rather than welding a count
+    // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`
+    // would not even see it. `Aug 2026` recurs on the Portfolio canvas.
+    samples: /\bCall \d+\b|\b(14|2026)\b/,
+    // The Fund canvas says `/fund/*`; the router mounts `/funds/*`, and
+    // `accounting` at the slug `ledger`. `profile_zone_actions.test.mjs:73-79`
+    // carries the same map for the ops half of the same rows.
+    live: (route) => ({
+      '/fund/lps': 'funds/lps',
+      '/fund/calls': 'funds/calls',
+      '/fund/accounting': 'funds/ledger',
+      '/fund/reporting': 'funds/reporting',
+    }[route] ?? route.replace(/^\//, '')),
   },
 };
 
@@ -174,58 +221,49 @@ for (const [name, profile] of Object.entries(PROFILES)) {
   });
 
   test(`${name}: {n} is filled from the page's count, or the clause is dropped`, () => {
-    const items = profile.build('build/kpi', { value: 'all', counts: { all: 3 } });
-    assert.ok(items.some((i) => i.label === 'All 3 months'), 'the page count is not substituted');
-    const blind = profile.build('build/kpi', { value: 'all' });
-    assert.ok(blind.some((i) => i.label === 'All months'), 'a missing count invents a figure');
-    // Rendering found this one: an empty ledger produced "All 0 months", which
-    // is a broken string rather than a filter name.
-    const empty = profile.build('build/kpi', { value: 'all', counts: { all: 0 } });
-    assert.ok(empty.some((i) => i.label === 'All months'), 'a zero count is printed into the label');
-    // `Last 6 mo` and `Stale > 7d` keep their digits on purpose: a window is
-    // part of the filter's definition, not a count of this account's records.
-    // What must never survive is a `{n}` with nothing to fill it.
-    assert.ok(!blind.some((i) => /\{n\}/.test(i.label || '')), 'an unfilled placeholder reached the chip');
-    for (const zone of Object.keys(profile.table)) {
-      const counted = profile.table[zone].filter((row) => String(row.label || '').includes('{n}'));
-      for (const row of counted) {
-        const shown = profile.build(zone, { value: row.key }).find((i) => i.active)?.label || '';
-        assert.ok(!/\d/.test(shown), `${zone} · ${row.canvas} printed a figure with no count supplied`);
+    // Generic over whatever this profile's table declares. `Last 6 mo` and
+    // `Stale > 7d` keep their digits on purpose — a window is part of a
+    // filter's definition, not a count of this account's records — so only a
+    // label carrying `{n}` is checked, and what must never survive is a `{n}`
+    // with nothing to fill it. A profile with no such label runs this over an
+    // empty set, which is honest: the builder's own substitution is proved once
+    // below, outside this loop, against the one founder zone that has one.
+    for (const [zone, rows] of Object.entries(profile.table)) {
+      for (const row of rows.filter((r) => String(r.label || '').includes('{n}'))) {
+        const shown = (opts) => profile.build(zone, { value: row.key, ...opts }).find((i) => i.active)?.label || '';
+        assert.ok(!/\d/.test(shown()), `${zone} · ${row.canvas} printed a figure with no count supplied`);
+        assert.ok(!/\{n\}/.test(shown()), `${zone} · ${row.canvas} let an unfilled placeholder reach the chip`);
+        assert.ok(/\b3\b/.test(shown({ counts: { [row.key]: 3 } })),
+          `${zone} · ${row.canvas} ignores the count the page supplies`);
+        // Rendering found this one: an empty ledger produced "All 0 months",
+        // which is a broken string rather than a filter name.
+        assert.ok(!/\d/.test(shown({ counts: { [row.key]: 0 } })),
+          `${zone} · ${row.canvas} prints a zero count into the label`);
       }
     }
   });
 
   test(`${name}: a dynamic group becomes its stored names, or its reason`, () => {
-    const withRoles = profile.build('grow/talent', {
-      value: 'r7', dynamic: { roles: [{ key: 'r7', label: 'Backend engineer' }] },
-    });
-    const role = withRoles.find((i) => i.label === 'Backend engineer');
-    assert.ok(role && !role.note && role.active, 'a supplied role is not a live chip');
-    // The same group in the zone whose substitution is the least obvious: the
-    // canvas names three market SEGMENTS, and a customer record stores the
-    // SOURCE it was captured from. The chips are the stored sources, and the
-    // note beside them is what keeps that from reading as a segment breakdown.
-    const bySource = profile.build('grow/customers', {
-      value: 'referral',
-      dynamic: { sources: [{ key: 'waitlist', label: 'Waitlist' }, { key: 'referral', label: 'Referral' }] },
-    });
-    assert.deepEqual(bySource.filter((i) => !i.note).map((i) => i.label), ['All', 'Waitlist', 'Referral']);
-    assert.ok(bySource.find((i) => i.label === 'Referral').active, 'the supplied source cannot be selected');
-    assert.ok(bySource.some((i) => i.note && /no market segment is stored/.test(i.note)),
-      'the segment/source difference stopped being stated');
-    // And it renders as a bare sentence, not "One chip per segment — …", since
-    // with chips present there is no dead filter left to name.
-    const standing = groupFilterNotes(bySource).find((g) => /no market segment/.test(g.note));
-    assert.deepEqual(standing.labels, [], 'the standing note still names a filter that is not missing');
-    // A fallback note keeps its label, because there the label IS the missing thing.
-    const fallback = groupFilterNotes(profile.build('grow/talent', { value: 'all' }))
-      .find((g) => /no job post is linked/.test(g.note));
-    assert.deepEqual(fallback.labels, ['One chip per role']);
-
-    const without = profile.build('grow/talent', { value: 'all' });
-    assert.ok(without.some((i) => i.note && /no job post is linked/.test(i.note)),
-      'an empty dynamic group draws nothing and explains nothing');
-    assert.ok(!without.some((i) => i.label === 'Backend engineer'), 'a sample name leaked through');
+    // Also generic: whatever the group is called and whatever the page stores,
+    // a supplied name renders as a live chip and an empty group states its
+    // reason instead of drawing nothing. The founder examples below carry the
+    // two subtleties this cannot express — a fallback note versus a standing
+    // clarification — because both live in the wording of specific zones.
+    for (const [zone, rows] of Object.entries(profile.table)) {
+      for (const row of rows.filter((r) => r.dynamic)) {
+        const supplied = profile.build(zone, {
+          value: '__stored__', dynamic: { [row.dynamic]: [{ key: '__stored__', label: 'A stored name' }] },
+        });
+        const chip = supplied.find((i) => i.label === 'A stored name');
+        assert.ok(chip && !chip.note && chip.active,
+          `${zone} · ${row.canvas} does not render a supplied name as a live chip`);
+        const empty = profile.build(zone, { value: 'all' });
+        assert.ok(!empty.some((i) => i.label === 'A stored name'),
+          `${zone} · ${row.canvas} shows a name nothing supplied`);
+        assert.ok(empty.some((i) => i.note === row.note),
+          `${zone} · ${row.canvas} draws nothing and explains nothing when the group is empty`);
+      }
+    }
   });
 
   test(`${name}: a filter with no source is never selectable`, () => {
@@ -391,6 +429,49 @@ function mountingFile(profile, zone) {
   }
   return null;
 }
+
+/**
+ * The builder's own behaviour, against the founder zones that exercise it.
+ *
+ * These used to run inside the per-profile loop, which meant every profile was
+ * asked to answer for `build/kpi` and `grow/talent`. The investor table has
+ * neither, so the loop failed on the second licence for the entirely wrong
+ * reason: not that its filters were wrong, but that they were not founder's.
+ * The generic halves stayed in the loop — a `{n}` label substitutes or drops,
+ * a dynamic group chips or explains, whatever the profile calls them. What is
+ * left here is what only these specific zones can say.
+ */
+test('{n} substitutes the page count, drops when there is none, and drops a zero', () => {
+  const items = founderZoneFilters('build/kpi', { value: 'all', counts: { all: 3 } });
+  assert.ok(items.some((i) => i.label === 'All 3 months'), 'the page count is not substituted');
+  const blind = founderZoneFilters('build/kpi', { value: 'all' });
+  assert.ok(blind.some((i) => i.label === 'All months'), 'a missing count invents a figure');
+  const empty = founderZoneFilters('build/kpi', { value: 'all', counts: { all: 0 } });
+  assert.ok(empty.some((i) => i.label === 'All months'), 'a zero count is printed into the label');
+});
+
+test('a dynamic note is a fallback in one zone and a standing clarification in the other', () => {
+  // `/grow/customers` is where the difference bites. The canvas names three
+  // market SEGMENTS; a customer record stores the SOURCE it was captured from.
+  // The chips are the stored sources, and the sentence saying those are not the
+  // same thing is needed most precisely when the chips ARE there to be misread.
+  const bySource = founderZoneFilters('grow/customers', {
+    value: 'referral',
+    dynamic: { sources: [{ key: 'waitlist', label: 'Waitlist' }, { key: 'referral', label: 'Referral' }] },
+  });
+  assert.deepEqual(bySource.filter((i) => !i.note).map((i) => i.label), ['All', 'Waitlist', 'Referral']);
+  assert.ok(bySource.find((i) => i.label === 'Referral').active, 'the supplied source cannot be selected');
+  assert.ok(bySource.some((i) => i.note && /no market segment is stored/.test(i.note)),
+    'the segment/source difference stopped being stated');
+  // And it renders as a bare sentence, not "One chip per segment — …", since
+  // with chips present there is no dead filter left to name.
+  const standing = groupFilterNotes(bySource).find((g) => /no market segment/.test(g.note));
+  assert.deepEqual(standing.labels, [], 'the standing note still names a filter that is not missing');
+  // A fallback note keeps its label, because there the label IS the missing thing.
+  const fallback = groupFilterNotes(founderZoneFilters('grow/talent', { value: 'all' }))
+    .find((g) => /no job post is linked/.test(g.note));
+  assert.deepEqual(fallback.labels, ['One chip per role']);
+});
 
 test('filters sharing one reason collapse into one sentence that names them all', () => {
   // /build/cadence has four filters and one reason. Saying it four times is
