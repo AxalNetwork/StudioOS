@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, NotComputable, NoPartnerProfile,
+  StatCard, Section, Field, SaveNote, NotComputable, UnlinkedZone,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass, moneyDollars,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -217,13 +217,13 @@ export default function PartnerVisibilityZone() {
   const view = 'engagements';
   const visible = [...items].sort(ORDERINGS[view]);
 
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  const rowActions = partnerZoneActions('offers/visibility', { view: { header: ['Service', 'Kind', 'Price', 'Active', 'Engagements', 'Won value'], rows: visible, cells: (r) => [r.name, r.kind, r.price, r.is_active, r.engagement_count, r.won_value] } });
+
   if (isNoPartnerProfile(state.error)) {
-    return (
-      <>
-        <ZoneHeading title="Visibility" />
-        <NoPartnerProfile />
-      </>
-    );
+    return <UnlinkedZone title="Visibility" actions={rowActions} />;
   }
 
   return (
@@ -244,7 +244,7 @@ export default function PartnerVisibilityZone() {
         className="mb-3"
         role="partner"
         filters={partnerZoneFilters('offers/visibility', { value: view })}
-        actions={partnerZoneActions('offers/visibility', { view: { header: ['Service', 'Kind', 'Price', 'Active', 'Engagements', 'Won value'], rows: visible, cells: (r) => [r.name, r.kind, r.price, r.is_active, r.engagement_count, r.won_value] } })}
+        actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}

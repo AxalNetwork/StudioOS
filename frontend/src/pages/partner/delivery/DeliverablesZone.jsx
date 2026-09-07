@@ -4,7 +4,7 @@ import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill,
   StatCard, Section, Field, SaveNote, NotComputable,
-  NoPartnerProfile, isNoPartnerProfile,
+  UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -178,18 +178,18 @@ export default function PartnerDeliverablesZone() {
     return sent.reduce((a, b) => (b.days_since_sent > a.days_since_sent ? b : a));
   }, [items]);
 
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  const rowActions = partnerZoneActions('delivery/deliverables', { view: { header: ['Deliverable', 'Need', 'Version', 'Sent', 'Opened', 'Signed off'], rows: items, cells: (r) => [r.title, r.need_title, r.version, r.sent_at, r.opened_at, r.signed_off_at] } });
+
   if (isNoPartnerProfile(state.error)) {
-    return (
-      <>
-        <ZoneHeading title="Deliverables" />
-        <NoPartnerProfile />
-      </>
-    );
+    return <UnlinkedZone title="Deliverables" actions={rowActions} />;
   }
 
   return (
     <ZoneBody
-      actions={partnerZoneActions('delivery/deliverables', { view: { header: ['Deliverable', 'Need', 'Version', 'Sent', 'Opened', 'Signed off'], rows: items, cells: (r) => [r.title, r.need_title, r.version, r.sent_at, r.opened_at, r.signed_off_at] } })}
+      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}

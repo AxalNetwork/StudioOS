@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
+  StatCard, Section, Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -344,13 +344,13 @@ export default function PartnerProofZone() {
     return true;
   });
 
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  const rowActions = partnerZoneActions('offers/proof', { view: { header: ['Proof', 'Kind', 'Need', 'Founder', 'Published', 'Outcome'], rows: visible, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, r.is_published, r.outcome_note] } });
+
   if (isNoPartnerProfile(state.error)) {
-    return (
-      <>
-        <ZoneHeading title="Proof" />
-        <NoPartnerProfile />
-      </>
-    );
+    return <UnlinkedZone title="Proof" actions={rowActions} />;
   }
 
   return (
@@ -364,7 +364,7 @@ export default function PartnerProofZone() {
         className="mb-3"
         role="partner"
         filters={partnerZoneFilters('offers/proof', { value: view, onChange: setView })}
-        actions={partnerZoneActions('offers/proof', { view: { header: ['Proof', 'Kind', 'Need', 'Founder', 'Published', 'Outcome'], rows: visible, cells: (r) => [r.title, r.kind, r.need_title, r.founder_name, r.is_published, r.outcome_note] } })}
+        actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}

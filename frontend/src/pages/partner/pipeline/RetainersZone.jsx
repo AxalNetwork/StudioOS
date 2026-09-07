@@ -4,7 +4,7 @@ import { api } from '../../../lib/api';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, NotComputable, NoPartnerProfile,
+  StatCard, Section, Field, SaveNote, NotComputable, UnlinkedZone,
   isNoPartnerProfile, inputClass, buttonClass, ghostButtonClass,
   moneyCents, dollarsToCents, formatDay,
 } from '../kit';
@@ -364,13 +364,18 @@ export default function PartnerRetainersZone() {
     [items],
   );
 
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  const rowActions = partnerZoneActions('pipeline/retainers', { view: {
+        header: ['Client', 'Engagement', 'Amount (cents)', 'Cadence', 'Retained hours', 'Used', 'Utilisation %', 'Renews'],
+        rows: items,
+        cells: (r) => [r.founder_name, r.need_title, r.retainer?.amount_cents, r.retainer?.cadence,
+          r.retained_hours, r.hours_used, r.retainer?.utilisation_pct, r.retainer?.renews_at],
+      } });
+
   if (isNoPartnerProfile(state.error)) {
-    return (
-      <>
-        <ZoneHeading title="Retainers" />
-        <NoPartnerProfile />
-      </>
-    );
+    return <UnlinkedZone title="Retainers" actions={rowActions} />;
   }
 
   return (
@@ -379,12 +384,7 @@ export default function PartnerRetainersZone() {
       // cadence, how much of the retained time is being used and when it comes
       // up. A row with no retainer carries blanks rather than zeroes — an
       // engagement without one is not an engagement billing nothing.
-      actions={partnerZoneActions('pipeline/retainers', { view: {
-        header: ['Client', 'Engagement', 'Amount (cents)', 'Cadence', 'Retained hours', 'Used', 'Utilisation %', 'Renews'],
-        rows: items,
-        cells: (r) => [r.founder_name, r.need_title, r.retainer?.amount_cents, r.retainer?.cadence,
-          r.retained_hours, r.hours_used, r.retainer?.utilisation_pct, r.retainer?.renews_at],
-      } })}
+      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}

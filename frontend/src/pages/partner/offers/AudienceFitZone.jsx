@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
-  StatCard, Section, Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
+  StatCard, Section, Field, SaveNote, UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, moneyCents, dollarsToCents,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -227,13 +227,13 @@ export default function PartnerAudienceFitZone() {
   // canvas draws are about leads and have no source; the table says so.
   const visible = view === 'best_fit' ? items.filter((r) => r.kind === 'best_fit') : items;
 
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  const rowActions = partnerZoneActions('offers/audience-fit', { view: { header: ['Rule', 'Kind', 'Referred to'], rows: visible, cells: (r) => [r.statement, r.kind, r.referred_to] } });
+
   if (isNoPartnerProfile(state.error)) {
-    return (
-      <>
-        <ZoneHeading title="Audience fit" />
-        <NoPartnerProfile />
-      </>
-    );
+    return <UnlinkedZone title="Audience fit" actions={rowActions} />;
   }
 
   return (
@@ -244,7 +244,7 @@ export default function PartnerAudienceFitZone() {
         className="mb-3"
         role="partner"
         filters={partnerZoneFilters('offers/audience-fit', { value: view, onChange: setView })}
-        actions={partnerZoneActions('offers/audience-fit', { view: { header: ['Rule', 'Kind', 'Referred to'], rows: visible, cells: (r) => [r.statement, r.kind, r.referred_to] } })}
+        actions={rowActions}
       />
       <ZoneBody
         loading={state.loading}

@@ -4,7 +4,7 @@ import { api } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
   StatCard, Section, Field, SaveNote, NotComputable,
-  NoPartnerProfile, isNoPartnerProfile,
+  UnlinkedZone, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
@@ -101,18 +101,18 @@ export default function PartnerCapacityZone() {
   const engagements = state.engagements || [];
   const liveSeats = seats.filter((s) => !s.revoked_at);
 
+  // Hoisted so the gate branch below and the live row draw the SAME row.
+  // With nothing loaded the export renders disabled and says so itself,
+  // which is what makes a header row over an unreadable store honest.
+  const rowActions = partnerZoneActions('delivery/capacity', { view: { header: ['Person', 'Live seats'], rows: people, cells: (p) => [p.name, p.live_seats] } });
+
   if (isNoPartnerProfile(state.error)) {
-    return (
-      <>
-        <ZoneHeading title="Capacity" />
-        <NoPartnerProfile />
-      </>
-    );
+    return <UnlinkedZone title="Capacity" actions={rowActions} />;
   }
 
   return (
     <ZoneBody
-      actions={partnerZoneActions('delivery/capacity', { view: { header: ['Person', 'Live seats'], rows: people, cells: (p) => [p.name, p.live_seats] } })}
+      actions={rowActions}
       loading={state.loading}
       error={state.error}
       onRetry={load}

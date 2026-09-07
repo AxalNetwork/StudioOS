@@ -128,6 +128,11 @@ const PROFILES = {
     // nothing, exactly as the investor Research pair did.
     excluded: ['network/organizations'],
     embeddedGuards: 0,
+    // The nine partner bodies that take the "no firm attached" branch —
+    // `offers/{visibility,proof,audience-fit}`, `pipeline/{negotiations,
+    // retainers}` and all four of `delivery/*`. Only this profile has the
+    // branch at all: it is `requirePartnerProfile` that throws.
+    gateBranches: 9,
     // `Pages · Partner Research` names /research/market; the router and
     // shellConfig.js both say `markets`.
     live: (route) => (route === '/research/market' ? 'research/markets' : route.replace(/^\//, '')),
@@ -317,6 +322,43 @@ function canvasOps(profile) {
   return out;
 }
 
+/**
+ * One builder call, from its name through its own closing paren.
+ *
+ * REPLACES A TERMINATOR THAT ASSUMED ONE SHAPE. This used to be
+ * `src.slice(at, src.indexOf('})}', at) + 3)` — the end of a call sitting
+ * directly inside a JSX prop. Nine partner zones now HOIST the call to a
+ * `const` above the branch that renders the gap card, so the row survives an
+ * account with no firm attached, and `})}` then landed somewhere in the next
+ * statement: the extractor below read an `if` as a name the page had failed to
+ * declare. Balancing the call's own parens reads both shapes and stops
+ * depending on what follows the call at all.
+ *
+ * Quoted spans are skipped, because a heading is allowed to contain a paren —
+ * `'Price (USD)'` in the catalog export is exactly that, and a naive count
+ * closes the call in the middle of a string.
+ */
+function callText(src, at) {
+  const open = src.indexOf('(', at);
+  let depth = 0;
+  let quote = null;
+  for (let i = open; i < src.length; i += 1) {
+    const c = src[i];
+    if (quote) {
+      if (c === '\\') i += 1;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') { quote = c; continue; }
+    if (c === '(') depth += 1;
+    else if (c === ')') {
+      depth -= 1;
+      if (depth === 0) return src.slice(at, i + 1);
+    }
+  }
+  throw new Error(`unbalanced builder call at ${at}`);
+}
+
 /** The inside of `[ … ]` starting at index 0, brackets balanced. */
 function balanced(text) {
   let depth = 0;
@@ -444,7 +486,7 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       const src = read(f);
       let at = src.indexOf(`${profile.call}('`);
       while (at >= 0) {
-        const call = src.slice(at, src.indexOf('})}', at) + 3);
+        const call = callText(src, at);
         const bare = call
           // A template literal is text plus real expressions: keep the `${…}`
           // bodies, drop the rest, or `?project_id=${id}` contributes a bare `$`.
@@ -510,6 +552,62 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       `${name} checked ${guarded} embedded-guarded blocks, expected at least ${profile.embeddedGuards}`);
   });
 
+  test(`${name}: a zone the account cannot read still draws its header row`, () => {
+    /**
+     * THE STATE MOST READERS ARE IN, AND THE ONE THE ROW USED TO SKIP.
+     *
+     * `requirePartnerProfile` resolves a caller only through
+     * `users.partner_id`, and `ensureRoleProfile` backfills that column for
+     * `role = 'partner'` alone — so every ADMIN reading this workspace, which
+     * includes anyone checking whether a design was built, gets
+     * `No partner profile attached to your account` on every zone. All nine
+     * partner zone bodies used to `return` a heading and the gap card there and
+     * nothing else, so the canvas's actions shipped and then rendered nowhere
+     * the reviewer looked. Measured on production the same day: 18 of 26
+     * partner accounts resolve to nothing, and no admin account ever resolves.
+     *
+     * `ZoneBody` has argued the general form of this since it was written — "a
+     * zone's header row is as true while the store is loading, or failed, or
+     * empty, as it is when rows are on screen". This was the one state carved
+     * out of that rule, and it was the state that mattered most.
+     *
+     * ACTIONS AND NOT FILTERS, asserted in both directions below. An export
+     * with nothing loaded already renders disabled and says so; a filter chip
+     * is a claim about ROWS, and drawing a selectable one over a store this
+     * account cannot read is the "an empty set reads as an answer" failure
+     * `zoneFilterBuilder.js` exists to prevent, reached from a new direction.
+     */
+    const kit = codeOnly(read('frontend/src/pages/partner/kit.jsx'));
+    if (!kit.includes('export function UnlinkedZone')) {
+      assert.fail('partner/kit.jsx no longer exports UnlinkedZone');
+    }
+    const helper = kit.slice(kit.indexOf('export function UnlinkedZone'));
+    assert.match(helper, /<ZoneActions[^>]*items=\{actions\}/,
+      'UnlinkedZone stopped drawing the zone\'s actions above the gap card');
+    assert.doesNotMatch(helper, /ZoneToolbar|filters=/,
+      'UnlinkedZone draws a filter over rows this account cannot read');
+
+    let checked = 0;
+    for (const f of pageFiles(profile)) {
+      const src = codeOnly(read(f));
+      // The CALL, not the import and not the definition — exactly the files
+      // that take this branch.
+      if (!src.includes('isNoPartnerProfile(state.error)')) continue;
+      checked += 1;
+      assert.match(src, /<UnlinkedZone[\s\S]{0,120}?actions=\{/,
+        `${f} takes the no-firm branch without handing over its header row`);
+      assert.doesNotMatch(src, /<NoPartnerProfile\s*\/>/,
+        `${f} renders the gap card directly again, which drops the row above it`);
+    }
+    // A floor rather than an exact count: the per-file assertion above is the
+    // real one and runs on a tenth zone the day it appears. This only stops a
+    // needle that has stopped matching from passing as "nothing to check".
+    if (profile.gateBranches) {
+      assert.ok(checked >= profile.gateBranches,
+        `${name} checked ${checked} no-firm branches, expected at least ${profile.gateBranches}`);
+    }
+  });
+
   test(`${name}: every zone is mounted, exactly once`, () => {
     const table = tableLabels(SRC);
     const seen = new Map();
@@ -532,9 +630,32 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         // CALLING the builder is not mounting it. Renaming the prop from
         // `actions=` to anything else leaves the call in the file and the row
         // off the screen, and every other assertion here still passes — so the
-        // call has to be the value of a prop something actually renders.
+        // call has to reach a prop something actually renders.
+        //
+        // TWO SHAPES REACH ONE, AND THE SECOND IS NEW. A call may sit directly
+        // inside the prop, or be HOISTED to a `const` first — which the nine
+        // partner zones now do, because the same row has to be drawn in two
+        // places: over the loaded body, and over the card shown when the
+        // account is attached to no firm. Naming it once is what stops those
+        // two rows drifting apart. The hoist is only accepted when the name is
+        // then handed to a rendered prop, so it buys no exemption: a `const`
+        // nothing mounts fails here exactly as an unmounted call did.
+        //
+        // THE GAP BRANCH MAY NOT VOUCH FOR THE LIVE ONE. `<UnlinkedZone
+        // actions={rowActions} />` also spells `actions={…}`, so searching the
+        // whole file let a row that renders ONLY over the no-firm card pass as
+        // mounted — the zone would draw its header for an unattached account
+        // and for nobody else, which is the original defect inverted. Found by
+        // mutation: deleting the live mount left this assertion green. The
+        // `UnlinkedZone` elements are removed before the search; the branch has
+        // its own assertion above.
         const before = src.slice(Math.max(0, m.index - 220), m.index);
-        assert.match(before, /(?:^|\s)(?:actions|items|zoneActions)=\{[^}]*$/,
+        const live = src.replace(/<UnlinkedZone[\s\S]*?\/>/g, '');
+        const inProp = /(?:^|\s)(?:actions|items|zoneActions)=\{[^}]*$/.test(before);
+        const hoisted = before.match(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*$/);
+        const handed = hoisted
+          && new RegExp(`(?:actions|items|zoneActions)=\\{${hoisted[1]}[\\s}]`).test(live);
+        assert.ok(inProp || handed,
           `${f} calls the builder for ${m[1]} but does not hand the result to anything`);
         seen.set(m[1], f);
       }
