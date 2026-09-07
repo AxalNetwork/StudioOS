@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Card, Pill } from '../../ui';
+import { Card, Pill, Stat } from '../../ui';
 import { api } from '../../lib/api';
 import {
   Field, NothingYet, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
@@ -168,6 +168,46 @@ export default function LibraryZone({ zoneActions }) {
         </form>
       </Card>
 
+      {/* THE CANVAS'S FOUR-STAT STRIP, WITH THREE OF THE FOUR ADMITTING THEY
+          HAVE NO SOURCE — which is the finding, not a shortfall in the wiring.
+          `Pages · {Founder,Investor} Research` asks this zone for `Documents`,
+          `Primary sources`, `Questions asked` and a cost per question.
+          `research_documents` holds title, kind, size, index state, passage
+          count and dates: no primary/secondary classification, no question
+          history, no per-question cost. Two of those three follow from the same
+          missing store, so the strip names it once and the header row's ops
+          half — `Clear history — no session history is stored to clear` —
+          already says the same thing from the other side.
+
+          A figure is never modelled to fill a tile. `Stat` would print an
+          em-dash for a null, which reads as a value; these say `Not recorded`
+          in words. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat
+          label="Documents"
+          value={payload ? items.length : undefined}
+          note={payload ? `${payload.indexed} answerable by Ask` : 'library not read'}
+        />
+        <Stat
+          label="Primary sources"
+          value="Not recorded"
+          mono={false}
+          note="no document records whether it is your own research or a bought report"
+        />
+        <Stat
+          label="Questions asked"
+          value="Not recorded"
+          mono={false}
+          note="no question history is stored, here or in Ask"
+        />
+        <Stat
+          label="Cost per question"
+          value="Not recorded"
+          mono={false}
+          note="the same missing history — nothing is priced per question or per document"
+        />
+      </div>
+
       <ZoneBody
         loading={state.loading}
         error={state.error}
@@ -183,48 +223,88 @@ export default function LibraryZone({ zoneActions }) {
         <Card className="p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <span className="text-sm font-extrabold tracking-tight">Documents</span>
-            <span className="text-[11px] text-axal-ink-3">Newest first</span>
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">
+              Newest first · state governs what Ask can cite
+            </span>
           </div>
-          <ul className="divide-y divide-axal-border-soft">
-            {items.map((d) => (
-              <li key={d.uid} className="py-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[13px] font-extrabold">{d.title}</span>
-                  <Pill tone={STATE_TONE[d.index_state] || 'neutral'}>
-                    {STATE_LABEL[d.index_state] || d.index_state}
-                  </Pill>
-                  <span className="text-[11px] text-axal-ink-3">
-                    {KINDS.find((k) => k.value === d.kind)?.label || d.kind}
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] text-axal-ink-3">
-                  {fmtBytes(d.size_bytes) || <Unrecorded>Size not recorded</Unrecorded>}
-                  {' · '}
-                  {String(d.created_at || '').slice(0, 10)}
-                  {' · '}
-                  {/* NULL, not 0. A document that has never been read shows no
-                      passage count rather than claiming it has none. */}
-                  {d.chunk_count == null
-                    ? <Unrecorded>No passages indexed</Unrecorded>
-                    : `${d.chunk_count} passages Ask can cite`}
-                </div>
-                {d.index_note && (
-                  <p className="mt-1.5 text-[11.5px] leading-relaxed text-axal-ink-2">{d.index_note}</p>
-                )}
-                <div className="mt-2 flex flex-wrap gap-3">
-                  <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)}>
-                    Open
-                  </button>
-                  <button
-                    type="button" disabled={busy} onClick={() => remove(d.uid)}
-                    className="text-[11px] text-axal-ink-3 underline hover:text-axal-ink-2"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {/* THE CANVAS DRAWS A TABLE WITH NAMED COLUMNS, and it is the right
+              shape: kind and state were chips in a row of chips, which is fine
+              to read one at a time and impossible to scan down.
+
+              `Year` IS RELABELLED, NOT DROPPED. The canvas means the source's
+              own year — the thing that makes a 2023 report stale — and nothing
+              records it; `created_at` is when the file was added here, which is
+              a different fact, so the column says `Added` and carries the date
+              it actually has. `Questions` has no column at all: it would be a
+              whole column of "Not recorded", and the strip above says it once.
+
+              Its own scroller, so a narrow viewport scrolls the table and never
+              the page. */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-800">
+                  {['Document', 'Kind', 'Added', 'Passages', 'State', ''].map((head) => (
+                    <th
+                      key={head || 'actions'}
+                      scope="col"
+                      className="pb-2 pr-3 text-[10px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400"
+                    >
+                      {head}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((d) => (
+                  <tr key={d.uid} className="border-b border-gray-100 align-top dark:border-gray-800">
+                    <td className="py-3 pr-3">
+                      <span className="text-[13px] font-extrabold">{d.title}</span>
+                      <span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">
+                        {fmtBytes(d.size_bytes) || <Unrecorded>Size not recorded</Unrecorded>}
+                      </span>
+                      {d.index_note && (
+                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-gray-600 dark:text-gray-300">
+                          {d.index_note}
+                        </p>
+                      )}
+                    </td>
+                    <td className="py-3 pr-3 text-[11.5px] text-gray-600 dark:text-gray-300">
+                      {KINDS.find((k) => k.value === d.kind)?.label || d.kind}
+                    </td>
+                    <td className="py-3 pr-3 text-[11.5px] tabular-nums text-gray-600 dark:text-gray-300">
+                      {String(d.created_at || '').slice(0, 10) || <Unrecorded>Not recorded</Unrecorded>}
+                    </td>
+                    <td className="py-3 pr-3 text-[11.5px] tabular-nums text-gray-600 dark:text-gray-300">
+                      {/* NULL, not 0. A document that has never been read shows
+                          no passage count rather than claiming it has none. */}
+                      {d.chunk_count == null
+                        ? <Unrecorded>Not indexed</Unrecorded>
+                        : d.chunk_count}
+                    </td>
+                    <td className="py-3 pr-3">
+                      <Pill tone={STATE_TONE[d.index_state] || 'neutral'}>
+                        {STATE_LABEL[d.index_state] || d.index_state}
+                      </Pill>
+                    </td>
+                    <td className="py-3">
+                      <div className="flex flex-wrap gap-3">
+                        <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)}>
+                          Open
+                        </button>
+                        <button
+                          type="button" disabled={busy} onClick={() => remove(d.uid)}
+                          className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       </ZoneBody>
 

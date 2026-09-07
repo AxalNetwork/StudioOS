@@ -6,10 +6,10 @@ import { bucketForPath } from '../../workspaces/shellConfig';
 import { api } from '../../lib/api';
 import './investorFundLanding.css';
 import './investorFundReporting.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
+import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 
-const FILTERS = [['all', 'All periods'], ['published', 'Published'], ['drafted', 'Drafted'], ['delivery', 'Delivery']];
 const titleCase = (value) => String(value || 'Unrecorded').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 const periodOf = (row) => row.period || row.label || row.reporting_period || `Period ${row.id || 'unrecorded'}`;
 const statusOf = (row) => String(row.status || (row.issued_at ? 'published' : 'drafted')).toLowerCase();
@@ -49,8 +49,16 @@ export default function InvestorFundReporting() {
 
   return <div className="i6-fund if4-shell"><main className="i6-main if4-main" data-testid="investor-fund-reporting"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>Reporting</b></div><h1><FileBarChart size={19} /> LP reporting</h1><p>Pack builder, archive and per-LP delivery status.</p></div><button type="button" className="if4-refresh" onClick={load} disabled={state.loading} aria-label="Refresh reporting archive"><RefreshCw size={14} className={state.loading ? 'if4-spin' : ''} /></button></header>
     <ZoneNav bucket={bucketForPath('investor', '/funds')} role="investor" activeSlug="reporting" className="my-3" />
-    <ZoneActions className="mb-3" items={investorZoneActions('funds/reporting', { view: { scope: state.fund?.name, header: ['Period', 'State', 'Issued', 'Delivered'], rows: visible, cells: (r) => [periodOf(r), statusOf(r), r.issued_at, r.delivery_count ?? r.delivered_count] } })} />
-    <div className="if4-filters">{FILTERS.map(([id, label]) => <button type="button" key={id} className={filter === id ? 'is-active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div>
+    {/* Four real predicates over the same `visible` memo as before — this row
+        moved into the canvas's shape and nothing about what it selects changed.
+        `Delivery` narrows on optional fields, which is honest: a period with no
+        delivery record simply does not match. */}
+    <ZoneToolbar
+      role="investor"
+      className="mb-3"
+      filters={investorZoneFilters('funds/reporting', { value: filter, onChange: setFilter })}
+      actions={investorZoneActions('funds/reporting', { view: { scope: state.fund?.name, header: ['Period', 'State', 'Issued', 'Delivered'], rows: visible, cells: (r) => [periodOf(r), statusOf(r), r.issued_at, r.delivery_count ?? r.delivered_count] } })}
+    />
     {state.error && <div className="i6-load-error if4-unavailable"><AlertCircle size={14} /> <span>Reporting archive unavailable. No period count, publication state, or delivery claim is being made.</span></div>}
     {!state.loading && !state.error && !state.rows.length && <div className="i6-load-error if4-unavailable" data-testid="status-fund-reporting-unavailable"><AlertCircle size={14} /> <span>No reporting archive is available in this environment. Current pack, period, and per-LP delivery values remain unavailable.</span></div>}
     <section className="if4-stats"><Stat label="Periods" value={state.error || !state.rows.length ? null : state.rows.length} note={state.rows.length ? `${published} published` : 'Archive source unavailable'} /><Stat label="Current pack" value={latest ? periodOf(latest) : null} note={latest ? titleCase(statusOf(latest)) : 'No current pack recorded'} /><Stat label="Delivery" value={deliveryKnown ? 'Recorded' : null} note={deliveryKnown ? 'Per-LP delivery source' : 'Per-LP delivery unavailable'} /><Stat label="Next audited" value={null} note="Audit schedule not recorded" /></section>

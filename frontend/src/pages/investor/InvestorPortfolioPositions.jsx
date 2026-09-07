@@ -6,8 +6,9 @@ import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import './investorPortfolioCanvas.css';
 import './investorPortfolioPositions.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
+import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 
 const money = (value) => {
   if (value == null || !Number.isFinite(Number(value))) return 'Unavailable';
@@ -86,10 +87,19 @@ export default function InvestorPortfolioPositions() {
   return <div className="i4-shell ip1-shell"><main className="i4-portfolio ip1-positions" data-testid="investor-portfolio-positions">
     <header className="i4-heading"><div><div className="i4-eyebrow">Portfolio / Positions</div><h1>Positions book</h1><p>Lots, marks history and ownership changes from the investor-accessible portfolio ledger.</p></div><button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh positions book"><RefreshCw size={15} /></button></header>
     <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
-    <ZoneActions className="mb-3" items={investorZoneActions('portfolio/positions', { view: { header: ['Company', 'Stage', 'Invested', 'FMV', 'Multiple', 'Mark basis'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.total_invested, r.fmv, r.multiple, r.mark_basis] } })} />
+    {/* All four predicates are real and none of them moved. The stage
+        `<select>` stays where it was, below, because `By stage` reveals a
+        control rather than applying one — there is no single stage a chip
+        could pick for you. */}
+    <ZoneToolbar
+      role="investor"
+      className="mb-3"
+      filters={investorZoneFilters('portfolio/positions', { value: filter, onChange: setFilter })}
+      actions={investorZoneActions('portfolio/positions', { view: { header: ['Company', 'Stage', 'Invested', 'FMV', 'Multiple', 'Mark basis'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.total_invested, r.fmv, r.multiple, r.mark_basis] } })}
+    />
     {state.error && <div className="i4-error" data-testid="status-investor-positions-error"><span>{String(state.error).toLowerCase() === 'not found' ? 'Position source unavailable in local development. No empty portfolio claim is being made.' : state.error}</span><button type="button" onClick={load}>Retry</button></div>}
     {anyPartial && !state.loading && <div className="i4-partial" data-testid="status-investor-positions-partial">Some supporting portfolio sources are unavailable. Affected metrics and cells are labelled rather than treated as zero.</div>}
-    {state.loading ? <Skeleton /> : !state.error && <><div className="ip1-filters"><div><button className={filter === 'attention' ? 'is-active' : ''} onClick={() => setFilter('attention')}>Needs attention</button><button className={filter === 'all' ? 'is-active' : ''} onClick={() => setFilter('all')}>All</button><button className={filter === 'stage' ? 'is-active' : ''} onClick={() => setFilter('stage')}>By stage</button><button className={filter === 'marked' ? 'is-active' : ''} onClick={() => setFilter('marked')}>Marked down</button></div>{filter === 'stage' && <label>Stage<select value={stage} onChange={(event) => setStage(event.target.value)}><option value="all">All recorded stages</option>{stages.map((item) => <option key={item} value={item}>{title(item)}</option>)}</select></label>}</div>
+    {state.loading ? <Skeleton /> : !state.error && <>{filter === 'stage' && <div className="ip1-filters"><label>Stage<select value={stage} onChange={(event) => setStage(event.target.value)}><option value="all">All recorded stages</option>{stages.map((item) => <option key={item} value={item}>{title(item)}</option>)}</select></label></div>}
       <section className="i4-stats"><Stat label="Invested" value={money(invested)} note="Recorded cost basis, including follow-ons" /><Stat label="Current FMV" value={money(carryingValue)} note={latestMark ? `Latest mark in book: ${latestMark}` : rows.length ? 'Unmarked positions carried at cost' : 'No positions recorded'} /><Stat label="TVPI · gross" value={state.unavailable.analytics ? 'Unavailable' : ratio(state.analytics?.tvpi)} note={state.unavailable.analytics ? 'Analytics source unavailable' : `DPI ${ratio(state.analytics?.dpi)} · gross of fees and carry`} /><Stat label="Needs attention" value={attentionPartial ? `≥ ${needsAttention}` : needsAttention} note={state.unavailable.health ? 'Health source unavailable' : `${red} red, ${amber} amber`} /></section>
       <section className="i4-card i4-positions ip1-ledger"><div className="i4-section-head"><div><h2>Positions</h2><p>{filter === 'attention' ? 'Sorted by recorded attention signals, worst first' : `${visible.length} visible of ${rows.length} recorded positions`}</p></div><span>Read-only ledger</span></div><PositionsTable rows={visible} healthUnavailable={state.unavailable.health} updatesUnavailable={state.unavailable.updates} filter={filter} /><p className="i4-seam-note"><span>Valuation boundary</span> FMV uses the latest stored mark. Unmarked positions are carried at cost and labelled as such; realised cash remains separate in DPI.</p></section>
       <section className="i4-card ip1-unavailable"><div className="i4-section-head"><div><h2>Mark and ownership detail</h2><p>Available in the existing governed records</p></div></div><strong>History remains read-only on this collection.</strong><p>IP1 does not export positions, write marks, add follow-ons, or accept an AI-generated performance narrative. Existing controlled workflows remain the source of ownership and valuation changes.</p></section>

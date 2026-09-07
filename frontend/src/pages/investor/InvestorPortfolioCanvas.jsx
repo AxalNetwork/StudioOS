@@ -116,7 +116,7 @@ export default function InvestorPortfolioCanvas() {
             {statCards.map((stat) => <article key={stat.label} className="i4-stat"><div><span>{stat.label}</span><b>{stat.value}</b><small>{stat.note}</small></div><em>{stat.delta}</em></article>)}
           </section>
 
-          <section className="i4-card i4-positions">
+          <section className="i4-card i4-positions" id="portfolio-positions">
             <div className="i4-section-head"><div><h2>Positions</h2><p>{rows.length} companies{state.analytics?.as_of ? ` · marks as of ${state.analytics.as_of}` : ''}</p></div><Link to="/portfolio/positions" data-testid="link-investor-positions-detail">View dilution <ArrowUpRight size={13} /></Link></div>
             {rows.length === 0 ? <div className="i4-empty">No direct positions have been recorded. Position records will appear here when they are available to this investor role.</div> : (
               <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Invested</th><th>Own %</th><th>FMV</th><th>Multiple</th><th>Reporting</th></tr></thead><tbody>
@@ -134,12 +134,12 @@ export default function InvestorPortfolioCanvas() {
           </section>
 
           <section className="i4-lower">
-            <article className="i4-card i4-updates">
+            <article className="i4-card i4-updates" id="portfolio-updates">
                <div className="i4-section-head"><div><h2>Updates &amp; KPI collection</h2><p>{state.unavailable.updates ? 'Update source unavailable' : `${state.updates.length} founder-submitted update${state.updates.length === 1 ? '' : 's'} in this accessible book`}</p></div><Link to="/portfolio/updates" data-testid="link-investor-updates-detail">Open updates <ArrowUpRight size={13} /></Link></div>
                {state.unavailable.updates ? <div className="i4-empty"><Inbox size={16} /> Founder updates are temporarily unavailable. No empty-reporting claim is being made.</div> : latestUpdate ? <div className="i4-update"><div className="i4-proposal">Founder update</div><h3>{latestUpdate.title}</h3><p>{latestUpdate.project?.name || `Startup ${latestUpdate.project_id}`}{latestUpdate.period ? ` · ${latestUpdate.period}` : ''}</p><div className="i4-kpis">{Object.entries(latestUpdate.kpis || {}).slice(0, 4).map(([key, value]) => <div key={key}><span>{label(key)}</span><b>{String(value)}</b></div>)}</div><Link to="/portfolio/updates" className="i4-primary-link" data-testid="link-review-latest-founder-update">Review source update</Link></div> : <div className="i4-empty"><Inbox size={16} /> No founder update is available yet. Incoming reports retain their source when published.</div>}
                <div className="i4-health-line"><Activity size={14} /><span>{state.unavailable.health ? 'Health signals are temporarily unavailable.' : interventionCount ? `${interventionCount} position${interventionCount === 1 ? '' : 's'} need attention.` : 'No intervention flags in the latest health sweep.'}</span><button type="button" onClick={load} data-testid="button-refresh-investor-health">Refresh signals</button></div>
             </article>
-            <article className="i4-card i4-value-add">
+            <article className="i4-card i4-value-add" id="portfolio-value-add">
             <div className="i4-section-head"><div><h2>Value-add desk</h2><p>Support recorded against this investor relationship</p></div><Link to="/portfolio/value-add" data-testid="link-investor-value-add-detail">Open desk <ArrowUpRight size={13} /></Link></div>
                <div className="i4-value-row"><UsersRound size={15} /><div><b>Introductions</b><p>{state.unavailable.intros ? 'Introduction records unavailable' : `${state.intros.length} recorded · ${acceptedIntros} accepted or meeting set`}</p></div><strong>{state.unavailable.intros ? '—' : state.intros.length}</strong></div>
                <div className="i4-value-row"><TrendingUp size={15} /><div><b>Portfolio health</b><p>{state.unavailable.health ? 'Health source unavailable' : `${state.health?.totals?.green ?? 0} currently healthy in the latest sweep`}</p></div><strong>{state.unavailable.health ? '—' : (state.health?.totals?.green ?? 0)}</strong></div>

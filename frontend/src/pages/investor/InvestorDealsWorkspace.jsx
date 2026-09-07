@@ -9,8 +9,10 @@ import { reportError } from '../../lib/log';
 import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
+import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
+import { slaBand, passReasonLabel } from '../../lib/dealFlow';
 
 const STAGES = [
   { id: 'sourcing', label: 'Sourcing' },
@@ -28,6 +30,32 @@ const money = (value) => {
   return `$${number.toLocaleString()}`;
 };
 
+/**
+ * THE THREE FIELDS THE PIPELINE FILTERS READ, NAMED WHERE THE DEAL IS SHAPED.
+ *
+ * The canvas asks this board for `Unassigned`, `Stale` and `Passed`, and the
+ * easy answer was that none of them is stored. All three are:
+ *
+ *   `assigned` — `deals.lead_partner_id`, which the list query already selects
+ *                alongside `lead_partner_name`.
+ *   `stale`    — `days_in_stage`, computed and returned on every row by the
+ *                worker's `enrichDeal`. The threshold is not chosen here:
+ *                `slaBand` bands it against the canvas's own SLA presets, so
+ *                "sat too long" means one thing across the product. An unknown
+ *                age bands to 'ok' rather than red, which is `slaBand`'s own
+ *                call — it will not invent urgency the data does not support.
+ *   `passed`   — `status === 'rejected'`, which is how the worker records a
+ *                pass (`PASSED_STATUS`, written by `POST /api/deals/:id/pass`
+ *                with a reason from a CHECKed enum).
+ *
+ * A PASSED DEAL HAS NO STAGE, and pretending otherwise was already a defect.
+ * The `stage` ladder below has no branch for `rejected`, so a passed deal fell
+ * through to Commit or Diligence and sat in the funnel as though it were still
+ * live — counted in "N live deals" in the section header. It is excluded from
+ * the funnel now and reachable through its own filter, where it is shown as a
+ * list with its recorded reason rather than as a card under a stage it is not
+ * in.
+ */
 function normalizeDeal(deal) {
   const committed = Number(deal.capital_committed) || 0;
   const stage = deal.status === 'applied'
@@ -47,6 +75,10 @@ function normalizeDeal(deal) {
     source: deal.project_id ? 'Founder-sourced round' : 'Permissioned shared deal',
     target: money(deal.target_raise),
     committed: money(committed),
+    assigned: Boolean(deal.lead_partner_id),
+    stale: slaBand(deal.days_in_stage) === 'red',
+    passed: deal.status === 'rejected',
+    passReason: deal.pass_reason || null,
     raw: deal,
   };
 }
@@ -55,17 +87,20 @@ function Empty({ children }) {
   return <div className="investor-deals-empty">{children}</div>;
 }
 
-function SectionHeading({ id, title, detail, actions }) {
-  // The Deals bucket's four zones are four SECTIONS of this one page — the
-  // router scrolls to `#deals-<slug>` rather than mounting four components — so
-  // each zone's action row belongs to its own heading. One row after the
-  // ZoneNav would claim to act on whichever section the reader happened to be
-  // looking at.
+function SectionHeading({ id, title, detail, filters = [], actions = [] }) {
+  // Each zone's row belongs to its own heading. On `/deals/<slug>` the page
+  // renders exactly one of these sections, so the row is unambiguous; on the
+  // `/deals` root all four stack and each row sits with the section it acts on.
+  //
+  // `ZoneToolbar` rather than a bare `ZoneActions`: it draws the canvas's own
+  // rule under the row and puts the ops half at `ml-auto`, which is the shape
+  // every `Pages · …` artboard uses. A section with neither half renders
+  // nothing at all, exactly as before.
   return (
     <div className="investor-deals-section-head" id={id}>
       <h2>{title}</h2>
       {detail && <span>{detail}</span>}
-      {actions?.length ? <ZoneActions className="basis-full" items={actions} /> : null}
+      <ZoneToolbar role="investor" className="basis-full" filters={filters} actions={actions} />
     </div>
   );
 }
@@ -84,7 +119,24 @@ function DealCard({ deal, onOpen }) {
 // commit,closing}, where WorkspaceShell is already drawing the heading, the
 // zone row and the rail. Without it the page draws a second h1, a second pill
 // row and a second rail inside the first — the doubled chrome the user saw.
-export default function InvestorDealsWorkspace({ embedded = false }) {
+/**
+ * `zone`: which single section this render is for, or null for the bucket root.
+ *
+ * The four stages are four zone ROUTES, and until now all four rendered the
+ * same page and differed only in what `InvestorDealsRoutes` scrolled to. This
+ * is the narrowing `InvestorNetworkWorkspace` already does — one component, one
+ * `load()`, one set of derivations, one section per route — and it is not a
+ * split: every section still derives from the same `api.listDeals` call, so
+ * `/deals` stacks all four as the overview and nothing is fetched twice.
+ *
+ * `known` guards against a slug this page has no section for: an unrecognised
+ * zone shows everything rather than nothing, because a blank page is the worse
+ * failure and the shell above has already decided the route is legitimate.
+ */
+export default function InvestorDealsWorkspace({ embedded = false, zone = null }) {
+  const known = zone === 'pipeline' || zone === 'screening' || zone === 'commit' || zone === 'closing';
+  const shows = (section) => !known || zone === section;
+  const [pipelineView, setPipelineView] = useState('all');
   const navigate = useNavigate();
   const [state, setState] = useState({ deals: [], invitations: [] });
   const [loading, setLoading] = useState(true);
@@ -126,9 +178,24 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
   const deals = state.deals;
   const bucket = bucketForPath('investor', '/deals');
 
+  // The funnel is the deals still in it. Everything the four sections derive —
+  // the stage columns, the screening desk, the commit and closing panels — now
+  // reads from `funnel`, so a deal the fund has passed on stops appearing as
+  // the deal on the desk.
+  const funnel = useMemo(() => deals.filter((deal) => !deal.passed), [deals]);
   const grouped = useMemo(
-    () => Object.fromEntries(STAGES.map((stage) => [stage.id, deals.filter((deal) => deal.stage === stage.id)])),
-    [deals],
+    () => Object.fromEntries(STAGES.map((stage) => [stage.id, funnel.filter((deal) => deal.stage === stage.id)])),
+    [funnel],
+  );
+  const pipelineRows = useMemo(() => {
+    if (pipelineView === 'passed') return deals.filter((deal) => deal.passed);
+    if (pipelineView === 'unassigned') return funnel.filter((deal) => !deal.assigned);
+    if (pipelineView === 'stale') return funnel.filter((deal) => deal.stale);
+    return funnel;
+  }, [deals, funnel, pipelineView]);
+  const pipelineGrouped = useMemo(
+    () => Object.fromEntries(STAGES.map((stage) => [stage.id, pipelineRows.filter((deal) => deal.stage === stage.id)])),
+    [pipelineRows],
   );
   const screeningRows = [...grouped.screening, ...grouped.diligence];
   const screening = screeningRows[0] || null;
@@ -193,25 +260,51 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
           </section>
         )}
 
-        <section className="investor-deals-card">
-          <SectionHeading id="deals-pipeline" title="Pipeline" detail={`${deals.length} live deal${deals.length === 1 ? '' : 's'}`} actions={investorZoneActions('deals/pipeline', { view: { header: ['Deal', 'Stage', 'Sector', 'Target', 'Committed'], rows: deals, cells: (d) => [d.name, d.stage, d.sector, d.target, d.committed] } })} />
-          <div className="investor-pipeline-grid">
-            {STAGES.map((stage) => (
-              <div className="investor-pipeline-column" key={stage.id}>
-                <div><span>{stage.label}</span><b>{grouped[stage.id].length}</b></div>
-                <div>
-                  {grouped[stage.id].length
-                    ? grouped[stage.id].map((deal) => <DealCard key={`${deal.id}:${deal.name}`} deal={deal} onOpen={(id) => navigate(`/deals/${id}`)} />)
-                    : <Empty>No deals</Empty>}
+        {shows('pipeline') && <section className="investor-deals-card">
+          {/* `funnel.length`, not `deals.length`: a passed deal is not a live
+              one, and this line said it was. */}
+          <SectionHeading
+            id="deals-pipeline"
+            title="Pipeline"
+            detail={`${funnel.length} live deal${funnel.length === 1 ? '' : 's'}`}
+            filters={investorZoneFilters('deals/pipeline', { value: pipelineView, onChange: setPipelineView })}
+            actions={investorZoneActions('deals/pipeline', { view: { header: ['Deal', 'Stage', 'Sector', 'Target', 'Committed'], rows: pipelineRows, cells: (d) => [d.name, d.stage, d.sector, d.target, d.committed] } })}
+          />
+          {/* A passed deal has no stage, so it is never drawn into a stage
+              column. The list says what was decided and why instead — the same
+              row treatment the closing list uses, named for what it holds
+              rather than borrowing the other section's class. */}
+          {pipelineView === 'passed' ? (
+            <div className="investor-passed-list" data-testid="list-deals-passed">
+              {pipelineRows.length
+                ? pipelineRows.map((deal) => (
+                  <div key={`${deal.id}:${deal.name}`}>
+                    <ThumbsDown size={14} /> {deal.name}
+                    <span>{deal.passReason ? passReasonLabel(deal.passReason) : 'Reason not recorded'}</span>
+                    <button type="button" onClick={() => navigate(`/deals/${deal.id}`)}>Open deal</button>
+                  </div>
+                ))
+                : <Empty>No deal on this board has been passed on.</Empty>}
+            </div>
+          ) : (
+            <div className="investor-pipeline-grid">
+              {STAGES.map((stage) => (
+                <div className="investor-pipeline-column" key={stage.id}>
+                  <div><span>{stage.label}</span><b>{pipelineGrouped[stage.id].length}</b></div>
+                  <div>
+                    {pipelineGrouped[stage.id].length
+                      ? pipelineGrouped[stage.id].map((deal) => <DealCard key={`${deal.id}:${deal.name}`} deal={deal} onOpen={(id) => navigate(`/deals/${id}`)} />)
+                      : <Empty>No deals</Empty>}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
           <p className="investor-deals-note">Pipeline labels translate the existing deal stages for this workspace; no backend stage or record is changed.</p>
-        </section>
+        </section>}
 
-        <div className="investor-deals-decisions">
-          <section className="investor-deals-card investor-screening">
+        {(shows('screening') || shows('commit') || shows('closing')) && <div className="investor-deals-decisions">
+          {shows('screening') && <section className="investor-deals-card investor-screening">
             <SectionHeading id="deals-screening" title="Screening desk" detail={screening?.name} actions={investorZoneActions('deals/screening', { view: { header: ['Deal', 'Stage', 'Sector', 'Target', 'Committed'], rows: screeningRows, cells: (d) => [d.name, d.stage, d.sector, d.target, d.committed] } })} />
             {screening ? (
               <>
@@ -226,10 +319,10 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
                 </button>
               </>
             ) : <Empty>No deals are currently in screening or diligence.</Empty>}
-          </section>
+          </section>}
 
-          <div className="investor-deals-stack">
-            <section className="investor-deals-card">
+          {(shows('commit') || shows('closing')) && <div className="investor-deals-stack">
+            {shows('commit') && <section className="investor-deals-card">
               <SectionHeading id="deals-commit" title="Commit room" detail={commit?.name} actions={investorZoneActions('deals/commit')} />
               {commit ? (
                 <dl className="investor-facts compact">
@@ -238,8 +331,8 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
                   <div><dt>Target</dt><dd>{commit.target || 'Not recorded'}</dd></div>
                 </dl>
               ) : <Empty>No deals are currently at commit.</Empty>}
-            </section>
-            <section className="investor-deals-card">
+            </section>}
+            {shows('closing') && <section className="investor-deals-card">
               <SectionHeading id="deals-closing" title="Closing" detail={closing?.name} actions={investorZoneActions('deals/closing')} />
               {closing ? (
                 <div className="investor-closing-list">
@@ -249,9 +342,9 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
                   <button type="button" onClick={() => navigate(`/deals/${closing.id}`)}>Open closing details</button>
                 </div>
               ) : <Empty>No deals are currently closing.</Empty>}
-            </section>
-          </div>
-        </div>
+            </section>}
+          </div>}
+        </div>}
       </div>
 
       {!embedded && (

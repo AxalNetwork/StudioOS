@@ -1,12 +1,19 @@
 import { makeZoneActions } from './zoneActionBuilder';
 
 /**
- * The investor profile's fourteen zones, and what each of their canvas actions
+ * The investor profile's nineteen zones, and what each of their canvas actions
  * actually does. `zoneActionBuilder.js` states the three outcomes and the rules
  * they follow; this file is the investor's answers.
  *
+ * THE FIGURES IN THIS DOCBLOCK WERE WRONG IN FOUR PLACES AND ARE RECOUNTED FROM
+ * THE FILE. It said fourteen zones and forty-two actions when there were
+ * seventeen and fifty-one, and "nine run" when thirteen did. Prose that counts
+ * something drifts the moment the thing it counts grows, which is why the two
+ * figures a reader might act on — how many links, how many exports — are
+ * asserted in `profile_zone_actions.test.mjs` rather than left here.
+ *
  * WHAT THIS PASS FOUND, AND THE DISTINCTION IT TOOK A SECOND LOOK TO GET RIGHT.
- * Nine of these forty-two actions run today, and the twelve Deals and Fund gaps
+ * Thirteen of these fifty-seven actions run today, and the Deals and Fund gaps
  * are not all the same kind of gap. The SCREENS are read-only —
  * `InvestorDealsWorkspace` calls `listDeals` and two invitation methods,
  * `FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal`, and
@@ -131,6 +138,27 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'New brief', note: 'the question box below starts one' },
     { label: 'Export session', kind: 'export' },
     { label: 'Clear history', note: 'no session history is stored to clear' },
+  ],
+  // Both of these zones have had a real body since the research stores landed,
+  // and both were calling `zoneActionsFor` all along — with no key here, so
+  // `makeZoneActions` returned `[]` and `ZoneActions` rendered nothing. Three
+  // specified actions each, an empty row on screen, and a test excluding them
+  // for a reason that had stopped being true. The gap was shipped, not deferred.
+  'research/diligence': [
+    // The zone's own StatedLimit argues this one, and the note says the same
+    // thing it does: "a request button that wrote nowhere would be worse than
+    // the conversation it replaced."
+    { label: 'New request', note: 'a founder opens a room; nothing here asks one to, and a button that wrote nowhere would replace the conversation that does' },
+    { label: 'Attach to deal', note: 'nothing links a room grant to a deal record' },
+    { label: 'Export', kind: 'export' },
+  ],
+  'research/benchmarking': [
+    { label: 'New benchmark', note: 'the add-a-metric form below takes one, with its source and sample size' },
+    { label: 'Change peer set', note: 'a peer source is recorded per row, so there is no one set to switch' },
+    // Not an export. The zone renders comparisons as rows precisely so each
+    // carries the base it rests on; a chart is the shape that detaches a figure
+    // from its sample size, which is the thing this zone exists to refuse.
+    { label: 'Export chart', note: 'no chart is drawn here — each comparison is a row carrying the base it rests on' },
   ],
   'research/markets': [
     { label: 'New deep-dive', note: 'signals are gathered on a schedule, not started here' },

@@ -60,11 +60,18 @@ const PROFILES = {
     call: 'investorZoneActions',
     canvas: /^Pages · Investor /,
     buckets: /^(deals|funds|portfolio|network|research)\//,
-    zones: 17,
+    zones: 19,
     links: 1,
-    exports: 12,
-    // Both are cards in `ResearchWorkspace`'s ZONE_COPY, not bodies.
-    excluded: ['research/diligence', 'research/benchmarking'],
+    exports: 13,
+    // Nothing is excluded. `research/diligence` and `research/benchmarking` sat
+    // here behind "both are cards in ResearchWorkspace's ZONE_COPY, not
+    // bodies" — a reason that had stopped being true: ZONE_COPY is now `{}`,
+    // both slugs are in LIVE_ZONES, and both have had real bodies since the
+    // research stores landed. Worse, both were already CALLING zoneActionsFor,
+    // so with no key in the table they rendered an empty action row on an
+    // artboard that specifies three ops each. The exclusion was hiding a
+    // shipped gap rather than deferring one.
+    excluded: [],
     embeddedGuards: 1,
     // `Pages · Investor Fund` names /fund/*; the router and shellConfig.js both
     // say /funds/*, and "accounting" is mounted at the slug "ledger". The

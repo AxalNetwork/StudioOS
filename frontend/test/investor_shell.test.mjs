@@ -187,6 +187,31 @@ test('an investor pill navigates — it is not an anchor onto the page', () => {
   }
 });
 
+test('every bucket root can be linked to by section', () => {
+  // `/portfolio` was the one root of five whose sections carried no anchor at
+  // all: twelve `id=` attributes on the page and every one of them a button, a
+  // link or a status testid. Deals has `#deals-pipeline` and its three
+  // siblings, Research `#research-ask` and four more, Fund and Network the
+  // same — so a reader handed "the Positions section" had no URL for it on the
+  // one root that needed it most, since Portfolio's three sections are the
+  // longest on the profile.
+  //
+  // This is NOT the anchor row the test above forbids. That one made a PILL
+  // scroll instead of navigating, which hid four whole routes; this gives a
+  // section a name so a link from elsewhere can reach it. The pills on
+  // `/portfolio` still go to `/portfolio/positions` and its siblings.
+  const anchors = {
+    InvestorPortfolioCanvas: ['portfolio-positions', 'portfolio-updates', 'portfolio-value-add'],
+    InvestorDealsWorkspace: ['deals-pipeline', 'deals-screening', 'deals-commit', 'deals-closing'],
+  };
+  for (const [name, ids] of Object.entries(anchors)) {
+    const page = codeOnly(read(`${investorDir}/${name}.jsx`));
+    for (const id of ids) {
+      assert.ok(page.includes(`id="${id}"`), `${name} has no section anchor #${id}`);
+    }
+  }
+});
+
 test('an investor never gets two headings, two pill rows or two rails on one page', () => {
   // /deals/pipeline and /network/relationships wrap the WHOLE overview in a
   // WorkspaceShell that draws its own title, ZoneNav and rail — so the page
@@ -204,8 +229,18 @@ test('an investor never gets two headings, two pill rows or two rails on one pag
     assert.match(page, /\{!embedded && <header/, `${name} must not draw its header when embedded`);
     assert.match(page, /\{!embedded && \(\s*<WorkerRail/, `${name} must not draw a rail when embedded`);
   }
-  assert.match(codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx')),
-    /<InvestorDealsWorkspace embedded \/>/, 'the Deals shell must pass embedded');
+  // Deals now passes the zone too, for the same reason Network does and after
+  // the same defect: all four stage routes rendered the identical stacked body
+  // and differed only in what a `useEffect` scrolled to — a poll every 100 ms,
+  // up to twenty tries, because the section is not mounted on first paint.
+  const dealsShell = codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx'));
+  assert.match(dealsShell, /<InvestorDealsWorkspace embedded zone=\{isRoot \? null : zone\?\.slug\} \/>/,
+    'the Deals shell must pass embedded and the zone slug');
+  assert.doesNotMatch(dealsShell, /scrollIntoView/,
+    'the Deals shell scrolls to a section again instead of rendering only that section');
+  assert.match(codeOnly(read(`${investorDir}/InvestorDealsWorkspace.jsx`)),
+    /const shows = \(section\) => !known \|\| zone === section;/,
+    'the investor Deals page must narrow to the zone it was given');
   // `embedded` AND the zone. The second half is the fix for the defect this
   // test's own name half-describes: the page renders all three sections
   // stacked, so mounted without a slug it drew the identical body on all three

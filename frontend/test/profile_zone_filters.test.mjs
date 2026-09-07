@@ -22,11 +22,12 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
 import { FOUNDER_ZONE_FILTERS, founderZoneFilters } from '../src/workspaces/founderZoneFilters.js';
+import { INVESTOR_ZONE_FILTERS, investorZoneFilters } from '../src/workspaces/investorZoneFilters.js';
 import { canvasFilterLabels, groupFilterNotes } from '../src/workspaces/zoneFilterBuilder.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -37,12 +38,96 @@ const PROFILES = {
   founder: {
     table: FOUNDER_ZONE_FILTERS,
     build: founderZoneFilters,
+    call: 'founderZoneFilters',
+    // Build, Raise and Grow only. Founder Network (3 zones) and Founder
+    // Research (5) also carry `filters:` arrays and are NOT covered here yet;
+    // they are rendered by `NetworkWorkspace` and `ResearchWorkspace`, which
+    // the investor profile has to touch for the same eight slugs, so both
+    // licences' halves of those two components land together or not at all.
     canvas: /^Pages · Founder (Build|Raise|Grow)\.dc\.html$/,
+    pages: ['frontend/src/pages/founder', 'frontend/src/workspaces'],
+    actions: 'frontend/src/workspaces/founderZoneActions.js',
     zones: 18,
+    mounted: 18,
+    // Nothing is excluded: this profile's canvas regex above already limits the
+    // set to the three buckets it covers, so every route it yields is declared.
+    excluded: [],
+    // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
+    samples: /\b(14|2026)\b/,
+    // Founder canvas routes are the live routes.
+    live: (route) => route.replace(/^\//, ''),
+  },
+
+  investor: {
+    table: INVESTOR_ZONE_FILTERS,
+    build: investorZoneFilters,
+    call: 'investorZoneFilters',
+    // All five investor page canvases, because this table grows one bucket at a
+    // time and `excluded` below is what records how far it has got. Founder can
+    // narrow by canvas name — its carve-out is two whole components shared with
+    // another licence — but a bucket-by-bucket build needs the full canvas set
+    // visible so each zone left out is named rather than filtered away.
+    canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
+    pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
+    actions: 'frontend/src/workspaces/investorZoneActions.js',
+    zones: 8,
+    mounted: 8,
+    // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
+    // it is not here yet:
+    excluded: [
+      // Deals' three DECISION zones. Their canvas filters all describe LIST
+      // surfaces — `All decisions`, `Pass reasons`, `Documents` — and each of
+      // these three renders a single-record panel (`screeningRows[0]`,
+      // `grouped.commit[0]`, `grouped.closing[0]`). Filtering a one-record
+      // panel narrows nothing, so honouring these means building the lists the
+      // canvas draws, which is body work.
+      //
+      // AND THE EASY VERSION WOULD SHIP FOUR FALSE SENTENCES. Every "nothing
+      // is stored" note these zones would need was checked against the schema
+      // and is wrong: `ic_decisions` and `ic_votes` exist and `api.icList` is
+      // investor-callable (though it returns every decision in the system
+      // unscoped, which is its own problem); `dd_findings` carries a severity
+      // enum through `critical`; `api.dealDocuments(id)` is a method; and
+      // `pass_reason` is a stored, CHECKed taxonomy the pipeline zone now
+      // reads. A deferral that says so is worth more than a row that lies.
+      'deals/screening', 'deals/commit', 'deals/closing',
+      // Network and Research are the shared surfaces. `NetworkWorkspace` and
+      // `ResearchWorkspace` render these eight slugs for founder too, with
+      // different labels per licence, and founder's halves are carved out of
+      // this file for exactly that reason. Giving investor a toolbar there
+      // while founder has none would show a zone header on one licence and
+      // nothing on the other, from one component. They land together.
+      'network/relationships', 'network/introductions', 'network/organizations',
+      'research/ask', 'research/diligence', 'research/benchmarking',
+      'research/markets', 'research/library',
+    ],
+    // `Call 3` names one specific stored record rather than welding a count
+    // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`
+    // would not even see it. `Aug 2026` recurs on the Portfolio canvas.
+    samples: /\bCall \d+\b|\b(14|2026)\b/,
+    // The Fund canvas says `/fund/*`; the router mounts `/funds/*`, and
+    // `accounting` at the slug `ledger`. `profile_zone_actions.test.mjs:73-79`
+    // carries the same map for the ops half of the same rows.
+    live: (route) => ({
+      '/fund/lps': 'funds/lps',
+      '/fund/calls': 'funds/calls',
+      '/fund/accounting': 'funds/ledger',
+      '/fund/reporting': 'funds/reporting',
+    }[route] ?? route.replace(/^\//, '')),
   },
 };
 
-/** Every matching artboard's route and its `filters:` labels, from the canvas. */
+/**
+ * Every matching artboard's route and its `filters:` labels, from the canvas.
+ *
+ * `profile.live` maps a canvas route onto the route the router actually mounts.
+ * The founder canvases need no mapping; the investor Fund canvas says `/fund/*`
+ * where the router says `/funds/*` and mounts `accounting` at the slug
+ * `ledger`. `profile_zone_actions.test.mjs` has carried the same hook since it
+ * was written — the mapping is spelled out per profile rather than guessed,
+ * so a canvas route that stops resolving fails here instead of matching
+ * nothing and quietly shrinking the covered set.
+ */
 function canvasFilters(profile) {
   const out = {};
   for (const file of readdirSync(resolve(root, 'design/canvases/integrated')).filter((f) => profile.canvas.test(f))) {
@@ -51,7 +136,7 @@ function canvasFilters(profile) {
       const route = chunk.slice(0, chunk.indexOf("'"));
       const filters = chunk.match(/filters:\s*fil\(\[([^\]]*)\]/);
       if (!filters) continue;
-      out[route.replace(/^\//, '')] = filters[1]
+      out[profile.live(route)] = filters[1]
         .split(',')
         .map((one) => one.trim().replace(/^'|'$/g, ''))
         .filter(Boolean);
@@ -73,8 +158,18 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         `${zone} does not match its artboard's filters`,
       );
     }
-    for (const route of Object.keys(canvas)) {
-      assert.ok(profile.table[route], `${route} has artboard filters this table does not cover`);
+    // A zone the canvas specifies and this table deliberately does not carry
+    // yet. Checked as an exact SET, the way `profile_zone_actions` does it, so
+    // a deferral is recorded rather than silent: an exclusion cannot grow by
+    // accident, and a route that stops existing on a canvas fails here instead
+    // of sitting in the list forever.
+    const excluded = profile.excluded || [];
+    const specified = Object.keys(canvas).filter((route) => !excluded.includes(route));
+    assert.deepEqual(specified.sort(), Object.keys(profile.table).sort(),
+      'an artboard specifies filters for a zone this table does not cover');
+    for (const skip of excluded) {
+      assert.ok(canvas[skip], `${skip} is excluded but no artboard specifies it`);
+      assert.ok(!profile.table[skip], `${skip} is both excluded and declared`);
     }
   });
 
@@ -107,71 +202,80 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
   });
 
-  test(`${name}: a sample figure from the artboard is never printed as fact`, () => {
-    // `All 14`, `All 14 mo` and `Aug 2026` are that artboard's mock data. A
-    // label that reproduces one states a count this account has not got.
+  test(`${name}: a sample datum from the artboard is never printed as fact`, () => {
+    // The pattern is per profile because the samples are. Founder's are counts
+    // welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026` — which
+    // `{n}` fixes. The investor Fund canvas has `Call 3`, which names one
+    // specific stored record rather than carrying a count, so `{n}` is not the
+    // repair and a shared `/\b(14|2026)\b/` would not even see it.
+    //
+    // The rule either way: a label naming a specific record becomes a `dynamic`
+    // group or a relabelled positional filter ("Latest month"), never a chip
+    // carrying the sample's identity.
+    // The pattern must be AIMED AT SOMETHING. Mutation-checking defanged it to
+    // `/__never__/` and every assertion still passed, because no label in the
+    // table trips it today — every one is already correct. A pattern that
+    // cannot be shown to match anything is not a guard, it is a decoration. So
+    // first prove it catches the canvas's own labels, then prove none of those
+    // reach the screen.
+    const raw = Object.values(canvasFilters(profile)).flat();
+    const caught = raw.filter((label) => profile.samples.test(label));
+    assert.ok(caught.length > 0,
+      `${name}'s sample pattern matches none of its ${raw.length} canvas labels — it guards nothing`);
+
     for (const [zone, rows] of Object.entries(profile.table)) {
       for (const row of rows) {
         const shown = row.label || (Array.isArray(row.canvas) ? row.canvas[0] : row.canvas);
-        assert.ok(!/\b(14|2026)\b/.test(shown) || shown.includes('{n}'),
-          `${zone} · ${row.canvas} prints the canvas's own sample figure: "${shown}"`);
+        assert.ok(!profile.samples.test(shown) || shown.includes('{n}'),
+          `${zone} · ${row.canvas} prints the canvas's own sample datum: "${shown}"`);
       }
     }
   });
 
   test(`${name}: {n} is filled from the page's count, or the clause is dropped`, () => {
-    const items = profile.build('build/kpi', { value: 'all', counts: { all: 3 } });
-    assert.ok(items.some((i) => i.label === 'All 3 months'), 'the page count is not substituted');
-    const blind = profile.build('build/kpi', { value: 'all' });
-    assert.ok(blind.some((i) => i.label === 'All months'), 'a missing count invents a figure');
-    // Rendering found this one: an empty ledger produced "All 0 months", which
-    // is a broken string rather than a filter name.
-    const empty = profile.build('build/kpi', { value: 'all', counts: { all: 0 } });
-    assert.ok(empty.some((i) => i.label === 'All months'), 'a zero count is printed into the label');
-    // `Last 6 mo` and `Stale > 7d` keep their digits on purpose: a window is
-    // part of the filter's definition, not a count of this account's records.
-    // What must never survive is a `{n}` with nothing to fill it.
-    assert.ok(!blind.some((i) => /\{n\}/.test(i.label || '')), 'an unfilled placeholder reached the chip');
-    for (const zone of Object.keys(profile.table)) {
-      const counted = profile.table[zone].filter((row) => String(row.label || '').includes('{n}'));
-      for (const row of counted) {
-        const shown = profile.build(zone, { value: row.key }).find((i) => i.active)?.label || '';
-        assert.ok(!/\d/.test(shown), `${zone} · ${row.canvas} printed a figure with no count supplied`);
+    // Generic over whatever this profile's table declares. `Last 6 mo` and
+    // `Stale > 7d` keep their digits on purpose — a window is part of a
+    // filter's definition, not a count of this account's records — so only a
+    // label carrying `{n}` is checked, and what must never survive is a `{n}`
+    // with nothing to fill it. A profile with no such label runs this over an
+    // empty set, which is honest: the builder's own substitution is proved once
+    // below, outside this loop, against the one founder zone that has one.
+    for (const [zone, rows] of Object.entries(profile.table)) {
+      for (const row of rows.filter((r) => String(r.label || '').includes('{n}'))) {
+        const shown = (opts) => profile.build(zone, { value: row.key, ...opts }).find((i) => i.active)?.label || '';
+        assert.ok(!/\d/.test(shown()), `${zone} · ${row.canvas} printed a figure with no count supplied`);
+        assert.ok(!/\{n\}/.test(shown()), `${zone} · ${row.canvas} let an unfilled placeholder reach the chip`);
+        assert.ok(/\b3\b/.test(shown({ counts: { [row.key]: 3 } })),
+          `${zone} · ${row.canvas} ignores the count the page supplies`);
+        // Rendering found this one: an empty ledger produced "All 0 months",
+        // which is a broken string rather than a filter name.
+        assert.ok(!/\d/.test(shown({ counts: { [row.key]: 0 } })),
+          `${zone} · ${row.canvas} prints a zero count into the label`);
       }
     }
   });
 
   test(`${name}: a dynamic group becomes its stored names, or its reason`, () => {
-    const withRoles = profile.build('grow/talent', {
-      value: 'r7', dynamic: { roles: [{ key: 'r7', label: 'Backend engineer' }] },
-    });
-    const role = withRoles.find((i) => i.label === 'Backend engineer');
-    assert.ok(role && !role.note && role.active, 'a supplied role is not a live chip');
-    // The same group in the zone whose substitution is the least obvious: the
-    // canvas names three market SEGMENTS, and a customer record stores the
-    // SOURCE it was captured from. The chips are the stored sources, and the
-    // note beside them is what keeps that from reading as a segment breakdown.
-    const bySource = profile.build('grow/customers', {
-      value: 'referral',
-      dynamic: { sources: [{ key: 'waitlist', label: 'Waitlist' }, { key: 'referral', label: 'Referral' }] },
-    });
-    assert.deepEqual(bySource.filter((i) => !i.note).map((i) => i.label), ['All', 'Waitlist', 'Referral']);
-    assert.ok(bySource.find((i) => i.label === 'Referral').active, 'the supplied source cannot be selected');
-    assert.ok(bySource.some((i) => i.note && /no market segment is stored/.test(i.note)),
-      'the segment/source difference stopped being stated');
-    // And it renders as a bare sentence, not "One chip per segment — …", since
-    // with chips present there is no dead filter left to name.
-    const standing = groupFilterNotes(bySource).find((g) => /no market segment/.test(g.note));
-    assert.deepEqual(standing.labels, [], 'the standing note still names a filter that is not missing');
-    // A fallback note keeps its label, because there the label IS the missing thing.
-    const fallback = groupFilterNotes(profile.build('grow/talent', { value: 'all' }))
-      .find((g) => /no job post is linked/.test(g.note));
-    assert.deepEqual(fallback.labels, ['One chip per role']);
-
-    const without = profile.build('grow/talent', { value: 'all' });
-    assert.ok(without.some((i) => i.note && /no job post is linked/.test(i.note)),
-      'an empty dynamic group draws nothing and explains nothing');
-    assert.ok(!without.some((i) => i.label === 'Backend engineer'), 'a sample name leaked through');
+    // Also generic: whatever the group is called and whatever the page stores,
+    // a supplied name renders as a live chip and an empty group states its
+    // reason instead of drawing nothing. The founder examples below carry the
+    // two subtleties this cannot express — a fallback note versus a standing
+    // clarification — because both live in the wording of specific zones.
+    for (const [zone, rows] of Object.entries(profile.table)) {
+      for (const row of rows.filter((r) => r.dynamic)) {
+        const supplied = profile.build(zone, {
+          value: '__stored__', dynamic: { [row.dynamic]: [{ key: '__stored__', label: 'A stored name' }] },
+        });
+        const chip = supplied.find((i) => i.label === 'A stored name');
+        assert.ok(chip && !chip.note && chip.active,
+          `${zone} · ${row.canvas} does not render a supplied name as a live chip`);
+        const empty = profile.build(zone, { value: 'all' });
+        assert.ok(!empty.some((i) => i.label === 'A stored name'),
+          `${zone} · ${row.canvas} shows a name nothing supplied`);
+        assert.ok(empty.some((i) => i.note === row.note),
+          `${zone} · ${row.canvas} draws nothing and explains nothing when the group is empty`);
+      }
+    }
   });
 
   test(`${name}: a filter with no source is never selectable`, () => {
@@ -183,64 +287,219 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       }
     }
   });
-}
-
-/**
- * The assertion that closes the hole the rest of this file cannot see.
- *
- * Everything above takes `key: 'stalled'` at its word. Mutation-checking found
- * that turning `/grow/customers`'s dead "Stalled" filter back into a live chip
- * passed all of it — which is the precise defect this whole change exists to
- * remove. A table cannot prove its own keys do anything; only the page that
- * has to write the predicate can. So: every live key must appear in the file
- * that mounts that zone's filters, with comments stripped so a key mentioned
- * in a docblock cannot stand in for one that is used.
- *
- * A zone nobody mounts is not silently exempt — MOUNTED counts them, and the
- * count only ever goes up.
- */
-const MOUNTED = 18;
-
-function mountingFile(zone) {
-  const dirs = ['frontend/src/pages/founder', 'frontend/src/workspaces'];
-  for (const dir of dirs) {
-    for (const file of readdirSync(resolve(root, dir))) {
-      if (!/\.jsx?$/.test(file)) continue;
-      const src = read(`${dir}/${file}`);
-      if (src.includes(`founderZoneFilters('${zone}'`)) return { path: `${dir}/${file}`, src };
-    }
-  }
-  return null;
-}
-
-test('a live filter key exists in the page that would have to implement it', () => {
-  let mounted = 0;
-  for (const [zone, rows] of Object.entries(FOUNDER_ZONE_FILTERS)) {
-    const page = mountingFile(zone);
-    if (!page) continue;
-    mounted += 1;
-    // The mount itself is stripped first. Without that, writing
-    // `founderZoneFilters('grow/customers', { value: 'stalled' })` would satisfy
-    // the search for 'stalled' using nothing but the declaration under test.
-    const code = codeOnly(page.src).replace(/founderZoneFilters\([^;]*?\)\s*\}/gs, '');
-    for (const row of rows) {
-      if (!row.key) continue;
+  /**
+   * The assertion that closes the hole the rest of this file cannot see.
+   *
+   * Everything above takes `key: 'stalled'` at its word. Mutation-checking
+   * found that turning `/grow/customers`'s dead "Stalled" filter back into a
+   * live chip passed all of it — which is the precise defect this whole change
+   * exists to remove. A table cannot prove its own keys do anything; only the
+   * page that has to write the predicate can. So: every live key must appear in
+   * the file that mounts that zone's filters, with comments stripped so a key
+   * mentioned in a docblock cannot stand in for one that is used.
+   *
+   * A zone nobody mounts is not silently exempt — `profile.mounted` counts
+   * them, and the count only ever goes up.
+   */
+  test(`${name}: a live filter key exists in the page that would have to implement it`, () => {
+    let mounted = 0;
+    for (const [zone, rows] of Object.entries(profile.table)) {
+      const page = mountingFile(profile, zone);
+      if (!page) continue;
+      mounted += 1;
+      // Two things are stripped before the search, and both were found by
+      // mutation-checking rather than reasoned out.
+      //
+      // THE MOUNT. Without stripping it, writing
+      // `founderZoneFilters('grow/customers', { value: 'stalled' })` would
+      // satisfy the search for 'stalled' using nothing but the declaration
+      // under test.
+      //
+      // THE ARGUMENTS OF `api.*` CALLS. `/deals/pipeline` loads
+      // `api.listDeals(undefined, 'mine')` — a constant the page passes on
+      // every load — and that alone let a DEAD `Mine` chip pass this
+      // assertion, which is the exact defect it exists to catch. A literal
+      // that appears only inside a request is the page asking the SERVER to
+      // narrow, unconditionally; it is not a view the reader can select. A
+      // genuinely server-filtered chip still passes, because the page has to
+      // hold the value in state to send it — and `useState('mine')` is not
+      // inside the call. `[^)]*` stops at the first `)`, so a nested call
+      // leaves its tail behind: stripping too little risks a false pass, and
+      // stripping too much would fail honest code.
+      const code = codeOnly(page.src)
+        .replace(new RegExp(`${profile.call}\\([^;]*?\\)\\s*\\}`, 'gs'), '')
+        .replace(/\bapi\.\w+\([^)]*\)/g, '');
+      for (const row of rows) {
+        if (!row.key) continue;
       // Either form counts: a page may compare (`period === 'six'`) or look up
       // (`PERIODS[period]`, keyed `six:`). Both implement the filter; insisting
       // on one would push pages toward a shape to satisfy a test.
       //
       // This is a proxy and it is worth saying what it cannot do: it proves the
       // page KNOWS the key, not that the predicate behind it is right. What it
-      // does close is the hole mutation-checking found — declaring a filter live
-      // without touching the page that would have to serve it.
-      const used = new RegExp(`(['"\`]${row.key}['"\`]|\\b${row.key}\\s*:)`);
-      assert.ok(
-        used.test(code),
-        `${zone} declares the live filter '${row.key}' but ${page.path} never uses it`,
-      );
+        // does close is the hole mutation-checking found — declaring a filter
+        // live without touching the page that would have to serve it.
+        const used = new RegExp(`(['"\`]${row.key}['"\`]|\\b${row.key}\\s*:)`);
+        assert.ok(
+          used.test(code),
+          `${zone} declares the live filter '${row.key}' but ${page.path} never uses it`,
+        );
+      }
+    }
+    assert.equal(mounted, profile.mounted,
+      `${mounted} ${name} zones mount their filters; the profile says ${profile.mounted}`);
+  });
+
+  test(`${name}: every ZoneToolbar in this profile's pages names this licence`, () => {
+    // `ZoneToolbar` defaults `role = 'founder'`, because founder was the first
+    // and only caller. A mount that forgets `role="investor"` therefore paints
+    // VIOLET chips on an indigo licence and nothing else catches it — the chip
+    // still renders, still selects, still looks deliberate. It is the quiet
+    // half of the same cross-licence leak the dispatcher assertion in
+    // `profile_zone_actions` exists to prevent.
+    //
+    // Founder may omit the prop, since it IS the default — but it may not claim
+    // a different licence, which is the same leak in the other direction and
+    // keeps this assertion live rather than skipped until a second profile
+    // arrives. Every other profile must say its own name outright.
+    let checked = 0;
+    for (const [zone] of Object.entries(profile.table)) {
+      const page = mountingFile(profile, zone);
+      if (!page) continue;
+      // Split rather than match a bounded window: these mounts run to 528
+      // characters and a capped regex silently found only twelve of eighteen,
+      // which the count below caught. Each segment ends at the element's own
+      // `/>` — the props are expressions, never nested JSX, so the first one
+      // closes it.
+      for (const segment of codeOnly(page.src).split('<ZoneToolbar').slice(1)) {
+        const mount = segment.slice(0, segment.indexOf('/>'));
+        checked += 1;
+        const claimed = mount.match(/role=["'](\w+)["']/)?.[1];
+        if (name === 'founder') {
+          assert.ok(claimed === undefined || claimed === 'founder',
+            `${page.path} mounts a founder ZoneToolbar claiming role="${claimed}"`);
+        } else {
+          assert.equal(claimed, name,
+            `${page.path} mounts a ZoneToolbar with role="${claimed}", so it wears founder violet`);
+        }
+      }
+    }
+    assert.ok(checked >= profile.mounted,
+      `only ${checked} ZoneToolbar mounts found across ${profile.mounted} mounting pages`);
+  });
+
+  test(`${name}: every zone that has a filter table also has an action table for the same zone`, () => {
+    // The two halves of one row. A zone in one and not the other means the row
+    // was half-wired, which is exactly how `/raise/status` lost "Timeline".
+    const actions = read(profile.actions);
+    for (const zone of Object.keys(profile.table)) {
+      assert.ok(actions.includes(`'${zone}':`), `${zone} has filters but no actions`);
+    }
+  });
+}
+
+test('an excluded zone must be specified by a canvas and must not be declared', () => {
+  // Founder excludes nothing, so the loop that enforces this never runs against
+  // a real profile yet. Asserted directly for the same reason `live()` is: a
+  // hook nothing exercises is a hook nobody notices breaking, and this one is
+  // what keeps a deferral honest — it makes the excluded set exact, so an
+  // exclusion cannot grow by accident and a stale one cannot linger.
+  const canvas = { 'a/one': ['X'], 'a/two': ['Y'] };
+  const check = (table, excluded) => {
+    const specified = Object.keys(canvas).filter((r) => !excluded.includes(r));
+    assert.deepEqual(specified.sort(), Object.keys(table).sort());
+    for (const skip of excluded) {
+      assert.ok(canvas[skip], `${skip} is excluded but no artboard specifies it`);
+      assert.ok(!table[skip], `${skip} is both excluded and declared`);
+    }
+  };
+  check({ 'a/one': [] }, ['a/two']);
+  assert.throws(() => check({ 'a/one': [] }, []), /Expected values to be/,
+    'an undeclared, unexcluded zone slipped through');
+  assert.throws(() => check({ 'a/one': [], 'a/two': [] }, ['a/two']), /Expected values to be/,
+    'a zone that is both excluded and declared slipped through');
+  assert.throws(() => check({ 'a/one': [], 'a/two': [] }, ['a/three']), /no artboard specifies it/,
+    'an exclusion naming no artboard slipped through');
+});
+
+test('canvasFilters maps a canvas route onto the route the router mounts', () => {
+  // The hook exists for the investor Fund canvas, which says `/fund/*` where
+  // the router says `/funds/*` and mounts `accounting` at the slug `ledger`.
+  // Asserted directly rather than left to be exercised by the first profile
+  // that needs it: a mapping nothing runs is a mapping nobody notices breaking.
+  const mapped = canvasFilters({
+    canvas: /^Pages · Founder Build\.dc\.html$/,
+    live: (route) => `x/${route.replace(/^\//, '').replace('/', '-')}`,
+  });
+  assert.ok(mapped['x/build-this-week'], 'the route was not remapped');
+  assert.ok(!mapped['build/this-week'], 'the unmapped route survived');
+  assert.deepEqual(mapped['x/build-this-week'], ['This week', 'Last 4', 'All 14', 'Carried only'],
+    'remapping changed the labels it carries');
+});
+
+/**
+ * The file that mounts a zone's filters, searched across this profile's own
+ * bodies. `pages` entries may be a directory or a single file: most licences
+ * keep their zone bodies in one folder, but a few live loose in
+ * `frontend/src/pages` beside a hundred unrelated ones, and naming those
+ * outright beats scanning the folder.
+ */
+function mountingFile(profile, zone) {
+  const needle = `${profile.call}('${zone}'`;
+  for (const entry of profile.pages) {
+    const full = resolve(root, entry);
+    const files = statSync(full).isDirectory()
+      ? readdirSync(full).filter((f) => /\.jsx?$/.test(f)).map((f) => `${entry}/${f}`)
+      : [entry];
+    for (const rel of files) {
+      const src = read(rel);
+      if (src.includes(needle)) return { path: rel, src };
     }
   }
-  assert.equal(mounted, MOUNTED, `${mounted} zones mount their filters; MOUNTED says ${MOUNTED}`);
+  return null;
+}
+
+/**
+ * The builder's own behaviour, against the founder zones that exercise it.
+ *
+ * These used to run inside the per-profile loop, which meant every profile was
+ * asked to answer for `build/kpi` and `grow/talent`. The investor table has
+ * neither, so the loop failed on the second licence for the entirely wrong
+ * reason: not that its filters were wrong, but that they were not founder's.
+ * The generic halves stayed in the loop — a `{n}` label substitutes or drops,
+ * a dynamic group chips or explains, whatever the profile calls them. What is
+ * left here is what only these specific zones can say.
+ */
+test('{n} substitutes the page count, drops when there is none, and drops a zero', () => {
+  const items = founderZoneFilters('build/kpi', { value: 'all', counts: { all: 3 } });
+  assert.ok(items.some((i) => i.label === 'All 3 months'), 'the page count is not substituted');
+  const blind = founderZoneFilters('build/kpi', { value: 'all' });
+  assert.ok(blind.some((i) => i.label === 'All months'), 'a missing count invents a figure');
+  const empty = founderZoneFilters('build/kpi', { value: 'all', counts: { all: 0 } });
+  assert.ok(empty.some((i) => i.label === 'All months'), 'a zero count is printed into the label');
+});
+
+test('a dynamic note is a fallback in one zone and a standing clarification in the other', () => {
+  // `/grow/customers` is where the difference bites. The canvas names three
+  // market SEGMENTS; a customer record stores the SOURCE it was captured from.
+  // The chips are the stored sources, and the sentence saying those are not the
+  // same thing is needed most precisely when the chips ARE there to be misread.
+  const bySource = founderZoneFilters('grow/customers', {
+    value: 'referral',
+    dynamic: { sources: [{ key: 'waitlist', label: 'Waitlist' }, { key: 'referral', label: 'Referral' }] },
+  });
+  assert.deepEqual(bySource.filter((i) => !i.note).map((i) => i.label), ['All', 'Waitlist', 'Referral']);
+  assert.ok(bySource.find((i) => i.label === 'Referral').active, 'the supplied source cannot be selected');
+  assert.ok(bySource.some((i) => i.note && /no market segment is stored/.test(i.note)),
+    'the segment/source difference stopped being stated');
+  // And it renders as a bare sentence, not "One chip per segment — …", since
+  // with chips present there is no dead filter left to name.
+  const standing = groupFilterNotes(bySource).find((g) => /no market segment/.test(g.note));
+  assert.deepEqual(standing.labels, [], 'the standing note still names a filter that is not missing');
+  // A fallback note keeps its label, because there the label IS the missing thing.
+  const fallback = groupFilterNotes(founderZoneFilters('grow/talent', { value: 'all' }))
+    .find((g) => /no job post is linked/.test(g.note));
+  assert.deepEqual(fallback.labels, ['One chip per role']);
 });
 
 test('filters sharing one reason collapse into one sentence that names them all', () => {
@@ -257,12 +516,4 @@ test('filters sharing one reason collapse into one sentence that names them all'
   assert.deepEqual(week[1].labels, ['Carried only']);
 });
 
-test('every zone that has a filter table also has an action table for the same zone', () => {
-  // The two halves of one row. A zone in one and not the other means the row
-  // was half-wired, which is exactly how `/raise/status` lost "Timeline".
-  const actions = read('frontend/src/workspaces/founderZoneActions.js');
-  for (const zone of Object.keys(FOUNDER_ZONE_FILTERS)) {
-    assert.ok(actions.includes(`'${zone}':`), `${zone} has filters but no actions`);
-  }
-});
 
