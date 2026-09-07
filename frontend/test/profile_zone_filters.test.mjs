@@ -70,13 +70,12 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 4,
-    mounted: 4,
-    // Fund only, so far. Every other canvas route, with why it is not here yet:
+    zones: 7,
+    mounted: 7,
+    // Fund and Portfolio, so far. Every other canvas route, with why it is not
+    // here yet:
     excluded: [
-      // Portfolio — next; three zones through `PortfolioWorkspace`'s delegates.
-      'portfolio/positions', 'portfolio/updates', 'portfolio/value-add',
-      // Deals — after that; its four routes now each render one zone, so the
+      // Deals — next; its four routes now each render one zone, so the
       // toolbar has an unambiguous header to sit in.
       'deals/pipeline', 'deals/screening', 'deals/commit', 'deals/closing',
       // Network and Research are the shared surfaces. `NetworkWorkspace` and

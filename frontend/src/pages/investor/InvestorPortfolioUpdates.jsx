@@ -6,8 +6,9 @@ import { AlertCircle, Inbox, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import './investorPortfolioCanvas.css';
 import './investorPortfolioUpdates.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
+import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 
 const money = (value) => value == null || !Number.isFinite(Number(value)) ? '—' : `$${Math.round(Number(value)).toLocaleString()}`;
 const title = (value, fallback = 'Not recorded') => String(value ?? '').trim().replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) || fallback;
@@ -57,12 +58,12 @@ export default function InvestorPortfolioUpdates() {
       return { ...position, compliance, health: healthByProject.get(String(position.project_id)) || null, update, current, arrived: current === true && update ? update.submitted_at || update.updated_at : null, status: state.unavailable.updates ? 'Unavailable' : current === false ? 'Not reported' : update ? 'Received' : 'Not recorded' };
     });
   }, [state]);
-  const visible = rows.filter((row) => {
-    if (filter === 'overdue') return row.current === false;
-    if (filter === 'parse') return false;
-    if (filter === 'rules') return false;
-    return true;
-  });
+  // `if (filter === 'parse') return false; if (filter === 'rules') return false;`
+  // used to sit here — two chips that emptied the inbox. An empty inbox reads
+  // as "every update is clean", not "nothing here was ever parsed", which is
+  // the actual truth and is now stated in the zone header row instead of being
+  // discovered by clicking. Both are prose there; neither reaches this filter.
+  const visible = rows.filter((row) => (filter === 'overdue' ? row.current === false : true));
   const complianceUnavailable = state.unavailable.compliance;
   const healthUnavailable = state.unavailable.health;
   const arrived = complianceUnavailable ? 'Unavailable' : state.compliance?.reported_count ?? 0;
@@ -73,20 +74,24 @@ export default function InvestorPortfolioUpdates() {
 
   return <div className="i4-shell ip2-shell"><main className="i4-portfolio ip2-updates" data-testid="investor-portfolio-updates"><header className="i4-heading"><div><div className="i4-eyebrow">Portfolio / Updates</div><h1>Updates &amp; KPI collection</h1><p>Inbox, cadence compliance and source-preserved founder updates from the investor-accessible portfolio.</p></div><button type="button" className="i4-icon-button" onClick={load} aria-label="Refresh portfolio updates"><RefreshCw size={15} /></button></header>
     <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" className="my-3" />
-    <ZoneActions className="mb-3" items={investorZoneActions('portfolio/updates', { view: { header: ['Company', 'Stage', 'Arrived', 'State', 'Update'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.arrived, r.status, r.update?.title] } })} />
+    <ZoneToolbar
+      role="investor"
+      className="mb-3"
+      filters={investorZoneFilters('portfolio/updates', { value: filter, onChange: setFilter })}
+      actions={investorZoneActions('portfolio/updates', { view: { header: ['Company', 'Stage', 'Arrived', 'State', 'Update'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.arrived, r.status, r.update?.title] } })}
+    />
     {state.error && <div className="i4-error" data-testid="status-investor-updates-error"><span>{String(state.error).toLowerCase() === 'not found' ? 'Portfolio update source unavailable in local development. No empty inbox claim is being made.' : state.error}</span><button type="button" onClick={load}>Retry</button></div>}
     {partial && !state.loading && <div className="i4-partial" data-testid="status-investor-updates-partial">Some portfolio sources are temporarily unavailable. Affected metrics and cells are labelled rather than treated as zero.</div>}
-    {state.loading ? <Skeleton /> : <><div className="ip2-filters"><div><button className={filter === 'period' ? 'is-active' : ''} onClick={() => setFilter('period')}>This period</button><button className={filter === 'overdue' ? 'is-active' : ''} onClick={() => setFilter('overdue')}>Overdue</button><button className={filter === 'parse' ? 'is-active' : ''} onClick={() => setFilter('parse')}>Parse review</button><button className={filter === 'rules' ? 'is-active' : ''} onClick={() => setFilter('rules')}>Rules</button></div></div>
+    {state.loading ? <Skeleton /> : <>
       <section className="i4-stats"><Stat label="Arrived" value={complianceUnavailable ? 'Unavailable' : `${arrived} of ${total}`} note={complianceUnavailable ? 'Cadence source unavailable' : `${rows.filter((row) => row.current === true && row.update).length} with a stored update`} /><Stat label="Never arrived" value={complianceUnavailable ? 'Unavailable' : neverArrived} note={complianceUnavailable ? 'Cadence source unavailable' : 'Current period not reported'} /><Stat label="Parse review" value="Unavailable" note="No parse-review state is stored" muted /><Stat label="Runway alerts" value={runwayAlerts} note={healthUnavailable ? 'Health source unavailable' : 'Below 6 months from health records'} /></section>
-      <section className="i4-card i4-positions ip2-inbox"><div className="i4-section-head"><div><h2>Update inbox</h2><p>{filter === 'rules' ? 'Extraction rules are not available in this read-only feed' : filter === 'parse' ? 'No parse-review state is recorded by the source' : 'Cadence status and founder-submitted content'}</p></div><span>Source-preserved · no write</span></div><UpdateTable rows={visible} updatesUnavailable={state.unavailable.updates} complianceUnavailable={complianceUnavailable} filter={filter} /><p className="i4-seam-note"><span>Founder record</span> Submitted updates remain attributable to their source company. IP2 does not edit, parse, chase, or submit an update.</p></section>
+      <section className="i4-card i4-positions ip2-inbox"><div className="i4-section-head"><div><h2>Update inbox</h2><p>Cadence status and founder-submitted content</p></div><span>Source-preserved · no write</span></div><UpdateTable rows={visible} updatesUnavailable={state.unavailable.updates} complianceUnavailable={complianceUnavailable} /><p className="i4-seam-note"><span>Founder record</span> Submitted updates remain attributable to their source company. IP2 does not edit, parse, chase, or submit an update.</p></section>
       <section className="i4-card ip2-unavailable"><div className="i4-section-head"><div><h2>Extraction rules</h2><p>Not available in the stored investor feed</p></div></div><strong>Parse review and editable proposals are unavailable.</strong><p>The API exposes submitted KPI values and narratives, but not an extraction proposal, ambiguity state, or rule editor. IP2 does not manufacture those states.</p></section>
       <footer className="i4-boundary">Investor workspace · updates shown are restricted to this investor’s accessible portfolio.</footer></>}
   </main><UpdatesRail rows={rows} unavailable={state.unavailable} /></div>;
 }
 
-function UpdateTable({ rows, updatesUnavailable, complianceUnavailable, filter }) {
+function UpdateTable({ rows, updatesUnavailable, complianceUnavailable }) {
   if (updatesUnavailable) return <div className="i4-empty"><AlertCircle size={16} />Portfolio update source unavailable. No empty-reporting claim is being made.</div>;
-  if (filter === 'parse' || filter === 'rules') return <div className="i4-empty"><AlertCircle size={16} />{filter === 'parse' ? 'No parse-review records are available from this source.' : 'Extraction rules are unavailable in this read-only collection.'}</div>;
   if (!rows.length) return <div className="i4-empty"><Inbox size={16} />No accessible portfolio companies are recorded for this investor.</div>;
   return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Arrived</th><th>State</th><th>What came in</th></tr></thead><tbody>{rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-update-${row.project_id}`}><td><strong>{row.project?.name || `Startup ${row.project_id}`}</strong><small>{row.project?.stage || 'Stage not recorded'}</small></td><td>{row.arrived ? dateLabel(row.arrived) : '—'}{row.update && !row.current && !complianceUnavailable && <small>Last stored update: {dateLabel(row.update.submitted_at || row.update.updated_at)}</small>}</td><td><span className={`ip2-state is-${row.status.toLowerCase().replace(/\s+/g, '-')}`}>{row.status}</span></td><td>{row.update ? <><strong>{row.update.title || 'Untitled update'}</strong><small>{kpiText(row.update) || 'No KPI values recorded'}</small></> : <span className="ip2-muted">{complianceUnavailable ? 'Cadence status unavailable' : 'No current update recorded'}</span>}</td></tr>)}</tbody></table></div>;
 }

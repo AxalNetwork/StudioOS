@@ -37,6 +37,10 @@ const NO_FUND_SCOPED_CALLS =
   'capital calls are recorded, but nothing links one to a fund register, so none can be listed against this fund';
 const NO_LEDGER_LINES =
   'the fund analytics contract returns totals, not the journal, fee movements or audit rows behind them';
+const NO_EXTRACTION_LAYER =
+  'the update feed returns submitted values and narratives, never the extraction proposal behind them or the rules that would produce one';
+const NO_SUPPORT_LEDGER =
+  'no value-add ledger exists, so no support entry, delivery state, hour or outcome is recorded against any company';
 
 export const INVESTOR_ZONE_FILTERS = {
   // ── Fund ─────────────────────────────────────────────────────────────────
@@ -91,6 +95,49 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Published', key: 'published' },
     { canvas: 'Drafted', key: 'drafted' },
     { canvas: 'Delivery', key: 'delivery' },
+  ],
+
+  // ── Portfolio ────────────────────────────────────────────────────────────
+  // All four are real, and `By stage` is the one that needs saying: it is a
+  // live chip that REVEALS a control rather than applying one. The page has
+  // always kept a `<select>` of the stages its own rows carry, shown only when
+  // this filter is chosen. That select does not move here — narrowing to a
+  // stage is still two clicks, because there is no single stage the chip could
+  // pick for you.
+  'portfolio/positions': [
+    { canvas: 'Needs attention', key: 'attention' },
+    { canvas: 'All', key: 'all' },
+    { canvas: 'By stage', key: 'stage' },
+    { canvas: 'Marked down', key: 'marked' },
+  ],
+
+  // `if (filter === 'parse') return false; if (filter === 'rules') return false;`
+  // — the `/grow/customers` "Stalled" defect, twice, on one page. Both chips
+  // emptied the inbox, and an empty inbox reads as "every update is clean"
+  // rather than "nothing here was ever parsed". The page's own panel below has
+  // said the true thing all along; it just said it after the click.
+  //
+  // ONE REASON, NOT TWO, and the ops half is why the wording is specific: that
+  // row already carries `Edit rules — no reminder rules are stored`. The rules
+  // this filter means are the EXTRACTION rules, a different absent thing, so
+  // the sentence names which kind rather than leaving two "rules" notes inches
+  // apart appearing to contradict each other.
+  'portfolio/updates': [
+    { canvas: 'This period', key: 'period' },
+    { canvas: 'Overdue', key: 'overdue' },
+    { canvas: 'Parse review', note: NO_EXTRACTION_LAYER },
+    { canvas: 'Rules', note: NO_EXTRACTION_LAYER },
+  ],
+
+  // Four live chips over a page that makes no `api.*` call at all — the same
+  // shape as `/funds/calls`, and the same repair. `By company` is not a dynamic
+  // group here: the companies exist, but there is nothing to group BY them, so
+  // the missing thing is the ledger and not the names.
+  'portfolio/value-add': [
+    { canvas: 'All', note: NO_SUPPORT_LEDGER },
+    { canvas: 'Delivered', note: NO_SUPPORT_LEDGER },
+    { canvas: 'Outstanding', note: NO_SUPPORT_LEDGER },
+    { canvas: 'By company', note: NO_SUPPORT_LEDGER },
   ],
 };
 
