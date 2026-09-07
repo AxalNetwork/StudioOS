@@ -375,8 +375,6 @@ export async function request(path, options = {}) {
         // Build queue #120 — public audience-scoped cap-table link.
         || path.startsWith('/captable/share/');
       if (res.status === 401 && !path.startsWith('/auth/') && !isPublicEndpoint) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
         // Only force a /login redirect when we're on a protected page.
         // Public marketing/onboarding pages must stay reachable for
         // anonymous visitors AND for previously-signed-in users with a
@@ -387,7 +385,24 @@ export async function request(path, options = {}) {
         // `_suppressAuthRedirect` is set only while the catch-all 404 page is
         // mounted (an unknown URL), so a logged-out visitor there sees the 404
         // instead of being bounced to /login by this background 401.
+        //
+        // THE SESSION WIPE BELONGS INSIDE THIS GUARD, and used to sit above
+        // it. The redirect was correctly skipped on a public page while the
+        // two `removeItem` calls ran anyway — so a signed-in reader on `/`,
+        // `/login`, `/articles` or `/jobs` was silently signed out by ONE
+        // background 401 from any endpoint that is not `/auth/`-prefixed.
+        // They stayed on the page, so nothing announced it; the session was
+        // simply gone on their next click. That is the exact case the comment
+        // four lines above says this branch exists to protect — a
+        // previously-signed-in user with a now-expired session keeping the
+        // public page — and clearing their token is not "not bouncing them".
+        //
+        // A 401 on a PROTECTED page still clears, because there the tab is
+        // about to become a sign-in screen and leaving a dead token behind
+        // would let the next mount re-send it.
         if (!publicPath && !_suppressAuthRedirect) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
           // Task #10 — capture the bounce BEFORE the hard navigation tears the
           // tab down. The reportError beacon uses keepalive so it still lands
           // even though we're about to leave the page; this is what makes a
