@@ -115,3 +115,71 @@ test('the completeness meter counts each profile field once', () => {
   assert.deepEqual([...new Set(dupes)], [],
     `these profile fields are counted more than once: ${[...new Set(dupes)].join(', ')}`);
 });
+
+/**
+ * EACH ZONE'S OWN HEADING AND LINE, DERIVED FROM THE CANVAS RATHER THAN TYPED.
+ *
+ * `AdvisorBucketRoutes.jsx` passed `title` only on the bucket root and `intro`
+ * from a map keyed by PREFIX, so all five Expertise zones printed one sentence
+ * — "How the market finds you, and what it finds when it does." — under five
+ * headings that were each the nav pill's label. The canvas gives every artboard
+ * an `h1` that is deliberately not the pill (`Practice profile` under `Profile`,
+ * `Evidence` under `Proof`) and a `sub` naming what that zone lists.
+ *
+ * The expected strings are parsed out of the canvas here, so this cannot pass
+ * on a table that agrees with a typo. If the canvas is re-exported with
+ * different copy, this fails and the table is what has to move.
+ */
+const CANVAS = readFileSync(
+  resolve(process.cwd(), 'design/incoming/Pages · Advisor Expertise.dc.html'), 'utf8');
+const ROUTES = readFileSync(
+  resolve(process.cwd(), 'frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx'), 'utf8');
+
+/** `route → { h1, sub }` for every Expertise artboard the canvas declares. */
+function canvasHeads() {
+  const out = {};
+  for (const chunk of CANVAS.split(/route:\s*'/).slice(1)) {
+    const route = chunk.slice(0, chunk.indexOf("'"));
+    const h1 = chunk.match(/h1:\s*'((?:[^'\\]|\\.)*)'/);
+    const sub = chunk.match(/sub:\s*'((?:[^'\\]|\\.)*)'/);
+    if (!h1 || !sub || !route.startsWith('/expertise/')) continue;
+    out[route.slice('/expertise/'.length)] = { h1: h1[1], sub: sub[1] };
+  }
+  return out;
+}
+
+test('every Expertise zone carries the canvas’s own heading and line', () => {
+  const heads = canvasHeads();
+  assert.equal(Object.keys(heads).length, 5,
+    `the canvas declared ${Object.keys(heads).length} Expertise artboards with an h1 and a sub, not 5`);
+
+  const table = ROUTES.slice(ROUTES.indexOf('const EXPERTISE_ZONE_HEAD = {'));
+  assert.ok(table.length > 0, 'the per-zone heading table is gone');
+  const body = table.slice(0, table.indexOf('\n  };'));
+
+  for (const [slug, { h1, sub }] of Object.entries(heads)) {
+    const row = body.match(new RegExp(`\\n\\s*${slug}: \\{ h1: '([^']*)', sub: '([^']*)' \\}`));
+    assert.ok(row, `${slug} has no row in EXPERTISE_ZONE_HEAD`);
+    assert.equal(row[1], h1, `${slug}'s heading is not the canvas's`);
+    assert.equal(row[2], sub, `${slug}'s line is not the canvas's`);
+    // The canvas's h1 is deliberately NOT the nav pill's label. A row that
+    // matched the pill would mean the table had been filled in from the router.
+    assert.notEqual(h1.toLowerCase(), slug, `${slug}'s canvas h1 is just the slug — re-read the export`);
+  }
+});
+
+test('a zone reaches the shell with its own heading, not the bucket’s line', () => {
+  // The wiring, not just the table: `title` was `isRoot ? … : undefined` and
+  // `intro` was `INTRO[prefix]` flat, which is what made all five identical.
+  assert.match(ROUTES, /title=\{isRoot \? bucketTitle\(bucket\) : zoneHead\?\.h1\}/,
+    'a zone no longer passes its own heading to the shell');
+  assert.match(ROUTES, /intro=\{zoneHead\?\.sub \|\| INTRO\[prefix\]\}/,
+    'a zone no longer prefers its own line over the bucket sentence');
+  assert.match(ROUTES, /prefix === '\/expertise' && !isRoot \? EXPERTISE_ZONE_HEAD\[slug\] : null/,
+    'the per-zone lookup is gone, or now fires on the bucket root too');
+
+  // The bucket ROOT keeps the bucket sentence and the tagline heading — task
+  // #75's rule, which this must not undo.
+  assert.match(ROUTES, /'\/expertise': 'How the market finds you/,
+    'the bucket-root sentence was deleted rather than scoped to the root');
+});
