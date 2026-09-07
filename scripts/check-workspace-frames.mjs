@@ -56,7 +56,8 @@ try {
 const EXECUTABLE = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome']
   .find((p) => existsSync(p));
 
-const { allZoneRoutes, bucketsFor } = await import(join(ROOT, 'frontend/src/workspaces/shellConfig.js'));
+const { bucketsFor, zonePath } = await import(join(ROOT, 'frontend/src/workspaces/shellConfig.js'));
+const { boardFor } = await import(join(ROOT, 'frontend/src/workspaces/boards/index.js'));
 const ARGS = process.argv.slice(2);
 
 /**
@@ -75,6 +76,15 @@ const ARGS = process.argv.slice(2);
  * fails any route that shows a skeleton or asserts emptiness as fact.
  */
 const FAIL_READS = ARGS.includes('--fail-reads');
+/**
+ * `--dark` runs the same structural pass with the browser reporting a dark
+ * colour scheme. It is opt-in because it doubles the page loads, and it earns
+ * its place because a theme is a render-time fact: the source suite reads
+ * `dark:` classes as text and cannot see a page that lays out differently, or
+ * throws, under the other one. It asserts the SAME things — nothing about
+ * contrast, which needs a different instrument and would report noise here.
+ */
+const DARK = ARGS.includes('--dark');
 const ROLE_ARG = ARGS.find((a) => !a.startsWith('--'));
 const ROLES = ROLE_ARG ? [ROLE_ARG] : ['founder', 'investor', 'advisor', 'partner'];
 
@@ -186,7 +196,7 @@ const SHELL_READ = /\/api\/(settings|notifications|personas|company\/memberships
 for (const role of ROLES) {
   const user = { id: 9, email: 'frame-check@example.test', name: 'Frame Check',
     role, is_super_admin: 0, kyc_status: 'approved', plan: 'pro' };
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 }, colorScheme: DARK ? 'dark' : 'light' });
   // Nothing off-origin: with no egress the font requests hang and every wait
   // times out on them rather than on the app.
   await ctx.route('**/*', (route) =>
@@ -239,9 +249,28 @@ for (const role of ROLES) {
     localStorage.setItem('token', 'frame-check');
   }, user);
 
-  const routes = [...bucketsFor(role).map((b) => b.prefix), ...allZoneRoutes(role)];
+  /**
+   * THE ROUTE LIST CARRIES WHAT EACH ROUTE SHOULD SAY IT IS, which is the C12
+   * addition and the reason it is built from `bucketsFor` rather than
+   * `allZoneRoutes`.
+   *
+   * `zoneForPath` ends `|| bucket.zones[0]` (`shellConfig.js`), and `App.jsx`
+   * registers all eight `/research/*` paths for all five roles while
+   * `RESEARCH_ZONES` gives each role only four or five. So a licence at a
+   * `/research/*` path its own shell does not list silently gets the FIRST
+   * zone — a partner at `/research/companies` reads "Research ‹ Ask" under a
+   * `/companies` URL. That renders cleanly, holds the frame, and passes every
+   * check above it while showing the wrong zone.
+   *
+   * Pairing each path with the label its own shell declares is what makes that
+   * visible: the crumb and the h1 must name the zone that was asked for.
+   */
+  const routes = [
+    ...bucketsFor(role).map((b) => ({ path: b.prefix, root: b })),
+    ...bucketsFor(role).flatMap((b) => b.zones.map((z) => ({ path: zonePath(b, z), zone: z, bucket: b }))),
+  ];
   let clean = 0;
-  for (const path of routes) {
+  for (const { path, zone, root, bucket } of routes) {
     const page = await ctx.newPage();
     failedReads = 0;
     const thrown = [];
@@ -274,6 +303,24 @@ for (const role of ROLES) {
           skeletons: main?.querySelectorAll('[aria-busy="true"], .animate-pulse, .fn-rel-loading').length ?? 0,
           statesFailure: /unavailable|could not|did not load|failed|error|try again|retry|not recorded/i.test(text),
           claimsEmpty: /\bno [a-z ]{0,30}(records|available|found|yet)\b|\bnone yet\b/i.test(text),
+          // The crumb's bold half and the heading, for the identity check. The
+          // crumb is `<bucket link> ‹ <b>zone</b>`; the bold element is the only
+          // one in it, so it is read from the crumb row rather than the page.
+          crumbZone: (main?.querySelector('.mb-2.flex.items-center b')?.innerText || '').trim(),
+          h1Text: (main?.querySelector('h1')?.innerText || '').trim(),
+          // A bucket root must offer a way into its own bucket, whether it drew
+          // a board or the overview grid. `BucketBoard` returns null for an
+          // empty board and nothing downstream catches that.
+          zoneLinks: [...(main?.querySelectorAll('a[href]') || [])]
+            .map((a) => new URL(a.href).pathname),
+          // The body must never scroll sideways. Measured on the document,
+          // because a wide table is supposed to scroll inside its own box.
+          overflowsX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+          // An entitlement notice shown INSTEAD of the bucket. The wording is
+          // the licence tier's own, so it names the add-on rather than saying
+          // "locked" — matching on the tier word is what keeps this from also
+          // catching a page that merely mentions a lock icon somewhere.
+          locked: /add-on|not included in your plan|upgrade to/i.test(text),
         };
       });
       const bad = [];
@@ -285,6 +332,42 @@ for (const role of ROLES) {
       // Only where the shared shell is actually the frame — several routes
       // draw their own canvas instead, correctly, and have no shell column.
       if (m.shellPad && m.shellPad === '0px') bad.push('shell renders with no padding');
+      if (m.overflowsX) bad.push('the page scrolls sideways');
+      // C12 — the zone that rendered must be the zone that was asked for.
+      // Compared case-insensitively: several zone labels are uppercased in CSS,
+      // and `text-transform` reaches `innerText`, so a case-sensitive check
+      // reports a false mismatch on exactly the labels it is watching.
+      //
+      // THE CRUMB, AND DELIBERATELY NOT THE h1. The first version fell back to
+      // the heading where no crumb was drawn, and reported fourteen routes that
+      // were all correct: `WorkspaceShell` renders `{title || zone?.label}`, so
+      // a page that passes its own title gets it, and "This week · Sep 7–Sep 13"
+      // and "Raise war-room" are better headings than the pill they sit under.
+      // The zone label is the pill's word, not the page's — only the crumb
+      // promises to be it, so only the crumb can be held to it.
+      if (zone && m.crumbZone && m.crumbZone.toLowerCase() !== zone.label.toLowerCase()) {
+        bad.push(`crumb says "${m.crumbZone}", route asked for "${zone.label}"`);
+      }
+      // C1/C3 — a bucket root leads somewhere. A registered board draws its
+      // sections and an unregistered one falls through to the overview grid;
+      // either way every root must link into its own zones, and a root that
+      // links to none of them has rendered a shell with no board and no grid.
+      //
+      // A STATED BOUNDARY IS A COMPLETE ANSWER, and leaving that out reported
+      // investor `/funds` — which is right, and which this file already
+      // documents for the `--fail-reads` counter a few lines down: an account
+      // without `hasInvestorTier(user, 'institutional')` gets the "Institutional
+      // add-on" lock instead of the bucket, and a locked bucket has no zones to
+      // offer. Detected from what the page says rather than from a list of route
+      // names, so a bucket that gains a lock later is exempt without anyone
+      // remembering to add it.
+      if (root && !m.locked) {
+        const own = new Set(root.zones.map((z) => zonePath(root, z)));
+        if (!m.zoneLinks.some((href) => own.has(href))) {
+          const shape = boardFor(role, root.prefix, {}) ? 'board' : 'overview grid';
+          bad.push(`bucket root links to none of its own zones (expected a ${shape})`);
+        }
+      }
       if (FAIL_READS && failedReads > 0) {
         // This page asked for data and was refused. The rule is that it must
         // not dress that up as an answer — so a spinner still spinning, or a
@@ -323,4 +406,4 @@ if (failures.length) {
 }
 console.log(FAIL_READS
   ? '✓ check-workspace-frames --fail-reads: every workspace route states a failed read rather than showing a skeleton or claiming empty.'
-  : '✓ check-workspace-frames: every workspace route renders and holds the frame.');
+  : `✓ check-workspace-frames${DARK ? ' --dark' : ''}: every workspace route renders, holds the frame, names its own zone and fits.`);
