@@ -27,13 +27,13 @@ cffi==2.1.1 ; platform_python_implementation != 'PyPy'
     # via cryptography
 charset-normalizer==3.5.1
     # via requests
-click==8.4.2
+click==8.5.0
     # via uvicorn
 colorama==0.4.6 ; sys_platform == 'win32'
     # via
     #   click
     #   qrcode
-cryptography==50.0.0
+cryptography==50.0.1
     # via
     #   google-auth
     #   http-ece
@@ -49,18 +49,18 @@ google-api-core==2.34.0
     # via google-api-python-client
 google-api-python-client==2.199.0
     # via repl-nix-workspace
-google-auth==2.56.3
+google-auth==2.57.0
     # via
     #   google-api-core
     #   google-api-python-client
     #   google-auth-httplib2
     #   google-auth-oauthlib
     #   repl-nix-workspace
-google-auth-httplib2==0.4.1
+google-auth-httplib2==0.4.2
     # via google-api-python-client
-google-auth-oauthlib==1.4.0
+google-auth-oauthlib==1.4.1
     # via repl-nix-workspace
-googleapis-common-protos==1.75.1
+googleapis-common-protos==1.75.2
     # via google-api-core
 greenlet==3.5.5 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
@@ -98,7 +98,7 @@ propcache==0.5.2
     # via
     #   aiohttp
     #   yarl
-proto-plus==1.28.3
+proto-plus==1.28.4
     # via google-api-core
 protobuf==7.36.0
     # via
@@ -116,7 +116,7 @@ pyasn1-modules==0.4.2
     # via google-auth
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
-pydantic==2.13.4
+pydantic==2.13.5
     # via
     #   fastapi
     #   repl-nix-workspace
@@ -133,7 +133,7 @@ python-dotenv==1.2.3
     # via repl-nix-workspace
 python-multipart==0.0.32
     # via repl-nix-workspace
-pywebpush==2.4.0
+pywebpush==2.5.0
     # via repl-nix-workspace
 qrcode==8.2
     # via repl-nix-workspace
@@ -148,7 +148,7 @@ sqlalchemy==2.0.52
     # via
     #   alembic
     #   sqlmodel
-sqlmodel==0.0.39
+sqlmodel==0.0.42
     # via repl-nix-workspace
 starlette==1.6.0
     # via fastapi
