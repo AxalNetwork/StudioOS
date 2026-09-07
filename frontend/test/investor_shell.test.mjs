@@ -187,6 +187,31 @@ test('an investor pill navigates — it is not an anchor onto the page', () => {
   }
 });
 
+test('every bucket root can be linked to by section', () => {
+  // `/portfolio` was the one root of five whose sections carried no anchor at
+  // all: twelve `id=` attributes on the page and every one of them a button, a
+  // link or a status testid. Deals has `#deals-pipeline` and its three
+  // siblings, Research `#research-ask` and four more, Fund and Network the
+  // same — so a reader handed "the Positions section" had no URL for it on the
+  // one root that needed it most, since Portfolio's three sections are the
+  // longest on the profile.
+  //
+  // This is NOT the anchor row the test above forbids. That one made a PILL
+  // scroll instead of navigating, which hid four whole routes; this gives a
+  // section a name so a link from elsewhere can reach it. The pills on
+  // `/portfolio` still go to `/portfolio/positions` and its siblings.
+  const anchors = {
+    InvestorPortfolioCanvas: ['portfolio-positions', 'portfolio-updates', 'portfolio-value-add'],
+    InvestorDealsWorkspace: ['deals-pipeline', 'deals-screening', 'deals-commit', 'deals-closing'],
+  };
+  for (const [name, ids] of Object.entries(anchors)) {
+    const page = codeOnly(read(`${investorDir}/${name}.jsx`));
+    for (const id of ids) {
+      assert.ok(page.includes(`id="${id}"`), `${name} has no section anchor #${id}`);
+    }
+  }
+});
+
 test('an investor never gets two headings, two pill rows or two rails on one page', () => {
   // /deals/pipeline and /network/relationships wrap the WHOLE overview in a
   // WorkspaceShell that draws its own title, ZoneNav and rail — so the page

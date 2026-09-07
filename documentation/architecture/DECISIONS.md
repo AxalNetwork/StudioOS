@@ -2639,3 +2639,72 @@ so a declaration cannot satisfy the search for its own key. Turning "Stalled"
 back on now fails the build. What it still cannot prove is that a predicate is
 *correct*, only that the page knows the key exists; that limit is written into
 the test rather than left for a reader to discover.
+
+### D52. A filter cannot be called dead until the store has been checked, and three of the five that looked dead were reading columns the page had already loaded
+
+**D51** settled what to do with a filter nothing backs: it becomes a sentence
+naming what is missing, because an empty set reads as an answer. Carrying that
+rule onto the investor profile turned up the opposite failure, and it is the
+more expensive one.
+
+**"Nothing is stored" is itself a claim about the data, and it is the easier
+claim to get wrong.** Writing a chip is work; writing a sentence that says the
+question cannot be asked is free, and it retires the question. Five of the
+investor labels checked here would have shipped that sentence falsely:
+
+- `/funds/calls` — `api.capitalCalls()` exists and calls **are** recorded. What
+  does not exist is a link from a call to a fund register, which is what the
+  page's own empty state had been saying in one word all along: *fund-scoped*.
+- `/deals/pipeline` — `Unassigned` reads `deals.lead_partner_id`, a column the
+  list query already selects; `Stale` reads `days_in_stage`, computed and
+  returned on every row; `Passed` reads `status = 'rejected'`, written through
+  `POST /api/deals/:id/pass` with a reason from a CHECKed taxonomy. Three
+  filters, all live, on a board that had no filter row at all.
+- Deals' three decision zones would have needed four more such sentences, and
+  every one is false: `ic_decisions` and `ic_votes` exist with `api.icList`
+  investor-callable, `dd_findings` carries a severity enum through `critical`,
+  `api.dealDocuments(id)` is a method, and `pass_reason` is the same taxonomy
+  the pipeline zone now reads. They are deferred in the guard's `excluded` set
+  with those facts written down, rather than closed with prose that lies.
+
+**So the rule is a sequence, not a judgement:** find the column, find the write
+path, find the client method — and only then decide which of the three
+outcomes a label gets. Absent is not empty (D51); unchecked is not absent.
+
+**A third outcome the founder table never needed: already scoped.**
+`/deals/pipeline`'s `Mine` is neither live nor missing. The board loads
+`scope=mine`, so a chip would narrow nothing while appearing to, and "no owner
+is recorded" would be false with `Unassigned` reading that very column beside
+it. The sentence says the question has already been answered upstream.
+
+**A bucket whose zones are sections of one page narrows to the zone rather
+than scrolling to it.** `/deals/{pipeline,screening,commit,closing}` rendered
+one component and differed only in what a `useEffect` polled for and scrolled
+to — up to twenty times, at 100 ms, because the workspace loads its deals
+before it renders them. It now passes a `zone` prop and renders one section per
+route, which is what `InvestorNetworkWorkspace` already did and said why:
+*"the pills moved, the page did not"*. Narrowing is not splitting — one
+component, one `api.listDeals` call, and `/deals` still stacks all four.
+
+Four action rows repeated on a scrolling page is noise. Four FILTER rows is
+four stateful controls making four different claims about what the reader is
+looking at, with the counts above them unmoved when the wrong one is clicked.
+That is what made the routing decision urgent rather than cosmetic.
+
+**A passed deal was being counted as live.** The stage ladder in
+`normalizeDeal` had no branch for `rejected`, so a passed deal fell through to
+Commit or Diligence, sat in the funnel, and was included in the "N live deals"
+the section header prints — and could be the deal on the screening desk. The
+`Passed` filter is what made the gap visible; a passed deal has no stage, so it
+is now excluded from the funnel and rendered as a list with its recorded
+reason rather than as a card under a stage it is not in.
+
+**Mutation-checking found the guard's own hole again, and it was the same
+shape as last time.** D51 recorded that the live-key check requires every key
+to appear in the page that would implement it. Declaring `/deals/pipeline`'s
+`Mine` live passed anyway, because `api.listDeals(undefined, 'mine')` puts that
+literal in the file for an unrelated reason. The check now strips `api.*` call
+arguments first: a literal that appears only inside a request is the page
+asking the server to narrow unconditionally, not a view a reader can select. A
+genuinely server-filtered chip still passes, because the page has to hold the
+value in state to send it.
