@@ -34,6 +34,10 @@ import {
   CATEGORY_META,
   ReferralError,
   CSV_IMPORT_LIMIT,
+  avgReviewDaysForReferrer,
+  PRE_VERDICT_STATUSES,
+  VERDICT_STATUSES,
+  STATUSES,
 } from '../src/services/referralSubmissions.ts';
 
 const root = resolve(import.meta.dirname, '..');
@@ -248,4 +252,117 @@ test('refunds still reverse the referral commission', async () => {
   const src = await readFile(resolve(root, 'src/routes/admin_billing.ts'), 'utf8');
   assert.match(src, /clawbackReferralCommissionForRefund/);
   assert.match(src, /from '\.\.\/services\/referralCommissions'/);
+});
+
+// ---------------------------------------------------------------------------
+// Avg. review time
+// ---------------------------------------------------------------------------
+
+/**
+ * A D1 stub that answers the review-time join with whatever rows are handed in.
+ *
+ * `avgReviewDaysForReferrer` filters and aggregates in TypeScript rather than in
+ * SQL (see its docblock — building an `IN (…)` list means interpolating into
+ * `DB.prepare`, which `check-sql-prepare.mjs` rejects). That is exactly why it
+ * is worth testing here: the selection rules ARE the implementation, and none of
+ * them would be exercised by a query the database evaluates.
+ */
+function reviewEnv(rows: Array<{
+  submission_id: number; submitted_at: string | null;
+  event_status: string | null; event_at: string | null;
+}>) {
+  return {
+    ENVIRONMENT: 'production',
+    DB: {
+      prepare(sql: string) {
+        return {
+          bind() {
+            return {
+              async all() {
+                if (/JOIN referral_submission_events/.test(sql)) return { results: rows };
+                return { results: [] };
+              },
+              async first() { return null; },
+              async run() { return { success: true }; },
+            };
+          },
+        };
+      },
+    },
+  } as never;
+}
+
+const DAY = (n: number) => `2026-01-${String(n).padStart(2, '0')} 00:00:00`;
+
+test('avg review time: null when nothing has reached a verdict', async () => {
+  // The honest answer to "how long does review take" before any review has
+  // finished is not zero — it is that nothing has been measured. The page turns
+  // this null into "Not recorded"; returning 0 would print "0 days".
+  assert.equal(await avgReviewDaysForReferrer(reviewEnv([]), 7), null);
+  assert.equal(
+    await avgReviewDaysForReferrer(reviewEnv([
+      { submission_id: 1, submitted_at: DAY(1), event_status: 'under_review', event_at: DAY(3) },
+      { submission_id: 1, submitted_at: DAY(1), event_status: 'more_info_needed', event_at: DAY(9) },
+    ]), 7),
+    null,
+    'a referral still in review must not count as decided',
+  );
+});
+
+test('avg review time: measures to the EARLIEST verdict, not the latest event', async () => {
+  // A submission qualifies on day 3 and converts on day 30. Review took two
+  // days; the pipeline took twenty-nine. Taking the last event would report the
+  // second number under the first name.
+  const days = await avgReviewDaysForReferrer(reviewEnv([
+    { submission_id: 1, submitted_at: DAY(1), event_status: 'submitted', event_at: DAY(1) },
+    { submission_id: 1, submitted_at: DAY(1), event_status: 'converted', event_at: DAY(30) },
+    { submission_id: 1, submitted_at: DAY(1), event_status: 'qualified', event_at: DAY(3) },
+  ]), 7);
+  assert.equal(days, 2);
+});
+
+test('avg review time: averages over submissions, not over events', async () => {
+  // One submission with four verdict events and one with a single event must
+  // weigh the same. Averaging rows would let a chatty referral dominate.
+  const days = await avgReviewDaysForReferrer(reviewEnv([
+    { submission_id: 1, submitted_at: DAY(1), event_status: 'qualified', event_at: DAY(3) },
+    { submission_id: 1, submitted_at: DAY(1), event_status: 'in_conversation', event_at: DAY(4) },
+    { submission_id: 1, submitted_at: DAY(1), event_status: 'converted', event_at: DAY(5) },
+    { submission_id: 1, submitted_at: DAY(1), event_status: 'reward_issued', event_at: DAY(6) },
+    { submission_id: 2, submitted_at: DAY(1), event_status: 'rejected', event_at: DAY(9) },
+  ]), 7);
+  // (2 + 8) / 2 = 5, not the row-weighted 3.2.
+  assert.equal(days, 5);
+});
+
+test('avg review time: skips rows that cannot be believed', async () => {
+  // A verdict stamped before its own submission is impossible in the write path,
+  // so it is corrupt rather than fast — averaging -6 days in would drag a real
+  // figure toward a lie. An unparseable timestamp is dropped for the same
+  // reason. What survives here is the one good pair: day 1 → day 5.
+  const days = await avgReviewDaysForReferrer(reviewEnv([
+    { submission_id: 1, submitted_at: DAY(10), event_status: 'rejected', event_at: DAY(4) },
+    { submission_id: 2, submitted_at: 'not a date', event_status: 'converted', event_at: DAY(4) },
+    { submission_id: 3, submitted_at: DAY(1), event_status: null, event_at: DAY(4) },
+    { submission_id: 4, submitted_at: DAY(1), event_status: 'qualified', event_at: DAY(5) },
+  ]), 7);
+  assert.equal(days, 4);
+});
+
+test('avg review time: sub-day spans survive as fractions', async () => {
+  // A same-day verdict is a real measurement, not a zero. The page renders
+  // anything under a day to one decimal for exactly this reason.
+  const days = await avgReviewDaysForReferrer(reviewEnv([
+    { submission_id: 1, submitted_at: '2026-01-01 00:00:00', event_status: 'qualified', event_at: '2026-01-01 06:00:00' },
+  ]), 7);
+  assert.equal(days, 0.25);
+});
+
+test('every pre-verdict status is a real status, and some status is not pre-verdict', () => {
+  for (const s of PRE_VERDICT_STATUSES) {
+    assert.ok((STATUSES as readonly string[]).includes(s),
+      `PRE_VERDICT_STATUSES names '${s}', which is not a status — the real one would then count as a verdict`);
+  }
+  assert.ok(VERDICT_STATUSES.length > 0, 'no status can ever end review');
+  assert.equal(VERDICT_STATUSES.length + PRE_VERDICT_STATUSES.size, STATUSES.length);
 });

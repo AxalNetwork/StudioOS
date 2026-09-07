@@ -41,12 +41,55 @@ const STATUS_TONE = {
   closed: 'grey',
 };
 
+function FacebookIcon({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M14 9V6.8c0-1 .3-1.6 1.7-1.6H18V2h-3c-3 0-4.3 1.6-4.3 4.4V9H8v3.4h2.7V22H14v-9.6h3l.5-3.4H14z" />
+    </svg>
+  );
+}
+
+const PILL = 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold';
+
 const CHIP = {
-  green: 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold bg-green-50 text-green-700',
-  amber: 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold bg-amber-50 text-amber-700',
-  grey: 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold bg-gray-100 text-gray-600',
-  purple: 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold bg-violet-50 text-violet-700',
-  red: 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold bg-red-50 text-red-700',
+  green: `${PILL} bg-green-50 text-green-700`,
+  amber: `${PILL} bg-amber-50 text-amber-700`,
+  grey: `${PILL} bg-gray-100 text-gray-600`,
+  purple: `${PILL} bg-violet-50 text-violet-700`,
+  red: `${PILL} bg-red-50 text-red-700`,
+};
+
+/**
+ * The same five tones as prose rather than as a pill.
+ *
+ * ONE STATUS, ONE COLOUR. `CHIP` paints a row's status pill and `CHIP_TEXT`
+ * paints prose about that same row — the reward label in the pipeline table and
+ * in the detail drawer. Both are keyed by the tone `STATUS_TONE` gives the
+ * status, so the two cannot disagree.
+ *
+ * They did until 2026-09-07. A separate `rewardColor()` returned raw hex strings
+ * off its own enumeration, and it did not agree with `STATUS_TONE` on real
+ * statuses: `converted` and `reward_eligible` were green as a chip and amber as
+ * text, `qualified` and `in_conversation` purple as a chip and amber as text. A
+ * reader saw one row painted two ways.
+ *
+ * NO `dark:` VARIANTS HERE, DELIBERATELY, and that is a correction. They were
+ * added first — TrustCenterPage's tone map carries them, so their absence read
+ * as an oversight. It is not: this page is light-only by construction.
+ * `referrals.css` hard-codes `.rf-card { background: #fff }`, contains zero dark
+ * rules, and the JSX sets roughly two hundred literal light hexes
+ * (`text-[#8b8798]`, `border-[#ececf1]`, `bg-[#faf9fc]`). A dark chip on a card
+ * that stays white in every theme is not a fix, it is one element defecting from
+ * its own surface — which the render pass showed plainly. Converting the page is
+ * real work (the stylesheet's tokens plus every inline hex) and belongs in its
+ * own change, not smuggled in beside a share block.
+ */
+const CHIP_TEXT = {
+  green: 'text-green-700',
+  amber: 'text-amber-700',
+  grey: 'text-gray-500',
+  purple: 'text-violet-700',
+  red: 'text-red-700',
 };
 
 const PRIORITY_CHIP = {
@@ -83,11 +126,9 @@ function StatusChip({ status, label }) {
   return <span className={CHIP[tone] || CHIP.grey}>{label || status}</span>;
 }
 
-function rewardColor(status) {
-  if (status === 'reward_issued') return '#15803d';
-  if (status === 'rejected') return '#b91c1c';
-  if (['qualified', 'in_conversation', 'converted', 'reward_eligible'].includes(status)) return '#b45309';
-  return '#8b8798';
+/** Prose about a row, in that row's own status colour. See `CHIP_TEXT`. */
+function rewardTextClass(status) {
+  return CHIP_TEXT[STATUS_TONE[status] || 'grey'] || CHIP_TEXT.grey;
 }
 
 function formatShortDate(iso) {
@@ -97,36 +138,236 @@ function formatShortDate(iso) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(d);
 }
 
-function sharePlatforms(link) {
+/**
+ * One caption per destination, written for how people read on each.
+ *
+ * Split out of `sharePlatforms` so the story formats can reach the Instagram and
+ * story captions without going through the modal's platform list — they are the
+ * same words whether you tap a composer or copy them by hand.
+ */
+function shareMessages(link, code) {
   const shareUrl = link || 'https://axal.vc/referrals';
+  return {
+    shareUrl,
+    linkedin: `Referring the right person is worth more than a hundred cold applications.\n\nAxal VC’s Refer & Earn program rewards founders, advisors, and operators who bring high-quality people into the network — real rewards for a real fit, every submission reviewed individually.\n\nIf you know a founder who should be building inside a structured 28-day formation program, an advisor with real operating depth, or a strategic introduction worth making — this is where it goes: ${shareUrl}`,
+    x: `Know a founder who should be building inside Axal VC’s Spin-Out Lab? Refer them. Reviewed individually, rewarded on real outcomes — not a referral-spam program. ${shareUrl}`,
+    whatsapp: `Hey — Axal VC has a referral program where you get rewarded for introducing strong founders, advisors, or partners into their network. Thought of you for this: ${shareUrl}`,
+    telegram: `Axal VC’s Refer & Earn: refer founders, advisors, or strategic intros into their network and earn when there’s a real fit. Reviewed individually, not a numbers game. ${shareUrl}`,
+    facebook: `Axal VC runs a referral program that actually reviews who you send. Refer a founder, advisor, or service partner into the network and you earn when there is a real fit — never on signup alone. ${shareUrl}`,
+    instagram: `Know someone building something serious? Axal VC’s Refer & Earn rewards real introductions — founders, advisors, partners. Reviewed individually. Link in bio, or use code ${code || '—'}. ${shareUrl}`,
+    // Short by design: a story caption is read in about a second, and the code
+    // is the only thing that has to survive being retyped from a screen.
+    story: `Refer a founder to Axal VC. Reviewed individually, rewarded on outcomes. Code: ${code || '—'}`,
+  };
+}
+
+function sharePlatforms(link, code) {
+  const m = shareMessages(link, code);
   const enc = encodeURIComponent;
-  const msgLinkedin = `Referring the right person is worth more than a hundred cold applications.\n\nAxal VC’s Refer & Earn program rewards founders, advisors, and operators who bring high-quality people into the network — real rewards for a real fit, every submission reviewed individually.\n\nIf you know a founder who should be building inside a structured 28-day formation program, an advisor with real operating depth, or a strategic introduction worth making — this is where it goes: ${shareUrl}`;
-  const msgX = `Know a founder who should be building inside Axal VC’s Spin-Out Lab? Refer them. Reviewed individually, rewarded on real outcomes — not a referral-spam program. ${shareUrl}`;
-  const msgWhatsapp = `Hey — Axal VC has a referral program where you get rewarded for introducing strong founders, advisors, or partners into their network. Thought of you for this: ${shareUrl}`;
-  const msgTelegram = `Axal VC’s Refer & Earn: refer founders, advisors, or strategic intros into their network and earn when there’s a real fit. Reviewed individually, not a numbers game. ${shareUrl}`;
 
   return [
     {
-      key: 'linkedin', label: 'LinkedIn', preview: msgLinkedin.slice(0, 72) + '…', iconBg: '#0A66C2',
-      go: () => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${enc(shareUrl)}`, '_blank'),
+      key: 'linkedin', label: 'LinkedIn', preview: m.linkedin.slice(0, 72) + '…', iconBg: '#0A66C2',
+      go: () => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${enc(m.shareUrl)}`, '_blank'),
       icon: <LinkedinIcon size={16} />,
     },
     {
-      key: 'x', label: 'X / Twitter', preview: msgX.slice(0, 72) + '…', iconBg: '#000000',
-      go: () => window.open(`https://twitter.com/intent/tweet?text=${enc(msgX)}`, '_blank'),
+      key: 'x', label: 'X / Twitter', preview: m.x.slice(0, 72) + '…', iconBg: '#000000',
+      go: () => window.open(`https://twitter.com/intent/tweet?text=${enc(m.x)}`, '_blank'),
       icon: <span className="text-sm font-bold">𝕏</span>,
     },
     {
-      key: 'whatsapp', label: 'WhatsApp', preview: msgWhatsapp.slice(0, 72) + '…', iconBg: '#25D366',
-      go: () => window.open(`https://wa.me/?text=${enc(msgWhatsapp)}`, '_blank'),
+      key: 'whatsapp', label: 'WhatsApp', preview: m.whatsapp.slice(0, 72) + '…', iconBg: '#25D366',
+      go: () => window.open(`https://wa.me/?text=${enc(m.whatsapp)}`, '_blank'),
       icon: <span className="text-xs">WA</span>,
     },
     {
-      key: 'telegram', label: 'Telegram', preview: msgTelegram.slice(0, 72) + '…', iconBg: '#26A5E4',
-      go: () => window.open(`https://t.me/share/url?url=${enc(shareUrl)}&text=${enc(msgTelegram)}`, '_blank'),
+      // Facebook's sharer accepts a URL and NOTHING else — it ignores any text
+      // parameter — so the caption is copied to the clipboard for pasting into
+      // the composer that opens. Said out loud in `copyNote` rather than left
+      // for the reader to discover a composer with no words in it.
+      key: 'facebook', label: 'Facebook', preview: m.facebook.slice(0, 72) + '…', iconBg: '#1877F2',
+      copyNote: 'Caption copied — paste it into the Facebook composer',
+      copyText: m.facebook,
+      go: () => window.open(`https://www.facebook.com/sharer/sharer.php?u=${enc(m.shareUrl)}`, '_blank'),
+      icon: <FacebookIcon size={16} />,
+    },
+    {
+      key: 'telegram', label: 'Telegram', preview: m.telegram.slice(0, 72) + '…', iconBg: '#26A5E4',
+      go: () => window.open(`https://t.me/share/url?url=${enc(m.shareUrl)}&text=${enc(m.telegram)}`, '_blank'),
       icon: <span className="text-xs">TG</span>,
     },
   ];
+}
+
+/**
+ * The three post and story formats.
+ *
+ * WHAT THIS PAGE CAN AND CANNOT MAKE. Every entry generates a real PNG carrying
+ * the referrer's code and QR, at the aspect ratio the platform wants. None of
+ * them generates a VIDEO, because a browser cannot, and the canvas this came
+ * from did not either — its three download handlers were `() => this.toast('1:1
+ * card downloaded …')` over a slot reading "Drop your 1:1 video or image here",
+ * with nothing behind the slot. A drop target with no store is a control that
+ * lies, so there is none here: the vertical formats say plainly that the video
+ * is the referrer's to bring and hand them the card that carries the code.
+ *
+ * 1080px on the short edge is what Instagram and Facebook both ingest without
+ * resampling.
+ */
+/**
+ * The rail row on the link card — the same destinations, one tap shallower.
+ *
+ * WHY THREE OF THEM DO NOT FIRE. WhatsApp, Telegram, LinkedIn and Facebook take
+ * a URL from a web page and open a composer. Instagram takes nothing — it has no
+ * web share endpoint at all — and a story is posted from the app with an asset
+ * already in hand. So those three scroll to the formats below, where the card
+ * and the caption are, rather than opening a composer that would arrive empty.
+ * A button that opens the right thing beats a button that appears to work.
+ */
+const SHARE_QUICK = [
+  { key: 'wa', label: 'WhatsApp', iconBg: '#25D366', platform: 'whatsapp', title: 'Send to one person on WhatsApp' },
+  { key: 'tg', label: 'Telegram', iconBg: '#26A5E4', platform: 'telegram', title: 'Send on Telegram' },
+  { key: 'li', label: 'LinkedIn', iconBg: '#0A66C2', platform: 'linkedin', title: 'Post on LinkedIn' },
+  { key: 'fb', label: 'Facebook', iconBg: '#1877F2', platform: 'facebook', title: 'Post on Facebook' },
+  { key: 'fbs', label: 'FB Stories', iconBg: '#1877F2', toFormats: true, title: 'Needs a 9:16 card — jumps to the formats below' },
+  { key: 'ig', label: 'Instagram', iconBg: '#C13584', toFormats: true, title: 'Needs a 1:1 card — jumps to the formats below' },
+  { key: 'igs', label: 'IG Stories', iconBg: '#C13584', toFormats: true, title: 'Needs a 9:16 card — jumps to the formats below' },
+];
+
+const SHARE_FORMATS = [
+  {
+    key: 'ig-post',
+    label: 'Instagram post',
+    ratio: '1:1',
+    iconBg: '#C13584',
+    width: 1080,
+    height: 1080,
+    caption: (m) => m.instagram,
+    note: 'A square card with your code and QR. Instagram has no web composer, so the caption copies to your clipboard.',
+    dlLabel: 'Download card',
+  },
+  {
+    key: 'ig-story',
+    label: 'Instagram Stories',
+    ratio: '9:16',
+    iconBg: '#C13584',
+    width: 1080,
+    height: 1920,
+    caption: (m) => m.story,
+    note: 'The video is yours to shoot — this is the vertical card that carries your code, to post as a frame or lay over your own clip.',
+    dlLabel: 'Download 9:16',
+  },
+  {
+    key: 'fb-story',
+    label: 'Facebook Stories',
+    ratio: '9:16',
+    iconBg: '#1877F2',
+    width: 1080,
+    height: 1920,
+    caption: (m) => m.story,
+    note: 'Same vertical card, Facebook’s story frame. Stories are posted from the app, so both the card and the caption come with you.',
+    dlLabel: 'Download 9:16',
+  },
+];
+
+/**
+ * Draw a share card at any aspect ratio and hand back a PNG data URL.
+ *
+ * Everything on it is already on this page — the referral link, the code, and
+ * the same QR the "Download PNG" button beside it produces — so the card states
+ * nothing the page cannot stand behind. It is drawn rather than fetched because
+ * there is no asset store and no route that would serve one; a canvas is the
+ * whole implementation.
+ *
+ * Layout is proportional to the short edge, so the square and the vertical card
+ * are one function rather than two that drift apart.
+ */
+async function renderShareCard({ width, height, link, code }) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('canvas unavailable');
+  const unit = Math.min(width, height) / 1080;
+
+  const bg = ctx.createLinearGradient(0, 0, 0, height);
+  bg.addColorStop(0, '#2e1065');
+  bg.addColorStop(1, '#4c1d95');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
+
+  const cx = width / 2;
+  ctx.textAlign = 'center';
+
+  // The QR is generated at the size it is drawn, never scaled up: an upscaled
+  // QR is a QR that phones stop reading.
+  const qrPx = Math.round(360 * unit);
+  const qrUrl = await QRCode.toDataURL(link, { width: qrPx, margin: 2 });
+  const qr = new Image();
+  await new Promise((resolve, reject) => {
+    qr.onload = resolve;
+    qr.onerror = () => reject(new Error('QR image failed to load'));
+    qr.src = qrUrl;
+  });
+
+  // A SEQUENTIAL STACK, not offsets from the centre.
+  //
+  // The first version positioned each element at its own fixed distance from the
+  // vertical midpoint, and on the square card the QR's white backing landed on
+  // top of the subtitle — half a sentence disappeared behind it. A test that
+  // asserted "a PNG came back" passed on that image; only looking at the pixels
+  // caught it. Advancing a cursor through measured heights cannot collide, and
+  // it centres correctly at both aspect ratios for the same reason.
+  const eyebrow = Math.round(30 * unit);
+  const title = Math.round(62 * unit);
+  const sub = Math.round(30 * unit);
+  const label = Math.round(26 * unit);
+  const codeSize = Math.round(76 * unit);
+  const qrBox = qrPx + Math.round(28 * unit);
+  const gap = Math.round(34 * unit);
+
+  const stack = eyebrow + gap + title + Math.round(gap * 0.55) + sub
+    + gap * 2 + qrBox + gap * 2 + label + Math.round(gap * 0.55) + codeSize;
+  let y = Math.max(gap, (height - stack) / 2);
+
+  ctx.textBaseline = 'top';
+
+  ctx.fillStyle = 'rgba(255,255,255,0.62)';
+  ctx.font = `700 ${eyebrow}px system-ui, sans-serif`;
+  ctx.letterSpacing = `${Math.round(6 * unit)}px`;
+  ctx.fillText('AXAL VC', cx, y);
+  ctx.letterSpacing = '0px';
+  y += eyebrow + gap;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `800 ${title}px system-ui, sans-serif`;
+  ctx.fillText('Refer & Earn', cx, y);
+  y += title + Math.round(gap * 0.55);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.font = `500 ${sub}px system-ui, sans-serif`;
+  ctx.fillText('Reviewed individually. Rewarded on outcomes.', cx, y);
+  y += sub + gap * 2;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(cx - qrBox / 2, y, qrBox, qrBox);
+  ctx.drawImage(qr, cx - qrPx / 2, y + (qrBox - qrPx) / 2, qrPx, qrPx);
+  y += qrBox + gap * 2;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.62)';
+  ctx.font = `700 ${label}px system-ui, sans-serif`;
+  ctx.letterSpacing = `${Math.round(4 * unit)}px`;
+  ctx.fillText('REFERRAL CODE', cx, y);
+  y += label + Math.round(gap * 0.55);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `800 ${codeSize}px ui-monospace, monospace`;
+  ctx.letterSpacing = `${Math.round(10 * unit)}px`;
+  ctx.fillText(code || '—', cx, y);
+  ctx.letterSpacing = '0px';
+
+  return canvas.toDataURL('image/png');
 }
 
 function inviteLink(code, email) {
@@ -145,6 +386,7 @@ function inviteStatus(row) {
 export default function ReferralsPage({ embedded = false }) {
   const { showToast } = useToast();
   const policyRef = useRef(null);
+  const formatsRef = useRef(null);
   const csvInputRef = useRef(null);
   const qrCanvasRef = useRef(null);
 
@@ -217,6 +459,24 @@ export default function ReferralsPage({ embedded = false }) {
   }, [rows, statusFilter]);
 
   const byStatus = overview?.counts?.by_status || {};
+
+  /**
+   * "Avg. review time", from the worker's own measurement.
+   *
+   * `avg_review_days` is null until at least one referral has reached a verdict,
+   * and null is the honest answer — this tile printed a hard-coded '5 days'
+   * until 2026-09-07, which nothing computed. Rounds to whole days below ten and
+   * to one decimal under a day, because "0 days" reads as an error and "0.4
+   * days" reads as a measurement.
+   */
+  const reviewTime = useMemo(() => {
+    const d = overview?.avg_review_days;
+    if (typeof d !== 'number' || !Number.isFinite(d)) return 'Not recorded';
+    if (d < 1) return `${d.toFixed(1)} days`;
+    const whole = Math.round(d);
+    return whole === 1 ? '1 day' : `${whole} days`;
+  }, [overview?.avg_review_days]);
+
   const summary = useMemo(() => {
     const qualifiedKeys = ['qualified', 'in_conversation', 'converted', 'reward_eligible', 'reward_issued'];
     const qualified = qualifiedKeys.reduce((n, k) => n + (byStatus[k] || 0), 0);
@@ -226,16 +486,26 @@ export default function ReferralsPage({ embedded = false }) {
     const top = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0];
     const topLabel = !top ? '—' : top[0] === 'startup' ? 'Startup' : top[0] === 'customer' ? 'Platform user' : 'Strategic';
     const rewardIssued = overview?.counts?.reward_issued ?? 0;
-    const dollarRow = rows.find((r) => r.status === 'reward_issued' && /\$/.test(r.reward_label || ''));
     return [
       { k: 'Referrals submitted', v: String(overview?.counts?.total ?? 0), tone: '#18181b' },
       { k: 'Qualified', v: String(qualified), tone: '#6d28d9' },
       { k: 'Under review', v: String(underReview), tone: '#b45309' },
-      { k: 'Rewards earned', v: dollarRow?.reward_label?.match(/\$[\d,]+/)?.[0] || String(rewardIssued), tone: '#15803d' },
-      { k: 'Avg. review time', v: '5 days', tone: '#18181b' },
+      // A COUNT, and labelled as one.
+      //
+      // This tile used to print whichever `$…` figure it could regex out of the
+      // first `reward_issued` row's `reward_label`, and a bare count when no row
+      // had one — so the same tile read `$500` or `3` depending on a string. Both
+      // were wrong. `reward_label` is TEXT by deliberate design (migration 175:
+      // rewards settle off-platform, and no amount column exists anywhere), so
+      // the scraped figure was one row's milestone text presented as a total.
+      // There is no total to show. There is a count, so that is what it says.
+      { k: 'Rewards issued', v: String(rewardIssued), tone: '#15803d' },
+      // Measured now — see `avgReviewDaysForReferrer`. Null until something has
+      // a verdict, and null renders as "Not recorded" rather than a placeholder.
+      { k: 'Avg. review time', v: reviewTime, tone: '#18181b' },
       { k: 'Top category', v: topLabel, tone: '#18181b' },
     ];
-  }, [byStatus, overview, rows]);
+  }, [byStatus, overview, rows, reviewTime]);
 
   const contactRows = useMemo(() => {
     const seen = new Set();
@@ -303,6 +573,38 @@ export default function ReferralsPage({ embedded = false }) {
       setTimeout(() => setShareToast(''), 2400);
     } catch {
       showToast('Could not generate QR image.', 'error');
+    }
+  };
+
+  /** One place that copies and says so, so every caption behaves alike. */
+  const copyCaption = async (text, note) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setShareToast(note);
+      setTimeout(() => setShareToast(''), 2400);
+    } catch {
+      showToast('Could not copy the caption.', 'error');
+    }
+  };
+
+  const downloadShareCard = async (format) => {
+    const link = overview?.referral_link;
+    if (!link) return;
+    try {
+      const dataUrl = await renderShareCard({
+        width: format.width,
+        height: format.height,
+        link,
+        code: overview.referral_code,
+      });
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `axal-referral-${format.key}-${overview.referral_code || 'code'}.png`;
+      a.click();
+      setShareToast(`${format.ratio} card downloaded — ${format.label}`);
+      setTimeout(() => setShareToast(''), 2400);
+    } catch {
+      showToast('Could not generate that card.', 'error');
     }
   };
 
@@ -497,6 +799,38 @@ export default function ReferralsPage({ embedded = false }) {
                     </p>
                   )}
                 </div>
+                <div className="rf-lbl mb-2 mt-5 text-[9.5px]">Share it</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {SHARE_QUICK.map((q) => {
+                    const platform = q.platform
+                      && sharePlatforms(overview?.referral_link, overview?.referral_code)
+                        .find((p) => p.key === q.platform);
+                    return (
+                      <button
+                        key={q.key}
+                        type="button"
+                        title={q.title}
+                        // No `bg-white`: `.rf-card` behind this is already white
+                        // in every theme, so the class was a no-op that only
+                        // tripped `check-dark-mode` into asking for a `dark:`
+                        // pair this page has no surface for.
+                        className="rf-btn inline-flex items-center gap-1.5 rounded-[9px] border border-[#ececf1] px-2.5 py-1.5 text-[11.5px] font-semibold text-[#3f3f46]"
+                        onClick={() => {
+                          if (q.toFormats) {
+                            formatsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            return;
+                          }
+                          if (!platform) return;
+                          if (platform.copyText) copyCaption(platform.copyText, platform.copyNote);
+                          platform.go();
+                        }}
+                      >
+                        <span className="inline-block h-2.5 w-2.5 flex-none rounded-full" style={{ background: q.iconBg }} />
+                        {q.label}
+                      </button>
+                    );
+                  })}
+                </div>
                 <p className="mt-4 border-t border-[#f4f3f7] pt-4 text-[11.5px] leading-relaxed text-[#8b8798]">
                   Anyone who registers with your code is attributed to you. Rewards accrue when they reach a qualified milestone — acceptance, onboarding, or close — never on signup alone.
                 </p>
@@ -516,6 +850,46 @@ export default function ReferralsPage({ embedded = false }) {
                 <button type="button" className="rf-btn mt-3 w-full rounded-lg border border-[#ececf1] py-2 text-[11.5px] font-bold text-zinc-700" onClick={downloadQr}>
                   Download PNG
                 </button>
+              </div>
+            </div>
+
+            <div ref={formatsRef} className="rf-card mt-3.5 p-5 sm:p-6">
+              <h2 className="text-sm font-extrabold tracking-tight">Post and story formats</h2>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-[#8b8798]">
+                Each card is generated here from your own code and QR — nothing is uploaded and nothing is stored.
+                Video is yours to shoot; these carry the code that makes a view countable.
+              </p>
+              <div className="mt-3.5 flex flex-col gap-2.5">
+                {SHARE_FORMATS.map((f) => {
+                  const messages = shareMessages(overview?.referral_link, overview?.referral_code);
+                  return (
+                    <div key={f.key} className="rounded-[12px] border border-[#ececf1] p-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="inline-block h-3 w-3 flex-none rounded-full" style={{ background: f.iconBg }} />
+                        <div className="text-[12.5px] font-bold">{f.label}</div>
+                        <span className={CHIP.grey}>{f.ratio}</span>
+                      </div>
+                      <p className="mt-1.5 text-[11.5px] leading-relaxed text-[#4a4553]">{f.note}</p>
+                      <div className="mt-2.5 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="rf-btn rounded-lg bg-violet-700 px-3.5 py-1.5 text-[11.5px] font-bold text-white"
+                          onClick={() => downloadShareCard(f)}
+                          disabled={!overview?.referral_link}
+                        >
+                          {f.dlLabel}
+                        </button>
+                        <button
+                          type="button"
+                          className="rf-btn rounded-lg border border-[#ececf1] px-3.5 py-1.5 text-[11.5px] font-bold text-[#3f3f46]"
+                          onClick={() => copyCaption(f.caption(messages), `${f.label} caption copied`)}
+                        >
+                          Copy caption
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -630,7 +1004,7 @@ export default function ReferralsPage({ embedded = false }) {
                       <div className="px-3 py-3 text-xs text-[#4a4553]">{r.category_name?.split('/')[0]?.trim() || r.category_name}</div>
                       <div className="rf-mono px-3 py-3 text-[11.5px] text-[#8b8798]">{formatShortDate(r.created_at)}</div>
                       <div className="px-3 py-3"><StatusChip status={r.status} label={r.status_label} /></div>
-                      <div className="px-3 py-3 text-xs" style={{ color: rewardColor(r.status) }}>{r.reward_label || '—'}</div>
+                      <div className={`px-3 py-3 text-xs ${rewardTextClass(r.status)}`}>{r.reward_label || '—'}</div>
                       <div className="px-4 py-3 text-[11.5px] text-zinc-500">{r.next_step || '—'}</div>
                     </button>
                   ))}
@@ -720,8 +1094,18 @@ export default function ReferralsPage({ embedded = false }) {
               </button>
             </div>
             <div className="mt-4 flex flex-col gap-2">
-              {sharePlatforms(overview?.referral_link).map((sp) => (
-                <button key={sp.key} type="button" className="rf-btn flex items-center gap-3 rounded-[11px] border border-[#ececf1] p-3 text-left" onClick={sp.go}>
+              {sharePlatforms(overview?.referral_link, overview?.referral_code).map((sp) => (
+                <button
+                  key={sp.key}
+                  type="button"
+                  className="rf-btn flex items-center gap-3 rounded-[11px] border border-[#ececf1] p-3 text-left"
+                  onClick={() => {
+                    // Facebook's sharer ignores any caption, so it is copied
+                    // first and the toast says so — see `copyNote`.
+                    if (sp.copyText) copyCaption(sp.copyText, sp.copyNote);
+                    sp.go();
+                  }}
+                >
                   <div className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-white" style={{ background: sp.iconBg }}>{sp.icon}</div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-bold">{sp.label}</div>
@@ -1054,7 +1438,7 @@ function DetailDrawer({ detail, onClose, onUpdated }) {
         {detail.reward_label && (
           <div className="mt-4 border-t border-[#f4f3f7] pt-4">
             <div className="rf-lbl mb-2 text-[9.5px]">Reward eligibility</div>
-            <p className="text-[12.5px] font-semibold" style={{ color: rewardColor(detail.status) }}>{detail.reward_label}</p>
+            <p className={`text-[12.5px] font-semibold ${rewardTextClass(detail.status)}`}>{detail.reward_label}</p>
           </div>
         )}
 
