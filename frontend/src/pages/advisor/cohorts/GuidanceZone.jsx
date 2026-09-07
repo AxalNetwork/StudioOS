@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Card, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
 import { NothingYet, Unrecorded, ZoneBody, ZoneHeading, Field, inputClass, buttonClass } from '../expertise/kit';
-import { BatchPicker, NoBatch, StatedLimit, cohortLabel } from './kit';
+import { BatchPicker, NoBatch, cohortLabel } from './kit';
 
 /**
  * Cohorts · Guidance — what was said to the batch, and who acted on it.
@@ -154,18 +154,21 @@ export default function GuidanceZone() {
           ))}
         </div>
 
-        <StatedLimit title="No “overdue” count, on purpose">
-          <p>
-            The design shows overdue questions against a 24-hour commitment. Nothing in
-            the product stores a commitment and you have never been asked for one, so a
-            threshold here would be invented and then held against you.
-          </p>
-          <p>
-            {payload?.oldest_open_hours != null
-              ? `The longest-waiting open question has been open ${payload.oldest_open_hours} hours. That is a fact; whether it is late is not something this page can say.`
-              : 'Nothing is waiting. When a question is open, this states how long it has actually waited.'}
-          </p>
-        </StatedLimit>
+        {/* NO “OVERDUE” COUNT, AND NO PANEL EXPLAINING ITS ABSENCE EITHER.
+            The design shows overdue questions against a 24-hour commitment.
+            Nothing stores a commitment and nobody has been asked for one, so a
+            threshold here would be invented and then held against the advisor.
+            That reasoning stands; it used to be printed on the page, above a
+            second paragraph carrying the one real figure. The figure is the
+            part worth rendering, so it is rendered on its own. */}
+        {payload?.oldest_open_hours != null && (
+          <Card className="p-4">
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
+              Longest open question
+            </div>
+            <div className="mt-1 text-sm font-bold">{payload.oldest_open_hours} hours</div>
+          </Card>
+        )}
 
         <Card className="p-4">
           <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">

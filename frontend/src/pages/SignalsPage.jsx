@@ -10,7 +10,6 @@ import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
 import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { Stat } from '../ui';
-import { StatedLimit } from './advisor/expertise/kit';
 
 /**
  * SignalsPage — "Public-market evidence for what to build next".
@@ -60,9 +59,11 @@ const AGE_WINDOWS = {
  * thing: a SAVED DEEP-DIVE — an analysis or a thesis, kept with its method, its
  * sources and its run date. Nothing stores one. This page reads a signals feed,
  * which is a different object: evidence gathered on a schedule, not a piece of
- * work someone saved. So those two licences state the absence once, in the
- * sentence below, rather than drawing four tiles that would each read "Not
- * recorded" — the rule D56 records and `LibraryZone` established.
+ * work someone saved. So those two licences draw no strip at all. They used to
+ * get a paragraph in its place naming what the canvas had asked for — D56's
+ * remedy for four tiles that would each read "Not recorded" — which traded four
+ * statements of an absence for one, on a page a reader came to for signals. The
+ * rule D56 records still holds; a figure with no source is now simply absent.
  *
  * Advisor and partner open with an AGE BAND, and that one is real. `ageInDays`
  * already buckets every signal against `AGE_WINDOWS[role]`, which are the
@@ -71,28 +72,36 @@ const AGE_WINDOWS = {
  * chip will return is reading the rows the chip reads. Their other two tiles are
  * about a curated figures register — a source and a run date per figure — which
  * does not exist here, and the fourth is marked `nr:true` on the artboard
- * itself, so the canvas already draws it as "Not recorded".
+ * itself. Neither is drawn; the block below records which and why.
  *
  * The labels are per licence because the artboards' are. `Current` and
  * `Attachable now` count the same band and ask different questions of it, and
  * flattening them to one word would answer the wrong one on one of the two.
  */
+/**
+ * The two strip tiles per licence that a signals feed can actually fill.
+ *
+ * THE OTHER TWO ARE NOT DRAWN, AND USED TO READ "Not recorded". Advisor's
+ * artboard asks for `Sectors covered` — the feed is not scoped to a declared
+ * sector and nothing here reads Expertise · Profile — and `Net revenue
+ * retention`, which the artboard itself marks unrecorded because no source
+ * covers enough companies. Partner's asks for `Widest range`, which needs a
+ * readings register with a range per row and none is stored, and `Retainer
+ * rate`, also marked unrecorded on the artboard and never run.
+ *
+ * Each shipped as a tile reading "Not recorded" with its reason beneath, and
+ * the licences with no strip at all got a paragraph in place of one explaining
+ * what the canvas had asked for. Both put commentary about the design where a
+ * figure belongs. The reasons live here now; the tiles do not render.
+ */
 const MARKETS_STRIP = {
   advisor: {
     fresh: { label: 'Current', note: (w) => `newest evidence within ${w.ageing} days` },
     stale: { label: 'Stale', note: (w) => `nothing dated inside ${w.stale} days` },
-    gaps: [
-      { label: 'Sectors covered', note: 'the feed is not scoped to your declared sectors, and nothing here reads Expertise · Profile' },
-      { label: 'Net revenue retention', note: 'the artboard marks this one unrecorded too — no source covers enough companies' },
-    ],
   },
   partner: {
     fresh: { label: 'Attachable now', note: (w) => `newest evidence within ${w.ageing} days` },
     stale: { label: 'Stale', note: (w) => `nothing dated inside ${w.stale} days` },
-    gaps: [
-      { label: 'Widest range', note: 'a comparable price range needs a readings register with a range per row, and none is stored' },
-      { label: 'Retainer rate', note: 'the artboard marks this one unrecorded too — it has never been run' },
-    ],
   },
 };
 
@@ -324,24 +333,7 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
             value={loading && !data ? undefined : bands.stale}
             note={strip.stale.note(window_)}
           />
-          {strip.gaps.map((g) => (
-            <Stat key={g.label} label={g.label} value="Not recorded" mono={false} note={g.note} />
-          ))}
         </div>
-      )}
-
-      {embedded && !strip && (
-        <StatedLimit>
-          The canvas puts four figures here — a count of saved analyses, their
-          sources, the confidence behind them and the input excluded for being
-          too old — and an instrument card listing each one with its method and
-          run date. All of it describes a saved deep-dive: a piece of work
-          someone kept, with the method named and the date it was run. Nothing
-          stores one. What this page reads is a signals feed, gathered on a
-          schedule from public evidence, which is a different object — so the
-          figures are stated here rather than drawn over rows that would not be
-          answering the question the labels ask.
-        </StatedLimit>
       )}
 
       {/* KPI strip */}

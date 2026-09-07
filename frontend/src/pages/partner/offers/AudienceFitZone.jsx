@@ -327,7 +327,15 @@ export default function PartnerAudienceFitZone() {
           </div>
         </Section>
 
-        <StatedLimit title="What this zone does not do">
+        {/* NO FIT SCORE, AND NO PARAGRAPH ABOUT ITS ABSENCE. The canvas
+              puts a percentage beside each lead. Scoring a founder’s need
+              against these rules would need the need to carry a budget and a
+              sector in a comparable shape, and `founder_needs` carries
+              free-text budget bounds and a single category that does not line
+              up with the sectors a firm would name — a number over those
+              inputs would be a guess wearing a decimal point. Not drawing it
+              was right; explaining the canvas underneath was not. */}
+        <StatedLimit title="What these rules do, and do not">
           <p>
             <strong>Nothing runs these rules.</strong>{' '}
             {d?.enforcement_note
@@ -336,14 +344,6 @@ export default function PartnerAudienceFitZone() {
             <Link to="/pipeline/leads" className="text-amber-700 underline">Leads</Link>{' '}
             and it is still your click that passes on it — which is what the
             workspace rail promises, and this zone does not quietly break.
-          </p>
-          <p className="mt-2">
-            <strong>No fit score.</strong> The canvas puts a percentage beside
-            each lead. Scoring a founder’s need against these rules would need
-            the need to carry a budget and a sector in a comparable shape, and
-            `founder_needs` carries free-text budget bounds and a single category
-            that does not line up with the sectors a firm would name. A number
-            over those inputs would be a guess wearing a decimal point.
           </p>
         </StatedLimit>
       </div>

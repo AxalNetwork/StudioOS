@@ -20,9 +20,25 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
-const read = (p) => codeOnly(readFileSync(resolve(process.cwd(), p), 'utf8'));
+const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
+const read = (p) => codeOnly(raw(p));
 const signals = read('frontend/src/pages/SignalsPage.jsx');
 const companies = read('frontend/src/components/CompetitorAnalysis.jsx');
+// The RAW source, for the one thing `codeOnly` deliberately destroys: a tile
+// that is no longer drawn keeps its reason in a docblock, and the assertions
+// that the reason survived have to read the comments to see it.
+const signalsRaw = raw('frontend/src/pages/SignalsPage.jsx');
+const companiesRaw = raw('frontend/src/components/CompetitorAnalysis.jsx');
+
+/**
+ * A docblock as one line, so a label that wrapped across `*`-prefixed lines is
+ * still findable. `Net revenue retention` breaks over two lines at this width,
+ * and a raw `includes` on the slice misses it — which is a wrapping accident,
+ * not a lost record.
+ */
+function flat(doc) {
+  return doc.replace(/^\s*\*/gm, '').replace(/[`\s]+/g, ' ');
+}
 
 /** Each `<Stat …/>` bounded at its OWN `/>`, keyed by label. */
 function tilesIn(code, from = 0) {
@@ -69,7 +85,7 @@ test('the bands count the whole population, never the rows a chip left showing',
     'an undated signal belongs to no band and must be counted apart, as the chip filter treats it');
 });
 
-test('markets’ two sourced tiles read the bands and its two gaps say so', () => {
+test('markets draws its two sourced tiles and no unsourced one', () => {
   const strip = signals.slice(signals.indexOf('{strip && bands && ('));
   // The two sourced tiles take their label FROM the licence table, never a
   // literal: `Current` and `Attachable now` count the same band and ask
@@ -81,28 +97,38 @@ test('markets’ two sourced tiles read the bands and its two gaps say so', () =
     'the fresh tile no longer counts the fresh band');
   assert.match(strip, /value=\{loading && !data \? undefined : bands\.stale\}/,
     'the stale tile no longer counts the stale band');
-  // The two gaps are rendered from the table, so the ban belongs on the table:
-  // neither may acquire a value, which is the only way a figure gets modelled.
+
+  // REVERSED, DELIBERATELY. The artboards' third and fourth tiles — `Sectors
+  // covered`, `Net revenue retention`, `Widest range`, `Retainer rate` — used
+  // to be rendered from a `gaps` array, each reading the words "Not recorded"
+  // with its reason beneath. This test REQUIRED that. Refusing to model a
+  // figure nobody stores was right and has not changed; printing the refusal
+  // where the figure belongs put commentary about the design on the page.
+  // They are not drawn, and the table's own docblock carries the four reasons.
   const table = signals.slice(signals.indexOf('const MARKETS_STRIP = {'));
-  const gaps = [...table.matchAll(/\{ label: '([^']+)', note: '/g)].map((m) => m[1]);
-  assert.deepEqual(gaps,
-    ['Sectors covered', 'Net revenue retention', 'Widest range', 'Retainer rate'],
-    'the four stated gaps are no longer the artboards’ own third and fourth tiles');
-  assert.match(strip, /<Stat key=\{g\.label\} label=\{g\.label\} value="Not recorded" mono=\{false\} note=\{g\.note\} \/>/,
-    'a gap tile must render the words "Not recorded", never a figure');
+  const decl = table.slice(0, table.indexOf('\n};'));
+  assert.doesNotMatch(decl, /gaps:/, 'the gaps array is back in the strip table');
+  assert.doesNotMatch(strip, /Not recorded/, 'a tile states its own absence again');
+  // The reasons still have to be recorded somewhere a builder reads.
+  const doc = signalsRaw.slice(signalsRaw.indexOf('* The two strip tiles per licence'),
+    signalsRaw.indexOf('const MARKETS_STRIP = {'));
+  assert.ok(doc.length > 0 && doc.length < 1600, 'the docblock slice must not run away');
+  for (const label of ['Sectors covered', 'Net revenue retention', 'Widest range', 'Retainer rate']) {
+    assert.ok(flat(doc).includes(label), `the record of why "${label}" is absent has been lost`);
+  }
 });
 
-test('founder and investor get markets’ absence once, naming what they lose', () => {
-  const limit = signals.slice(signals.indexOf('{embedded && !strip && ('), signals.indexOf('{/* KPI strip */}'));
-  assert.ok(limit.length > 0 && limit.length < 1400, 'the stated-limit slice must not run away');
-  assert.match(limit, /saved deep-dive/, 'the sentence must name the one object all eight tiles are downstream of');
-  assert.match(limit, /instrument card/i,
-    'the artboards also ask for a table of analyses; the sentence stands in for that too');
+test('founder and investor reach no markets tile and no paragraph about one', () => {
+  // ALSO REVERSED. This required a `<StatedLimit>` naming the saved deep-dive
+  // and the instrument card the artboards ask for. Saying an absence once beat
+  // saying it four times; not saying it on the customer surface beats both.
+  const after = signals.slice(signals.indexOf('{strip && bands && ('));
+  assert.doesNotMatch(after, /<StatedLimit/, 'the canvas-narration panel is back');
+  assert.doesNotMatch(signals, /import \{ StatedLimit \}/, 'the narration component is imported again');
   // And no second strip is drawn for them: `<Stat` appears only inside the
   // advisor/partner branch above.
-  const after = signals.slice(signals.indexOf('{embedded && !strip && ('));
-  assert.doesNotMatch(after, /<Stat\s/,
-    'founder and investor must reach no stat tile on this zone');
+  const tail = after.slice(after.indexOf('{/* KPI strip */}'));
+  assert.doesNotMatch(tail, /<Stat\s/, 'founder and investor must reach no stat tile on this zone');
 });
 
 // ── Companies ─────────────────────────────────────────────────────────────
@@ -114,8 +140,10 @@ test('companies draws its strip on founder only, and only on the zone route', ()
   // and `ProjectDetail` mounts it `embedded`; neither canvas asked for a strip.
   assert.match(companies, /const zoneCanvas = chromeless;/,
     'the strip must be gated on the zone route, not on `embedded` or `bare`');
-  assert.equal((companies.match(/COMPANIES_STRIP_LICENCES\.has\(role\)/g) || []).length, 2,
-    'exactly two branches read the set: the strip and the sentence that replaces it');
+  // ONE branch now, not two. The second read the same set to draw a paragraph
+  // for advisor explaining the canvas; advisor simply gets no strip.
+  assert.equal((companies.match(/COMPANIES_STRIP_LICENCES\.has\(role\)/g) || []).length, 1,
+    'a second branch reads the set again — the advisor narration is back');
 });
 
 test('companies counts analyses under a label that says analyses', () => {
@@ -125,54 +153,48 @@ test('companies counts analyses under a label that says analyses', () => {
   // analyses under the canvas's word would report the wrong number under the
   // right label — so the label moves, the way `Year` became `Added` on Library.
   const strip = companies.slice(companies.indexOf('{zoneCanvas && COMPANIES_STRIP_LICENCES.has(role) && ('));
-  const tiles = tilesIn(strip.slice(0, strip.indexOf('{zoneCanvas && !COMPANIES_STRIP_LICENCES')));
-  assert.deepEqual(
-    Object.keys(tiles),
-    ['Saved analyses', 'Changed this month', 'Comparables', 'Last refreshed'],
-    'the strip is no longer four tiles with the first relabelled to what the store holds',
-  );
+  const tiles = tilesIn(strip.slice(0, strip.indexOf('{!bare && (')));
+  // `Changed this month` and `Comparables` are GONE, not "Not recorded".
+  assert.deepEqual(Object.keys(tiles), ['Saved analyses', 'Last refreshed'],
+    'the strip draws a tile the store cannot fill, or has lost one it can');
   assert.ok(!strip.includes('label="Tracked"'),
     '`Tracked` counts companies and this row is an analysis — the label must not come back');
   assert.match(tiles['Saved analyses'], /value=\{visibleSaved\.length\}/,
     'the analyses tile no longer counts the analyses actually loaded');
+  assert.doesNotMatch(strip, /Not recorded/, 'a tile states its own absence again');
   for (const label of ['Changed this month', 'Comparables']) {
-    assert.match(tiles[label], /value="Not recorded"/,
-      `${label} has no source at this level and must say "Not recorded"`);
-    assert.doesNotMatch(tiles[label], /value=\{/,
-      `${label} has no source, so any expression in its value is a modelled figure`);
+    assert.ok(!strip.includes(`label="${label}"`), `${label} has no source and is drawn anyway`);
   }
 });
 
-test('“Last refreshed” reads a real timestamp and says so when there is none', () => {
-  // Zero saved analyses must not render the epoch. `reduce` starts at 0, so the
-  // falsy check is what stands between an empty account and "1970-01-01".
+test('“Last refreshed” is drawn only when a real timestamp exists', () => {
+  // Zero saved analyses must not render the epoch. `reduce` starts at 0, and
+  // that falsy check used to pick the string "Not recorded"; now it decides
+  // whether the tile is rendered at all — an empty account gets one tile, not
+  // a second one announcing that it has nothing.
   assert.match(companies, /const lastRefreshed = visibleSaved\.reduce\(/,
     'the refresh date must be derived from the saved rows');
   assert.match(companies, /Date\.parse\(`\$\{a\.updated_at\}Z`\)/,
     'these timestamps carry no zone and must be read as UTC, as the saved list already does');
   const strip = companies.slice(companies.indexOf('{zoneCanvas && COMPANIES_STRIP_LICENCES.has(role) && ('));
-  const tiles = tilesIn(strip.slice(0, strip.indexOf('{zoneCanvas && !COMPANIES_STRIP_LICENCES')));
-  assert.match(tiles['Last refreshed'], /lastRefreshed \? new Date\(lastRefreshed\)/,
-    'the tile must render a date only when one exists');
-  assert.match(tiles['Last refreshed'], /: 'Not recorded'/,
-    'an account with nothing saved must read "Not recorded", never the epoch');
+  const block = strip.slice(0, strip.indexOf('{!bare && ('));
+  assert.match(block, /\{lastRefreshed > 0 && \(/,
+    'the tile renders without first proving a timestamp exists — the epoch would ship');
+  assert.match(block, /value=\{new Date\(lastRefreshed\)\.toISOString\(\)\.slice\(0, 10\)\}/,
+    'the tile no longer renders the derived date');
 });
 
-test('advisor gets companies’ absence once, and reaches no tile', () => {
-  const limit = companies.slice(companies.indexOf('{zoneCanvas && !COMPANIES_STRIP_LICENCES'));
-  const body = limit.slice(0, limit.indexOf('</StatedLimit>'));
-  assert.ok(body.length > 0 && body.length < 1400, 'the stated-limit slice must not run away');
-  // NAMES ITS FOUR TILES, not the missing thing in one word. A bare
-  // `/relationship/i` passed a rewrite that dropped three of the four labels,
-  // because the word survived elsewhere in the paragraph — the same "literal
-  // present for an unrelated reason" trap the header of this file warns about,
-  // met from the other side. If a company register ever lands, this sentence is
-  // what has to change, so it names what it is standing in for.
+test('advisor reaches no companies tile and no paragraph about one', () => {
+  // REVERSED. This required a `<StatedLimit>` naming `Relationships`,
+  // `Researching`, `Prospects` and `Headcounts missing`. The component's own
+  // docblock still names all four and says why none can be drawn; the customer
+  // surface no longer does.
+  assert.doesNotMatch(companies, /<StatedLimit/, 'the canvas-narration panel is back');
+  assert.doesNotMatch(companies, /import \{ StatedLimit \}/, 'the narration component is imported again');
+  const doc = companiesRaw.slice(0, companiesRaw.indexOf('const COMPANIES_STRIP_LICENCES'));
   for (const label of ['Relationships', 'Researching', 'Prospects', 'Headcounts missing']) {
-    assert.ok(body.includes(label),
-      `the sentence must name "${label}" — it is standing in for that tile`);
+    assert.ok(flat(doc).includes(label), `the record of why "${label}" is absent has been lost`);
   }
-  assert.match(body, /names no company/,
-    'the sentence must say why: an analysis names no company');
-  assert.doesNotMatch(body, /<Stat\s/, 'the advisor branch must draw no tile');
+  assert.match(doc, /nothing here stores a relationship or a company/,
+    'the docblock must still say why: an analysis names no company');
 });

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Stat } from '../ui';
-import { StatedLimit } from '../pages/advisor/expertise/kit';
+
 import {
   ArrowLeft, Megaphone, Loader2, Sparkles, Plus, Trash2, RefreshCw, Download,
   Save, ExternalLink, ChevronRight, Search, AlertCircle, Check,
@@ -91,14 +91,21 @@ async function fetchMarkdown(url) {
  * relabelled to what the store actually holds — an analysis, not a company —
  * which is the same move `LibraryZone` made turning the canvas's `Year` into
  * `Added`; and `Last refreshed` is a real `updated_at` on a real row. The other
- * two are stated.
+ * two are not drawn.
  *
  * ADVISOR draws none of it. All four of its tiles are about a company register
  * with a relationship state — who is a client, who is a prospect, who is merely
  * researched — and nothing here stores a relationship or a company. An advisor's
  * analyses are their own, keyed on their own user id, which is the very thing
- * `CompanyScopeNote` says above this page. Four tiles reading "Not recorded"
- * would state one absence four times, so it is stated once (D56).
+ * `CompanyScopeNote` says above this page.
+ *
+ * NEITHER ABSENCE IS NARRATED ANY MORE, and that is what changed (D56 stands;
+ * its remedy does not). The two founder tiles with no source read "Not
+ * recorded" under a sentence each, and advisor got a paragraph in place of the
+ * strip explaining what the canvas had asked for. Both put design-review
+ * commentary where a figure belongs, on a page a reader came to for competitor
+ * work. A tile with no source is not drawn, and a licence with no tiles gets no
+ * strip. The reasons stay here.
  */
 const COMPANIES_STRIP_LICENCES = new Set(['founder']);
 
@@ -340,6 +347,19 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           actions={zoneActions(visibleSaved)}
         />
       )}
+      {/* THE CANVAS'S FOUR TILES, AND THE TWO OF THEM THAT HAVE A SOURCE.
+          The canvas asks for Relationships, Researching, Prospects and
+          Headcounts missing — all four counting companies, three of them
+          counting a relationship state per company. This page stores neither:
+          an analysis is keyed on the person who ran it and names no company,
+          and the competitors inside one carry no relation to you.
+
+          What it does have is the saved analyses themselves and their newest
+          run date, so those two are drawn. `Changed this month` and
+          `Comparables` used to read "Not recorded" with a sentence beneath,
+          and the licences with no strip at all got a paragraph explaining the
+          canvas instead — design-review commentary in the place a figure
+          belongs. A tile with no source is now simply not drawn. */}
       {zoneCanvas && COMPANIES_STRIP_LICENCES.has(role) && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 mb-4">
           {/* NOT `Tracked`. The canvas's word means a company you follow; the
@@ -347,28 +367,13 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
               several companies. Counting analyses under a label that says
               companies would report the wrong number under the right word. */}
           <Stat label="Saved analyses" value={visibleSaved.length}
-            note="one analysis covers several companies; the canvas counts companies and nothing stores them" />
-          <Stat label="Changed this month" value="Not recorded" mono={false}
-            note="a re-run replaces the analysis; nothing records what moved between one run and the next" />
-          <Stat label="Comparables" value="Not recorded" mono={false}
-            note="direct and adjacent are filed per competitor inside an analysis, and the saved list carries no competitors" />
-          <Stat label="Last refreshed" mono={false}
-            value={lastRefreshed ? new Date(lastRefreshed).toISOString().slice(0, 10) : 'Not recorded'}
-            note={lastRefreshed ? 'the newest run across your saved analyses' : 'nothing has been run yet'} />
+            note={`across ${visibleSaved.length === 1 ? 'one run' : 'your runs'}`} />
+          {lastRefreshed > 0 && (
+            <Stat label="Last refreshed" mono={false}
+              value={new Date(lastRefreshed).toISOString().slice(0, 10)}
+              note="the newest run across your saved analyses" />
+          )}
         </div>
-      )}
-
-      {zoneCanvas && !COMPANIES_STRIP_LICENCES.has(role) && (
-        <StatedLimit>
-          The canvas puts four figures here — Relationships, Researching,
-          Prospects and Headcounts missing — and a table listing each company
-          with its relation to you and what changed since you last looked. All
-          four count companies, and three of them count a relationship state per
-          company. This page stores neither: an analysis is keyed on the person
-          who ran it and names no company, and the competitors inside one carry
-          no relation to you. That is the same thing the note above this page
-          says about whose analyses these are.
-        </StatedLimit>
       )}
 
       {!bare && (

@@ -205,14 +205,26 @@ test('MRR states what it counted', () => {
 });
 
 test('the negotiations zone refuses a close probability', () => {
-  const src = codeOnly(read(`${ZONE_ROOT}/pipeline/NegotiationsZone.jsx`));
+  const raw = read(`${ZONE_ROOT}/pipeline/NegotiationsZone.jsx`);
+  const src = codeOnly(raw);
   // The canvas puts a percentage beside each deal. Nothing records why a past
   // negotiation was won or lost, so there is no history to weight a live one
   // against — a figure drawn from stage alone would be the stage relabelled as
   // a forecast. The stat exists and reads as an em-dash, because removing it
-  // would hide the gap rather than state it.
+  // would hide the gap rather than state it. UNCHANGED.
   assert.match(src, /Close probability/, 'the canvas asks for it, so the zone must address it');
   assert.match(src, /value="—"/, 'and it must be an em-dash rather than a computed number');
-  assert.match(src, /No close probability/,
-    'the StatedLimit must explain why, not merely leave a dash');
+
+  // WHAT CHANGED IS THE PARAGRAPH BENEATH IT. A `No close probability` block
+  // explained the canvas to the reader; the em-dash already says the honest
+  // thing, and the reasoning belongs with whoever would add the decision
+  // column. So the reason moves into the source and off the page.
+  assert.doesNotMatch(src, /No close probability/,
+    'the canvas-narration paragraph is back beneath the em-dash');
+  assert.match(raw, /NO CLOSE PROBABILITY, AND NO PARAGRAPH ABOUT ITS ABSENCE/,
+    'the record of why the stat is an em-dash has been lost');
+
+  // The block that stays is the one that explains a figure the reader CAN see.
+  assert.match(src, /What “stalled” counts/,
+    'the stalled legend went with it — that one qualifies a count on the page');
 });

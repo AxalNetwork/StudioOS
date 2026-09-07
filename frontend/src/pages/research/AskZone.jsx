@@ -95,26 +95,27 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
         ) : null}
       />
 
-      {/* THE CANVAS'S STAT STRIP, AND THE ONE PLACE THIS ZONE DOES NOT DRAW IT.
+      {/* THE CANVAS'S STAT STRIP, AND THE ONE TILE OF IT THAT IS REAL.
           Every artboard gives a research zone four tiles. Advisor's and
           partner's ask for `Indexed documents`, `Answered`, `No source` and
           `Session spend`; founder's and investor's for `Questions asked`,
           `Answers kept` and two per-question costs.
 
-          On advisor and partner the FIRST tile is real — `api.research.
-          documents()` is already loaded above for the empty state — so the
-          strip is drawn and the other three say `Not recorded` in words, which
-          is the treatment `LibraryZone` established.
+          ONE of the eight has a source. `api.research.documents()` is already
+          loaded above for the empty state, so `Indexed documents` is a real
+          figure on advisor and partner. Every other tile is downstream of a
+          session store that does not exist: `research.post('/ask')` searches,
+          answers and returns, and the only per-question row anywhere is
+          `ai_usage_logs`, which holds token counts and no question text.
 
-          On founder and investor NOT ONE of the four is real: all four are
-          downstream of a session store that does not exist. `research.post
-          ('/ask')` searches, answers and returns; the only per-question row
-          anywhere is `ai_usage_logs`, which holds token counts and no question
-          text. Four tiles reading `Not recorded` would say one thing four
-          times — the same reason `LibraryZone` omits a column that would be
-          `Not recorded` on every row. So those two licences get the sentence
-          instead, naming all four labels once. `groupFilterNotes` does exactly
-          this in the header row above, for exactly this reason. */}
+          A TILE WITH NO SOURCE IS NOT DRAWN. It used to read `Not recorded`
+          with a sentence beneath it, and founder and investor — where not one
+          of the four is real — got a paragraph in place of the strip saying so.
+          Both were the design's own figures replaced by prose about why they
+          are missing, on the page a reader came to for answers. So the strip is
+          the tiles that have a figure: one here, and none on the two licences
+          that have none. The reasons are in this comment, where the person who
+          can build the session store reads them. */}
       {ASK_STRIP_LICENCES.has(role) ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat
@@ -122,24 +123,8 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             value={payload ? indexed : undefined}
             note={payload ? `of ${items.length} in your library` : 'library not read'}
           />
-          <Stat label="Answered" value="Not recorded" mono={false}
-            note="no session history is stored, so answers are not counted across questions" />
-          <Stat label="No source" value="Not recorded" mono={false}
-            note="the same missing history — a refusal is shown once and never tallied" />
-          <Stat label="Session spend" value="Not recorded" mono={false}
-            note="token counts are logged per call and are never priced back to a question" />
         </div>
-      ) : (
-        <StatedLimit>
-          The canvas puts four figures here — Questions asked, Answers kept,
-          First-pass cost and Follow-up cost — and all four count the same
-          thing this page does not keep: a session. A question is searched,
-          answered and returned; nothing records the question, the answer or
-          what you did with it, and the only per-call row anywhere holds token
-          counts with no question text. Four tiles reading “Not recorded” would
-          state one absence four times, so it is stated once.
-        </StatedLimit>
-      )}
+      ) : null}
 
       <ZoneBody
         loading={lib.loading}

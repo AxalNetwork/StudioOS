@@ -465,15 +465,15 @@ export default function PartnerHealthZone() {
             than either number, so there is one calculation and this page is not
             it.
           </p>
-          <p className="mt-2">
-            <strong>No “client has gone quiet” signal.</strong> The canvas asks
-            for one. Nothing in this product records contact with a client — no
-            message log, no last-touched date — so a quiet client and an active
-            one look identical here. The nearest true thing is a deliverable sent
-            and not opened, which is shown, and even that reads as “we do not
-            know” rather than “they ignored it”, because{' '}
-            <Link to="/delivery/deliverables" className="text-amber-700 underline">nothing records an open</Link>.
-          </p>
+          {/* NO “CLIENT HAS GONE QUIET” SIGNAL, AND NO PARAGRAPH ABOUT IT.
+              The canvas asks for one. Nothing in this product records contact
+              with a client — no message log, no last-touched date — so a quiet
+              client and an active one look identical here. The nearest true
+              thing is a deliverable sent and not opened, which IS shown, on
+              Delivery · Deliverables, and reads there as "we do not know"
+              rather than "they ignored it". The rating rules above stay on the
+              page because they explain a pill the reader can see; this
+              explained a pill that is not drawn. */}
         </StatedLimit>
       </div>
     </ZoneBody>

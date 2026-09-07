@@ -227,18 +227,16 @@ export default function PartnerPipelineAnalyticsZone() {
           {f?.note && <p className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">{f.note}</p>}
         </Section>
 
-        <StatedLimit title="What this zone cannot tell you">
+        {/* LOSS REASONS ARE NOT SHOWN, AND NO LONGER EXPLAINED HERE EITHER.
+            The canvas asks for a reason taxonomy and an on-price count per
+            shape. A quote records its status and the date it was decided and
+            nothing about why, so both need a reason captured at the moment a
+            quote is rejected. Until one is, this zone shows what happened and
+            not why, rather than inferring a cause from a bare status — the same
+            call, minus the paragraph that used to state it on the page. */}
+        <StatedLimit title="Where demand is, rather than how you did">
           <p>
-            <strong>Loss reasons.</strong> {d?.loss_reasons_note
-              || 'A quote records its status and the date it was decided, and nothing about why.'}{' '}
-            The canvas asks for the taxonomy rather than a summary sentence, and for the
-            on-price count stated per shape — both of which need a reason recorded at the
-            moment a quote is rejected. Until one is, this zone shows what happened and
-            not why, rather than inferring a cause from a bare status.
-          </p>
-          <p className="mt-2">
-            <strong>Where demand is, rather than how you did.</strong> The board-wide view of
-            founder demand lives on{' '}
+            The board-wide view of founder demand lives on{' '}
             <Link to="/partner/insights" className="text-amber-700 underline">Demand Insights</Link>,
             which this zone used to render. It answers a different question and keeps its own page.
           </p>
