@@ -6,6 +6,7 @@ import ScrollToTop from './components/ScrollToTop';
 import TopLevelErrorBoundary from './components/TopLevelErrorBoundary';
 import './index.css';
 import { registerServiceWorker } from './lib/pwa';
+import { readAttempts, reloadCarryingCount } from './lib/reloadGuard';
 
 // Task #37 — tell the un-bundled boot watchdog (index.html) that the entry
 // module actually executed, so it won't trigger a recovery reload. Also strip
@@ -73,23 +74,18 @@ function isChunkLoadError(reason) {
 // as the storage-free half. A tab that survives two deploys still recovers from
 // both; a genuinely broken chunk stops after MAX_CHUNK_RELOADS and lets the
 // error boundary render something a person can act on.
+// THE COUNT AND THE URL MARKER NOW LIVE IN `lib/reloadGuard.js`, because this
+// file was not the only place that needed them. `lib/pwa.js` reloads on a
+// service-worker `controllerchange` and had learned neither lesson above — its
+// guard was a closure `let` that died with the document, bounding one reload
+// per page load. Two implementations of "bounded reload" is how one of them
+// ends up missing a lesson the other paid for, so there is one.
 const CHUNK_KEY = 'axal:chunk-reload-attempts';
+const CHUNK_PARAM = '__chunk';
 const MAX_CHUNK_RELOADS = 2;
 
-function chunkReloadAttempts() {
-  try {
-    const n = parseInt(sessionStorage.getItem(CHUNK_KEY) || '0', 10);
-    if (Number.isFinite(n) && n > 0) return n;
-  } catch { /* storage blocked — fall through to the URL marker */ }
-  try {
-    const m = /[?&]__chunk=(\d+)/.exec(window.location.search);
-    if (m) return parseInt(m[1], 10) || 0;
-  } catch { /* location unreadable */ }
-  return 0;
-}
-
 function reloadOnceForStaleChunk() {
-  const attempts = chunkReloadAttempts();
+  const attempts = readAttempts(CHUNK_KEY, CHUNK_PARAM);
   if (attempts >= MAX_CHUNK_RELOADS) return;
   const next = attempts + 1;
   try { sessionStorage.setItem(CHUNK_KEY, String(next)); } catch { /* URL marker below carries it */ }
@@ -102,27 +98,16 @@ function reloadOnceForStaleChunk() {
         if (window.caches && caches.keys) {
           caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k).catch(() => {}))))
             .catch(() => {})
-            .finally(() => reloadCarryingCount(next));
+            .finally(() => reloadCarryingCount(CHUNK_PARAM, next));
         } else {
-          reloadCarryingCount(next);
+          reloadCarryingCount(CHUNK_PARAM, next);
         }
       });
   } else {
-    reloadCarryingCount(next);
+    reloadCarryingCount(CHUNK_PARAM, next);
   }
 }
 
-// The attempt count rides in the URL as well as in sessionStorage, so the bound
-// still holds in a browser that refuses the write.
-function reloadCarryingCount(n) {
-  try {
-    const u = new URL(window.location.href);
-    u.searchParams.set('__chunk', String(n));
-    window.location.replace(u.toString());
-  } catch {
-    window.location.reload();
-  }
-}
 function recoverFromStaleChunk(reason) {
   if (!isChunkLoadError(reason)) return;
   reloadOnceForStaleChunk();

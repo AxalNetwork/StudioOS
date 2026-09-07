@@ -6,6 +6,16 @@
  *  "Enable push" toggle.
  */
 import { api } from './api';
+import { reloadWithinBudget } from './reloadGuard';
+
+// The service-worker update reload's budget. One is the whole intent — "reload
+// once when a new worker takes control" — and the point of a stored count
+// rather than an in-memory flag is that it still says one after the reload.
+const SW_RELOAD_KEY = 'axal:sw-reload-attempts';
+const SW_RELOAD_PARAM = '__swreload';
+const MAX_SW_RELOADS = 1;
+// How long to wait before asking the network again whether the worker is stale.
+const UPDATE_THROTTLE_MS = 5 * 60 * 1000;
 
 let _deferredInstall = null;
 const _installListeners = new Set();
@@ -48,29 +58,56 @@ export function registerServiceWorker() {
     }
     return;
   }
-  // Auto-reload exactly once when a NEWLY activated service worker takes
-  // control of the page. Without this, a freshly deployed build leaves an
-  // open/cached tab running the old in-memory bundle, which can reference
-  // asset chunks the new deploy removed → a site-wide blank page that
-  // survives normal refreshes. We only arm this when a controller already
-  // exists (i.e. this is an UPDATE, not the first-ever install, which would
-  // otherwise reload every brand-new visitor) and guard against any reload
-  // loop with a one-shot flag.
+  // Auto-reload when a NEWLY activated service worker takes control of the
+  // page. Without this, a freshly deployed build leaves an open/cached tab
+  // running the old in-memory bundle, which can reference asset chunks the new
+  // deploy removed → a site-wide blank page that survives normal refreshes. We
+  // only arm this when a controller already exists (i.e. this is an UPDATE, not
+  // the first-ever install, which would otherwise reload every brand-new
+  // visitor).
+  //
+  // THE GUARD USED TO BE A CLOSURE FLAG, AND THAT IS NOT A GUARD. It read:
+  //
+  //     let _reloadingForUpdate = false;
+  //     ... if (_reloadingForUpdate) return; _reloadingForUpdate = true;
+  //
+  // and its comment claimed it "guard[s] against any reload loop with a
+  // one-shot flag". A `let` in this closure dies with the document, so every
+  // reload re-armed it with a fresh `false`: it bounded one reload PER PAGE
+  // LOAD, which bounds nothing at all. This was the only reload in the app with
+  // no guard that outlived the reload it triggered.
+  //
+  // It closed a cycle with the worker itself. `sw.js` calls `skipWaiting()` on
+  // every install and `clients.claim()` in `activate` — and `claim()` fires
+  // `controllerchange` on pages that already have a controller. So:
+  // reload → register → update → install → skipWaiting → claim →
+  // controllerchange → reload, with nothing counting.
+  //
+  // Now it uses the same counter-plus-URL-marker the rest of the app settled
+  // on (`lib/reloadGuard.js`), so the bound survives both the reload and a
+  // browser that refuses `sessionStorage` writes.
   if (navigator.serviceWorker.controller) {
-    let _reloadingForUpdate = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (_reloadingForUpdate) return;
-      _reloadingForUpdate = true;
-      window.location.reload();
+      reloadWithinBudget(SW_RELOAD_KEY, SW_RELOAD_PARAM, MAX_SW_RELOADS);
     });
   }
   // Register after first paint to avoid blocking LCP.
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .then((reg) => {
-        // Optional: nudge update on focus
+        // Nudge an update check when the tab comes back to the foreground —
+        // THROTTLED, because unthrottled it ran on every single tab switch and
+        // fed the cycle described above. The throttle is not the bound (it is
+        // in-memory and dies with the document, like the flag this replaced);
+        // the counter above is. This just stops the app asking the network
+        // whether it is stale every time someone glances at another tab.
+        let lastUpdate = 0;
         document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible') reg.update().catch(() => {});
+          if (document.visibilityState !== 'visible') return;
+          const now = Date.now();
+          if (now - lastUpdate < UPDATE_THROTTLE_MS) return;
+          lastUpdate = now;
+          reg.update().catch(() => {});
         });
       })
       .catch((err) => {
