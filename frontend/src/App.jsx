@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
+import { preserveReloadGuards } from './lib/reloadGuard';
 import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
@@ -1340,8 +1341,25 @@ function AppInner() {
     // so nothing leaks — but that first paint would be unscoped rather than
     // the new account's own company.
     setActiveCompanyId(null);
-    // Sweep any per-tab sensitive state (drafts, in-flight wizards, etc.).
-    try { sessionStorage.clear(); } catch (e) { /* ignore */ }
+    // Sweep any per-tab sensitive state (drafts, in-flight wizards, etc.) —
+    // but NOT the reload guards, which this used to take with it.
+    //
+    // A bare `sessionStorage.clear()` here removed every loop bound in the app
+    // at once, and `/login` is where that bit. `AuthScreen` calls `clearSession`
+    // on mount for anyone arriving still signed in — which is every arrival via
+    // `logout()` and via `RequireAuth`'s redirect — and `main.jsx` strips the
+    // boot watchdog's `?__reboot=` marker on every successful boot. Between the
+    // two, the watchdog lost both of its guards on that route and the next
+    // failed boot had a fresh budget. `main.jsx` says this in writing: "Clearing
+    // it while `main.jsx` also strips `?__reboot=` from the URL removed BOTH of
+    // the boot watchdog's loop guards at once."
+    //
+    // The guards are not session state and are not sensitive; they are counts
+    // that bound a recovery. `lib/reloadGuard.js` owns the list so a guard added
+    // to any caller cannot be silently dropped here.
+    preserveReloadGuards(() => {
+      try { sessionStorage.clear(); } catch (e) { /* ignore */ }
+    });
     setUser(null);
     setRealUser(null);
     // T6 — revoke the server-side session + clear the httpOnly auth/CSRF
