@@ -246,9 +246,9 @@ export default function LoginPage() {
     }
   };
 
-  // ---- Task #41 — DEV-ONLY demo investor quick-login ----
+  // ---- Task #41 — DEV-ONLY demo-account quick-login ----
   // The dev FastAPI backend exposes POST /api/auth/dev/quick-login
-  // which mints a JWT for the seeded `demo-investor@axal.test` account
+  // which mints a JWT for an allowlisted seeded demo account
   // without TOTP / Turnstile (refused entirely when ENVIRONMENT=production).
   // The button is gated on Vite's `import.meta.env.DEV` so the production
   // bundle never includes it. Lands the user on /deals so testers can
@@ -502,6 +502,14 @@ export default function LoginPage() {
               >
                 {demoLoading === 'investor' ? 'Signing in…' : 'Sign in as demo investor (dev only)'}
               </button>
+               <button
+                 onClick={() => demoLogin({ email: 'demo-admin@axal.test', landing: '/admin' })}
+                 disabled={!!demoLoading}
+                 data-testid="demo-admin-login"
+                 className="w-full bg-violet-100 hover:bg-violet-200 border border-violet-300 disabled:opacity-50 rounded-lg py-2 text-xs font-medium text-violet-900"
+               >
+                 {demoLoading === 'demo-admin@axal.test' ? 'Signing in…' : 'Sign in as demo admin (dev only)'}
+               </button>
             </div>
           )}
         </div>

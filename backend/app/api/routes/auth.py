@@ -676,12 +676,12 @@ def dev_quick_login(
     request: Request,
     session: Session = Depends(get_session),
 ):
-    """Task #41 — DEV-ONLY shortcut that mints a JWT for the seeded demo
-    investor (or demo founder when explicitly requested) without TOTP or
+    """Task #41 — DEV-ONLY shortcut that mints a JWT for an allowlisted seeded
+    demo account without TOTP or
     Turnstile. Returns 404 in production / staging so this can never
     become an auth-bypass on a real deploy. The acceptable `email` values
-    are a strict allowlist (`DEMO_INVESTOR_EMAIL` / `DEMO_FOUNDER_EMAIL`)
-    — any other email is rejected with 403, even in dev.
+    are a strict allowlist of seeded demo accounts — any other email is
+    rejected with 403, even in dev.
 
     Returns the same `{token, user, expires_in}` shape as POST /api/auth/login
     so frontends and tests can use the response interchangeably.
