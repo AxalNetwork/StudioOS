@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import { NothingYet, Unrecorded, ZoneBody, ZoneHeading } from '../expertise/kit';
-import { BatchPicker, FromTheLab, NoBatch, StatedLimit, cohortLabel } from './kit';
+import { BatchPicker, FromTheLab, NoBatch, cohortLabel } from './kit';
 
 /**
  * Cohorts · Founders — the batch an admin put this advisor in front of.
@@ -103,12 +103,13 @@ export default function FoundersZone() {
             </table>
           </Card>
           <div className="mt-3"><FromTheLab /></div>
-          <StatedLimit title="What this page cannot show">
-            Company, stage, a live signal per founder, and your own next action beside each of
-            them are all asked for by the design and none has a store behind it. They are absent
-            rather than empty — the columns are not here at all, so a blank is never mistaken for
-            a founder with nothing going on.
-          </StatedLimit>
+          {/* COMPANY, STAGE, A LIVE SIGNAL AND YOUR NEXT ACTION ARE NOT DRAWN.
+              The design asks for a column each and none has a store behind it.
+              They are absent rather than empty: the columns are not here at
+              all, so a blank is never mistaken for a founder with nothing going
+              on. That rule has not changed — what changed is that the page used
+              to say so in a panel beneath the table, which told a reader about
+              the design rather than about their cohort. */}
         </ZoneBody>
       </ZoneBody>
     </div>

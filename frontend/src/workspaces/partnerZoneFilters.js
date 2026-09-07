@@ -48,8 +48,7 @@ const ONE_SOURCE_ONLY =
 
 // `/network/relationships`. Two labels, one absent column, and the ops half of
 // this very row already names it — "no owner field is stored on a relationship".
-// These are the same sentence from the other side, so they share one note and
-// `groupFilterNotes` renders it once for both.
+// These are the same sentence from the other side, so they share one string.
 const NO_OWNER_ON_A_RELATIONSHIP =
   'no owner is stored on a relationship, so there is no assignment to bring forward and none to filter by';
 const NO_INTERACTION_DATE =
@@ -75,27 +74,27 @@ export const PARTNER_ZONE_FILTERS = {
   // strength score and nothing else. Founder's row on this zone runs all four,
   // because founder relationships are `contacts`.
   'network/relationships': [
-    { canvas: 'Unassigned first', note: NO_OWNER_ON_A_RELATIONSHIP },
+    { canvas: 'Unassigned first', unbuilt: NO_OWNER_ON_A_RELATIONSHIP },
     { canvas: 'All', key: 'all' },
-    { canvas: 'By owner', note: NO_OWNER_ON_A_RELATIONSHIP },
-    { canvas: 'Going cold', note: NO_INTERACTION_DATE },
+    { canvas: 'By owner', unbuilt: NO_OWNER_ON_A_RELATIONSHIP },
+    { canvas: 'Going cold', unbuilt: NO_INTERACTION_DATE },
   ],
 
   'network/introductions': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Gated', key: 'pending', label: 'Awaiting you' },
-    { canvas: 'Made', note: NO_CONNECTED_STATE },
+    { canvas: 'Made', unbuilt: NO_CONNECTED_STATE },
     { canvas: 'Declined', key: 'declined' },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
   'research/client-prep': [
     { canvas: 'Full brief', key: 'all' },
-    { canvas: 'Ours only', note: ONE_SOURCE_ONLY },
-    { canvas: 'Founder-sourced', note: ONE_SOURCE_ONLY },
+    { canvas: 'Ours only', unbuilt: ONE_SOURCE_ONLY },
+    { canvas: 'Founder-sourced', unbuilt: ONE_SOURCE_ONLY },
     {
       canvas: 'Open items',
-      note: 'nothing records a brief row as open or closed; these rows are what the founder opened to you, not a checklist the firm works through',
+      unbuilt: 'nothing records a brief row as open or closed; these rows are what the founder opened to you, not a checklist the firm works through',
     },
   ],
   // Three live, one prose. The windows are this canvas's own — `const STALE_AT
@@ -111,14 +110,14 @@ export const PARTNER_ZONE_FILTERS = {
     { canvas: 'Stale', key: 'stale' },
     {
       canvas: 'Attached to proposals',
-      note: 'no row joins a signal to a proposal — the only foreign keys to a signal in the whole schema are its evidence and the companies it names',
+      unbuilt: 'no row joins a signal to a proposal — the only foreign keys to a signal in the whole schema are its evidence and the companies it names',
     },
   ],
   'research/ask': [
-    { canvas: 'This session', note: ONE_ANSWER_ONLY },
-    { canvas: 'All history', note: NO_ANSWER_RECORD },
-    { canvas: 'Cited', note: ONE_ANSWER_ONLY },
-    { canvas: 'Unanswered', note: NO_ANSWER_RECORD },
+    { canvas: 'This session', unbuilt: ONE_ANSWER_ONLY },
+    { canvas: 'All history', unbuilt: NO_ANSWER_RECORD },
+    { canvas: 'Cited', unbuilt: ONE_ANSWER_ONLY },
+    { canvas: 'Unanswered', unbuilt: NO_ANSWER_RECORD },
   ],
   // Four labels, four predicates, no prose — the only zone in this pass where
   // that happens. `Client docs` needs no relabel: `About a client` is what the

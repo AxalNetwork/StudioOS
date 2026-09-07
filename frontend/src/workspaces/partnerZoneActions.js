@@ -43,74 +43,74 @@ import { makeZoneActions } from './zoneActionBuilder';
 export const PARTNER_ZONE_ACTIONS = {
   // ── Delivery ─────────────────────────────────────────────────────────────
   'delivery/board': [
-    { label: 'Bulk status update', note: 'status moves one engagement at a time, from its own row' },
-    { label: 'Saved views', note: 'filters reset between visits; no saved view is stored' },
+    { label: 'Bulk status update', unbuilt: 'status moves one engagement at a time, from its own row' },
+    { label: 'Saved views', unbuilt: 'filters reset between visits; no saved view is stored' },
     { label: 'Export', kind: 'export' },
   ],
   'delivery/deliverables': [
-    { label: 'Chase unopened', note: 'nothing here sends mail, and an unopened deliverable means “we do not know”' },
-    { label: 'Version history', note: 'only the current version number is stored, so there is no history to open' },
+    { label: 'Chase unopened', unbuilt: 'nothing here sends mail, and an unopened deliverable means “we do not know”' },
+    { label: 'Version history', unbuilt: 'only the current version number is stored, so there is no history to open' },
     { label: 'Export', kind: 'export' },
   ],
   'delivery/capacity': [
-    { label: 'Reallocate', note: 'seats are granted and revoked on the engagement, not moved from here' },
-    { label: 'Seat register', note: 'the seats below are the register; there is no second view of it' },
+    { label: 'Reallocate', unbuilt: 'seats are granted and revoked on the engagement, not moved from here' },
+    { label: 'Seat register', unbuilt: 'the seats below are the register; there is no second view of it' },
     { label: 'Export', kind: 'export' },
   ],
   'delivery/status-reports': [
-    { label: 'Draft all', note: 'no cadence is stored, so there is no set of reports to draft' },
-    { label: 'Cadence rules', note: 'report cadence is not a stored record' },
+    { label: 'Draft all', unbuilt: 'no cadence is stored, so there is no set of reports to draft' },
+    { label: 'Cadence rules', unbuilt: 'report cadence is not a stored record' },
     { label: 'Export', kind: 'export' },
   ],
   'delivery/health': [
-    { label: 'Change order', note: 'change orders are not a stored record' },
-    { label: 'Renewal watch', note: 'no renewal date is stored to watch' },
+    { label: 'Change order', unbuilt: 'change orders are not a stored record' },
+    { label: 'Renewal watch', unbuilt: 'no renewal date is stored to watch' },
     { label: 'Export', kind: 'export' },
   ],
 
   // ── Offers ───────────────────────────────────────────────────────────────
   'offers/catalog': [
-    { label: 'New service', note: 'services are added from the catalogue’s own form below' },
-    { label: 'Pricing history', note: 'only the current price is stored; there is no history to open' },
+    { label: 'New service', unbuilt: 'services are added from the catalogue’s own form below' },
+    { label: 'Pricing history', unbuilt: 'only the current price is stored; there is no history to open' },
     { label: 'Export', kind: 'export' },
   ],
   'offers/perk-deals': [
-    { label: 'New perk', note: 'perks are added from the form below' },
-    { label: 'Extend', note: 'an expiry is edited on the perk itself, not extended in bulk' },
+    { label: 'New perk', unbuilt: 'perks are added from the form below' },
+    { label: 'Extend', unbuilt: 'an expiry is edited on the perk itself, not extended in bulk' },
     { label: 'Export', kind: 'export' },
   ],
   'offers/visibility': [
-    { label: 'Adjust placements', note: 'placement is not a stored setting' },
-    { label: 'Attribution rules', note: 'attribution is counted from engagements, never configured' },
+    { label: 'Adjust placements', unbuilt: 'placement is not a stored setting' },
+    { label: 'Attribution rules', unbuilt: 'attribution is counted from engagements, never configured' },
     { label: 'Export', kind: 'export' },
   ],
   'offers/proof': [
-    { label: 'Ask for consent', note: 'consent is given by the founder, and no founder-side surface exists to ask from here' },
-    { label: 'Preview public page', note: 'no public proof page is published yet' },
+    { label: 'Ask for consent', unbuilt: 'consent is given by the founder, and no founder-side surface exists to ask from here' },
+    { label: 'Preview public page', unbuilt: 'no public proof page is published yet' },
     { label: 'Export', kind: 'export' },
   ],
   'offers/audience-fit': [
-    { label: 'Edit fit rules', note: 'rules are edited on the rule itself, below' },
-    { label: 'Pass reasons', note: 'a pass reason is not a stored field on a fit rule' },
+    { label: 'Edit fit rules', unbuilt: 'rules are edited on the rule itself, below' },
+    { label: 'Pass reasons', unbuilt: 'a pass reason is not a stored field on a fit rule' },
     { label: 'Export', kind: 'export' },
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
-    { label: 'Assign owner', note: 'no owner field is stored on a relationship' },
-    { label: 'Log interaction', note: 'no interaction log is stored' },
+    { label: 'Assign owner', unbuilt: 'no owner field is stored on a relationship' },
+    { label: 'Log interaction', unbuilt: 'no interaction log is stored' },
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [
-    { label: 'New introduction', note: 'introductions arrive as propositions; none is composed here' },
-    { label: 'Consent log', note: 'consent is recorded per introduction, not as a log' },
+    { label: 'New introduction', unbuilt: 'introductions arrive as propositions; none is composed here' },
+    { label: 'Consent log', unbuilt: 'consent is recorded per introduction, not as a log' },
     { label: 'Export', kind: 'export' },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
   'research/ask': [
-    { label: 'New session', note: 'the question box below starts one' },
-    { label: 'Saved answers', note: 'no answer is saved; the citations below belong to this question' },
+    { label: 'New session', unbuilt: 'the question box below starts one' },
+    { label: 'Saved answers', unbuilt: 'no answer is saved; the citations below belong to this question' },
     { label: 'Export', kind: 'export' },
   ],
   // Excluded as "a card, not a body" until now, and it is a body — see the
@@ -119,18 +119,18 @@ export const PARTNER_ZONE_ACTIONS = {
   // about a brief, where `research/markets` below is about a signal, and both
   // fail for the want of a link rather than the want of a proposal.
   'research/client-prep': [
-    { label: 'New brief', note: 'a brief exists when a founder opens their record to you; nothing here asks for one' },
-    { label: 'Attach to proposal', note: 'nothing links a brief to a proposal record' },
+    { label: 'New brief', unbuilt: 'a brief exists when a founder opens their record to you; nothing here asks for one' },
+    { label: 'Attach to proposal', unbuilt: 'nothing links a brief to a proposal record' },
     { label: 'Export', kind: 'export' },
   ],
   'research/markets': [
-    { label: 'Re-run stale', note: 'signals are gathered on a schedule; nothing re-runs one' },
-    { label: 'Attach to proposal', note: 'nothing carries a signal onto a proposal' },
+    { label: 'Re-run stale', unbuilt: 'signals are gathered on a schedule; nothing re-runs one' },
+    { label: 'Attach to proposal', unbuilt: 'nothing carries a signal onto a proposal' },
     { label: 'Export', kind: 'export' },
   ],
   'research/library': [
-    { label: 'Add document', note: 'the add-document form below takes a file or a link' },
-    { label: 'Re-index', note: 'indexing runs on upload; there is no re-run control' },
+    { label: 'Add document', unbuilt: 'the add-document form below takes a file or a link' },
+    { label: 'Re-index', unbuilt: 'indexing runs on upload; there is no re-run control' },
     { label: 'Export', kind: 'export' },
   ],
 };

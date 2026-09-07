@@ -35,8 +35,8 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  */
 
 // `/funds/calls` and `/funds/ledger` each fail for one reason across several
-// filters, so the reason is named once and `groupFilterNotes` collapses them
-// into a single sentence naming every label it covers.
+// filters, so the reason is written once and shared by every entry it covers
+// rather than restated per label.
 const NO_FUND_SCOPED_CALLS =
   'capital calls are recorded, but nothing links one to a fund register, so none can be listed against this fund';
 const NO_LEDGER_LINES =
@@ -120,7 +120,7 @@ export const INVESTOR_ZONE_FILTERS = {
       canvas: 'By type',
       dynamic: 'types',
       label: 'One chip per LP type',
-      note: 'no LP record carries a type yet',
+      unbuilt: 'no LP record carries a type yet',
     },
   ],
 
@@ -135,19 +135,19 @@ export const INVESTOR_ZONE_FILTERS = {
   // welded onto a filter, so `{n}` is not the repair. It renders as the
   // positional filter it actually is.
   'funds/calls': [
-    { canvas: 'Call 3', label: 'Current call', note: NO_FUND_SCOPED_CALLS },
-    { canvas: 'All calls', note: NO_FUND_SCOPED_CALLS },
-    { canvas: 'Outstanding', note: NO_FUND_SCOPED_CALLS },
-    { canvas: 'Notices', note: 'no call notice is stored, sent or tracked anywhere in this product' },
+    { canvas: 'Call 3', label: 'Current call', unbuilt: NO_FUND_SCOPED_CALLS },
+    { canvas: 'All calls', unbuilt: NO_FUND_SCOPED_CALLS },
+    { canvas: 'Outstanding', unbuilt: NO_FUND_SCOPED_CALLS },
+    { canvas: 'Notices', unbuilt: 'no call notice is stored, sent or tracked anywhere in this product' },
   ],
 
   // `Summary` is real — it reads the fund analytics totals. The other three
   // reached a panel that told you so only after you clicked.
   'funds/ledger': [
     { canvas: 'Summary', key: 'summary' },
-    { canvas: 'Journal', note: NO_LEDGER_LINES },
-    { canvas: 'Fees', note: NO_LEDGER_LINES },
-    { canvas: 'Audit trail', note: NO_LEDGER_LINES },
+    { canvas: 'Journal', unbuilt: NO_LEDGER_LINES },
+    { canvas: 'Fees', unbuilt: NO_LEDGER_LINES },
+    { canvas: 'Audit trail', unbuilt: NO_LEDGER_LINES },
   ],
 
   // Four real predicates over `api.lpReportsList` / `api.fundsReportPeriods`.
@@ -189,8 +189,8 @@ export const INVESTOR_ZONE_FILTERS = {
   'portfolio/updates': [
     { canvas: 'This period', key: 'period' },
     { canvas: 'Overdue', key: 'overdue' },
-    { canvas: 'Parse review', note: NO_EXTRACTION_LAYER },
-    { canvas: 'Rules', note: NO_EXTRACTION_LAYER },
+    { canvas: 'Parse review', unbuilt: NO_EXTRACTION_LAYER },
+    { canvas: 'Rules', unbuilt: NO_EXTRACTION_LAYER },
   ],
 
   // Four live chips over a page that makes no `api.*` call at all — the same
@@ -198,10 +198,10 @@ export const INVESTOR_ZONE_FILTERS = {
   // group here: the companies exist, but there is nothing to group BY them, so
   // the missing thing is the ledger and not the names.
   'portfolio/value-add': [
-    { canvas: 'All', note: NO_SUPPORT_LEDGER },
-    { canvas: 'Delivered', note: NO_SUPPORT_LEDGER },
-    { canvas: 'Outstanding', note: NO_SUPPORT_LEDGER },
-    { canvas: 'By company', note: NO_SUPPORT_LEDGER },
+    { canvas: 'All', unbuilt: NO_SUPPORT_LEDGER },
+    { canvas: 'Delivered', unbuilt: NO_SUPPORT_LEDGER },
+    { canvas: 'Outstanding', unbuilt: NO_SUPPORT_LEDGER },
+    { canvas: 'By company', unbuilt: NO_SUPPORT_LEDGER },
   ],
 
   // ── Deals ────────────────────────────────────────────────────────────────
@@ -219,7 +219,7 @@ export const INVESTOR_ZONE_FILTERS = {
   // definition of "sat too long" for the whole product beats two.
   'deals/pipeline': [
     { canvas: 'All stages', key: 'all' },
-    { canvas: 'Mine', note: ALREADY_MINE },
+    { canvas: 'Mine', unbuilt: ALREADY_MINE },
     { canvas: 'Unassigned', key: 'unassigned' },
     { canvas: 'Stale', key: 'stale' },
     { canvas: 'Passed', key: 'passed' },
@@ -236,16 +236,16 @@ export const INVESTOR_ZONE_FILTERS = {
   // member of it.
   'network/relationships': [
     { canvas: 'Everyone', key: 'all' },
-    { canvas: 'Founders', note: NO_COUNTERPART_ROLE },
+    { canvas: 'Founders', unbuilt: NO_COUNTERPART_ROLE },
     { canvas: 'Co-investors', key: 'coinvestors' },
-    { canvas: 'LPs', note: NO_LP_RELATIONSHIP },
-    { canvas: 'Going cold', note: NO_INTERACTION_DATE },
+    { canvas: 'LPs', unbuilt: NO_LP_RELATIONSHIP },
+    { canvas: 'Going cold', unbuilt: NO_INTERACTION_DATE },
   ],
 
   'network/introductions': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Offered', note: NO_DIRECTION_RECORDED },
-    { canvas: 'Asked', note: NO_DIRECTION_RECORDED },
+    { canvas: 'Offered', unbuilt: NO_DIRECTION_RECORDED },
+    { canvas: 'Asked', unbuilt: NO_DIRECTION_RECORDED },
     { canvas: 'Stalled', key: 'stalled' },
   ],
 
@@ -263,11 +263,11 @@ export const INVESTOR_ZONE_FILTERS = {
   // clearest statement this workstream has of why a filter's verdict belongs to
   // the row it sits on and not to the word.
   'network/organizations': [
-    { canvas: 'All', note: NO_ORG_ON_A_RELATIONSHIP },
-    { canvas: 'Portfolio', note: NO_ORG_ON_A_RELATIONSHIP },
-    { canvas: 'Co-investors', note: NO_ORG_ON_A_RELATIONSHIP },
-    { canvas: 'LPs', note: KEPT_IN_ANOTHER_STORE },
-    { canvas: 'Passed', note: KEPT_IN_ANOTHER_STORE },
+    { canvas: 'All', unbuilt: NO_ORG_ON_A_RELATIONSHIP },
+    { canvas: 'Portfolio', unbuilt: NO_ORG_ON_A_RELATIONSHIP },
+    { canvas: 'Co-investors', unbuilt: NO_ORG_ON_A_RELATIONSHIP },
+    { canvas: 'LPs', unbuilt: KEPT_IN_ANOTHER_STORE },
+    { canvas: 'Passed', unbuilt: KEPT_IN_ANOTHER_STORE },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
@@ -283,13 +283,13 @@ export const INVESTOR_ZONE_FILTERS = {
   // returns — so there is no session, kept answer or outcome to narrow. The ops
   // half of this row already says "no session history is stored to clear".
   'research/ask': [
-    { canvas: 'All sessions', note: NO_SESSION_RECORD },
-    { canvas: 'Saved', note: NO_SESSION_RECORD },
+    { canvas: 'All sessions', unbuilt: NO_SESSION_RECORD },
+    { canvas: 'Saved', unbuilt: NO_SESSION_RECORD },
     {
       canvas: 'Cited in a memo',
-      note: 'a citation names the passage it quoted and carries no document id, and nothing carries one into a memo',
+      unbuilt: 'a citation names the passage it quoted and carries no document id, and nothing carries one into a memo',
     },
-    { canvas: 'Discarded', note: NO_SESSION_RECORD },
+    { canvas: 'Discarded', unbuilt: NO_SESSION_RECORD },
   ],
   // ROOM ACCESS, AND THE CANVAS MEANS SOMETHING DIFFERENT BY `Requested` THAN
   // THE WORD SUGGESTS. Its own artboard code reads
@@ -309,12 +309,12 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'All', key: 'all' },
     {
       canvas: 'Granted',
-      note: 'every room here is one you have been granted; the list loads active grants only, so this would select all of them',
+      unbuilt: 'every room here is one you have been granted; the list loads active grants only, so this would select all of them',
     },
     { canvas: 'Requested', key: 'partial', label: 'Partly staged' },
     {
       canvas: 'Not staged',
-      note: 'a company that never opened a room is not on this list at all, because the grant is what puts a room here and an unstaged one leaves no row to find',
+      unbuilt: 'a company that never opened a room is not on this list at all, because the grant is what puts a room here and an unstaged one leaves no row to find',
     },
   ],
   // `Peer set` IS RELABELLED BECAUSE THE OPS HALF WOULD CONTRADICT IT. That
@@ -328,18 +328,18 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Metrics', key: 'all' },
     {
       canvas: 'Saved',
-      note: 'a benchmark row has no draft state; the form writes a finished row on submit, so every metric on this page is saved',
+      unbuilt: 'a benchmark row has no draft state; the form writes a finished row on submit, so every metric on this page is saved',
     },
     {
       canvas: 'Export',
-      note: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn',
+      unbuilt: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn',
     },
   ],
   'research/markets': [
-    { canvas: 'Active', note: NO_SAVED_DEEP_DIVE },
-    { canvas: 'Parked', note: NO_SAVED_DEEP_DIVE },
-    { canvas: 'Retired', note: NO_SAVED_DEEP_DIVE },
-    { canvas: 'Builder', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Active', unbuilt: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Parked', unbuilt: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Retired', unbuilt: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Builder', unbuilt: NO_SAVED_DEEP_DIVE },
   ],
   // `Diligence` looks like the two live chips partner gets from this same
   // column and is not one of them. `research_documents.kind` is free text, so
@@ -348,18 +348,18 @@ export const INVESTOR_ZONE_FILTERS = {
   // client`, and the worker coerces anything else. No row can carry it.
   'research/library': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Diligence', note: NO_SUCH_KIND },
+    { canvas: 'Diligence', unbuilt: NO_SUCH_KIND },
     {
       canvas: 'Benchmarks',
-      note: 'a benchmark is a row in Benchmarking carrying its own source and sample size, not a document in this library',
+      unbuilt: 'a benchmark is a row in Benchmarking carrying its own source and sample size, not a document in this library',
     },
     {
       canvas: 'Primary',
-      note: 'no document records whether it is your own research or a bought report',
+      unbuilt: 'no document records whether it is your own research or a bought report',
     },
     {
       canvas: 'Stale',
-      note: 'nothing records a source’s own year, and the date held is when the file was added here, which is a different fact',
+      unbuilt: 'nothing records a source’s own year, and the date held is when the file was added here, which is a different fact',
     },
   ],
 };

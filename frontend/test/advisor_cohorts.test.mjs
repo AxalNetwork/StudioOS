@@ -146,11 +146,30 @@ test('Outcomes says it is the program, not the reader’s batch', () => {
   assert.match(src, /spinoutLab\.graduates\(\)/);
 });
 
-test('each zone states what it cannot show, rather than leaving a blank', () => {
+test('each zone records what it cannot show, without printing it', () => {
   // The canvas asked Founders for company, stage, a live signal and a next
   // action. The read returns name and email. An absent column is honest; an
-  // empty one reads as a founder with nothing going on.
-  assert.match(codeOnly(read(`${ZONE_DIR}/FoundersZone.jsx`)), /What this page cannot show/);
+  // empty one reads as a founder with nothing going on. THAT RULE IS
+  // UNCHANGED — what changed is where it is written down.
+  //
+  // Founders used to carry a `What this page cannot show` panel under its
+  // table, naming the four columns the design asked for. It told a reader
+  // about the design rather than about their cohort, so the reason moved into
+  // the source and the panel went. The columns are still absent, which is the
+  // part that was ever load-bearing.
+  const founders = read(`${ZONE_DIR}/FoundersZone.jsx`);
+  assert.doesNotMatch(codeOnly(founders), /What this page cannot show/,
+    'the canvas-narration panel is back on Founders');
+  assert.match(founders, /COMPANY, STAGE, A LIVE SIGNAL AND YOUR NEXT ACTION ARE NOT DRAWN/,
+    'the record of which columns are absent, and why, has been lost');
+  for (const column of ['Company', 'Stage']) {
+    assert.ok(!codeOnly(founders).includes(`>${column}<`),
+      `${column} is drawn as a column and nothing fills it`);
+  }
+
+  // ThisWeek's panel STAYS. It is not about the design: it scopes what the
+  // numbers on the page mean — the batch's week, not the advisor's own — which
+  // a reader needs in order to read the rows correctly.
   assert.match(codeOnly(read(`${ZONE_DIR}/ThisWeekZone.jsx`)), /This is the batch's week, not yours/);
 });
 

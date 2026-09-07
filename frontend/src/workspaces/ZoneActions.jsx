@@ -32,11 +32,25 @@ import { Link } from 'react-router-dom';
  * instead, which `scripts/check-dark-mode.mjs` also knows how to require a
  * dark counterpart for.
  *
- * AN ACTION THAT CANNOT RUN IS NOT DRAWN AS A BUTTON. `note` renders the item
- * as plain text stating why instead. This repo has shipped the other thing —
- * Trust Center's KYB form posted to a route the worker never declared, and the
- * only reason CI stayed green was `scripts/api-drift-baseline.json`. A button
- * is a promise that something will happen.
+ * AN ACTION THAT CANNOT RUN IS NOT DRAWN AT ALL. This repo has shipped the
+ * other thing — Trust Center's KYB form posted to a route the worker never
+ * declared, and the only reason CI stayed green was
+ * `scripts/api-drift-baseline.json`. A button is a promise that something will
+ * happen, so an op nothing performs never reaches this component:
+ * `zoneActionBuilder` returns null for it and the caller drops it.
+ *
+ * IT USED TO RENDER THE REASON INSTEAD, AND THAT WAS THE BUG. A `note` field
+ * drew the item as `{label} — {note}`, so the design's `Comparables` shipped as
+ * a two-line sentence about how comparables are filed, and a five-op zone
+ * header became five paragraphs of design-review commentary aimed at a reader
+ * who cannot act on any of it. The refusal was right; printing it inside the
+ * control's own label was not. The reason now lives in the action table, which
+ * is where the person who can build the op reads it.
+ *
+ * `disabled` IS THE ONE THING THAT STILL RENDERS WITHOUT RUNNING, and it is a
+ * different claim: `Export` over rows that have not loaded YET is a real
+ * control in a transient state, not an unbuilt one. It keeps the canvas's label
+ * and comes alive when the page has rows.
  */
 
 const GHOST =
@@ -52,8 +66,9 @@ const GHOST =
  *   onClick?: () => void,
  *   to?: string,
  *   busy?: boolean,
- *   disabled?: boolean,
- *   note?: string,        // stated limit — renders as text, never as a button
+ *   disabled?: boolean,   // a real control the page cannot run yet, e.g. an
+ *                         // export before its rows have loaded
+ *   title?: string,
  *   testid?: string,
  * }>} items
  */
@@ -64,18 +79,6 @@ export default function ZoneActions({ items = [], className = '' }) {
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
       {live.map((item) => {
         const key = item.label;
-        if (item.note) {
-          return (
-            <span
-              key={key}
-              data-testid={item.testid}
-              className="text-[11px] font-semibold text-gray-600 dark:text-gray-300"
-              title={item.note}
-            >
-              {item.label} — {item.note}
-            </span>
-          );
-        }
         if (item.to) {
           return (
             <Link key={key} to={item.to} data-testid={item.testid} title={item.title} className={GHOST}>
@@ -90,6 +93,7 @@ export default function ZoneActions({ items = [], className = '' }) {
             data-testid={item.testid}
             onClick={item.onClick}
             disabled={item.disabled || item.busy}
+            title={item.title}
             className={GHOST}
           >
             {item.busy ? `${item.label}…` : item.label}

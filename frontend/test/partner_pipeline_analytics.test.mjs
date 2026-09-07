@@ -89,11 +89,22 @@ test('the endpoint returns both breakdowns and refuses to invent a loss taxonomy
     'a null with no reason attached reads as a bug rather than a stated gap');
 });
 
-test('the zone names the loss-reason gap rather than leaving the block blank', () => {
-  assert.match(ZONE, /Loss reasons/,
-    'the canvas leads with the taxonomy; a zone that simply omits it looks unfinished');
-  assert.match(ZONE, /StatedLimit/,
-    'the gap belongs in the stated-limit block, which is what that component is for');
+test('the zone records the loss-reason gap without printing it', () => {
+  // REVERSED. This required `Loss reasons` inside a `StatedLimit` block on the
+  // page, on the argument that a zone which simply omits the canvas's taxonomy
+  // looks unfinished. What actually shipped was a paragraph telling the reader
+  // what the canvas had asked for and why a quote's bare status cannot supply
+  // it — commentary about the design, on a partner's analytics page.
+  //
+  // The gap is unchanged and still needs a reason captured when a quote is
+  // rejected. It is recorded in the source, where whoever adds that column
+  // reads it, and nothing about it renders.
+  assert.doesNotMatch(codeOnly(ZONE), /Loss reasons/,
+    'the loss-reason narration is back on the page');
+  assert.match(ZONE, /LOSS REASONS ARE NOT SHOWN/,
+    'the record of why loss reasons are absent has been lost');
+  assert.match(ZONE, /reason captured at the moment a\s+\*?\s*quote is rejected|reason captured at the moment/,
+    'the record no longer says what would have to exist first');
 });
 
 test('no win rate is ever displayed as 0% when nothing was decided', () => {

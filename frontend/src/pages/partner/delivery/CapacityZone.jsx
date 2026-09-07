@@ -355,10 +355,10 @@ export default function PartnerCapacityZone() {
           <p>
             <strong>No capacity cap is recorded anywhere in this product.</strong>{' '}
             Hours are real and are shown. A threshold to be over is not: nothing
-            stores what this firm considers a full period for a person. The
-            canvas draws its bars against a hardcoded 40 — adopting that number
-            would be inventing your cap and then presenting the result to you as
-            a finding, on the one page whose job is to be trusted about exposure.
+            stores what this firm considers a full period for a person, and
+            adopting a default would be inventing your cap and then presenting
+            the result to you as a finding, on the one page whose job is to be
+            trusted about exposure.
           </p>
           <p className="mt-2">
             <strong>What is here is still the point.</strong> A person holding

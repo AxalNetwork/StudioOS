@@ -455,18 +455,17 @@ export default function PartnerNegotiationsZone() {
           </div>
         </Section>
 
-        <StatedLimit title="What this zone does not claim">
+        {/* NO CLOSE PROBABILITY, AND NO PARAGRAPH ABOUT ITS ABSENCE.
+            The canvas puts a percentage beside each deal. Nothing records why a
+            past negotiation was won or lost — `quotes` carries a status and the
+            date it was decided and nothing about the decision — so there is no
+            history to weight a live deal against, and a number drawn from stage
+            alone would be the stage relabelled as a forecast. The stat above is
+            an em-dash for exactly that reason, which is the honest rendering;
+            a second paragraph explaining the canvas was not. */}
+        <StatedLimit title="What “stalled” counts">
           <p>
-            <strong>No close probability.</strong> The canvas puts a percentage
-            beside each deal. Nothing records why a past negotiation was won or
-            lost — <code>quotes</code> carries a status and the date it was
-            decided and nothing about the decision — so there is no history to
-            weight a live deal against. A number drawn from stage alone would be
-            the stage relabelled as a forecast, which is why the stat above is
-            an em-dash rather than a figure.
-          </p>
-          <p className="mt-2">
-            <strong>Stalled means no recorded move</strong>, not silence. The
+            <strong>No recorded move</strong>, not silence. The
             clock advances on a stage or court change, or on an explicit “Log a
             move”; it does not advance when the open question is reworded. An
             email nobody logged here does not move it either — so a deal can be

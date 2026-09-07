@@ -1,7 +1,6 @@
 import React from 'react';
 import ZoneActions from './ZoneActions';
 import { accentChipClass } from './shellConfig';
-import { groupFilterNotes, sentenceList } from './zoneFilterBuilder.js';
 
 /**
  * The zone header's toolbar — the canvas's one rule-bordered row, filters on
@@ -36,12 +35,17 @@ import { groupFilterNotes, sentenceList } from './zoneFilterBuilder.js';
  * are declared in no `@theme` block, so they emit no CSS at all. This file uses
  * Tailwind's own greys, as `ZoneActions.jsx` does for the same reason.
  *
- * A FILTER THAT CANNOT RUN IS NOT DRAWN AS A CHIP. It renders as prose, and
- * filters sharing a reason are collected into one sentence that names every one
- * of them — so a reader hunting for "Dependencies" finds the word and the
- * reason rather than a hole. `zoneFilterBuilder.js` argues why this matters
- * more for a filter than for a button: a dead filter does not fail loudly, it
- * returns an empty set, and an empty set reads as an answer.
+ * A FILTER THAT CANNOT RUN IS NOT DRAWN AT ALL. `zoneFilterBuilder.js` argues
+ * why this matters more for a filter than for a button: a dead filter does not
+ * fail loudly, it returns an empty set, and an empty set reads as an answer. So
+ * an `unbuilt` filter never reaches this component — the builder drops it, and
+ * the reason stays in the filter table where it can be acted on.
+ *
+ * IT USED TO RENDER THOSE REASONS HERE, GROUPED INTO SENTENCES, and that was
+ * the bug: `/build/cadence`'s four-chip row shipped as a paragraph about the
+ * cadence store, and the design's tidy filter strip became an essay on every
+ * zone that had a gap. Not drawing the dead chip was right. Explaining its
+ * absence to the customer, in the row where the working chips live, was not.
  */
 
 const CHIP =
@@ -53,14 +57,13 @@ const CHIP_OFF =
   'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-600';
 
 /**
- * @param {Array<{label:string,testid?:string,active?:boolean,onSelect?:()=>void,note?:string}>} filters
+ * @param {Array<{label:string,testid?:string,active?:boolean,onSelect?:()=>void}>} filters
  * @param {Array} actions  passed straight to `ZoneActions`
  * @param {string} role    which licence's accent the selected chip wears
  */
 export default function ZoneToolbar({ filters = [], actions = [], role = 'founder', className = '' }) {
-  const live = filters.filter((item) => item && !item.note);
-  const notes = groupFilterNotes(filters);
-  if (!live.length && !notes.length && !actions.filter(Boolean).length) return null;
+  const live = filters.filter(Boolean);
+  if (!live.length && !actions.filter(Boolean).length) return null;
   const on = accentChipClass(role);
   return (
     <div
@@ -83,15 +86,6 @@ export default function ZoneToolbar({ filters = [], actions = [], role = 'founde
           ))}
         </div>
       )}
-      {notes.map(({ note, labels }) => (
-        <p
-          key={note}
-          data-testid={`filter-note-${labels.length}`}
-          className="m-0 text-[11px] font-semibold text-gray-600 dark:text-gray-300"
-        >
-          {labels.length ? `${sentenceList(labels)} — ` : ''}{note}
-        </p>
-      ))}
       <ZoneActions items={actions} className="ml-auto" />
     </div>
   );

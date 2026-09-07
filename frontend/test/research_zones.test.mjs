@@ -243,52 +243,55 @@ test('the ask strip and table are drawn only where their first tile is real', ()
     'a bare role comparison would let one surface drift from the other');
 });
 
-test('ask draws the advisor/partner strip, and three of its four tiles say they have no source', () => {
-  // `Pages · {Advisor,Partner} Research`'s Ask artboard: `Indexed documents`,
-  // `Answered`, `No source`, `Session spend`, in that order.
+test('ask draws only the strip tile that has a source', () => {
+  // `Pages · {Advisor,Partner} Research`'s Ask artboard asks for four tiles:
+  // `Indexed documents`, `Answered`, `No source`, `Session spend`.
+  //
+  // THIS ASSERTION IS REVERSED, DELIBERATELY. It used to REQUIRE the last three
+  // to read `value="Not recorded"`, each under a sentence explaining the
+  // missing session store — the design's figures replaced by prose about why
+  // they are absent, on the page a reader came to for answers. Refusing to
+  // model a figure nobody stores was right and has not changed: the tile is now
+  // not drawn at all, and the reason lives in the component's own comment where
+  // whoever builds the session store reads it.
+  //
+  // `Indexed documents` survives because it is real — `api.research.documents()`
+  // is already loaded for the empty state — and it still has to read that
+  // payload. A strip whose one figure is decorative is worse than no strip.
   const code = codeOnly(ask);
   assert.match(code, /<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">/,
-    'the four-stat strip the advisor and partner canvases draw is gone');
+    'the strip the advisor and partner canvases draw is gone entirely');
 
-  // Bounded at each tile's own `/>`, and split on `/<Stat\s/` — both for the
-  // reasons the library block above pays for in full. `<StatedLimit` twice in
-  // this file is exactly the trap the `\s` avoids.
   const tiles = Object.fromEntries(code.split(/<Stat\s/).slice(1).map((segment) => {
     const tile = segment.slice(0, segment.indexOf('/>'));
     return [tile.match(/label="([^"]+)"/)?.[1], tile];
   }));
-  assert.deepEqual(
-    Object.keys(tiles),
-    ['Indexed documents', 'Answered', 'No source', 'Session spend'],
-    'the strip is no longer the advisor/partner canvas’s four tiles, in its order',
-  );
-  for (const label of ['Answered', 'No source', 'Session spend']) {
-    assert.match(tiles[label], /value="Not recorded"/,
-      `${label} counts across a session that is not stored and must say "Not recorded"`);
-    assert.doesNotMatch(tiles[label], /value=\{/,
-      `${label} has no source, so any expression in its value is a modelled figure`);
-  }
-  // And the true tile reads the payload actually loaded — a strip whose one
-  // real figure is decorative is worse than no strip.
+  assert.deepEqual(Object.keys(tiles), ['Indexed documents'],
+    'the strip draws a tile the store cannot fill');
   assert.match(tiles['Indexed documents'], /value=\{payload \? indexed : undefined\}/,
     'the Indexed documents tile no longer reads the library payload');
+  assert.doesNotMatch(code, /value="Not recorded"/,
+    'a tile states its own absence again instead of not being drawn');
 });
 
-test('founder and investor get the absence once, naming all four tiles they lose', () => {
-  // The four labels, said in the sentence rather than drawn as four tiles that
-  // would each read "Not recorded". If a session store ever lands, this
-  // sentence is what has to change — so it names what it is standing in for.
+test('founder and investor get no strip and no paragraph about one', () => {
+  // ALSO REVERSED. This required a `<StatedLimit>` naming all four tiles the
+  // two licences lose — `Questions asked`, `Answers kept`, `First-pass cost`,
+  // `Follow-up cost` — since four tiles each reading "Not recorded" would state
+  // one absence four times. Saying it once was better than saying it four
+  // times; saying it nowhere on the customer surface is better than both. Not
+  // one of the four has a source, so the strip is simply absent for them.
   const code = codeOnly(ask);
-  const limit = code.slice(code.indexOf('<StatedLimit>'), code.indexOf('</StatedLimit>'));
-  assert.ok(limit.length > 0 && limit.length < 1200, 'the stated-limit slice must not run away');
+  assert.doesNotMatch(code, /<StatedLimit>/,
+    'the untitled stated-limit panel is back — that is the canvas narration');
   for (const label of ['Questions asked', 'Answers kept', 'First-pass cost', 'Follow-up cost']) {
-    assert.ok(limit.includes(label),
-      `the sentence must name "${label}" — it is standing in for that tile`);
+    assert.ok(!code.includes(`label="${label}"`),
+      `"${label}" is drawn as a tile and no session store fills it`);
   }
-  assert.match(limit, /session/i,
-    'the sentence must name the one missing thing all four tiles are downstream of');
-  // The founder/investor `Session history` table is NOT drawn. A table whose
-  // every row would be "Not recorded" is what the library rule already forbids.
+
+  // The founder/investor `Session history` table is NOT drawn either, for the
+  // same reason: a table whose every row would be "Not recorded" is what the
+  // library rule already forbids.
   //
   // BANNING THE PHRASE IS THE WRONG PROBE, and this assertion failed as one
   // first. `codeOnly` deliberately keeps indented `{/* */}` comments — its own
@@ -298,7 +301,7 @@ test('founder and investor get the absence once, naming all four tiles they lose
   // the test above has already pinned to the licence-gated card, and none of
   // the session table's own column headings anywhere.
   assert.equal((code.match(/<table/g) || []).length, 1,
-    'a second table in this file is the session history the sentence above says is not kept');
+    'a second table in this file is the session history nothing keeps');
   for (const head of ['Drew on', 'What you did with it']) {
     assert.ok(!code.includes(`>${head}<`),
       `"${head}" is a session-history column and nothing writes a row for it`);
