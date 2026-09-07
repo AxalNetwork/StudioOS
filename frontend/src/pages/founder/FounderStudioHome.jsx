@@ -105,7 +105,7 @@ export default function FounderStudioHome({ user }) {
   return (
     <section className="fs-root" data-testid="founder-studio-home">
       <header className="fs-context">
-        <div><span className="fs-kicker">Axal Studio / Founder cockpit</span><h2 data-testid="text-founder-studio-title">One company. One clear move.</h2><p>{project?.name || 'Your venture context'}{project?.stage ? ` · ${label(project.stage)}` : ''}</p></div>
+        <div><h2 data-testid="text-founder-studio-title">One company. One clear move.</h2><p>{project?.name || 'Your venture context'}{project?.stage ? ` · ${label(project.stage)}` : ''}</p></div>
         <div className="fs-date"><span>{first}'s operating view</span><button type="button" data-testid="button-refresh-founder-studio" onClick={() => setRetry((n) => n + 1)}><RefreshCw size={13} />Refresh context</button></div>
       </header>
       {partial && <div className="fs-partial" data-testid="status-founder-studio-partial">Some live sources are unavailable. Available operating records remain on screen.<button type="button" data-testid="button-retry-founder-studio" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>}

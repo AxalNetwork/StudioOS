@@ -51,7 +51,7 @@ task = "shell.exec"
 # anywhere. Scoping to the one directory the app's source actually lives in
 # is the fix, not a workaround — nothing outside backend/ should ever
 # trigger or block a reload here.
-args = "UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir backend"
+args = "UV_PROJECT_ENVIRONMENT=.venv uv run uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir backend"
 waitForPort = 8000
 
 [[workflows.workflow]]
