@@ -267,10 +267,10 @@ for (const role of ROLES) {
    */
   const routes = [
     ...bucketsFor(role).map((b) => ({ path: b.prefix, root: b })),
-    ...bucketsFor(role).flatMap((b) => b.zones.map((z) => ({ path: zonePath(b, z), zone: z, bucket: b }))),
+    ...bucketsFor(role).flatMap((b) => b.zones.map((z) => ({ path: zonePath(b, z), zone: z }))),
   ];
   let clean = 0;
-  for (const { path, zone, root, bucket } of routes) {
+  for (const { path, zone, root } of routes) {
     const page = await ctx.newPage();
     failedReads = 0;
     const thrown = [];
