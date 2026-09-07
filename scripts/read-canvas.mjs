@@ -59,16 +59,31 @@ if (!existsSync(inPath)) {
 
 const html = readFileSync(inPath, 'utf8');
 
-/** The two islands the bundler leaves in the shell. */
-function island(type) {
-  const m = new RegExp(
-    `<script type="__bundler/${type}">\\s*([\\s\\S]*?)\\s*</script>`,
-  ).exec(html);
-  return m ? m[1] : null;
+/**
+ * The two islands the bundler leaves in the shell, read in one pass.
+ *
+ * ONE HARDCODED PATTERN, not one built per type. The first version took the
+ * island name as an argument and interpolated it into `new RegExp(...)`, which
+ * Semgrep's `detect-non-literal-regexp` flagged. The ReDoS it exists to catch
+ * is not reachable here — this is a local CLI whose only two call sites passed
+ * the literals below — but the rule was still worth taking rather than
+ * arguing, for the same reason it was taken in `frontend/src/lib/reloadGuard.js`
+ * on 2026-09-07: the construct it pushes you toward is better. There are
+ * exactly two island types, an alternation says so in one place, and reading
+ * both in a single pass replaces two scans of a ~2MB document with one.
+ *
+ * `matchAll` clones the regex internally, so the module-level `g` flag carries
+ * no `lastIndex` between runs. First occurrence wins, which is what `.exec()`
+ * returned before.
+ */
+const ISLAND = /<script type="__bundler\/(manifest|template)">\s*([\s\S]*?)\s*<\/script>/g;
+const islands = new Map();
+for (const m of html.matchAll(ISLAND)) {
+  if (!islands.has(m[1])) islands.set(m[1], m[2]);
 }
 
-const manifestRaw = island('manifest');
-const templateRaw = island('template');
+const manifestRaw = islands.get('manifest');
+const templateRaw = islands.get('template');
 if (!manifestRaw || !templateRaw) {
   console.error('read-canvas: this file is not a bundled artifact — no manifest/template island.');
   process.exit(1);
