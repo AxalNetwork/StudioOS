@@ -108,7 +108,7 @@ export default function FounderResearchDesk() {
   return <main className="a7-research" data-testid="founder-research-desk">
     <div className="a7-canvas">
       <div className="a7-main">
-        <header className="a7-hero"><div className="a7-kicker">Founder / Research</div><h1>Go deep on a market or company</h1><p>The page opens as a question, not a menu.</p>
+        <header className="a7-hero"><h1>Go deep on a market or company</h1><p>The page opens as a question, not a menu.</p>
           <div className="a7-question"><Search size={16} /><input data-testid="input-research-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question about a market or company" /><Link data-testid="link-explore-evidence" to="/signals?mode=workspace" state={state}>Open signals <ArrowUpRight size={14} /></Link></div>
           <div className="a7-honesty">Question-based briefs are not connected in this overview. Questions remain local here; open Signals to inspect stored evidence.</div>
           <nav className="a7-anchors" aria-label="Research sections">{SECTIONS.map(([label, to], index) => <NavLink data-testid={`link-research-anchor-${index}`} key={label} to={`${to}${query}`} state={state} className={zonePillClass}>{label}</NavLink>)}</nav>

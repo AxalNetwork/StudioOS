@@ -112,7 +112,6 @@ export default function FounderBuildDesk() {
     <section className="build-canvas">
       <div className="build-main">
         <header className="build-hero">
-          <div className="build-eyebrow">Founder / Build</div>
           <div className="build-hero-line">
             <div><h1>Operate the company this week</h1><p>Commitments first, with execution, roadmap, cadence, and metrics serving the days ahead.</p></div>
             <div className="build-actions">

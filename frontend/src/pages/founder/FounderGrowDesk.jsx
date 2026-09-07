@@ -92,7 +92,7 @@ export default function FounderGrowDesk() {
   const query = projectId ? `?project_id=${projectId}` : '';
   const state = { founderGrowSeed: { projects, projectId, records } };
   return <main className="a5-grow" data-testid="founder-grow-desk"><div className="a5-grow-canvas"><div className="a5-grow-main">
-     <header className="a5-grow-hero"><span>Founder / Grow</span><div><h1>Get customers, people, reach</h1><p>One metric organizes the work around your startup this month.</p></div>
+     <header className="a5-grow-hero"><div><h1>Get customers, people, reach</h1><p>One metric organizes the work around your startup this month.</p></div>
       {projects.length > 1 && <select data-testid="select-grow-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
      <nav aria-label="Grow desk sections">{SECTIONS.map(([label, slug]) => <NavLink data-testid={`link-grow-anchor-${slug}`} to={`/grow/${slug}${query}`} key={label} className={zonePillClass}>{label}</NavLink>)}</nav>
     </header>
