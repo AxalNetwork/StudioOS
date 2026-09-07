@@ -34,11 +34,16 @@ Tests live in `cloudflare-worker/test/` — **122** files.
 
 `frontend/src/`:
 
-- `App.jsx` — 2,190 lines, **289** `<Route>` elements, all route/role policy.
-- `lib/api.js` — 3,621 lines, **552** `request('/…')` call sites; `export const api = {` at line 276. `lib/` also holds ~48 other modules (PDF builders, view models, funnel, SEO).
-- `sidebarConfig.js` — 547 lines.
-- `pages/` — 178 `.jsx` files plus 13 subdirectories (`admin/`, `advisor/`, `captable/`, `docs/`, `events/`, `growth/`, `insights/`, `jobs/`, `partner/`, `pipeline/`, …).
-- `components/` — 136 `.jsx` recursively, 12 subdirectories (`command-center/`, `advisor/`, `brand/`, `profile/`, `spinout/`, `cofounder/`, `scoring/`, `signals/`, `products/`, `play/`, `discovery/`, `events/`).
+Counts re-derived 2026-09-07. Every figure below was wrong before that — the
+previous set was written on 2026-09-03 and the C series moved most of them.
+**Re-derive rather than trust; that is what this line is for.**
+
+- `App.jsx` — 2,432 lines, **370** `<Route>` elements, all route/role policy.
+- `lib/api.js` — 4,397 lines, **598** `request('/…')` call sites; `export const api = {` at line 513. `lib/` holds 54 modules in all (PDF builders, view models, funnel, SEO).
+- `sidebarConfig.js` — 651 lines.
+- `pages/` — 181 top-level `.jsx` (347 recursive) plus 18 subdirectories (`admin/`, `advisor/`, `captable/`, `docs/`, `events/`, `founder/`, `hq/`, `insights/`, `investor/`, `jobs/`, `legal/`, `partner/`, `pipeline/`, `raise/`, `referrals/`, `research/`, `subsidiary/`, `templates/`).
+- `workspaces/` — **the shared workspace layer, and the folder the C series lives in.** `shellConfig.js` (the bucket/zone tables every licence reads), `WorkspaceShell`, `ZoneNav`, `ZoneToolbar`/`ZoneActions` and `zoneFilterBuilder.js` with the four per-licence `*ZoneFilters.js` / `*ZoneActions.js` tables; `NetworkWorkspace.jsx` and `ResearchWorkspace.jsx`, each rendering one surface for all four licences; `BucketBoard.jsx` and `BucketOverview.jsx`, the two things a bucket root can be; `NoStoreYet.jsx` with its shared `noStoreCopy.js` table, so a board's gap statement and its zone page's are one object; `useBucketSources.js`. Subfolders `boards/` (the nine composed roots — see its README), `advisor/`, `partner/`, `investor/`, `founder/`. Start at `frontend/src/workspaces/README.md`.
+- `components/` — 138 `.jsx` recursively, 13 subdirectories (`advisor/`, `auth/`, `brand/`, `cofounder/`, `command-center/`, `discovery/`, `events/`, `play/`, `products/`, `profile/`, `scoring/`, `signals/`, `spinout/`).
 - `contexts/` — `ActiveCompanyContext.js`, `SettingsContext.jsx`, `ViewModeContext.js`.
 - Also `hooks/`, `brand/`, `data/`, `decks/`, `templates/`, `index.css`, `main.jsx`.
 
@@ -53,7 +58,7 @@ not a file under `frontend/test/`. It fails when a `className` in
 allowlist for marketing/auth/print surfaces. Auto-fixer:
 `scripts/codemod-dark-mode.mjs`. It runs as the last step of `npm run test:drift`.
 
-`frontend/test/` holds **37** `*.test.mjs` files, including three deletion
+`frontend/test/` holds **135** `*.test.mjs` files, including three deletion
 guards: `founder_portal_removed.test.mjs`, `spinouts_page_removed.test.mjs`,
 `studio_ops_removed.test.mjs`.
 
