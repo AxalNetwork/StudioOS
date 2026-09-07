@@ -108,6 +108,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   // member of it — so `Everyone` and `Co-investors` are the whole of what this
   // store can tell apart. The other three labels are prose on the row.
   const [bookView, setBookView] = useState('all');
+  // The introductions desk's zone view. `Stalled` is `status = 'expired'`,
+  // which the route writes lazily on every read; `Asked` and `Offered` are
+  // prose on the row, because no response carries a direction.
+  const [deskView, setDeskView] = useState('all');
   const [params] = useSearchParams();
   const highlightedIntro = params.get('intro') || '';
   const requestedTab = params.get('tab') || '';
@@ -157,12 +161,18 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   }, [highlightedIntro, introductions, requestedTab]);
 
   const propositionRows = introductions?.propositions || [];
+  // THE ZONE VIEW NARROWS BEFORE THE CAP, and the order matters: the memo below
+  // shows four propositions and pins a deep-linked one into them, so a filter
+  // applied after it would only ever search the first four rows.
+  const deskRows = deskView === 'stalled'
+    ? propositionRows.filter((prop) => String(prop.status || '').toLowerCase() === 'expired')
+    : propositionRows;
   const visiblePropositions = useMemo(() => {
-    const compact = propositionRows.slice(0, 4);
+    const compact = deskRows.slice(0, 4);
     if (!highlightedIntro || compact.some((prop) => prop.uid === highlightedIntro)) return compact;
-    const highlighted = propositionRows.find((prop) => prop.uid === highlightedIntro);
+    const highlighted = deskRows.find((prop) => prop.uid === highlightedIntro);
     return highlighted ? [highlighted, ...compact.slice(0, 3)] : compact;
-  }, [highlightedIntro, propositionRows]);
+  }, [highlightedIntro, deskRows]);
   const organizations = useMemo(() => {
     if (!relationships) return [];
     const grouped = new Map();
@@ -257,7 +267,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
             {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} role={role} filters={zoneFilters ? zoneFilters({}) : []} actions={investorZoneActions('network/introductions', { view: { header: ['Introduction', 'Status', 'Score', 'Source'], rows: propositionRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: { header: ['Introduction', 'Status', 'Score', 'Source'], rows: visiblePropositions, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
               {errors.introductions ? <Alert>{errors.introductions}</Alert> : introductions === null ? <Skeleton rows={4} /> : propositionRows.length === 0 ? <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div> : <>
                 {actionError && <Alert>{actionError}</Alert>}
                 <div className="inw-proposition-list">{visiblePropositions.map((prop) => {

@@ -15,20 +15,32 @@ const list = (value, ...keys) => {
 };
 const text = (value, fallback = 'Not recorded') => String(value ?? '').trim() || fallback;
 const pretty = (value) => text(value).replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-const direction = (row) => String(row.direction || '').toLowerCase() === 'incoming' ? 'Asked' : 'Offered';
+/**
+ * THERE IS NO DIRECTION, AND THERE NEVER WAS. This file used to read
+ * `row.direction`, which `propositionDto` has never returned and
+ * `intro_propositions` has no column for. Every row the route sends is
+ * `WHERE user_id = ?` — the reader is always the addressee — so the reader's
+ * side is not a fact the model holds, let alone one it reports.
+ *
+ * What that shipped: an `Asked` chip matching zero rows on every account, over
+ * copy telling the reader that "no asked introductions are recorded"; an
+ * `Offered` chip matching all of them; a `Direction` column reading `Offered`
+ * on every row and in every export; a `Given / received` stat reading `N / 0`;
+ * and a row title claiming `you → Name` for introductions the reader received.
+ * The header row now says the absence once, and none of the rest of it is
+ * drawn.
+ */
 const isStalled = (row) => String(row.status || '').toLowerCase() === 'expired';
 const isLanded = (row) => ['accepted', 'connected'].includes(String(row.status || '').toLowerCase());
 // `/introductions/propositions` names the other side `target`; the older
 // shapes named it counterpart/initiator/recipient. Read all of them so the
 // name renders instead of falling through to 'Counterpart not recorded'.
-const counterpart = (row) => row.counterpart
-  || (row.direction === 'incoming' ? row.initiator : row.recipient)
-  || row.target
-  || {};
-const introductionLabel = (row) => {
-  const name = text(counterpart(row).name, 'Counterpart not recorded');
-  return direction(row) === 'Asked' ? `${name} → you` : `you → ${name}`;
-};
+// `/introductions/propositions` names the other side `target`. The older shapes
+// this used to fall back through keyed off `row.direction`, which no response
+// has ever carried, so that branch could only ever pick `row.recipient` — also
+// absent. What is left is the two names a payload actually uses.
+const counterpart = (row) => row.counterpart || row.target || {};
+const introductionLabel = (row) => text(counterpart(row).name, 'Counterpart not recorded');
 const outcome = (row) => {
   const status = String(row.status || '').toLowerCase();
   if (status === 'connected') return 'Both sides connected. No downstream outcome is recorded.';
@@ -68,14 +80,10 @@ export default function FounderNetworkIntroductions({ embedded = false, role = '
   useEffect(() => { load(); }, []);
 
   const visible = useMemo(() => rows.filter((row) => {
-    if (filter === 'asked') return direction(row) === 'Asked';
-    if (filter === 'offered') return direction(row) === 'Offered';
     if (filter === 'stalled') return isStalled(row);
     return true;
   }), [rows, filter]);
   const landed = rows.filter(isLanded).length;
-  const given = rows.filter((row) => direction(row) === 'Offered').length;
-  const received = rows.filter((row) => direction(row) === 'Asked').length;
   const stalled = rows.filter(isStalled).length;
   const projectId = params.get('project_id');
   const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
@@ -97,15 +105,17 @@ export default function FounderNetworkIntroductions({ embedded = false, role = '
     <ZoneToolbar
       className="mt-3"
       role={role}
-      filters={zoneFilters ? zoneFilters({}) : []}
-      actions={founderZoneActions('network/introductions', { query, view: { scope: null, header: ['Introduction', 'Counterpart company', 'Counterpart role', 'Direction', 'State'], rows: visible, cells: (r) => [introductionLabel(r), counterpart(r).company, counterpart(r).role, direction(r), stateLabel(r)] } })}
+      filters={zoneFilters ? zoneFilters({ value: filter, onChange: setFilter }) : []}
+      actions={founderZoneActions('network/introductions', { query, view: { scope: null, header: ['Counterpart', 'Counterpart company', 'Counterpart role', 'State'], rows: visible, cells: (r) => [introductionLabel(r), counterpart(r).company, counterpart(r).role, stateLabel(r)] } })}
     />
     {status === 'error' && <div className="fn-rel-alert" data-testid="status-network-introductions-error"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <IntroductionSkeleton />}
-    {status === 'ready' && <><div className="fn-intro-context"><div><span>Ledger scope</span><strong>Introductions where you are a participant</strong><small>Contact details remain privacy-filtered until connected</small></div><div><span>Source</span><strong>Secure introductions</strong><small>Direction and state are stored on each record</small></div></div>
-      <div className="fn-rel-tabs"><div><button className={filter === 'all' ? 'is-active' : ''} onClick={() => setFilter('all')}>All</button><button className={filter === 'asked' ? 'is-active' : ''} onClick={() => setFilter('asked')}>Asked</button><button className={filter === 'offered' ? 'is-active' : ''} onClick={() => setFilter('offered')}>Offered</button><button className={filter === 'stalled' ? 'is-active' : ''} onClick={() => setFilter('stalled')}>Stalled</button></div><Link data-testid="link-open-network-introductions-workspace" to={workspace}>Open introductions <ChevronRight size={13} /></Link></div>
-      <div className="fn-rel-stats"><Stat label="Tracked" value={rows.length} note="Both stored directions" /><Stat label="Landed" value={landed} note="Accepted or connected" /><Stat label="Given / received" value={`${given} / ${received}`} note={given > received ? 'More offered than asked' : given < received ? 'More asked than offered' : 'Directions are even'} /><Stat label="Stalled" value={stalled} note="Explicitly expired records" /></div>
-      <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>Introduction ledger</h2></div><span>Direction and state are stored · outcome is not inferred</span></div><IntroductionTable rows={visible} filter={filter} /><p className="fn-rel-note">“Asked” and “Offered” are viewer-relative directions returned by the secure ledger. Only explicitly expired records are counted as stalled; pending age is not treated as proof that an introduction died.</p></section>
+    {status === 'ready' && <><div className="fn-intro-context"><div><span>Ledger scope</span><strong>Introductions where you are a participant</strong><small>Contact details remain privacy-filtered until connected</small></div><div><span>Source</span><strong>Secure introductions</strong><small>State is stored on each record; which side asked is not</small></div></div>
+      {/* The chips moved up into the zone header row, where the canvas draws
+          them. Two of the four could never match: see the note at the top. */}
+      <div className="fn-rel-tabs"><Link data-testid="link-open-network-introductions-workspace" to={workspace}>Open introductions <ChevronRight size={13} /></Link></div>
+      <div className="fn-rel-stats"><Stat label="Tracked" value={rows.length} note="Propositions addressed to you" /><Stat label="Accepted" value={landed} note="You accepted; the other side's answer is not returned" /><Stat label="Given / received" value="Not recorded" mono={false} note="no record says which side asked for an introduction" /><Stat label="Stalled" value={stalled} note="Explicitly expired records" /></div>
+      <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>Introduction ledger</h2></div><span>State is stored · direction and outcome are not</span></div><IntroductionTable rows={visible} filter={filter} /><p className="fn-rel-note">Which side asked for an introduction is not recorded anywhere, so this ledger does not claim it: every row here is a proposition addressed to you. Only explicitly expired records are counted as stalled; pending age is not treated as proof that an introduction died.</p></section>
       <section className="fn-rel-card fn-rel-unavailable"><div className="fn-rel-card-head"><div><AlertCircle size={16} /><h2>Introduction context</h2></div><span>Partially unavailable</span></div><strong>Connector and downstream outcomes are not recorded.</strong><p>The source proves who participated, direction, acceptance state, and connection state. It does not identify who carried the introduction or whether a call, hire, referral, or other real-world outcome followed.</p></section>
     </>}
   </section>{!embedded && <IntroductionRail rows={rows} landed={landed} stalled={stalled} error={error} />}</div></main>;
@@ -113,7 +123,7 @@ export default function FounderNetworkIntroductions({ embedded = false, role = '
 
 function IntroductionTable({ rows, filter }) {
   if (!rows.length) return <div className="fn-rel-empty"><UsersRound size={18} /><div><strong>{filter === 'all' ? 'No introduction records are available.' : `No ${filter} introductions are recorded.`}</strong><p>This filter contains no stored ledger entries.</p></div></div>;
-  return <div className="fn-rel-table-wrap"><table><thead><tr><th>Introduction</th><th>Direction</th><th>State</th><th>Via</th><th>Outcome</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || row.uid || index} data-testid={`row-network-introduction-${row.id || index}`}><td><strong>{introductionLabel(row)}</strong><small>{text(counterpart(row).company, text(counterpart(row).role, 'Counterpart context not recorded'))}</small></td><td>{direction(row)}</td><td><span className={`intro-${String(row.status || 'unknown').toLowerCase()}`}>{stateLabel(row)}</span></td><td>Not recorded</td><td className="fn-intro-outcome">{outcome(row)}</td></tr>)}</tbody></table></div>;
+  return <div className="fn-rel-table-wrap"><table><thead><tr><th>Counterpart</th><th>State</th><th>Via</th><th>Outcome</th></tr></thead><tbody>{rows.map((row, index) => <tr key={row.id || row.uid || index} data-testid={`row-network-introduction-${row.id || index}`}><td><strong>{introductionLabel(row)}</strong><small>{text(counterpart(row).company, text(counterpart(row).role, 'Counterpart context not recorded'))}</small></td><td><span className={`intro-${String(row.status || 'unknown').toLowerCase()}`}>{stateLabel(row)}</span></td><td>Not recorded</td><td className="fn-intro-outcome">{outcome(row)}</td></tr>)}</tbody></table></div>;
 }
 function Stat({ label, value, note }) { return <div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }
 function IntroductionRail({ rows, landed, stalled, error }) {

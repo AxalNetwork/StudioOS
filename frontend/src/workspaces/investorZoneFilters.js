@@ -63,6 +63,13 @@ const NO_INTERACTION_DATE =
 // a reader moving between licences must not find one absence explained two
 // ways. The ops half of the Ask row already says "no session history is stored
 // to clear"; this is that clause, extended to the views the filters name.
+// `/network/introductions`. Word for word what the founder table says, because
+// it is the same store and the same absence: `intro_propositions` has no
+// direction column, and every row is one addressed to the reader. Note the
+// canvas order differs from founder's — `Offered` before `Asked` — which is
+// exactly why these are four tables and not one.
+const NO_DIRECTION_RECORDED =
+  'nothing records who asked: every proposition here is addressed to you, and the response names the counterpart without a direction';
 const NO_SESSION_RECORD =
   'no session history is stored, so no past question, kept answer or discarded one exists to look through';
 const NO_SUCH_KIND =
@@ -211,6 +218,13 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Co-investors', key: 'coinvestors' },
     { canvas: 'LPs', note: NO_LP_RELATIONSHIP },
     { canvas: 'Going cold', note: NO_INTERACTION_DATE },
+  ],
+
+  'network/introductions': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Offered', note: NO_DIRECTION_RECORDED },
+    { canvas: 'Asked', note: NO_DIRECTION_RECORDED },
+    { canvas: 'Stalled', key: 'stalled' },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────

@@ -56,12 +56,26 @@ const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 // `FounderNetworkRelationships` would be true, but the variable is what the
 // mount actually passes and what the accent reads.
 const NETWORK_BODIES = {
-  founder: { 'network/relationships': 'frontend/src/pages/founder/FounderNetworkRelationships.jsx' },
-  investor: { 'network/relationships': 'frontend/src/pages/investor/InvestorNetworkWorkspace.jsx' },
-  advisor: { 'network/relationships': 'frontend/src/pages/advisor/network/RelationshipsZone.jsx' },
-  // The partner arm's body is the PANEL, not `NetworkPage`: the page forwards
-  // the two-argument builder and the panel is what renders the row.
-  partner: { 'network/relationships': 'frontend/src/pages/RelationshipsPage.jsx' },
+  founder: {
+    'network/relationships': 'frontend/src/pages/founder/FounderNetworkRelationships.jsx',
+    'network/introductions': 'frontend/src/pages/founder/FounderNetworkIntroductions.jsx',
+  },
+  // One file, two zones: `InvestorNetworkWorkspace` renders all three sections
+  // and the shell narrows it to one with `zone={slug}`.
+  investor: {
+    'network/relationships': 'frontend/src/pages/investor/InvestorNetworkWorkspace.jsx',
+    'network/introductions': 'frontend/src/pages/investor/InvestorNetworkWorkspace.jsx',
+  },
+  advisor: {
+    'network/relationships': 'frontend/src/pages/advisor/network/RelationshipsZone.jsx',
+    'network/introductions': 'frontend/src/pages/advisor/network/IntroductionsZone.jsx',
+  },
+  // The partner arm's bodies are the PANELS, not `NetworkPage`: the page
+  // forwards the two-argument builder and the panels render the rows.
+  partner: {
+    'network/relationships': 'frontend/src/pages/RelationshipsPage.jsx',
+    'network/introductions': 'frontend/src/pages/IntroductionsPanel.jsx',
+  },
 };
 
 const RESEARCH_BODIES = {
@@ -90,8 +104,8 @@ const PROFILES = {
     canvas: /^Pages · Founder /,
     pages: ['frontend/src/pages/founder', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
-    zones: 24,
-    mounted: 24,
+    zones: 25,
+    mounted: 25,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.founder },
     excluded: [
       // The shared surfaces. `NetworkWorkspace` and `ResearchWorkspace` render
@@ -100,7 +114,7 @@ const PROFILES = {
       // the same component shows a header row on one and nothing on another.
       // `research/{ask,library}` left this list when all four tables gained
       // them in the same commit, which is the only way they can.
-      'network/introductions', 'network/organizations',
+      'network/organizations',
     ],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
@@ -120,8 +134,8 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 14,
-    mounted: 14,
+    zones: 15,
+    mounted: 15,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.investor },
     // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
     // it is not here yet:
@@ -148,7 +162,7 @@ const PROFILES = {
       // this file for exactly that reason. Giving investor a toolbar there
       // while founder has none would show a zone header on one licence and
       // nothing on the other, from one component. They land together.
-      'network/introductions', 'network/organizations',
+      'network/organizations',
     ],
     // `Call 3` names one specific stored record rather than welding a count
     // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`
@@ -186,11 +200,11 @@ const PROFILES = {
     canvas: /^Pages · Advisor (Network|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
-    zones: 6,
-    mounted: 6,
+    zones: 7,
+    mounted: 7,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.advisor },
     excluded: [
-      'network/introductions', 'network/organizations',
+      'network/organizations',
     ],
     // No `samples`: not one advisor label carries a figure, and the assertion
     // below proves that rather than taking it on trust — a canvas that gains an
@@ -206,11 +220,11 @@ const PROFILES = {
     canvas: /^Pages · Partner (Network|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/partner', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/partnerZoneActions.js',
-    zones: 5,
-    mounted: 5,
+    zones: 6,
+    mounted: 6,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.partner },
     excluded: [
-      'network/introductions', 'network/organizations',
+      'network/organizations',
     ],
     // `Pages · Partner Research` names /research/market; the router and
     // `shellConfig.js` both say `markets`. Same mapping the ops half carries.

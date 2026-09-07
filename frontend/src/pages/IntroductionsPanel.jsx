@@ -462,8 +462,15 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
         <ZoneToolbar
           className="mb-3"
           role={role}
-          filters={zoneFilters ? zoneFilters({}) : []}
-          actions={zoneActions ? zoneActions(data.propositions || []) : []}
+          // THE ZONE ROW DRIVES THE PANEL'S OWN STATUS FILTER rather than
+          // adding a second one. This panel already filters on `status` in its
+          // body, so a parallel state would be two controls making the same
+          // claim and able to disagree — the collision `SignalFilterBar`'s
+          // heading had. The canvas's `Gated` and `Declined` are names for two
+          // values that filter already takes, so they set it: one state, two
+          // surfaces onto it, always in agreement.
+          filters={zoneFilters ? zoneFilters({ value: statusFilter, onChange: setStatusFilter }) : []}
+          actions={zoneActions ? zoneActions(visible) : []}
         />
       )}
       <p className="text-sm text-gray-600 dark:text-gray-400">

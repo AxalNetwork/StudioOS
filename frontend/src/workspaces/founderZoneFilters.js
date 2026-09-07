@@ -73,6 +73,13 @@ const NO_SUCH_KIND =
 // from, and this is that sentence from the other side.
 const NO_SAVED_DEEP_DIVE =
   'nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of; this page is the signals feed, gathered on a schedule';
+// `/network/introductions`. THE SHARPEST CASE THIS PASS HAS FOUND, and it was
+// already on screen: the page filtered on `row.direction`, which
+// `propositionDto` has never returned and `intro_propositions` has no column
+// for. Every row is `WHERE user_id = ?` — the reader is always the addressee —
+// so direction is not merely unreturned, it is not a fact this model holds.
+const NO_DIRECTION_RECORDED =
+  'nothing records who asked: every proposition here is addressed to you, and the response names the counterpart without a direction';
 // `/research/companies`. Not an absent store — a LEVEL mismatch, which is a
 // fourth kind of reason this table has needed. See the zone's entry below.
 const CATEGORY_IS_PER_COMPETITOR =
@@ -260,6 +267,18 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Investors', key: 'investors' },
     { canvas: 'Advisors', key: 'advisors' },
     { canvas: 'Going cold', key: 'cold' },
+  ],
+
+  // Two live, two prose, and the two prose entries replace CHIPS THAT SHIPPED.
+  // `Asked` matched zero rows on every account and said so as a fact about the
+  // reader's data; `Offered` matched every row. `Stalled` is the one that
+  // always worked — `status = 'expired'`, written lazily by the route on every
+  // read.
+  'network/introductions': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Asked', note: NO_DIRECTION_RECORDED },
+    { canvas: 'Offered', note: NO_DIRECTION_RECORDED },
+    { canvas: 'Stalled', key: 'stalled' },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────

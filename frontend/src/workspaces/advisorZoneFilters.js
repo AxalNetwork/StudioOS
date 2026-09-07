@@ -73,6 +73,19 @@ const NO_INTERACTION_DATE =
 const EVERY_ROW_IS_YOURS =
   'every relationship here is already one of yours; the list loads only rows you are a party to, so this would select all of them';
 
+// `/network/introductions`. `Gated` IS RELABELLED because the canvas's word
+// means the double opt-in and this page can only see one side of it: the
+// counterpart's consent is a separate `intro_propositions` row owned by
+// `target_user_id`, which the response never returns. What `status = 'pending'`
+// actually means is that YOU have not answered, so the chip says that.
+//
+// `Made` is the same asymmetry, and the zone's own docblock already argues it:
+// `accepted` means you accepted and "cannot distinguish 'waiting on them' from
+// 'you are already connected'". No `connected` value exists — the CHECK on
+// `status` would reject one.
+const NO_CONNECTED_STATE =
+  'accepting is recorded per side, so this page knows that you accepted and not whether they did; no connected state exists to mark an introduction as made';
+
 export const ADVISOR_ZONE_FILTERS = {
   // ── Network ──────────────────────────────────────────────────────────────
   // ONE LIVE CHIP OUT OF FOUR, and the three that fail do so for three
@@ -87,6 +100,13 @@ export const ADVISOR_ZONE_FILTERS = {
       canvas: 'From the Lab',
       note: 'nothing marks a relationship as sourced from the Lab; a referral records a name and an organisation as free text, with no link back to an account',
     },
+  ],
+
+  'network/introductions': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Gated', key: 'pending', label: 'Awaiting you' },
+    { canvas: 'Made', note: NO_CONNECTED_STATE },
+    { canvas: 'Declined', key: 'declined' },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────

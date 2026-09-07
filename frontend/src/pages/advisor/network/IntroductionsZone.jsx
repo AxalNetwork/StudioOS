@@ -87,6 +87,12 @@ function PropositionCard({ row, onAnswered }) {
 
 export default function IntroductionsZone({ role = 'advisor', zoneFilters = null }) {
   const [state, setState] = useState({ loading: true, error: null, rows: [], credits: null });
+  // `Gated` renders as `Awaiting you`, and the relabel is the honest part: the
+  // canvas means the double opt-in, and this page can only see one side of it.
+  // The counterpart's consent is a separate `intro_propositions` row owned by
+  // `target_user_id`, which the response never returns. `status = 'pending'`
+  // means YOU have not answered, so the chip says that.
+  const [view, setView] = useState('all');
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -106,6 +112,10 @@ export default function IntroductionsZone({ role = 'advisor', zoneFilters = null
   useEffect(() => { load(); }, [load]);
 
   const balance = state.credits?.balance;
+
+  const visible = view === 'all'
+    ? state.rows
+    : state.rows.filter((r) => String(r.status || '').toLowerCase() === view);
 
   return (
     <div className="space-y-6">
@@ -130,8 +140,8 @@ export default function IntroductionsZone({ role = 'advisor', zoneFilters = null
         <ZoneToolbar
           className="mb-3"
           role={role}
-          filters={zoneFilters ? zoneFilters({}) : []}
-          actions={advisorZoneActions('network/introductions', { view: { header: ['Counterpart', 'Role', 'Country', 'Headline', 'Status'], rows: state.rows, cells: (r) => [r.target?.name, r.target?.role, r.target?.country, r.target?.headline, r.status] } })}
+          filters={zoneFilters ? zoneFilters({ value: view, onChange: setView }) : []}
+          actions={advisorZoneActions('network/introductions', { view: { header: ['Counterpart', 'Role', 'Country', 'Headline', 'Status'], rows: visible, cells: (r) => [r.target?.name, r.target?.role, r.target?.country, r.target?.headline, r.status] } })}
         />
         <ZoneBody
           loading={state.loading}
@@ -148,7 +158,15 @@ export default function IntroductionsZone({ role = 'advisor', zoneFilters = null
             />
           )}
         >
-          {state.rows.map((r) => <PropositionCard key={r.uid} row={r} onAnswered={load} />)}
+          {/* A narrowed view that finds nothing says which view it is. The
+              empty state above asserts that nobody has proposed an
+              introduction, which stops being true the moment a chip is on. */}
+          {state.rows.length > 0 && visible.length === 0 && (
+            <p className="text-[12.5px] text-gray-600 dark:text-gray-300">
+              {`No introduction is in this state. ${state.rows.length} proposed to you in total.`}
+            </p>
+          )}
+          {visible.map((r) => <PropositionCard key={r.uid} row={r} onAnswered={load} />)}
         </ZoneBody>
       </section>
 
