@@ -260,6 +260,28 @@ export const FOUNDER_ZONE_FILTERS = {
     },
     { canvas: 'Discarded', note: NO_SESSION_RECORD },
   ],
+  // THREE OF THESE FOUR WERE ALREADY ON SCREEN AND MATCHED NOTHING. The page
+  // has held `stage_fit === 'right'`, `path === 'warm'` and `status ===
+  // 'passed'` since the zone shipped, over columns the worker validates and a
+  // PATCH route accepts — and no surface in this product ever set one. The
+  // add-a-fund form sends a name, a thesis and a note; `api.research.fundUpdate`
+  // had no callers at all. Three live-looking chips over three empty columns.
+  // The repair is the missing writer, not a sentence: each row now carries the
+  // three controls, so the predicates that were always right have something to
+  // be right about.
+  //
+  // `Best fit` IS `all`, RELABELLED, exactly as `grow/capital-match` above
+  // resolves the same canvas word. No fit score is stored, and the zone's own
+  // StatedLimit already refuses to invent one — "nothing here scores a fund for
+  // you, ranks your list, or drafts an approach". So the canvas's first slot
+  // becomes the unfiltered view rather than a ranking that would be a number
+  // with no method behind it.
+  'research/funds': [
+    { canvas: 'Best fit', key: 'all', label: 'All funds' },
+    { canvas: 'Right stage', key: 'right' },
+    { canvas: 'Warm path', key: 'warm' },
+    { canvas: 'Passed', key: 'passed' },
+  ],
   // One reason, four labels. Worth stating precisely because a shorter version
   // would be wrong: signals ARE stored, dated and scored, and this page reads
   // them. What is absent is the object the canvas filters — a saved analysis

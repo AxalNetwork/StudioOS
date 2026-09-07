@@ -153,6 +153,17 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Compare', note: 'analyses are read one at a time; no comparison view is stored' },
     { label: 'Export', kind: 'export' },
   ],
+  // THIS KEY WAS MISSING AND THE ROW DREW NOTHING. `profile_zone_actions`
+  // excluded `research/funds` as "a card in ResearchWorkspace's ZONE_COPY, not
+  // a body" — true once, and untrue since `ZONE_COPY` became `{}` and
+  // `LIVE_ZONES` gained `funds`. `FundsZone` takes `zoneActions` and renders
+  // `zoneActions(visible)`, so three specified ops rendered as nothing at all.
+  // The same stale exclusion `research/client-prep` carried on two licences.
+  'research/funds': [
+    { label: 'Add fund', note: 'the add-a-fund form below takes one' },
+    { label: 'Brief me', note: 'no per-fund brief is generated; the thesis is quoted in their words and the reading is yours to write' },
+    { label: 'Export', kind: 'export' },
+  ],
   'research/library': [
     { label: 'Upload', note: 'the add-document form below takes a file or a link' },
     { label: 'New collection', note: 'collections are not stored' },

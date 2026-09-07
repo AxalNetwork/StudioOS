@@ -37,6 +37,11 @@ const day = (v) => {
 
 export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
+  // `Partly staged` is the canvas's `Requested`, which its own artboard code
+  // reads into a variable called `partial` — a room where the founder held some
+  // files back, not a request record. The route already returns the same count
+  // as `partial_count`, computed with this exact predicate.
+  const [filter, setFilter] = useState('all');
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true }));
@@ -51,6 +56,7 @@ export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founde
 
   const data = state.data;
   const items = data?.items || [];
+  const visible = filter === 'partial' ? items.filter((r) => r.withheld_behind_nda > 0) : items;
 
   return (
     <div className="space-y-6">
@@ -58,8 +64,8 @@ export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founde
         <ZoneToolbar
           role={role}
           className="mb-3"
-          filters={zoneFilters ? zoneFilters({}) : []}
-          actions={zoneActions(items)}
+          filters={zoneFilters ? zoneFilters({ value: filter, onChange: setFilter }) : []}
+          actions={zoneActions(visible)}
         />
       )}
       <ZoneHeading
@@ -88,7 +94,7 @@ export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founde
             </span>
           </div>
           <ul className="divide-y divide-axal-ground dark:divide-gray-800">
-            {items.map((r) => (
+            {visible.map((r) => (
               <li key={r.grant_uid} className="py-3">
                 <div className="flex flex-wrap items-baseline gap-2">
                   <strong className="text-[13px]">{r.project_name}</strong>

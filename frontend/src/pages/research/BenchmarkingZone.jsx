@@ -37,6 +37,11 @@ const EMPTY = { metric: '', our_value: '', peer_value: '', peer_source: '', peer
 
 export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
+  // `Metrics` is everything and `Peer set` is the rows that carry a comparison.
+  // The page already draws the distinction on every row — a benchmark without a
+  // peer figure reads `Tracked, not compared` — so the chip narrows to a split
+  // the reader can already see.
+  const [filter, setFilter] = useState('all');
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(null);
@@ -71,6 +76,7 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
 
   const data = state.data;
   const items = data?.items || [];
+  const visible = filter === 'comparison' ? items.filter((b) => b.is_comparison) : items;
   // The form asks for a peer figure and its base together, because the route
   // and the schema both refuse them apart.
   const wantsPeer = Boolean(form.peer_value.trim());
@@ -81,8 +87,8 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
         <ZoneToolbar
           role={role}
           className="mb-3"
-          filters={zoneFilters ? zoneFilters({}) : []}
-          actions={zoneActions(items)}
+          filters={zoneFilters ? zoneFilters({ value: filter, onChange: setFilter }) : []}
+          actions={zoneActions(visible)}
         />
       )}
       <ZoneHeading
@@ -120,7 +126,7 @@ export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'fou
             <span className="text-[11px] text-gray-600 dark:text-gray-300">Every row carries its own read</span>
           </div>
           <ul className="divide-y divide-axal-ground dark:divide-gray-800">
-            {items.map((b) => (
+            {visible.map((b) => (
               <li key={b.uid} className="py-3">
                 <div className="flex flex-wrap items-baseline gap-2">
                   <strong className="text-[13px]">{b.metric}</strong>

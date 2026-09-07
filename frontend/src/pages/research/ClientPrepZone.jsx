@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from '../advisor/expertise/kit';
 import { SeamChip } from '../../workspaces/WorkspaceShell';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
+import { accentChipClass } from '../../workspaces/shellConfig';
 
 /**
  * Research · Client prep — the brief, with both sides in it.
@@ -25,6 +26,14 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
  * quotes their own assumption back at a client as if the client had said it.
  * Founder-sourced rows carry the seam chip and are read-only here.
  *
+ * ONLY ONE OF THOSE TWO SIDES EXISTS, and the header row now says so. Every row
+ * `buildRows` emits is `source: 'client'`, and so is every row the worker
+ * describes: nothing in this product writes a note of the reader's own against
+ * a client. The chip row this page used to draw offered `Mine only` over that
+ * predicate and answered "Nothing matches this filter" on a full brief — a
+ * live instance of the defect D51 exists to prevent. Cyan is theirs; there is
+ * nothing to render in emerald yet.
+ *
  * THE BRIEF SAYS WHAT IT IS MISSING. A grant carries three scopes and a founder
  * may open one and not the others. The worker returns `withheld` naming each
  * scope it did not read, and this page prints it — because a brief that looked
@@ -37,17 +46,10 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
  * fastest way to lose a session's first ten minutes."
  */
 
-const FILTERS = [
-  ['all', 'Full brief'],
-  ['mine', 'Mine only'],
-  ['client', 'Founder-sourced'],
-];
-
 export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advisor' }) {
   const [inbox, setInbox] = useState({ loading: true, error: null, items: [] });
   const [chosen, setChosen] = useState(null);
   const [brief, setBrief] = useState({ loading: false, error: null, data: null });
-  const [filter, setFilter] = useState('all');
 
   const loadInbox = useCallback(async () => {
     setInbox((s) => ({ ...s, loading: true }));
@@ -75,8 +77,16 @@ export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advis
   }, [chosen]);
 
   const data = brief.data;
+  // EVERY ROW HAS ONE SOURCE, AND THE OLD CHIP ROW DID NOT SAY SO. It offered
+  // `Full brief / Mine only / Founder-sourced` over a predicate of
+  // `r.source === filter`, and `buildRows` below emits `source: 'client'` at
+  // every one of its five sites and nothing else — as does the worker, whose
+  // only `source` is the same literal. So `Mine only` matched nothing and said
+  // "Nothing matches this filter" over a full brief, and `Founder-sourced`
+  // matched everything. The zone header row states both facts as one sentence
+  // now, and the whole view is `all`.
   const rows = buildRows(data);
-  const visible = rows.filter((r) => (filter === 'all' ? true : r.source === filter));
+  const visible = rows;
   const clientRows = rows.filter((r) => r.source === 'client').length;
   const active = inbox.items.find((i) => i.project_uid === chosen);
 
@@ -86,7 +96,7 @@ export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advis
         <ZoneToolbar
           role={role}
           className="mb-3"
-          filters={zoneFilters ? zoneFilters({}) : []}
+          filters={zoneFilters ? zoneFilters({ value: 'all' }) : []}
           actions={zoneActions(visible)}
         />
       )}
@@ -110,7 +120,13 @@ export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advis
           />
         )}
       >
-        {/* The switcher. Context changes here and nowhere implicitly. */}
+        {/* The switcher. Context changes here and nowhere implicitly.
+            ITS SELECTED STATE WAS HARDCODED EMERALD, which is the advisor
+            accent — and partner routes to this same file, so a partner picking
+            a client got a green chip on an amber shell. The zone row above had
+            the identical bug in its own chips and loses it by moving into
+            `ZoneToolbar`; this one is the same leak in a control that is not a
+            filter, so it takes the same source of truth. */}
         {inbox.items.length > 1 && (
           <div className="flex flex-wrap gap-2">
             {inbox.items.map((i) => (
@@ -120,7 +136,7 @@ export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advis
                 onClick={() => setChosen(i.project_uid)}
                 className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
                   chosen === i.project_uid
-                    ? 'border-emerald-600 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                    ? accentChipClass(role)
                     : 'border-axal-hairline text-gray-600 dark:border-gray-700 dark:text-gray-300'
                 }`}
               >
@@ -143,23 +159,6 @@ export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advis
 
         {data && (
           <>
-            <div className="flex flex-wrap gap-2">
-              {FILTERS.map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setFilter(key)}
-                  className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
-                    filter === key
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                      : 'border-axal-hairline text-gray-600 dark:border-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
             <Card padding="lg">
               <div className="mb-3 flex items-baseline justify-between gap-3">
                 <h3 className="text-sm font-extrabold tracking-tight">The brief</h3>
@@ -168,7 +167,9 @@ export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advis
                 </span>
               </div>
               {!visible.length ? (
-                <p className="text-[12.5px] text-gray-600 dark:text-gray-300">Nothing matches this filter.</p>
+                <p className="text-[12.5px] text-gray-600 dark:text-gray-300">
+                  This grant opens nothing that produces a brief row yet.
+                </p>
               ) : (
                 <ul className="divide-y divide-axal-ground dark:divide-gray-800">
                   {visible.map((r, i) => (

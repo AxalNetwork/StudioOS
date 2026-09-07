@@ -49,6 +49,15 @@ const NO_ANSWER_RECORD =
 const NO_COMPANY_ON_AN_ANALYSIS =
   'an analysis is stored against the person who ran it and names no company, so nothing marks one as a relationship or as somebody you are pursuing';
 
+// `/research/client-prep`. TWO LABELS, ONE FACT, AND THE FACT CUTS BOTH WAYS:
+// every row a brief produces carries `source: 'client'` and nothing else can,
+// so `Mine only` matches nothing and `Founder-sourced` matches everything.
+// Neither narrows, and the page shipped the first of them as a live chip until
+// this commit — clicking it said "nothing matches this filter" over a full
+// brief, which is exactly the failure D51 was written about.
+const ONE_SOURCE_ONLY =
+  'every row in a brief comes from the founder’s grant and nothing records a note of your own against a client, so there is no second source to separate out';
+
 export const ADVISOR_ZONE_FILTERS = {
   // ── Research ─────────────────────────────────────────────────────────────
   // Nothing is written per question. `research.post('/ask')` searches, answers
@@ -63,6 +72,20 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'All history', note: NO_ANSWER_RECORD },
     { canvas: 'Cited', note: ONE_ANSWER_ONLY },
     { canvas: 'Unanswered', note: NO_ANSWER_RECORD },
+  ],
+  // The ops half of this row already argues the grant story — "a brief exists
+  // when a founder opens their record to you; nothing here asks for one". These
+  // name a different absence: no row of your own, and no open/answered state on
+  // any row. The canvas's own `Open questions` count comes from a hand-written
+  // `state: 'Not done'` in the artboard's mock.
+  'research/client-prep': [
+    { canvas: 'Full brief', key: 'all' },
+    { canvas: 'Mine only', note: ONE_SOURCE_ONLY },
+    { canvas: 'Founder-sourced', note: ONE_SOURCE_ONLY },
+    {
+      canvas: 'Open questions',
+      note: 'nothing records a brief row as open or answered; these rows are what the founder opened to you, not a checklist you work through',
+    },
   ],
   // THE ONE PLACE THE SIGNALS FEED ANSWERS THE CANVAS'S QUESTION. Founder and
   // investor ask this zone for a saved deep-dive with a lifecycle, and nothing

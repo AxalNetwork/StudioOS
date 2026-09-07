@@ -35,8 +35,26 @@ const ONE_ANSWER_ONLY =
 const NO_ANSWER_RECORD =
   'no answer is saved, so nothing records a past question or whether one went unanswered';
 
+// `/research/client-prep`, and the same single fact the advisor table names:
+// every row a brief produces carries `source: 'client'`, so `Ours only` matches
+// nothing and `Founder-sourced` matches everything. The dead chip was live on
+// this licence too — `ClientPrepZone` is one file, and its hand-rolled row was
+// hardcoded to the ADVISOR accent, so a partner clicking it got a green chip
+// and an empty brief.
+const ONE_SOURCE_ONLY =
+  'every row in a brief comes from the founder’s grant and nothing records a note of the firm’s own against a client, so there is no second source to separate out';
+
 export const PARTNER_ZONE_FILTERS = {
   // ── Research ─────────────────────────────────────────────────────────────
+  'research/client-prep': [
+    { canvas: 'Full brief', key: 'all' },
+    { canvas: 'Ours only', note: ONE_SOURCE_ONLY },
+    { canvas: 'Founder-sourced', note: ONE_SOURCE_ONLY },
+    {
+      canvas: 'Open items',
+      note: 'nothing records a brief row as open or closed; these rows are what the founder opened to you, not a checklist the firm works through',
+    },
+  ],
   // Three live, one prose. The windows are this canvas's own — `const STALE_AT
   // = 90, AGE_AT = 30`, ninety where advisor's artboard says a hundred and
   // twenty, which is why the number lives in each licence's own table rather

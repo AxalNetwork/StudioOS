@@ -207,6 +207,50 @@ export const INVESTOR_ZONE_FILTERS = {
     },
     { canvas: 'Discarded', note: NO_SESSION_RECORD },
   ],
+  // ROOM ACCESS, AND THE CANVAS MEANS SOMETHING DIFFERENT BY `Requested` THAN
+  // THE WORD SUGGESTS. Its own artboard code reads
+  // `PULLS.filter(p => p.state === 'Requested')` into a variable called
+  // `partial`, and its `Requested` row is `6 of 11 files · IP folder withheld`.
+  // It is a partly-staged room, which this page can see — `withheld_behind_nda`
+  // is on every row and the route already returns the count as `partial_count`.
+  // So the chip is live and wears the store's own word: keeping `Requested`
+  // would promise a request record, and the ops half of this same row spends a
+  // sentence explaining that none exists.
+  //
+  // `Granted` is the ALREADY-SCOPED kind of reason, like `Mine` on the pipeline
+  // board: the query selects only active grants, so `granted_count` is
+  // literally `items.length` and a chip would narrow nothing while looking like
+  // it might.
+  'research/diligence': [
+    { canvas: 'All', key: 'all' },
+    {
+      canvas: 'Granted',
+      note: 'every room here is one you have been granted; the list loads active grants only, so this would select all of them',
+    },
+    { canvas: 'Requested', key: 'partial', label: 'Partly staged' },
+    {
+      canvas: 'Not staged',
+      note: 'a company that never opened a room is not on this list at all, because the grant is what puts a room here and an unstaged one leaves no row to find',
+    },
+  ],
+  // `Peer set` IS RELABELLED BECAUSE THE OPS HALF WOULD CONTRADICT IT. That
+  // half says "a peer source is recorded per row, so there is no one set to
+  // switch" — and it is right: `research_benchmarks` carries `peer_source` and
+  // `peer_sample_size` per row under a CHECK, with no shared peer set anywhere.
+  // What the page can tell apart is which rows are comparisons at all, which it
+  // already labels `Tracked, not compared` and counts in its own subtitle.
+  'research/benchmarking': [
+    { canvas: 'Peer set', key: 'comparison', label: 'Compared' },
+    { canvas: 'Metrics', key: 'all' },
+    {
+      canvas: 'Saved',
+      note: 'a benchmark row has no draft state; the form writes a finished row on submit, so every metric on this page is saved',
+    },
+    {
+      canvas: 'Export',
+      note: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn',
+    },
+  ],
   'research/markets': [
     { canvas: 'Active', note: NO_SAVED_DEEP_DIVE },
     { canvas: 'Parked', note: NO_SAVED_DEEP_DIVE },
