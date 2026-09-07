@@ -6,7 +6,7 @@ import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorNetworkWorkspace.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 
 /**
@@ -62,7 +62,7 @@ const introductionContext = (prop) => {
   return reason || prop?.breakdown?.relationship_context || 'Context is retained with the proposition and reviewed before consent.';
 };
 
-function SectionHeading({ id, title, detail, actions }) {
+function SectionHeading({ id, title, detail, actions, role, filters }) {
   // The action row belongs to the SECTION, not to the page header — that header
   // sits behind `{!embedded && …}` and is false on every zone route, because
   // NetworkWorkspace supplies the crumb and the zone nav itself. A row placed
@@ -71,7 +71,13 @@ function SectionHeading({ id, title, detail, actions }) {
   // `/network` itself, where all three sections show at once and no single row
   // could be right.
   return <div className="inw-section-head" id={id}><h2>{title}</h2><span data-testid={`text-${id}-detail`}>{detail}</span>
-    {actions?.length ? <ZoneActions className="basis-full" items={actions} /> : null}</div>;
+    {/* `ZoneToolbar` renders `ZoneActions` internally, so the ops half is
+        unchanged; the filter half joins it on the same rule-bordered row the
+        canvas draws. A section whose zone has no filter table yet passes `[]`
+        and gets exactly the row it had. */}
+    {filters?.length || actions?.length
+      ? <ZoneToolbar className="basis-full" role={role} filters={filters || []} actions={actions || []} />
+      : null}</div>;
 }
 
 function Skeleton({ rows = 4 }) {
@@ -96,7 +102,16 @@ function Alert({ children }) {
 // set of derivations behind all four URLs: `organizations` is derived from the
 // relationship rows, so a split would either duplicate that read or invent a
 // second source for it.
-export default function InvestorNetworkWorkspace({ embedded = false, zone = null }) {
+export default function InvestorNetworkWorkspace({ embedded = false, zone = null, role = 'investor', zoneFilters = null }) {
+  // The relationship book's zone view. One live chip out of five on this
+  // licence — `relationship_type` is a CHECKed set and `co_investor` is a
+  // member of it — so `Everyone` and `Co-investors` are the whole of what this
+  // store can tell apart. The other three labels are prose on the row.
+  const [bookView, setBookView] = useState('all');
+  // The introductions desk's zone view. `Stalled` is `status = 'expired'`,
+  // which the route writes lazily on every read; `Asked` and `Offered` are
+  // prose on the row, because no response carries a direction.
+  const [deskView, setDeskView] = useState('all');
   const [params] = useSearchParams();
   const highlightedIntro = params.get('intro') || '';
   const requestedTab = params.get('tab') || '';
@@ -146,12 +161,18 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   }, [highlightedIntro, introductions, requestedTab]);
 
   const propositionRows = introductions?.propositions || [];
+  // THE ZONE VIEW NARROWS BEFORE THE CAP, and the order matters: the memo below
+  // shows four propositions and pins a deep-linked one into them, so a filter
+  // applied after it would only ever search the first four rows.
+  const deskRows = deskView === 'stalled'
+    ? propositionRows.filter((prop) => String(prop.status || '').toLowerCase() === 'expired')
+    : propositionRows;
   const visiblePropositions = useMemo(() => {
-    const compact = propositionRows.slice(0, 4);
+    const compact = deskRows.slice(0, 4);
     if (!highlightedIntro || compact.some((prop) => prop.uid === highlightedIntro)) return compact;
-    const highlighted = propositionRows.find((prop) => prop.uid === highlightedIntro);
+    const highlighted = deskRows.find((prop) => prop.uid === highlightedIntro);
     return highlighted ? [highlighted, ...compact.slice(0, 3)] : compact;
-  }, [highlightedIntro, propositionRows]);
+  }, [highlightedIntro, deskRows]);
   const organizations = useMemo(() => {
     if (!relationships) return [];
     const grouped = new Map();
@@ -187,6 +208,13 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   };
 
   const bucket = bucketForPath('investor', '/network');
+  // `Co-investors` is the only narrowing this store supports: `relationship_type`
+  // is a CHECKed set and `co_investor` is one of its five values. `Everyone` is
+  // the reset view, which is what the word means over a book the query has
+  // already scoped to the reader.
+  const visibleRelationships = bookView === 'coinvestors'
+    ? (relationships || []).filter((item) => item.relationship_type === 'co_investor')
+    : (relationships || []);
   const touchCoverage = (relationships || []).filter((item) => lastTouchAt(item)).length;
   const coldCount = (relationships || []).filter((item) => {
     const touched = new Date(String(lastTouchAt(item) || '').replace(' ', 'T'));
@@ -223,11 +251,11 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
               const touch = relationships.length === 0 ? 'no ties recorded'
                 : touchCoverage ? `${coldCount} going cold` : 'last-touch coverage unavailable';
               return `${ties} ties · ${touch}`;
-            })} actions={investorZoneActions('network/relationships', { view: { header: ['Person', 'Organization', 'Type'], rows: relationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
-            {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : (
+            })} role={role} filters={zoneFilters ? zoneFilters({ value: bookView, onChange: setBookView }) : []} actions={investorZoneActions('network/relationships', { view: { header: ['Person', 'Organization', 'Type'], rows: visibleRelationships || [], cells: (r) => [personName(r), orgIdentity(r), r.relationship_type] } })} />
+            {errors.relationships ? <Alert>{errors.relationships}</Alert> : relationships === null ? <Skeleton rows={5} /> : relationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-book">No attributed relationship records are available yet.</div> : visibleRelationships.length === 0 ? <div className="inw-empty" data-testid="empty-relationship-view">{`No co-investor tie is recorded. ${relationships.length} ${relationships.length === 1 ? 'tie' : 'ties'} in the book in total.`}</div> : (
               <div className="inw-table" data-testid="table-relationship-book">
                 <div className="inw-table-head"><span>Person</span><span>Type</span><span>Strength</span><span>Context</span><span>Last touch</span></div>
-                {relationships.map((item) => <div className="inw-table-row" key={item.id} data-testid={`row-relationship-${item.id}`}>
+                {visibleRelationships.map((item) => <div className="inw-table-row" key={item.id} data-testid={`row-relationship-${item.id}`}>
                   <strong data-label="Person">{personName(item)}</strong><span data-label="Type"><i className="inw-type">{typeLabel(item.relationship_type)}</i></span>
                   <span data-label="Strength"><i className={`inw-strength ${Number(item.strength_score) >= 70 ? 'strong' : ''}`}>{Number.isFinite(Number(item.strength_score)) ? `${Math.round(item.strength_score)}/100` : 'Not scored'}</i></span>
                    <span data-label="Context" className="inw-context">{relationshipContext(item)}</span><time data-label="Last touch" className={age(lastTouchAt(item)).includes('d') && Number.parseInt(age(lastTouchAt(item)), 10) > 60 ? 'inw-cold' : ''}>{age(lastTouchAt(item))}</time>
@@ -239,7 +267,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
             {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} actions={investorZoneActions('network/introductions', { view: { header: ['Introduction', 'Status', 'Score', 'Source'], rows: propositionRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: { header: ['Introduction', 'Status', 'Score', 'Source'], rows: visiblePropositions, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
               {errors.introductions ? <Alert>{errors.introductions}</Alert> : introductions === null ? <Skeleton rows={4} /> : propositionRows.length === 0 ? <div className="inw-empty" data-testid="empty-introductions">No live introduction propositions. New matches appear here when available.</div> : <>
                 {actionError && <Alert>{actionError}</Alert>}
                 <div className="inw-proposition-list">{visiblePropositions.map((prop) => {
@@ -255,7 +283,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
             </section>}
 
             {shows('organizations') && <section className="inw-card" aria-labelledby="organizations">
-              <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => `${organizations.length} relationship-backed organizations`)} actions={investorZoneActions('network/organizations', { view: { header: ['Organization', 'People', 'Recorded types'], rows: organizations, cells: (o) => [o.name, o.people.size, [...o.types].join(' + ')] } })} />
+              <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => `${organizations.length} relationship-backed organizations`)} role={role} filters={zoneFilters ? zoneFilters({}) : []} actions={investorZoneActions('network/organizations', { view: { header: ['Organization', 'People', 'Recorded types'], rows: organizations, cells: (o) => [o.name, o.people.size, [...o.types].join(' + ')] } })} />
               {errors.organizations ? <Alert>{errors.organizations}</Alert> : relationships === null ? <Skeleton rows={4} /> : organizations.length === 0 ? <div className="inw-empty" data-testid="empty-organizations">No organization identity is recorded on your relationship records yet.</div> : <div className="inw-org-list">{organizations.slice(0, 6).map((org) => <div className="inw-org" key={org.name} data-testid={`row-organization-${safeKey(org.name)}`}><div><strong>{org.name}</strong><span>{[...org.types].join(' · ') || 'Attributed relationship'}</span></div><b>{org.people.size} known</b></div>)}</div>}
               <p className="inw-footnote">Organizations appear only when explicitly attached to a relationship record. Names and email domains are never used to infer a firm.</p>
             </section>}

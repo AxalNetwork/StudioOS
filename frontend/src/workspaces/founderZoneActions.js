@@ -101,9 +101,15 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Offer one', note: 'offering an introduction is not built' },
     { label: 'Export', kind: 'export' },
   ],
+  // BOTH NOTES WERE TOO WEAK, and the filter half of this row is what showed
+  // it. `Add org` said the contact form was merely out of reach, and `Merge
+  // duplicates` said duplicates "stay as separate rows" — which describes rows
+  // this page can never have. A contact carries no organisation field at all,
+  // so the roll-up above is empty on every account and there is nothing to
+  // have duplicated. The two halves of this row now say the same thing.
   'network/organizations': [
-    { label: 'Add org', note: 'the contact form is not reachable from a founder’s Network desk' },
-    { label: 'Merge duplicates', note: 'no merge is built; duplicates stay as separate rows' },
+    { label: 'Add org', note: 'a contact records a person, an email and an audience, and no field on it names an organisation, so there is no org for a form to add' },
+    { label: 'Merge duplicates', note: 'nothing groups people into organisations here, so there are no rows to be duplicates of each other' },
     { label: 'Export', kind: 'export' },
   ],
 

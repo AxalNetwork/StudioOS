@@ -98,7 +98,6 @@ export default function FounderRaiseDesk() {
     <section className="raise-canvas">
       <div className="raise-main">
         <header className="raise-hero">
-          <div className="raise-eyebrow">Founder / Raise</div>
           <div className="raise-heading"><div><h1>Get capital, stay legal</h1><p>Pitch, capital planning, legal readiness, data room, and liquidity in one fundraising workspace.</p></div>
             {projects.length > 1 && <select data-testid="select-raise-project" value={projectId || ''} onChange={(event) => setProjectId(Number(event.target.value))}>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}
           </div>

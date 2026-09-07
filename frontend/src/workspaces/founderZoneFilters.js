@@ -1,12 +1,18 @@
 import { makeZoneFilters } from './zoneFilterBuilder.js';
 
 /**
- * The founder profile's eighteen zone pages, and what each of their canvas
- * filters can honestly do.
+ * The founder profile's twenty-six zone pages, and what each of their canvas
+ * filters can honestly do. That is ALL OF THEM: every route on all five
+ * artboards has an entry, and `profile_zone_filters.test.mjs`'s `excluded` list
+ * for this licence is now empty. The count is pinned in the guard, so a canvas
+ * that gains a zone fails here rather than shrinking the covered set quietly.
  *
  * WHERE THE LABELS COME FROM. Verbatim from the `filters: fil([…])` array of
  * the zone's artboard in `design/canvases/integrated/Pages · Founder
- * {Build,Raise,Grow}.dc.html`, in the canvas's own order. `founderZoneActions`
+ * {Build,Raise,Grow,Network,Research}.dc.html`, in the canvas's own order.
+ * Network and Research are shared surfaces — one component serves all four
+ * licences — which is why their entries sit in four per-licence tables rather
+ * than one common one, and why a zone's four tables land together. `founderZoneActions`
  * is the same table for the `ops:` array on the same row; between them the
  * header row this product ships is the header row the design drew.
  *
@@ -73,6 +79,29 @@ const NO_SUCH_KIND =
 // from, and this is that sentence from the other side.
 const NO_SAVED_DEEP_DIVE =
   'nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of; this page is the signals feed, gathered on a schedule';
+// `/network/introductions`. THE SHARPEST CASE THIS PASS HAS FOUND, and it was
+// already on screen: the page filtered on `row.direction`, which
+// `propositionDto` has never returned and `intro_propositions` has no column
+// for. Every row is `WHERE user_id = ?` — the reader is always the addressee —
+// so direction is not merely unreturned, it is not a fact this model holds.
+const NO_DIRECTION_RECORDED =
+  'nothing records who asked: every proposition here is addressed to you, and the response names the counterpart without a direction';
+// `/network/organizations`. THE COLUMN THREE DOCBLOCKS SAID EXISTS DOES NOT.
+// `FounderNetworkOrganizations` groups on `row.organization || row.company ||
+// row.firm`, and `contacts` carries none of the three: the table is sixteen
+// columns (`127_contacts.sql:8-23`), the only three `ALTER TABLE contacts` in
+// the repo add `promoted_ref_id`, `utm_json` and `referrer`, and the route
+// returns `SELECT c.*` plus two landing-page aliases. So `if (!name) return;`
+// skips every row and the group list is permanently empty — which is why `All`
+// is prose here and not a chip: it would select an empty set on every account.
+const NO_ORG_ON_A_CONTACT =
+  'no field on a contact names the organisation that person is in, so this roll-up has nothing to roll up; the audience each of them is filed under is real and narrows the relationship book one zone over, but it classifies people, not companies';
+// The sharpest of the four, because the predicate is not the missing part.
+// `last_activity_at` is stored, `isDormant` is written and runs, and the page
+// already reports a dormant count in its rail. What is missing is the thing it
+// would describe.
+const NO_GROUP_TO_AGE =
+  'sixty days of silence is recorded per person and this page already computes it, but dormancy on this row would describe an organisation, and there is no organisation for it to describe';
 // `/research/companies`. Not an absent store — a LEVEL mismatch, which is a
 // fourth kind of reason this table has needed. See the zone's entry below.
 const CATEGORY_IS_PER_COMPETITOR =
@@ -235,6 +264,68 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Published', note: 'a calendar event has no publication state' },
     { canvas: 'Events', key: 'events' },
     { canvas: 'Articles', note: 'no article or content record is connected to this startup' },
+  ],
+
+  // ── Network ──────────────────────────────────────────────────────────────
+  // THE ONLY ZONE ON THIS SURFACE WHERE ALL FOUR LABELS RUN, and the reason is
+  // which store it reads. Founder relationships are `contacts`, which carries
+  // `audience` and `last_activity_at`; the other three licences read
+  // `partner_relationships`, which carries neither a role for the counterpart
+  // nor any interaction date. One canvas row, one component, and the licence
+  // that happens to sit on the right table gets four chips where advisor and
+  // partner get one.
+  //
+  // A MIGRATION, NOT NEW WORK. `.fn-rel-tabs` has rendered these four labels
+  // since the page shipped, over the same predicates named here. What moves is
+  // where the row lives; not one predicate changes.
+  //
+  // `Going cold` CARRIES A CAVEAT THIS TABLE CANNOT FIX. `last_activity_at` is
+  // stamped at creation, so a signup nobody has touched reads as going cold on
+  // its 61st day — which is exactly what the page's own note says it does not
+  // do. The predicate is the one that ships today and the chip is honest about
+  // what it selects; correcting the column is a write-path change.
+  'network/relationships': [
+    { canvas: 'Everyone', key: 'everyone' },
+    { canvas: 'Investors', key: 'investors' },
+    { canvas: 'Advisors', key: 'advisors' },
+    { canvas: 'Going cold', key: 'cold' },
+  ],
+
+  // Two live, two prose, and the two prose entries replace CHIPS THAT SHIPPED.
+  // `Asked` matched zero rows on every account and said so as a fact about the
+  // reader's data; `Offered` matched every row. `Stalled` is the one that
+  // always worked — `status = 'expired'`, written lazily by the route on every
+  // read.
+  'network/introductions': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Asked', note: NO_DIRECTION_RECORDED },
+    { canvas: 'Offered', note: NO_DIRECTION_RECORDED },
+    { canvas: 'Stalled', key: 'stalled' },
+  ],
+
+  // FOUR LABELS, NO CHIPS, AND `All` IS PROSE TOO. This zone's collection is
+  // empty by construction on every account — the grouping key it reads is not
+  // a column on `contacts` — so a chip here could only ever say "nothing
+  // matches this filter" over a page that has nothing to match, which is D51's
+  // canonical failure. Four such chips shipped until this commit, and `Funds`
+  // rendered "No funds organizations are recorded", a per-filter claim about
+  // this founder's data made by a page that had never looked.
+  //
+  // WHAT STAYS IS THE PAGE'S OWN PROSE, which was written knowing the field
+  // might be absent: "No explicit organizations are recorded… people without
+  // an organization are not placed into an inferred row", the stat that reads
+  // "No organization fields returned", and the footnote refusing to infer
+  // membership from email domains. Those are careful and correct. Only the
+  // chip row was dishonest.
+  //
+  // THE OPS HALF OF THIS ROW NEEDED THE SAME CORRECTION and got it: it said
+  // merging was merely unbuilt. The finding is stronger — with no key, there
+  // is nothing to merge and nothing to have duplicated.
+  'network/organizations': [
+    { canvas: 'All', note: NO_ORG_ON_A_CONTACT },
+    { canvas: 'Funds', note: NO_ORG_ON_A_CONTACT },
+    { canvas: 'Customers', note: NO_ORG_ON_A_CONTACT },
+    { canvas: 'Dormant', note: NO_GROUP_TO_AGE },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────

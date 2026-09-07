@@ -4,7 +4,7 @@ import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'luc
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const list = (value, ...keys) => {
@@ -45,7 +45,7 @@ const isCold = (row) => {
  * both columns now, and the page's `min-height:100vh` would otherwise stretch
  * a short zone the full viewport inside a container that is already full.
  */
-export default function FounderNetworkRelationships({ embedded = false }) {
+export default function FounderNetworkRelationships({ embedded = false, role = 'founder', zoneFilters = null }) {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
   const [projects, setProjects] = useState([]);
@@ -94,15 +94,24 @@ export default function FounderNetworkRelationships({ embedded = false }) {
         heading and zone nav itself — so everything inside that guard is dead
         on the route a founder actually opens. The actions row placed in there
         rendered nowhere, which a source test cannot see and a browser found. */}
-    <ZoneActions className="mt-3" items={founderZoneActions('network/relationships', { query, view: { scope: project?.name, header: ['Person', 'Email', 'Context', 'Type', 'Last activity'], rows: visible, cells: (r) => [r.name, r.email, r.landing_page_name || r.source, r.audience, r.last_activity_at] } })} />
+    <ZoneToolbar
+      className="mt-3"
+      role={role}
+      filters={zoneFilters ? zoneFilters({ value: filter, onChange: setFilter }) : []}
+      actions={founderZoneActions('network/relationships', { query, view: { scope: project?.name, header: ['Person', 'Email', 'Context', 'Type', 'Last activity'], rows: visible, cells: (r) => [r.name, r.email, r.landing_page_name || r.source, r.audience, r.last_activity_at] } })}
+    />
     {errors.length > 0 && <div className="fn-rel-alert" data-testid="status-network-relationships-partial"><AlertCircle size={15} /><span>{`Some selected-project sources are unavailable: ${errors.join(', ')}.`}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <RelationshipSkeleton />}
     {status === 'empty' && <NoProject />}
     {status === 'error' && !project && <NoProject error />}
     {status === 'ready' && project && <><div className="fn-rel-context"><div><span>Selected startup</span><strong data-testid="text-network-relationships-project">{text(project.name)}</strong><small>{text(project.sector, 'Sector not recorded')}</small></div><div><span>Source</span><strong>Project-linked authorized contacts</strong><small>Strength, notes and reminders are not exposed</small></div></div>
-      <div className="fn-rel-tabs"><div><button className={filter === 'everyone' ? 'is-active' : ''} onClick={() => setFilter('everyone')}>Everyone</button><button className={filter === 'investors' ? 'is-active' : ''} onClick={() => setFilter('investors')}>Investors</button><button className={filter === 'advisors' ? 'is-active' : ''} onClick={() => setFilter('advisors')}>Advisors</button><button className={filter === 'cold' ? 'is-active' : ''} onClick={() => setFilter('cold')}>Going cold</button></div><Link data-testid="link-open-network-relationships-workspace" to={`/network?mode=workspace&tab=contacts&project_id=${project.id}`}>Open contacts <ChevronRight size={13} /></Link></div>
+      {/* THE FOUR CHIPS MOVED UP INTO THE ZONE HEADER ROW, which is where the
+          canvas draws them and where the ops half already sat. Same four
+          labels, same four predicates, one row instead of two. What stays here
+          is the link out, which is navigation rather than a view. */}
+      <div className="fn-rel-tabs"><Link data-testid="link-open-network-relationships-workspace" to={`/network?mode=workspace&tab=contacts&project_id=${project.id}`}>Open contacts <ChevronRight size={13} /></Link></div>
       <div className="fn-rel-stats"><Stat label="In the book" value={contacts.length} note={`${knownTypes.size} recorded type${knownTypes.size === 1 ? '' : 's'}`} /><Stat label="Strong" value="Unavailable" note="No relationship strength source" muted /><Stat label="Going cold" value={cold.length} note="Past 60 days of explicit activity" /><Stat label="Coldest" value={cold.length ? `${Math.max(...cold.map((row) => daysSince(row.last_activity_at)))} d` : 'Unavailable'} note={cold.length ? 'From stored last activity' : 'No cold relationship recorded'} muted={!cold.length} /></div>
-      <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>The book</h2></div><span>Cold flag uses explicit last activity only</span></div><RelationshipTable rows={visible} /><p className="fn-rel-note">Contact status is not relationship strength. A contact is flagged going cold only when `last_activity_at` is stored and more than 60 days old; creation or signup age is never substituted for a touch.</p></section>
+      <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>The book</h2></div><span>Cold flag uses explicit last activity only</span></div><RelationshipTable rows={visible} /><p className="fn-rel-note">Contact status is not relationship strength. A contact is flagged going cold when `last_activity_at` is more than 60 days old — and that column is stamped when the contact is created, so a record nobody has touched ages into this set on its 61st day. The flag is honest about the column it reads; the column does not yet distinguish a touch from an arrival.</p></section>
       <section className="fn-rel-card fn-rel-unavailable"><div className="fn-rel-card-head"><div><AlertCircle size={16} /><h2>Relationship intelligence</h2></div><span>Unavailable</span></div><strong>No project-scoped relationship history is connected.</strong><p>Notes, reminders, organization membership, strength scoring, and message context require a dedicated relationship-book source. FN1 does not derive them from email domains, lead status, landing pages, or contact age.</p></section>
     </>}
   </section>{!embedded && <RelationshipRail project={project} contacts={contacts} cold={cold} errors={errors} />}</div></main>;

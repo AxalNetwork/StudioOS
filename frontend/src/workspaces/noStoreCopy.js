@@ -34,18 +34,25 @@ export const ADVISOR_COPY = {
 };
 
 /**
- * Network · Organizations, on a licence that has no store for it.
+ * Network · Organizations, on a licence that renders no body for it.
  *
- * `ORG_BACKED` in `NetworkWorkspace` is `{founder, investor}`: a founder reads
- * `contacts.organization` and the investor workspace has its own section, while
- * an advisor is 403'd from `/api/contacts` and an operator's NetworkPage has no
- * organizations tab at all. The heading is the exact line the overview card has
- * always shown, so the card, the board section and the rail say one thing.
+ * `ORG_BACKED` in `NetworkWorkspace` is `{founder, investor}` and this file
+ * used to explain that set as a store: "a founder reads `contacts.organization`
+ * and the investor workspace has its own section". There is no such column on
+ * `contacts`, and the investor path ends at `metadata.organization_name`, which
+ * nothing in the product writes. The edge is missing on all four licences.
+ *
+ * What differs is only where the absence is said. Founder and investor have a
+ * body that says it — an empty table, a stat reading "No organization fields
+ * returned", and a header row of notes. Advisor and operator have no body, so
+ * the copy below is the whole surface. The heading is the exact line the
+ * overview card shows, so the card, the board section and the rail say one
+ * thing.
  */
 export const NETWORK_ORG_COPY = {
   heading: 'Organizations reads nothing on this licence — no store links a relationship to an organisation here.',
   what: 'The companies, funds and firms behind the people you know, rolled up from the relationships you keep.',
-  why: 'The roll-up needs a person-to-organisation edge, and on this licence there is none: an advisor cannot read the contact store at all, and an operator has no organizations surface to roll up from. A count assembled from anything else would be counting something other than what the heading says.',
+  why: 'The roll-up needs a person-to-organisation edge and nothing stores one: a relationship is a pair of account ids with a type, and a referral records an organisation as free text with no link back to an account. On this licence there is not even a surface to attempt it from — an advisor cannot read the contact store at all, and an operator has no organizations tab. A count assembled from anything else would be counting something other than what the heading says.',
 };
 
 /**

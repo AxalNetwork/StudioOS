@@ -49,6 +49,37 @@ const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
  * file for all four — which is the fact the whole per-licence table design
  * exists to handle.
  */
+// The Network bodies, and they are NOT one shared file the way Research's are:
+// each licence has its own. `roleMountVerdict` still treats a declared body as
+// shared and requires `role={role}` — which is right here for a different
+// reason. The workspace resolved the role and hands it down; a literal in
+// `FounderNetworkRelationships` would be true, but the variable is what the
+// mount actually passes and what the accent reads.
+const NETWORK_BODIES = {
+  founder: {
+    'network/relationships': 'frontend/src/pages/founder/FounderNetworkRelationships.jsx',
+    'network/introductions': 'frontend/src/pages/founder/FounderNetworkIntroductions.jsx',
+    'network/organizations': 'frontend/src/pages/founder/FounderNetworkOrganizations.jsx',
+  },
+  // One file, three zones: `InvestorNetworkWorkspace` renders all three sections
+  // and the shell narrows it to one with `zone={slug}`.
+  investor: {
+    'network/relationships': 'frontend/src/pages/investor/InvestorNetworkWorkspace.jsx',
+    'network/introductions': 'frontend/src/pages/investor/InvestorNetworkWorkspace.jsx',
+    'network/organizations': 'frontend/src/pages/investor/InvestorNetworkWorkspace.jsx',
+  },
+  advisor: {
+    'network/relationships': 'frontend/src/pages/advisor/network/RelationshipsZone.jsx',
+    'network/introductions': 'frontend/src/pages/advisor/network/IntroductionsZone.jsx',
+  },
+  // The partner arm's bodies are the PANELS, not `NetworkPage`: the page
+  // forwards the two-argument builder and the panels render the rows.
+  partner: {
+    'network/relationships': 'frontend/src/pages/RelationshipsPage.jsx',
+    'network/introductions': 'frontend/src/pages/IntroductionsPanel.jsx',
+  },
+};
+
 const RESEARCH_BODIES = {
   'research/ask': 'frontend/src/pages/research/AskZone.jsx',
   'research/library': 'frontend/src/pages/research/LibraryZone.jsx',
@@ -75,18 +106,16 @@ const PROFILES = {
     canvas: /^Pages · Founder /,
     pages: ['frontend/src/pages/founder', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
-    zones: 23,
-    mounted: 23,
-    bodies: RESEARCH_BODIES,
-    excluded: [
-      // The shared surfaces. `NetworkWorkspace` and `ResearchWorkspace` render
-      // these slugs for all four licences from one component each, with
-      // different labels per licence, so every licence's half lands together or
-      // the same component shows a header row on one and nothing on another.
-      // `research/{ask,library}` left this list when all four tables gained
-      // them in the same commit, which is the only way they can.
-      'network/relationships', 'network/introductions', 'network/organizations',
-    ],
+    zones: 26,
+    mounted: 26,
+    bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.founder },
+    // EMPTY, AND THAT IS THE POINT OF THE LIST. Every canvas route on all five
+    // founder artboards now has a filter table. `research/{ask,library}` left
+    // when all four licences gained them in one commit; `network/organizations`
+    // left when the two licences that HAVE a body for it gained it — advisor
+    // and partner keep it excluded for a reason that is theirs and is stated in
+    // their own profiles, not because founder is waiting on them.
+    excluded: [],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.
@@ -105,9 +134,9 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 13,
-    mounted: 13,
-    bodies: RESEARCH_BODIES,
+    zones: 16,
+    mounted: 16,
+    bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.investor },
     // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
     // it is not here yet:
     excluded: [
@@ -127,13 +156,6 @@ const PROFILES = {
       // `pass_reason` is a stored, CHECKed taxonomy the pipeline zone now
       // reads. A deferral that says so is worth more than a row that lies.
       'deals/screening', 'deals/commit', 'deals/closing',
-      // Network and Research are the shared surfaces. `NetworkWorkspace` and
-      // `ResearchWorkspace` render these eight slugs for founder too, with
-      // different labels per licence, and founder's halves are carved out of
-      // this file for exactly that reason. Giving investor a toolbar there
-      // while founder has none would show a zone header on one licence and
-      // nothing on the other, from one component. They land together.
-      'network/relationships', 'network/introductions', 'network/organizations',
     ],
     // `Call 3` names one specific stored record rather than welding a count
     // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`
@@ -171,11 +193,19 @@ const PROFILES = {
     canvas: /^Pages · Advisor (Network|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
-    zones: 5,
-    mounted: 5,
-    bodies: RESEARCH_BODIES,
+    zones: 7,
+    mounted: 7,
+    bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.advisor },
+    // THE ONE EXCLUSION THAT IS NOT A DEFERRAL. Founder and investor left this
+    // list; advisor and partner do not follow, and the reason is not that their
+    // half is unwritten. `OrganizationsZone` is a dashed card whose entire body
+    // is the gap statement — it imports no `api`, renders no rows and has no
+    // state to narrow — so four controls above it would be a filter row over a
+    // sentence explaining why there is nothing to filter. The shared-component
+    // argument that binds the other two Network zones does not reach here:
+    // founder and advisor mount DIFFERENT files for organizations.
     excluded: [
-      'network/relationships', 'network/introductions', 'network/organizations',
+      'network/organizations',
     ],
     // No `samples`: not one advisor label carries a figure, and the assertion
     // below proves that rather than taking it on trust — a canvas that gains an
@@ -191,11 +221,14 @@ const PROFILES = {
     canvas: /^Pages · Partner (Network|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/partner', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/partnerZoneActions.js',
-    zones: 4,
-    mounted: 4,
-    bodies: RESEARCH_BODIES,
+    zones: 6,
+    mounted: 6,
+    bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.partner },
+    // Same as advisor's, one step further: there is not even a card. This
+    // licence has no organizations panel at all — `NetworkPage`'s
+    // `unservedAlone` suppresses it — so a row here would attach to nothing.
     excluded: [
-      'network/relationships', 'network/introductions', 'network/organizations',
+      'network/organizations',
     ],
     // `Pages · Partner Research` names /research/market; the router and
     // `shellConfig.js` both say `markets`. Same mapping the ops half carries.
@@ -523,6 +556,47 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
     assert.ok(checked >= profile.mounted,
       `only ${checked} ZoneToolbar mounts found across ${profile.mounted} mounting pages`);
+  });
+
+  test(`${name}: a body with a live chip passes its own state to the builder`, () => {
+    /**
+     * THE HOLE MUTATION-CHECKING FOUND, and it is one this file could not see.
+     *
+     * Everything above proves a live key is DECLARED honestly and that the page
+     * knows the string. None of it proves the page ever tells the row which
+     * view is showing. A body can declare four live keys and still call
+     * `zoneFilters({})` — the four chips render, none is ever `active`, and
+     * clicking one calls `onChange?.()` on an undefined handler. Four controls
+     * that look selectable and narrow nothing, which is D51's failure reached
+     * from a new direction: not a filter with no store, but a filter with no
+     * wire.
+     *
+     * Caught by turning `zoneFilters({ value: filter, onChange: setFilter })`
+     * back into `zoneFilters({})` in a founder body and watching all 47
+     * assertions pass.
+     *
+     * What this cannot do: a body rendering SEVERAL sections calls the builder
+     * once per section, and this only proves one of them is wired.
+     * `InvestorNetworkWorkspace` is the only such body today, and its other two
+     * sections are zones with no table at all.
+     */
+    for (const [zone, rows] of Object.entries(profile.table)) {
+      if (!rows.some((row) => row.key)) continue;
+      const page = mountingFile(profile, zone);
+      if (!page) continue;
+      // TWO CALL SHAPES, AND THE FIRST DRAFT OF THIS REGEX SAW ONLY ONE.
+      // A prop-drilled body calls `zoneFilters({ value: … })`; a page that
+      // imports its licence's table calls `founderZoneFilters('build/kpi',
+      // { value: … })` with the zone key first. Written for the first shape
+      // alone, this failed against two pages that were perfectly correct —
+      // loudly, because it went in beside real tables rather than ahead of
+      // them, which is the only reason it was not a decoration.
+      assert.match(
+        codeOnly(page.src),
+        /[zZ]oneFilters\([^)]*value:/,
+        `${zone} declares a live chip but ${page.path} never passes a value to the builder`,
+      );
+    }
   });
 
   test(`${name}: every zone that has a filter table also has an action table for the same zone`, () => {

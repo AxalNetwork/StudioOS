@@ -154,7 +154,6 @@ export default function FounderValidatePage() {
       <section className="validate-canvas">
         <div className="validate-main">
           <header className="validate-hero">
-            <div className="validate-eyebrow">Founder / Validate</div>
             <div className="validate-hero-line">
               <div><h1>Prove someone wants this</h1><p>Every interview, every pain, every hypothesis and the verdict they add up to — on one page.</p></div>
               <div className="validate-project-actions">

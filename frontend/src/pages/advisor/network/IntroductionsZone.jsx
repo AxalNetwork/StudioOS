@@ -5,6 +5,7 @@ import {
   NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading, ghostButtonClass,
 } from '../expertise/kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Network · Introductions — the propositions this advisor may answer.
@@ -84,8 +85,14 @@ function PropositionCard({ row, onAnswered }) {
   );
 }
 
-export default function IntroductionsZone() {
+export default function IntroductionsZone({ role = 'advisor', zoneFilters = null }) {
   const [state, setState] = useState({ loading: true, error: null, rows: [], credits: null });
+  // `Gated` renders as `Awaiting you`, and the relabel is the honest part: the
+  // canvas means the double opt-in, and this page can only see one side of it.
+  // The counterpart's consent is a separate `intro_propositions` row owned by
+  // `target_user_id`, which the response never returns. `status = 'pending'`
+  // means YOU have not answered, so the chip says that.
+  const [view, setView] = useState('all');
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -106,6 +113,10 @@ export default function IntroductionsZone() {
 
   const balance = state.credits?.balance;
 
+  const visible = view === 'all'
+    ? state.rows
+    : state.rows.filter((r) => String(r.status || '').toLowerCase() === view);
+
   return (
     <div className="space-y-6">
       <section>
@@ -119,8 +130,20 @@ export default function IntroductionsZone() {
             </span>
           )}
         />
+        {/* THE ROW IS HOISTED OUT OF `ZoneBody`, and only here. `ZoneBody`
+            renders `actions` above all four of its states, which is the right
+            guarantee — a header row is as true while the store is loading as
+            when rows are on screen — and this keeps it, one level up. What it
+            avoids is teaching `ZoneBody` about filters: a dozen Expertise and
+            Practice zones mount it, and giving it a `ZoneToolbar` would change
+            the row on every one of them for a change that belongs to three. */}
+        <ZoneToolbar
+          className="mb-3"
+          role={role}
+          filters={zoneFilters ? zoneFilters({ value: view, onChange: setView }) : []}
+          actions={advisorZoneActions('network/introductions', { view: { header: ['Counterpart', 'Role', 'Country', 'Headline', 'Status'], rows: visible, cells: (r) => [r.target?.name, r.target?.role, r.target?.country, r.target?.headline, r.status] } })}
+        />
         <ZoneBody
-          actions={advisorZoneActions('network/introductions', { view: { header: ['Counterpart', 'Role', 'Country', 'Headline', 'Status'], rows: state.rows, cells: (r) => [r.target?.name, r.target?.role, r.target?.country, r.target?.headline, r.status] } })}
           loading={state.loading}
           error={state.error}
           isEmpty={!state.rows.length}
@@ -135,7 +158,15 @@ export default function IntroductionsZone() {
             />
           )}
         >
-          {state.rows.map((r) => <PropositionCard key={r.uid} row={r} onAnswered={load} />)}
+          {/* A narrowed view that finds nothing says which view it is. The
+              empty state above asserts that nobody has proposed an
+              introduction, which stops being true the moment a chip is on. */}
+          {state.rows.length > 0 && visible.length === 0 && (
+            <p className="text-[12.5px] text-gray-600 dark:text-gray-300">
+              {`No introduction is in this state. ${state.rows.length} proposed to you in total.`}
+            </p>
+          )}
+          {visible.map((r) => <PropositionCard key={r.uid} row={r} onAnswered={load} />)}
         </ZoneBody>
       </section>
 

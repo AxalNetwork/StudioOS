@@ -7,6 +7,7 @@ import {
   ghostButtonClass, inputClass,
 } from '../expertise/kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Network · Relationships — the book, and the referrals beside it.
@@ -137,7 +138,7 @@ function ReferralRow({ row }) {
   );
 }
 
-export default function RelationshipsZone() {
+export default function RelationshipsZone({ role = 'advisor', zoneFilters = null }) {
   const [state, setState] = useState({ loading: true, error: null, rows: [], referrals: [] });
 
   const load = useCallback(async () => {
@@ -175,8 +176,24 @@ export default function RelationshipsZone() {
           title="Relationship book"
           blurb="Links between StudioOS accounts, strongest first. Both sides see the row."
         />
-        <ZoneBody
+        {/* THE ROW IS HOISTED OUT OF `ZoneBody`, and only here. `ZoneBody`
+            renders `actions` above all four of its states, which is the right
+            guarantee — a header row is as true while the store is loading as
+            when rows are on screen — and this keeps it, one level up. What it
+            avoids is teaching `ZoneBody` about filters: a dozen Expertise and
+            Practice zones mount it, and giving it a `ZoneToolbar` would change
+            the row on every one of them for a change that belongs to three. */}
+        <ZoneToolbar
+          className="mb-3"
+          role={role}
+          // `All` is the only live label on this licence's row: the other three
+          // name an owner, a provenance mark or an interaction date that
+          // `partner_relationships` does not carry. So the page reports the one
+          // view it has rather than holding a state that could never change.
+          filters={zoneFilters ? zoneFilters({ value: 'all' }) : []}
           actions={advisorZoneActions('network/relationships', { view: { header: ['Person', 'Email', 'Type', 'Status', 'Referred by', 'Referred org', 'Next step'], rows: state.rows, cells: (r) => [r.other?.name, r.other?.email, r.relationship_type, r.status, r.referred_name, r.referred_org, r.next_step] } })}
+        />
+        <ZoneBody
           loading={state.loading}
           error={state.error}
           isEmpty={!state.rows.length}

@@ -3,9 +3,11 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 /**
  * The partner profile's filter tables — the left half of the zone header row.
  *
- * SEVEN PARTNER ZONES CARRY A `filters:` ARRAY ON A CANVAS. Two are here; the
- * rest are listed in `profile_zone_filters.test.mjs`'s `excluded` set with a
- * reason, and move into this table one surface at a time.
+ * SEVEN PARTNER ZONES CARRY A `filters:` ARRAY ON A CANVAS. The four Research
+ * ones are here and so is `network/relationships`; `network/introductions` is
+ * listed in `profile_zone_filters.test.mjs`'s `excluded` set with a reason, and
+ * `network/organizations` never will be (below). The table fills one surface at
+ * a time.
  *
  * `/research/library` IS THE ONE ZONE WHERE THIS LICENCE GETS EVERYTHING THE
  * CANVAS DREW, out of the same component that gives founder one live chip out
@@ -44,7 +46,48 @@ const NO_ANSWER_RECORD =
 const ONE_SOURCE_ONLY =
   'every row in a brief comes from the founder’s grant and nothing records a note of the firm’s own against a client, so there is no second source to separate out';
 
+// `/network/relationships`. Two labels, one absent column, and the ops half of
+// this very row already names it — "no owner field is stored on a relationship".
+// These are the same sentence from the other side, so they share one note and
+// `groupFilterNotes` renders it once for both.
+const NO_OWNER_ON_A_RELATIONSHIP =
+  'no owner is stored on a relationship, so there is no assignment to bring forward and none to filter by';
+const NO_INTERACTION_DATE =
+  'no interaction date is stored on a relationship, so nothing can be called cold; the only history kept is that the row was created and edited';
+
+// `/network/introductions`. `Gated` IS RELABELLED because the canvas's word
+// means the double opt-in and this page can only see one side of it: the
+// counterpart's consent is a separate `intro_propositions` row owned by
+// `target_user_id`, which the response never returns. What `status = 'pending'`
+// actually means is that YOU have not answered, so the chip says that.
+//
+// `Made` is the same asymmetry, and the zone's own docblock already argues it:
+// `accepted` means you accepted and "cannot distinguish 'waiting on them' from
+// 'you are already connected'". No `connected` value exists — the CHECK on
+// `status` would reject one.
+const NO_CONNECTED_STATE =
+  'accepting is recorded per side, so this page knows that you accepted and not whether they did; no connected state exists to mark an introduction as made';
+
 export const PARTNER_ZONE_FILTERS = {
+  // ── Network ──────────────────────────────────────────────────────────────
+  // One live chip out of four, the same as advisor's and for the same reason:
+  // this licence reads `partner_relationships`, which carries a type and a
+  // strength score and nothing else. Founder's row on this zone runs all four,
+  // because founder relationships are `contacts`.
+  'network/relationships': [
+    { canvas: 'Unassigned first', note: NO_OWNER_ON_A_RELATIONSHIP },
+    { canvas: 'All', key: 'all' },
+    { canvas: 'By owner', note: NO_OWNER_ON_A_RELATIONSHIP },
+    { canvas: 'Going cold', note: NO_INTERACTION_DATE },
+  ],
+
+  'network/introductions': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Gated', key: 'pending', label: 'Awaiting you' },
+    { canvas: 'Made', note: NO_CONNECTED_STATE },
+    { canvas: 'Declined', key: 'declined' },
+  ],
+
   // ── Research ─────────────────────────────────────────────────────────────
   'research/client-prep': [
     { canvas: 'Full brief', key: 'all' },

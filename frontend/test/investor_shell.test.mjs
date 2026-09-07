@@ -245,9 +245,18 @@ test('an investor never gets two headings, two pill rows or two rails on one pag
   // test's own name half-describes: the page renders all three sections
   // stacked, so mounted without a slug it drew the identical body on all three
   // zone routes — one heading, but the wrong one on two of them.
+  // MATCHED AS TWO FACTS, NOT AS ONE LITERAL. This read
+  // `<InvestorNetworkWorkspace embedded zone={slug} />` including the closing
+  // slash, so it broke the moment the mount gained the filter builder — a test
+  // of formatting rather than of behaviour, which is the third one of those
+  // this workstream has had to loosen. What it defends is that the mount says
+  // `embedded` and passes the resolved slug; both are asserted, and any other
+  // prop may join them.
   const networkShell = codeOnly(read('frontend/src/workspaces/NetworkWorkspace.jsx'));
-  assert.match(networkShell, /<InvestorNetworkWorkspace embedded zone=\{slug\} \/>/,
-    'the Network shell must pass embedded and the zone slug');
+  const investorMount = networkShell.split('<InvestorNetworkWorkspace')[1] || '';
+  const investorProps = investorMount.slice(0, investorMount.indexOf('/>'));
+  assert.match(investorProps, /\bembedded\b/, 'the Network shell must pass embedded');
+  assert.match(investorProps, /\szone=\{slug\}/, 'the Network shell must pass the zone slug');
   assert.match(codeOnly(read('frontend/src/pages/investor/InvestorNetworkWorkspace.jsx')),
     /const shows = \(section\) => !known \|\| zone === section;/,
     'the investor Network page must narrow to the zone it was given');

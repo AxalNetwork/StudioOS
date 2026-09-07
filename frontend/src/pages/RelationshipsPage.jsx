@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Loader2, X, Award } from 'lucide-react';
 import { api } from '../lib/api';
 import { useEscapeClose } from '../components/useEscapeClose';
-import ZoneActions from '../workspaces/ZoneActions';
+import ZoneToolbar from '../workspaces/ZoneToolbar';
 
 const REL_TYPES = [
   { id: 'co_investor', label: 'Co-Investor', color: 'bg-emerald-100 text-emerald-700' },
@@ -22,7 +22,7 @@ const REL_TYPES = [
  * differ; `/relationships` passes nothing and gets nothing. See
  * `workspaces/zoneActionsByRole.js`.
  */
-export function RelationshipsPanel({ zoneActions }) {
+export function RelationshipsPanel({ zoneActions, zoneFilters = null, role = 'partner' }) {
   const [summary, setSummary] = useState(null);
   const [rels, setRels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +48,18 @@ export function RelationshipsPanel({ zoneActions }) {
 
   return (
     <div className="space-y-6">
-      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(rels)} />}
+      {(zoneActions || zoneFilters) && (
+        <ZoneToolbar
+          className="mb-3"
+          role={role}
+          // `All` is the only live label on this licence's row: the other three
+          // name an owner, a provenance mark or an interaction date that
+          // `partner_relationships` does not carry. So the page reports the one
+          // view it has rather than holding a state that could never change.
+          filters={zoneFilters ? zoneFilters({ value: 'all' }) : []}
+          actions={zoneActions ? zoneActions(rels) : []}
+        />
+      )}
       <p className="text-sm text-gray-600 dark:text-gray-400">Your partner graph and relationship strength.</p>
 
       {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded p-2 text-sm">{err}</div>}

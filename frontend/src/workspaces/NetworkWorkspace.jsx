@@ -5,6 +5,7 @@ import WorkspaceShell from './WorkspaceShell';
 import BucketOverview from './BucketOverview';
 import { bucketForPath, bucketTitle, zoneForPath } from './shellConfig';
 import { zoneActionsFor } from './zoneActionsByRole';
+import { zoneFiltersFor } from './zoneFiltersByRole';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
@@ -75,21 +76,37 @@ const ADVISOR_ZONE = {
 };
 
 /**
- * Organizations is a real zone only where an organisation store is reachable.
- * Founders read `contacts.organization`; the investor workspace has its own
- * section. An advisor is 403'd from `/api/contacts` and an operator's
- * `NetworkPage` has no organizations tab at all — so for those two the zone
- * reads nothing, and the rail has to say so rather than call it covered.
+ * WHICH LICENCES HAVE A BODY FOR ORGANIZATIONS — NOT WHICH HAVE A STORE.
+ *
+ * This set used to be documented as the second thing, here and in two other
+ * files, and the second thing has never been true of anybody. `contacts` has
+ * no `organization` column: the table is sixteen columns and the only three
+ * `ALTER TABLE contacts` in the repo add `promoted_ref_id`, `utm_json` and
+ * `referrer`, so the founder page's grouping key skips every row and its list
+ * is permanently empty. The investor side reaches `metadata.organization_name`
+ * on `partner_relationships`, a free-text JSON column that would accept one —
+ * and the only writer in the product sends `partner_id`, `relationship_type`
+ * and `strength_score`, so no row has ever carried it.
+ *
+ * What the set actually decides is whether a body renders at all. Founder and
+ * investor have one: a table, a stat block and prose that says plainly it found
+ * nothing and refuses to infer membership from email domains. An advisor is
+ * 403'd from `/api/contacts` — `'advisor'` is not even expressible in that
+ * guard's parameter type — and an operator's `NetworkPage` has no organizations
+ * tab, so on those two the zone is a card whose whole content is the gap. Both
+ * are honest; they are honest in different shapes, and this set names which.
  */
 const ORG_BACKED = new Set(['founder', 'investor']);
 
 /**
  * One line per zone, shared by the overview cards and the zone headers below
- * so the two cannot drift apart. Organizations is the one line that is not
- * true on every licence: an advisor is 403'd from `/api/contacts` and an
- * operator has no organizations tab, so on those licences the card says the
- * zone reads nothing rather than describing the roll-up it would perform —
- * `ORG_BACKED` is the same set the zone body and the rail already consult.
+ * so the two cannot drift apart. Organizations is the one line that describes
+ * an intention rather than a result: no licence stores a person-to-organisation
+ * edge, so the roll-up it names produces nothing anywhere. On founder and
+ * investor the body says so on the page, in its empty state and its stats and
+ * now in four and five header-row notes; on advisor and operator there is no
+ * body and the card carries the gap instead. `ORG_BACKED` is the same set the
+ * zone body and the rail consult, and it distinguishes those two shapes.
  */
 const INTRO = {
   relationships: 'People you know and how strongly, from the records you keep here.',
@@ -123,6 +140,22 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
   const slug = zone?.slug;
 
+  // The filter half of the canvas's header row, bound to the licence and the
+  // zone the URL names. A BOUND BUILDER, not a render prop: actions need only
+  // the rows, so `(rows) => items` works, but filters need `value` and
+  // `onChange`, which are the body's own state and cannot be supplied from
+  // here. So the body calls this with its state — the shape `ResearchWorkspace`
+  // established and D53 records.
+  //
+  // A body that is handed nothing draws nothing: `zoneFiltersFor` returns `[]`
+  // for a zone with no table entry, and `ZoneToolbar` renders exactly what
+  // `ZoneActions` did. That is what makes this step invisible on screen and the
+  // tables that follow it a per-zone decision rather than a big-bang one.
+  const zoneFilters = useMemo(
+    () => (slug ? (opts) => zoneFiltersFor(role, `network/${slug}`, opts) : null),
+    [role, slug],
+  );
+
   const body = useMemo(() => {
     if (isRoot) {
       return <NetworkOverview role={role} />;
@@ -135,11 +168,11 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     // is the same seam the advisor and investor arms below already had.
     if (role === 'founder') {
       const Zone = FOUNDER_ZONE[slug] || FounderNetworkRelationships;
-      return <Suspense fallback={<Loading />}><Zone embedded /></Suspense>;
+      return <Suspense fallback={<Loading />}><Zone embedded role={role} zoneFilters={zoneFilters} /></Suspense>;
     }
     if (role === 'advisor') {
       const Zone = ADVISOR_ZONE[slug] || AdvisorNetworkRelationships;
-      return <Suspense fallback={<Loading />}><Zone /></Suspense>;
+      return <Suspense fallback={<Loading />}><Zone role={role} zoneFilters={zoneFilters} /></Suspense>;
     }
     // `embedded`: this shell already supplies the heading, the zone row and
     // the rail. InvestorNetworkWorkspace draws all three of its own on
@@ -153,7 +186,11 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     // and the page did not. Passing the slug the shell has already resolved
     // narrows it to the one section the URL names.
     if (role === 'investor') {
-      return <Suspense fallback={<Loading />}><InvestorNetworkWorkspace embedded zone={slug} /></Suspense>;
+      return (
+        <Suspense fallback={<Loading />}>
+          <InvestorNetworkWorkspace embedded zone={slug} role={role} zoneFilters={zoneFilters} />
+        </Suspense>
+      );
     }
     // The partner (and operator) arm. `NetworkPage`'s panels are shared with
     // other licences, so the row comes in as a function of the tab and its rows
@@ -165,9 +202,23 @@ export default function NetworkWorkspace({ role = 'founder' }) {
     // stores. A header row would add nothing to a page that is entirely that
     // statement. (An earlier version of this comment said the route "lands on
     // contacts". It does not, and a partner has no contacts tab either.)
+    // THE TWO-ARGUMENT SIGNATURE STAYS, AND IT IS NOT AN INCONSISTENCY. Every
+    // other arm can bind the zone key from `slug`, because the slug IS what
+    // renders. This page decides for itself: `?tab=` wins over the path
+    // (`NetworkPage.jsx:53`), because notification deep links depend on it, so
+    // the panel on screen is not always the zone the shell resolved. Only the
+    // page knows which one it drew, so only the page can say which row it
+    // wants. `zoneFilters` takes the same shape for the same reason, and
+    // `NetworkPage` re-closes both into the one-argument form its panels speak.
     return (
       <Suspense fallback={<Loading />}>
-        <NetworkPage embedded zoneActions={(kind, rows) => (
+        {/* No `role` prop, deliberately: `NetworkPage` already destructures
+            `role` from `useAuth()`, and a prop of the same name would be a
+            duplicate declaration. It passes its own down to the panels. */}
+        <NetworkPage
+          embedded
+          zoneFilters={(kind, opts) => zoneFiltersFor(role, `network/${kind}`, opts)}
+          zoneActions={(kind, rows) => (
           kind === 'relationships'
             ? zoneActionsFor(role, 'network/relationships', { view: {
                 header: ['Person', 'Type', 'Status', 'Strength', 'Added'],
@@ -179,10 +230,11 @@ export default function NetworkWorkspace({ role = 'founder' }) {
                 rows,
                 cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source],
               } })
-        )} />
+          )}
+        />
       </Suspense>
     );
-  }, [role, slug, isRoot]);
+  }, [role, slug, isRoot, zoneFilters]);
 
   const orgGap = slug === 'organizations' && !ORG_BACKED.has(role);
 
