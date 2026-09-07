@@ -41,6 +41,13 @@ const NO_EXTRACTION_LAYER =
   'the update feed returns submitted values and narratives, never the extraction proposal behind them or the rules that would produce one';
 const NO_SUPPORT_LEDGER =
   'no value-add ledger exists, so no support entry, delivery state, hour or outcome is recorded against any company';
+// The third kind of reason, and the founder table never needed one. `Mine` is
+// not a gap and it is not live either: the board is ALREADY scoped, so a chip
+// would narrow nothing while appearing to, and "no owner is recorded" would be
+// flatly false — `lead_partner_id` is a column and `Unassigned` beside it reads
+// it. What is true is that the question has already been answered upstream.
+const ALREADY_MINE =
+  'every deal on this board is already one of yours; it loads only the deals you were invited to, committed to, or are a room member of';
 
 export const INVESTOR_ZONE_FILTERS = {
   // ── Fund ─────────────────────────────────────────────────────────────────
@@ -138,6 +145,27 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Delivered', note: NO_SUPPORT_LEDGER },
     { canvas: 'Outstanding', note: NO_SUPPORT_LEDGER },
     { canvas: 'By company', note: NO_SUPPORT_LEDGER },
+  ],
+
+  // ── Deals ────────────────────────────────────────────────────────────────
+  // FOUR OF THESE FIVE ARE LIVE, AND THREE OF THEM ARE NEW — which is the
+  // point. The board had no filter row at all, so the easy move was to call
+  // the whole thing unavailable. Reading the deal record instead:
+  // `lead_partner_id` is a column the list already selects, `days_in_stage` is
+  // computed and returned on every row, and a pass is `status = 'rejected'`
+  // written through `POST /api/deals/:id/pass` with a reason from a CHECKed
+  // enum. Three sentences saying "nothing is stored" would have been three
+  // false statements over data the page had already loaded.
+  //
+  // `Stale` reuses `slaBand` from `lib/dealFlow.js` rather than picking a
+  // number here: the thresholds are the canvas's own SLA presets, and one
+  // definition of "sat too long" for the whole product beats two.
+  'deals/pipeline': [
+    { canvas: 'All stages', key: 'all' },
+    { canvas: 'Mine', note: ALREADY_MINE },
+    { canvas: 'Unassigned', key: 'unassigned' },
+    { canvas: 'Stale', key: 'stale' },
+    { canvas: 'Passed', key: 'passed' },
   ],
 };
 

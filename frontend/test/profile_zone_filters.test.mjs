@@ -70,14 +70,27 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 7,
-    mounted: 7,
-    // Fund and Portfolio, so far. Every other canvas route, with why it is not
-    // here yet:
+    zones: 8,
+    mounted: 8,
+    // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
+    // it is not here yet:
     excluded: [
-      // Deals — next; its four routes now each render one zone, so the
-      // toolbar has an unambiguous header to sit in.
-      'deals/pipeline', 'deals/screening', 'deals/commit', 'deals/closing',
+      // Deals' three DECISION zones. Their canvas filters all describe LIST
+      // surfaces — `All decisions`, `Pass reasons`, `Documents` — and each of
+      // these three renders a single-record panel (`screeningRows[0]`,
+      // `grouped.commit[0]`, `grouped.closing[0]`). Filtering a one-record
+      // panel narrows nothing, so honouring these means building the lists the
+      // canvas draws, which is body work.
+      //
+      // AND THE EASY VERSION WOULD SHIP FOUR FALSE SENTENCES. Every "nothing
+      // is stored" note these zones would need was checked against the schema
+      // and is wrong: `ic_decisions` and `ic_votes` exist and `api.icList` is
+      // investor-callable (though it returns every decision in the system
+      // unscoped, which is its own problem); `dd_findings` carries a severity
+      // enum through `critical`; `api.dealDocuments(id)` is a method; and
+      // `pass_reason` is a stored, CHECKed taxonomy the pipeline zone now
+      // reads. A deferral that says so is worth more than a row that lies.
+      'deals/screening', 'deals/commit', 'deals/closing',
       // Network and Research are the shared surfaces. `NetworkWorkspace` and
       // `ResearchWorkspace` render these eight slugs for founder too, with
       // different labels per licence, and founder's halves are carved out of
@@ -294,11 +307,28 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       const page = mountingFile(profile, zone);
       if (!page) continue;
       mounted += 1;
-      // The mount itself is stripped first. Without that, writing
+      // Two things are stripped before the search, and both were found by
+      // mutation-checking rather than reasoned out.
+      //
+      // THE MOUNT. Without stripping it, writing
       // `founderZoneFilters('grow/customers', { value: 'stalled' })` would
       // satisfy the search for 'stalled' using nothing but the declaration
       // under test.
-      const code = codeOnly(page.src).replace(new RegExp(`${profile.call}\\([^;]*?\\)\\s*\\}`, 'gs'), '');
+      //
+      // THE ARGUMENTS OF `api.*` CALLS. `/deals/pipeline` loads
+      // `api.listDeals(undefined, 'mine')` — a constant the page passes on
+      // every load — and that alone let a DEAD `Mine` chip pass this
+      // assertion, which is the exact defect it exists to catch. A literal
+      // that appears only inside a request is the page asking the SERVER to
+      // narrow, unconditionally; it is not a view the reader can select. A
+      // genuinely server-filtered chip still passes, because the page has to
+      // hold the value in state to send it — and `useState('mine')` is not
+      // inside the call. `[^)]*` stops at the first `)`, so a nested call
+      // leaves its tail behind: stripping too little risks a false pass, and
+      // stripping too much would fail honest code.
+      const code = codeOnly(page.src)
+        .replace(new RegExp(`${profile.call}\\([^;]*?\\)\\s*\\}`, 'gs'), '')
+        .replace(/\bapi\.\w+\([^)]*\)/g, '');
       for (const row of rows) {
         if (!row.key) continue;
       // Either form counts: a page may compare (`period === 'six'`) or look up
