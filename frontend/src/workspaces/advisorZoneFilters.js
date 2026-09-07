@@ -6,10 +6,11 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * THE ADVISOR LICENCE SERVES EIGHT ZONES THAT CARRY A `filters:` ARRAY —
  * `/network/{relationships,introductions,organizations}` and
  * `/research/{ask,client-prep,markets,companies,library}`. All five Research
- * zones are here; the three Network ones are listed in
- * `profile_zone_filters.test.mjs`'s `excluded` set with the reason each is not
- * yet. The table fills one surface at a time, and the guard is what keeps that
- * honest: an exclusion cannot grow by accident and a stale one cannot linger.
+ * zones are here and so is `network/relationships`; `network/introductions` is
+ * listed in `profile_zone_filters.test.mjs`'s `excluded` set with the reason it
+ * is not yet, and `network/organizations` never will be (below). The table
+ * fills one surface at a time, and the guard is what keeps that honest: an
+ * exclusion cannot grow by accident and a stale one cannot linger.
  *
  * THIS LICENCE GETS THE MOST OUT OF `/research/library` AND THAT IS NOT A
  * COINCIDENCE. One component, one column, one write path serve four licences
@@ -58,7 +59,36 @@ const NO_COMPANY_ON_AN_ANALYSIS =
 const ONE_SOURCE_ONLY =
   'every row in a brief comes from the founder’s grant and nothing records a note of your own against a client, so there is no second source to separate out';
 
+// `/network/relationships`. The zone's own `StatedLimit` already states the
+// first of these in the page's voice — "No last touch, and therefore no 'going
+// cold' … there is no interaction date, no interaction count, and the only
+// history it keeps is that the row was created and edited" — so the note says
+// it once more only because a reader hunting for the canvas's word needs to
+// find it on the row.
+const NO_INTERACTION_DATE =
+  'no interaction date is stored on a relationship, so there is nothing to sort by age; the only history kept is that the row was created and edited';
+// The already-scoped kind of reason. `Mine` is not a gap: `partnernet.ts:233`
+// loads only rows the reader is one side of, so the chip would select the whole
+// list while implying a remainder that is not yours exists somewhere.
+const EVERY_ROW_IS_YOURS =
+  'every relationship here is already one of yours; the list loads only rows you are a party to, so this would select all of them';
+
 export const ADVISOR_ZONE_FILTERS = {
+  // ── Network ──────────────────────────────────────────────────────────────
+  // ONE LIVE CHIP OUT OF FOUR, and the three that fail do so for three
+  // different reasons — an absent column, a question already answered, and a
+  // provenance mark nothing writes. Grouping them into one sentence would tell
+  // a reader that the same thing is missing three times, which is not true.
+  'network/relationships': [
+    { canvas: 'Coldest first', note: NO_INTERACTION_DATE },
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Mine', note: EVERY_ROW_IS_YOURS },
+    {
+      canvas: 'From the Lab',
+      note: 'nothing marks a relationship as sourced from the Lab; a referral records a name and an organisation as free text, with no link back to an account',
+    },
+  ],
+
   // ── Research ─────────────────────────────────────────────────────────────
   // Nothing is written per question. `research.post('/ask')` searches, answers
   // and returns; the only per-question row anywhere is `ai_usage_logs`, which

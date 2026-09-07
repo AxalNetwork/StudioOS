@@ -48,6 +48,16 @@ const NO_SUPPORT_LEDGER =
 // it. What is true is that the question has already been answered upstream.
 const ALREADY_MINE =
   'every deal on this board is already one of yours; it loads only the deals you were invited to, committed to, or are a room member of';
+// `/network/relationships`, and all three failures are the same one column
+// short. `partner_relationships` is `partner_a_id, partner_b_id,
+// relationship_type, strength_score, metadata` and nothing else — no
+// counterpart role, no interaction date, no fund tie.
+const NO_COUNTERPART_ROLE =
+  'no relationship type names an investor-to-founder tie, and the payload carries the counterpart’s name and email without their role';
+const NO_LP_RELATIONSHIP =
+  'an LP register is kept against a fund rather than as a relationship, and this page never reads it';
+const NO_INTERACTION_DATE =
+  'no interaction date is stored on a relationship; the only history kept is that the row was created and edited';
 // `/research/ask` and `/research/library` are shared surfaces, so these two
 // read the same as founder's — deliberately. One component draws both rows, and
 // a reader moving between licences must not find one absence explained two
@@ -184,6 +194,23 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Unassigned', key: 'unassigned' },
     { canvas: 'Stale', key: 'stale' },
     { canvas: 'Passed', key: 'passed' },
+  ],
+
+  // ── Network ──────────────────────────────────────────────────────────────
+  // ONE LIVE CHIP OUT OF FIVE, from the same component that gives founder four
+  // out of four. Founder relationships read `contacts`; this licence reads
+  // `partner_relationships`, and the difference is the whole row.
+  //
+  // `Everyone` is the reset view rather than a claim — it selects what the page
+  // loaded, which is what the word means here. `Co-investors` is the one real
+  // narrowing: `relationship_type` is a CHECKed set and `co_investor` is a
+  // member of it.
+  'network/relationships': [
+    { canvas: 'Everyone', key: 'all' },
+    { canvas: 'Founders', note: NO_COUNTERPART_ROLE },
+    { canvas: 'Co-investors', key: 'coinvestors' },
+    { canvas: 'LPs', note: NO_LP_RELATIONSHIP },
+    { canvas: 'Going cold', note: NO_INTERACTION_DATE },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────

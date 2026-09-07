@@ -186,7 +186,11 @@ export default function RelationshipsZone({ role = 'advisor', zoneFilters = null
         <ZoneToolbar
           className="mb-3"
           role={role}
-          filters={zoneFilters ? zoneFilters({}) : []}
+          // `All` is the only live label on this licence's row: the other three
+          // name an owner, a provenance mark or an interaction date that
+          // `partner_relationships` does not carry. So the page reports the one
+          // view it has rather than holding a state that could never change.
+          filters={zoneFilters ? zoneFilters({ value: 'all' }) : []}
           actions={advisorZoneActions('network/relationships', { view: { header: ['Person', 'Email', 'Type', 'Status', 'Referred by', 'Referred org', 'Next step'], rows: state.rows, cells: (r) => [r.other?.name, r.other?.email, r.relationship_type, r.status, r.referred_name, r.referred_org, r.next_step] } })}
         />
         <ZoneBody

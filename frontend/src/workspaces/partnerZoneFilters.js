@@ -4,9 +4,10 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * The partner profile's filter tables — the left half of the zone header row.
  *
  * SEVEN PARTNER ZONES CARRY A `filters:` ARRAY ON A CANVAS. The four Research
- * ones are here; the three Network ones are listed in
- * `profile_zone_filters.test.mjs`'s `excluded` set with a reason, and move into
- * this table one surface at a time.
+ * ones are here and so is `network/relationships`; `network/introductions` is
+ * listed in `profile_zone_filters.test.mjs`'s `excluded` set with a reason, and
+ * `network/organizations` never will be (below). The table fills one surface at
+ * a time.
  *
  * `/research/library` IS THE ONE ZONE WHERE THIS LICENCE GETS EVERYTHING THE
  * CANVAS DREW, out of the same component that gives founder one live chip out
@@ -45,7 +46,28 @@ const NO_ANSWER_RECORD =
 const ONE_SOURCE_ONLY =
   'every row in a brief comes from the founder’s grant and nothing records a note of the firm’s own against a client, so there is no second source to separate out';
 
+// `/network/relationships`. Two labels, one absent column, and the ops half of
+// this very row already names it — "no owner field is stored on a relationship".
+// These are the same sentence from the other side, so they share one note and
+// `groupFilterNotes` renders it once for both.
+const NO_OWNER_ON_A_RELATIONSHIP =
+  'no owner is stored on a relationship, so there is no assignment to bring forward and none to filter by';
+const NO_INTERACTION_DATE =
+  'no interaction date is stored on a relationship, so nothing can be called cold; the only history kept is that the row was created and edited';
+
 export const PARTNER_ZONE_FILTERS = {
+  // ── Network ──────────────────────────────────────────────────────────────
+  // One live chip out of four, the same as advisor's and for the same reason:
+  // this licence reads `partner_relationships`, which carries a type and a
+  // strength score and nothing else. Founder's row on this zone runs all four,
+  // because founder relationships are `contacts`.
+  'network/relationships': [
+    { canvas: 'Unassigned first', note: NO_OWNER_ON_A_RELATIONSHIP },
+    { canvas: 'All', key: 'all' },
+    { canvas: 'By owner', note: NO_OWNER_ON_A_RELATIONSHIP },
+    { canvas: 'Going cold', note: NO_INTERACTION_DATE },
+  ],
+
   // ── Research ─────────────────────────────────────────────────────────────
   'research/client-prep': [
     { canvas: 'Full brief', key: 'all' },

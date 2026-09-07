@@ -237,6 +237,31 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Articles', note: 'no article or content record is connected to this startup' },
   ],
 
+  // ── Network ──────────────────────────────────────────────────────────────
+  // THE ONLY ZONE ON THIS SURFACE WHERE ALL FOUR LABELS RUN, and the reason is
+  // which store it reads. Founder relationships are `contacts`, which carries
+  // `audience` and `last_activity_at`; the other three licences read
+  // `partner_relationships`, which carries neither a role for the counterpart
+  // nor any interaction date. One canvas row, one component, and the licence
+  // that happens to sit on the right table gets four chips where advisor and
+  // partner get one.
+  //
+  // A MIGRATION, NOT NEW WORK. `.fn-rel-tabs` has rendered these four labels
+  // since the page shipped, over the same predicates named here. What moves is
+  // where the row lives; not one predicate changes.
+  //
+  // `Going cold` CARRIES A CAVEAT THIS TABLE CANNOT FIX. `last_activity_at` is
+  // stamped at creation, so a signup nobody has touched reads as going cold on
+  // its 61st day — which is exactly what the page's own note says it does not
+  // do. The predicate is the one that ships today and the chip is honest about
+  // what it selects; correcting the column is a write-path change.
+  'network/relationships': [
+    { canvas: 'Everyone', key: 'everyone' },
+    { canvas: 'Investors', key: 'investors' },
+    { canvas: 'Advisors', key: 'advisors' },
+    { canvas: 'Going cold', key: 'cold' },
+  ],
+
   // ── Research ─────────────────────────────────────────────────────────────
   // SHARED WITH THREE OTHER LICENCES, and that is why these entries exist here
   // rather than in one common table. `ResearchWorkspace` renders `AskZone` and

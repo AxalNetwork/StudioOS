@@ -52,7 +52,11 @@ export function RelationshipsPanel({ zoneActions, zoneFilters = null, role = 'pa
         <ZoneToolbar
           className="mb-3"
           role={role}
-          filters={zoneFilters ? zoneFilters({}) : []}
+          // `All` is the only live label on this licence's row: the other three
+          // name an owner, a provenance mark or an interaction date that
+          // `partner_relationships` does not carry. So the page reports the one
+          // view it has rather than holding a state that could never change.
+          filters={zoneFilters ? zoneFilters({ value: 'all' }) : []}
           actions={zoneActions ? zoneActions(rels) : []}
         />
       )}
