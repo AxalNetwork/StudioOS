@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Info } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 // Through `pages/partner/kit.jsx` rather than reaching into the advisor tree
 // and the operations kit separately — the same primitives, but `moneyUsd`
 // arrives under the name `moneyDollars`, which is the whole point of that file:
@@ -62,6 +63,14 @@ export default function PartnerPipelineAnalyticsZone() {
 
   return (
     <ZoneBody
+      // `Export chart` writes the by-shape rows the chart above is drawn from,
+      // not a picture of it: a CSV of the figures is the thing a reader can
+      // check, and it is what this zone actually holds.
+      actions={partnerZoneActions('pipeline/analytics', { view: {
+        header: ['Shape', 'Quotes', 'Won', 'Win rate %', 'Median cycle (days)', 'Won value'],
+        rows: shapes,
+        cells: (s) => [s.shape, s.quote_count, s.count, s.win_rate_pct, s.median_cycle_days, s.won_value],
+      } })}
       loading={state.loading}
       error={state.error}
       onRetry={load}

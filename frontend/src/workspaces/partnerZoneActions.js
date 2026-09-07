@@ -7,14 +7,6 @@ import { makeZoneActions } from './zoneActionBuilder';
  *
  * THREE BUCKETS ARE ABSENT FROM THIS TABLE AND NONE OF THEM IS AN OVERSIGHT.
  *
- *   `/pipeline` — `Pages · Partner Pipeline` specifies NO zone-header actions.
- *     It is a rendered export rather than a data canvas: five artboards, five
- *     headings, and its only `.gho` elements are inline card buttons ("Pass",
- *     "Edit terms", "See the hours") that sit in rows, not in a header. Adding
- *     actions to those five zones would mean inventing them, which is the exact
- *     failure the rest of this pass exists to avoid. Recorded in `ROUTE_MAP.md`
- *     and left alone until the canvas gains an `ops:` array.
- *
  *   `/network` — its three zones render `NetworkPage`, whose bodies are three
  *     further shared components (`RelationshipsPanel`, `IntroductionsPanel`,
  *     `ContactsPanel`) used by more than one licence. Threading a partner-only
@@ -93,6 +85,60 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Edit fit rules', unbuilt: 'rules are edited on the rule itself, below' },
     { label: 'Pass reasons', unbuilt: 'a pass reason is not a stored field on a fit rule' },
     { label: 'Export', kind: 'export' },
+  ],
+
+  // ── Pipeline ─────────────────────────────────────────────────────────────
+  // THE PARAGRAPH THAT USED TO STAND HERE WAS WRONG, and it is worth saying how
+  // rather than just deleting it. It read: "`/pipeline` — `Pages · Partner
+  // Pipeline` specifies NO zone-header actions … Adding actions to those five
+  // zones would mean inventing them", and it was believed for long enough that
+  // five zones shipped with no header row at all.
+  //
+  // The canvas specifies seven. It always has. `design/canvases/integrated/
+  // Pages · Partner Pipeline.dc.html` carries every one as `class="vm"`, and
+  // the newer export in `design/incoming/` is byte-identical on that point. The
+  // canvas is simply in a different shape from the others — no `PAGES` array,
+  // no `route:'…'`, no `ops:[…]` — and `canvasOps` in
+  // `frontend/test/profile_zone_actions.test.mjs` could only read the first
+  // shape. A guard that could not parse a file reported the file as empty, and
+  // this docblock repeated the guard back as if it were a fact about design.
+  // The reader now understands both shapes, so these five rows are held to the
+  // artboard exactly like every other zone's.
+  //
+  // Three of the seven run today; all three are exports, and every one of these
+  // zones already loads the rows an export would write. The other four each
+  // need a store that does not exist, named per entry.
+  'pipeline/leads': [
+    // Scoring a lead against what this firm can do needs a weight per
+    // capability and a capability register to hang it on. Neither is stored: a
+    // lead's fit is judged by the person reading it.
+    { label: 'Edit capability weights', unbuilt: 'no capability register is stored, and no weight against one, so there is nothing to edit' },
+  ],
+  'pipeline/proposals': [
+    // `opened_at` is the CLIENT'S column to set and no surface lets them, so
+    // "unopened" here means "we do not know" — the reading
+    // `delivery/deliverables` already documents. Nothing in this product sends
+    // mail either, so a bulk nudge has neither a trigger nor a set to act on.
+    { label: 'Bulk: nudge unopened', unbuilt: 'nothing here sends mail, and an unopened proposal means “we do not know” rather than “they ignored it”' },
+    { label: 'Export win/loss CSV', kind: 'export' },
+  ],
+  'pipeline/negotiations': [
+    // The canvas draws each lane as "n / 5". That 5 is the canvas's own sample
+    // figure, and adopting it would be inventing this firm's limit and then
+    // policing the board with it — the same call `delivery/capacity` makes
+    // about the hardcoded 40 it refuses to treat as a cap.
+    { label: 'WIP limit: 5 per stage', unbuilt: 'no per-stage limit is stored, and the canvas’s 5 is its own sample rather than this firm’s' },
+  ],
+  'pipeline/retainers': [
+    { label: 'Export MRR schedule', kind: 'export' },
+  ],
+  'pipeline/analytics': [
+    { label: 'Export chart', kind: 'export' },
+    // `research_benchmarks` (216/217) is owner-scoped and exists precisely to
+    // hold a figure WITH the source and sample the reader entered. Writing this
+    // firm's own win rate into it would put an unsourced number in a register
+    // built to refuse them.
+    { label: 'Save benchmark', unbuilt: 'the benchmark register stores a figure with the source and sample you entered, and this page has neither to give it' },
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────

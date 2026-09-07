@@ -109,13 +109,29 @@ const PROFILES = {
     zones: 26,
     mounted: 26,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.founder },
-    // EMPTY, AND THAT IS THE POINT OF THE LIST. Every canvas route on all five
-    // founder artboards now has a filter table. `research/{ask,library}` left
-    // when all four licences gained them in one commit; `network/organizations`
-    // left when the two licences that HAVE a body for it gained it — advisor
-    // and partner keep it excluded for a reason that is theirs and is stated in
-    // their own profiles, not because founder is waiting on them.
-    excluded: [],
+    // FOUR, AND THEY ARRIVED BY THE READER LEARNING TO SEE THEM. This note used
+    // to read "EMPTY … every canvas route on all five founder artboards now has
+    // a filter table", and the count was the parser's rather than the
+    // directory's: `/^Pages · Founder /` matches SIX files, and the sixth —
+    // `Pages · Founder Validate` — is a single artboard looped over a `boards`
+    // array, so a reader that only understood `route:'…'` found nothing in it
+    // and the list stayed empty by accident rather than by achievement.
+    //
+    // It specifies sixteen chips across its four zones and none of them is on
+    // screen: `FounderValidateWorkspace.jsx` imports `ZoneActions` and no
+    // `ZoneToolbar`, so all four zones ship an action row over an unfiltered
+    // list. That is a real gap, recorded here by name so it is re-checked on
+    // every run, and it is the work of building four filter tables and four
+    // narrowed row sets — not of this reader.
+    //
+    // The three that LEFT this list are still gone for their own reasons:
+    // `research/{ask,library}` when all four licences gained them in one
+    // commit; `network/organizations` when the two licences that HAVE a body
+    // for it gained it — advisor and partner keep it excluded for a reason that
+    // is theirs and is stated in their own profiles.
+    excluded: [
+      'validate/interviews', 'validate/pain-map', 'validate/hypotheses', 'validate/verdict',
+    ],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.
@@ -256,18 +272,72 @@ function canvasFilters(profile) {
   for (const dir of profile.canvasDirs || ['design/canvases/integrated']) {
     for (const file of readdirSync(resolve(root, dir)).filter((f) => profile.canvas.test(f))) {
       const src = read(`${dir}/${file}`);
-      for (const chunk of src.split(/route:\s*'/).slice(1)) {
-        const route = chunk.slice(0, chunk.indexOf("'"));
-        const filters = chunk.match(/filters:\s*fil\(\[([^\]]*)\]/);
-        if (!filters) continue;
-        out[profile.live(route)] = filters[1]
-          .split(',')
-          .map((one) => one.trim().replace(/^'|'$/g, ''))
-          .filter(Boolean);
-      }
+      const found = artboardFilters(src);
+      // PER FILE, THE WAY `profile_zone_actions.test.mjs` DOES IT, and for the
+      // reason found there: a canvas whose NAME matched and whose contents this
+      // reader could not parse contributed nothing and said nothing. Founder's
+      // regex is `/^Pages · Founder /`, which matches SIX files; the note beside
+      // its empty `excluded` list said "all five founder artboards", and the
+      // sixth — `Pages · Founder Validate` — was the one this reader could not
+      // open. A comment counted what the parser could see rather than what the
+      // directory holds, which is exactly the failure the count now forbids.
+      assert.ok(Object.keys(found).length,
+        `${dir}/${file} matched ${profile.canvas} and yielded no artboard — ` +
+        'it is in neither known shape, or one of them has changed');
+      for (const [route, labels] of Object.entries(found)) out[profile.live(route)] = labels;
     }
   }
   return out;
+}
+
+/**
+ * The two canvas shapes that declare filter chips.
+ *
+ * SHAPE A — a `PAGES` array: `route:'/research/library'` … `filters: fil([…])`.
+ * Every canvas this reader has ever opened uses it.
+ *
+ * SHAPE C — one templated artboard looped over a `boards` array in the canvas's
+ * own data block, where the route hides inside `sub:'violet · /validate/pain-map'`
+ * and the chips are `views(['All','Deck-eligible',…])`. `Pages · Founder
+ * Validate` is the only one, and until the assertion above it was invisible
+ * here: no `route:'…'` anywhere in the file, so the loop simply never ran.
+ *
+ * The pair is read PER BOARD rather than by zipping two whole-file matches, so
+ * a board that gains a `sub` and no `views` drops out instead of shifting every
+ * later board's chips onto the wrong route.
+ *
+ * `profile_zone_actions.test.mjs` knows a third shape — `sc-` markup with
+ * `class="vm"` ops, which is how `Pages · Partner Pipeline` states its actions.
+ * It is deliberately not here: no canvas in any filter profile's scope uses it,
+ * and a branch nothing exercises is a branch nobody notices breaking. A canvas
+ * in that shape entering scope trips the assertion above, which is the intended
+ * way to find out.
+ */
+function artboardFilters(src) {
+  const out = {};
+  if (/route:\s*'/.test(src)) {
+    for (const chunk of src.split(/route:\s*'/).slice(1)) {
+      const route = chunk.slice(0, chunk.indexOf("'"));
+      const filters = chunk.match(/filters:\s*fil\(\[([^\]]*)\]/);
+      if (!filters) continue;
+      out[route] = chips(filters[1]);
+    }
+    return out;
+  }
+  const boardsAt = src.search(/\bboards:\s*\[/);
+  if (boardsAt < 0) return out;
+  for (const board of src.slice(boardsAt).split(/\{ id:\s*'/).slice(1)) {
+    const route = board.match(/sub:\s*'[^']*?(\/[a-z0-9/-]+)'/);
+    const views = board.match(/views\(\[([^\]]*)\]\)/);
+    if (!route || !views) continue;
+    out[route[1]] = chips(views[1]);
+  }
+  return out;
+}
+
+/** `'All','Deck-eligible','Strong fit'` → the three labels. */
+function chips(list) {
+  return list.split(',').map((one) => one.trim().replace(/^'|'$/g, '')).filter(Boolean);
 }
 
 /**
@@ -715,6 +785,39 @@ test('canvasFilters maps a canvas route onto the route the router mounts', () =>
   assert.ok(!mapped['build/this-week'], 'the unmapped route survived');
   assert.deepEqual(mapped['x/build-this-week'], ['This week', 'Last 4', 'All 14', 'Carried only'],
     'remapping changed the labels it carries');
+});
+
+test('a matched canvas that yields no artboard fails the run', () => {
+  // The reader's own failure mode, exercised directly because nothing else can
+  // reach it: with both shapes understood, every canvas in every profile's
+  // scope parses, so the assertion inside `canvasFilters` has nothing left to
+  // catch and a mutation that deletes it passes the whole file. It had
+  // something to catch until this commit — `Pages · Founder Validate` matched
+  // founder's regex and contributed nothing — and it is what will catch the
+  // next canvas in a shape this reader does not know.
+  //
+  // The stand-in is a file in this very directory rather than a canvas,
+  // chosen because it can never drift into looking like one.
+  assert.throws(() => canvasFilters({
+    canvasDirs: ['frontend/test'],
+    canvas: /^_codeOnly\.mjs$/,
+    live: (route) => route,
+  }), /yielded no artboard/);
+});
+
+test('a looped canvas pairs each board with its own chips', () => {
+  // `Pages · Founder Validate` is one artboard drawn four times over a `boards`
+  // array, so its routes hide in `sub:` and its chips in `views([…])`. All four
+  // zones are in founder's `excluded` list, which means no table compares their
+  // labels to anything — the reader could hand every route the FIRST board's
+  // chips and every other assertion in this file would still pass. So the
+  // pairing is asserted here, on two boards, or it is not asserted at all.
+  const found = artboardFilters(read('design/canvases/integrated/Pages · Founder Validate.dc.html'));
+  assert.deepEqual(Object.keys(found).sort(),
+    ['/validate/hypotheses', '/validate/interviews', '/validate/pain-map', '/validate/verdict']);
+  assert.deepEqual(found['/validate/interviews'], ['All', 'Deck-eligible', 'Strong fit', 'Not ICP']);
+  assert.deepEqual(found['/validate/verdict'],
+    ['Current', 'As of last week', 'Changed this month', 'Retired claims']);
 });
 
 /**

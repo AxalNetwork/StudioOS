@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Unrecorded, Pill,
   StatCard, Section, Field, SaveNote, NotComputable, NoPartnerProfile,
@@ -374,6 +375,16 @@ export default function PartnerRetainersZone() {
 
   return (
     <ZoneBody
+      // The schedule is one row per retained engagement: what it bills, on what
+      // cadence, how much of the retained time is being used and when it comes
+      // up. A row with no retainer carries blanks rather than zeroes — an
+      // engagement without one is not an engagement billing nothing.
+      actions={partnerZoneActions('pipeline/retainers', { view: {
+        header: ['Client', 'Engagement', 'Amount (cents)', 'Cadence', 'Retained hours', 'Used', 'Utilisation %', 'Renews'],
+        rows: items,
+        cells: (r) => [r.founder_name, r.need_title, r.retainer?.amount_cents, r.retainer?.cadence,
+          r.retained_hours, r.hours_used, r.retainer?.utilisation_pct, r.retainer?.renews_at],
+      } })}
       loading={state.loading}
       error={state.error}
       onRetry={load}

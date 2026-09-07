@@ -144,7 +144,15 @@ function Loading() {
  */
 const LIVE = {
   '/pipeline': {
-    leads: (user) => <NeedsBoardPage user={user} embedded />,
+    // Leads is a shared page, so its zone actions arrive as a render prop the
+    // way Offers' catalog and perk-deals do. Proposals is the other half of
+    // `EngagementsPage`, which already calls the table directly for
+    // `/delivery/board` and now does the same for its own zone.
+    leads: (user) => <NeedsBoardPage user={user} embedded zoneActions={(rows) => partnerZoneActions('pipeline/leads', { view: {
+      header: ['Need', 'Category', 'Project', 'Budget min', 'Budget max', 'Timeline', 'Quotes'],
+      rows,
+      cells: (n) => [n.title, n.category, n.project_name, n.budget_min, n.budget_max, n.timeline, n.quote_count],
+    } })} />,
     proposals: () => <PartnerEngagements view="proposals" />,
     negotiations: () => <PartnerNegotiations />,
     retainers: () => <PartnerRetainers />,
