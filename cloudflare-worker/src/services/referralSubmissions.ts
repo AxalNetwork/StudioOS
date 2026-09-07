@@ -47,6 +47,26 @@ export const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
   'reward_issued', 'rejected', 'closed',
 ]);
 
+/**
+ * Statuses that mean review has not yet reached a verdict — the clock is still
+ * running. `more_info_needed` belongs here even though the ball is in the
+ * referrer's court: the review is not finished, and stopping the clock there
+ * would report a review time shorter than anyone waited.
+ */
+export const PRE_VERDICT_STATUSES: ReadonlySet<string> = new Set([
+  'draft', 'submitted', 'under_review', 'more_info_needed',
+]);
+
+/**
+ * The complement: a verdict exists, so the clock stops. DERIVED rather than
+ * typed out a second time — a status added to `STATUSES` lands here unless it
+ * is named above, and `referrals_contract.test.mjs` asserts every member of
+ * `PRE_VERDICT_STATUSES` is a real status, so a typo there cannot quietly move
+ * a status to the wrong side of the line.
+ */
+export const VERDICT_STATUSES: readonly string[] =
+  STATUSES.filter((s) => !PRE_VERDICT_STATUSES.has(s));
+
 export const CATEGORY_META: Record<Category, {
   name: string; priority: string; access: string; qualifies: string; reward: string;
 }> = {
@@ -283,6 +303,81 @@ export async function countsForReferrer(
     (byStatus.reward_eligible || 0) +
     (byStatus.reward_issued || 0);
   return { total, byStatus, converted, rewardIssued: byStatus.reward_issued || 0 };
+}
+
+/**
+ * Mean days from submission to a verdict — or `null` when nothing has one yet.
+ *
+ * WHY THIS EXISTS. `/referrals` printed a hard-coded `'5 days'` for "Avg. review
+ * time". Nothing measured it, and a figure nobody computes is not a statistic;
+ * it is a placeholder wearing a number's clothes. The data was already in D1:
+ * `referral_submissions.created_at` is when a referral arrived, and
+ * `referral_submission_events` writes one row per status change with its own
+ * `created_at`, so the EARLIEST event carrying a verdict status is the decision.
+ * Nothing read it. That is a wiring job, not a backend one.
+ *
+ * `null` rather than `0` when there is nothing to average, so the caller renders
+ * "Not recorded" instead of claiming every review finished the same day.
+ *
+ * Two deliberate choices about where the work happens:
+ *
+ *   · The averaging is NOT `AVG(julianday(a) - julianday(b))`. That would be one
+ *     round trip, but no query in this worker uses `julianday` today, and a date
+ *     function nothing else depends on is a poor thing to rest a user-visible
+ *     number on. Per-referrer row counts are tens, not thousands.
+ *
+ *   · The status filter is NOT an `IN (…)` list. Building one means interpolating
+ *     placeholders into `DB.prepare()`, which `scripts/check-sql-prepare.mjs`
+ *     rejects — rightly, even for a string of `?` marks, because the guard
+ *     cannot tell a safe interpolation from an unsafe one and an argued
+ *     exception in its baseline is a permanent cost for a one-off convenience.
+ *     The SQL below is wholly literal, and "which statuses count as a verdict"
+ *     stays in one place: next to the constant that defines it.
+ */
+export async function avgReviewDaysForReferrer(
+  env: Env,
+  userId: number,
+): Promise<number | null> {
+  const res = await env.DB.prepare(
+    `SELECT s.id AS submission_id, s.created_at AS submitted_at,
+            e.status AS event_status, e.created_at AS event_at
+       FROM referral_submissions s
+       JOIN referral_submission_events e ON e.submission_id = s.id
+      WHERE s.referrer_user_id = ?`,
+  ).bind(userId).all<{
+    submission_id: number;
+    submitted_at: string | null;
+    event_status: string | null;
+    event_at: string | null;
+  }>();
+
+  // D1 writes `CURRENT_TIMESTAMP` as `YYYY-MM-DD HH:MM:SS` with no zone marker,
+  // which `Date.parse` would read as LOCAL time. Both ends are stamped UTC, so
+  // both are read as UTC.
+  const at = (raw: string | null): number =>
+    Date.parse(`${(raw ?? '').replace(' ', 'T')}Z`);
+
+  const verdict = new Set(VERDICT_STATUSES);
+  /** submission id → { submitted, earliest verdict } */
+  const perSubmission = new Map<number, { from: number; to: number }>();
+
+  for (const row of res.results || []) {
+    if (!row.event_status || !verdict.has(row.event_status)) continue;
+    const from = at(row.submitted_at);
+    const to = at(row.event_at);
+    if (!Number.isFinite(from) || !Number.isFinite(to)) continue;
+    // A verdict stamped before the submission it belongs to is impossible in
+    // the write path, so it is corrupt rather than fast. Averaging it in would
+    // drag a real figure toward a lie.
+    if (to < from) continue;
+    const seen = perSubmission.get(row.submission_id);
+    if (!seen || to < seen.to) perSubmission.set(row.submission_id, { from, to });
+  }
+
+  if (!perSubmission.size) return null;
+  let sum = 0;
+  for (const { from, to } of perSubmission.values()) sum += (to - from) / 86_400_000;
+  return sum / perSubmission.size;
 }
 
 export async function hasStrategicAccess(env: Env, userId: number): Promise<boolean> {

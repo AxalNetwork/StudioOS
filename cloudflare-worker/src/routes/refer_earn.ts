@@ -24,6 +24,7 @@ import {
   STATUS_LABELS,
   CSV_IMPORT_LIMIT,
   ReferralError,
+  avgReviewDaysForReferrer,
   type Category,
 } from '../services/referralSubmissions';
 
@@ -97,6 +98,7 @@ refer.get('/overview', async (c) => {
   const { code, legacy } = await ensureReferralCode(c.env, user.id);
   const counts = await countsForReferrer(c.env, user.id);
   const strategic = await strategicAccessState(c.env, user.id);
+  const avgReviewDays = await avgReviewDaysForReferrer(c.env, user.id);
 
   return c.json({
     referral_code: code,
@@ -116,6 +118,10 @@ refer.get('/overview', async (c) => {
       reward_issued: counts.rewardIssued,
       by_status: counts.byStatus,
     },
+    // Mean days from submission to a verdict, or NULL when nothing has one yet.
+    // Null is the honest answer and the page renders it as "Not recorded" —
+    // this replaces a hard-coded '5 days' that no query ever produced.
+    avg_review_days: avgReviewDays,
     status_labels: STATUS_LABELS,
   });
 });
