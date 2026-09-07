@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, Pill } from '../../ui';
+import { Card, Pill, Stat } from '../../ui';
 import { api } from '../../lib/api';
 import {
-  NothingYet, StatedLimit, ZoneBody, ZoneHeading, buttonClass, inputClass,
+  NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading, buttonClass, inputClass,
 } from '../advisor/expertise/kit';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 
@@ -34,6 +34,14 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
  * differ, so the caller — which knows the role — decides what the row says, and
  * this page renders whatever it is handed. See `workspaces/zoneActionsByRole.js`.
  */
+// WHICH LICENCES DRAW THE STAT STRIP, and the rule is not about the licence —
+// it is about whether any tile in it is real. Advisor's and partner's artboards
+// open with `Indexed documents`, which `api.research.documents()` already
+// returns; founder's and investor's four tiles are all downstream of a session
+// store that does not exist, so they get one sentence instead of four empty
+// tiles. Add a licence here only when its first tile has a source.
+const ASK_STRIP_LICENCES = new Set(['advisor', 'partner']);
+
 export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
@@ -65,6 +73,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
 
   const payload = lib.payload;
   const indexed = payload?.indexed ?? 0;
+  const items = Array.isArray(payload?.items) ? payload.items : [];
 
   return (
     <div className="space-y-4">
@@ -85,6 +94,52 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
           </Pill>
         ) : null}
       />
+
+      {/* THE CANVAS'S STAT STRIP, AND THE ONE PLACE THIS ZONE DOES NOT DRAW IT.
+          Every artboard gives a research zone four tiles. Advisor's and
+          partner's ask for `Indexed documents`, `Answered`, `No source` and
+          `Session spend`; founder's and investor's for `Questions asked`,
+          `Answers kept` and two per-question costs.
+
+          On advisor and partner the FIRST tile is real — `api.research.
+          documents()` is already loaded above for the empty state — so the
+          strip is drawn and the other three say `Not recorded` in words, which
+          is the treatment `LibraryZone` established.
+
+          On founder and investor NOT ONE of the four is real: all four are
+          downstream of a session store that does not exist. `research.post
+          ('/ask')` searches, answers and returns; the only per-question row
+          anywhere is `ai_usage_logs`, which holds token counts and no question
+          text. Four tiles reading `Not recorded` would say one thing four
+          times — the same reason `LibraryZone` omits a column that would be
+          `Not recorded` on every row. So those two licences get the sentence
+          instead, naming all four labels once. `groupFilterNotes` does exactly
+          this in the header row above, for exactly this reason. */}
+      {ASK_STRIP_LICENCES.has(role) ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat
+            label="Indexed documents"
+            value={payload ? indexed : undefined}
+            note={payload ? `of ${items.length} in your library` : 'library not read'}
+          />
+          <Stat label="Answered" value="Not recorded" mono={false}
+            note="no session history is stored, so answers are not counted across questions" />
+          <Stat label="No source" value="Not recorded" mono={false}
+            note="the same missing history — a refusal is shown once and never tallied" />
+          <Stat label="Session spend" value="Not recorded" mono={false}
+            note="token counts are logged per call and are never priced back to a question" />
+        </div>
+      ) : (
+        <StatedLimit>
+          The canvas puts four figures here — Questions asked, Answers kept,
+          First-pass cost and Follow-up cost — and all four count the same
+          thing this page does not keep: a session. A question is searched,
+          answered and returned; nothing records the question, the answer or
+          what you did with it, and the only per-call row anywhere holds token
+          counts with no question text. Four tiles reading “Not recorded” would
+          state one absence four times, so it is stated once.
+        </StatedLimit>
+      )}
 
       <ZoneBody
         loading={lib.loading}
@@ -187,6 +242,70 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                 </li>
               ))}
             </ul>
+          </Card>
+        )}
+
+        {/* THE ARTBOARD'S INSTRUMENT CARD, and it is the one part of Ask's
+            canvas structure that is fully sourced today. The advisor and
+            partner artboards specify `What Ask can reach` with the columns
+            `Document / Kind / Added / Index state / In Ask` — every one of
+            which is a field `api.research.documents()` already returns and
+            this page has already fetched for its empty state. Nothing new is
+            called to draw it.
+
+            Founder's and investor's artboards ask for a `Session history`
+            table instead — `Question / Drew on / Cost / What you did with it`
+            — over rows nothing writes. That one is not drawn, for the reason
+            the strip above states once. */}
+        {ASK_STRIP_LICENCES.has(role) && items.length > 0 && (
+          <Card className="p-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="text-[13px] font-extrabold tracking-tight">What Ask can reach</h3>
+              <span className="text-[11px] text-axal-ink-3">Reads over the library and nothing else</span>
+            </div>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-left text-[12px]">
+                <thead>
+                  <tr className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-ink-3">
+                    <th className="pb-2 pr-3 font-extrabold">Document</th>
+                    <th className="pb-2 pr-3 font-extrabold">Kind</th>
+                    <th className="pb-2 pr-3 font-extrabold">Added</th>
+                    <th className="pb-2 pr-3 font-extrabold">Index state</th>
+                    <th className="pb-2 font-extrabold">In Ask</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((d) => (
+                    <tr key={d.uid} className="border-t border-axal-border-soft">
+                      <td className="py-2 pr-3">{d.title || <Unrecorded>Untitled</Unrecorded>}</td>
+                      <td className="py-2 pr-3 capitalize">{d.kind || <Unrecorded>Not recorded</Unrecorded>}</td>
+                      {/* `Added`, not the canvas's own column name for this
+                          slot. It means when the file arrived here, which is
+                          what `created_at` holds — the same relabel
+                          `LibraryZone` made for the same reason. */}
+                      <td className="py-2 pr-3">
+                        {String(d.created_at || '').slice(0, 10) || <Unrecorded>Not recorded</Unrecorded>}
+                      </td>
+                      <td className="py-2 pr-3">
+                        {d.index_state === 'indexed'
+                          ? 'Indexed'
+                          : <Unrecorded>{d.index_state || 'Not indexed'}</Unrecorded>}
+                      </td>
+                      {/* The question this zone exists to answer, per row.
+                          `index_state`, not `chunk_count`: a document that
+                          indexed once and later failed a re-index keeps its old
+                          count, and the failure path updates the state and
+                          leaves the number alone. */}
+                      <td className="py-2">
+                        {d.index_state === 'indexed'
+                          ? 'Answerable'
+                          : <Unrecorded>Not answerable</Unrecorded>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Card>
         )}
       </ZoneBody>

@@ -2894,3 +2894,69 @@ external funds still needs a licensed source and still is not being built; D9's
 table row `| funds | none | no data source → D9 |` remains true of the thing it
 describes. The two objects share a path and nothing else.
 
+
+---
+
+## D56 — Ask draws the canvas strip on two licences and refuses it on two, because the licences do not share a first tile
+
+**Date:** 2026-09-07 · **Reverses in part:** the judgement recorded in
+`77f53bf28` · **Follows:** D37, D51
+
+`77f53bf28` gave `/research/library` its canvas structure — the four-tile stat
+strip and the instrument card — and argued in the same commit that
+`/research/ask` should **not** get the same treatment:
+
+> Four empty tiles and an empty table would restate one absence five more times.
+
+That is right, and it is right about only half the product. It was written
+looking at the founder and investor artboards, where it still holds exactly.
+The advisor and partner artboards specify a different Ask zone, and the
+difference is the first tile.
+
+**Where the original judgement stands, unchanged.** Founder's and investor's
+four tiles — `Questions asked`, `Answers kept`, a first-pass cost and a
+follow-up cost — and their whole `Session history` table are downstream of one
+missing thing: a stored session. `research.post('/ask')` searches, answers and
+returns; the only per-question row anywhere in the product is `ai_usage_logs`,
+which holds token counts and no question text. Four tiles reading "Not
+recorded" would state one absence four times, and a table whose every row is
+"Not recorded" is what D51 and the Library rule already forbid. So those two
+licences get **one sentence naming all four tiles**, and neither strip nor
+table. `groupFilterNotes` does the same thing in the header row directly above,
+for the same reason.
+
+**Where it does not stand.** Advisor's and partner's strip opens with `Indexed
+documents`, and their instrument card is `What Ask can reach` —
+`Document / Kind / Added / Index state / In Ask`. Every one of those is a field
+`api.research.documents()` already returns, and `AskZone` has already fetched
+that payload for its own empty state. Nothing new is called to draw either. So
+the strip is real in its first tile with three stated gaps below it, which is
+the Library treatment exactly, and the card answers the question the zone
+exists to answer: *which of my documents can Ask actually see.*
+
+Refusing to draw them on the strength of an argument about tiles that are not
+on this artboard would hide a sourced table behind a judgement made elsewhere.
+
+**The rule this leaves behind, which is not about licences.** A zone draws its
+canvas strip when **at least one tile in it has a store**; the rest then say
+"Not recorded" in words. A strip with no real tile is a sentence instead. That
+is why `ASK_STRIP_LICENCES` is one named constant gating both the strip and the
+card rather than two role tests — the two surfaces answer the same question and
+must not be able to drift apart. `research_zones.test.mjs` pins the constant,
+its two uses, the absence of any bare role comparison, each tile at its own
+`/>`, and the card's five columns.
+
+**`In Ask` reads `index_state`, never `chunk_count`.** A document that indexed
+once and later failed a re-index keeps its old passage count — the failure path
+writes the state and leaves the number alone — so the count would call a
+document answerable that Ask cannot see. The guard bans `d.chunk_count` in that
+card.
+
+**Still out of scope, and named so it is not mistaken for an oversight.** The AI
+proposal card (`aiLabel` / `aiCost` / `aiBody` / `aiAccept` / `aiFoot`) appears
+in ten artboard specs and is rendered nowhere under `pages/research/`; wiring it
+means binding each zone to an aiRouter task class, which is a registration
+decision rather than a layout one. Same for Ask's advisor/partner `.meter`, the
+`.askbar` cost line, `.thread`, and the `scope` chip — `ZoneHeading` has no prop
+for it. A session store for Ask is a migration, and a migration is a decision:
+it is raised here, not built around.

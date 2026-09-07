@@ -200,3 +200,149 @@ test('the library lists documents as the canvas’s named columns', () => {
   assert.match(code, /<div className="overflow-x-auto">/,
     'the table must scroll inside its own container, never the page');
 });
+
+/**
+ * Ask's canvas structure, and the one judgement in C9 that reverses a recorded
+ * one.
+ *
+ * `77f53bf28` — the commit that gave Library this treatment — argued in writing
+ * that Ask should NOT get it: "Four empty tiles and an empty table would
+ * restate one absence five more times." That reasoning was right about the
+ * licences it was looking at and wrong about the other two, and the split is
+ * what these tests hold still.
+ *
+ * On FOUNDER and INVESTOR it stands. All four of their canvas tiles —
+ * `Questions asked`, `Answers kept`, and two per-question costs — and their
+ * whole `Session history` table are downstream of one missing thing: a stored
+ * session. `research.post('/ask')` searches, answers and returns; the only
+ * per-call row in the product is `ai_usage_logs`, holding token counts with no
+ * question text. So those two licences state the absence once, in a sentence,
+ * and draw neither strip nor table.
+ *
+ * On ADVISOR and PARTNER it does not stand, because their artboards open with a
+ * different first tile. `Indexed documents` and the whole `What Ask can reach`
+ * table are fields `api.research.documents()` already returns and this page has
+ * already fetched for its empty state. A real strip with three stated gaps is
+ * the Library treatment exactly; refusing to draw it would hide a table that
+ * answers the zone's own question — which of my documents can Ask actually
+ * see — behind an argument about tiles that are not on this artboard.
+ */
+test('the ask strip and table are drawn only where their first tile is real', () => {
+  const code = codeOnly(ask);
+  // THE SET, NOT A ROLE TEST INLINE. One named constant gates both surfaces,
+  // so the strip and the table can never disagree about which licence they are
+  // for — which is the drift a second `role === 'advisor'` further down the
+  // file would introduce silently.
+  assert.match(code, /const ASK_STRIP_LICENCES = new Set\(\['advisor', 'partner'\]\)/,
+    'the licence set that gates Ask’s canvas structure is gone or has changed shape');
+  assert.equal((code.match(/ASK_STRIP_LICENCES\.has\(role\)/g) || []).length, 2,
+    'exactly two surfaces are gated: the stat strip and the instrument card');
+  // Founder and investor must reach neither, and must not do so by accident:
+  // the only role comparisons in this file are the set above.
+  assert.doesNotMatch(code, /role === '(founder|investor|advisor|partner)'/,
+    'a bare role comparison would let one surface drift from the other');
+});
+
+test('ask draws the advisor/partner strip, and three of its four tiles say they have no source', () => {
+  // `Pages · {Advisor,Partner} Research`'s Ask artboard: `Indexed documents`,
+  // `Answered`, `No source`, `Session spend`, in that order.
+  const code = codeOnly(ask);
+  assert.match(code, /<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">/,
+    'the four-stat strip the advisor and partner canvases draw is gone');
+
+  // Bounded at each tile's own `/>`, and split on `/<Stat\s/` — both for the
+  // reasons the library block above pays for in full. `<StatedLimit` twice in
+  // this file is exactly the trap the `\s` avoids.
+  const tiles = Object.fromEntries(code.split(/<Stat\s/).slice(1).map((segment) => {
+    const tile = segment.slice(0, segment.indexOf('/>'));
+    return [tile.match(/label="([^"]+)"/)?.[1], tile];
+  }));
+  assert.deepEqual(
+    Object.keys(tiles),
+    ['Indexed documents', 'Answered', 'No source', 'Session spend'],
+    'the strip is no longer the advisor/partner canvas’s four tiles, in its order',
+  );
+  for (const label of ['Answered', 'No source', 'Session spend']) {
+    assert.match(tiles[label], /value="Not recorded"/,
+      `${label} counts across a session that is not stored and must say "Not recorded"`);
+    assert.doesNotMatch(tiles[label], /value=\{/,
+      `${label} has no source, so any expression in its value is a modelled figure`);
+  }
+  // And the true tile reads the payload actually loaded — a strip whose one
+  // real figure is decorative is worse than no strip.
+  assert.match(tiles['Indexed documents'], /value=\{payload \? indexed : undefined\}/,
+    'the Indexed documents tile no longer reads the library payload');
+});
+
+test('founder and investor get the absence once, naming all four tiles they lose', () => {
+  // The four labels, said in the sentence rather than drawn as four tiles that
+  // would each read "Not recorded". If a session store ever lands, this
+  // sentence is what has to change — so it names what it is standing in for.
+  const code = codeOnly(ask);
+  const limit = code.slice(code.indexOf('<StatedLimit>'), code.indexOf('</StatedLimit>'));
+  assert.ok(limit.length > 0 && limit.length < 1200, 'the stated-limit slice must not run away');
+  for (const label of ['Questions asked', 'Answers kept', 'First-pass cost', 'Follow-up cost']) {
+    assert.ok(limit.includes(label),
+      `the sentence must name "${label}" — it is standing in for that tile`);
+  }
+  assert.match(limit, /session/i,
+    'the sentence must name the one missing thing all four tiles are downstream of');
+  // The founder/investor `Session history` table is NOT drawn. A table whose
+  // every row would be "Not recorded" is what the library rule already forbids.
+  //
+  // BANNING THE PHRASE IS THE WRONG PROBE, and this assertion failed as one
+  // first. `codeOnly` deliberately keeps indented `{/* */}` comments — its own
+  // docblock explains why a naive stripper is worse — and the comment above the
+  // instrument card names `Session history` precisely to say it is not drawn.
+  // So the probe is the rendered thing: one `<table>` in the whole file, which
+  // the test above has already pinned to the licence-gated card, and none of
+  // the session table's own column headings anywhere.
+  assert.equal((code.match(/<table/g) || []).length, 1,
+    'a second table in this file is the session history the sentence above says is not kept');
+  for (const head of ['Drew on', 'What you did with it']) {
+    assert.ok(!code.includes(`>${head}<`),
+      `"${head}" is a session-history column and nothing writes a row for it`);
+  }
+});
+
+test('the ask instrument card lists documents as its canvas’s named columns', () => {
+  // `What Ask can reach` — `Document / Kind / Added / Index state / In Ask`.
+  // `Added` is the same deliberate relabel the library made: the canvas's slot
+  // means the source's own date, `created_at` is when the file arrived here.
+  const code = codeOnly(ask);
+  // SLICED FROM THE RENDERED HEADING, not the first mention of it. The comment
+  // above the card names the title and all five columns while explaining where
+  // they come from, so `indexOf('What Ask can reach')` lands in prose and every
+  // column below would then be checked against the sentence describing them.
+  assert.match(code, /<h3 className="[^"]*">What Ask can reach<\/h3>/,
+    'the advisor/partner instrument card is gone');
+  const card = code.slice(code.indexOf('What Ask can reach</h3>'));
+  for (const head of ['Document', 'Kind', 'Added', 'Index state', 'In Ask']) {
+    assert.ok(card.includes(`>${head}<`), `the instrument card lost its "${head}" column`);
+  }
+  assert.equal((code.match(/<div className="mt-3 overflow-x-auto">/g) || []).length, 1,
+    'the table must scroll inside its own container, never the page');
+});
+
+test('“In Ask” is derived from the index state, never from a stale passage count', () => {
+  // The zone's own question, per row. `chunk_count` is the tempting source and
+  // the wrong one: a document that indexed once and later failed a re-index
+  // keeps its old count, because the failure path writes the state and leaves
+  // the number alone. Reading the count would call that document answerable
+  // when Ask cannot see it.
+  const code = codeOnly(ask);
+  // From the rendered heading, for the reason the test above gives: the comment
+  // that names `chunk_count` to rule it out sits ABOVE the card.
+  const card = code.slice(code.indexOf('What Ask can reach</h3>'));
+  assert.match(card, /d\.index_state === 'indexed'\s*\?\s*'Answerable'/,
+    'the In Ask column must read the index state');
+  assert.match(card, /<Unrecorded>Not answerable<\/Unrecorded>/,
+    'a document Ask cannot see must read as unrecorded, not as a blank cell');
+  // `d.chunk_count`, not the bare token. The comment ruling the field out sits
+  // INSIDE this card — it is the comment worth keeping — and the field is only
+  // reachable off the row object, so the property access is the code form and
+  // the backticked name in prose is not. Banning the bare token here would ban
+  // the explanation rather than the behaviour.
+  assert.doesNotMatch(card, /d\.chunk_count/,
+    'chunk_count survives a failed re-index and would call an unreachable document answerable');
+});
