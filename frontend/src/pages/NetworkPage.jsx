@@ -34,8 +34,16 @@ import PartnerWorkspaceShell from './partner/PartnerWorkspaceShell';
  * `zoneActions` is forwarded, not interpreted: the caller hands this page a
  * `(zone, rows) => items` function and it calls it with whichever panel is on
  * screen. `/network` for an operator passes nothing and gets nothing.
+ *
+ * `zoneFilters` takes the same two-argument shape, and the reason is the same
+ * one that made `zoneActions` two-argument: `?tab=` wins over the path below,
+ * because notification deep links depend on it, so the panel on screen is not
+ * always the zone the shell resolved. The caller cannot know which row to
+ * build; this page can, and re-closes both into the one-argument form the
+ * panels speak. `role` is NOT a prop — it comes from `useAuth()` below, and a
+ * prop of that name would be a duplicate declaration.
  */
-export default function NetworkPage({ embedded = false, zoneActions = null }) {
+export default function NetworkPage({ embedded = false, zoneActions = null, zoneFilters = null }) {
   const { role } = useAuth();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
@@ -144,8 +152,8 @@ export default function NetworkPage({ embedded = false, zoneActions = null }) {
       )}
 
       {!unservedAlone && activeTab === 'contacts' && canContacts && <ContactsPanel />}
-      {!unservedAlone && activeTab === 'introductions' && <IntroductionsPanel zoneActions={zoneActions && ((rows) => zoneActions('introductions', rows))} />}
-      {!unservedAlone && activeTab === 'relationships' && <RelationshipsPanel zoneActions={zoneActions && ((rows) => zoneActions('relationships', rows))} />}
+      {!unservedAlone && activeTab === 'introductions' && <IntroductionsPanel role={role} zoneActions={zoneActions && ((rows) => zoneActions('introductions', rows))} zoneFilters={zoneFilters && ((opts) => zoneFilters('introductions', opts))} />}
+      {!unservedAlone && activeTab === 'relationships' && <RelationshipsPanel role={role} zoneActions={zoneActions && ((rows) => zoneActions('relationships', rows))} zoneFilters={zoneFilters && ((opts) => zoneFilters('relationships', opts))} />}
     </div>
   );
 

@@ -5,6 +5,7 @@ import {
   NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading, ghostButtonClass,
 } from '../expertise/kit';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Network · Introductions — the propositions this advisor may answer.
@@ -84,7 +85,7 @@ function PropositionCard({ row, onAnswered }) {
   );
 }
 
-export default function IntroductionsZone() {
+export default function IntroductionsZone({ role = 'advisor', zoneFilters = null }) {
   const [state, setState] = useState({ loading: true, error: null, rows: [], credits: null });
 
   const load = useCallback(async () => {
@@ -119,8 +120,20 @@ export default function IntroductionsZone() {
             </span>
           )}
         />
-        <ZoneBody
+        {/* THE ROW IS HOISTED OUT OF `ZoneBody`, and only here. `ZoneBody`
+            renders `actions` above all four of its states, which is the right
+            guarantee — a header row is as true while the store is loading as
+            when rows are on screen — and this keeps it, one level up. What it
+            avoids is teaching `ZoneBody` about filters: a dozen Expertise and
+            Practice zones mount it, and giving it a `ZoneToolbar` would change
+            the row on every one of them for a change that belongs to three. */}
+        <ZoneToolbar
+          className="mb-3"
+          role={role}
+          filters={zoneFilters ? zoneFilters({}) : []}
           actions={advisorZoneActions('network/introductions', { view: { header: ['Counterpart', 'Role', 'Country', 'Headline', 'Status'], rows: state.rows, cells: (r) => [r.target?.name, r.target?.role, r.target?.country, r.target?.headline, r.status] } })}
+        />
+        <ZoneBody
           loading={state.loading}
           error={state.error}
           isEmpty={!state.rows.length}

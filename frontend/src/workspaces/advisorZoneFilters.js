@@ -5,11 +5,11 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  *
  * THE ADVISOR LICENCE SERVES EIGHT ZONES THAT CARRY A `filters:` ARRAY —
  * `/network/{relationships,introductions,organizations}` and
- * `/research/{ask,client-prep,markets,companies,library}`. Two are here; the
- * rest are listed in `profile_zone_filters.test.mjs`'s `excluded` set with the
- * reason each is not yet. The table fills one surface at a time, and the guard
- * is what keeps that honest: an exclusion cannot grow by accident and a stale
- * one cannot linger.
+ * `/research/{ask,client-prep,markets,companies,library}`. All five Research
+ * zones are here; the three Network ones are listed in
+ * `profile_zone_filters.test.mjs`'s `excluded` set with the reason each is not
+ * yet. The table fills one surface at a time, and the guard is what keeps that
+ * honest: an exclusion cannot grow by accident and a stale one cannot linger.
  *
  * THIS LICENCE GETS THE MOST OUT OF `/research/library` AND THAT IS NOT A
  * COINCIDENCE. One component, one column, one write path serve four licences
@@ -27,7 +27,7 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * hook — `profile_zone_actions.test.mjs` has carried the same one since the
  * advisor Expertise bucket landed there.
  *
- * TWO ZONES WILL NEVER BE HERE, and the reason is not the same as "not yet".
+ * ONE ZONE WILL NEVER BE HERE, and the reason is not the same as "not yet".
  * `network/organizations` is a dashed card whose entire body is the gap
  * statement — an advisor is 403'd from `/api/contacts` and no other store
  * carries a person-to-organisation edge, so `ORG_BACKED` in

@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
 import './founderNetworkOrganizations.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const list = (value, ...keys) => {
@@ -29,7 +29,7 @@ const freshest = (people) => {
   return values.length ? `${Math.min(...values)} day${Math.min(...values) === 1 ? '' : 's'} ago` : 'Unavailable';
 };
 
-export default function FounderNetworkOrganizations({ embedded = false }) {
+export default function FounderNetworkOrganizations({ embedded = false, role = 'founder', zoneFilters = null }) {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
   const [projects, setProjects] = useState([]);
@@ -88,7 +88,12 @@ export default function FounderNetworkOrganizations({ embedded = false }) {
         heading and zone nav itself — so everything inside that guard is dead
         on the route a founder actually opens. The actions row placed in there
         rendered nowhere, which a source test cannot see and a browser found. */}
-    <ZoneActions className="mt-3" items={founderZoneActions('network/organizations', { query, view: { scope: project?.name, header: ['Organization', 'People', 'Recorded types'], rows: groups, cells: (g) => [g.name, g.people.length, g.types.join(' + ')] } })} />
+    <ZoneToolbar
+      className="mt-3"
+      role={role}
+      filters={zoneFilters ? zoneFilters({}) : []}
+      actions={founderZoneActions('network/organizations', { query, view: { scope: project?.name, header: ['Organization', 'People', 'Recorded types'], rows: groups, cells: (g) => [g.name, g.people.length, g.types.join(' + ')] } })}
+    />
     {errors.length > 0 && <div className="fn-rel-alert" data-testid="status-network-organizations-partial"><AlertCircle size={15} /><span>{`Some selected-project sources are unavailable: ${errors.join(', ')}.`}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <OrganizationSkeleton />}
     {status === 'empty' && <NoProject />}

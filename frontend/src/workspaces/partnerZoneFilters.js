@@ -3,9 +3,10 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 /**
  * The partner profile's filter tables — the left half of the zone header row.
  *
- * SEVEN PARTNER ZONES CARRY A `filters:` ARRAY ON A CANVAS. Two are here; the
- * rest are listed in `profile_zone_filters.test.mjs`'s `excluded` set with a
- * reason, and move into this table one surface at a time.
+ * SEVEN PARTNER ZONES CARRY A `filters:` ARRAY ON A CANVAS. The four Research
+ * ones are here; the three Network ones are listed in
+ * `profile_zone_filters.test.mjs`'s `excluded` set with a reason, and move into
+ * this table one surface at a time.
  *
  * `/research/library` IS THE ONE ZONE WHERE THIS LICENCE GETS EVERYTHING THE
  * CANVAS DREW, out of the same component that gives founder one live chip out

@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
 import './founderNetworkIntroductions.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const list = (value, ...keys) => {
@@ -46,7 +46,7 @@ const stateLabel = (row) => {
   return pretty(status, 'Not recorded');
 };
 
-export default function FounderNetworkIntroductions({ embedded = false }) {
+export default function FounderNetworkIntroductions({ embedded = false, role = 'founder', zoneFilters = null }) {
   const [params] = useSearchParams();
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState('all');
@@ -94,7 +94,12 @@ export default function FounderNetworkIntroductions({ embedded = false }) {
         carries the zone and the row count without a venture name. Naming a
         variable that does not exist here is not a build error in a module;
         it is a ReferenceError that blanks the whole page at render. */}
-    <ZoneActions className="mt-3" items={founderZoneActions('network/introductions', { query, view: { scope: null, header: ['Introduction', 'Counterpart company', 'Counterpart role', 'Direction', 'State'], rows: visible, cells: (r) => [introductionLabel(r), counterpart(r).company, counterpart(r).role, direction(r), stateLabel(r)] } })} />
+    <ZoneToolbar
+      className="mt-3"
+      role={role}
+      filters={zoneFilters ? zoneFilters({}) : []}
+      actions={founderZoneActions('network/introductions', { query, view: { scope: null, header: ['Introduction', 'Counterpart company', 'Counterpart role', 'Direction', 'State'], rows: visible, cells: (r) => [introductionLabel(r), counterpart(r).company, counterpart(r).role, direction(r), stateLabel(r)] } })}
+    />
     {status === 'error' && <div className="fn-rel-alert" data-testid="status-network-introductions-error"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <IntroductionSkeleton />}
     {status === 'ready' && <><div className="fn-intro-context"><div><span>Ledger scope</span><strong>Introductions where you are a participant</strong><small>Contact details remain privacy-filtered until connected</small></div><div><span>Source</span><strong>Secure introductions</strong><small>Direction and state are stored on each record</small></div></div>

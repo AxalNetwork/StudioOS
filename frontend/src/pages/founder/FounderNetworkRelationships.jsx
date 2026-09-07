@@ -4,7 +4,7 @@ import { AlertCircle, ArrowLeft, ChevronRight, RefreshCw, UsersRound } from 'luc
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderNetworkRelationships.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
 
 const list = (value, ...keys) => {
@@ -45,7 +45,7 @@ const isCold = (row) => {
  * both columns now, and the page's `min-height:100vh` would otherwise stretch
  * a short zone the full viewport inside a container that is already full.
  */
-export default function FounderNetworkRelationships({ embedded = false }) {
+export default function FounderNetworkRelationships({ embedded = false, role = 'founder', zoneFilters = null }) {
   const [params, setParams] = useSearchParams();
   const requestedId = params.get('project_id');
   const [projects, setProjects] = useState([]);
@@ -94,7 +94,12 @@ export default function FounderNetworkRelationships({ embedded = false }) {
         heading and zone nav itself — so everything inside that guard is dead
         on the route a founder actually opens. The actions row placed in there
         rendered nowhere, which a source test cannot see and a browser found. */}
-    <ZoneActions className="mt-3" items={founderZoneActions('network/relationships', { query, view: { scope: project?.name, header: ['Person', 'Email', 'Context', 'Type', 'Last activity'], rows: visible, cells: (r) => [r.name, r.email, r.landing_page_name || r.source, r.audience, r.last_activity_at] } })} />
+    <ZoneToolbar
+      className="mt-3"
+      role={role}
+      filters={zoneFilters ? zoneFilters({}) : []}
+      actions={founderZoneActions('network/relationships', { query, view: { scope: project?.name, header: ['Person', 'Email', 'Context', 'Type', 'Last activity'], rows: visible, cells: (r) => [r.name, r.email, r.landing_page_name || r.source, r.audience, r.last_activity_at] } })}
+    />
     {errors.length > 0 && <div className="fn-rel-alert" data-testid="status-network-relationships-partial"><AlertCircle size={15} /><span>{`Some selected-project sources are unavailable: ${errors.join(', ')}.`}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {status === 'loading' && <RelationshipSkeleton />}
     {status === 'empty' && <NoProject />}

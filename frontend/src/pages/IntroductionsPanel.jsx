@@ -5,7 +5,7 @@ import {
   Wallet, Gift, Package, History, ChevronDown, ChevronUp, Handshake, Scale,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import ZoneActions from '../workspaces/ZoneActions';
+import ZoneToolbar from '../workspaces/ZoneToolbar';
 
 // Introductions tab body for the unified Network page. Curated warm-intro
 // propositions for every user type: the platform proposes matches (shared
@@ -326,7 +326,7 @@ const STATUS_FILTERS = [
  * the propositions on screen. One route, four licences, four different sets of
  * zone actions.
  */
-export default function IntroductionsPanel({ zoneActions }) {
+export default function IntroductionsPanel({ zoneActions, zoneFilters = null, role = 'partner' }) {
   const [params] = useSearchParams();
   const highlightUid = params.get('intro') || '';
 
@@ -458,7 +458,14 @@ export default function IntroductionsPanel({ zoneActions }) {
 
   return (
     <div className="space-y-4">
-      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(data.propositions || [])} />}
+      {(zoneActions || zoneFilters) && (
+        <ZoneToolbar
+          className="mb-3"
+          role={role}
+          filters={zoneFilters ? zoneFilters({}) : []}
+          actions={zoneActions ? zoneActions(data.propositions || []) : []}
+        />
+      )}
       <p className="text-sm text-gray-600 dark:text-gray-400">
         Curated warm introductions matched on shared values, complementary skills, archetypes,
         jurisdiction and specialization. Accepting an introduction uses one credit; declining is always free.
