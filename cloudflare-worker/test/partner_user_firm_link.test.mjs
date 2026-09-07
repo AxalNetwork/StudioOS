@@ -142,3 +142,108 @@ test('no email address is committed in the file', () => {
   assert.doesNotMatch(SQL, /[\w.+-]+@[\w-]+\.[\w.]+/,
     'identify the row by id and guard it by shape, not by writing someone\'s email here');
 });
+
+/*
+ * THE OTHER HALF OF THE SAME RULE — the resolver, not the migration.
+ *
+ * Everything above guards an UPDATE that sets `users.partner_id`. These guard
+ * what READS it, because until this commit the resolver had a second way in
+ * that no migration could have protected against: when `partner_id` did not
+ * resolve, it matched `partners.email` against `users.email` and returned
+ * whatever came back.
+ *
+ * That is the failure this file's own docblock names — "a row matched too
+ * broadly does not fail closed" — arrived at from the read side. Two tables
+ * joined on a mutable string is a link nobody records making: change an
+ * account's address to one a firm happens to carry and the account acquires
+ * that firm's quotes, engagements and clients, with a 200 and no audit row.
+ *
+ * Measured before removing it: of 26 `role='partner'` accounts in production, 8
+ * resolved by `partner_id`, 18 resolved to nothing, and 0 resolved only by
+ * email — which could not have been otherwise, since `ensureRoleProfile` runs
+ * the same email lookup on every `/auth/me` and writes `partner_id` from it.
+ * The fallback was unreachable in practice and unsafe in principle.
+ *
+ * Real SQLite again, and the same reason as above: the point is what the
+ * resolver's own query returns, not what its source looks like.
+ */
+const { requirePartnerProfile } = await import(
+  '../src/routes/_t13t14t15_helpers.ts');
+
+/** A D1-shaped binding over a database holding two firms. */
+function firmsDb() {
+  const d = new DatabaseSync(':memory:');
+  d.exec(`
+    CREATE TABLE partners (id INTEGER PRIMARY KEY, name TEXT, email TEXT);
+    INSERT INTO partners (id, name, email) VALUES
+      (9, 'Oblivira', 'hello@oblivira.example'),
+      (3, 'Algo Size', 'ops@algosize.example');
+  `);
+  return {
+    prepare: (sql) => ({
+      bind: (...binds) => ({
+        async first() { return d.prepare(sql).get(...binds) ?? null; },
+      }),
+    }),
+  };
+}
+
+const env = { DB: firmsDb() };
+const gate = { message: 'No partner profile attached to your account' };
+
+test('a linked account resolves to its own firm', async () => {
+  const firm = await requirePartnerProfile(env, {
+    id: 29, role: 'partner', email: 'someone@oblivira.example', partner_id: 9,
+  });
+  assert.equal(firm.name, 'Oblivira');
+});
+
+test('an email that matches a firm is not a link to it', async () => {
+  // The removed fallback: this caller's address IS `partners.email` for firm 9,
+  // and they must still get the gap card. Nothing but `partner_id` attaches an
+  // account to a firm.
+  await assert.rejects(() => requirePartnerProfile(env, {
+    id: 25, role: 'partner', email: 'hello@oblivira.example', partner_id: null,
+  }), gate, 'an email match resolved a firm the account was never linked to');
+});
+
+test('an admin previewing the role is attached to nobody', async () => {
+  // The role gate lets an admin through — they can act as a partner when their
+  // OWN `partner_id` is set — and resolution then finds nothing, which is the
+  // whole reason the nine zone bodies must draw their header row over the card.
+  await assert.rejects(() => requirePartnerProfile(env, {
+    id: 1, role: 'admin', email: 'hello@oblivira.example', partner_id: null,
+  }), gate);
+});
+
+test('a partner_id pointing at a firm that is gone fails closed', async () => {
+  // `users.partner_id` carries no foreign key, so a deleted firm leaves a
+  // dangling pointer. This used to fall through to the email match — the worst
+  // case of the two, because the account had once been attached to something
+  // else. The card is the correct answer.
+  await assert.rejects(() => requirePartnerProfile(env, {
+    id: 30, role: 'partner', email: 'hello@oblivira.example', partner_id: 404,
+  }), gate);
+});
+
+test('a founder is refused before any firm is looked up', async () => {
+  await assert.rejects(() => requirePartnerProfile(env, {
+    id: 31, role: 'founder', email: 'hello@oblivira.example', partner_id: 9,
+  }), { message: 'Forbidden' });
+});
+
+test('the resolver reads partners by id and never by email', async () => {
+  // The source, as a backstop to the behaviour above: a future edit that
+  // reintroduces the fallback would have to delete this line to pass.
+  const src = readFileSync(
+    join(resolve(process.cwd()), 'cloudflare-worker', 'src', 'routes',
+      '_t13t14t15_helpers.ts'),
+    'utf8',
+  );
+  const at = src.indexOf('export async function requirePartnerProfile');
+  assert.ok(at > 0, 'requirePartnerProfile is gone or renamed');
+  const body = src.slice(at, src.indexOf('\n}', at));
+  assert.match(body, /FROM partners WHERE id = \?/);
+  assert.doesNotMatch(body, /FROM partners WHERE email/,
+    'the email fallback is back — see the docblock above it for why it went');
+});

@@ -2960,3 +2960,54 @@ decision rather than a layout one. Same for Ask's advisor/partner `.meter`, the
 `.askbar` cost line, `.thread`, and the `scope` chip — `ZoneHeading` has no prop
 for it. A session store for Ask is a migration, and a migration is a decision:
 it is raised here, not built around.
+
+## D57 — An account reaches a firm through `users.partner_id` and through nothing else
+
+`requirePartnerProfile` (`cloudflare-worker/src/routes/_t13t14t15_helpers.ts`)
+had two ways to resolve the caller's firm. It now has one, and the second is
+recorded here rather than deleted quietly, because a removed authorization path
+is exactly the kind of change a later reader will want the reasoning for.
+
+**What it was.** When `users.partner_id` did not resolve, the helper ran
+`SELECT * FROM partners WHERE email = ?` against the caller's own address and
+returned whatever came back.
+
+**Why it was useless, measured rather than argued.** Against production D1 on
+2026-09-07: of 26 `role='partner'` accounts, **8** resolve by `partner_id`,
+**18** resolve to nothing, and **0** resolved only by email. That is not a
+coincidence of the current data — it is structural. `ensureRoleProfile`
+(`services/ensureRoleProfile.ts`) runs the SAME email lookup on every
+`/auth/me`, and writes `partner_id` from it. Any row the fallback could have
+matched had already been linked before the fallback was reached. It was
+unreachable by construction.
+
+**Why it was dangerous.** `partners.email` is a person's address and `users`
+holds another copy of one. Joining two tables on a mutable string is a link
+nobody records making: change an account's email to one a firm happens to carry
+and the account acquires that firm's quotes, engagements and clients, with a
+200 and no audit row. `partner_user_firm_link.test.mjs` was written to stop
+migration 210 doing precisely this from the write side — *"a row matched too
+broadly does not fail closed"* — and the read side had the same hole open the
+whole time.
+
+**What the unmatched get instead.** The gap card, in both directions. An
+account with no `partner_id`, and an account whose `partner_id` points at a
+firm that no longer exists (the column carries no foreign key, so a deleted
+firm leaves a dangling pointer, and that case used to fall through to the email
+match — the worse of the two, since the account had once been attached to
+something else). The card states that the account is not linked to a firm and
+that an admin can attach it, which is a better answer than a guess.
+
+**What this does NOT require.** A backfill for the 18. `ensureRoleProfile`
+already creates a `partners` row and sets `users.partner_id` on every
+`/auth/me`, which the SPA calls on session boot — so those accounts link
+themselves at next sign-in, and the 18 are dormant rather than broken. What is
+still missing is the admin surface the gap card promises, which is its own
+piece of work.
+
+**Where it is checked.** `cloudflare-worker/test/partner_user_firm_link.test.mjs`
+exercises the resolver against real SQLite: a linked account gets its firm; an
+account whose email IS a firm's does not; an admin previewing the role does not;
+a dangling `partner_id` does not; a founder is refused before any lookup. A
+source assertion sits beside them so an edit reintroducing the fallback has to
+delete a line that says why it went.
