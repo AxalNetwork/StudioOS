@@ -114,17 +114,17 @@ export const FOUNDER_ZONE_FILTERS = {
   // page's own footnote already refuses to report a completion rate.
   'build/this-week': [
     { canvas: 'This week', key: 'now', label: 'This week' },
-    { canvas: 'Last 4', note: NO_WEEK_STAMP },
-    { canvas: 'All 14', label: 'All weeks', note: NO_WEEK_STAMP },
-    { canvas: 'Carried only', note: 'nothing records a commitment moving from one week to the next' },
+    { canvas: 'Last 4', unbuilt: NO_WEEK_STAMP },
+    { canvas: 'All 14', label: 'All weeks', unbuilt: NO_WEEK_STAMP },
+    { canvas: 'Carried only', unbuilt: 'nothing records a commitment moving from one week to the next' },
   ],
   // Cards are pipeline tasks with a stored `status` and `updated_at`. They
   // carry no lane and no assignee this page can compare against the reader, so
   // the canvas's two sample lanes and its "Mine" are stated, not drawn.
   'build/board': [
     { canvas: 'All lanes', key: 'all', label: 'All cards' },
-    { canvas: ['Engineering', 'GTM'], label: 'Engineering and GTM', note: 'a card carries a stage, not a lane, and no lane is stored' },
-    { canvas: 'Mine', note: 'a card records an owner name, which is not the same as the account reading it' },
+    { canvas: ['Engineering', 'GTM'], label: 'Engineering and GTM', unbuilt: 'a card carries a stage, not a lane, and no lane is stored' },
+    { canvas: 'Mine', unbuilt: 'a card records an owner name, which is not the same as the account reading it' },
     { canvas: 'Stale > 7d', key: 'stale' },
   ],
   // Objectives carry a quarter, a kanban column and a dependency field. No
@@ -133,15 +133,15 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Timeline', key: 'timeline' },
     { canvas: 'Board', key: 'board' },
     { canvas: 'Dependencies', key: 'dependencies' },
-    { canvas: 'Scenarios', note: 'no roadmap scenario is stored' },
+    { canvas: 'Scenarios', unbuilt: 'no roadmap scenario is stored' },
   ],
   // Nothing at all backs this zone: the page loads the project list and no
   // second source. All four filters share the one reason.
   'build/cadence': [
-    { canvas: 'All rituals', note: NO_CADENCE_STORE },
-    { canvas: 'Plans', note: NO_CADENCE_STORE },
-    { canvas: 'Retros', note: NO_CADENCE_STORE },
-    { canvas: 'Skipped', note: NO_CADENCE_STORE },
+    { canvas: 'All rituals', unbuilt: NO_CADENCE_STORE },
+    { canvas: 'Plans', unbuilt: NO_CADENCE_STORE },
+    { canvas: 'Retros', unbuilt: NO_CADENCE_STORE },
+    { canvas: 'Skipped', unbuilt: NO_CADENCE_STORE },
   ],
   // Metric snapshots are dated and their fields are individually nullable, so
   // every one of these four is a predicate over stored values.
@@ -160,15 +160,15 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Overview', key: 'overview' },
     { canvas: 'Blockers', key: 'blockers' },
     { canvas: 'Investors', key: 'investors' },
-    { canvas: 'Timeline', note: 'the assembled rows carry a state but no date, so they cannot be put in order' },
+    { canvas: 'Timeline', unbuilt: 'the assembled rows carry a state but no date, so they cannot be put in order' },
   ],
   // Deck versions are stored and engagement is returned per version. A deck has
   // versions rather than narrative variants, and a share link is minted and
   // revoked in the deck builder, which is where its record lives.
   'raise/pitch': [
     { canvas: 'Versions', key: 'versions' },
-    { canvas: 'Variants', note: 'a deck stores versions; no narrative variant is a separate record' },
-    { canvas: 'Shares', note: 'share links are held by the deck builder and are not returned to this page' },
+    { canvas: 'Variants', unbuilt: 'a deck stores versions; no narrative variant is a separate record' },
+    { canvas: 'Shares', unbuilt: 'share links are held by the deck builder and are not returned to this page' },
     { canvas: 'Analytics', key: 'analytics' },
   ],
   // The one zone where the canvas asks for five views and the store has all
@@ -199,10 +199,10 @@ export const FOUNDER_ZONE_FILTERS = {
   // ledger this product has never had, which is also why all four stats on this
   // page read Unavailable rather than zero.
   'raise/liquidity': [
-    { canvas: 'Restrictions', note: NO_LIQUIDITY_LEDGER },
+    { canvas: 'Restrictions', unbuilt: NO_LIQUIDITY_LEDGER },
     { canvas: 'Waterfall', key: 'waterfall' },
-    { canvas: 'Tender', note: NO_LIQUIDITY_LEDGER },
-    { canvas: 'History', note: NO_LIQUIDITY_LEDGER },
+    { canvas: 'Tender', unbuilt: NO_LIQUIDITY_LEDGER },
+    { canvas: 'History', unbuilt: NO_LIQUIDITY_LEDGER },
   ],
 
   // ── Grow ─────────────────────────────────────────────────────────────────
@@ -211,14 +211,14 @@ export const FOUNDER_ZONE_FILTERS = {
   'grow/focus': [
     { canvas: 'August', key: 'latest', label: 'Latest month' },
     { canvas: 'Last 6 mo', key: 'six-months' },
-    { canvas: 'Experiments', note: 'no experiment log is connected, so no effect on the metric is claimed' },
-    { canvas: 'Targets', note: 'no metric target is stored' },
+    { canvas: 'Experiments', unbuilt: 'no experiment log is connected, so no effect on the metric is claimed' },
+    { canvas: 'Targets', unbuilt: 'no metric target is stored' },
   ],
   // Roles linked to this startup become their own chips — the canvas's two are
   // sample names. An application's stored status is what "shortlisted" reads.
   'grow/talent': [
     { canvas: 'All roles', key: 'all' },
-    { canvas: ['Backend', 'GTM'], dynamic: 'roles', label: 'One chip per role', note: 'no job post is linked to this startup yet' },
+    { canvas: ['Backend', 'GTM'], dynamic: 'roles', label: 'One chip per role', unbuilt: 'no job post is linked to this startup yet' },
     { canvas: 'Shortlisted', key: 'shortlisted' },
   ],
   // The canvas names three market segments. A customer record stores the source
@@ -230,12 +230,9 @@ export const FOUNDER_ZONE_FILTERS = {
       canvas: ['Distributed SaaS', 'Agencies', 'Enterprise'],
       dynamic: 'sources',
       label: 'One chip per segment',
-      note: 'no market segment is stored on a customer record',
-      // Standing, not a fallback: with the source chips showing, this sentence
-      // is the only thing stopping them being read as a segment breakdown.
-      noteAlways: true,
+      unbuilt: 'no market segment is stored on a customer record',
     },
-    { canvas: 'Stalled', note: 'no activity timeline is stored, so no account can be called stalled' },
+    { canvas: 'Stalled', unbuilt: 'no activity timeline is stored, so no account can be called stalled' },
   ],
   'grow/partnerships': [
     { canvas: 'All', key: 'all' },
@@ -247,8 +244,8 @@ export const FOUNDER_ZONE_FILTERS = {
   // are the Network relationship book's, and nothing joins the two records.
   'grow/capital-match': [
     { canvas: 'Best fit', key: 'all', label: 'All prospects' },
-    { canvas: 'Warm path only', note: 'nothing joins a prospect to a relationship in the network book' },
-    { canvas: 'Right stage', dynamic: 'stages', label: 'One chip per stage', note: 'no prospect records a stage yet' },
+    { canvas: 'Warm path only', unbuilt: 'nothing joins a prospect to a relationship in the network book' },
+    { canvas: 'Right stage', dynamic: 'stages', label: 'One chip per stage', unbuilt: 'no prospect records a stage yet' },
     { canvas: 'Passed', key: 'passed' },
   ],
   'grow/brand': [
@@ -261,9 +258,9 @@ export const FOUNDER_ZONE_FILTERS = {
   // stores an article or a publication state.
   'grow/launch': [
     { canvas: 'Upcoming', key: 'upcoming' },
-    { canvas: 'Published', note: 'a calendar event has no publication state' },
+    { canvas: 'Published', unbuilt: 'a calendar event has no publication state' },
     { canvas: 'Events', key: 'events' },
-    { canvas: 'Articles', note: 'no article or content record is connected to this startup' },
+    { canvas: 'Articles', unbuilt: 'no article or content record is connected to this startup' },
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────
@@ -298,8 +295,8 @@ export const FOUNDER_ZONE_FILTERS = {
   // read.
   'network/introductions': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Asked', note: NO_DIRECTION_RECORDED },
-    { canvas: 'Offered', note: NO_DIRECTION_RECORDED },
+    { canvas: 'Asked', unbuilt: NO_DIRECTION_RECORDED },
+    { canvas: 'Offered', unbuilt: NO_DIRECTION_RECORDED },
     { canvas: 'Stalled', key: 'stalled' },
   ],
 
@@ -322,10 +319,10 @@ export const FOUNDER_ZONE_FILTERS = {
   // merging was merely unbuilt. The finding is stronger — with no key, there
   // is nothing to merge and nothing to have duplicated.
   'network/organizations': [
-    { canvas: 'All', note: NO_ORG_ON_A_CONTACT },
-    { canvas: 'Funds', note: NO_ORG_ON_A_CONTACT },
-    { canvas: 'Customers', note: NO_ORG_ON_A_CONTACT },
-    { canvas: 'Dormant', note: NO_GROUP_TO_AGE },
+    { canvas: 'All', unbuilt: NO_ORG_ON_A_CONTACT },
+    { canvas: 'Funds', unbuilt: NO_ORG_ON_A_CONTACT },
+    { canvas: 'Customers', unbuilt: NO_ORG_ON_A_CONTACT },
+    { canvas: 'Dormant', unbuilt: NO_GROUP_TO_AGE },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
@@ -343,13 +340,13 @@ export const FOUNDER_ZONE_FILTERS = {
   // `ai_usage_logs`, which holds token counts and no question text. So the page
   // has exactly one answer in state at a time and there is nothing to narrow.
   'research/ask': [
-    { canvas: 'All sessions', note: NO_SESSION_RECORD },
-    { canvas: 'Saved', note: NO_SESSION_RECORD },
+    { canvas: 'All sessions', unbuilt: NO_SESSION_RECORD },
+    { canvas: 'Saved', unbuilt: NO_SESSION_RECORD },
     {
       canvas: 'Cited in deck',
-      note: 'a citation names the passage it quoted and carries no document id, and nothing carries one into the deck builder',
+      unbuilt: 'a citation names the passage it quoted and carries no document id, and nothing carries one into the deck builder',
     },
-    { canvas: 'Discarded', note: NO_SESSION_RECORD },
+    { canvas: 'Discarded', unbuilt: NO_SESSION_RECORD },
   ],
   // THREE OF THESE FOUR WERE ALREADY ON SCREEN AND MATCHED NOTHING. The page
   // has held `stage_fit === 'right'`, `path === 'warm'` and `status ===
@@ -378,10 +375,10 @@ export const FOUNDER_ZONE_FILTERS = {
   // them. What is absent is the object the canvas filters — a saved analysis
   // with a method, a run date and a lifecycle.
   'research/markets': [
-    { canvas: 'Saved', note: NO_SAVED_DEEP_DIVE },
-    { canvas: 'Builder', note: NO_SAVED_DEEP_DIVE },
-    { canvas: 'Sources', note: NO_SAVED_DEEP_DIVE },
-    { canvas: 'Retired', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Saved', unbuilt: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Builder', unbuilt: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Sources', unbuilt: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Retired', unbuilt: NO_SAVED_DEEP_DIVE },
   ],
   // THE CLASSIFICATION IS REAL AND SITS ONE LEVEL DOWN. `competitor_candidates`
   // carries `direct | adjacent`, defended by every writer — the manual form,
@@ -392,11 +389,11 @@ export const FOUNDER_ZONE_FILTERS = {
   // row mean two things, so the reason says which level holds what.
   'research/companies': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Direct', note: CATEGORY_IS_PER_COMPETITOR },
-    { canvas: 'Adjacent', note: CATEGORY_IS_PER_COMPETITOR },
+    { canvas: 'Direct', unbuilt: CATEGORY_IS_PER_COMPETITOR },
+    { canvas: 'Adjacent', unbuilt: CATEGORY_IS_PER_COMPETITOR },
     {
       canvas: 'Comparables',
-      note: 'no competitor can be filed as a comparable: the form offers direct or adjacent, and every writer coerces anything else to direct',
+      unbuilt: 'no competitor can be filed as a comparable: the form offers direct or adjacent, and every writer coerces anything else to direct',
     },
   ],
   // `All` is the only one of the five this licence can run. Two fail on the
@@ -404,15 +401,15 @@ export const FOUNDER_ZONE_FILTERS = {
   // page's own stat strip already states in words, so the wording is reused.
   'research/library': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Reports', note: NO_SUCH_KIND },
+    { canvas: 'Reports', unbuilt: NO_SUCH_KIND },
     {
       canvas: 'Primary',
-      note: 'no document records whether it is your own research or a bought report',
+      unbuilt: 'no document records whether it is your own research or a bought report',
     },
-    { canvas: 'Legal', note: NO_SUCH_KIND },
+    { canvas: 'Legal', unbuilt: NO_SUCH_KIND },
     {
       canvas: 'Stale',
-      note: 'nothing records a source’s own year, and the date held is when the file was added here, which is a different fact',
+      unbuilt: 'nothing records a source’s own year, and the date held is when the file was added here, which is a different fact',
     },
   ],
 };

@@ -30,7 +30,7 @@ import { FOUNDER_ZONE_FILTERS, founderZoneFilters } from '../src/workspaces/foun
 import { INVESTOR_ZONE_FILTERS, investorZoneFilters } from '../src/workspaces/investorZoneFilters.js';
 import { ADVISOR_ZONE_FILTERS, advisorZoneFilters } from '../src/workspaces/advisorZoneFilters.js';
 import { PARTNER_ZONE_FILTERS, partnerZoneFilters } from '../src/workspaces/partnerZoneFilters.js';
-import { canvasFilterLabels, groupFilterNotes } from '../src/workspaces/zoneFilterBuilder.js';
+import { canvasFilterLabels } from '../src/workspaces/zoneFilterBuilder.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '../..');
@@ -336,31 +336,33 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
   });
 
-  test(`${name}: an entry is a live key, a stated reason, or a dynamic group — never two`, () => {
+  test(`${name}: an entry is a live key, an unbuilt reason, or a dynamic group — never two`, () => {
     for (const [zone, rows] of Object.entries(profile.table)) {
       for (const row of rows) {
         const kinds = [row.key ? 'key' : null, row.dynamic ? 'dynamic' : null,
-          !row.key && !row.dynamic && row.note ? 'note' : null].filter(Boolean);
+          !row.key && !row.dynamic && row.unbuilt ? 'unbuilt' : null].filter(Boolean);
         assert.equal(kinds.length, 1, `${zone} · ${row.canvas} is ${kinds.length} things at once`);
-        if (row.key) assert.ok(!row.note, `${zone} · ${row.canvas} is live and would never show its note`);
-        if (!row.key) assert.ok(row.note, `${zone} · ${row.canvas} states no reason`);
+        if (row.key) assert.ok(!row.unbuilt, `${zone} · ${row.canvas} is live and unbuilt at once`);
+        if (!row.key) assert.ok(row.unbuilt, `${zone} · ${row.canvas} states no reason`);
       }
     }
   });
 
-  test(`${name}: a stated reason says what is missing, not that something is`, () => {
+  test(`${name}: an unbuilt reason says what is missing, not that something is`, () => {
     // "Unavailable", "not supported", "coming soon" name no absent record, so a
-    // reader learns nothing they could act on. Every note here has to point at
-    // the thing that does not exist.
+    // reader learns nothing they could act on. Every reason here has to point at
+    // the thing that does not exist. These strings no longer render anywhere —
+    // they are for whoever builds the filter — which makes the bar HIGHER, not
+    // lower: the only reader left is the one who has to act on it.
     const EMPTY = /\b(unavailable|not supported|unsupported|coming soon|n\/a|tbd)\b/i;
     for (const [zone, rows] of Object.entries(profile.table)) {
       for (const row of rows) {
-        if (!row.note) continue;
-        assert.ok(!EMPTY.test(row.note), `${zone} · ${row.canvas} says nothing: "${row.note}"`);
-        assert.ok(row.note.length > 25, `${zone} · ${row.canvas} is too short to be a reason`);
-        // It renders after an em dash, so it is a clause and not a sentence.
-        assert.ok(/^[a-z]/.test(row.note), `${zone} · ${row.canvas} reads as a sentence, not a clause`);
-        assert.ok(!/\.$/.test(row.note), `${zone} · ${row.canvas} ends in a full stop`);
+        if (!row.unbuilt) continue;
+        assert.ok(!EMPTY.test(row.unbuilt), `${zone} · ${row.canvas} says nothing: "${row.unbuilt}"`);
+        assert.ok(row.unbuilt.length > 25, `${zone} · ${row.canvas} is too short to be a reason`);
+        // Still a clause rather than a sentence, so the table reads as one voice.
+        assert.ok(/^[a-z]/.test(row.unbuilt), `${zone} · ${row.canvas} reads as a sentence, not a clause`);
+        assert.ok(!/\.$/.test(row.unbuilt), `${zone} · ${row.canvas} ends in a full stop`);
       }
     }
   });
@@ -431,35 +433,44 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
   });
 
-  test(`${name}: a dynamic group becomes its stored names, or its reason`, () => {
+  test(`${name}: a dynamic group becomes its stored names, or nothing`, () => {
     // Also generic: whatever the group is called and whatever the page stores,
-    // a supplied name renders as a live chip and an empty group states its
-    // reason instead of drawing nothing. The founder examples below carry the
-    // two subtleties this cannot express — a fallback note versus a standing
-    // clarification — because both live in the wording of specific zones.
+    // a supplied name renders as a live chip. AN EMPTY GROUP NOW RENDERS
+    // NOTHING — it used to render its reason as prose in the chip row, which is
+    // the defect this pass removed. The reason stays on the table entry, where
+    // the founder examples below still assert its wording.
     for (const [zone, rows] of Object.entries(profile.table)) {
       for (const row of rows.filter((r) => r.dynamic)) {
         const supplied = profile.build(zone, {
           value: '__stored__', dynamic: { [row.dynamic]: [{ key: '__stored__', label: 'A stored name' }] },
         });
         const chip = supplied.find((i) => i.label === 'A stored name');
-        assert.ok(chip && !chip.note && chip.active,
+        assert.ok(chip && chip.active,
           `${zone} · ${row.canvas} does not render a supplied name as a live chip`);
         const empty = profile.build(zone, { value: 'all' });
         assert.ok(!empty.some((i) => i.label === 'A stored name'),
           `${zone} · ${row.canvas} shows a name nothing supplied`);
-        assert.ok(empty.some((i) => i.note === row.note),
-          `${zone} · ${row.canvas} draws nothing and explains nothing when the group is empty`);
+        assert.ok(!empty.some((i) => i.label === (row.label || row.canvas)),
+          `${zone} · ${row.canvas} draws a placeholder chip when the group is empty`);
       }
     }
   });
 
-  test(`${name}: a filter with no source is never selectable`, () => {
-    for (const zone of Object.keys(profile.table)) {
-      for (const item of profile.build(zone, { value: '__none__' })) {
-        if (!item.note) continue;
-        assert.equal(item.onSelect, undefined, `${zone} · ${item.label} is prose with a click handler`);
-        assert.equal(item.active, undefined, `${zone} · ${item.label} is prose that can look selected`);
+  test(`${name}: a filter with no source is never rendered at all`, () => {
+    // STRONGER THAN THE ASSERTION IT REPLACES, which allowed the item through
+    // as long as it carried no click handler — it then rendered as prose in the
+    // chip row. Nothing unbuilt reaches the renderer now, so every item the
+    // builder returns is a chip that runs.
+    for (const [zone, rows] of Object.entries(profile.table)) {
+      const built = profile.build(zone, { value: '__none__' });
+      for (const item of built) {
+        assert.ok(item.onSelect, `${zone} · ${item.label} is rendered but cannot be selected`);
+        assert.equal(item.note, undefined, `${zone} · ${item.label} still carries prose`);
+      }
+      const dead = rows.filter((r) => r.unbuilt && !r.dynamic).map((r) => r.label || r.canvas);
+      for (const label of dead) {
+        assert.ok(!built.some((i) => i.label === label),
+          `${zone} · ${label} has no source and is still drawn`);
       }
     }
   });
@@ -766,41 +777,61 @@ test('{n} substitutes the page count, drops when there is none, and drops a zero
   assert.ok(empty.some((i) => i.label === 'All months'), 'a zero count is printed into the label');
 });
 
-test('a dynamic note is a fallback in one zone and a standing clarification in the other', () => {
-  // `/grow/customers` is where the difference bites. The canvas names three
-  // market SEGMENTS; a customer record stores the SOURCE it was captured from.
-  // The chips are the stored sources, and the sentence saying those are not the
-  // same thing is needed most precisely when the chips ARE there to be misread.
+test('a dynamic group renders its stored names and nothing else', () => {
+  // `/grow/customers` is where the difference used to bite. The canvas names
+  // three market SEGMENTS; a customer record stores the SOURCE it was captured
+  // from. The old build appended a standing sentence beside the source chips
+  // saying so — `noteAlways` — which is exactly the prose this pass removed
+  // from the chip row, and it did it on a row whose chips all worked.
+  //
+  // WHAT REPLACES IT, AND WHY THIS IS NOT A WEAKENING. The clarification was
+  // never load-bearing for correctness: the chips are labelled with the stored
+  // source names themselves — `Waitlist`, `Referral` — so nothing on screen
+  // claims to be a segment. The entry keeps its reason in the table, asserted
+  // below, so the distinction is still recorded for whoever wires segments up.
   const bySource = founderZoneFilters('grow/customers', {
     value: 'referral',
     dynamic: { sources: [{ key: 'waitlist', label: 'Waitlist' }, { key: 'referral', label: 'Referral' }] },
   });
-  assert.deepEqual(bySource.filter((i) => !i.note).map((i) => i.label), ['All', 'Waitlist', 'Referral']);
+  assert.deepEqual(bySource.map((i) => i.label), ['All', 'Waitlist', 'Referral']);
   assert.ok(bySource.find((i) => i.label === 'Referral').active, 'the supplied source cannot be selected');
-  assert.ok(bySource.some((i) => i.note && /no market segment is stored/.test(i.note)),
-    'the segment/source difference stopped being stated');
-  // And it renders as a bare sentence, not "One chip per segment — …", since
-  // with chips present there is no dead filter left to name.
-  const standing = groupFilterNotes(bySource).find((g) => /no market segment/.test(g.note));
-  assert.deepEqual(standing.labels, [], 'the standing note still names a filter that is not missing');
-  // A fallback note keeps its label, because there the label IS the missing thing.
-  const fallback = groupFilterNotes(founderZoneFilters('grow/talent', { value: 'all' }))
-    .find((g) => /no job post is linked/.test(g.note));
-  assert.deepEqual(fallback.labels, ['One chip per role']);
+  assert.ok(bySource.every((i) => !i.note), 'a sentence is back in the chip row');
+
+  // The reason survives on the table entry, and still says the same thing.
+  const row = FOUNDER_ZONE_FILTERS['grow/customers'].find((r) => r.dynamic === 'sources');
+  assert.match(row.unbuilt, /no market segment is stored/,
+    'the segment/source difference stopped being recorded');
+
+  // An unsupplied dynamic group renders nothing at all rather than a stand-in.
+  const talent = founderZoneFilters('grow/talent', { value: 'all' });
+  assert.ok(!talent.some((i) => i.label === 'One chip per role'),
+    'an empty dynamic group still draws a placeholder');
+  const talentRow = FOUNDER_ZONE_FILTERS['grow/talent'].find((r) => r.dynamic);
+  assert.match(talentRow.unbuilt, /no job post is linked/, 'the fallback reason stopped being recorded');
 });
 
-test('filters sharing one reason collapse into one sentence that names them all', () => {
-  // /build/cadence has four filters and one reason. Saying it four times is
-  // noise; saying it once and naming three of the four is a lie by omission.
-  const items = founderZoneFilters('build/cadence', { value: 'x' });
-  const grouped = groupFilterNotes(items);
-  assert.equal(grouped.length, 1, 'one reason produced more than one sentence');
-  assert.deepEqual(grouped[0].labels, ['All rituals', 'Plans', 'Retros', 'Skipped']);
-  // /build/this-week has two distinct reasons across three dead filters.
-  const week = groupFilterNotes(founderZoneFilters('build/this-week', { value: 'now' }));
-  assert.equal(week.length, 2, 'two distinct reasons were merged into one');
-  assert.deepEqual(week[0].labels, ['Last 4', 'All weeks']);
-  assert.deepEqual(week[1].labels, ['Carried only']);
+test('filters sharing one reason are recorded once and rendered never', () => {
+  // /build/cadence has four filters and one reason. That reason used to be
+  // collected into a sentence naming all four and printed under the chips;
+  // /build/this-week's two distinct reasons became two sentences. Both are now
+  // absent from the row entirely — a zone whose filters cannot run shows the
+  // ones that can, and nothing else.
+  const cadence = founderZoneFilters('build/cadence', { value: 'x' });
+  assert.deepEqual(cadence, [], 'a zone with no runnable filter still renders something');
+
+  const week = founderZoneFilters('build/this-week', { value: 'now' });
+  assert.ok(week.every((i) => i.onSelect && !i.note), 'this-week renders prose in the chip row');
+  for (const label of ['Last 4', 'All weeks', 'Carried only']) {
+    assert.ok(!week.some((i) => i.label === label), `${label} has no source and is still drawn`);
+  }
+
+  // The reasons themselves stay in the table, distinct where they were distinct.
+  const reasons = new Set(FOUNDER_ZONE_FILTERS['build/this-week']
+    .filter((r) => r.unbuilt).map((r) => r.unbuilt));
+  assert.equal(reasons.size, 2, 'this-week\'s two distinct reasons were merged into one');
+  assert.equal(new Set(FOUNDER_ZONE_FILTERS['build/cadence']
+    .filter((r) => r.unbuilt).map((r) => r.unbuilt)).size, 1,
+    'cadence\'s one reason was split into several');
 });
 
 

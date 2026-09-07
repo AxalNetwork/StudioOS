@@ -283,12 +283,14 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
   });
 
-  test(`${name}: a note never points at a path, because prose is not checked`, () => {
+  test(`${name}: an unbuilt reason never points at a path, because it is not checked`, () => {
     // Every `to` in this table is verified against the router by the test above.
-    // A note is prose and nothing verifies it, so a note that says "go to
-    // /matches" is an unchecked link wearing a sentence. Notes name surfaces the
-    // way a person would; the checked field carries the path.
-    const notes = [...SRC.matchAll(/^ {4}\{ label: '[^']+', note: '([^']*)'/gm)].map((m) => m[1]);
+    // An `unbuilt` reason is prose and nothing verifies it, so one that says "go
+    // to /matches" is an unchecked link wearing a sentence. It now renders
+    // NOWHERE — the builder drops the entry — which makes an unchecked path in
+    // it worse, not better: a reader of this file would act on a route that may
+    // not exist, and no rendering would ever contradict them.
+    const notes = [...SRC.matchAll(/^ {4}\{ label: '[^']+', unbuilt: '([^']*)'/gm)].map((m) => m[1]);
     // Exact rather than a floor: every action is a link, an export or a gap,
     // and nothing is untyped. An entry that is none of the three would render
     // as a dead button — which is the one thing this whole pass forbids.
@@ -296,18 +298,18 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     assert.equal(profile.links + profile.exports + notes.length, actions,
       `${name} has ${actions} actions but ${profile.links} links, ${profile.exports} exports and ${notes.length} gaps`);
     for (const note of notes) {
-      assert.doesNotMatch(note, /(^|\s)\/[a-z]/, `a note carries an unchecked path: "${note}"`);
+      assert.doesNotMatch(note, /(^|\s)\/[a-z]/, `an unbuilt reason carries an unchecked path: "${note}"`);
     }
   });
 
   test(`${name}: no action is given both a destination and an excuse`, () => {
-    // The builder prefers `to`, so a `note` beside it would never be read — the
-    // gap would be recorded in the source and invisible on screen. `linkNote` is
+    // The builder prefers `to`, so an `unbuilt` reason beside it would never be
+    // read, and the entry would claim to be both built and not. `linkNote` is
     // the deliberate way to qualify a link, and it renders as the title.
     const entries = [...SRC.matchAll(/^ {4}\{ label: '[^']+',([^\n]*)$/gm)].map((m) => m[1]);
     assert.ok(entries.length >= profile.zones * 2, `expected every action, found ${entries.length}`);
     for (const rest of entries) {
-      assert.ok(!(/\bto: /.test(rest) && /\bnote: /.test(rest)),
+      assert.ok(!(/\bto: /.test(rest) && /\bunbuilt: /.test(rest)),
         `an action declares both a destination and a gap: ${rest.trim()}`);
     }
   });
@@ -506,7 +508,7 @@ test('a gap note describes the screen, never a capability the API already has', 
     const at = table.indexOf(`'${zone}'`);
     assert.ok(at > 0, `${zone} left the table`);
     const entry = table.slice(at, table.indexOf('],', at));
-    const note = entry.match(new RegExp(`\\{ label: '${label}', note: '([^']*)'`));
+    const note = entry.match(new RegExp(`\\{ label: '${label}', unbuilt: '([^']*)'`));
     assert.ok(note, `${zone}'s "${label}" is no longer a stated gap — if it was wired, delete this row`);
     assert.doesNotMatch(note[1], DENIALS,
       `${zone} "${label}" denies a capability ${method} provides: "${note[1]}"`);
@@ -568,19 +570,37 @@ test('the shared zone body actually renders the row it is handed', () => {
     'a ZoneBody return path stopped carrying the actions row');
 });
 
-test('an action that performs nothing is prose, never a button', () => {
+test('an action that performs nothing is not rendered at all', () => {
+  // THIS ASSERTION REVERSED, DELIBERATELY. It used to require that an
+  // unperformable action rendered as a `<span>` of prose stating why. That
+  // shipped the reason to the customer inside the control's own label — the
+  // design's `Comparables` chip arrived as a two-line sentence about how
+  // comparables are filed — so the entry now renders NOTHING and the reason
+  // stays in the action table. Refusing to draw a dead button has not changed;
+  // only where the refusal is explained has.
+  const builder = read('frontend/src/workspaces/zoneActionBuilder.js');
+  const bind = builder.slice(builder.indexOf('export function makeZoneActions'));
+  assert.match(bind, /return null;\n\s*\}\)\.filter\(Boolean\);/,
+    'the builder no longer drops the entries it cannot perform');
+
   const zone = read('frontend/src/workspaces/ZoneActions.jsx');
   const render = zone.slice(zone.indexOf('export default function ZoneActions'));
-  // The note branch returns before either the Link or the button branch is
-  // reached. Order is the mechanism, so order is what is asserted.
-  const note = render.indexOf('if (item.note)');
-  const link = render.indexOf('if (item.to)');
-  const button = render.indexOf('<button');
-  assert.ok(note > 0 && link > note && button > link,
-    'the note branch no longer precedes the link and button branches');
-  assert.match(render.slice(note, link), /<span/, 'a note is not rendered as text');
-  assert.doesNotMatch(render.slice(note, link), /<button|onClick/,
-    'the note branch grew something clickable');
+  assert.doesNotMatch(render, /item\.note/,
+    'ZoneActions reads a note again — the prose branch is back');
+  assert.doesNotMatch(render, /\{item\.label\} — /,
+    'ZoneActions renders a label joined to a sentence again');
+
+  // The toolbar's filter half had the same defect and the same fix.
+  const toolbar = read('frontend/src/workspaces/ZoneToolbar.jsx');
+  assert.doesNotMatch(toolbar, /groupFilterNotes|sentenceList/,
+    'ZoneToolbar collects filter reasons into prose again');
+  // Through `codeOnly`: the docblock NAMES `noteAlways` to explain why it was
+  // removed, so a raw-source check would fail on the explanation itself.
+  const filters = codeOnly(read('frontend/src/workspaces/zoneFilterBuilder.js'));
+  assert.match(filters, /if \(item\.unbuilt\) return \[\];/,
+    'the filter builder no longer drops an unbuilt chip');
+  assert.doesNotMatch(filters, /noteAlways/,
+    'the noteAlways mode is back — a standing sentence beside working chips');
 });
 
 test('the client CSV escapes exactly as the worker does', () => {
@@ -611,6 +631,9 @@ test('the label says the export is of this view, because it is', () => {
     'the export button no longer says which rows it covers');
   assert.match(read('frontend/src/lib/csvExport.js'), /\$\{list\.length\}-rows/,
     'the filename no longer carries the row count');
-  assert.match(builder, /note: 'nothing loaded to export yet'/,
-    'an export with no rows is offered as a button');
+  // An export over rows that have not LOADED is the one control that stays and
+  // goes quiet: the store and the writer both exist, so it keeps the canvas's
+  // label and renders disabled rather than vanishing like an unbuilt op.
+  assert.match(builder, /disabled: true, title: 'nothing loaded to export yet'/,
+    'an export with no rows is offered as a live button');
 });

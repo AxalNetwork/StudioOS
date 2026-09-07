@@ -32,42 +32,42 @@ import { makeZoneActions } from './zoneActionBuilder';
 
 export const ADVISOR_ZONE_ACTIONS = {
   'expertise/profile': [
-    { label: 'Edit profile', note: 'every field below is editable and saves in place' },
-    { label: 'Preview as founder', note: 'no public profile page exists to preview' },
+    { label: 'Edit profile', unbuilt: 'every field below is editable and saves in place' },
+    { label: 'Preview as founder', unbuilt: 'no public profile page exists to preview' },
     { label: 'Export', kind: 'export' },
   ],
   'expertise/services': [
-    { label: 'New service', note: 'the form below adds one' },
-    { label: 'Price history', note: 'only the current price is stored; there is no history to open' },
+    { label: 'New service', unbuilt: 'the form below adds one' },
+    { label: 'Price history', unbuilt: 'only the current price is stored; there is no history to open' },
     { label: 'Export', kind: 'export' },
   ],
   'expertise/proof': [
-    { label: 'Ask for consent', note: 'consent is requested from each proof’s own row' },
-    { label: 'Public preview', note: 'no public profile page exists to preview' },
+    { label: 'Ask for consent', unbuilt: 'consent is requested from each proof’s own row' },
+    { label: 'Public preview', unbuilt: 'no public profile page exists to preview' },
     { label: 'Export', kind: 'export' },
   ],
   'expertise/thinking': [
     { label: 'New piece', to: '/articles/draft' },
-    { label: 'Drafting history', note: 'only the current draft is stored; there is no revision history' },
+    { label: 'Drafting history', unbuilt: 'only the current draft is stored; there is no revision history' },
     { label: 'Export', kind: 'export' },
   ],
 
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
-    { label: 'Log interaction', note: 'no interaction log is stored' },
-    { label: 'Add person', note: 'an advisor’s book is built from accepted introductions, not typed in' },
+    { label: 'Log interaction', unbuilt: 'no interaction log is stored' },
+    { label: 'Add person', unbuilt: 'an advisor’s book is built from accepted introductions, not typed in' },
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [
-    { label: 'New introduction', note: 'introductions arrive as propositions; none is composed here' },
-    { label: 'Consent log', note: 'consent is recorded per introduction, not as a log' },
+    { label: 'New introduction', unbuilt: 'introductions arrive as propositions; none is composed here' },
+    { label: 'Consent log', unbuilt: 'consent is recorded per introduction, not as a log' },
     { label: 'Export', kind: 'export' },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────
   'research/ask': [
-    { label: 'New session', note: 'the question box below starts one' },
-    { label: 'Saved answers', note: 'no answer is saved; the citations below belong to this question' },
+    { label: 'New session', unbuilt: 'the question box below starts one' },
+    { label: 'Saved answers', unbuilt: 'no answer is saved; the citations below belong to this question' },
     { label: 'Export', kind: 'export' },
   ],
   // THIS ZONE WAS EXCLUDED AS "A CARD, NOT A BODY" AND IT IS A BODY.
@@ -80,23 +80,23 @@ export const ADVISOR_ZONE_ACTIONS = {
   // a `scope_sessions` flag, so a client's sessions can be opened to you — what
   // nothing records is a brief against one of them.
   'research/client-prep': [
-    { label: 'New brief', note: 'a brief exists when a founder opens their record to you; nothing here asks for one' },
-    { label: 'Attach to session', note: 'a grant can open a client’s sessions to you, but nothing records a brief against one' },
+    { label: 'New brief', unbuilt: 'a brief exists when a founder opens their record to you; nothing here asks for one' },
+    { label: 'Attach to session', unbuilt: 'a grant can open a client’s sessions to you, but nothing records a brief against one' },
     { label: 'Export', kind: 'export' },
   ],
   'research/markets': [
-    { label: 'Re-run stale', note: 'signals are gathered on a schedule; nothing re-runs one' },
-    { label: 'Add source', note: 'sources are not configurable' },
+    { label: 'Re-run stale', unbuilt: 'signals are gathered on a schedule; nothing re-runs one' },
+    { label: 'Add source', unbuilt: 'sources are not configurable' },
     { label: 'Export', kind: 'export' },
   ],
   'research/companies': [
-    { label: 'Add company', note: 'the analysis form below adds one' },
-    { label: 'Open in Ask', note: 'Ask answers from the library, and an analysis is not a library document' },
+    { label: 'Add company', unbuilt: 'the analysis form below adds one' },
+    { label: 'Open in Ask', unbuilt: 'Ask answers from the library, and an analysis is not a library document' },
     { label: 'Export', kind: 'export' },
   ],
   'research/library': [
-    { label: 'Add document', note: 'the add-document form below takes a file or a link' },
-    { label: 'Re-index', note: 'indexing runs on upload; there is no re-run control' },
+    { label: 'Add document', unbuilt: 'the add-document form below takes a file or a link' },
+    { label: 'Re-index', unbuilt: 'indexing runs on upload; there is no re-run control' },
     { label: 'Export', kind: 'export' },
   ],
 };

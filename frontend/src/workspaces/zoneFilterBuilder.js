@@ -20,9 +20,21 @@
  *
  *   `key: 'blockers'` — it narrows the rows the page has loaded. Rendered as a
  *                       chip; selecting it sets the page's own view state.
- *   `note: '…'`       — nothing in the store distinguishes it. Rendered as
- *                       prose naming the reason, never as a chip, and never as
- *                       a chip that returns nothing.
+ *   `unbuilt: '…'`    — nothing in the store distinguishes it. The entry stays
+ *                       so `canvasFilterLabels` can still prove this table
+ *                       accounted for every string the artboard drew, and so a
+ *                       reader of this file learns why. IT RENDERS NOTHING —
+ *                       not a chip, and not a sentence either.
+ *
+ * WHY IT RENDERS NOTHING, WHEN IT USED TO RENDER ITS OWN REASON. The field was
+ * called `note`, and `ZoneToolbar` collected the notes into prose beneath the
+ * chips, so the design's four-word filter row shipped as three paragraphs
+ * explaining which of its filters the store cannot tell apart. Not drawing a
+ * dead chip is right and has not changed. Printing the reason in the chip row
+ * put design-review commentary on the customer surface — and `noteAlways`,
+ * which appended a standing sentence BESIDE working chips, did it on rows that
+ * were otherwise entirely fine. The reason belongs in this file. What the
+ * reader needs on the page is the filters that work.
  *
  * `canvas` IS THE PROVENANCE AND IS ALWAYS THE ARTBOARD'S OWN STRING.
  * `label` is what renders, and defaults to `canvas`. They differ only where the
@@ -77,24 +89,14 @@ export function makeZoneFilters(TABLE) {
       const first = Array.isArray(item.canvas) ? item.canvas[0] : item.canvas;
       // A dynamic group: the canvas draws one chip per role, segment or stage
       // and fills them with sample names. The real names come from the store,
-      // so the page supplies them and the note stands in when it has none.
+      // so the page supplies them; with none supplied there is no chip group to
+      // draw and the group contributes nothing to the row.
       if (item.dynamic) {
         const supplied = dynamic[item.dynamic] || [];
-        if (!supplied.length) return [{ label: item.label || first, testid: id(first), note: item.note }];
-        const chips = supplied.map((one) => chip(one.key, one.label));
-        // A note plays one of two roles, and `/grow/customers` is where the
-        // difference bites. For `/grow/talent` it is a fallback: no job post is
-        // linked, so there are no chips and the note stands in for them. For
-        // customers it is a STANDING clarification — the canvas names three
-        // market segments, the chips are the sources a record was captured
-        // from, and the sentence saying those are not the same thing is needed
-        // most precisely when the chips ARE there to be misread. `noteAlways`
-        // keeps it; without it the clarification disappeared at the moment it
-        // started mattering, which a guard caught and rendering would not have.
-        if (!item.noteAlways) return chips;
-        return [...chips, { label: null, testid: id(first) + '-note', note: item.note }];
+        if (!supplied.length) return [];
+        return supplied.map((one) => chip(one.key, one.label));
       }
-      if (item.note) return [{ label: item.label || first, testid: id(first), note: item.note }];
+      if (item.unbuilt) return [];
       return [chip(item.key, item.label || first)];
     });
   };
@@ -106,32 +108,4 @@ export function makeZoneFilters(TABLE) {
  */
 export function canvasFilterLabels(TABLE, zoneKey) {
   return (TABLE[zoneKey] || []).flatMap((item) => (Array.isArray(item.canvas) ? item.canvas : [item.canvas]));
-}
-
-/** "a", "a and b", "a, b and c" — the reason lists every label it covers. */
-export function sentenceList(parts) {
-  if (parts.length <= 1) return parts.join('');
-  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
-}
-
-/**
- * Collapse the unavailable filters into one line per distinct reason.
- *
- * `/build/cadence` has four filters and one reason — no cadence store is
- * connected — so it gets one sentence naming all four, not the same sentence
- * four times. The grouping is derived from the note strings themselves, so a
- * zone whose filters fail for two different reasons gets two lines without
- * anyone having to say so.
- */
-export function groupFilterNotes(items) {
-  const order = [];
-  const byNote = new Map();
-  for (const item of items) {
-    if (!item?.note) continue;
-    if (!byNote.has(item.note)) { byNote.set(item.note, []); order.push(item.note); }
-    byNote.get(item.note).push(item.label);
-  }
-  // `labels` is empty for a standing note (see `noteAlways` above): there is
-  // no dead filter to name, only a sentence about the live ones beside it.
-  return order.map((note) => ({ note, labels: byNote.get(note).filter(Boolean) }));
 }

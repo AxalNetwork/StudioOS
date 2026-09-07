@@ -37,8 +37,8 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * sentence saying the page has no rows.
  */
 // Both Ask filters fail for reasons that are not the same reason, so they are
-// named separately and `groupFilterNotes` renders two sentences rather than one
-// that would cover a label it does not explain.
+// named separately: one shared string would claim to explain a label it does
+// not. Neither renders — these are reasons for whoever builds the filters.
 const ONE_ANSWER_ONLY =
   'one answer is on screen at a time and the citations under it are the whole of it, so neither of these narrows anything';
 const NO_ANSWER_RECORD =
@@ -93,19 +93,19 @@ export const ADVISOR_ZONE_FILTERS = {
   // provenance mark nothing writes. Grouping them into one sentence would tell
   // a reader that the same thing is missing three times, which is not true.
   'network/relationships': [
-    { canvas: 'Coldest first', note: NO_INTERACTION_DATE },
+    { canvas: 'Coldest first', unbuilt: NO_INTERACTION_DATE },
     { canvas: 'All', key: 'all' },
-    { canvas: 'Mine', note: EVERY_ROW_IS_YOURS },
+    { canvas: 'Mine', unbuilt: EVERY_ROW_IS_YOURS },
     {
       canvas: 'From the Lab',
-      note: 'nothing marks a relationship as sourced from the Lab; a referral records a name and an organisation as free text, with no link back to an account',
+      unbuilt: 'nothing marks a relationship as sourced from the Lab; a referral records a name and an organisation as free text, with no link back to an account',
     },
   ],
 
   'network/introductions': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Gated', key: 'pending', label: 'Awaiting you' },
-    { canvas: 'Made', note: NO_CONNECTED_STATE },
+    { canvas: 'Made', unbuilt: NO_CONNECTED_STATE },
     { canvas: 'Declined', key: 'declined' },
   ],
 
@@ -118,10 +118,10 @@ export const ADVISOR_ZONE_FILTERS = {
   // `Unanswered` would select nothing that exists. Two different failures, and
   // the ops half of this row already states the second one in these words.
   'research/ask': [
-    { canvas: 'This session', note: ONE_ANSWER_ONLY },
-    { canvas: 'All history', note: NO_ANSWER_RECORD },
-    { canvas: 'Cited', note: ONE_ANSWER_ONLY },
-    { canvas: 'Unanswered', note: NO_ANSWER_RECORD },
+    { canvas: 'This session', unbuilt: ONE_ANSWER_ONLY },
+    { canvas: 'All history', unbuilt: NO_ANSWER_RECORD },
+    { canvas: 'Cited', unbuilt: ONE_ANSWER_ONLY },
+    { canvas: 'Unanswered', unbuilt: NO_ANSWER_RECORD },
   ],
   // The ops half of this row already argues the grant story — "a brief exists
   // when a founder opens their record to you; nothing here asks for one". These
@@ -130,11 +130,11 @@ export const ADVISOR_ZONE_FILTERS = {
   // `state: 'Not done'` in the artboard's mock.
   'research/client-prep': [
     { canvas: 'Full brief', key: 'all' },
-    { canvas: 'Mine only', note: ONE_SOURCE_ONLY },
-    { canvas: 'Founder-sourced', note: ONE_SOURCE_ONLY },
+    { canvas: 'Mine only', unbuilt: ONE_SOURCE_ONLY },
+    { canvas: 'Founder-sourced', unbuilt: ONE_SOURCE_ONLY },
     {
       canvas: 'Open questions',
-      note: 'nothing records a brief row as open or answered; these rows are what the founder opened to you, not a checklist you work through',
+      unbuilt: 'nothing records a brief row as open or answered; these rows are what the founder opened to you, not a checklist you work through',
     },
   ],
   // THE ONE PLACE THE SIGNALS FEED ANSWERS THE CANVAS'S QUESTION. Founder and
@@ -162,11 +162,11 @@ export const ADVISOR_ZONE_FILTERS = {
   // analysis DOES carry a status, and it is the status of the run.
   'research/companies': [
     { canvas: 'All', key: 'all' },
-    { canvas: 'Relationships', note: NO_COMPANY_ON_AN_ANALYSIS },
-    { canvas: 'Prospects', note: NO_COMPANY_ON_AN_ANALYSIS },
+    { canvas: 'Relationships', unbuilt: NO_COMPANY_ON_AN_ANALYSIS },
+    { canvas: 'Prospects', unbuilt: NO_COMPANY_ON_AN_ANALYSIS },
     {
       canvas: 'Researching',
-      note: 'the only state an analysis carries is the state of its own run (draft, running, complete or error), which says nothing about your standing with a company',
+      unbuilt: 'the only state an analysis carries is the state of its own run (draft, running, complete or error), which says nothing about your standing with a company',
     },
   ],
   // ALL FOUR RUN. `kind` carries the artboard's own axis, and `index_state`

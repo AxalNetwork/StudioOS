@@ -32,44 +32,44 @@ export const FOUNDER_ZONE_ACTIONS = {
   // ── Build ────────────────────────────────────────────────────────────────
   'build/this-week': [
     { label: 'Export CSV', kind: 'export' },
-    { label: 'Configure zone', note: 'nothing here is configurable — this desk reads the roadmap’s Now column' },
+    { label: 'Configure zone', unbuilt: 'nothing here is configurable — this desk reads the roadmap’s Now column' },
   ],
   'build/board': [
-    { label: 'Bulk move', note: 'no bulk stage change is stored; a deal moves from its own row' },
-    { label: 'Automations', note: 'no automation rules are stored' },
-    { label: 'Configure lanes', note: 'the lanes are the pipeline’s stored stages and are not editable here' },
+    { label: 'Bulk move', unbuilt: 'no bulk stage change is stored; a deal moves from its own row' },
+    { label: 'Automations', unbuilt: 'no automation rules are stored' },
+    { label: 'Configure lanes', unbuilt: 'the lanes are the pipeline’s stored stages and are not editable here' },
   ],
   'build/roadmap': [
     { label: 'New scenario', to: '/execution/roadmap', linkNote: 'objectives and key results are edited in Execution' },
     { label: 'Export', kind: 'export' },
-    { label: 'Configure', note: 'no roadmap settings are stored' },
+    { label: 'Configure', unbuilt: 'no roadmap settings are stored' },
   ],
   'build/cadence': [
-    { label: 'New ritual', note: 'rituals are not a stored record yet' },
-    { label: 'Edit templates', note: 'no cadence templates are stored' },
-    { label: 'Export archive', note: 'no cadence history is stored, so there is no archive to export' },
+    { label: 'New ritual', unbuilt: 'rituals are not a stored record yet' },
+    { label: 'Edit templates', unbuilt: 'no cadence templates are stored' },
+    { label: 'Export archive', unbuilt: 'no cadence history is stored, so there is no archive to export' },
   ],
   'build/kpi': [
     { label: 'Bulk entry', to: '/build/metrics' },
-    { label: 'Import CSV', note: 'no importer is built; snapshots are entered one at a time' },
+    { label: 'Import CSV', unbuilt: 'no importer is built; snapshots are entered one at a time' },
     { label: 'Stripe sync', to: '/build/metrics' },
-    { label: 'Definitions', note: 'metric definitions are not stored' },
+    { label: 'Definitions', unbuilt: 'metric definitions are not stored' },
   ],
 
   // ── Grow ─────────────────────────────────────────────────────────────────
   'grow/focus': [
-    { label: 'New experiment', note: 'experiments are not a stored record' },
+    { label: 'New experiment', unbuilt: 'experiments are not a stored record' },
     { label: 'Change metric', to: '/build/metrics' },
     { label: 'Export', kind: 'export' },
   ],
   'grow/talent': [
-    { label: 'Post a role', note: 'no role posting is stored' },
-    { label: 'Bulk reject', note: 'no candidate records exist to act on' },
+    { label: 'Post a role', unbuilt: 'no role posting is stored' },
+    { label: 'Bulk reject', unbuilt: 'no candidate records exist to act on' },
     { label: 'Export', kind: 'export' },
   ],
   'grow/customers': [
-    { label: 'Bulk sequence', note: 'no sequence store exists — nothing here sends mail' },
-    { label: 'New segment', note: 'segments are not stored' },
+    { label: 'Bulk sequence', unbuilt: 'no sequence store exists — nothing here sends mail' },
+    { label: 'New segment', unbuilt: 'segments are not stored' },
     { label: 'Export', kind: 'export' },
   ],
   'grow/partnerships': [
@@ -77,13 +77,13 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export terms', kind: 'export' },
   ],
   'grow/capital-match': [
-    { label: 'Draft outreach', note: 'no outreach drafting runs on this desk' },
+    { label: 'Draft outreach', unbuilt: 'no outreach drafting runs on this desk' },
     { label: 'Export shortlist', kind: 'export' },
   ],
   'grow/brand': [
     { label: 'New page', to: '/spinout-lab/brand' },
     { label: 'Export leads', kind: 'export' },
-    { label: 'Edit templates', note: 'landing templates are chosen in the brand builder, not edited' },
+    { label: 'Edit templates', unbuilt: 'landing templates are chosen in the brand builder, not edited' },
   ],
   'grow/launch': [
     { label: 'New item', to: '/calendar' },
@@ -92,13 +92,13 @@ export const FOUNDER_ZONE_ACTIONS = {
 
   // ── Network ──────────────────────────────────────────────────────────────
   'network/relationships': [
-    { label: 'Add person', note: 'the contact form is not reachable from a founder’s Network desk' },
-    { label: 'Set reminders', note: 'no reminder store exists' },
+    { label: 'Add person', unbuilt: 'the contact form is not reachable from a founder’s Network desk' },
+    { label: 'Set reminders', unbuilt: 'no reminder store exists' },
     { label: 'Export', kind: 'export' },
   ],
   'network/introductions': [
-    { label: 'Request an intro', note: 'the request flow lives on a surface a founder cannot open' },
-    { label: 'Offer one', note: 'offering an introduction is not built' },
+    { label: 'Request an intro', unbuilt: 'the request flow lives on a surface a founder cannot open' },
+    { label: 'Offer one', unbuilt: 'offering an introduction is not built' },
     { label: 'Export', kind: 'export' },
   ],
   // BOTH NOTES WERE TOO WEAK, and the filter half of this row is what showed
@@ -108,20 +108,20 @@ export const FOUNDER_ZONE_ACTIONS = {
   // so the roll-up above is empty on every account and there is nothing to
   // have duplicated. The two halves of this row now say the same thing.
   'network/organizations': [
-    { label: 'Add org', note: 'a contact records a person, an email and an audience, and no field on it names an organisation, so there is no org for a form to add' },
-    { label: 'Merge duplicates', note: 'nothing groups people into organisations here, so there are no rows to be duplicates of each other' },
+    { label: 'Add org', unbuilt: 'a contact records a person, an email and an audience, and no field on it names an organisation, so there is no org for a form to add' },
+    { label: 'Merge duplicates', unbuilt: 'nothing groups people into organisations here, so there are no rows to be duplicates of each other' },
     { label: 'Export', kind: 'export' },
   ],
 
   // ── Raise ────────────────────────────────────────────────────────────────
   'raise/status': [
     { label: 'Export brief', kind: 'export' },
-    { label: 'Share war-room', note: 'no share link is issued for this view' },
+    { label: 'Share war-room', unbuilt: 'no share link is issued for this view' },
   ],
   'raise/pitch': [
     { label: 'New version', to: '/raise/pitch?mode=workspace' },
     { label: 'Export PDF', to: '/raise/pitch?mode=workspace' },
-    { label: 'Revoke a link', note: 'share links are revoked where they are issued, in the deck builder' },
+    { label: 'Revoke a link', unbuilt: 'share links are revoked where they are issued, in the deck builder' },
   ],
   'raise/capital': [
     { label: 'Model a round', to: '/raise/capital/model' },
@@ -129,7 +129,7 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Add instrument', to: '/raise/capital/cap-table' },
   ],
   'raise/legal': [
-    { label: 'Send for signature', note: 'no e-signature provider is connected' },
+    { label: 'Send for signature', unbuilt: 'no e-signature provider is connected' },
     { label: 'Add document', to: '/legal' },
     { label: 'Calendar', to: '/raise/legal-engine/compliance' },
   ],
@@ -145,18 +145,18 @@ export const FOUNDER_ZONE_ACTIONS = {
 
   // ── Research ─────────────────────────────────────────────────────────────
   'research/ask': [
-    { label: 'New brief', note: 'the question box below starts one' },
+    { label: 'New brief', unbuilt: 'the question box below starts one' },
     { label: 'Export session', kind: 'export' },
-    { label: 'Clear history', note: 'no session history is stored to clear' },
+    { label: 'Clear history', unbuilt: 'no session history is stored to clear' },
   ],
   'research/markets': [
-    { label: 'New deep-dive', note: 'signals are gathered on a schedule, not started here' },
+    { label: 'New deep-dive', unbuilt: 'signals are gathered on a schedule, not started here' },
     { label: 'Export', kind: 'export' },
-    { label: 'Cite in deck', note: 'nothing carries a signal into the deck builder' },
+    { label: 'Cite in deck', unbuilt: 'nothing carries a signal into the deck builder' },
   ],
   'research/companies': [
-    { label: 'Add company', note: 'the analysis form below adds one' },
-    { label: 'Compare', note: 'analyses are read one at a time; no comparison view is stored' },
+    { label: 'Add company', unbuilt: 'the analysis form below adds one' },
+    { label: 'Compare', unbuilt: 'analyses are read one at a time; no comparison view is stored' },
     { label: 'Export', kind: 'export' },
   ],
   // THIS KEY WAS MISSING AND THE ROW DREW NOTHING. `profile_zone_actions`
@@ -166,13 +166,13 @@ export const FOUNDER_ZONE_ACTIONS = {
   // `zoneActions(visible)`, so three specified ops rendered as nothing at all.
   // The same stale exclusion `research/client-prep` carried on two licences.
   'research/funds': [
-    { label: 'Add fund', note: 'the add-a-fund form below takes one' },
-    { label: 'Brief me', note: 'no per-fund brief is generated; the thesis is quoted in their words and the reading is yours to write' },
+    { label: 'Add fund', unbuilt: 'the add-a-fund form below takes one' },
+    { label: 'Brief me', unbuilt: 'no per-fund brief is generated; the thesis is quoted in their words and the reading is yours to write' },
     { label: 'Export', kind: 'export' },
   ],
   'research/library': [
-    { label: 'Upload', note: 'the add-document form below takes a file or a link' },
-    { label: 'New collection', note: 'collections are not stored' },
+    { label: 'Upload', unbuilt: 'the add-document form below takes a file or a link' },
+    { label: 'New collection', unbuilt: 'collections are not stored' },
     { label: 'Export', kind: 'export' },
   ],
 };

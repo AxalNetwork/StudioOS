@@ -137,16 +137,27 @@ test('"Send to Problem slide" is not drawn, because it would be theatre', () => 
     'a "send" button over a feed that is already live must not ship');
 });
 
-test('ZoneActions renders a limit as text, never as a button', () => {
+test('ZoneActions renders no limit at all, as text or as a button', () => {
+  // REVERSED DELIBERATELY. This required an unperformable action to render as a
+  // `<span>` reading `{label} — {note}`. That is how the design's `Comparables`
+  // chip reached customers as a sentence about how comparables are filed, and
+  // how a five-op zone header became five paragraphs. Not drawing a dead button
+  // was always right; putting the reason inside the control's own label was
+  // not. The entry is dropped by `zoneActionBuilder` and the reason stays in
+  // the action table, where the person who can build the op reads it.
   const zone = codeOnly(read('frontend/src/workspaces/ZoneActions.jsx'));
-  // The `note` branch must return before either the Link or the button branch.
-  const noteAt = zone.indexOf('if (item.note)');
-  const linkAt = zone.indexOf('if (item.to)');
-  const btnAt = zone.lastIndexOf('<button');
-  assert.ok(noteAt > 0 && linkAt > noteAt && btnAt > noteAt,
-    'an item carrying a stated limit must short-circuit before anything clickable');
-  assert.match(zone, /<span[\s\S]{0,240}\{item\.label\} — \{item\.note\}/,
-    'the limit must render beside the label, so the reader learns why');
+  assert.doesNotMatch(zone, /item\.note/, 'the prose branch is back in ZoneActions');
+  assert.doesNotMatch(zone, /\{item\.label\} — /,
+    'a label is joined to a sentence again');
+  // Everything the component still renders is a control: a link or a button.
+  assert.match(zone, /if \(item\.to\)/, 'the link branch went missing');
+  assert.ok(zone.lastIndexOf('<button') > zone.indexOf('if (item.to)'),
+    'the button branch no longer follows the link branch');
+
+  // And the drop happens upstream, so nothing unperformable ever arrives here.
+  const builder = codeOnly(read('frontend/src/workspaces/zoneActionBuilder.js'));
+  assert.match(builder, /return null;/, 'the builder no longer drops an unbuilt op');
+  assert.match(builder, /\.filter\(Boolean\)/, 'the dropped entries are still in the array');
 });
 
 test('ZoneActions adopts no undeclared design token', () => {
