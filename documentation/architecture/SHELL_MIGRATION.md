@@ -182,11 +182,18 @@ Overview: `InvestorNetworkWorkspace.jsx` (`embedded` on zone routes via
 
 | Zone | Archetype | Route | Body treatment |
 | --- | --- | --- | --- |
-| Ask | FEED | `/research/ask` | centred card (`NoStoreYet`) |
-| Diligence | COLLECTION | `/research/diligence` | centred card |
-| Benchmarking | ANALYTICS | `/research/benchmarking` | centred card |
-| Markets | ANALYTICS | `/research/markets` | live signals feed |
-| Library | COLLECTION | `/research/library` | centred card |
+| Ask | FEED | `/research/ask` | `AskZone` — question box over the indexed library, answering with citations (D37) |
+| Diligence | COLLECTION | `/research/diligence` | `DiligenceZone` — an assembly over `data_room_grants`, `data_room_files.visibility` and `data_room_access_log`; no migration of its own, read-only by design |
+| Benchmarking | ANALYTICS | `/research/benchmarking` | `BenchmarkingZone` over migration 217 `research_benchmarks` |
+| Markets | ANALYTICS | `/research/markets` | live signals feed (`SignalsPage`, embedded) |
+| Library | COLLECTION | `/research/library` | `LibraryZone` over migration 213 — the canvas stat strip and document table |
+
+**UPDATE 2026-09-07.** Every row of the Body-treatment column above read
+"centred card" until now, and four of the five had stopped being true: Ask and
+Library were built by D37, and Diligence and Benchmarking shipped in #456. The
+zone set itself is unchanged and correct — `funds` is founder's and
+`client-prep` is advisor's and partner's, so neither belongs in this
+investor table. See D55.
 
 Overview: `InvestorResearchWorkspace.jsx` on `/research` and `/market-intel`
 (role branch). **`/research/*` deliberately excluded from `INVESTOR_FULL_BLEED`**

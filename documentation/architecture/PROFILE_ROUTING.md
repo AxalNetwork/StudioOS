@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 107 canonical canvases at `design/canvases/`, listed
-127 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 109 canonical canvases at `design/canvases/`, listed
+129 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 45 canvases
+## Founder — 46 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -64,6 +64,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Founder Network | `/network` | Home | Full page | Sidebar → Home → Network | RESKIN | High |
 | Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` | Home | Full page (proposed) | Sidebar → Home → Raise | UPGRADE | Low |
 | Pages · Founder Research | `/market-intel` | Home | Full page | Sidebar → Home → Research | RESKIN | High |
+| Pages · Founder Validate | `/validate` · `/validate/{interviews` | Home | Full page (proposed) | Sidebar → Home → Validate | CURRENT | Low |
 | Perks & Products | `/perks` | Home | Full page | Sidebar → Home → Grow | NEW | High |
 | Pitch Deck Builder | `/spinout-lab/pitch-deck` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
 | Profiling | `/spinout-lab/profiling` | Home | Full page (Spin-Out Lab — frozen) | Sidebar → Home → Spin-Out Lab | OUT OF SCOPE | High |
@@ -149,7 +150,7 @@ it, where in their nav, and how do they get there.*
 | Support Security · Super | `/admin/security` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
-## Shell (all workspaces) — 11 canvases
+## Shell (all workspaces) — 12 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -162,6 +163,7 @@ it, where in their nav, and how do they get there.*
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Mobile Canvas | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Navigation Shell | — | — (not routed) | Embedded rail | Not reachable yet | UPGRADE | Low |
+| Navigation Shell · Anatomy | — | — (not routed) | Embedded rail | Not reachable yet | UPGRADE | Low |
 | PartnerRail | — | — (not routed) | Embedded rail | Not reachable yet | UPGRADE | Low |
 | System Sheet | — | — (not routed) | Reference (no surface) | Not reachable yet | NEW | Low |
 
@@ -210,7 +212,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 67 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 33 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 27 | Not routed. Proposed route only. |
+| Low | 29 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

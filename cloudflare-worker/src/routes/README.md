@@ -6,7 +6,19 @@ against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
 
 ## Mount map
 
-`index.ts` mounts each router under `/api/<prefix>`:
+`index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,
+not the whole set** — there are 155 `app.route()` calls in `index.ts` and 35
+rows here, most of the remainder being the `/api/admin/*` family. `index.ts` is
+the complete answer; this map exists to name the ones worth knowing first.
+
+Every filename below is now checked. `check-folder-docs.mjs` used to read only
+backticked tokens, so names sitting bare inside this fence were invisible to
+it — which is how the row for `/api/market-intel` came to point at a hyphenated
+spelling of `market_intel.ts` that has never existed, while a guard written to
+catch exactly that ran green over this folder. The guard reads fenced blocks as
+of 2026-09-07. (Naming the wrong spelling in backticks here would fail the
+widened guard on this very sentence, which is the rule working.)
+
 
 ```
 /api/auth          → auth.ts
@@ -21,7 +33,8 @@ against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
 /api/tickets       → tickets.ts
 /api/deals         → deals.ts
 /api/users         → users.ts
-/api/market-intel  → market-intel.ts
+/api/market-intel  → market_intel.ts
+/api/market-intel-public → market_intel_public.ts
 /api/advisory      → advisory.ts
 /api/activity      → activity.ts
 /api/admin         → admin.ts
@@ -40,6 +53,8 @@ against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
 /api/profiling     → profiling.ts
 /api/dashboard     → dashboard.ts
 /api/matches       → matches.ts
+/api/research      → research.ts        (the Research bucket's own stores)
+/api/advisor-grants → advisor_grants.ts (a founder's per-scope grant to a named advisor)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)
 ```
 

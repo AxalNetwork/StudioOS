@@ -9,6 +9,8 @@ import SignalKPIStrip from '../components/signals/SignalKPIStrip';
 import SignalEvidencePanel from '../components/signals/SignalEvidencePanel';
 import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
+import { Stat } from '../ui';
+import { StatedLimit } from './advisor/expertise/kit';
 
 /**
  * SignalsPage — "Public-market evidence for what to build next".
@@ -42,6 +44,56 @@ import ZoneToolbar from '../workspaces/ZoneToolbar';
 const AGE_WINDOWS = {
   advisor: { ageing: 30, stale: 120 },
   partner: { ageing: 30, stale: 90 },
+};
+
+/**
+ * THE CANVAS'S STAT STRIP, and the two licences that can draw one.
+ *
+ * Every Markets artboard specifies four tiles, and the four sets do not agree:
+ *
+ *   founder  Saved analyses · Sources · Confidence · Excluded input
+ *   investor Theses · Sourced from active · Excluded input · Last refreshed
+ *   advisor  Current · Stale · Sectors covered · Net revenue retention (nr)
+ *   partner  Attachable now · Stale · Widest range · Retainer rate (nr)
+ *
+ * Founder's and investor's eight tiles are all downstream of the same missing
+ * thing: a SAVED DEEP-DIVE — an analysis or a thesis, kept with its method, its
+ * sources and its run date. Nothing stores one. This page reads a signals feed,
+ * which is a different object: evidence gathered on a schedule, not a piece of
+ * work someone saved. So those two licences state the absence once, in the
+ * sentence below, rather than drawing four tiles that would each read "Not
+ * recorded" — the rule D56 records and `LibraryZone` established.
+ *
+ * Advisor and partner open with an AGE BAND, and that one is real. `ageInDays`
+ * already buckets every signal against `AGE_WINDOWS[role]`, which are the
+ * artboards' own `AGE_AT`/`STALE_AT` constants transcribed, and the zone's
+ * header chips already filter on exactly those bands. A tile that counts what a
+ * chip will return is reading the rows the chip reads. Their other two tiles are
+ * about a curated figures register — a source and a run date per figure — which
+ * does not exist here, and the fourth is marked `nr:true` on the artboard
+ * itself, so the canvas already draws it as "Not recorded".
+ *
+ * The labels are per licence because the artboards' are. `Current` and
+ * `Attachable now` count the same band and ask different questions of it, and
+ * flattening them to one word would answer the wrong one on one of the two.
+ */
+const MARKETS_STRIP = {
+  advisor: {
+    fresh: { label: 'Current', note: (w) => `newest evidence within ${w.ageing} days` },
+    stale: { label: 'Stale', note: (w) => `nothing dated inside ${w.stale} days` },
+    gaps: [
+      { label: 'Sectors covered', note: 'the feed is not scoped to your declared sectors, and nothing here reads Expertise · Profile' },
+      { label: 'Net revenue retention', note: 'the artboard marks this one unrecorded too — no source covers enough companies' },
+    ],
+  },
+  partner: {
+    fresh: { label: 'Attachable now', note: (w) => `newest evidence within ${w.ageing} days` },
+    stale: { label: 'Stale', note: (w) => `nothing dated inside ${w.stale} days` },
+    gaps: [
+      { label: 'Widest range', note: 'a comparable price range needs a readings register with a range per row, and none is stored' },
+      { label: 'Retainer rate', note: 'the artboard marks this one unrecorded too — it has never been run' },
+    ],
+  },
 };
 
 /**
@@ -168,6 +220,21 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
   });
   const chooseZoneView = (key) => setZoneView((current) => (current === key ? 'all' : key));
 
+  // COUNTED OVER `signals`, NEVER `visible`. `visible` is already narrowed by
+  // the chip the reader has selected, so counting it would make `Current` read
+  // zero the moment they clicked `Stale` — a tile that changes because you
+  // looked at it is not reporting the population it claims to.
+  const strip = embedded ? MARKETS_STRIP[role] : null;
+  const bands = !strip || !window_ ? null : signals.reduce((acc, s) => {
+    const days = ageInDays(s);
+    // An undated signal is in no band, exactly as the chip filter treats it.
+    if (days === null) acc.undated += 1;
+    else if (days <= window_.ageing) acc.fresh += 1;
+    else if (days > window_.stale) acc.stale += 1;
+    else acc.ageing += 1;
+    return acc;
+  }, { fresh: 0, ageing: 0, stale: 0, undated: 0 });
+
   const content = (
     <div className="space-y-5 pb-10">
       {zoneActions && (
@@ -237,6 +304,44 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
             Advisor mode — signals ordered by how confidently you can point a founder toward them.
           </span>
         </div>
+      )}
+
+      {/* THE CANVAS'S STRIP, above the one this page already had. They are not
+          rivals and neither is redundant: `SignalKPIStrip` answers how big this
+          feed is and where it comes from — every one of its four tiles is
+          sourced — and the strip below answers how much of it is still worth
+          quoting. The bands are also the counts behind the header chips, so a
+          reader can see a chip is empty before clicking it. */}
+      {strip && bands && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat
+            label={strip.fresh.label}
+            value={loading && !data ? undefined : bands.fresh}
+            note={strip.fresh.note(window_)}
+          />
+          <Stat
+            label={strip.stale.label}
+            value={loading && !data ? undefined : bands.stale}
+            note={strip.stale.note(window_)}
+          />
+          {strip.gaps.map((g) => (
+            <Stat key={g.label} label={g.label} value="Not recorded" mono={false} note={g.note} />
+          ))}
+        </div>
+      )}
+
+      {embedded && !strip && (
+        <StatedLimit>
+          The canvas puts four figures here — a count of saved analyses, their
+          sources, the confidence behind them and the input excluded for being
+          too old — and an instrument card listing each one with its method and
+          run date. All of it describes a saved deep-dive: a piece of work
+          someone kept, with the method named and the date it was run. Nothing
+          stores one. What this page reads is a signals feed, gathered on a
+          schedule from public evidence, which is a different object — so the
+          figures are stated here rather than drawn over rows that would not be
+          answering the question the labels ask.
+        </StatedLimit>
       )}
 
       {/* KPI strip */}

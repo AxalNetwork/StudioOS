@@ -189,6 +189,25 @@ for (const [dir] of DOCUMENTED) {
   for (const m of src.matchAll(/`([^`\s]+)`/g)) {
     if (CITED_EXT.test(m[1])) cited.add(m[1]);
   }
+  // AND NOTHING IN A FENCED BLOCK EITHER. The pass above reads backticked
+  // tokens only, so a filename sitting bare inside a ``` fence was invisible to
+  // it — which is how `cloudflare-worker/src/routes/README.md`'s mount map came
+  // to point at `market-intel.ts`, a file that has never existed, for as long
+  // as this guard has been running over that folder. A mount map is the most
+  // load-bearing prose in the repository and was the one shape exempt from the
+  // rule written to protect it.
+  for (const fence of src.matchAll(/```[^\n]*\n([\s\S]*?)```/g)) {
+    // `*` IS PART OF THE TOKEN, deliberately. A tokenizer that drops it turns
+    // the glob `*.test.mjs` into the filename `test.mjs` and then reports it
+    // missing — so the wildcard is captured and the `NNN|<|\*` rule below
+    // does the excluding, rather than a second exclusion being written here.
+    // The leading class also forbids a bare `.`, so `.dc.html` named as an
+    // extension is not read as a file.
+    for (const m of fence[1].matchAll(/[A-Za-z0-9_*-][A-Za-z0-9_.*\-/]*/g)) {
+      if (CITED_EXT.test(m[0])) cited.add(m[0]);
+    }
+  }
+
   for (const name of cited) {
     // A naming pattern is not a claim. `NNN_short_name.sql` and
     // `<Surface>.dc.html` describe how to name a new file; they are not

@@ -14,15 +14,16 @@ been built. Counts as of 2026-09-04:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 57 — the canvas is built; its zones render its bodies. |
+| `canvases/integrated/` | 59 — the canvas is built; its zones render its bodies. |
 | `canvases/backlog/` | 26 — triaged, not built yet. |
 | `canvases/out-of-scope/` | 27 — deliberately not being built. |
 
 (`canvases/uploads/` holds 3 more that were never part of the triage split, and
 is not counted here. The table read 53 / 27 / 27 until 2026-09-04: one canvas
 had moved from `backlog/` to `integrated/` without the count following it, and
-two more moved out of this folder in the commit that corrected it. **If you move
-a file, move the number.**)
+two more moved out of this folder in the commit that corrected it. It read
+57 / 26 / 27 until 2026-09-07, when the two below left. **If you move a file,
+move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
 `canvases/integrated/`; this queue should only ever hold work that is still
@@ -83,13 +84,11 @@ of the four whose canvas was already committed — it is in
 
 | Canvas | Governs | Grade | Still outstanding |
 | --- | --- | --- | --- |
-| `Pages · Founder Validate.dc.html` | `/validate`, `/validate/{interviews,pain-map,hypotheses,verdict}` | UPGRADE | `hypotheses` and `verdict` have no store |
 | `Pages · Advisor Expertise.dc.html` | `/expertise`, `/expertise/{profile,services,proof,thinking,visibility}` | UPGRADE | `thinking` has no store; `visibility` needs an impression pipeline, not a table |
 | `Pages · Advisor Network.dc.html` | `/network/*` on the advisor licence | UPGRADE | `organizations` reads nothing for this licence |
 | `Pages · Advisor Research.dc.html` | `/research/*` on the advisor licence | UPGRADE | only `markets` and `companies` are live |
 | `Pages · Partner Network.dc.html` | `/network/*` on the partner licence | UPGRADE | `organizations` reads nothing for this licence |
 | `Pages · Partner Research.dc.html` | `/research/*` on the partner licence | UPGRADE | only `markets` and `companies` are live |
-| `Navigation Shell · Anatomy.dc.html` | the shell itself — chrome, company switcher and the six role fills (2026-09-04 batch) | UPGRADE | the rail's model card (see below) |
 
 **Moved to `canvases/integrated/` on 2026-09-04**, both by #431, which built
 their stores (migrations 208 and 209) and their bodies:
@@ -98,6 +97,22 @@ their stores (migrations 208 and 209) and their bodies:
 | --- | --- |
 | `Pages · Partner Delivery.dc.html` | `/delivery`, `/delivery/{board,deliverables,capacity,status-reports,health}` |
 | `Pages · Partner Offers.dc.html` | `/offers`, `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` |
+
+**Moved on 2026-09-07**, each because the one thing this queue was holding it
+for now exists — checked against the store, not the route, per the bar above:
+
+| Canvas | Was waiting on | What closed it |
+| --- | --- | --- |
+| `Pages · Founder Validate.dc.html` | "`hypotheses` and `verdict` have no store" | Migrations 211 and 214. `founder_validate.ts` serves `POST /board/:projectId/hypotheses`, `PATCH /hypotheses/:id` and `POST /hypotheses/:id/links`; `api.createHypothesis` and `api.linkHypothesisPain` are called from `FounderValidateWorkspace.jsx`; no Validate surface renders a `NoStoreYet` card. |
+| `Navigation Shell · Anatomy.dc.html` | "the rail's model card" | `WorkerRail.jsx` reads `ASSIST_SURFACES[WORKSPACE_SURFACE]` and imports `modelsForTask` / `priceForTask`. The registration gap that made the card unshippable is closed, so it names a model for a page that does call one. |
+
+**Both carry zero `filters:` and zero `ops:` rows, which is why the move was a
+file move.** `profile_zone_filters.test.mjs` and `profile_zone_actions.test.mjs`
+glob `integrated/` for `Pages · Founder *`, so a canvas arriving there with zone
+rows would change the founder profile's expected zone count. These two do not:
+the set stayed 26 zones and 108 labels across what is now six files. Any of the
+five canvases still listed above WOULD change it, and would also need
+`canvasDirs` updated in both guards.
 
 Two things those two canvases asked for were **not** built, and are stated on
 the pages themselves rather than held open here: nothing records a firm's
@@ -168,7 +183,7 @@ intent is to land a canvas.**
 | Canvas | Folder |
 | --- | --- |
 | Pages · Founder Build / Grow / Raise / Network / Research | `canvases/integrated/` |
-| Pages · Founder Validate | `incoming/` |
+| Pages · Founder Validate | `canvases/integrated/` (moved from `incoming/`, 2026-09-07) |
 | Pages · Investor Deals / Portfolio / Fund / Research | `canvases/integrated/` |
 | Pages · Advisor Expertise / Network / Research | `incoming/` |
 | Pages · Advisor Cohorts | `canvases/backlog/` |
@@ -184,7 +199,9 @@ intent is to land a canvas.**
 **The two the repository does not hold.** One is landed here; the other cannot
 be, and the difference is instructive.
 
-1. **`Navigation Shell · Anatomy.dc.html` — LANDED.** Five artboards: N1 shell
+1. **`Navigation Shell · Anatomy.dc.html` — LANDED**, and moved on to
+   `canvases/integrated/` on 2026-09-07 once the rail's model card shipped.
+   Five artboards: N1 shell
    anatomy (one chrome, six role fills), N2 company switcher in three states,
    N3 admin tiers (subsidiary and HQ), N4 founder and investor/LP, N5 advisor
    and service partner. It carries no `data-props`, so nothing about it was

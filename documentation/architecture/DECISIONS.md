@@ -232,6 +232,17 @@ licence before a single row of it is real. The route, the five nav entries and
 fabricated; the funds honesty rule that governs `vc_funds` ("Not recorded",
 never invented) is the same principle. It returns when a source is licensed.
 
+**UPDATE 2026-09-07 — `/research/funds` has returned, and not on the condition
+this decision set.** No source was licensed. Migration 216 `research_funds`
+backs a zone that is a different object from the one withdrawn here: the funds
+a founder records for THEMSELVES — who they are talking to, at what stage,
+through which warm path — not a directory of external funds bought from a
+vendor. D9 withdrew the second and still does; the first needs no licence,
+because every row in it is the founder's own. That is the same line D37 drew
+for Library and Ask, and D55 records it. The table row below still reads
+`| funds | none | no data source → D9 |`, which remains true of the tab this
+decision withdrew and is not true of the zone that now stands at that path.
+
 **Correction to an earlier recommendation.** D7 named Research "the clearest
 case" for wire-what-has-a-backend-first. That was true of one tab in six, not
 of the row. Verified per tab:
@@ -1689,6 +1700,16 @@ type the product has for investors (`data_room_grants`) and for no one else.
 Adding one is a decision about a founder's privacy, not a schema change, and
 it is what `/research/client-prep` also waits on.
 
+**UPDATE 2026-09-07 — the paragraph above is superseded and the decision it
+called for was taken.** Migration 218 `advisor_client_grants` added exactly that
+second founder-to-outsider grant type, scope by scope, and
+`/research/client-prep` no longer waits on anything: it reads a brief under the
+grant and names in `withheld[]` every scope the founder did not open. D50
+records it and says "D37 is narrowed, not retired" — this is that narrowing,
+written on the side that gets read first. The rest of D37 stands: Ask still
+answers only from documents the caller uploaded themselves, and still refuses
+rather than answering from general knowledge.
+
 ---
 
 ### D38. The Spin-Out Lab is not a pre-incorporation programme, and never was in code — only in prose
@@ -2822,3 +2843,120 @@ relationship book, so there is nothing to merge". Both were true and both were
 too weak: with no key there are no rows to be duplicates of, and the derivation
 produces nothing. The two halves of a row are one sentence about one store and
 must not be allowed to describe it at two different strengths.
+
+## D55 — The Research stores are the reader's own record, which is why D9's licence is not their condition
+
+**2026-09-07.** `/research/{funds,benchmarking,diligence}` shipped in #456 with
+migrations 216 `research_funds` and 217 `research_benchmarks` — and no decision
+entry, which is the gap this closes. D49 recorded the bucket boards and D50 the
+advisor grant; the stores they were built alongside got nothing.
+
+**Why the omission mattered more than a missing paragraph.** D9 withdrew the
+Funds research tab and closed *"It returns when a source is licensed."* No
+source has been licensed, and `/research/funds` is back. Read on its own that
+looks like a decision quietly reversed. It is not: **the object changed.** D9's
+tab wanted a directory of external funds, managers, fundraises, unicorns and
+comparables — third-party market data nobody here can produce without buying
+it. `research_funds` holds the funds a founder is *themselves* talking to,
+with the stage fit they judged, the path they have in, and the reason they
+were passed on. Every row is the founder's own record of their own raise.
+Nothing in it is bought, so nothing in it needs a licence. That is the same
+line D37 drew for Library and Ask — answer from what the caller uploaded, refuse
+to answer from general knowledge — applied to a different bucket.
+
+**Diligence has no migration and that is the design.** It is an assembly over
+`data_room_grants`, `data_room_files.visibility` and `data_room_access_log`:
+three tables that already exist, read together to answer one question an
+investor cannot otherwise ask — which founders opened a room to me, and how
+much of what they hold did they stage. A fourth table would have been a copy
+of the first three going stale.
+
+**Three absences these routes state in the response body rather than fill.**
+Each is the same rule the filter halves later formalised as D51 — an absent fact
+is said, never modelled:
+
+- `cheque_overlap_note` (`research.ts:436`) — with no `raise_target_usd` on the
+  active company's project there is no ask to compare a cheque range against,
+  so the count is *absent rather than zero*.
+- `sample_note` (`research.ts:560`) — the smallest peer set behind any
+  comparison on the page is named up front, because "a median over a set that
+  size moves with one member and should not be presented as a market rate".
+  The write path refuses a peer figure without its source and sample size
+  (`:567`), duplicating the schema CHECK so the writer gets a sentence instead
+  of a constraint violation.
+- `deal_stage_note` (`research.ts:668`) — the canvas puts a deal stage on a
+  data room; a grant and a deal are separate records with no key between them,
+  and joining them on a company name would attach a stage to the wrong room.
+  `deal_stage` is `null` and says why.
+
+**What this decision does not do.** It does not reopen D9's tab. A directory of
+external funds still needs a licensed source and still is not being built; D9's
+table row `| funds | none | no data source → D9 |` remains true of the thing it
+describes. The two objects share a path and nothing else.
+
+
+---
+
+## D56 — Ask draws the canvas strip on two licences and refuses it on two, because the licences do not share a first tile
+
+**Date:** 2026-09-07 · **Reverses in part:** the judgement recorded in
+`77f53bf28` · **Follows:** D37, D51
+
+`77f53bf28` gave `/research/library` its canvas structure — the four-tile stat
+strip and the instrument card — and argued in the same commit that
+`/research/ask` should **not** get the same treatment:
+
+> Four empty tiles and an empty table would restate one absence five more times.
+
+That is right, and it is right about only half the product. It was written
+looking at the founder and investor artboards, where it still holds exactly.
+The advisor and partner artboards specify a different Ask zone, and the
+difference is the first tile.
+
+**Where the original judgement stands, unchanged.** Founder's and investor's
+four tiles — `Questions asked`, `Answers kept`, a first-pass cost and a
+follow-up cost — and their whole `Session history` table are downstream of one
+missing thing: a stored session. `research.post('/ask')` searches, answers and
+returns; the only per-question row anywhere in the product is `ai_usage_logs`,
+which holds token counts and no question text. Four tiles reading "Not
+recorded" would state one absence four times, and a table whose every row is
+"Not recorded" is what D51 and the Library rule already forbid. So those two
+licences get **one sentence naming all four tiles**, and neither strip nor
+table. `groupFilterNotes` does the same thing in the header row directly above,
+for the same reason.
+
+**Where it does not stand.** Advisor's and partner's strip opens with `Indexed
+documents`, and their instrument card is `What Ask can reach` —
+`Document / Kind / Added / Index state / In Ask`. Every one of those is a field
+`api.research.documents()` already returns, and `AskZone` has already fetched
+that payload for its own empty state. Nothing new is called to draw either. So
+the strip is real in its first tile with three stated gaps below it, which is
+the Library treatment exactly, and the card answers the question the zone
+exists to answer: *which of my documents can Ask actually see.*
+
+Refusing to draw them on the strength of an argument about tiles that are not
+on this artboard would hide a sourced table behind a judgement made elsewhere.
+
+**The rule this leaves behind, which is not about licences.** A zone draws its
+canvas strip when **at least one tile in it has a store**; the rest then say
+"Not recorded" in words. A strip with no real tile is a sentence instead. That
+is why `ASK_STRIP_LICENCES` is one named constant gating both the strip and the
+card rather than two role tests — the two surfaces answer the same question and
+must not be able to drift apart. `research_zones.test.mjs` pins the constant,
+its two uses, the absence of any bare role comparison, each tile at its own
+`/>`, and the card's five columns.
+
+**`In Ask` reads `index_state`, never `chunk_count`.** A document that indexed
+once and later failed a re-index keeps its old passage count — the failure path
+writes the state and leaves the number alone — so the count would call a
+document answerable that Ask cannot see. The guard bans `d.chunk_count` in that
+card.
+
+**Still out of scope, and named so it is not mistaken for an oversight.** The AI
+proposal card (`aiLabel` / `aiCost` / `aiBody` / `aiAccept` / `aiFoot`) appears
+in ten artboard specs and is rendered nowhere under `pages/research/`; wiring it
+means binding each zone to an aiRouter task class, which is a registration
+decision rather than a layout one. Same for Ask's advisor/partner `.meter`, the
+`.askbar` cost line, `.thread`, and the `scope` chip — `ZoneHeading` has no prop
+for it. A session store for Ask is a migration, and a migration is a decision:
+it is raised here, not built around.

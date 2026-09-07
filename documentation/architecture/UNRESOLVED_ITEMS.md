@@ -141,6 +141,17 @@ private notes.
 
 ## U6 — A cohort's founders never learn that an advisor can read them
 
+> **UPDATE 2026-09-07 — the precedent this item wanted now ships.** U6's third
+> reading proposes that founders consent per advisor, and names
+> `advisor_proof_consents` (204) as the shape to copy. Migration 218
+> `advisor_client_grants` (D50) is a closer one: a founder names an advisor and
+> opens three scopes individually, the read re-checks the role on every request,
+> and the brief returns `withheld[]` naming every scope that was NOT opened.
+> That is a founder-made, per-scope grant already in production. It does not
+> resolve U6 — migration 206's cohort assignments are admin-made and still tell
+> the founder nothing — but it removes the "this would be new machinery"
+> objection, because the machinery exists one bucket over.
+
 **Evidence.** `advisor_cohort_assignments` (migration 206) lets an admin grant
 one advisor read access to the **names and email addresses** of every founder
 in a Lab cohort, through `GET /api/advisors/me/cohort/:cycleId/founders`. The
@@ -363,6 +374,56 @@ value is the method: the question was answerable only by a request to the
 edge, and it stayed unanswered in this file — with `CLAUDE.md` fact 4,
 `GOTCHAS.md` and `frontend/public/_headers` all pointing here — until
 something actually made that request.
+
+---
+
+## U11 — 390 Tailwind classes name tokens that are declared nowhere
+
+**Found 2026-09-07, closing out the C series.** `frontend/src/index.css`'s
+`@theme` block declares ten `--color-axal-*` tokens: `amber`, `amber-deep`,
+`faint`, `ground`, `hairline`, `ink`, `lavender`, `muted`, `violet`,
+`violet-deep`. The workspace layer uses six that are **not** among them, and
+Tailwind v4 does not derive a numbered variant from a base token — so
+`text-axal-ink-2` is not a dimmer `axal-ink`, it is a class that emits no CSS
+at all:
+
+| Class | `className` usages |
+| --- | --- |
+| `text-axal-ink-3` | 234 |
+| `text-axal-ink-2` | 99 |
+| `bg-axal-surface-2` | 28 |
+| `border-axal-border` | 16 |
+| `border-axal-border-soft` | 11 |
+| `text-axal-ink-1` | 2 |
+
+**390 in all, across 20+ files** — including `WorkspaceShell.jsx`, the frame
+every workspace route renders, and `BucketOverview`, `ResearchWorkspace`,
+`AskZone`, `FundsZone` and most of the partner Delivery and Offers zones. Text
+meant to be muted inherits its parent's colour; borders meant to be hairlines
+are absent. It reads as "slightly wrong" rather than broken, which is why it
+has survived.
+
+**Half of it is already known and was fixed in one place.** The C2 lift
+(`NoStoreYet.jsx:24-25`) removed exactly these classes from the three copies of
+that component on the grounds that they "are declared in no `@theme` block",
+and `BucketBoard.jsx:52` and `ZoneToolbar.jsx:34` carry a NO UNDECLARED TOKENS
+rule in their docblocks. The rule was written and applied locally; the other
+390 usages were never swept.
+
+**Why it is recorded rather than fixed here.** Two open questions, and both are
+decisions rather than details. Either the six tokens get declared — which means
+choosing six colours in both themes, and `axal-ink` alone is already a
+correction of its own spec (`index.css:57` notes the shipped value differs from
+what the canvas asked for) — or 390 call sites move to Tailwind's own greys,
+which is a restyle of the whole workspace surface and needs its own render
+pass across four licences. Doing either inside a documentation commit would be
+a large uninspected visual change.
+
+**What would make it safe to start:** a guard that fails a NEW undeclared
+`axal-*` class, so the number can only go down. That is cheap; an allowlist of
+390 to get it green is not, which is why it waits on the sweep rather than
+leading it.
+
 
 ---
 
