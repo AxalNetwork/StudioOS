@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
 import { NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from '../advisor/expertise/kit';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 
 /**
  * Research · Diligence — the rooms you have been let into, and how far.
@@ -35,7 +35,7 @@ const day = (v) => {
   return Number.isNaN(t.getTime()) ? String(v) : t.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-export default function DiligenceZone({ zoneActions }) {
+export default function DiligenceZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
 
   const load = useCallback(async () => {
@@ -54,7 +54,14 @@ export default function DiligenceZone({ zoneActions }) {
 
   return (
     <div className="space-y-6">
-      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(items)} />}
+      {zoneActions && (
+        <ZoneToolbar
+          role={role}
+          className="mb-3"
+          filters={zoneFilters ? zoneFilters({}) : []}
+          actions={zoneActions(items)}
+        />
+      )}
       <ZoneHeading
         title="Diligence pulls"
         sub="The rooms founders have opened to you, and how much of each they actually staged."

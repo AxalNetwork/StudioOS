@@ -5,7 +5,7 @@ import {
   Field, NothingYet, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, inputClass,
 } from '../advisor/expertise/kit';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 
 /**
  * Research · Benchmarking — a comparison, and the base it rests on.
@@ -35,7 +35,7 @@ import ZoneActions from '../../workspaces/ZoneActions';
 
 const EMPTY = { metric: '', our_value: '', peer_value: '', peer_source: '', peer_sample_size: '', peer_as_of: '', reading: '' };
 
-export default function BenchmarkingZone({ zoneActions }) {
+export default function BenchmarkingZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
@@ -77,7 +77,14 @@ export default function BenchmarkingZone({ zoneActions }) {
 
   return (
     <div className="space-y-6">
-      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(items)} />}
+      {zoneActions && (
+        <ZoneToolbar
+          role={role}
+          className="mb-3"
+          filters={zoneFilters ? zoneFilters({}) : []}
+          actions={zoneActions(items)}
+        />
+      )}
       <ZoneHeading
         title="Fund & manager benchmarking"
         sub="What you are measuring, what the peer set says, and how many it was measured over."
