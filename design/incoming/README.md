@@ -84,19 +84,77 @@ byte, so only what the repository did not already hold is here.
 
 **Eight the repository had never seen.** Each governs a bucket whose zone
 routes are live and whose bodies have not yet been built up to the canvas —
-which is exactly what this queue is for. Partner · Pipeline is the one bucket
+which is exactly what this queue is for. Partner · Pipeline was the one bucket
 of the four whose canvas was already committed — it is in
-`design/canvases/integrated/` and is not repeated here.
+`design/canvases/integrated/` and was not repeated here **until 2026-09-07**,
+when a newer export of it arrived; see the section above.
 
 **Two of the eight have since left**, and what remains is the honest list:
 
 | Canvas | Governs | Grade | Still outstanding |
 | --- | --- | --- | --- |
-| `Pages · Advisor Expertise.dc.html` | `/expertise`, `/expertise/{profile,services,proof,thinking,visibility}` | UPGRADE | `thinking` has no store; `visibility` needs an impression pipeline, not a table |
+| `Pages · Advisor Expertise.dc.html` | `/expertise`, `/expertise/{profile,services,proof,thinking,visibility}` | UPGRADE | `thinking` has no store; `visibility` needs an impression pipeline, not a table. **The file is the 2026-09-07 export**, which replaced the 2026-09-03 one in place; both gaps still stand, and the newer one adds that every zone renders only the impersonation gate card. |
 | `Pages · Advisor Network.dc.html` | `/network/*` on the advisor licence | UPGRADE | `organizations` reads nothing for this licence |
 | `Pages · Advisor Research.dc.html` | `/research/*` on the advisor licence | UPGRADE | only `markets` and `companies` are live |
 | `Pages · Partner Network.dc.html` | `/network/*` on the partner licence | UPGRADE | `organizations` reads nothing for this licence |
 | `Pages · Partner Research.dc.html` | `/research/*` on the partner licence | UPGRADE | only `markets` and `companies` are live |
+
+## Landed 2026-09-07 — four newer exports, reported as not matching
+
+The owner sent four artifacts, each saying the shipped subpages do not match
+the design. All four are decoded and committed here as `.dc.html`, so the
+comparison can be made against a file in the repository rather than against a
+link:
+
+| Canvas | Governs | Supersedes | Why it is here |
+| --- | --- | --- | --- |
+| `Pages · Founder Research.dc.html` | `/research/{ask,markets,companies,funds,library}` | — | Five zones, `PAGES` shape (ids fs1–fs5): `filters`, `ops`, four `adds` stat tiles, `head`/`rows` with status pills, and an AI-rail offer per zone. |
+| `Pages · Partner Offers.dc.html` | `/offers/{catalog,perk-deals,visibility,proof,audience-fit}` | the `integrated/` copy | Same shape. Its `ops` match what `partnerZoneActions.js` already carries; its `filters` do **not** exist in `partnerZoneFilters.js` at all — that table has no `offers/*` key. |
+| `Pages · Partner Pipeline.dc.html` | `/pipeline/{leads,proposals,negotiations,retainers,analytics}` | the `integrated/` copy | **The one that changes a standing decision.** See below. |
+| `Pages · Advisor Expertise.dc.html` | `/expertise/{profile,services,proof,thinking,visibility}` | the 2026-09-03 export in this folder | Newer export of the same surface, 54K against 39K. Its `h1` per zone is not the zone name — `Practice profile`, `Service ledger`, `Evidence`, `Published thinking`, `Surfaces & funnel` — and each zone has its own blurb, where the shipped pages print Visibility's on all five. |
+
+### Partner Pipeline: the exemption that expired, and the one that has not
+
+`partnerZoneActions.js` carried a paragraph saying `/pipeline` "specifies NO
+zone-header actions … left alone until the canvas gains an `ops:` array". This
+export **has** one — seven ops across the five zones:
+
+| Zone | Chips | Ops |
+| --- | --- | --- |
+| Leads | Open · Strong fit · Warm intros · Passed · All sources | `Edit capability weights` |
+| Proposals | All · Opened, unanswered · Never opened · Won · Lost | `Bulk: nudge unopened` · `Export win/loss CSV` |
+| Negotiations | All · Awaiting you · Awaiting them · Stalled 7d+ | `WIP limit: 5 per stage` |
+| Retainers | All · Renewing 30d · Under-consuming · Over scope | `Export MRR schedule` |
+| Analytics | Q3 2026 · Q2 2026 · Year to date · By shape | `Export chart` · `Save benchmark` |
+
+**But the table cannot adopt them yet, and the reason is a shape difference
+rather than a judgement.** `profile_zone_actions.test.mjs` derives the expected
+ops by globbing `canvases/integrated/` and parsing `route:'…'` plus `ops:[…]`
+out of a `PAGES` declaration. This export does not use that shape: its labels
+live in the `__bundler/template` as `sc-` markup (`<sc-for list="{{ l_views }}">`,
+`class="vm"` on each op) and its data in a single `text/x-dc` block keyed by
+zone prefix — `l_` Leads, `pr_` Proposals, `n_` Negotiations, `r_` Retainers,
+`a_` Analytics. Adding the ops to the table without a canvas the guard can read
+was tried and correctly rejected: 21 zones against the 16 the canvases declare.
+
+So integrating this one needs a decision that is not a styling call: either the
+guard's parser learns the `sc-` shape, or the surface is re-exported in the
+`PAGES` shape the other three use. Until then the ops stay unbuilt, and the
+five Pipeline zones keep the empty header they have had since the exemption was
+written.
+
+**What each of the four named ops would need**, checked against the stores
+rather than guessed:
+
+| Op | Needs | State |
+| --- | --- | --- |
+| `Export win/loss CSV` | the loaded proposal rows | **buildable now** — `kind: 'export'`, same as every other zone's |
+| `Export MRR schedule` | the loaded retainer rows | **buildable now** |
+| `Export chart` | the loaded analytics rows | **buildable now** |
+| `Edit capability weights` | a capability register and a weight per capability | neither is stored |
+| `Bulk: nudge unopened` | a send mechanism, and `opened_at` set by the client | nothing here sends mail, and `opened_at` is the client's column with no surface to set it — "unopened" means "we do not know" |
+| `WIP limit: 5 per stage` | a per-stage limit stored for this firm | not stored; the canvas's 5 is its own sample, and adopting it would police the board with an invented number, the same call `delivery/capacity` makes about the hardcoded 40 |
+| `Save benchmark` | a figure with a source and a sample | `research_benchmarks` (216/217) exists but stores what the reader entered *with* its provenance; this page has neither to give it |
 
 **Moved to `canvases/integrated/` on 2026-09-04**, both by #431, which built
 their stores (migrations 208 and 209) and their bodies:
