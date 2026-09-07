@@ -258,3 +258,107 @@ test('the canvas demo switchers did not land', () => {
   assert.doesNotMatch(code, /'83b'|83\(b\)/,
     "the canvas's 83b key is not an ObligationKey");
 });
+
+// ===========================================================================
+// Trust Center v2 — the page reports, it does not edit.
+//
+// The canvas's whole thesis, and the one thing `/trust` visibly was not: it
+// rendered an editable KYC form inline, so the page was a status report AND a
+// submission surface at once. These pin the split.
+
+test('the page renders no editable identity control', () => {
+  assert.doesNotMatch(CODE, /KycVerification/,
+    'the editable KYC form is embedded in the Trust Center again — this page reports status only');
+  assert.doesNotMatch(CODE, /api\.kycSubmit/,
+    'the Trust Center is submitting KYC; submission belongs to /kyc');
+});
+
+test('removing the form stranded nobody — /kyc is still routed and still linked', () => {
+  // The check that has to pass BEFORE taking a form away. `/kyc` renders the
+  // same component full-page, and Settings points at it, so the only thing that
+  // changed is that the form stopped being in two places.
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /path="\/kyc"/, '/kyc is no longer routed — the KYC form is now unreachable');
+  assert.match(read('frontend/src/pages/KYCPage.jsx'), /KycVerification/,
+    '/kyc no longer renders the KYC form');
+  assert.match(read('frontend/src/pages/SettingsPage.jsx'), /href="\/kyc"/,
+    'Settings no longer links to /kyc, so "managed in Account Settings" would be a dead end');
+  // And this page says where it went.
+  assert.match(PAGE, /this page reports status only/);
+  assert.match(PAGE, /href="\/kyc"/, 'the Trust Center offers no route to the form it stopped rendering');
+});
+
+test('the identity fields are read, and the ID number is not printed in full', () => {
+  // `publicKycData` (kyc.ts) strips document bytes and spreads the rest, so
+  // `id_number` arrives whole. Printing it on a status page is a disclosure with
+  // no purpose; the mask is the point.
+  assert.match(PAGE, /api\.kycStatus\(\)/, 'the read-only grid no longer reads /kyc/status');
+  assert.match(CODE, /function maskIdNumber/, 'the ID-number mask is gone');
+  assert.match(CODE, /maskIdNumber\(kd\?\.id_number\)/,
+    'the ID number is no longer masked where it is rendered');
+  assert.doesNotMatch(CODE, /value: kd\?\.id_number\b/,
+    'the raw ID number is being rendered — mask it to the last four');
+});
+
+test('an absent value says the platform has none, not that the user withheld one', () => {
+  // "Not provided" blames the reader for a gap that may be a legacy record, a
+  // field never asked for, or a failed read. The page cannot tell those apart.
+  assert.match(CODE, /'Not recorded'/,
+    'the read-only fields no longer say "Not recorded" for an absent value');
+  assert.doesNotMatch(CODE, /'Not provided'/,
+    'a field claims the user did not provide a value the platform simply does not hold');
+});
+
+test('the Entity tab states the KYB model instead of drawing a selector over it', () => {
+  // The canvas draws a per-company KYB selector. `corporate_profiles` upserts
+  // ON CONFLICT(user_id) and no /trust route takes a company, so one user has
+  // one KYB and the selector would change nothing when clicked (task #108).
+  assert.match(PAGE, /recorded once per account, not per company/,
+    'the Entity tab no longer says KYB is per-account');
+  assert.doesNotMatch(CODE, /useActiveCompany|COMPANIES|selCompanyName/,
+    'a company selector landed on a page whose data has no company dimension');
+  const worker = read('cloudflare-worker/src/routes/trust.ts');
+  assert.match(worker, /ON CONFLICT\(user_id\)/,
+    'corporate_profiles is no longer keyed on user_id — recheck whether KYB is now per-company');
+});
+
+test('the pending-agreement label reads the column the worker actually selects', () => {
+  assert.match(CODE, /p\.document_type \|\| 'Agreement'/,
+    'the label is not reading document_type');
+  assert.doesNotMatch(CODE, /p\.agreement_type/,
+    'agreement_type is back — no such column exists, so every row falls through to "Agreement"');
+  assert.match(read('cloudflare-worker/src/routes/trust.ts'), /e\.document_type/,
+    'the worker stopped selecting document_type — recheck the label');
+});
+
+test('both frames get the provenance line, exactly once', () => {
+  // OUTSIDE the `chromeless` guard, deliberately. It went inside first, on the
+  // reasoning that investorWorkspace supplies its own header — and rendering the
+  // investor frame showed that `chromeless` then suppressed the line entirely,
+  // so the reader most likely to be mid-verification never saw the sentence
+  // explaining why nothing on the page is editable. It is not a heading, so
+  // there was never anything to duplicate.
+  // Counted over CODE, not PAGE: the Identity tab's docblock quotes the
+  // canvas's sentence verbatim to explain what the tab is for, so a raw count
+  // finds two and blames the page for its own explanation.
+  const occurrences = [...CODE.matchAll(/this page reports status only/g)].length;
+  assert.equal(occurrences, 1, `the provenance line is rendered ${occurrences} times — one, in one place`);
+
+  const start = CODE.indexOf('{chromeless ? <div /> : (');
+  assert.ok(start > 0, 'could not find the chromeless guard');
+  // Anchored FORWARD from the guard, and sliced out of the SAME string the
+  // index came from. Two bugs lived here in turn, both of which made this
+  // assertion read the wrong bytes while still passing:
+  //   1. `indexOf('<TrustScoreBadge')` from zero found the Overview panel's
+  //      badge far above the header, so the slice ran backwards and was empty.
+  //   2. `start` was then taken from CODE while the slice was taken from PAGE —
+  //      comments are stripped from one and not the other, so the offsets
+  //      disagree by thousands of characters and the slice landed nowhere near
+  //      the header. The mutation check caught it: moving the line back inside
+  //      the guard did not fail the test.
+  const head = CODE.slice(start, CODE.indexOf('<TrustScoreBadge', start));
+  assert.ok(head.length > 200, 'could not read the header block');
+  assert.match(head, /chromeless/, 'the header slice does not contain the guard it is supposed to bracket');
+  assert.doesNotMatch(head, /this page reports status only/,
+    'the provenance line is back inside the chromeless guard — an investor would never see it');
+});
