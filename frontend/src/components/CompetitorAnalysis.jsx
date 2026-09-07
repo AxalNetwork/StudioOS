@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Stat } from '../ui';
+import { StatedLimit } from '../pages/advisor/expertise/kit';
 import {
   ArrowLeft, Megaphone, Loader2, Sparkles, Plus, Trash2, RefreshCw, Download,
   Save, ExternalLink, ChevronRight, Search, AlertCircle, Check,
@@ -72,6 +74,34 @@ async function fetchMarkdown(url) {
  * `/research/companies` is one route for four licences whose zone actions
  * differ; `/build/competitors` passes nothing and gets nothing.
  */
+/**
+ * THE CANVAS'S STAT STRIP, and the level mismatch that decides who gets one.
+ *
+ *   founder  Tracked · Changed this month · Comparables · Last refreshed
+ *   advisor  Relationships · Researching · Prospects · Headcounts missing
+ *
+ * Every one of those eight labels counts COMPANIES. `competitor_analyses` is
+ * keyed on `user_id` and names no company at all — direct and adjacent live one
+ * level down, on `competitor_candidates`, and the list payload this page reads
+ * carries no candidates. That mismatch is already recorded on the filter half of
+ * this row (`founderZoneFilters.js`, `CATEGORY_IS_PER_COMPETITOR`); it decides
+ * the strip too.
+ *
+ * FOUNDER draws it, because two of its four survive the mismatch. `Tracked` is
+ * relabelled to what the store actually holds — an analysis, not a company —
+ * which is the same move `LibraryZone` made turning the canvas's `Year` into
+ * `Added`; and `Last refreshed` is a real `updated_at` on a real row. The other
+ * two are stated.
+ *
+ * ADVISOR draws none of it. All four of its tiles are about a company register
+ * with a relationship state — who is a client, who is a prospect, who is merely
+ * researched — and nothing here stores a relationship or a company. An advisor's
+ * analyses are their own, keyed on their own user id, which is the very thing
+ * `CompanyScopeNote` says above this page. Four tiles reading "Not recorded"
+ * would state one absence four times, so it is stated once (D56).
+ */
+const COMPANIES_STRIP_LICENCES = new Set(['founder']);
+
 export default function CompetitorAnalysis({ project = null, embedded = false, chromeless = false, zoneActions, zoneFilters, role = 'founder' }) {
   // Page furniture only. Never gate data or controls on this.
   const bare = embedded || chromeless;
@@ -281,6 +311,19 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     ? saved.filter((a) => Number(a.project_id) === Number(project.id))
     : saved;
 
+  // `chromeless` IS THE ZONE ROUTE, and it is the only caller that should draw
+  // canvas structure. `/build/competitors` mounts this page bare and
+  // `ProjectDetail` mounts it `embedded`; only `ResearchWorkspace` passes
+  // `chromeless`, so the strip cannot appear on a surface whose canvas never
+  // asked for one.
+  const zoneCanvas = chromeless;
+  // The same `+ 'Z'` the saved list below already appends: these timestamps come
+  // back without a zone and would otherwise be read as local time.
+  const lastRefreshed = visibleSaved.reduce((newest, a) => {
+    const at = Date.parse(`${a.updated_at}Z`);
+    return Number.isFinite(at) && at > newest ? at : newest;
+  }, 0);
+
   return (
     <div ref={sectionRef} className={bare ? '' : 'max-w-5xl mx-auto py-6 px-4'}>
       {zoneActions && (
@@ -297,6 +340,37 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
           actions={zoneActions(visibleSaved)}
         />
       )}
+      {zoneCanvas && COMPANIES_STRIP_LICENCES.has(role) && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 mb-4">
+          {/* NOT `Tracked`. The canvas's word means a company you follow; the
+              row this counts is an analysis you ran, and one analysis covers
+              several companies. Counting analyses under a label that says
+              companies would report the wrong number under the right word. */}
+          <Stat label="Saved analyses" value={visibleSaved.length}
+            note="one analysis covers several companies; the canvas counts companies and nothing stores them" />
+          <Stat label="Changed this month" value="Not recorded" mono={false}
+            note="a re-run replaces the analysis; nothing records what moved between one run and the next" />
+          <Stat label="Comparables" value="Not recorded" mono={false}
+            note="direct and adjacent are filed per competitor inside an analysis, and the saved list carries no competitors" />
+          <Stat label="Last refreshed" mono={false}
+            value={lastRefreshed ? new Date(lastRefreshed).toISOString().slice(0, 10) : 'Not recorded'}
+            note={lastRefreshed ? 'the newest run across your saved analyses' : 'nothing has been run yet'} />
+        </div>
+      )}
+
+      {zoneCanvas && !COMPANIES_STRIP_LICENCES.has(role) && (
+        <StatedLimit>
+          The canvas puts four figures here — Relationships, Researching,
+          Prospects and Headcounts missing — and a table listing each company
+          with its relation to you and what changed since you last looked. All
+          four count companies, and three of them count a relationship state per
+          company. This page stores neither: an analysis is keyed on the person
+          who ran it and names no company, and the competitors inside one carry
+          no relation to you. That is the same thing the note above this page
+          says about whose analyses these are.
+        </StatedLimit>
+      )}
+
       {!bare && (
         <>
           <button onClick={() => navigate(-1)} className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 mb-3">
