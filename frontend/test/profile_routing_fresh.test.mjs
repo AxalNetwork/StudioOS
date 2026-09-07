@@ -36,11 +36,18 @@ test('both generated docs carry the do-not-hand-edit stamp', () => {
 
 test('ROUTE_MAP still parses to the full canvas corpus', () => {
   const recs = parseRouteMap(read('documentation/architecture/ROUTE_MAP.md'));
-  // The corpus is 107 canonical canvases; ROUTE_MAP's own header says so, and
-  // design/canvases/README.md repeats it. If a row is added the number moves —
-  // that is fine, but it must move deliberately, so it is asserted here rather
-  // than left to drift silently past a parser that quietly stopped matching.
-  assert.equal(recs.length, 107);
+  // The P−1 audit's corpus was 107 canonical canvases; ROUTE_MAP's own header
+  // says so, and design/canvases/README.md repeats it. If a row is added the
+  // number moves — that is fine, but it must move deliberately, so it is
+  // asserted here rather than left to drift silently past a parser that
+  // quietly stopped matching.
+  //
+  // 109 as of 2026-09-07. `Pages · Founder Validate` and `Navigation Shell ·
+  // Anatomy` landed in `design/incoming/` after the audit fixed the 107 and
+  // graduated to `canvases/integrated/` when the store each was waiting for
+  // shipped. The queue's own pipeline requires a ROUTE_MAP row per canvas and
+  // neither had ever had one; part 5 of ROUTE_MAP holds them.
+  assert.equal(recs.length, 109);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

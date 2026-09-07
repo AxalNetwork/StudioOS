@@ -7,7 +7,9 @@ reading the live page component side by side with the canvas, not from name
 matching. Comparisons are source-level; the app was not run.
 
 **Corpus:** 107 canonical `*.dc.html` canvases at `design/canvases/` (top level
-only). `uploads/` holds 3 stale duplicates and `scraps/` holds images — both
+only), as counted by the P−1 audit. Canvases that have landed in
+`design/incoming/` since are NOT in that 107; part 5 below holds the rows for
+the ones that have graduated out of the queue. `uploads/` holds 3 stale duplicates and `scraps/` holds images — both
 excluded. Also at the root, not counted in the 107: 2 standalone pitch-deck
 HTMLs, 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
 `fund-model.js`) and `assets/`.
@@ -90,6 +92,20 @@ HTMLs, 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
 | Help Center | shared | `/docs` | `/docs`, `/docs/admin/*` | — (none; static JS modules under `pages/docs/sections/`, client-side fuse.js search) | UPGRADE | Live ships 14 journey-organised sections with search, per-subsection how-to/tips/pitfalls, related links, on-this-page rail. New: persona-aware grouping and per-article surface tags, suggested-search chips, a **"Popular this week"** ranked list, a "Still stuck?" block with a live status line to `/status`; on the article page a "Where this lives" block, a worked example in mono, a warning callout, an "Applies to" persona list, an "Open the surface" deep-link, and **"Did this answer it? Yes / No"**. Popularity and feedback both need a backend that does not exist. **Wave 3 shipped** the "Still stuck?" block with its live status line — `GET /api/public/status` was already serving `/status`, and the docs footer was a static sentence. The roll-up rule is now shared (`lib/statusOverall.js`) so the two pages cannot disagree mid-incident; extracting it also fixed an inline `[].every()` that reported a confident "Operational" on an empty probe list, which is why StatusPage's `unknown` pill had never been reachable. **Blocked, not skipped:** "Popular this week" and "Did this answer it?" each need a store that does not exist (view counts, article feedback). "Where this lives" / "Open the surface" / per-article surface tags need a `surface` route on each of ~98 subsections — content authoring, and a wrong deep link is worse than none. "Applies to" would render "everyone" on 97 of 98: only `admin.js` carries a `roles` array today. |
 | Incorporate | founder | `/spinout-lab/incorporate` | `/spinout-lab/incorporate`; separate platform surface at `/incorporate`, `/incorporate/success`, `/incorporate/83b`, `/incorporate/cofounder-agreement` | `legal.ts`, `legal_83b.ts`, `compliance.ts`, `spinout_lab.ts`, `payments.ts` | OUT OF SCOPE | Lab tool ("Unlocked · Wk 4"). **Not** the same surface as the platform's `/incorporate`. Do not collapse them. |
 
+## Graduated from `design/incoming/` — part 5 (2 canvases)
+
+The intake queue's pipeline (step 2 of `design/incoming/README.md`) requires a
+ROUTE_MAP row per canvas. These two never got one: they arrived in the
+2026-09-03/04 batches, after the P−1 audit fixed the 107-canvas corpus above,
+and moved into `canvases/integrated/` on 2026-09-07 when the one thing each was
+waiting for shipped. Rows written on the move rather than on arrival, which is
+the gap, not the intent.
+
+| Canvas | Persona | Proposed route | Live route today | Backend it wires to | STATUS | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| Pages · Founder Validate | founder | `/validate`, `/validate/{interviews,pain-map,hypotheses,verdict}` | all five live (`FounderValidatePage` at the root, `FounderValidateWorkspace` on the four zones) | `founder_validate.ts` over migrations 211 `founder_validate_evidence`, 214 `validate_proposals` and 215 `interview_recordings` | CURRENT | Held in the queue for "`hypotheses` and `verdict` have no store". Both have one: `POST /board/:projectId/hypotheses`, `PATCH /hypotheses/:id` and `POST /hypotheses/:id/links` are served and called, and the verdict is computed in `_founder_validate_proposals.ts` from the evidence rather than stored as a free-standing claim. Interview transcription landed with it. No Validate surface renders a `NoStoreYet` card, which is the bar the queue's README sets. Carries no `filters:` or `ops:` rows, so moving it into `integrated/` left the founder zone-guard set at 26 zones / 108 labels. |
+| Navigation Shell · Anatomy | chrome | — (the shell itself, on every authed route) | rendered on every authed route via `WorkspaceShell` + `sidebarConfig.js` | `personas.ts`, `settings.ts`, `billing.ts` (tier gates), `aiRouter.ts` (the rail's model card) | UPGRADE | Five artboards: N1 shell anatomy with six role fills, N2 the company switcher in three states, N3 admin tiers, N4 founder and investor/LP, N5 advisor and service partner. **A different document from `Navigation Shell.dc.html`** in the same folder, which is a single rendered shell with no artboards — a name lookup would wrongly call it a duplicate. Held for "the rail's model card", which could not ship while no workspace surface was registered in `ASSIST_SURFACES`: the card would have named a model for a page that never called one. `WorkerRail.jsx` now reads that registration and quotes the router's own rate. Still open from this canvas: the Preview item state, per-item count badges, and the icon-only collapsed rail with a hover flyout. |
+
 ## Investor / advisor / partner / chrome — part 3 (24 canvases)
 
 | Canvas | Persona | Proposed route | Live route today | Backend it wires to | STATUS | Notes |
@@ -165,6 +181,11 @@ HTMLs, 4 shared JS modules (`support.js`, `doc-page.js`, `deck-stage.js`,
 | CURRENT | 4 |
 | DEFERRED | 4 |
 | **Total** | **107** |
+
+Plus the 2 rows in part 5, graduated from `design/incoming/` after this
+tally was struck: `Pages · Founder Validate` (CURRENT) and `Navigation
+Shell · Anatomy` (UPGRADE). **109 rows in all**, which is the figure
+`profile_routing_fresh.test.mjs` pins.
 
 `UPGRADE` being the largest bucket is the headline: this is mostly a re-integration
 pass over surfaces that already exist, not a greenfield build. The 23 `NEW`

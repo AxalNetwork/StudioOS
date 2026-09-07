@@ -14,7 +14,7 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Home | Studio | `/studio` | Founder Studio |
 | Home | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab Workspace |
-| Home | Validate | `/validate` | Founder Workspaces Canvas |
+| Home | Validate | `/validate` | Founder Workspaces Canvas, Pages · Founder Validate |
 | Home | Build | `/build` | Founder Workspaces Canvas |
 | Home | Raise | `/raise` | Founder Workspaces Canvas |
 | Home | Grow | `/grow` | Founder Workspaces Canvas |
@@ -202,4 +202,4 @@ rather than merely absent.
 - exploring · Account · My Profile (`/profile`)
 - super_admin · HQ · Settings (`/account`)
 
-**Canvas corpus:** 107. **Workspace assignments:** 127.
+**Canvas corpus:** 109. **Workspace assignments:** 129.
