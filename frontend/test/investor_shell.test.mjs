@@ -204,8 +204,18 @@ test('an investor never gets two headings, two pill rows or two rails on one pag
     assert.match(page, /\{!embedded && <header/, `${name} must not draw its header when embedded`);
     assert.match(page, /\{!embedded && \(\s*<WorkerRail/, `${name} must not draw a rail when embedded`);
   }
-  assert.match(codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx')),
-    /<InvestorDealsWorkspace embedded \/>/, 'the Deals shell must pass embedded');
+  // Deals now passes the zone too, for the same reason Network does and after
+  // the same defect: all four stage routes rendered the identical stacked body
+  // and differed only in what a `useEffect` scrolled to — a poll every 100 ms,
+  // up to twenty tries, because the section is not mounted on first paint.
+  const dealsShell = codeOnly(read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx'));
+  assert.match(dealsShell, /<InvestorDealsWorkspace embedded zone=\{isRoot \? null : zone\?\.slug\} \/>/,
+    'the Deals shell must pass embedded and the zone slug');
+  assert.doesNotMatch(dealsShell, /scrollIntoView/,
+    'the Deals shell scrolls to a section again instead of rendering only that section');
+  assert.match(codeOnly(read(`${investorDir}/InvestorDealsWorkspace.jsx`)),
+    /const shows = \(section\) => !known \|\| zone === section;/,
+    'the investor Deals page must narrow to the zone it was given');
   // `embedded` AND the zone. The second half is the fix for the defect this
   // test's own name half-describes: the page renders all three sections
   // stacked, so mounted without a slug it drew the identical body on all three

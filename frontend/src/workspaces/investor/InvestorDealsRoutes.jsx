@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect } from 'react';
+import React, { Suspense, lazy } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell from '../WorkspaceShell';
@@ -18,19 +18,29 @@ const InvestorDealsWorkspace = lazy(() => import('../../pages/investor/InvestorD
  * `/pipeline`, and three `/pipeline/*`), none of which say which stage you are
  * looking at.
  *
- * WHAT THIS ADDS, AND WHAT IT DOES NOT. Four real URLs that are deep-linkable,
- * bookmarkable, and reachable with the browser's back button, each landing on
- * its own section. It does NOT split the workspace into four pages: the
- * component still renders all four sections and this scrolls to the right one.
- * That is the same `?tab=` → anchor arrangement `InvestorNetworkWorkspace`
- * already uses, and it is deliberate — turning one working page into four is a
- * content decision about what each stage owns, not a routing one, and the
- * Positions/Cap Table collision next door is a reminder of what happens when
- * those two get conflated.
+ * WHAT THIS ADDS. Four real URLs that are deep-linkable, bookmarkable and
+ * reachable with the browser's back button, each rendering its own section.
  *
- * The scroll is `useEffect` on the pathname rather than a hash link so the URL
- * stays clean: the route is the state, and nothing has to keep a `#fragment`
- * in sync with it.
+ * IT USED TO SCROLL, AND SCROLLING WAS THE WRONG ANSWER. The first version kept
+ * all four sections on every route and ran a `useEffect` that polled every
+ * 100 ms, up to twenty times, for `#deals-<slug>` to appear so it could scroll
+ * there — the workspace loads its deals before it renders them, so the element
+ * is not there on first paint. It said, in these words, that splitting was "a
+ * content decision, not a routing one".
+ *
+ * The comparison it drew was to `InvestorNetworkWorkspace`, and that is exactly
+ * what settles it the other way: Network takes a `zone` prop and renders ONE
+ * section per zone route, from one component, one `load()` and one set of
+ * derivations. Its docblock says why — "the pills moved, the page did not".
+ * That was verbatim this file's behaviour. Narrowing is not splitting: there is
+ * still one component and one `api.listDeals` call, and all four sections
+ * derive from it, so `/deals` still stacks them as the bucket overview.
+ *
+ * What made it worth doing now is the filter row. Four zones sharing one
+ * scrolling page can carry four action rows — a button repeated is noise. Four
+ * FILTER rows is four stateful controls making four different claims about what
+ * the reader is looking at, and the pipeline counts above them do not move when
+ * the wrong one is clicked.
  */
 export default function InvestorDealsRoutes() {
   const location = useLocation();
@@ -42,23 +52,6 @@ export default function InvestorDealsRoutes() {
   // scroll to `#deals-pipeline` as if the reader had asked for it.
   const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
   const zone = zoneForPath(bucket, location.pathname);
-
-  useEffect(() => {
-    if (!zone || isRoot) return undefined;
-    // The section may not be mounted on the first paint — the workspace loads
-    // its deals before it renders them — so retry briefly rather than once.
-    let tries = 0;
-    const id = window.setInterval(() => {
-      const el = document.getElementById(`deals-${zone.slug}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        window.clearInterval(id);
-      } else if ((tries += 1) > 20) {
-        window.clearInterval(id);
-      }
-    }, 100);
-    return () => window.clearInterval(id);
-  }, [zone?.slug]);
 
   const INTRO = {
     pipeline: 'Every live deal by stage, and how long each has been sitting where it is.',
@@ -90,9 +83,13 @@ export default function InvestorDealsRoutes() {
     >
       {/* `embedded`: the shell above already draws the heading, the zone row
           and the rail. Without it the workspace drew all three again inside
-          them — two h1s, two pill rows and two Worker AI rails on one page. */}
+          them — two h1s, two pill rows and two Worker AI rails on one page.
+
+          `zone`: which one section this route is for. `null` on the root, where
+          all four stack — the same two props, for the same two reasons, that
+          `NetworkWorkspace` passes `InvestorNetworkWorkspace`. */}
       <Suspense fallback={<div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-64" /></div>}>
-        <InvestorDealsWorkspace embedded />
+        <InvestorDealsWorkspace embedded zone={isRoot ? null : zone?.slug} />
       </Suspense>
     </WorkspaceShell>
   );

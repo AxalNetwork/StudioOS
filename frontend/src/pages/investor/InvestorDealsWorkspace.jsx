@@ -84,7 +84,23 @@ function DealCard({ deal, onOpen }) {
 // commit,closing}, where WorkspaceShell is already drawing the heading, the
 // zone row and the rail. Without it the page draws a second h1, a second pill
 // row and a second rail inside the first — the doubled chrome the user saw.
-export default function InvestorDealsWorkspace({ embedded = false }) {
+/**
+ * `zone`: which single section this render is for, or null for the bucket root.
+ *
+ * The four stages are four zone ROUTES, and until now all four rendered the
+ * same page and differed only in what `InvestorDealsRoutes` scrolled to. This
+ * is the narrowing `InvestorNetworkWorkspace` already does — one component, one
+ * `load()`, one set of derivations, one section per route — and it is not a
+ * split: every section still derives from the same `api.listDeals` call, so
+ * `/deals` stacks all four as the overview and nothing is fetched twice.
+ *
+ * `known` guards against a slug this page has no section for: an unrecognised
+ * zone shows everything rather than nothing, because a blank page is the worse
+ * failure and the shell above has already decided the route is legitimate.
+ */
+export default function InvestorDealsWorkspace({ embedded = false, zone = null }) {
+  const known = zone === 'pipeline' || zone === 'screening' || zone === 'commit' || zone === 'closing';
+  const shows = (section) => !known || zone === section;
   const navigate = useNavigate();
   const [state, setState] = useState({ deals: [], invitations: [] });
   const [loading, setLoading] = useState(true);
@@ -193,7 +209,7 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
           </section>
         )}
 
-        <section className="investor-deals-card">
+        {shows('pipeline') && <section className="investor-deals-card">
           <SectionHeading id="deals-pipeline" title="Pipeline" detail={`${deals.length} live deal${deals.length === 1 ? '' : 's'}`} actions={investorZoneActions('deals/pipeline', { view: { header: ['Deal', 'Stage', 'Sector', 'Target', 'Committed'], rows: deals, cells: (d) => [d.name, d.stage, d.sector, d.target, d.committed] } })} />
           <div className="investor-pipeline-grid">
             {STAGES.map((stage) => (
@@ -208,10 +224,10 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
             ))}
           </div>
           <p className="investor-deals-note">Pipeline labels translate the existing deal stages for this workspace; no backend stage or record is changed.</p>
-        </section>
+        </section>}
 
-        <div className="investor-deals-decisions">
-          <section className="investor-deals-card investor-screening">
+        {(shows('screening') || shows('commit') || shows('closing')) && <div className="investor-deals-decisions">
+          {shows('screening') && <section className="investor-deals-card investor-screening">
             <SectionHeading id="deals-screening" title="Screening desk" detail={screening?.name} actions={investorZoneActions('deals/screening', { view: { header: ['Deal', 'Stage', 'Sector', 'Target', 'Committed'], rows: screeningRows, cells: (d) => [d.name, d.stage, d.sector, d.target, d.committed] } })} />
             {screening ? (
               <>
@@ -226,10 +242,10 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
                 </button>
               </>
             ) : <Empty>No deals are currently in screening or diligence.</Empty>}
-          </section>
+          </section>}
 
-          <div className="investor-deals-stack">
-            <section className="investor-deals-card">
+          {(shows('commit') || shows('closing')) && <div className="investor-deals-stack">
+            {shows('commit') && <section className="investor-deals-card">
               <SectionHeading id="deals-commit" title="Commit room" detail={commit?.name} actions={investorZoneActions('deals/commit')} />
               {commit ? (
                 <dl className="investor-facts compact">
@@ -238,8 +254,8 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
                   <div><dt>Target</dt><dd>{commit.target || 'Not recorded'}</dd></div>
                 </dl>
               ) : <Empty>No deals are currently at commit.</Empty>}
-            </section>
-            <section className="investor-deals-card">
+            </section>}
+            {shows('closing') && <section className="investor-deals-card">
               <SectionHeading id="deals-closing" title="Closing" detail={closing?.name} actions={investorZoneActions('deals/closing')} />
               {closing ? (
                 <div className="investor-closing-list">
@@ -249,9 +265,9 @@ export default function InvestorDealsWorkspace({ embedded = false }) {
                   <button type="button" onClick={() => navigate(`/deals/${closing.id}`)}>Open closing details</button>
                 </div>
               ) : <Empty>No deals are currently closing.</Empty>}
-            </section>
-          </div>
-        </div>
+            </section>}
+          </div>}
+        </div>}
       </div>
 
       {!embedded && (
