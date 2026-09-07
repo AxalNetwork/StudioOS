@@ -35,7 +35,6 @@ export default function FounderNetworkOrganizations({ embedded = false, role = '
   const [projects, setProjects] = useState([]);
   const [project, setProject] = useState(null);
   const [contacts, setContacts] = useState([]);
-  const [filter, setFilter] = useState('all');
   const [status, setStatus] = useState('loading');
   const [errors, setErrors] = useState([]);
 
@@ -69,12 +68,6 @@ export default function FounderNetworkOrganizations({ embedded = false, role = '
     });
     return [...map.entries()].map(([name, people]) => ({ name, people, types: [...new Set(people.map((row) => row.audience).filter(Boolean))] })).sort((a, b) => a.name.localeCompare(b.name));
   }, [contacts]);
-  const visible = groups.filter((group) => {
-    if (filter === 'funds') return group.types.includes('investor');
-    if (filter === 'customers') return group.types.includes('customer');
-    if (filter === 'dormant') return isDormant(group.people);
-    return true;
-  });
   const mapped = contacts.filter((row) => organization(row));
   const dualRole = groups.filter((group) => group.types.length > 1);
   const dormant = groups.filter((group) => isDormant(group.people));
@@ -99,16 +92,25 @@ export default function FounderNetworkOrganizations({ embedded = false, role = '
     {status === 'empty' && <NoProject />}
     {status === 'error' && !project && <NoProject error />}
     {status === 'ready' && project && <><div className="fn-rel-context"><div><span>Selected startup</span><strong data-testid="text-network-organizations-project">{text(project.name)}</strong><small>{text(project.sector, 'Sector not recorded')}</small></div><div><span>Source</span><strong>Relationship book lens</strong><small>Only explicit organization fields are grouped</small></div></div>
-      <div className="fn-rel-tabs"><div><button className={filter === 'all' ? 'is-active' : ''} onClick={() => setFilter('all')}>All</button><button className={filter === 'funds' ? 'is-active' : ''} onClick={() => setFilter('funds')}>Funds</button><button className={filter === 'customers' ? 'is-active' : ''} onClick={() => setFilter('customers')}>Customers</button><button className={filter === 'dormant' ? 'is-active' : ''} onClick={() => setFilter('dormant')}>Dormant</button></div><Link data-testid="link-open-network-organizations-relationships" to={`/network/relationships${query}`}>View relationship book <ChevronRight size={13} /></Link></div>
+      {/* The four chips that stood here are now the zone header row's four
+          notes. They filtered `groups`, which `contacts` can never fill: no
+          column on that table names an organisation, so `Funds` rendered "No
+          funds organizations are recorded" — a claim about this founder's data
+          from a page that had never had any to look at. The link stays. */}
+      <div className="fn-rel-tabs"><Link data-testid="link-open-network-organizations-relationships" to={`/network/relationships${query}`}>View relationship book <ChevronRight size={13} /></Link></div>
       <div className="fn-rel-stats"><Stat label="Organizations" value={contactsUnavailable ? 'Unavailable' : groups.length} note={contactsUnavailable ? 'Relationship book source unavailable' : groups.length ? 'Explicit organization fields' : 'No organization fields returned'} muted={contactsUnavailable} /><Stat label="People mapped" value={contactsUnavailable ? 'Unavailable' : mapped.length} note={contactsUnavailable ? 'Relationship book source unavailable' : `of ${contacts.length} in the book`} muted={contactsUnavailable} /><Stat label="Dual-role orgs" value={contactsUnavailable ? 'Unavailable' : dualRole.length} note={contactsUnavailable ? 'Relationship book source unavailable' : dualRole.length ? 'Multiple recorded contact types' : 'No dual-role grouping recorded'} muted={contactsUnavailable || !dualRole.length} /><Stat label="Unmapped people" value={contactsUnavailable ? 'Unavailable' : contacts.length - mapped.length} note={contactsUnavailable ? 'Relationship book source unavailable' : contacts.length - mapped.length ? 'No organization on file' : 'All people mapped'} muted={contactsUnavailable || contacts.length - mapped.length > 0} /></div>
-      <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>Organizations</h2></div><span>People counts read from the relationship book</span></div>{contactsUnavailable ? <div className="fn-rel-empty"><AlertCircle size={18} /><div><strong>Organization collection unavailable.</strong><p>The project relationship-book source could not be read, so FN3 does not present an empty collection as fact.</p></div></div> : <OrganizationTable groups={visible} filter={filter} />}<p className="fn-rel-note">Organizations are a lens over stored people, not a second address book. FN3 does not infer membership from email domains, landing pages, source labels, or similar names.</p></section>
+      <section className="fn-rel-card"><div className="fn-rel-card-head"><div><UsersRound size={16} /><h2>Organizations</h2></div><span>People counts read from the relationship book</span></div>{contactsUnavailable ? <div className="fn-rel-empty"><AlertCircle size={18} /><div><strong>Organization collection unavailable.</strong><p>The project relationship-book source could not be read, so FN3 does not present an empty collection as fact.</p></div></div> : <OrganizationTable groups={groups} />}<p className="fn-rel-note">Organizations are a lens over stored people, not a second address book. FN3 does not infer membership from email domains, landing pages, source labels, or similar names.</p></section>
       <section className="fn-rel-card fn-rel-unavailable"><div className="fn-rel-card-head"><div><AlertCircle size={16} /><h2>Organization intelligence</h2></div><span>Partially unavailable</span></div><strong>{groups.length ? 'Profiles and history are not recorded for these groups.' : 'No relationship-backed organization rollup is available.'}</strong><p>Profiles, organization history, duplicate review, and merge actions require explicit organization records. This read-only collection does not create or merge them.</p></section>
     </>}
   </section>{!embedded && <OrganizationRail project={project} contacts={contacts} groups={groups} dormant={dormant} errors={errors} />}</div></main>;
 }
 
-function OrganizationTable({ groups, filter }) {
-  if (!groups.length) return <div className="fn-rel-empty"><UsersRound size={18} /><div><strong>{filter === 'all' ? 'No explicit organizations are recorded.' : `No ${filter} organizations are recorded.`}</strong><p>People without an organization remain in the relationship book and are not placed into an inferred row.</p></div></div>;
+// The empty state used to name whichever chip was active — "No funds
+// organizations are recorded" — which turned one true sentence about an absent
+// column into four false ones about this founder's book. With no chips there is
+// one message, and it is the one that was always true.
+function OrganizationTable({ groups }) {
+  if (!groups.length) return <div className="fn-rel-empty"><UsersRound size={18} /><div><strong>No explicit organizations are recorded.</strong><p>People without an organization remain in the relationship book and are not placed into an inferred row.</p></div></div>;
   return <div className="fn-rel-table-wrap"><table><thead><tr><th>Organization</th><th>People</th><th>Freshest contact</th><th>Recorded types</th></tr></thead><tbody>{groups.map((group) => <tr key={group.name} data-testid={`row-network-organization-${group.name}`}><td><strong>{group.name}</strong><small>{group.people.length} relationship book record{group.people.length === 1 ? '' : 's'}</small></td><td>{group.people.length}</td><td>{freshest(group.people)}</td><td>{group.types.length ? group.types.map((type) => text(type).replace(/[_-]/g, ' ')).join(' + ') : 'Not recorded'}</td></tr>)}</tbody></table></div>;
 }
 function Stat({ label, value, note, muted }) { return <div className={muted ? 'is-muted' : ''}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>; }

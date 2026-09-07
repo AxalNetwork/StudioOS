@@ -127,9 +127,15 @@ export const INVESTOR_ZONE_ACTIONS = {
     { label: 'Offer one', note: 'offering an introduction is not built' },
     { label: 'Export', kind: 'export' },
   ],
+  // THE DERIVATION NAMED HERE PRODUCES NOTHING, which the filter half of this
+  // row establishes: a relationship stores two account ids, a type and a
+  // free-text `metadata` blob, and the only writer in the product sends
+  // `{partner_id, relationship_type, strength_score}` — no organisation, ever.
+  // "Derived from the relationship book" was true and incomplete; the book has
+  // no organisation to derive one from.
   'network/organizations': [
-    { label: 'Add org', note: 'the contact form is not reachable from the investor Network desk' },
-    { label: 'Merge duplicates', note: 'organizations are derived from the relationship book, so there is nothing to merge' },
+    { label: 'Add org', note: 'a relationship records two accounts, a type and a strength, and nothing on it names a firm, so there is no org for a form to add' },
+    { label: 'Merge duplicates', note: 'no organisation is stored on a relationship, so the list above is empty on every account and has no duplicates to merge' },
     { label: 'Export', kind: 'export' },
   ],
 

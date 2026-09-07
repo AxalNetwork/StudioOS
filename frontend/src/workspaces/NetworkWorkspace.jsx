@@ -76,21 +76,37 @@ const ADVISOR_ZONE = {
 };
 
 /**
- * Organizations is a real zone only where an organisation store is reachable.
- * Founders read `contacts.organization`; the investor workspace has its own
- * section. An advisor is 403'd from `/api/contacts` and an operator's
- * `NetworkPage` has no organizations tab at all — so for those two the zone
- * reads nothing, and the rail has to say so rather than call it covered.
+ * WHICH LICENCES HAVE A BODY FOR ORGANIZATIONS — NOT WHICH HAVE A STORE.
+ *
+ * This set used to be documented as the second thing, here and in two other
+ * files, and the second thing has never been true of anybody. `contacts` has
+ * no `organization` column: the table is sixteen columns and the only three
+ * `ALTER TABLE contacts` in the repo add `promoted_ref_id`, `utm_json` and
+ * `referrer`, so the founder page's grouping key skips every row and its list
+ * is permanently empty. The investor side reaches `metadata.organization_name`
+ * on `partner_relationships`, a free-text JSON column that would accept one —
+ * and the only writer in the product sends `partner_id`, `relationship_type`
+ * and `strength_score`, so no row has ever carried it.
+ *
+ * What the set actually decides is whether a body renders at all. Founder and
+ * investor have one: a table, a stat block and prose that says plainly it found
+ * nothing and refuses to infer membership from email domains. An advisor is
+ * 403'd from `/api/contacts` — `'advisor'` is not even expressible in that
+ * guard's parameter type — and an operator's `NetworkPage` has no organizations
+ * tab, so on those two the zone is a card whose whole content is the gap. Both
+ * are honest; they are honest in different shapes, and this set names which.
  */
 const ORG_BACKED = new Set(['founder', 'investor']);
 
 /**
  * One line per zone, shared by the overview cards and the zone headers below
- * so the two cannot drift apart. Organizations is the one line that is not
- * true on every licence: an advisor is 403'd from `/api/contacts` and an
- * operator has no organizations tab, so on those licences the card says the
- * zone reads nothing rather than describing the roll-up it would perform —
- * `ORG_BACKED` is the same set the zone body and the rail already consult.
+ * so the two cannot drift apart. Organizations is the one line that describes
+ * an intention rather than a result: no licence stores a person-to-organisation
+ * edge, so the roll-up it names produces nothing anywhere. On founder and
+ * investor the body says so on the page, in its empty state and its stats and
+ * now in four and five header-row notes; on advisor and operator there is no
+ * body and the card carries the gap instead. `ORG_BACKED` is the same set the
+ * zone body and the rail consult, and it distinguishes those two shapes.
  */
 const INTRO = {
   relationships: 'People you know and how strongly, from the records you keep here.',

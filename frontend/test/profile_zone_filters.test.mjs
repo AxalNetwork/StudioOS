@@ -59,12 +59,14 @@ const NETWORK_BODIES = {
   founder: {
     'network/relationships': 'frontend/src/pages/founder/FounderNetworkRelationships.jsx',
     'network/introductions': 'frontend/src/pages/founder/FounderNetworkIntroductions.jsx',
+    'network/organizations': 'frontend/src/pages/founder/FounderNetworkOrganizations.jsx',
   },
-  // One file, two zones: `InvestorNetworkWorkspace` renders all three sections
+  // One file, three zones: `InvestorNetworkWorkspace` renders all three sections
   // and the shell narrows it to one with `zone={slug}`.
   investor: {
     'network/relationships': 'frontend/src/pages/investor/InvestorNetworkWorkspace.jsx',
     'network/introductions': 'frontend/src/pages/investor/InvestorNetworkWorkspace.jsx',
+    'network/organizations': 'frontend/src/pages/investor/InvestorNetworkWorkspace.jsx',
   },
   advisor: {
     'network/relationships': 'frontend/src/pages/advisor/network/RelationshipsZone.jsx',
@@ -104,18 +106,16 @@ const PROFILES = {
     canvas: /^Pages · Founder /,
     pages: ['frontend/src/pages/founder', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
-    zones: 25,
-    mounted: 25,
+    zones: 26,
+    mounted: 26,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.founder },
-    excluded: [
-      // The shared surfaces. `NetworkWorkspace` and `ResearchWorkspace` render
-      // these slugs for all four licences from one component each, with
-      // different labels per licence, so every licence's half lands together or
-      // the same component shows a header row on one and nothing on another.
-      // `research/{ask,library}` left this list when all four tables gained
-      // them in the same commit, which is the only way they can.
-      'network/organizations',
-    ],
+    // EMPTY, AND THAT IS THE POINT OF THE LIST. Every canvas route on all five
+    // founder artboards now has a filter table. `research/{ask,library}` left
+    // when all four licences gained them in one commit; `network/organizations`
+    // left when the two licences that HAVE a body for it gained it — advisor
+    // and partner keep it excluded for a reason that is theirs and is stated in
+    // their own profiles, not because founder is waiting on them.
+    excluded: [],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.
@@ -134,8 +134,8 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 15,
-    mounted: 15,
+    zones: 16,
+    mounted: 16,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.investor },
     // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
     // it is not here yet:
@@ -156,13 +156,6 @@ const PROFILES = {
       // `pass_reason` is a stored, CHECKed taxonomy the pipeline zone now
       // reads. A deferral that says so is worth more than a row that lies.
       'deals/screening', 'deals/commit', 'deals/closing',
-      // Network and Research are the shared surfaces. `NetworkWorkspace` and
-      // `ResearchWorkspace` render these eight slugs for founder too, with
-      // different labels per licence, and founder's halves are carved out of
-      // this file for exactly that reason. Giving investor a toolbar there
-      // while founder has none would show a zone header on one licence and
-      // nothing on the other, from one component. They land together.
-      'network/organizations',
     ],
     // `Call 3` names one specific stored record rather than welding a count
     // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`
@@ -203,6 +196,14 @@ const PROFILES = {
     zones: 7,
     mounted: 7,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.advisor },
+    // THE ONE EXCLUSION THAT IS NOT A DEFERRAL. Founder and investor left this
+    // list; advisor and partner do not follow, and the reason is not that their
+    // half is unwritten. `OrganizationsZone` is a dashed card whose entire body
+    // is the gap statement — it imports no `api`, renders no rows and has no
+    // state to narrow — so four controls above it would be a filter row over a
+    // sentence explaining why there is nothing to filter. The shared-component
+    // argument that binds the other two Network zones does not reach here:
+    // founder and advisor mount DIFFERENT files for organizations.
     excluded: [
       'network/organizations',
     ],
@@ -223,6 +224,9 @@ const PROFILES = {
     zones: 6,
     mounted: 6,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.partner },
+    // Same as advisor's, one step further: there is not even a card. This
+    // licence has no organizations panel at all — `NetworkPage`'s
+    // `unservedAlone` suppresses it — so a row here would attach to nothing.
     excluded: [
       'network/organizations',
     ],

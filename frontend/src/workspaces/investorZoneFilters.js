@@ -23,11 +23,15 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
  * does the translation, exactly as `investorZoneActions.js` describes for the
  * ops half.
  *
- * TWO OF THESE FOUR ZONES WERE ALREADY RIGHT AND ARE NOT BEING CHANGED.
- * `funds/lps` and `funds/reporting` each carry four real predicates over rows
- * they load; their entries here name the keys those pages already use, and not
- * one predicate is touched. The point of the move is the header row's shape,
- * not a rewrite of working code.
+ * SIXTEEN OF THE NINETEEN ARE HERE. The three left out are Deals' decision
+ * zones, and the guard records why: each renders a single-record panel, so the
+ * list surfaces their canvas filters describe would have to be built first.
+ *
+ * SOME ZONES WERE ALREADY RIGHT AND ARE NOT BEING CHANGED. `funds/lps` and
+ * `funds/reporting` each carry four real predicates over rows they load; their
+ * entries here name the keys those pages already use, and not one predicate is
+ * touched. The point of the move is the header row's shape, not a rewrite of
+ * working code.
  */
 
 // `/funds/calls` and `/funds/ledger` each fail for one reason across several
@@ -58,11 +62,6 @@ const NO_LP_RELATIONSHIP =
   'an LP register is kept against a fund rather than as a relationship, and this page never reads it';
 const NO_INTERACTION_DATE =
   'no interaction date is stored on a relationship; the only history kept is that the row was created and edited';
-// `/research/ask` and `/research/library` are shared surfaces, so these two
-// read the same as founder's — deliberately. One component draws both rows, and
-// a reader moving between licences must not find one absence explained two
-// ways. The ops half of the Ask row already says "no session history is stored
-// to clear"; this is that clause, extended to the views the filters name.
 // `/network/introductions`. Word for word what the founder table says, because
 // it is the same store and the same absence: `intro_propositions` has no
 // direction column, and every row is one addressed to the reader. Note the
@@ -70,6 +69,29 @@ const NO_INTERACTION_DATE =
 // exactly why these are four tables and not one.
 const NO_DIRECTION_RECORDED =
   'nothing records who asked: every proposition here is addressed to you, and the response names the counterpart without a direction';
+// `/network/organizations`, AND THE FOUR-STEP CHECK ENDS AT STEP FOUR HERE.
+// `metadata` is a real column on `partner_relationships` and it is free-text
+// JSON, so `metadata.organization_name` is a shape the store could physically
+// hold — which is exactly the trap D52 was written about. The write path exists
+// (`POST /partnernet/relationships`), the client method exists
+// (`api.createRelationship`), and the only caller in the product
+// (`RelationshipsPage.jsx:154`) sends `{partner_id, relationship_type,
+// strength_score}` and no metadata at all. The string `organization_name`
+// appears nowhere in the worker or the backend. Nothing has ever written one.
+const NO_ORG_ON_A_RELATIONSHIP =
+  'a relationship records two accounts, a type and a strength, and nothing on it names the firm either of them is at, so there are no organisations here to select between';
+// The other two name records that are real and are kept somewhere this page
+// never opens: it loads the relationship book, the network summary and the
+// introductions desk, and nothing else. `limited_partners` is keyed on
+// `fund_id` and belongs to the Fund bucket; `deals.pass_reason` is a CHECKed
+// taxonomy on a deal, which the pipeline zone reads and this one does not.
+const KEPT_IN_ANOTHER_STORE =
+  'both name records this page never loads: an LP belongs to a fund’s own register, and a pass is a reason stamped on a deal';
+// `/research/ask` and `/research/library` are shared surfaces, so these two
+// read the same as founder's — deliberately. One component draws both rows, and
+// a reader moving between licences must not find one absence explained two
+// ways. The ops half of the Ask row already says "no session history is stored
+// to clear"; this is that clause, extended to the views the filters name.
 const NO_SESSION_RECORD =
   'no session history is stored, so no past question, kept answer or discarded one exists to look through';
 const NO_SUCH_KIND =
@@ -225,6 +247,27 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Offered', note: NO_DIRECTION_RECORDED },
     { canvas: 'Asked', note: NO_DIRECTION_RECORDED },
     { canvas: 'Stalled', key: 'stalled' },
+  ],
+
+  // FIVE LABELS, NO CHIPS. The section this row sits over is honest already —
+  // "No organization identity is recorded on your relationship records yet" —
+  // and it is honest because it has always been empty: `orgIdentity` tries six
+  // paths and the last of them, `metadata.organization_name`, is a key nothing
+  // in this product writes. `All` is prose for the same reason it is on the
+  // founder row: there is no collection for it to select.
+  //
+  // `Co-investors` IS THE ONE WORTH READING TWICE. It is a live chip one zone
+  // up, where `relationship_type = 'co_investor'` selects people. Here the same
+  // word would have to select firms, and the store holds none. Same label, same
+  // table, two zones apart, live in one and dead in the other — which is the
+  // clearest statement this workstream has of why a filter's verdict belongs to
+  // the row it sits on and not to the word.
+  'network/organizations': [
+    { canvas: 'All', note: NO_ORG_ON_A_RELATIONSHIP },
+    { canvas: 'Portfolio', note: NO_ORG_ON_A_RELATIONSHIP },
+    { canvas: 'Co-investors', note: NO_ORG_ON_A_RELATIONSHIP },
+    { canvas: 'LPs', note: KEPT_IN_ANOTHER_STORE },
+    { canvas: 'Passed', note: KEPT_IN_ANOTHER_STORE },
   ],
 
   // ── Research ─────────────────────────────────────────────────────────────

@@ -2767,3 +2767,58 @@ set exists; the ops half of the same row says so), `Requested` → `Partly stage
 (the artboard's own code calls that set `partial`), `Best fit` → `All funds` (no
 fit score is stored). The canvas string stays in `canvas:` as provenance, so the
 guard still re-derives every one of them.
+
+## D54 — A filter row is where a body's dead predicate becomes visible
+
+**2026-09-07.** `/network/*` was the last shared surface to get its filter half,
+and it was not an additive pass. Three defects were already shipped there, all
+three in bodies, and all three were found by writing the header row rather than
+by any test.
+
+**Founder Introductions filtered on a field the API has never returned.**
+`direction(row)` read `row.direction`; `propositionDto` returns ten fields and
+that is not one of them, `intro_propositions` has no such column, and every row
+is loaded `WHERE user_id = ?` — the reader is always the addressee, so direction
+is not merely unreturned, it is not a fact the model holds. `Asked` matched zero
+rows on every account and rendered "No asked introductions are recorded. This
+filter contains no stored ledger entries." `Offered` matched all of them. A
+`Direction` column printed `Offered` in the table and in the CSV export, a stat
+read `N / 0` under "More offered than asked", and three prose lines asserted the
+opposite of the truth. D51's canonical failure and its already-scoped inverse,
+side by side in one card.
+
+**Organizations grouped on a column that does not exist**, on both licences that
+have a body for it. `contacts` is sixteen columns and none of them is
+`organization`, `company` or `firm`; the only three `ALTER TABLE contacts` in
+the repo add `promoted_ref_id`, `utm_json` and `referrer`. The investor path
+ends at `metadata.organization_name`, a free-text JSON column that would accept
+one — and the only writer in the product sends `partner_id`,
+`relationship_type` and `strength_score`, so no row has ever carried it. Four
+chips sat over a collection that is empty by construction, and `Funds` rendered
+"No funds organizations are recorded": a per-filter claim about this founder's
+data, from a page that had never had any to look at.
+
+**A source guard cannot see any of this**, which is the decision. The ops half
+has been guarded per zone since #465 and none of these three is an action. A
+body's predicate is ordinary code over ordinary state; nothing in the suite
+knows that `row.direction` is not a field or that `groups` can never fill.
+Writing the filter half forces the four-step check onto every canvas label, and
+a label that survives it becomes a `key` the guard then holds — so the row is
+both the audit and the record of what the audit found. Two of these three had
+been on screen since their pages shipped.
+
+**A dead label's verdict belongs to the row, not to the word.**
+`Co-investors` is a live chip on `/network/relationships` for an investor —
+`relationship_type = 'co_investor'` over people — and prose on
+`/network/organizations`, where the same word would have to select firms and the
+store holds none. Same label, same table, two zones apart. This is why the
+tables are keyed by zone and why a shared note is named once per zone rather
+than hoisted to a file-level constant.
+
+**When a filter half and an ops half disagree, the stronger finding wins and
+both are rewritten.** The Organizations ops row said merging was merely unbuilt
+— "duplicates stay as separate rows", "organizations are derived from the
+relationship book, so there is nothing to merge". Both were true and both were
+too weak: with no key there are no rows to be duplicates of, and the derivation
+produces nothing. The two halves of a row are one sentence about one store and
+must not be allowed to describe it at two different strengths.
