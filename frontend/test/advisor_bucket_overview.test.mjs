@@ -266,9 +266,23 @@ test('Client prep gives the two roles that see it their own reason', () => {
 
   assert.match(zone, /role === 'partner'/,
     'the two roles must still get different words — one sentence cannot be true for both');
-  assert.match(zone, /export default function ClientPrepZone\(\{ zoneActions, role = 'advisor' \}\)/,
+  // THE INVARIANT IS `role`, NOT THE PROP LIST OR THE LINE BREAKS. Both of
+  // these used to be pinned literally — the exact signature `({ zoneActions,
+  // role = 'advisor' })` and the exact one-line mount `<ClientPrepZone
+  // role={role}`. Adding a third prop and breaking the tag across lines failed
+  // them without changing anything they exist to protect, which is a test
+  // holding formatting still rather than behaviour. What must not change is
+  // that the zone destructures `role` defaulting to `'advisor'`, and that the
+  // workspace passes it.
+  // No `\b` after the closing quote: a quote and a space are both non-word
+  // characters, so there is no boundary between them and the match can never
+  // succeed. The opening `\brole` is a real boundary and stays.
+  assert.match(zone, /export default function ClientPrepZone\(\{[^}]*\brole = 'advisor'/,
     'the zone must take the role, or it cannot tell them apart');
-  assert.match(codeOnly(researchWs), /<ClientPrepZone role=\{role\}/,
+  // Bounded at the element's own `/>` rather than matched with `[^>]*`: the
+  // mount's props contain arrow functions, so the first `>` belongs to an `=>`.
+  const mount = codeOnly(researchWs).split('<ClientPrepZone')[1] || '';
+  assert.match(mount.slice(0, mount.indexOf('/>')), /\srole=\{role\}/,
     'and the workspace must actually pass it');
 
   // The advisor half: what would open it, not merely that it is shut. It is a

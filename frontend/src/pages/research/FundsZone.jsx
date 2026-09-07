@@ -5,7 +5,7 @@ import {
   Field, NothingYet, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
   buttonClass, inputClass,
 } from '../advisor/expertise/kit';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 
 /**
  * Research · Funds — the funds you have researched, and what the research said.
@@ -56,7 +56,7 @@ function cheque(row) {
   return lo || hi || null;
 }
 
-export default function FundsZone({ zoneActions }) {
+export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [state, setState] = useState({ loading: true, error: null, data: null });
   const [filter, setFilter] = useState('all');
   const [form, setForm] = useState({ name: '', thesis: '', note: '' });
@@ -99,7 +99,14 @@ export default function FundsZone({ zoneActions }) {
 
   return (
     <div className="space-y-6">
-      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(visible)} />}
+      {zoneActions && (
+        <ZoneToolbar
+          role={role}
+          className="mb-3"
+          filters={zoneFilters ? zoneFilters({}) : []}
+          actions={zoneActions(visible)}
+        />
+      )}
       <ZoneHeading
         title="Fund research"
         sub="Investor research and fit scores — every fund you have looked into, and why it is on or off the list."

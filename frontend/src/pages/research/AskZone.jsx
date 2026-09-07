@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import {
   NothingYet, StatedLimit, ZoneBody, ZoneHeading, buttonClass, inputClass,
 } from '../advisor/expertise/kit';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 
 /**
  * Research · Ask — answers drawn only from your own library, or no answer.
@@ -34,7 +34,7 @@ import ZoneActions from '../../workspaces/ZoneActions';
  * differ, so the caller — which knows the role — decides what the row says, and
  * this page renders whatever it is handed. See `workspaces/zoneActionsByRole.js`.
  */
-export default function AskZone({ zoneActions }) {
+export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
@@ -68,7 +68,14 @@ export default function AskZone({ zoneActions }) {
 
   return (
     <div className="space-y-4">
-      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(result?.citations || [])} />}
+      {zoneActions && (
+        <ZoneToolbar
+          role={role}
+          className="mb-3"
+          filters={zoneFilters ? zoneFilters({}) : []}
+          actions={zoneActions(result?.citations || [])}
+        />
+      )}
       <ZoneHeading
         title="Ask your library"
         blurb="Answers drawn only from documents you have added, with the passage each answer used."

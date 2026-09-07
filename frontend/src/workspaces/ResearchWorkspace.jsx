@@ -5,6 +5,7 @@ import WorkspaceShell from './WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from './BucketOverview';
 import { accentLinkClass, bucketForPath, bucketTitle, zoneForPath } from './shellConfig';
 import { zoneActionsFor } from './zoneActionsByRole';
+import { zoneFiltersFor } from './zoneFiltersByRole';
 import NoStoreYet from './NoStoreYet';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
@@ -207,6 +208,8 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
       return (
         <Suspense fallback={<Loading />}>
           <SignalsPage user={user} mode={role === 'advisor' ? 'advisor' : 'founder'} embedded
+            role={role}
+            zoneFilters={(opts) => zoneFiltersFor(role, 'research/markets', opts)}
             zoneActions={(rows) => zoneActionsFor(role, 'research/markets', { view: {
               header: ['Signal', 'Type', 'Sector', 'Niche', 'Region', 'Confidence', 'Freshness', 'Updated'],
               rows,
@@ -226,6 +229,8 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
               appears here and why one must not be invented. */}
           <CompanyScopeNote role={role} />
           <CompetitorAnalysisPage chromeless
+            role={role}
+            zoneFilters={(opts) => zoneFiltersFor(role, 'research/companies', opts)}
             zoneActions={(rows) => zoneActionsFor(role, 'research/companies', { view: {
               header: ['Analysis', 'Mode', 'Edited', 'Updated'],
               rows,
@@ -237,7 +242,10 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     if (slug === 'library') {
       return (
         <Suspense fallback={<Loading />}>
-          <LibraryZone zoneActions={(rows) => zoneActionsFor(role, 'research/library', { view: {
+          <LibraryZone
+            role={role}
+            zoneFilters={(opts) => zoneFiltersFor(role, 'research/library', opts)}
+            zoneActions={(rows) => zoneActionsFor(role, 'research/library', { view: {
             header: ['Document', 'Kind', 'Index state', 'Passages', 'Size (bytes)', 'Added'],
             rows,
             cells: (d) => [d.title, d.kind, d.index_state, d.chunk_count, d.size_bytes, d.created_at],
@@ -251,7 +259,10 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
           {/* The citations of the answer ON SCREEN, which is the whole session
               this surface stores: nothing keeps a history, and the zone says so
               rather than offering to export one that does not exist. */}
-          <AskZone zoneActions={(rows) => zoneActionsFor(role, 'research/ask', { view: {
+          <AskZone
+            role={role}
+            zoneFilters={(opts) => zoneFiltersFor(role, 'research/ask', opts)}
+            zoneActions={(rows) => zoneActionsFor(role, 'research/ask', { view: {
             header: ['#', 'Document', 'Score', 'Passage'],
             rows,
             cells: (c) => [c.n, c.title, c.score, c.chunk],
@@ -262,7 +273,10 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     if (slug === 'funds') {
       return (
         <Suspense fallback={<Loading />}>
-          <FundsZone zoneActions={(rows) => zoneActionsFor(role, 'research/funds', { view: {
+          <FundsZone
+            role={role}
+            zoneFilters={(opts) => zoneFiltersFor(role, 'research/funds', opts)}
+            zoneActions={(rows) => zoneActionsFor(role, 'research/funds', { view: {
             scope: null,
             zone: 'funds',
             header: ['Fund', 'Cheque min (cents)', 'Cheque max (cents)', 'Stage fit', 'Path', 'State', 'Pass reason'],
@@ -275,7 +289,10 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     if (slug === 'benchmarking') {
       return (
         <Suspense fallback={<Loading />}>
-          <BenchmarkingZone zoneActions={(rows) => zoneActionsFor(role, 'research/benchmarking', { view: {
+          <BenchmarkingZone
+            role={role}
+            zoneFilters={(opts) => zoneFiltersFor(role, 'research/benchmarking', opts)}
+            zoneActions={(rows) => zoneActionsFor(role, 'research/benchmarking', { view: {
             scope: null,
             zone: 'benchmarking',
             header: ['Metric', 'Ours', 'Peer', 'Peer source', 'Sample size', 'As of', 'Read'],
@@ -288,7 +305,10 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     if (slug === 'client-prep') {
       return (
         <Suspense fallback={<Loading />}>
-          <ClientPrepZone role={role} zoneActions={(rows) => zoneActionsFor(role, 'research/client-prep', { view: {
+          <ClientPrepZone
+            role={role}
+            zoneFilters={(opts) => zoneFiltersFor(role, 'research/client-prep', opts)}
+            zoneActions={(rows) => zoneActionsFor(role, 'research/client-prep', { view: {
             scope: null,
             zone: 'client-prep',
             header: ['Section', 'What it says', 'Source'],
@@ -301,7 +321,10 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
     if (slug === 'diligence') {
       return (
         <Suspense fallback={<Loading />}>
-          <DiligenceZone zoneActions={(rows) => zoneActionsFor(role, 'research/diligence', { view: {
+          <DiligenceZone
+            role={role}
+            zoneFilters={(opts) => zoneFiltersFor(role, 'research/diligence', opts)}
+            zoneActions={(rows) => zoneActionsFor(role, 'research/diligence', { view: {
             scope: null,
             zone: 'diligence',
             header: ['Company', 'Open to you', 'In the room', 'Behind an NDA', 'You last opened'],

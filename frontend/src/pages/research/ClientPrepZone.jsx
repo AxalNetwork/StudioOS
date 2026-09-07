@@ -3,7 +3,7 @@ import { Card, Pill } from '../../ui';
 import { api } from '../../lib/api';
 import { NothingYet, StatedLimit, Unrecorded, ZoneBody, ZoneHeading } from '../advisor/expertise/kit';
 import { SeamChip } from '../../workspaces/WorkspaceShell';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 
 /**
  * Research · Client prep — the brief, with both sides in it.
@@ -43,7 +43,7 @@ const FILTERS = [
   ['client', 'Founder-sourced'],
 ];
 
-export default function ClientPrepZone({ zoneActions, role = 'advisor' }) {
+export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advisor' }) {
   const [inbox, setInbox] = useState({ loading: true, error: null, items: [] });
   const [chosen, setChosen] = useState(null);
   const [brief, setBrief] = useState({ loading: false, error: null, data: null });
@@ -82,7 +82,14 @@ export default function ClientPrepZone({ zoneActions, role = 'advisor' }) {
 
   return (
     <div className="space-y-6">
-      {zoneActions && <ZoneActions className="mb-3" items={zoneActions(visible)} />}
+      {zoneActions && (
+        <ZoneToolbar
+          role={role}
+          className="mb-3"
+          filters={zoneFilters ? zoneFilters({}) : []}
+          actions={zoneActions(visible)}
+        />
+      )}
       <ZoneHeading
         title={active ? `Session brief — ${active.project_name}` : 'Client prep'}
         sub="One client per brief. Founder-sourced rows are read-only."
