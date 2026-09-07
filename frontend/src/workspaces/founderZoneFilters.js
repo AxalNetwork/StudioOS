@@ -51,6 +51,20 @@ const NO_CADENCE_STORE =
   'no ritual schedule or review archive is stored for this startup';
 const NO_LIQUIDITY_LEDGER =
   'no restriction, tender or liquidity-event ledger is connected';
+// Research · Ask has no store at all behind it, and the ops half of its own row
+// already says so — `Clear history — no session history is stored to clear`.
+// This reuses that clause rather than inventing a fourth phrasing of one
+// absence: `LibraryZone`'s stat strip is already the third
+// ("no question history is stored, here or in Ask").
+const NO_SESSION_RECORD =
+  'no session history is stored, so no past question, kept answer or discarded one exists to look through';
+// `/research/library`. The classification column is real and free text; what is
+// missing is a WRITER that could produce these values. `research.ts:64` accepts
+// exactly `playbook | client | document` and coerces anything else, and the
+// upload form offers exactly those three. Column, write path and client method
+// all pass; only the vocabulary check catches it.
+const NO_SUCH_KIND =
+  'a document is filed as a document, a playbook or about a client, and no upload can classify one any other way';
 
 export const FOUNDER_ZONE_FILTERS = {
   // ── Build ────────────────────────────────────────────────────────────────
@@ -209,6 +223,46 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Published', note: 'a calendar event has no publication state' },
     { canvas: 'Events', key: 'events' },
     { canvas: 'Articles', note: 'no article or content record is connected to this startup' },
+  ],
+
+  // ── Research ─────────────────────────────────────────────────────────────
+  // SHARED WITH THREE OTHER LICENCES, and that is why these entries exist here
+  // rather than in one common table. `ResearchWorkspace` renders `AskZone` and
+  // `LibraryZone` for founder, investor, advisor and partner alike, but the
+  // artboards do not agree on what the row should say and the store does not
+  // agree on what it can answer. `/research/library` is the sharpest case: one
+  // column, one write path, one client method, and partner gets four live chips
+  // off it while founder gets one — the difference is entirely which values a
+  // writer can actually produce.
+
+  // Nothing survives a question. `research.post('/ask')` searches, answers and
+  // returns; it writes no row, and the only per-question record anywhere is
+  // `ai_usage_logs`, which holds token counts and no question text. So the page
+  // has exactly one answer in state at a time and there is nothing to narrow.
+  'research/ask': [
+    { canvas: 'All sessions', note: NO_SESSION_RECORD },
+    { canvas: 'Saved', note: NO_SESSION_RECORD },
+    {
+      canvas: 'Cited in deck',
+      note: 'a citation names the passage it quoted and carries no document id, and nothing carries one into the deck builder',
+    },
+    { canvas: 'Discarded', note: NO_SESSION_RECORD },
+  ],
+  // `All` is the only one of the five this licence can run. Two fail on the
+  // vocabulary, and two on columns that were never there — both of which this
+  // page's own stat strip already states in words, so the wording is reused.
+  'research/library': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Reports', note: NO_SUCH_KIND },
+    {
+      canvas: 'Primary',
+      note: 'no document records whether it is your own research or a bought report',
+    },
+    { canvas: 'Legal', note: NO_SUCH_KIND },
+    {
+      canvas: 'Stale',
+      note: 'nothing records a source’s own year, and the date held is when the file was added here, which is a different fact',
+    },
   ],
 };
 

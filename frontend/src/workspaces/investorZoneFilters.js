@@ -48,6 +48,15 @@ const NO_SUPPORT_LEDGER =
 // it. What is true is that the question has already been answered upstream.
 const ALREADY_MINE =
   'every deal on this board is already one of yours; it loads only the deals you were invited to, committed to, or are a room member of';
+// `/research/ask` and `/research/library` are shared surfaces, so these two
+// read the same as founder's — deliberately. One component draws both rows, and
+// a reader moving between licences must not find one absence explained two
+// ways. The ops half of the Ask row already says "no session history is stored
+// to clear"; this is that clause, extended to the views the filters name.
+const NO_SESSION_RECORD =
+  'no session history is stored, so no past question, kept answer or discarded one exists to look through';
+const NO_SUCH_KIND =
+  'a document is filed as a document, a playbook or about a client, and no upload can classify one any other way';
 
 export const INVESTOR_ZONE_FILTERS = {
   // ── Fund ─────────────────────────────────────────────────────────────────
@@ -166,6 +175,49 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Unassigned', key: 'unassigned' },
     { canvas: 'Stale', key: 'stale' },
     { canvas: 'Passed', key: 'passed' },
+  ],
+
+  // ── Research ─────────────────────────────────────────────────────────────
+  // TWO ZONES SHARED WITH THREE OTHER LICENCES. `ResearchWorkspace` renders one
+  // `AskZone` and one `LibraryZone` for all four, so these entries land beside
+  // founder's, advisor's and partner's rather than after them — a header row
+  // that appears on one licence and not another, out of the same file, reads as
+  // a bug. What the entries say is not shared: on `/research/library` the same
+  // column answers four of partner's labels and one of these five.
+
+  // The same absence founder's row states, in this licence's words. Nothing is
+  // written per question — `research.post('/ask')` searches, answers and
+  // returns — so there is no session, kept answer or outcome to narrow. The ops
+  // half of this row already says "no session history is stored to clear".
+  'research/ask': [
+    { canvas: 'All sessions', note: NO_SESSION_RECORD },
+    { canvas: 'Saved', note: NO_SESSION_RECORD },
+    {
+      canvas: 'Cited in a memo',
+      note: 'a citation names the passage it quoted and carries no document id, and nothing carries one into a memo',
+    },
+    { canvas: 'Discarded', note: NO_SESSION_RECORD },
+  ],
+  // `Diligence` looks like the two live chips partner gets from this same
+  // column and is not one of them. `research_documents.kind` is free text, so
+  // the column check and the write-path check both pass — but the only writer
+  // is the upload form, which offers `Document`, `My playbook` and `About a
+  // client`, and the worker coerces anything else. No row can carry it.
+  'research/library': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Diligence', note: NO_SUCH_KIND },
+    {
+      canvas: 'Benchmarks',
+      note: 'a benchmark is a row in Benchmarking carrying its own source and sample size, not a document in this library',
+    },
+    {
+      canvas: 'Primary',
+      note: 'no document records whether it is your own research or a bought report',
+    },
+    {
+      canvas: 'Stale',
+      note: 'nothing records a source’s own year, and the date held is when the file was added here, which is a different fact',
+    },
   ],
 };
 
