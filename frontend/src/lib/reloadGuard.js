@@ -71,8 +71,19 @@ export function readAttempts(storageKey, urlParam) {
     if (Number.isFinite(n) && n > 0) return n;
   } catch { /* storage blocked — fall through to the URL marker */ }
   try {
-    const m = new RegExp(`[?&]${urlParam}=(\\d+)`).exec(window.location.search);
-    if (m) return parseInt(m[1], 10) || 0;
+    // `URLSearchParams`, NOT a regex built from `urlParam`. Semgrep's
+    // detect-non-literal-regexp flagged the interpolated version, and while the
+    // ReDoS it exists to catch is not reachable here — every caller passes a
+    // module-level constant, never anything a user supplies — the finding was
+    // still worth taking rather than arguing, because a parser beats a pattern
+    // for reading a query parameter. It decodes correctly, cannot be confused
+    // by a value that looks like a delimiter, and is the same mechanism
+    // `reloadCarryingCount` below already uses to WRITE the marker.
+    const raw = new URL(window.location.href).searchParams.get(urlParam);
+    if (raw != null) {
+      const n = parseInt(raw, 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
   } catch { /* location unreadable */ }
   return 0;
 }
