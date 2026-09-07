@@ -48,6 +48,11 @@ const PROFILES = {
     actions: 'frontend/src/workspaces/founderZoneActions.js',
     zones: 18,
     mounted: 18,
+    // Nothing is excluded: this profile's canvas regex above already limits the
+    // set to the three buckets it covers, so every route it yields is declared.
+    excluded: [],
+    // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
+    samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.
     live: (route) => route.replace(/^\//, ''),
   },
@@ -94,8 +99,18 @@ for (const [name, profile] of Object.entries(PROFILES)) {
         `${zone} does not match its artboard's filters`,
       );
     }
-    for (const route of Object.keys(canvas)) {
-      assert.ok(profile.table[route], `${route} has artboard filters this table does not cover`);
+    // A zone the canvas specifies and this table deliberately does not carry
+    // yet. Checked as an exact SET, the way `profile_zone_actions` does it, so
+    // a deferral is recorded rather than silent: an exclusion cannot grow by
+    // accident, and a route that stops existing on a canvas fails here instead
+    // of sitting in the list forever.
+    const excluded = profile.excluded || [];
+    const specified = Object.keys(canvas).filter((route) => !excluded.includes(route));
+    assert.deepEqual(specified.sort(), Object.keys(profile.table).sort(),
+      'an artboard specifies filters for a zone this table does not cover');
+    for (const skip of excluded) {
+      assert.ok(canvas[skip], `${skip} is excluded but no artboard specifies it`);
+      assert.ok(!profile.table[skip], `${skip} is both excluded and declared`);
     }
   });
 
@@ -128,14 +143,32 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
   });
 
-  test(`${name}: a sample figure from the artboard is never printed as fact`, () => {
-    // `All 14`, `All 14 mo` and `Aug 2026` are that artboard's mock data. A
-    // label that reproduces one states a count this account has not got.
+  test(`${name}: a sample datum from the artboard is never printed as fact`, () => {
+    // The pattern is per profile because the samples are. Founder's are counts
+    // welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026` — which
+    // `{n}` fixes. The investor Fund canvas has `Call 3`, which names one
+    // specific stored record rather than carrying a count, so `{n}` is not the
+    // repair and a shared `/\b(14|2026)\b/` would not even see it.
+    //
+    // The rule either way: a label naming a specific record becomes a `dynamic`
+    // group or a relabelled positional filter ("Latest month"), never a chip
+    // carrying the sample's identity.
+    // The pattern must be AIMED AT SOMETHING. Mutation-checking defanged it to
+    // `/__never__/` and every assertion still passed, because no label in the
+    // table trips it today — every one is already correct. A pattern that
+    // cannot be shown to match anything is not a guard, it is a decoration. So
+    // first prove it catches the canvas's own labels, then prove none of those
+    // reach the screen.
+    const raw = Object.values(canvasFilters(profile)).flat();
+    const caught = raw.filter((label) => profile.samples.test(label));
+    assert.ok(caught.length > 0,
+      `${name}'s sample pattern matches none of its ${raw.length} canvas labels — it guards nothing`);
+
     for (const [zone, rows] of Object.entries(profile.table)) {
       for (const row of rows) {
         const shown = row.label || (Array.isArray(row.canvas) ? row.canvas[0] : row.canvas);
-        assert.ok(!/\b(14|2026)\b/.test(shown) || shown.includes('{n}'),
-          `${zone} · ${row.canvas} prints the canvas's own sample figure: "${shown}"`);
+        assert.ok(!profile.samples.test(shown) || shown.includes('{n}'),
+          `${zone} · ${row.canvas} prints the canvas's own sample datum: "${shown}"`);
       }
     }
   });
@@ -250,6 +283,44 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       `${mounted} ${name} zones mount their filters; the profile says ${profile.mounted}`);
   });
 
+  test(`${name}: every ZoneToolbar in this profile's pages names this licence`, () => {
+    // `ZoneToolbar` defaults `role = 'founder'`, because founder was the first
+    // and only caller. A mount that forgets `role="investor"` therefore paints
+    // VIOLET chips on an indigo licence and nothing else catches it — the chip
+    // still renders, still selects, still looks deliberate. It is the quiet
+    // half of the same cross-licence leak the dispatcher assertion in
+    // `profile_zone_actions` exists to prevent.
+    //
+    // Founder may omit the prop, since it IS the default — but it may not claim
+    // a different licence, which is the same leak in the other direction and
+    // keeps this assertion live rather than skipped until a second profile
+    // arrives. Every other profile must say its own name outright.
+    let checked = 0;
+    for (const [zone] of Object.entries(profile.table)) {
+      const page = mountingFile(profile, zone);
+      if (!page) continue;
+      // Split rather than match a bounded window: these mounts run to 528
+      // characters and a capped regex silently found only twelve of eighteen,
+      // which the count below caught. Each segment ends at the element's own
+      // `/>` — the props are expressions, never nested JSX, so the first one
+      // closes it.
+      for (const segment of codeOnly(page.src).split('<ZoneToolbar').slice(1)) {
+        const mount = segment.slice(0, segment.indexOf('/>'));
+        checked += 1;
+        const claimed = mount.match(/role=["'](\w+)["']/)?.[1];
+        if (name === 'founder') {
+          assert.ok(claimed === undefined || claimed === 'founder',
+            `${page.path} mounts a founder ZoneToolbar claiming role="${claimed}"`);
+        } else {
+          assert.equal(claimed, name,
+            `${page.path} mounts a ZoneToolbar with role="${claimed}", so it wears founder violet`);
+        }
+      }
+    }
+    assert.ok(checked >= profile.mounted,
+      `only ${checked} ZoneToolbar mounts found across ${profile.mounted} mounting pages`);
+  });
+
   test(`${name}: every zone that has a filter table also has an action table for the same zone`, () => {
     // The two halves of one row. A zone in one and not the other means the row
     // was half-wired, which is exactly how `/raise/status` lost "Timeline".
@@ -259,6 +330,30 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     }
   });
 }
+
+test('an excluded zone must be specified by a canvas and must not be declared', () => {
+  // Founder excludes nothing, so the loop that enforces this never runs against
+  // a real profile yet. Asserted directly for the same reason `live()` is: a
+  // hook nothing exercises is a hook nobody notices breaking, and this one is
+  // what keeps a deferral honest — it makes the excluded set exact, so an
+  // exclusion cannot grow by accident and a stale one cannot linger.
+  const canvas = { 'a/one': ['X'], 'a/two': ['Y'] };
+  const check = (table, excluded) => {
+    const specified = Object.keys(canvas).filter((r) => !excluded.includes(r));
+    assert.deepEqual(specified.sort(), Object.keys(table).sort());
+    for (const skip of excluded) {
+      assert.ok(canvas[skip], `${skip} is excluded but no artboard specifies it`);
+      assert.ok(!table[skip], `${skip} is both excluded and declared`);
+    }
+  };
+  check({ 'a/one': [] }, ['a/two']);
+  assert.throws(() => check({ 'a/one': [] }, []), /Expected values to be/,
+    'an undeclared, unexcluded zone slipped through');
+  assert.throws(() => check({ 'a/one': [], 'a/two': [] }, ['a/two']), /Expected values to be/,
+    'a zone that is both excluded and declared slipped through');
+  assert.throws(() => check({ 'a/one': [], 'a/two': [] }, ['a/three']), /no artboard specifies it/,
+    'an exclusion naming no artboard slipped through');
+});
 
 test('canvasFilters maps a canvas route onto the route the router mounts', () => {
   // The hook exists for the investor Fund canvas, which says `/fund/*` where
