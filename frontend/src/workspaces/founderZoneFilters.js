@@ -65,6 +65,18 @@ const NO_SESSION_RECORD =
 // all pass; only the vocabulary check catches it.
 const NO_SUCH_KIND =
   'a document is filed as a document, a playbook or about a client, and no upload can classify one any other way';
+// `/research/markets`. All four labels are views of a SAVED DEEP-DIVE, which
+// the artboard makes plain: its instrument table is `Analysis · Method · Run ·
+// State`, and `Sources` in the stat strip counts the indexed documents one
+// analysis rests on. The live page is the signals feed — real, useful and a
+// different object. The ops half of this row already says where signals come
+// from, and this is that sentence from the other side.
+const NO_SAVED_DEEP_DIVE =
+  'nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of; this page is the signals feed, gathered on a schedule';
+// `/research/companies`. Not an absent store — a LEVEL mismatch, which is a
+// fourth kind of reason this table has needed. See the zone's entry below.
+const CATEGORY_IS_PER_COMPETITOR =
+  'each competitor inside an analysis is filed as direct or adjacent, but this row narrows the saved analyses, and an analysis carries no relation of its own';
 
 export const FOUNDER_ZONE_FILTERS = {
   // ── Build ────────────────────────────────────────────────────────────────
@@ -247,6 +259,32 @@ export const FOUNDER_ZONE_FILTERS = {
       note: 'a citation names the passage it quoted and carries no document id, and nothing carries one into the deck builder',
     },
     { canvas: 'Discarded', note: NO_SESSION_RECORD },
+  ],
+  // One reason, four labels. Worth stating precisely because a shorter version
+  // would be wrong: signals ARE stored, dated and scored, and this page reads
+  // them. What is absent is the object the canvas filters — a saved analysis
+  // with a method, a run date and a lifecycle.
+  'research/markets': [
+    { canvas: 'Saved', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Builder', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Sources', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Retired', note: NO_SAVED_DEEP_DIVE },
+  ],
+  // THE CLASSIFICATION IS REAL AND SITS ONE LEVEL DOWN. `competitor_candidates`
+  // carries `direct | adjacent`, defended by every writer — the manual form,
+  // the row editor, the AI prompt and three server-side coercions. What this
+  // header row governs is the saved ANALYSES: its ops half exports them, and
+  // the list endpoint deliberately omits candidates. Narrowing the left half by
+  // a candidate's category while the right half exports analyses would make one
+  // row mean two things, so the reason says which level holds what.
+  'research/companies': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Direct', note: CATEGORY_IS_PER_COMPETITOR },
+    { canvas: 'Adjacent', note: CATEGORY_IS_PER_COMPETITOR },
+    {
+      canvas: 'Comparables',
+      note: 'no competitor can be filed as a comparable: the form offers direct or adjacent, and every writer coerces anything else to direct',
+    },
   ],
   // `All` is the only one of the five this licence can run. Two fail on the
   // vocabulary, and two on columns that were never there — both of which this

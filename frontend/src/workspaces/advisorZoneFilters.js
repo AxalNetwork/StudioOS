@@ -42,6 +42,12 @@ const ONE_ANSWER_ONLY =
   'one answer is on screen at a time and the citations under it are the whole of it, so neither of these narrows anything';
 const NO_ANSWER_RECORD =
   'no answer is saved, so nothing records a past question or whether one went unanswered';
+// `/research/companies`. `competitor_analyses` is keyed on `user_id` and names
+// no company at all, which `ResearchWorkspace` already states on the page: an
+// analysis belongs to the person who ran it, so there is no client dimension to
+// switch between and nothing to mark as a relationship.
+const NO_COMPANY_ON_AN_ANALYSIS =
+  'an analysis is stored against the person who ran it and names no company, so nothing marks one as a relationship or as somebody you are pursuing';
 
 export const ADVISOR_ZONE_FILTERS = {
   // ── Research ─────────────────────────────────────────────────────────────
@@ -57,6 +63,38 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'All history', note: NO_ANSWER_RECORD },
     { canvas: 'Cited', note: ONE_ANSWER_ONLY },
     { canvas: 'Unanswered', note: NO_ANSWER_RECORD },
+  ],
+  // THE ONE PLACE THE SIGNALS FEED ANSWERS THE CANVAS'S QUESTION. Founder and
+  // investor ask this zone for a saved deep-dive with a lifecycle, and nothing
+  // saves one — their rows are prose. This canvas asks something the page can
+  // answer about its own rows: how old is what I am looking at. Every signal
+  // carries its evidence with `observed_at`, and the artboard supplies the
+  // windows itself — `const STALE_AT = 120, AGE_AT = 30`. A day window is part
+  // of a filter's definition, not a claim about this account's records, which
+  // is the same ground `Last 6 mo` stands on in the founder table.
+  //
+  // NOT `updated_at`, WHICH LOOKS RIGHT AND IS NOT. The ingestion job computes
+  // one timestamp per run and binds it to every row it touches, so an age
+  // predicate over it would put the whole feed in one bucket — a filter that
+  // always returns everything or nothing, which is D51 in a new costume.
+  'research/markets': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Current', key: 'current' },
+    { canvas: 'Ageing', key: 'ageing' },
+    { canvas: 'Stale', key: 'stale' },
+  ],
+  // The same level mismatch founder's row has, from the other end: this canvas
+  // wants a company's standing with you, and the page lists analyses that name
+  // no company. `Researching` is the near-miss worth naming separately — an
+  // analysis DOES carry a status, and it is the status of the run.
+  'research/companies': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Relationships', note: NO_COMPANY_ON_AN_ANALYSIS },
+    { canvas: 'Prospects', note: NO_COMPANY_ON_AN_ANALYSIS },
+    {
+      canvas: 'Researching',
+      note: 'the only state an analysis carries is the state of its own run (draft, running, complete or error), which says nothing about your standing with a company',
+    },
   ],
   // ALL FOUR RUN. `kind` carries the artboard's own axis, and `index_state`
   // carries the column this zone exists to show.

@@ -52,6 +52,8 @@ const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const RESEARCH_BODIES = {
   'research/ask': 'frontend/src/pages/research/AskZone.jsx',
   'research/library': 'frontend/src/pages/research/LibraryZone.jsx',
+  'research/markets': 'frontend/src/pages/SignalsPage.jsx',
+  'research/companies': 'frontend/src/components/CompetitorAnalysis.jsx',
 };
 
 const PROFILES = {
@@ -69,8 +71,8 @@ const PROFILES = {
     canvas: /^Pages · Founder /,
     pages: ['frontend/src/pages/founder', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
-    zones: 20,
-    mounted: 20,
+    zones: 22,
+    mounted: 22,
     bodies: RESEARCH_BODIES,
     excluded: [
       // The shared surfaces. `NetworkWorkspace` and `ResearchWorkspace` render
@@ -80,7 +82,7 @@ const PROFILES = {
       // `research/{ask,library}` left this list when all four tables gained
       // them in the same commit, which is the only way they can.
       'network/relationships', 'network/introductions', 'network/organizations',
-      'research/markets', 'research/companies', 'research/funds',
+      'research/funds',
     ],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
@@ -100,8 +102,8 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 10,
-    mounted: 10,
+    zones: 11,
+    mounted: 11,
     bodies: RESEARCH_BODIES,
     // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
     // it is not here yet:
@@ -129,7 +131,7 @@ const PROFILES = {
       // while founder has none would show a zone header on one licence and
       // nothing on the other, from one component. They land together.
       'network/relationships', 'network/introductions', 'network/organizations',
-      'research/diligence', 'research/benchmarking', 'research/markets',
+      'research/diligence', 'research/benchmarking',
     ],
     // `Call 3` names one specific stored record rather than welding a count
     // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`
@@ -167,12 +169,12 @@ const PROFILES = {
     canvas: /^Pages · Advisor (Network|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
-    zones: 2,
-    mounted: 2,
+    zones: 4,
+    mounted: 4,
     bodies: RESEARCH_BODIES,
     excluded: [
       'network/relationships', 'network/introductions', 'network/organizations',
-      'research/client-prep', 'research/markets', 'research/companies',
+      'research/client-prep',
     ],
     // No `samples`: not one advisor label carries a figure, and the assertion
     // below proves that rather than taking it on trust — a canvas that gains an
@@ -188,12 +190,12 @@ const PROFILES = {
     canvas: /^Pages · Partner (Network|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/partner', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/partnerZoneActions.js',
-    zones: 2,
-    mounted: 2,
+    zones: 3,
+    mounted: 3,
     bodies: RESEARCH_BODIES,
     excluded: [
       'network/relationships', 'network/introductions', 'network/organizations',
-      'research/client-prep', 'research/markets',
+      'research/client-prep',
     ],
     // `Pages · Partner Research` names /research/market; the router and
     // `shellConfig.js` both say `markets`. Same mapping the ops half carries.

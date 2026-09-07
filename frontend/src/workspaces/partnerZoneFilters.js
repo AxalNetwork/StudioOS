@@ -37,6 +37,22 @@ const NO_ANSWER_RECORD =
 
 export const PARTNER_ZONE_FILTERS = {
   // ── Research ─────────────────────────────────────────────────────────────
+  // Three live, one prose. The windows are this canvas's own — `const STALE_AT
+  // = 90, AGE_AT = 30`, ninety where advisor's artboard says a hundred and
+  // twenty, which is why the number lives in each licence's own table rather
+  // than in the shared body. Age comes from each signal's evidence
+  // `observed_at`, never from `updated_at`: the ingestion job stamps every row
+  // it touches with one run timestamp, so that column cannot tell two signals
+  // apart.
+  'research/markets': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Current', key: 'current' },
+    { canvas: 'Stale', key: 'stale' },
+    {
+      canvas: 'Attached to proposals',
+      note: 'no row joins a signal to a proposal — the only foreign keys to a signal in the whole schema are its evidence and the companies it names',
+    },
+  ],
   'research/ask': [
     { canvas: 'This session', note: ONE_ANSWER_ONLY },
     { canvas: 'All history', note: NO_ANSWER_RECORD },

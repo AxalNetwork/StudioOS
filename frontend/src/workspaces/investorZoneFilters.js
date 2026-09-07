@@ -57,6 +57,15 @@ const NO_SESSION_RECORD =
   'no session history is stored, so no past question, kept answer or discarded one exists to look through';
 const NO_SUCH_KIND =
   'a document is filed as a document, a playbook or about a client, and no upload can classify one any other way';
+// `/research/markets`. The same absence founder's row states, in this licence's
+// words: all four labels are lifecycle states of a SAVED DEEP-DIVE, which the
+// artboard shows as `Analysis · Method · Run · State`. Two of them look nearly
+// live and are not — `signals.status` exists, but the feed's own query is
+// `WHERE status = 'active'` and the row mapper never sends `status` to the
+// browser, so `Active` selects everything and nothing writes `parked` or
+// `archived` at all.
+const NO_SAVED_DEEP_DIVE =
+  'nothing saves a market deep-dive, so there is no analysis to hold active, park, retire or build; this page is the signals feed, gathered on a schedule';
 
 export const INVESTOR_ZONE_FILTERS = {
   // ── Fund ─────────────────────────────────────────────────────────────────
@@ -197,6 +206,12 @@ export const INVESTOR_ZONE_FILTERS = {
       note: 'a citation names the passage it quoted and carries no document id, and nothing carries one into a memo',
     },
     { canvas: 'Discarded', note: NO_SESSION_RECORD },
+  ],
+  'research/markets': [
+    { canvas: 'Active', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Parked', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Retired', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Builder', note: NO_SAVED_DEEP_DIVE },
   ],
   // `Diligence` looks like the two live chips partner gets from this same
   // column and is not one of them. `research_documents.kind` is free text, so
