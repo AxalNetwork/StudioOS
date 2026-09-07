@@ -2482,7 +2482,110 @@ nobody specified and nothing backs — the failure this entry exists to prevent.
 
 ---
 
-### D49. A filter is a claim about the data, so a filter with no store is a sentence — and the one that looked live was worse than the four that looked dead
+### D49. A bucket root the canvas composed renders a board; one it did not renders the card grid
+
+**2026-09-06.** Every bucket root rendered `BucketOverview` — a three-column
+grid of link cards carrying a label, an archetype badge and one blurb. Two
+canvases draw something else: `Partner Operator Canvas` P3–P7 and
+`Advisor Canvas` V3–V6 draw a root as an h1 (the bucket's **tagline**), a
+sub-line, and one section per zone, each with a real count in its header, a
+short table of that zone's real rows, and a footnote.
+
+`BucketBoard` renders that, for the nine roots the corpus composes.
+`BucketOverview` is **kept, unchanged**, for the six it does not — advisor
+`/cohorts`, whose own canvas (`Pages · Advisor Cohorts.dc.html`) draws its five
+zones and deliberately no root, plus every founder and investor bucket. These
+are not two ways of doing one thing: a card grid is the honest surface for a
+root nobody designed, a board for one they did. `boardFor(role, prefix)`
+returning null is what gives the six theirs, with no condition naming them.
+
+**The boards read the endpoints the zone pages already read.** One aggregate
+endpoint per bucket was the obvious build and is the wrong one, because the
+honesty rule here does not live in the component — it lives in the worker,
+attached to the absence. `partner_offers.ts` returns `views: null` beside
+*"No impression is recorded anywhere in the product, so a view count would be
+invented rather than measured"*; `partner_pipeline.ts` returns `mrr_cents`
+null-or-counted beside its basis and its note; `partner_delivery.ts` returns
+`unrated_note` — *"Silence is not good news."* An aggregate endpoint would
+re-derive those figures or re-copy those sentences, and `partner_delivery.ts`
+already refuses the first in as many words. Reading the same endpoint makes the
+board's number the zone's number **by construction**. It also means the feature
+adds no route, no query and nothing for `check-api-drift.mjs` to see.
+
+**A section cannot print a count it cannot source**, and that is a property of
+the signature rather than of anyone's care: `summary`, `rows` and `footnote`
+take the section's payload as their **only** argument, so a section with no
+`source` is handed nothing. `gap` and `source` are mutually exclusive, and a
+`gap` is *imported* from `workspaces/noStoreCopy.js` — the same object the zone
+page renders — so a board can never be gentler than the page behind it.
+`frontend/test/bucket_board.test.mjs` fails the build on an inline gap literal,
+on a section slug list that is not its bucket's zones in order, and on **any
+digit in a registry string**: every canvas hardcodes its figures, and those are
+the designer's placeholders rather than the reader's numbers.
+
+**Eight canvas claims are drawn on an artboard and refused in code**, each
+replaced by the worker's own reason rather than dropped: the capacity cap, the
+per-surface conversion rate, "shipped and acknowledged", the advisor platform
+cut, engagement renewals, relationship staleness grading, satisfaction in
+health, and "slots open" over a billing zone. The anchor pills the canvases draw
+are **not** rebuilt — `ZoneNav` already renders one pill per zone, and
+`ZoneNav.jsx:8-15` exists precisely because the canvas pills were inert.
+
+---
+
+### D50. An advisor reads a client's record only under a grant the founder makes, scope by scope
+
+**2026-09-06.** Task #55. `/research/client-prep` had said the same thing since
+it existed: half a client brief was present — the topic and the questions the
+client wrote when they asked for the session — and the other half was the
+client's own record, **closed by rule rather than absent**.
+`canAccessFounderResource` admits admin, partner and the owning founder; an
+advisor matches no branch. No table was missing. A decision was.
+
+Migration 218 adds `advisor_client_grants`, shaped on `data_room_grants` — the
+product's only founder→outsider content grant — rather than generalising it:
+that table's column is `investor_user_id` and its reads are wired into the NDA
+path, so widening it would put the advisor case inside the investor case's
+blast radius for no gain. Keyed on `users(id)` and not `advisors(id)`, for the
+reason migration 206 argues about cohort assignments — the read is
+authorisation, and an advisor with no practice profile would otherwise be
+ungrantable for a reason a founder could never discover.
+
+**Three scopes, not one switch.** Opening the project record is not the same as
+opening the data room, and neither is the same as showing an advisor which
+*other* advisors this founder works with. One boolean would force the most
+sensitive in order to grant the least. `scope_project` defaults on because it is
+the half the brief lacks; `scope_data_room` and `scope_sessions` default off,
+and the granting screen names each in the words that describe what it exposes.
+
+**The gate is two parts and neither is sufficient**, copying `advisors.ts:1410`:
+the grant is the founder's decision, and the **role is re-checked on every
+read** — without it, a demoted advisor keeps an active row and keeps reading
+indefinitely. Granting to a non-advisor is refused at the door, because such a
+grant would be inert and a founder who ticked three scopes deserves to be told.
+
+Three smaller properties are load-bearing: a missing project and a missing grant
+answer identically, so the endpoint cannot enumerate projects; the data room
+stays behind `pairwise_ndas` for an advisor exactly as for an investor — a
+count, never the names; and the brief **names every scope it did not read**.
+
+**`pairwise_ndas`'s "party_b is the investor" is a comment, not a constraint.**
+The schema says only `UNIQUE(party_a_user_id, party_b_user_id)`,
+`getPairwiseNda` is a two-column lookup with no role assertion, and every other
+reader is symmetric. The convention is restated as *party_a is the founder,
+party_b is the counterparty*; no migration was needed.
+
+**D37 is narrowed, not retired.** A founder still cannot push a document to an
+advisor: `advisor_client_document_shares` has a reader — a shared document
+appears in the brief — and no writer, so `LibraryZone` still says nobody can
+send you a document. What changed is the reason, from "the mechanism cannot
+exist" to "the control has not been built". `searchSemantic` is never widened;
+a shared document is resolved by id, and `research_search_isolation.test.ts`
+stays green.
+
+---
+
+### D51. A filter is a claim about the data, so a filter with no store is a sentence — and the one that looked live was worse than the four that looked dead
 
 **D48** settled the right-hand half of a zone header: the canvas's `ops:` list,
 verbatim, with anything nothing performs rendered as prose. This is the

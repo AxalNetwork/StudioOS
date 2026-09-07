@@ -295,10 +295,24 @@ test('the withdrawn Research tabs stay withdrawn, and the reason is written down
     assert.ok(live.includes(`'${slug}'`), `${slug} has a store now and must be live`);
   }
   // And neither may still carry a no-store card.
+  //
+  // ZONE_COPY IS EMPTY NOW — `const ZONE_COPY = {};` on one line — because every
+  // zone this workspace serves reads a store: funds and benchmarking got one in
+  // migrations 216 and 217, diligence needed none, and client-prep got its
+  // second side from the advisor grant in 218. The old slice looked for `\n};`
+  // and found nothing, failing on a tree where the thing it guards had been
+  // completed. Handle both forms rather than pinning either.
   const copyStart = code.indexOf('const ZONE_COPY = {');
-  const copyBlock = code.slice(copyStart, code.indexOf('\n};', copyStart));
+  assert.ok(copyStart > -1, 'ZONE_COPY must still exist as the structure an unbacked zone would use');
+  // The NEAREST close, not the first multi-line one: `\n};` also matches the
+  // next object literal further down the file, which is how the first fix
+  // turned a one-line ZONE_COPY into a slice covering half the module.
+  const multiline = code.indexOf('\n};', copyStart);
+  const inline = code.indexOf('};', copyStart);
+  const closeAt = multiline > -1 && multiline < inline ? multiline : inline;
+  const copyBlock = code.slice(copyStart, closeAt + 2);
   assert.ok(copyBlock.length > 0 && copyBlock.length < 4000, 'the ZONE_COPY slice must not run away');
-  for (const slug of ['ask:', 'library:']) {
+  for (const slug of ['ask:', 'library:', 'funds:', 'benchmarking:', 'diligence:', "'client-prep':"]) {
     assert.ok(!copyBlock.includes(slug),
       `${slug} still carries a "no store" card while its page reads a store`);
   }

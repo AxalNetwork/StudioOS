@@ -23,12 +23,15 @@ import ZoneActions from '../../workspaces/ZoneActions';
  * are different facts and only one of them means Ask has read the file.
  *
  * WHAT THIS PAGE CANNOT DO, stated rather than left as an empty list a reader
- * fills in wrongly: nobody can send you a document. A founder sharing their
- * own file with an advisor needs a grant that does not exist in the product —
- * the shape exists for investors (`data_room_grants`) and has no counterpart
- * here, and adding one is a decision about a founder's privacy rather than a
- * schema change. So an empty library means you have uploaded nothing, not
- * that nobody shared anything.
+ * fills in wrongly: nobody can send you a document. That is still true, and
+ * the reason has changed. The grant that would carry it now exists —
+ * `advisor_client_grants` (migration 218) opens one project to one named
+ * advisor, scope by scope — and `advisor_client_document_shares` is the table
+ * a pushed document would live in. It has a reader, in the client brief, and
+ * no writer: no surface in this product lets a founder pick a file and send
+ * it. So an empty library still means you have uploaded nothing rather than
+ * that nobody shared anything, and it says so for a narrower reason than
+ * before.
  */
 
 const STATE_LABEL = {

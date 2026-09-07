@@ -9,7 +9,6 @@ import NoStoreYet from './NoStoreYet';
 import BucketBoard from './BucketBoard';
 import { boardFor } from './boards';
 import { api } from '../lib/api';
-import { RESEARCH_CLIENT_PREP_COPY } from './noStoreCopy';
 
 /**
  * `/research/*` — one path, four zone lists.
@@ -71,11 +70,18 @@ import { RESEARCH_CLIENT_PREP_COPY } from './noStoreCopy';
  * "nothing joins a booking to the client's own record". Checked against
  * production rather than `schema.sql`: `advisor_bookings.founder_user_id` →
  * `users.founder_id` → `projects.founder_id` is two hops over the column
- * `canAccessFounderResource` itself reads. The join was never the problem —
- * the access rule is, and it decides differently for the two roles that see
- * this zone (see `ClientPrepScopeNote`). A card that blames a missing table
- * for an access decision sends the next reader to write a migration that would
- * change nothing.
+ * `canAccessFounderResource` itself reads. The join was never the problem — the
+ * access rule was. A card that blames a missing table for an access decision
+ * sends the next reader to write a migration that would change nothing.
+ *
+ * THAT ACCESS RULE IS NOW A DECISION A FOUNDER MAKES. Migration 218 gives them
+ * `advisor_client_grants`: one project, one named advisor, revocable, expiring,
+ * and scoped — the project record, the data room and the client's other
+ * sessions are three separate ticks. So the zone has a body, the card is gone,
+ * and the per-role reason it used to carry lives in the zone's own empty state,
+ * where it is read by someone who has actually opened the page. A partner still
+ * has no grant path — the grant is founder→advisor by role check — and the
+ * empty state says so in its own words.
  */
 
 const SignalsPage = lazy(() => import('../pages/SignalsPage'));
@@ -85,6 +91,7 @@ const AskZone = lazy(() => import('../pages/research/AskZone'));
 const FundsZone = lazy(() => import('../pages/research/FundsZone'));
 const BenchmarkingZone = lazy(() => import('../pages/research/BenchmarkingZone'));
 const DiligenceZone = lazy(() => import('../pages/research/DiligenceZone'));
+const ClientPrepZone = lazy(() => import('../pages/research/ClientPrepZone'));
 
 function Loading() {
   return <div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-40" /></div>;
@@ -117,53 +124,6 @@ function CompanyScopeNote({ role }) {
   );
 }
 
-/**
- * Client prep is refused for a DIFFERENT REASON depending on who is reading,
- * and one sentence cannot be true for both — which is why this is a component
- * and not another line of `ZONE_COPY`.
- *
- * Both roles carry this zone (`shellConfig.js` RESEARCH_ZONES.advisor and
- * .partner), and `canAccessFounderResource` (`cloudflare-worker/src/auth.ts`)
- * treats them oppositely: it returns true outright for `partner`, and an
- * advisor matches neither that branch nor the owning-founder one. So the
- * card's old "the project read that would reach it excludes advisors" was
- * simply not a partner's obstacle, and the "on Practice · Sessions" pointer
- * sent a partner to a bucket only the advisor shell has.
- */
-function ClientPrepScopeNote({ role }) {
-  if (role !== 'advisor' && role !== 'partner') return null;
-  const advisor = role === 'advisor';
-  return (
-    <Card variant="sunken" padding="md" className="mb-4">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-ink-3">
-        {advisor ? 'The client’s record is closed to you by rule' : 'Permission is not what stops this for a firm'}
-      </div>
-      <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-axal-ink-2">
-        {advisor ? (
-          <>
-            The guard over founder data admits studio staff and the founder who owns the record.
-            An advisor is neither, so a client’s project is unreadable to you deliberately rather
-            than by oversight. Opening it would take a grant from the founder, and the product
-            already has that exact shape for investors — one project, one named counterparty,
-            revocable, expiring, and logged. Nothing equivalent exists for advisors, and adding
-            one is a decision about a founder’s privacy, not a schema change. The half you do
-            have — what the client wrote when they asked for the session — is on Practice ·
-            Sessions.
-          </>
-        ) : (
-          <>
-            A firm passes the founder-data guard as studio staff, so the rule is not the
-            obstacle here. What is missing is the link: no record on the firm side points at a
-            client’s project, so there is nothing to hang a brief on. That is an assembly gap
-            rather than a permission one, and it is why this zone waits on a store rather than
-            on a decision.
-          </>
-        )}
-      </p>
-    </Card>
-  );
-}
-
 // The zones with a live source behind them. Everything else in ZONE_COPY
 // renders NoStoreYet, and the rail says so rather than implying a source.
 //
@@ -175,11 +135,18 @@ function ClientPrepScopeNote({ role }) {
 // needed none — its canvas artboard is "room access", assembled from the
 // `data_room_grants` an investor already holds. All three leave ZONE_COPY here
 // and join the zones that read something.
-const LIVE_ZONES = new Set(['markets', 'companies', 'library', 'ask', 'funds', 'benchmarking', 'diligence']);
+const LIVE_ZONES = new Set(['markets', 'companies', 'library', 'ask', 'funds', 'benchmarking', 'diligence', 'client-prep']);
 
-const ZONE_COPY = {
-  'client-prep': RESEARCH_CLIENT_PREP_COPY,
-};
+/**
+ * EMPTY, AND THAT IS THE STATE RATHER THAN AN OVERSIGHT. Every zone this
+ * workspace serves now reads a store: `funds` and `benchmarking` got one in
+ * migrations 216 and 217, `diligence` turned out to need none — its artboard is
+ * room access, assembled from grants that already existed — and `client-prep`
+ * got its second side from the advisor grant in 218. The object stays as the
+ * structure a future unbacked zone would use, and `unbuiltFrom` over an empty
+ * map correctly produces no gaps.
+ */
+const ZONE_COPY = {};
 
 /**
  * One line per zone, for the zones in `LIVE_ZONES` — the only two with a
@@ -198,6 +165,7 @@ const ZONE_COPY = {
  * LIVE_ZONES reappears here.
  */
 const ZONE_BLURB = {
+  'client-prep': 'One client per brief, assembled from what they opened to you and what you already hold.',
   funds: 'Every fund you have researched, whether they write at your stage, and whether you have a route in.',
   diligence: 'The rooms founders have opened to you, and how much of each they actually staged.',
   benchmarking: 'What you are measuring, what the peer set says, and how many it was measured over.',
@@ -317,6 +285,19 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
         </Suspense>
       );
     }
+    if (slug === 'client-prep') {
+      return (
+        <Suspense fallback={<Loading />}>
+          <ClientPrepZone role={role} zoneActions={(rows) => zoneActionsFor(role, 'research/client-prep', { view: {
+            scope: null,
+            zone: 'client-prep',
+            header: ['Section', 'What it says', 'Source'],
+            rows,
+            cells: (r) => [r.section, r.value, r.source === 'client' ? 'From the client' : 'Mine'],
+          } })} />
+        </Suspense>
+      );
+    }
     if (slug === 'diligence') {
       return (
         <Suspense fallback={<Loading />}>
@@ -330,16 +311,17 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
         </Suspense>
       );
     }
-    // `client-prep` is the fallback now that funds, benchmarking and diligence
-    // all render real pages: a slug with no card would otherwise show some
-    // other zone's body under this zone's heading.
-    const copy = ZONE_COPY[slug] || ZONE_COPY['client-prep'];
-    return (
-      <>
-        {slug === 'client-prep' && <ClientPrepScopeNote role={role} />}
-        <NoStoreYet {...copy} accentClass={copy.accentClass || accentClass} />
-      </>
-    );
+    // Reachable only if `shellConfig` names a zone before this file serves it.
+    // It borrowed another zone's card until every zone had a body; now there is
+    // no card to borrow, and describing the wrong zone would be worse than
+    // saying plainly that this one has no surface.
+    const copy = ZONE_COPY[slug] || {
+      heading: 'Nothing serves this zone yet',
+      what: 'The workspace shell names this zone, and no page in this file answers it.',
+      why: 'It ships empty rather than borrowing another zone\'s description, which would '
+        + 'tell you about a surface you are not looking at.',
+    };
+    return <NoStoreYet {...copy} accentClass={copy.accentClass || accentClass} />;
   }, [slug, accentClass, role, user, isRoot]);
 
   // Companies has a live store for everyone, but for an advisor the store holds

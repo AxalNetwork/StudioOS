@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import AdvisorGrantSection from './AdvisorGrantSection';
 
 /**
  * Data room — /raise/data-room. One route, two audiences.
@@ -249,6 +250,11 @@ function FounderRoom({ projects, initialProjectUid }) {
           </div>
         )}
       </section>
+
+      {/* The second grant type, beside the first. Both answer "who sees my
+          company"; splitting them across two screens is how a founder ends up
+          believing they revoked something they did not. */}
+      <AdvisorGrantSection projectUid={projectUid} />
 
       <section>
         <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Recent activity</h2>

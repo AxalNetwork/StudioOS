@@ -2576,6 +2576,14 @@ export const api = {
     request(`/data-room/${encodeURIComponent(projectUid)}/grants/${encodeURIComponent(uid)}`, { method: 'DELETE' }),
   dataRoomsSharedWithMe: () => request('/data-room/shared'),
 
+  // Task #55 — the advisor grant. A founder opens one project to one named
+  // advisor, scope by scope; the advisor reads it back through /shared/*.
+  advisorGrants: (projectUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}`),
+  advisorGrantCreate: (projectUid, data) => request(`/advisor-grants/${encodeURIComponent(projectUid)}`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  advisorGrantRevoke: (projectUid, grantUid) => request(`/advisor-grants/${encodeURIComponent(projectUid)}/${encodeURIComponent(grantUid)}`, { method: 'DELETE' }),
+  advisorClientsSharedWithMe: () => request('/advisor-grants/shared/list'),
+  advisorClientBrief: (projectUid) => request(`/advisor-grants/shared/${encodeURIComponent(projectUid)}/brief`),
+
   // Messages (migration 185 + routes/messages.ts). Membership is the only key:
   // every one of these 404s for a thread the caller is not in.
   messageThreads: () => request('/messages'),

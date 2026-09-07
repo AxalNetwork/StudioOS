@@ -249,59 +249,42 @@ test('Client prep blames the access rule, not a table that is actually there', (
 });
 
 test('Client prep gives the two roles that see it their own reason', () => {
-  // `canAccessFounderResource` (cloudflare-worker/src/auth.ts) returns true
-  // outright for `partner` and matches an advisor on neither branch, so ONE
-  // sentence cannot be true for both — and RESEARCH_ZONES gives this zone to
-  // both roles. The old card stated the advisor's obstacle to a partner, and
-  // pointed them at Practice · Sessions, a bucket only the advisor shell has.
-  const code = codeOnly(researchWs);
-  assert.match(code, /function ClientPrepScopeNote\(\{ role \}\)/,
-    'the role-specific reason must be a component, not another line of shared copy');
-  assert.match(code, /slug === 'client-prep' && <ClientPrepScopeNote role=\{role\} \/>/,
-    'the note must actually render on the zone');
+  // `canAccessFounderResource` returns true outright for `partner` and matches
+  // an advisor on neither branch, so ONE sentence cannot be true for both — and
+  // RESEARCH_ZONES gives this zone to both roles. That invariant is unchanged.
+  //
+  // WHERE IT LIVES CHANGED, because the zone stopped being a card. Migration 218
+  // gives a founder `advisor_client_grants`, so an advisor CAN now be let in —
+  // by name, scope by scope, revocably. The reason therefore belongs in the
+  // zone's own empty state, read by someone who opened the page, rather than in
+  // a no-store note above a card that no longer exists.
+  //
+  // A PARTNER STILL HAS NO GRANT PATH. The grant is founder→advisor by role
+  // check (`isAdvisorNow`), so the partner half of this must keep saying
+  // something different from the advisor half.
+  const zone = codeOnly(read('frontend/src/pages/research/ClientPrepZone.jsx'));
 
-  const start = code.indexOf('function ClientPrepScopeNote');
-  const end = code.indexOf('const LIVE_ZONES');
-  assert.ok(start > -1 && end > start,
-    'the ClientPrepScopeNote slice must be bounded at BOTH ends — an open-ended slice reads '
-    + 'the rest of the file and passes on some other component\'s copy');
-  // Collapsed, because these assert RENDERED prose and JSX text wraps wherever
-  // the line runs out. Matching source line breaks means a reflow that changes
-  // no rendered word fails the test, which trains the next reader to loosen it.
-  const note = code.slice(start, end).replace(/\s+/g, ' ');
-  assert.ok(note.length > 200 && note.length < 4000, 'the note slice must not run away');
-  assert.match(note, /role !== 'advisor' && role !== 'partner'/,
-    'no other role may be told a reason that is not theirs');
-  // PINNED BECAUSE EVERY OTHER ASSERTION HERE IS ABOUT PRESENCE AND ORDER, and
-  // flipping this one line to `role === 'partner'` changes neither: the two
-  // reasons swap readers in silence, and an advisor is told permission is not
-  // their obstacle when it is precisely their obstacle. Caught by mutation
-  // only after it had already slipped through the first eight.
-  assert.match(note, /const advisor = role === 'advisor';/,
-    'the branch predicate must select on the advisor — every ordering check below '
-    + 'reads the advisor branch as the ternary\'s first arm');
-  // The advisor half: refused by rule, and the grant shape that would open it
-  // exists for investors (data_room_grants) with no advisor equivalent.
-  assert.match(note, /revocable, expiring, and logged/,
-    'the advisor must be told what would open it, not merely that it is shut');
-  // The partner half: they PASS the guard, so permission is not the obstacle.
-  // Verified in production — no partner_* table carries a project_id.
-  assert.match(note, /passes the founder-data guard as studio staff/,
+  assert.match(zone, /role === 'partner'/,
+    'the two roles must still get different words — one sentence cannot be true for both');
+  assert.match(zone, /export default function ClientPrepZone\(\{ zoneActions, role = 'advisor' \}\)/,
+    'the zone must take the role, or it cannot tell them apart');
+  assert.match(codeOnly(researchWs), /<ClientPrepZone role=\{role\}/,
+    'and the workspace must actually pass it');
+
+  // The advisor half: what would open it, not merely that it is shut. It is a
+  // grant a founder makes, and it is theirs to revoke.
+  const advisorHalf = zone.slice(zone.indexOf("role === 'partner'"));
+  assert.match(advisorHalf, /A founder opens their record to you by name/,
+    'an advisor must be told how it opens, since it now can');
+  // The partner half: they pass the founder-data guard, so permission is not
+  // their obstacle — an assembly is.
+  assert.match(zone, /Nothing here requests one/,
     'a partner must not be told a rule refuses them when it does not');
-  assert.match(note, /assembly gap rather than a permission one/,
-    'the partner obstacle is the missing link, and the card must say which it is');
 
-  // Practice · Sessions is advisor-only (shellConfig: no /practice on partner),
-  // so it may only be named inside the advisor branch — everything before the
-  // `) : (` that opens the partner one.
-  const practiceAt = note.indexOf('Practice · Sessions');
-  const partnerBranchAt = note.indexOf(') : (');
-  assert.notEqual(practiceAt, -1, 'the advisor still has a half, and should be sent to it');
-  assert.notEqual(partnerBranchAt, -1, 'the ternary that splits the two branches is gone');
-  assert.ok(practiceAt < partnerBranchAt,
-    'Practice · Sessions may only be named in the advisor branch — a partner has no /practice');
-  assert.doesNotMatch(block(code, 'ZONE_COPY'), /Practice · Sessions/,
-    'the shared card must not point a partner at a bucket their shell does not carry');
+  // The worker half of the same rule: a non-advisor holds no client grant, and
+  // every read re-checks the role rather than trusting the grant row.
+  const grants = read('cloudflare-worker/src/routes/advisor_grants.ts');
+  assert.match(grants, /Only an advisor may open a client brief/);
 });
 
 test('the Network overview shares one INTRO map and marks Organizations where it reads nothing', () => {
