@@ -33,6 +33,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { readAttempts, preserveReloadGuards, RELOAD_GUARD_KEYS } from '../src/lib/reloadGuard.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const main = codeOnly(read('frontend/src/main.jsx'));
@@ -78,8 +79,12 @@ test('the reload budget is a count, and it survives blocked storage', () => {
     'the shared guard must expose the count reader');
   assert.match(guard, /export function reloadCarryingCount/,
     'the reload must propagate the attempt count');
-  assert.match(guard, /new RegExp\(`\[\?&\]\$\{urlParam\}=/,
-    'the count needs a storage-free carrier in the URL');
+  // Read with a PARSER, not a pattern: Semgrep flags a regex built from an
+  // interpolated value, and a query parameter is what URLSearchParams is for.
+  assert.match(guard, /searchParams\.get\(urlParam\)/,
+    'the count needs a storage-free carrier read out of the URL');
+  assert.doesNotMatch(guard, /new RegExp\(/,
+    'a regex assembled from a caller-supplied name is the finding this replaced');
 });
 
 test('the service-worker reload is bounded by something that outlives a reload', () => {
@@ -164,4 +169,119 @@ test('the boot watchdog keeps at least one loop guard', () => {
     'the URL marker may only be stripped when sessionStorage is proven to work');
   assert.match(main, /_storageWorks && _u\.searchParams\.has\('__reboot'\)/,
     'the strip must be gated on that probe');
+});
+
+/**
+ * The two behaviours the source-reading tests above can only describe.
+ *
+ * `reloadGuard.js` is plain JavaScript with no module-scope side effects, so it
+ * loads in Node and can be RUN rather than read — which matters most for the
+ * storage-refused path, since that is the browser the bug was reported from and
+ * the one no amount of grepping can exercise.
+ */
+function withBrowser({ search = '', storage }, fn) {
+  const priorWindow = globalThis.window;
+  const priorStorage = globalThis.sessionStorage;
+  globalThis.window = { location: { href: `https://axal.vc/login/${search}`, search } };
+  globalThis.sessionStorage = storage;
+  try { return fn(); } finally {
+    globalThis.window = priorWindow;
+    globalThis.sessionStorage = priorStorage;
+  }
+}
+
+/** A sessionStorage that refuses every operation, as Safari Private Browsing does. */
+const REFUSING = {
+  getItem() { throw new Error('storage blocked'); },
+  setItem() { throw new Error('storage blocked'); },
+};
+
+function workingStorage(seed = {}) {
+  const map = new Map(Object.entries(seed));
+  return {
+    getItem: (k) => (map.has(k) ? map.get(k) : null),
+    setItem: (k, v) => map.set(k, String(v)),
+    clear: () => map.clear(),
+    _map: map,
+  };
+}
+
+test('the count is readable from the URL when storage refuses every write', () => {
+  // THE SAFARI PRIVATE BROWSING PATH, run rather than described. With storage
+  // throwing, the URL marker is the only thing standing between a failed
+  // recovery and an unbounded loop.
+  const n = withBrowser({ search: '?__swreload=1', storage: REFUSING },
+    () => readAttempts('axal:sw-reload-attempts', '__swreload'));
+  assert.equal(n, 1, 'a refused read must fall through to the URL marker');
+
+  // And a budget of 1 is then spent, so the next controllerchange does nothing.
+  assert.ok(n >= 1, 'the recovered count must actually bound the next attempt');
+});
+
+test('storage wins when it works, and a missing marker reads as no attempts', () => {
+  assert.equal(
+    withBrowser({ search: '?__swreload=1', storage: workingStorage({ 'axal:sw-reload-attempts': '2' }) },
+      () => readAttempts('axal:sw-reload-attempts', '__swreload')),
+    2, 'the stored count is authoritative when it is readable',
+  );
+  assert.equal(
+    withBrowser({ search: '', storage: workingStorage() },
+      () => readAttempts('axal:sw-reload-attempts', '__swreload')),
+    0, 'a first attempt reads as zero, not as a spent budget',
+  );
+  // A junk marker must not read as a spent budget — that would silently disable
+  // the recovery this whole mechanism exists to allow.
+  assert.equal(
+    withBrowser({ search: '?__swreload=notanumber', storage: REFUSING },
+      () => readAttempts('axal:sw-reload-attempts', '__swreload')),
+    0, 'an unparseable marker must not be treated as attempts already spent',
+  );
+});
+
+test('preserveReloadGuards keeps the guards across a wholesale sweep', () => {
+  // The behaviour `clearSession()` depends on, exercised end to end.
+  const storage = workingStorage({
+    'axal:boot-reboot': '1',
+    'axal:chunk-reload-attempts': '2',
+    'draft:pitch': 'sensitive in-flight state',
+  });
+  withBrowser({ storage }, () => {
+    preserveReloadGuards(() => storage.clear());
+  });
+  assert.equal(storage.getItem('axal:boot-reboot'), '1', 'the boot watchdog guard must survive');
+  assert.equal(storage.getItem('axal:chunk-reload-attempts'), '2', 'the chunk count must survive');
+  assert.equal(storage.getItem('draft:pitch'), null,
+    'the sweep must still remove the per-tab state it exists to remove');
+});
+
+test('a sweep that throws still leaves the guards restored', () => {
+  // `sessionStorage.clear()` can throw, and a guard lost to a failed sweep is
+  // the same unbounded reload as a guard lost to a successful one.
+  //
+  // THE SWEEP MUST CLEAR AND THEN THROW. A first version threw without clearing,
+  // so "the guard survived" was indistinguishable from "nothing removed it" —
+  // and the test duly passed against a `preserveReloadGuards` whose restore was
+  // moved out of the `finally`. A test for a restore has to destroy the thing
+  // first, or it is testing nothing.
+  const storage = workingStorage({ 'axal:boot-reboot': '1' });
+  withBrowser({ storage }, () => {
+    assert.throws(() => preserveReloadGuards(() => {
+      storage.clear();
+      throw new Error('clear failed halfway');
+    }));
+  });
+  assert.equal(storage.getItem('axal:boot-reboot'), '1',
+    'the guards must be written back even when the sweep throws');
+});
+
+test('every guard key the module lists is one a caller actually uses', () => {
+  // The list is only useful if it matches reality in both directions: the tests
+  // above pin that nothing is missing; this pins that nothing is invented.
+  const callers = [main, boundary, pwa, read('frontend/index.html')].join('\n');
+  for (const key of RELOAD_GUARD_KEYS) {
+    if (key === 'deck_registry_recover') continue; // PitchDeckPage, read separately below
+    assert.ok(callers.includes(key), `RELOAD_GUARD_KEYS lists ${key}, which no caller sets`);
+  }
+  assert.match(codeOnly(read('frontend/src/pages/PitchDeckPage.jsx')), /deck_registry_recover/,
+    'the deck recovery guard must still be the key the list names');
 });
