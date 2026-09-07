@@ -113,6 +113,16 @@ export const PARTNER_ZONE_ACTIONS = {
     { label: 'Saved answers', note: 'no answer is saved; the citations below belong to this question' },
     { label: 'Export', kind: 'export' },
   ],
+  // Excluded as "a card, not a body" until now, and it is a body — see the
+  // note on the advisor table's copy of this zone. `Attach to proposal` states
+  // the missing EDGE rather than denying that proposals exist: this row is
+  // about a brief, where `research/markets` below is about a signal, and both
+  // fail for the want of a link rather than the want of a proposal.
+  'research/client-prep': [
+    { label: 'New brief', note: 'a brief exists when a founder opens their record to you; nothing here asks for one' },
+    { label: 'Attach to proposal', note: 'nothing links a brief to a proposal record' },
+    { label: 'Export', kind: 'export' },
+  ],
   'research/markets': [
     { label: 'Re-run stale', note: 'signals are gathered on a schedule; nothing re-runs one' },
     { label: 'Attach to proposal', note: 'nothing carries a signal onto a proposal' },

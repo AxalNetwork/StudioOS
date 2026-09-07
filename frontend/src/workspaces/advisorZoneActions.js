@@ -70,6 +70,20 @@ export const ADVISOR_ZONE_ACTIONS = {
     { label: 'Saved answers', note: 'no answer is saved; the citations below belong to this question' },
     { label: 'Export', kind: 'export' },
   ],
+  // THIS ZONE WAS EXCLUDED AS "A CARD, NOT A BODY" AND IT IS A BODY.
+  // `ClientPrepZone` has taken `zoneActions` and rendered a row from it since
+  // the advisor grant landed; with no key here `makeZoneActions` returned `[]`
+  // and the row drew nothing, over an artboard specifying three ops. Same
+  // shape, and the same stale reason, as the two investor Research zones.
+  //
+  // `Attach to session` is a LINKAGE gap, not an absent store: a grant carries
+  // a `scope_sessions` flag, so a client's sessions can be opened to you — what
+  // nothing records is a brief against one of them.
+  'research/client-prep': [
+    { label: 'New brief', note: 'a brief exists when a founder opens their record to you; nothing here asks for one' },
+    { label: 'Attach to session', note: 'a grant can open a client’s sessions to you, but nothing records a brief against one' },
+    { label: 'Export', kind: 'export' },
+  ],
   'research/markets': [
     { label: 'Re-run stale', note: 'signals are gathered on a schedule; nothing re-runs one' },
     { label: 'Add source', note: 'sources are not configurable' },
