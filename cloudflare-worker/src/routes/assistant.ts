@@ -218,7 +218,7 @@ const FEATURE_CATALOG: FeatureEntry[] = [
   { keywords: ['notifications', 'inbox'],
     url: '/activity', label: 'Notifications & Activity', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['docs', 'help', 'documentation'],
-    url: '/docs', label: 'Help & Docs', roles: ['admin', 'founder', 'partner', 'investor'] },
+    url: '/help', label: 'Help Center', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['calendar', 'meetings'],
     url: '/calendar', label: 'Calendar', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['due diligence', 'dd'],

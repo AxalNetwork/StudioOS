@@ -4,6 +4,94 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Help Center — the design and the address had never met (#103)
+
+`/help` was reported as not matching the Help Center design. It did not, and
+could not: `/help` mounted `TicketsPage`, a GitHub-Issues ticket tracker that
+rendered `<h1>Help Center</h1>` because D39 renamed a menu label and moved
+`/tickets` → `/help`. The corpus the design actually describes — 13
+journey-organised sections, ~98 subsections, a fuse.js index, role filtering —
+has been live the whole time at `/docs` under a different name. The 2026-09-07
+artifact decodes byte-identical to `canvases/integrated/Help Center.dc.html`,
+so nothing about the design changed either.
+
+So this is **composition and routing, not authoring**. No article store was
+added; the content is already structured, searchable and role-filtered, and
+markdown would lose the filtering.
+
+**The move.** `/help` mounts `HelpCenterPage` (renamed from `DocsPage`); the
+ticket flow lives at `/help/tickets` and `/help/tickets/:id`; `TicketsPage`'s
+heading is "Support tickets", because two pages claiming one name is what made
+this canvas look unbuilt. Every legacy address still resolves: `/docs` and
+`/docs/admin/*`, `/tickets` and `/tickets/:id`, `/help/:id`, plus `/support`.
+The `/docs` redirect carries **hash and query** — the hash IS the article, and
+eight deep links across six components address one that way.
+
+**Composed onto the corpus:** the hero ("How can we help?"), the search moved
+into it with five suggested queries, "Browse by what you are doing" built from
+`visibleSections` rather than a second list to keep, an in-column result list,
+and a "Still stuck?" block offering three channels. The sections stay mounted
+(hidden, not unmounted) during a search, so a deep link arriving with both a
+hash and a `?q=` still finds its anchor to scroll to.
+
+**Four canvas elements stay refused**, each blocked on a store that does not
+exist: "Popular this week" (no view counts), "Did this answer it?" (no feedback
+table), "Where this lives" / "Open the surface" (no per-article `surface` route
+on ~98 subsections), "Applies to" (**zero** sections carry a `roles` array —
+`sections/admin.js` is the only file with one and `2c38e60b3` dropped it from
+the manifest on 2026-05-22, which also means `adminOnlyAnchors()` returns an
+empty set and the `/…/admin/*` guard is inert; left as found, since
+re-importing it reverses someone's decision). A test asserts all four stay out,
+and a fifth asserts the persona refusal's premise is still true.
+
+**Five live defects closed, every one an address nothing declared or a route
+nothing read** — none of them visible from a screenshot:
+
+- `/support?topic=…` was built by `ErrorState` from four pages' failure paths
+  and declared by no route. It now lands on `/help?q=<topic>`, seeding the
+  search with the name of the surface that just failed.
+- The advisor's `exploreDocs` built `/docs/<section>/<sub>` — a path segment
+  where the corpus wants a hash — so every "Read <topic>" CTA hit the
+  catch-all 404. Now `/help#<anchor>`, with `/help` added to the route
+  allowlist that gates it.
+- `TicketsPage` never called `useParams`. `/help/<id>`, emitted into Slack by
+  `tickets.ts:147`, silently showed the list. It reads the id now, opening a
+  ticket moves the address with it, and Back returns to the list.
+- Three `ticket_update` notifications linked `/help` for a notification naming
+  one ticket. Now `/help/tickets/<id>`.
+- The pre-KYC allow list was an exact match on `/help`, so an un-KYC'd
+  investor clicking "Open ticket" was bounced to `/kyc` — cut off from the one
+  channel that could unblock them. The whole `/help` subtree is exempt now.
+
+A sixth came out of the render pass: `MarkdownBody` rendered a fetched file's
+`# ` as an `<h1>`, and `/CHANGELOG-user.md` opens with "# What's new", so
+`/docs` has been shipping two competing top-level headings for as long as that
+file has been linked. Headings shift down one level, class hooks with them —
+document structure, not restyle.
+
+**`CustomerChatWidget` is mounted at last.** Built under Task #7 (IG) with a
+complete Slack round-trip and referenced nowhere, because its docblock
+delegated the tier check to "the Help Center help panel" that was never
+written. `lib/customerChat.js` is that gate, mirroring the worker's
+`isEligible`; the contract test reads both tier sets and the bypass roles out
+of the worker source and fails if the two copies disagree in either direction.
+`/auth/me` now returns `investor_tier` beside `subscription_tier` — without it
+every investor read as `free` on the client, including `institutional`, the one
+investor tier that qualifies. The worker's 402 remains the enforcement; the
+client gate only decides whether to offer a channel that would reject you.
+
+**Verified.** `npm run test:drift` exit 0. 21 new assertions in
+`frontend/test/help_center_contract.test.mjs`, **22 mutations, all caught** —
+one of them only after fixing the test: a fixed-width source window from
+`TicketsRedirect` ran on into `HelpTicketIdRedirect` and read its neighbour's
+code, so the mutation that dropped the ticket id passed. `fnBody()` ends at the
+function's own close and refuses a slice containing another `function `.
+`check-workspace-frames` 115/115. `/help` rendered in Chromium at both themes
+and at both tiers — a free founder is not offered the paid channel, a studio
+founder is — and all six legacy addresses walked end to end in the browser,
+including the anchor actually scrolling (`scrollTop` 26176, not just a URL).
+`docs/` rebuilt at the tip.
+
 ## Migrations 208 and 209 — the stores behind the nine unbacked partner zones
 
 Six of the fifteen partner zones render a real body. The other nine render a `NoStoreYet` card naming the column they would need, and **every one of those columns was verified absent before a line of SQL was written**: `engagements` (`sql/t13_t14_t15.sql:366`) has eighteen columns and exactly one ALTER ever added to it (`company_id`, migration 196) — no cadence, no renewal date, no consumption, no milestone, no hours, no last client contact, no acknowledgment; `quotes` (`:347`) has a four-value status and a `decided_at`, and nothing between "sent" and "decided". Fifteen tables across two files close that.

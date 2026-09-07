@@ -270,7 +270,7 @@ function ItemCard({
         <div className="mt-1 flex items-center justify-end gap-3">
           {docAnchor && (
             <Link
-              to={`/docs#${docAnchor}`}
+              to={`/help#${docAnchor}`}
               onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 hover:text-violet-700 dark:hover:text-violet-300 hover:underline"
               title="Learn about this in the docs"

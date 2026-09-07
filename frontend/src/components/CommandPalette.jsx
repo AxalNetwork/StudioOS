@@ -104,7 +104,7 @@ function buildDocItems(role) {
         kind: 'doc',
         label: sub.title,
         hint: sec.title,
-        to: `/docs#${sec.id}/${sub.id}`,
+        to: `/help#${sec.id}/${sub.id}`,
       });
     }
   }

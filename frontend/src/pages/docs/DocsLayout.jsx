@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import {
-  BookOpen, Search, ChevronRight, X, AlertTriangle,
+  BookOpen, Search, ChevronRight, X, AlertTriangle, MessageSquare,
   Compass, Rocket, Hammer, TrendingUp, DollarSign, Scale,
   Network, LayoutDashboard, UserCircle, LifeBuoy, FileText, History,
 } from 'lucide-react';
@@ -11,6 +11,8 @@ import { createDocsFuse, splitForHighlight, snippet } from '../../lib/docs/searc
 import { useAuth } from '../../hooks/useAuthSync';
 import { request } from '../../lib/api';
 import { overallStatus } from '../../lib/statusOverall';
+import { canUseCustomerChat } from '../../lib/customerChat';
+import CustomerChatWidget from '../../components/CustomerChatWidget';
 
 // Wrap the pure-JS split helper into a JSX-friendly highlighter. Kept
 // inside the layout so the search module stays JSX-free.
@@ -28,6 +30,23 @@ function highlight(text, q) {
 const ICONS = {
   Compass, Rocket, Hammer, TrendingUp, DollarSign, Scale,
   Network, LayoutDashboard, UserCircle, LifeBuoy, FileText, History,
+};
+
+// Fetched markdown lands inside a `<section>` under the subsection's `<h3>`,
+// so its own headings have to start below that — a `# ` at the top of a file
+// is the file's title, not the page's. It rendered as a second `<h1>`: the
+// page had one, and `/CHANGELOG-user.md` opens with "# What's new", so /docs
+// has been shipping two competing top-level headings for as long as that file
+// has been linked. The render check is what caught it, on a page whose one
+// `<h1>` is now a question the second one does not answer.
+//
+// Each level shifts down one and the class hooks above shift with it, so the
+// visual hierarchy is unchanged — this is a document-structure fix, not a
+// restyle.
+const MARKDOWN_HEADINGS = {
+  h1: ({ node, ...props }) => <h2 {...props} />,
+  h2: ({ node, ...props }) => <h3 {...props} />,
+  h3: ({ node, ...props }) => <h4 {...props} />,
 };
 
 function MarkdownBody({ url }) {
@@ -56,8 +75,8 @@ function MarkdownBody({ url }) {
     );
   }
   return (
-    <div className="prose prose-sm max-w-none text-sm text-gray-700 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-gray-900 [&_h1]:mt-6 [&_h1]:mb-3 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-gray-900 [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-gray-900 [&_h3]:mt-4 [&_h3]:mb-2 [&_p]:leading-relaxed [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3 [&_li]:leading-relaxed [&_li]:mb-1 [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_blockquote]:border-l-2 [&_blockquote]:border-gray-200 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-600 [&_a]:text-violet-700 [&_a]:underline dark:text-gray-300">
-      <ReactMarkdown>{state.text}</ReactMarkdown>
+    <div className="prose prose-sm max-w-none text-sm text-gray-700 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:text-gray-900 [&_h2]:mt-6 [&_h2]:mb-3 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-gray-900 [&_h3]:mt-5 [&_h3]:mb-2 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:text-gray-900 [&_h4]:mt-4 [&_h4]:mb-2 [&_p]:leading-relaxed [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3 [&_li]:leading-relaxed [&_li]:mb-1 [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_blockquote]:border-l-2 [&_blockquote]:border-gray-200 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-gray-600 [&_a]:text-violet-700 [&_a]:underline dark:text-gray-300">
+      <ReactMarkdown components={MARKDOWN_HEADINGS}>{state.text}</ReactMarkdown>
     </div>
   );
 }
@@ -145,6 +164,202 @@ function SubsectionView({ section, sub }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Task #103 — the Help Center's front door, composed over this corpus.
+//
+// The Help Center canvas describes a hero ("How can we help?"), a search with
+// suggested queries, and a "browse by what you are doing" category grid. All
+// three are presentation over the manifest that was already here; nothing
+// below authors an article or invents a store.
+//
+// Four canvas elements are deliberately absent, and each is absent for the
+// same reason — there is nothing behind it:
+//
+//   · "Popular this week" ranks articles by view count. Nothing counts views.
+//     A hardcoded top five is a claim about other readers' behaviour.
+//   · "Did this answer it? Yes / No" needs somewhere to put the answer. There
+//     is no feedback table, so the buttons would discard every press.
+//   · "Where this lives" / "Open the surface" need a `surface` route on each
+//     of ~98 subsections. That is content authoring, and a deep link to the
+//     wrong page is worse than no deep link.
+//   · "Applies to <persona>" reads a `roles` array. Exactly one section file
+//     carries one (`sections/admin.js`) and it is not in the manifest, so the
+//     line would render "Everyone" on 98 articles out of 98.
+//
+// `frontend/test/help_center_contract.test.mjs` asserts they stay absent, the
+// way the Trust Center guard does — so that reinstating one is a decision
+// someone takes on purpose rather than a canvas element quietly reappearing
+// with fixture data behind it.
+// ---------------------------------------------------------------------------
+
+// Suggested queries under the hero. These are shortcuts into the corpus, not
+// decoration, so the contract test runs each one through the real fuse index
+// and fails if it returns nothing: a chip that finds no article is a dead end
+// dressed as a suggestion, and copy edits upstream are exactly how one would
+// become that without anyone noticing.
+const SUGGESTED_SEARCHES = ['cap table', 'data room', 'capital call', 'KYC', 'integrations'];
+
+function HelpHero({ query, setQuery, searchInputRef, onSuggest }) {
+  return (
+    <header className="mb-10">
+      <div className="flex items-center gap-2 text-violet-600 text-xs font-semibold uppercase tracking-widest mb-2">
+        <LifeBuoy size={14} /> Help
+      </div>
+      <h1 className="text-3xl font-bold text-gray-900 mb-2 dark:text-gray-100">How can we help?</h1>
+      <p className="text-sm text-gray-500 max-w-2xl">
+        Every guide on the platform, grouped by what you are doing rather than by
+        who owns the code. Search it, or browse the categories below.
+      </p>
+
+      <div className="relative mt-5 max-w-2xl">
+        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input
+          ref={searchInputRef}
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search guides… (press /)"
+          aria-label="Search the Help Center"
+          className="w-full pl-10 pr-9 py-3 text-sm rounded-xl border border-gray-200 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:border-gray-800 dark:bg-gray-900"
+        />
+        {query && (
+          <button
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-700"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-gray-400">Try</span>
+        {SUGGESTED_SEARCHES.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onSuggest(s)}
+            className="px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:border-violet-200 hover:text-violet-700 hover:bg-violet-50 transition-colors dark:border-gray-800 dark:text-gray-300"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+    </header>
+  );
+}
+
+// "Browse by what you are doing" — one card per section, built from the
+// role-filtered manifest rather than a hand-kept list, so a new section file
+// appears here the moment it is added to `sections/index.js` and an
+// admin-only one never appears for anyone else.
+//
+// The card's only figure is its article count, which is `subsections.length`
+// — a fact about the manifest in hand. The canvas also puts a persona line on
+// each card; see the block comment above for why that one is not here.
+const PREVIEW_PER_CATEGORY = 3;
+
+function BrowseByTask({ sections, onPick }) {
+  return (
+    <section className="mb-12">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          Browse by what you are doing
+        </h2>
+        <span className="text-xs text-gray-400">
+          {sections.length} categories
+        </span>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {sections.map((section) => {
+          const preview = section.subsections.slice(0, PREVIEW_PER_CATEGORY);
+          const more = section.subsections.length - preview.length;
+          return (
+            <div
+              key={section.id}
+              className="rounded-xl border border-gray-200 bg-white p-4 hover:border-violet-200 transition-colors dark:border-gray-800 dark:bg-gray-900"
+            >
+              <button
+                type="button"
+                onClick={() => onPick(`${section.id}/${section.subsections[0].id}`)}
+                className="flex items-center gap-2 text-left"
+              >
+                <SectionIcon name={section.icon} size={15} className="text-violet-600" />
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{section.title}</span>
+              </button>
+              <div className="mt-0.5 text-[11px] text-gray-400">
+                {section.subsections.length} guide{section.subsections.length === 1 ? '' : 's'}
+              </div>
+              <ul className="mt-3 space-y-1">
+                {preview.map((sub) => (
+                  <li key={sub.id}>
+                    <button
+                      type="button"
+                      onClick={() => onPick(`${section.id}/${sub.id}`)}
+                      className="text-left text-[12.5px] text-gray-600 hover:text-violet-700 dark:text-gray-300"
+                    >
+                      {sub.title}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {more > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onPick(`${section.id}/${section.subsections[0].id}`)}
+                  className="mt-3 inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:underline dark:text-violet-300"
+                >
+                  {more} more <ChevronRight size={11} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// The search results, rendered in the content column where the reader's eye
+// already is. The left rail keeps its own compact list — same state, same
+// results, different shape: the rail is navigation, this is the answer.
+function SearchResults({ results, query, onPick }) {
+  return (
+    <section className="mb-12">
+      <h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-gray-100">
+        {results.length} result{results.length === 1 ? '' : 's'} for “{query}”
+      </h2>
+      {results.length === 0 ? (
+        <p className="text-sm text-gray-500">
+          No guide matches that. Try a broader term, or use the contact options at
+          the bottom of this page.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {results.map((r) => (
+            <li key={r.anchor}>
+              <button
+                type="button"
+                onClick={() => onPick(r.anchor)}
+                className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 hover:border-violet-200 transition-colors dark:border-gray-800 dark:bg-gray-900"
+              >
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {highlight(r.subsectionTitle, query)}
+                </div>
+                <div className="text-[11px] text-gray-400 mb-1">{r.sectionTitle}</div>
+                <div className="text-xs text-gray-600 leading-relaxed dark:text-gray-300">
+                  {highlight(snippet(r.text, query), query)}
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 // "Still stuck?" — the canvas's contact block, with the one live element it
 // asks for: the current platform status, read from `GET /api/public/status`,
 // the same endpoint /status renders. Someone reading the docs because a
@@ -160,7 +375,7 @@ const STATUS_LINE = {
   down: { text: 'Active outage', dot: 'bg-red-500' },
 };
 
-function StillStuck() {
+function StillStuck({ user, onOpenChat }) {
   const [overall, setOverall] = useState(null);
 
   useEffect(() => {
@@ -173,16 +388,43 @@ function StillStuck() {
   }, []);
 
   const line = STATUS_LINE[overall];
+  // Task #103 — offered only to viewers the worker would actually serve. The
+  // gate is enforced server-side either way (402); this decides whether the
+  // channel is shown at all, so nobody is invited into a paywall.
+  const chatAvailable = canUseCustomerChat(user);
 
   return (
     <footer className="mt-16 pt-6 border-t border-gray-200 dark:border-gray-800">
       <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Still stuck?</h2>
       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-        Open a ticket from the Tickets page in the sidebar, or email{' '}
-        <a className="text-violet-700 hover:underline dark:text-violet-300" href="mailto:support@axal.vc">
-          support@axal.vc
-        </a>.
+        Nothing here answering it? Reach a person.
       </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        {/* Task #103 — this used to read "Open a ticket from the Tickets page
+            in the sidebar", naming a sidebar item D39 had already renamed to
+            "Help Center". Directions beat names: the link goes to the flow. */}
+        <Link
+          to="/help/tickets"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-200 hover:text-violet-700 transition-colors dark:border-gray-800 dark:text-gray-200"
+        >
+          <FileText size={12} /> Open a ticket
+        </Link>
+        {chatAvailable && (
+          <button
+            type="button"
+            onClick={onOpenChat}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-200 hover:text-violet-700 transition-colors dark:border-gray-800 dark:text-gray-200"
+          >
+            <MessageSquare size={12} /> Message the team
+          </button>
+        )}
+        <a
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-200 hover:text-violet-700 transition-colors dark:border-gray-800 dark:text-gray-200"
+          href="mailto:support@axal.vc"
+        >
+          <LifeBuoy size={12} /> support@axal.vc
+        </a>
+      </div>
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         {line && (
           <span className="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-300">
@@ -203,8 +445,16 @@ export default function DocsLayout() {
   const navigate = useNavigate();
   const contentRef = useRef(null);
   const searchInputRef = useRef(null);
-  const [query, setQuery] = useState('');
-  const { role } = useAuth() || {};
+  // Task #103 — `?q=` prefills the search. `/support?topic=<x>` redirects here
+  // as `/help?q=<x>`: `ErrorState` builds that URL from the surface that just
+  // failed ("projects", "integrations", "signals", "activity"), which is a
+  // better opening query than an empty box for someone who arrived from a
+  // broken page. Read once, as the initial value, so typing is never fought.
+  const [query, setQuery] = useState(
+    () => new URLSearchParams(location.search).get('q') || '',
+  );
+  const [chatOpen, setChatOpen] = useState(false);
+  const { user, role } = useAuth() || {};
 
   // Task #2 (DD) — Filter the docs manifest down to what the current
   // viewer's role is allowed to see. Admin sections/subsections are
@@ -291,7 +541,7 @@ export default function DocsLayout() {
     const hash = decodeURIComponent(location.hash.replace(/^#/, ''));
     if (!hash) return;
     if (!isAdmin && restrictedAnchors.has(hash)) {
-      navigate('/docs', { replace: true });
+      navigate('/help', { replace: true });
       return;
     }
     requestAnimationFrame(() => {
@@ -334,7 +584,7 @@ export default function DocsLayout() {
         <div className="px-2 mb-3">
           <div className="flex items-center gap-2 mb-3">
             <BookOpen size={14} className="text-violet-600" />
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Documentation</span>
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Help Center</span>
           </div>
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -343,8 +593,8 @@ export default function DocsLayout() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search docs… (press /)"
-              aria-label="Search documentation"
+              placeholder="Search guides… (press /)"
+              aria-label="Search the Help Center contents"
               className="w-full pl-8 pr-7 py-1.5 text-xs rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 placeholder:text-gray-400 dark:border-gray-800 dark:bg-gray-900"
             />
             {query && (
@@ -387,7 +637,7 @@ export default function DocsLayout() {
             </ul>
           </div>
         ) : (
-          <nav aria-label="Documentation contents">
+          <nav aria-label="Help Center contents">
             {visibleSections.map(section => {
               const isActive = section.id === activeSectionId;
               return (
@@ -439,7 +689,7 @@ export default function DocsLayout() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search docs…"
+              placeholder="Search guides…"
               className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-400 dark:border-gray-800 dark:bg-gray-900"
             />
           </div>
@@ -487,39 +737,49 @@ export default function DocsLayout() {
           <div className="max-w-3xl flex-1 min-w-0 px-6 py-8">
             {/* Breadcrumbs */}
             <nav aria-label="Breadcrumb" className="text-[11px] text-gray-500 mb-3 flex items-center gap-1.5">
-              <span>Documentation</span>
+              <span>Help</span>
               <ChevronRight size={11} />
               <span className="text-gray-700 font-medium dark:text-gray-300">{activeSection.title}</span>
             </nav>
 
-            <header className="mb-8">
-              <div className="flex items-center gap-2 text-violet-600 text-xs font-semibold uppercase tracking-widest mb-2">
-                <BookOpen size={14} /> Documentation
-              </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2 dark:text-gray-100">StudioOS Documentation</h1>
-              <p className="text-sm text-gray-500">
-                Guides for founders, investors, partners, and advisors using the StudioOS platform.
-              </p>
-            </header>
+            <HelpHero
+              query={query}
+              setQuery={setQuery}
+              searchInputRef={searchInputRef}
+              onSuggest={setQuery}
+            />
 
-            {visibleSections.map(section => (
-              <div key={section.id}>
-                <div
-                  id={section.id}
-                  data-anchor={`${section.id}/${section.subsections[0].id}`}
-                  className="scroll-mt-20"
-                />
-                <div className="flex items-center gap-2 mt-2 mb-4 pb-2 border-b border-gray-200 dark:border-gray-800">
-                  <SectionIcon name={section.icon} size={18} className="text-violet-600" />
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{section.title}</h2>
+            {/* A query replaces the browse surface with its answers. The
+                corpus stays mounted below either way — every `#section/sub`
+                anchor in the product resolves against this page, so hiding
+                the sections on search would break deep links arriving with a
+                `?q=` still set. It is collapsed, not unmounted. */}
+            {trimmedQuery ? (
+              <SearchResults results={searchResults} query={trimmedQuery} onPick={goToAnchor} />
+            ) : (
+              <BrowseByTask sections={visibleSections} onPick={goToAnchor} />
+            )}
+
+            <div className={trimmedQuery ? 'hidden' : ''}>
+              {visibleSections.map(section => (
+                <div key={section.id}>
+                  <div
+                    id={section.id}
+                    data-anchor={`${section.id}/${section.subsections[0].id}`}
+                    className="scroll-mt-20"
+                  />
+                  <div className="flex items-center gap-2 mt-2 mb-4 pb-2 border-b border-gray-200 dark:border-gray-800">
+                    <SectionIcon name={section.icon} size={18} className="text-violet-600" />
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{section.title}</h2>
+                  </div>
+                  {section.subsections.map(sub => (
+                    <SubsectionView key={sub.id} section={section} sub={sub} />
+                  ))}
                 </div>
-                {section.subsections.map(sub => (
-                  <SubsectionView key={sub.id} section={section} sub={sub} />
-                ))}
-              </div>
-            ))}
+              ))}
+            </div>
 
-            <StillStuck />
+            <StillStuck user={user} onOpenChat={() => setChatOpen(true)} />
           </div>
 
           {/* "On this page" right rail — auto-built from the active section's subsections. */}
@@ -548,6 +808,11 @@ export default function DocsLayout() {
           </aside>
         </div>
       </div>
+
+      {/* Task #103 — the panel CustomerChatWidget's docblock has been waiting
+          for. It renders null while closed and only polls while open, so an
+          ineligible viewer (who never gets the button) pays nothing for it. */}
+      <CustomerChatWidget open={chatOpen} onClose={() => setChatOpen(false)} />
     </div>
   );
 }

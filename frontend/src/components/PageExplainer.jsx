@@ -48,12 +48,12 @@ export default function PageExplainer({ pageKey }) {
 
   const openDocs = (e) => {
     e.preventDefault();
-    navigate(`/docs#${entry.docPath}`);
+    navigate(`/help#${entry.docPath}`);
   };
 
   const learnMoreLink = (
     <a
-      href={`/docs#${entry.docPath}`}
+      href={`/help#${entry.docPath}`}
       onClick={openDocs}
       className="ml-1 text-blue-600 dark:text-blue-400 hover:underline font-medium"
     >

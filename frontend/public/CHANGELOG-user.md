@@ -3,6 +3,24 @@
 A plain-English summary of recent changes to StudioOS, written for
 everyone using the platform. Newest changes are at the top.
 
+## Changed: Help and Documentation are one place now
+
+Everything the platform can explain lives at **Help** in your account menu.
+It opens with a search over every guide, a set of suggested searches, and the
+guide categories grouped by what you are doing. Support tickets moved one step
+down, to **Help → Open a ticket**, and the contact block at the bottom of the
+page shows the platform's current status alongside the ways to reach us. On a
+Studio, Institutional or Partner plan you can also message the team directly
+from there.
+
+Old links keep working. `/docs` bookmarks, links to a specific guide, "Open
+ticket" buttons in your notifications and the old `/tickets` address all land
+where you would expect — and a link to a specific ticket now opens that
+ticket rather than the ticket list. The "contact support" button on an error
+message used to go nowhere; it opens Help with the topic already searched.
+
+---
+
 ## New: a Security page for the Super Admin
 
 The HQ sidebar's Security row opens one page for the things a security review asks about: every admin action on record, who is impersonating whom right now and recently, how many sessions are active and how many admins have two-factor sign-in, the KYC queue, and open deletion requests with days left on their 30-day clock. It also carries one action — signing every account out everywhere, with a typed reason that is kept. Where the platform keeps no record (security events, AI safety counters, sanctions screening, backup drills) the page says so instead of showing a number.

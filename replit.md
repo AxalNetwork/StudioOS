@@ -58,7 +58,7 @@ If you clone or fork this repl, repeat steps 1–2.
 - API keys UI is gated behind a server-driven feature flag.
 
 ## Doc visibility
-Admin docs live behind `roles: ['admin']` on sections/subsections in `frontend/src/pages/docs/sections/*.js`. DocsLayout filters rail/body/TOC and the hash-deep-link guard by `useAuth().role`; `lib/docs/search.js::createDocsFuse(role)` filters search. Adding a new admin doc = add `roles: ['admin']`; no other wiring. Never link to `#admin/*` from non-admin surfaces.
+Admin docs live behind `roles: ['admin']` on sections/subsections in `frontend/src/pages/docs/sections/*.js`. DocsLayout filters rail/body/TOC and the hash-deep-link guard by `useAuth().role`; `lib/docs/search.js::createDocsFuse(role)` filters search. Adding a new admin doc = add `roles: ['admin']`; no other wiring. Never link to `#admin/*` from non-admin surfaces. **The surface moved to `/help` (Task #103, 2026-09-07)** — `HelpCenterPage` (was `DocsPage`) mounts it, `/docs` redirects with hash and query preserved, and the ticket flow sits under it at `/help/tickets`. **Caveat found while doing that:** `sections/admin.js` is not imported by `sections/index.js` — `2c38e60b3` ("Remove administrative sections from user documentation", 2026-05-22) dropped it deliberately and left the file. So `SECTIONS` holds 13 entries, `adminOnlyAnchors()` returns an empty set, and `AdminDocsPathGuard` redirects admins to an anchor nothing renders. The role machinery above is correct and still runs; there is simply no admin section in the manifest for it to act on, and re-importing one reverses that decision rather than fixing a bug.
 
 ## Persistent gotchas
 

@@ -124,6 +124,8 @@ const PAGE_ALLOWLIST: Record<string, string> = {
   '/legal-capital': 'Legal & Capital',
   '/capital': 'Capital',
   '/compliance': 'Compliance',
+  '/help': 'Help Center',
+  // `/docs` redirects into `/help`; kept so an older stored CTA still labels.
   '/docs': 'Docs',
   '/calendar': 'Calendar',
   '/account/billing': 'Billing',
@@ -322,14 +324,19 @@ async function bookOfficeHours(_ctx: ToolContext, args: ToolArgs): Promise<ToolE
 async function exploreDocs(_ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const anchor = asString(args?.anchor || args?.topic || '', 200)
     .replace(/[^a-zA-Z0-9/_-]/g, '');
-  const route = anchor ? `/docs/${anchor}` : '/docs';
-  const label = anchor ? `Read “${anchor}”` : 'Open docs';
+  // Task #103 — the anchor is a HASH, not a path segment. This built
+  // `/docs/<section>/<sub>`, an address no route ever declared: only `/docs`
+  // and `/docs/admin/*` existed, so every "Read <topic>" CTA Eadwyn offered
+  // landed on the catch-all 404. The corpus is one scrolling page anchored at
+  // `#<section>/<subsection>`, and it lives at `/help` now.
+  const route = anchor ? `/help#${anchor}` : '/help';
+  const label = anchor ? `Read “${anchor}”` : 'Open the Help Center';
   return {
     result: { anchor: anchor || null },
     cta: {
       label, route,
       primary: { label, route },
-      secondary: anchor ? { label: 'Browse all docs', route: '/docs' } : undefined,
+      secondary: anchor ? { label: 'Browse all guides', route: '/help' } : undefined,
     },
   };
 }
