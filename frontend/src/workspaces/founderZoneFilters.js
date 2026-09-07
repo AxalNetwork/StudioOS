@@ -51,6 +51,32 @@ const NO_CADENCE_STORE =
   'no ritual schedule or review archive is stored for this startup';
 const NO_LIQUIDITY_LEDGER =
   'no restriction, tender or liquidity-event ledger is connected';
+// Research · Ask has no store at all behind it, and the ops half of its own row
+// already says so — `Clear history — no session history is stored to clear`.
+// This reuses that clause rather than inventing a fourth phrasing of one
+// absence: `LibraryZone`'s stat strip is already the third
+// ("no question history is stored, here or in Ask").
+const NO_SESSION_RECORD =
+  'no session history is stored, so no past question, kept answer or discarded one exists to look through';
+// `/research/library`. The classification column is real and free text; what is
+// missing is a WRITER that could produce these values. `research.ts:64` accepts
+// exactly `playbook | client | document` and coerces anything else, and the
+// upload form offers exactly those three. Column, write path and client method
+// all pass; only the vocabulary check catches it.
+const NO_SUCH_KIND =
+  'a document is filed as a document, a playbook or about a client, and no upload can classify one any other way';
+// `/research/markets`. All four labels are views of a SAVED DEEP-DIVE, which
+// the artboard makes plain: its instrument table is `Analysis · Method · Run ·
+// State`, and `Sources` in the stat strip counts the indexed documents one
+// analysis rests on. The live page is the signals feed — real, useful and a
+// different object. The ops half of this row already says where signals come
+// from, and this is that sentence from the other side.
+const NO_SAVED_DEEP_DIVE =
+  'nothing saves a market deep-dive, so there is no analysis to keep, retire, build or list the sources of; this page is the signals feed, gathered on a schedule';
+// `/research/companies`. Not an absent store — a LEVEL mismatch, which is a
+// fourth kind of reason this table has needed. See the zone's entry below.
+const CATEGORY_IS_PER_COMPETITOR =
+  'each competitor inside an analysis is filed as direct or adjacent, but this row narrows the saved analyses, and an analysis carries no relation of its own';
 
 export const FOUNDER_ZONE_FILTERS = {
   // ── Build ────────────────────────────────────────────────────────────────
@@ -209,6 +235,94 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'Published', note: 'a calendar event has no publication state' },
     { canvas: 'Events', key: 'events' },
     { canvas: 'Articles', note: 'no article or content record is connected to this startup' },
+  ],
+
+  // ── Research ─────────────────────────────────────────────────────────────
+  // SHARED WITH THREE OTHER LICENCES, and that is why these entries exist here
+  // rather than in one common table. `ResearchWorkspace` renders `AskZone` and
+  // `LibraryZone` for founder, investor, advisor and partner alike, but the
+  // artboards do not agree on what the row should say and the store does not
+  // agree on what it can answer. `/research/library` is the sharpest case: one
+  // column, one write path, one client method, and partner gets four live chips
+  // off it while founder gets one — the difference is entirely which values a
+  // writer can actually produce.
+
+  // Nothing survives a question. `research.post('/ask')` searches, answers and
+  // returns; it writes no row, and the only per-question record anywhere is
+  // `ai_usage_logs`, which holds token counts and no question text. So the page
+  // has exactly one answer in state at a time and there is nothing to narrow.
+  'research/ask': [
+    { canvas: 'All sessions', note: NO_SESSION_RECORD },
+    { canvas: 'Saved', note: NO_SESSION_RECORD },
+    {
+      canvas: 'Cited in deck',
+      note: 'a citation names the passage it quoted and carries no document id, and nothing carries one into the deck builder',
+    },
+    { canvas: 'Discarded', note: NO_SESSION_RECORD },
+  ],
+  // THREE OF THESE FOUR WERE ALREADY ON SCREEN AND MATCHED NOTHING. The page
+  // has held `stage_fit === 'right'`, `path === 'warm'` and `status ===
+  // 'passed'` since the zone shipped, over columns the worker validates and a
+  // PATCH route accepts — and no surface in this product ever set one. The
+  // add-a-fund form sends a name, a thesis and a note; `api.research.fundUpdate`
+  // had no callers at all. Three live-looking chips over three empty columns.
+  // The repair is the missing writer, not a sentence: each row now carries the
+  // three controls, so the predicates that were always right have something to
+  // be right about.
+  //
+  // `Best fit` IS `all`, RELABELLED, exactly as `grow/capital-match` above
+  // resolves the same canvas word. No fit score is stored, and the zone's own
+  // StatedLimit already refuses to invent one — "nothing here scores a fund for
+  // you, ranks your list, or drafts an approach". So the canvas's first slot
+  // becomes the unfiltered view rather than a ranking that would be a number
+  // with no method behind it.
+  'research/funds': [
+    { canvas: 'Best fit', key: 'all', label: 'All funds' },
+    { canvas: 'Right stage', key: 'right' },
+    { canvas: 'Warm path', key: 'warm' },
+    { canvas: 'Passed', key: 'passed' },
+  ],
+  // One reason, four labels. Worth stating precisely because a shorter version
+  // would be wrong: signals ARE stored, dated and scored, and this page reads
+  // them. What is absent is the object the canvas filters — a saved analysis
+  // with a method, a run date and a lifecycle.
+  'research/markets': [
+    { canvas: 'Saved', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Builder', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Sources', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Retired', note: NO_SAVED_DEEP_DIVE },
+  ],
+  // THE CLASSIFICATION IS REAL AND SITS ONE LEVEL DOWN. `competitor_candidates`
+  // carries `direct | adjacent`, defended by every writer — the manual form,
+  // the row editor, the AI prompt and three server-side coercions. What this
+  // header row governs is the saved ANALYSES: its ops half exports them, and
+  // the list endpoint deliberately omits candidates. Narrowing the left half by
+  // a candidate's category while the right half exports analyses would make one
+  // row mean two things, so the reason says which level holds what.
+  'research/companies': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Direct', note: CATEGORY_IS_PER_COMPETITOR },
+    { canvas: 'Adjacent', note: CATEGORY_IS_PER_COMPETITOR },
+    {
+      canvas: 'Comparables',
+      note: 'no competitor can be filed as a comparable: the form offers direct or adjacent, and every writer coerces anything else to direct',
+    },
+  ],
+  // `All` is the only one of the five this licence can run. Two fail on the
+  // vocabulary, and two on columns that were never there — both of which this
+  // page's own stat strip already states in words, so the wording is reused.
+  'research/library': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Reports', note: NO_SUCH_KIND },
+    {
+      canvas: 'Primary',
+      note: 'no document records whether it is your own research or a bought report',
+    },
+    { canvas: 'Legal', note: NO_SUCH_KIND },
+    {
+      canvas: 'Stale',
+      note: 'nothing records a source’s own year, and the date held is when the file was added here, which is a different fact',
+    },
   ],
 };
 

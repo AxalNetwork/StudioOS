@@ -48,6 +48,24 @@ const NO_SUPPORT_LEDGER =
 // it. What is true is that the question has already been answered upstream.
 const ALREADY_MINE =
   'every deal on this board is already one of yours; it loads only the deals you were invited to, committed to, or are a room member of';
+// `/research/ask` and `/research/library` are shared surfaces, so these two
+// read the same as founder's — deliberately. One component draws both rows, and
+// a reader moving between licences must not find one absence explained two
+// ways. The ops half of the Ask row already says "no session history is stored
+// to clear"; this is that clause, extended to the views the filters name.
+const NO_SESSION_RECORD =
+  'no session history is stored, so no past question, kept answer or discarded one exists to look through';
+const NO_SUCH_KIND =
+  'a document is filed as a document, a playbook or about a client, and no upload can classify one any other way';
+// `/research/markets`. The same absence founder's row states, in this licence's
+// words: all four labels are lifecycle states of a SAVED DEEP-DIVE, which the
+// artboard shows as `Analysis · Method · Run · State`. Two of them look nearly
+// live and are not — `signals.status` exists, but the feed's own query is
+// `WHERE status = 'active'` and the row mapper never sends `status` to the
+// browser, so `Active` selects everything and nothing writes `parked` or
+// `archived` at all.
+const NO_SAVED_DEEP_DIVE =
+  'nothing saves a market deep-dive, so there is no analysis to hold active, park, retire or build; this page is the signals feed, gathered on a schedule';
 
 export const INVESTOR_ZONE_FILTERS = {
   // ── Fund ─────────────────────────────────────────────────────────────────
@@ -166,6 +184,99 @@ export const INVESTOR_ZONE_FILTERS = {
     { canvas: 'Unassigned', key: 'unassigned' },
     { canvas: 'Stale', key: 'stale' },
     { canvas: 'Passed', key: 'passed' },
+  ],
+
+  // ── Research ─────────────────────────────────────────────────────────────
+  // TWO ZONES SHARED WITH THREE OTHER LICENCES. `ResearchWorkspace` renders one
+  // `AskZone` and one `LibraryZone` for all four, so these entries land beside
+  // founder's, advisor's and partner's rather than after them — a header row
+  // that appears on one licence and not another, out of the same file, reads as
+  // a bug. What the entries say is not shared: on `/research/library` the same
+  // column answers four of partner's labels and one of these five.
+
+  // The same absence founder's row states, in this licence's words. Nothing is
+  // written per question — `research.post('/ask')` searches, answers and
+  // returns — so there is no session, kept answer or outcome to narrow. The ops
+  // half of this row already says "no session history is stored to clear".
+  'research/ask': [
+    { canvas: 'All sessions', note: NO_SESSION_RECORD },
+    { canvas: 'Saved', note: NO_SESSION_RECORD },
+    {
+      canvas: 'Cited in a memo',
+      note: 'a citation names the passage it quoted and carries no document id, and nothing carries one into a memo',
+    },
+    { canvas: 'Discarded', note: NO_SESSION_RECORD },
+  ],
+  // ROOM ACCESS, AND THE CANVAS MEANS SOMETHING DIFFERENT BY `Requested` THAN
+  // THE WORD SUGGESTS. Its own artboard code reads
+  // `PULLS.filter(p => p.state === 'Requested')` into a variable called
+  // `partial`, and its `Requested` row is `6 of 11 files · IP folder withheld`.
+  // It is a partly-staged room, which this page can see — `withheld_behind_nda`
+  // is on every row and the route already returns the count as `partial_count`.
+  // So the chip is live and wears the store's own word: keeping `Requested`
+  // would promise a request record, and the ops half of this same row spends a
+  // sentence explaining that none exists.
+  //
+  // `Granted` is the ALREADY-SCOPED kind of reason, like `Mine` on the pipeline
+  // board: the query selects only active grants, so `granted_count` is
+  // literally `items.length` and a chip would narrow nothing while looking like
+  // it might.
+  'research/diligence': [
+    { canvas: 'All', key: 'all' },
+    {
+      canvas: 'Granted',
+      note: 'every room here is one you have been granted; the list loads active grants only, so this would select all of them',
+    },
+    { canvas: 'Requested', key: 'partial', label: 'Partly staged' },
+    {
+      canvas: 'Not staged',
+      note: 'a company that never opened a room is not on this list at all, because the grant is what puts a room here and an unstaged one leaves no row to find',
+    },
+  ],
+  // `Peer set` IS RELABELLED BECAUSE THE OPS HALF WOULD CONTRADICT IT. That
+  // half says "a peer source is recorded per row, so there is no one set to
+  // switch" — and it is right: `research_benchmarks` carries `peer_source` and
+  // `peer_sample_size` per row under a CHECK, with no shared peer set anywhere.
+  // What the page can tell apart is which rows are comparisons at all, which it
+  // already labels `Tracked, not compared` and counts in its own subtitle.
+  'research/benchmarking': [
+    { canvas: 'Peer set', key: 'comparison', label: 'Compared' },
+    { canvas: 'Metrics', key: 'all' },
+    {
+      canvas: 'Saved',
+      note: 'a benchmark row has no draft state; the form writes a finished row on submit, so every metric on this page is saved',
+    },
+    {
+      canvas: 'Export',
+      note: 'an export is an action rather than a view; the ops half of this row is where it belongs, and it says there why no chart is drawn',
+    },
+  ],
+  'research/markets': [
+    { canvas: 'Active', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Parked', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Retired', note: NO_SAVED_DEEP_DIVE },
+    { canvas: 'Builder', note: NO_SAVED_DEEP_DIVE },
+  ],
+  // `Diligence` looks like the two live chips partner gets from this same
+  // column and is not one of them. `research_documents.kind` is free text, so
+  // the column check and the write-path check both pass — but the only writer
+  // is the upload form, which offers `Document`, `My playbook` and `About a
+  // client`, and the worker coerces anything else. No row can carry it.
+  'research/library': [
+    { canvas: 'All', key: 'all' },
+    { canvas: 'Diligence', note: NO_SUCH_KIND },
+    {
+      canvas: 'Benchmarks',
+      note: 'a benchmark is a row in Benchmarking carrying its own source and sample size, not a document in this library',
+    },
+    {
+      canvas: 'Primary',
+      note: 'no document records whether it is your own research or a bought report',
+    },
+    {
+      canvas: 'Stale',
+      note: 'nothing records a source’s own year, and the date held is when the file was added here, which is a different fact',
+    },
   ],
 };
 

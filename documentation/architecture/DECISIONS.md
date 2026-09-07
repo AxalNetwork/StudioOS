@@ -2708,3 +2708,62 @@ arguments first: a literal that appears only inside a request is the page
 asking the server to narrow unconditionally, not a view a reader can select. A
 genuinely server-filtered chip still passes, because the page has to hold the
 value in state to send it.
+
+## D53 — A shared surface's header row is per licence, or it is absent
+
+**2026-09-07.** `ResearchWorkspace` and `NetworkWorkspace` each render one
+component for founder, investor, advisor and partner. Their filter halves were
+deferred twice for one reason both times: a header row that appears on one
+licence and not another, out of the same file, reads as a bug and is one. So a
+shared zone's four tables land in the same commit or none of them does.
+
+**The tables stay four, and this pass is the argument for that.**
+`/research/library` is one component reading one column — `research_documents.
+kind` — through one write path and one client method. Run the four-step check
+per licence and the answers are not close: partner and advisor get four live
+chips each, founder and investor get one out of five. The difference is
+entirely the fourth check. `kind` is free text with no CHECK, so the column, the
+write path and the client method all pass for every label; then the writer
+settles it, because the upload form offers exactly `Document`, `My playbook`
+and `About a client` and the worker coerces anything else. `Reports`, `Legal`
+and `Diligence` name values no row can carry. `Client docs` and `Reusable` are
+exact. One shared table with a role switch would have had to encode that split
+anyway, in a place where nobody would read it.
+
+**A filter builder reaches a shared body as a BOUND BUILDER, not a render
+prop.** Actions need only the rows: `zoneActions={(rows) => zoneActionsFor(role,
+key, { view })}` is a one-argument function the body calls. Filters need `value`
+and `onChange`, which are the body's own state and cannot be supplied by the
+workspace. So the workspace passes `zoneFilters={(opts) => zoneFiltersFor(role,
+key, opts)}` and the body calls it with its own state. The body also needs
+`role`, for the accent — and `roleMountVerdict` in the guard enforces the
+consequence: a shared body must pass `role={role}`, while a page under
+`pages/investor/` must still name its licence outright.
+
+**A filter that matches everything is as dishonest as one that matches
+nothing.** D51 was written about the empty set, and this pass found the other
+end of the same axis five times: `/research/diligence`'s `Granted` over a query
+that selects only grants, `/research/markets`'s `Active` over a feed that reads
+`WHERE status = 'active'`, `/research/benchmarking`'s `Saved` over rows with no
+draft state, and `/research/client-prep`'s `Founder-sourced` over rows that all
+carry one source. None of them narrows; each would tell a reader they had
+confirmed something. They render as prose naming what is already true of the
+list, which is the same treatment `/deals/pipeline`'s `Mine` established.
+
+**Two filter rows were live and matching nothing when this pass reached them**,
+which is D51's own defect shipped twice more. `ClientPrepZone`'s `Mine only`
+filtered on a `source` value nothing writes. `FundsZone`'s `Right stage`, `Warm
+path` and `Passed` read three columns the schema has, the worker validates and
+the PATCH route accepts — and that no surface in the product ever set, because
+`api.research.fundUpdate` had no callers. The second one is why the check
+sequence has a fourth step at all: three of them pass on a column whose only
+possible value is NULL. Where the vocabulary is already settled and only a
+control is missing, the repair is the control.
+
+**A label is relabelled when the canvas's word promises a record that does not
+exist**, and the predicate is unchanged: `Session docs` → `About a client`
+(nothing links a document to a session), `Peer set` → `Compared` (no shared peer
+set exists; the ops half of the same row says so), `Requested` → `Partly staged`
+(the artboard's own code calls that set `partial`), `Best fit` → `All funds` (no
+fit score is stored). The canvas string stays in `canvas:` as provenance, so the
+guard still re-derives every one of them.

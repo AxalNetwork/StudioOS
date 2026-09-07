@@ -39,6 +39,29 @@ import ZoneToolbar from '../workspaces/ZoneToolbar';
  * so the caller decides what the row says and this page renders it. `/signals`
  * passes nothing and gets nothing. See `workspaces/zoneActionsByRole.js`.
  */
+const AGE_WINDOWS = {
+  advisor: { ageing: 30, stale: 120 },
+  partner: { ageing: 30, stale: 90 },
+};
+
+/**
+ * How old a signal is, from its own evidence — or null when nothing is dated.
+ *
+ * NOT `updated_at`, WHICH LOOKS RIGHT AND IS NOT. The ingestion job computes one
+ * timestamp per run and binds it to every row it touches, so that column would
+ * sort every signal into the same bucket and any age filter over it would
+ * return the whole feed or none of it. `evidence_items[].observed_at` is the
+ * per-item date, and it is what the freshness score decays from.
+ */
+function ageInDays(signal) {
+  let newest = null;
+  for (const evidence of signal?.evidence_items || []) {
+    const at = Date.parse(evidence?.observed_at || '');
+    if (Number.isFinite(at) && (newest === null || at > newest)) newest = at;
+  }
+  return newest === null ? null : (Date.now() - newest) / 86400000;
+}
+
 export default function SignalsPage({ user, embedded = false, mode: modeProp = null, zoneActions, zoneFilters, role = 'founder' }) {
   const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
   // Two different questions, so two props. `user` answers "who is this?" and
@@ -52,6 +75,13 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
     || (String(user?.role || '').toLowerCase() === 'advisor' ? 'advisor' : 'founder');
 
   const [filters, setFilters] = useState({});
+  // TWO DIFFERENT FILTER SURFACES ON ONE PAGE, and they are not rivals.
+  // `filters` above is `SignalFilterBar`'s nine server-driven facets — region,
+  // sector, signal type and the rest — sent to the API and narrowed there.
+  // `zoneView` is the zone header row's, which the canvas draws above
+  // everything and which asks one question the facets do not: how old is what I
+  // am looking at. It runs here, over rows already loaded.
+  const [zoneView, setZoneView] = useState('all');
   const [facets, setFacets] = useState(null);
   const [data, setData] = useState(null);
   const [kpis, setKpis] = useState(null);
@@ -119,14 +149,33 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
 
   const signals = data?.signals || [];
 
+  // The age windows are the CANVAS'S OWN, per licence, transcribed rather than
+  // chosen: `Pages · Advisor Research` declares `const STALE_AT = 120, AGE_AT =
+  // 30` and `Pages · Partner Research` declares 90 and 30. Founder and investor
+  // are absent because their artboards ask this zone for a saved deep-dive
+  // instead, which nothing stores — their header row is prose, and no key here
+  // is reachable for them.
+  const window_ = AGE_WINDOWS[role];
+  const visible = !window_ || zoneView === 'all' ? signals : signals.filter((s) => {
+    const days = ageInDays(s);
+    // An undated signal is in no age bucket and stays in `All` — the same call
+    // the artboard makes for the figure whose source has no run date.
+    if (days === null) return false;
+    if (zoneView === 'current') return days <= window_.ageing;
+    if (zoneView === 'ageing') return days > window_.ageing && days <= window_.stale;
+    if (zoneView === 'stale') return days > window_.stale;
+    return true;
+  });
+  const chooseZoneView = (key) => setZoneView((current) => (current === key ? 'all' : key));
+
   const content = (
     <div className="space-y-5 pb-10">
       {zoneActions && (
         <ZoneToolbar
           role={role}
           className="mb-3"
-          filters={zoneFilters ? zoneFilters({}) : []}
-          actions={zoneActions(signals)}
+          filters={zoneFilters ? zoneFilters({ value: zoneView, onChange: chooseZoneView }) : []}
+          actions={zoneActions(visible)}
         />
       )}
       {/* Header */}
@@ -224,17 +273,26 @@ export default function SignalsPage({ user, embedded = false, mode: modeProp = n
             <ArrowDownWideNarrow size={13} />
             Ranked by signal strength, freshness and relevance{data?.cached ? ' · cached' : ''}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {signals.map((s, i) => (
-              <SignalCard
-                key={s.id}
-                signal={s}
-                mode={mode}
-                rank={i + 1}
-                onOpen={(sig) => setSelectedId(sig.id)}
-              />
-            ))}
-          </div>
+          {/* A zone view that finds nothing says so against the total, because
+              an empty grid under a selected chip reads as "no signals match
+              your facets" — a different and wrong answer. */}
+          {visible.length === 0 ? (
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              No signal here is in this age band. {signals.length} match your filters in total.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {visible.map((s, i) => (
+                <SignalCard
+                  key={s.id}
+                  signal={s}
+                  mode={mode}
+                  rank={i + 1}
+                  onOpen={(sig) => setSelectedId(sig.id)}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
 

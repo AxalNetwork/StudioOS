@@ -37,13 +37,13 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 
 const STAGE_LABEL = { right: 'Right stage', wrong: 'Wrong stage' };
 const PATH_LABEL = { warm: 'Warm path', cold: 'No route in' };
-const FILTERS = [
-  ['all', 'All'],
-  ['right', 'Right stage'],
-  ['warm', 'Warm path'],
-  ['passed', 'Passed'],
-];
 
+// The compact inline enum editor `CompetitorAnalysis` already uses for the same
+// job. Tailwind's own greys: `axal-ink-2` and its family are declared in no
+// `@theme` block and emit no CSS at all.
+const READ_SELECT =
+  'rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-600 '
+  + 'dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300';
 const usd = (cents) => (cents === null || cents === undefined
   ? null
   : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -74,6 +74,18 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // One PATCH per change, then a reload — the row the worker returns is the row
+  // that is stored, and the counts in the strip above are computed there too.
+  const setRead = async (uid, patch) => {
+    setSaved(null);
+    try {
+      await api.research.fundUpdate(uid, patch);
+      await load();
+    } catch (e) {
+      setSaved(e?.detail || e?.message || 'That did not save.');
+    }
+  };
+
   const add = async (event) => {
     event.preventDefault();
     if (!form.name.trim() || busy) return;
@@ -90,6 +102,10 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
 
   const data = state.data;
   const items = data?.items || [];
+  // The canvas has no `All` of its own — its first slot reads `Best fit`, which
+  // the table renders as the unfiltered view because no fit score is stored. So
+  // the chip that is on is also the way back off it.
+  const choose = (key) => setFilter((current) => (current === key ? 'all' : key));
   const visible = items.filter((f) => {
     if (filter === 'right') return f.stage_fit === 'right';
     if (filter === 'warm') return f.path === 'warm';
@@ -103,7 +119,7 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         <ZoneToolbar
           role={role}
           className="mb-3"
-          filters={zoneFilters ? zoneFilters({}) : []}
+          filters={zoneFilters ? zoneFilters({ value: filter, onChange: choose }) : []}
           actions={zoneActions(visible)}
         />
       )}
@@ -130,22 +146,6 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
         />
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {FILTERS.map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setFilter(key)}
-            className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
-              filter === key
-                ? 'border-axal-violet bg-axal-lavender text-axal-violet dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-300'
-                : 'border-axal-hairline text-gray-600 dark:border-gray-700 dark:text-gray-300'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
       <ZoneBody
         loading={state.loading}
@@ -185,6 +185,52 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
                   </div>
                   {f.thesis && <p className="mt-1 text-[12px] italic leading-relaxed text-gray-600 dark:text-gray-300">“{f.thesis}”</p>}
                   {f.note && <p className="mt-1 text-[12px] leading-relaxed text-gray-700 dark:text-gray-300">{f.note}</p>}
+                  {/* THE WRITERS THESE THREE COLUMNS NEVER HAD. `stage_fit`,
+                      `path` and `status` have been in the schema, validated by
+                      the worker and accepted by `PATCH /research/funds/:uid`
+                      since this zone shipped — and no surface ever set one. The
+                      add-a-fund form sends a name, a thesis and a note, and
+                      `api.research.fundUpdate` had no callers at all, so every
+                      row carried a NULL fit, a NULL path and `researching`.
+                      Three filters read those columns, which meant three chips
+                      that could only ever match nothing.
+                      Blank is a real option on the first two: "not assessed" is
+                      a different fact from "wrong", and the route stores the
+                      difference. */}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">
+                      Your read
+                    </span>
+                    <select
+                      aria-label={`Stage fit for ${f.name}`}
+                      className={READ_SELECT}
+                      value={f.stage_fit || ''}
+                      onChange={(e) => setRead(f.uid, { stage_fit: e.target.value })}
+                    >
+                      <option value="">Stage not assessed</option>
+                      <option value="right">Right stage</option>
+                      <option value="wrong">Wrong stage</option>
+                    </select>
+                    <select
+                      aria-label={`Route in for ${f.name}`}
+                      className={READ_SELECT}
+                      value={f.path || ''}
+                      onChange={(e) => setRead(f.uid, { path: e.target.value })}
+                    >
+                      <option value="">Route not recorded</option>
+                      <option value="warm">Warm path</option>
+                      <option value="cold">No route in</option>
+                    </select>
+                    <select
+                      aria-label={`Status for ${f.name}`}
+                      className={READ_SELECT}
+                      value={f.status || 'researching'}
+                      onChange={(e) => setRead(f.uid, { status: e.target.value })}
+                    >
+                      <option value="researching">Researching</option>
+                      <option value="passed">Passed</option>
+                    </select>
+                  </div>
                   {f.status === 'passed' && (
                     <p className="mt-1 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
                       {f.pass_reason

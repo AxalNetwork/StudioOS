@@ -45,11 +45,17 @@ const PROFILES = {
     call: 'founderZoneActions',
     canvas: /^Pages · Founder /,
     buckets: /^(build|grow|network|raise|research)\//,
-    zones: 25,
+    zones: 26,
     links: 17,
-    exports: 19,
-    // `research/funds` is a card in `ResearchWorkspace`'s ZONE_COPY, not a body.
-    excluded: ['research/funds'],
+    exports: 20,
+    // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
+    // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
+    // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
+    // `FundsZone` takes `zoneActions` and renders `zoneActions(visible)`, so the
+    // canvas's `Add fund · Brief me · Export` drew nothing at all. The identical
+    // staleness `research/client-prep` carried on advisor and partner, found the
+    // same way: by the filters half needing an action table for the same zone.
+    excluded: [],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
     live: (route) => route.replace(/^\//, ''),

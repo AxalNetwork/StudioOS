@@ -67,6 +67,10 @@ function fmtBytes(n) {
  */
 export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [state, setState] = useState({ loading: true, error: '', payload: null });
+  // The zone header row's view, owned here because only this page has the rows.
+  // `zoneFiltersByRole` decides WHICH views this licence is offered; the
+  // predicate below is the same for all four, because it is the same store.
+  const [filter, setFilter] = useState('all');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [kind, setKind] = useState('document');
@@ -129,14 +133,31 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   const payload = state.payload;
   const items = payload?.items || [];
 
+  // `unindexed` TESTS THE STATE, NOT THE PASSAGE COUNT. The Passages column
+  // below is right to read `chunk_count == null` — that column reports how much
+  // of a file Ask holds. This is a different question, and the two come apart:
+  // the indexer's failure path writes `index_state` and `index_note` and leaves
+  // `chunk_count` alone, so a document that indexed once and later failed a
+  // re-index still carries its old count while being unreadable to Ask. Reading
+  // the number here would hide exactly the documents this view is for.
+  const visible = items.filter((d) => {
+    if (filter === 'client' || filter === 'playbook') return d.kind === filter;
+    if (filter === 'unindexed') return d.index_state !== 'indexed';
+    return true;
+  });
+  // Clicking the active chip clears it. Two of the four canvases carry no `All`
+  // of their own, and adding one the artboard never drew is not this table's
+  // call to make — so the chip that is on is also the way back off it.
+  const choose = (key) => setFilter((current) => (current === key ? 'all' : key));
+
   return (
     <div className="space-y-4">
       {zoneActions && (
         <ZoneToolbar
           role={role}
           className="mb-3"
-          filters={zoneFilters ? zoneFilters({}) : []}
-          actions={zoneActions(items)}
+          filters={zoneFilters ? zoneFilters({ value: filter, onChange: choose }) : []}
+          actions={zoneActions(visible)}
         />
       )}
       <ZoneHeading
@@ -263,7 +284,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                 </tr>
               </thead>
               <tbody>
-                {items.map((d) => (
+                {visible.map((d) => (
                   <tr key={d.uid} className="border-b border-gray-100 align-top dark:border-gray-800">
                     <td className="py-3 pr-3">
                       <span className="text-[13px] font-extrabold">{d.title}</span>
@@ -312,6 +333,14 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
               </tbody>
             </table>
           </div>
+          {/* A narrowed view that finds nothing says which view it is, because
+              a bare empty table under a selected chip reads as "your library is
+              empty" — which it is not, and the count above says so. */}
+          {items.length > 0 && visible.length === 0 && (
+            <p className="mt-3 text-[12px] text-gray-600 dark:text-gray-300">
+              No document in your library matches this view. {items.length} in total.
+            </p>
+          )}
         </Card>
       </ZoneBody>
 

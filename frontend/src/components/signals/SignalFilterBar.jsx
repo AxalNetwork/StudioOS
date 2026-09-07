@@ -61,7 +61,13 @@ export default function SignalFilterBar({ facets, filters, onChange, onReset, re
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100">
           <SlidersHorizontal size={15} className="text-violet-500" />
-          Filters
+          {/* NOT "Filters", and the rename is not cosmetic. The zone header row
+              directly above this card now carries the canvas's own `filters:`
+              half — chips on some licences, prose on others — so a card headed
+              `Filters` under it reads as the same control twice. These are the
+              feed's server-driven facets: region, sector, signal type and the
+              rest, sent to the API. The row above narrows what came back. */}
+          Narrow the feed
           {activeCount > 0 && (
             <span className="text-xs px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">
               {activeCount}

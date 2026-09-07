@@ -287,7 +287,13 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
         <ZoneToolbar
           role={role}
           className="mb-3"
-          filters={zoneFilters ? zoneFilters({}) : []}
+          // NO STATE, BECAUSE THERE IS NOTHING TO SWITCH BETWEEN. `All` is the
+          // only live entry on either licence's table for this zone: the
+          // canvas's other labels are a company's relation to you, and the rows
+          // this row governs are saved ANALYSES, which name no company. So the
+          // page reports which view is showing — the only one — rather than
+          // holding a state that could never change.
+          filters={zoneFilters ? zoneFilters({ value: 'all' }) : []}
           actions={zoneActions(visibleSaved)}
         />
       )}

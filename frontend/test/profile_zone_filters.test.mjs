@@ -36,6 +36,30 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 
+/**
+ * Zone key → the file that renders that zone's toolbar, for the surfaces four
+ * licences share.
+ *
+ * `mountingFile()` finds a page by searching for the profile's OWN builder name
+ * with a literal zone key. That works for a page importing its licence's table
+ * directly and cannot work here: `ResearchWorkspace` calls
+ * `zoneFiltersFor(role, 'research/library', …)` and hands the body a bound
+ * function, so the body never names the zone and the workspace never names the
+ * licence. Written down, one map for all four profiles, because it IS the same
+ * file for all four — which is the fact the whole per-licence table design
+ * exists to handle.
+ */
+const RESEARCH_BODIES = {
+  'research/ask': 'frontend/src/pages/research/AskZone.jsx',
+  'research/library': 'frontend/src/pages/research/LibraryZone.jsx',
+  'research/markets': 'frontend/src/pages/SignalsPage.jsx',
+  'research/companies': 'frontend/src/components/CompetitorAnalysis.jsx',
+  'research/funds': 'frontend/src/pages/research/FundsZone.jsx',
+  'research/benchmarking': 'frontend/src/pages/research/BenchmarkingZone.jsx',
+  'research/diligence': 'frontend/src/pages/research/DiligenceZone.jsx',
+  'research/client-prep': 'frontend/src/pages/research/ClientPrepZone.jsx',
+};
+
 const PROFILES = {
   founder: {
     table: FOUNDER_ZONE_FILTERS,
@@ -51,16 +75,17 @@ const PROFILES = {
     canvas: /^Pages · Founder /,
     pages: ['frontend/src/pages/founder', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
-    zones: 18,
-    mounted: 18,
+    zones: 23,
+    mounted: 23,
+    bodies: RESEARCH_BODIES,
     excluded: [
       // The shared surfaces. `NetworkWorkspace` and `ResearchWorkspace` render
-      // these eight slugs for all four licences from one component each, with
+      // these slugs for all four licences from one component each, with
       // different labels per licence, so every licence's half lands together or
       // the same component shows a header row on one and nothing on another.
+      // `research/{ask,library}` left this list when all four tables gained
+      // them in the same commit, which is the only way they can.
       'network/relationships', 'network/introductions', 'network/organizations',
-      'research/ask', 'research/markets', 'research/companies',
-      'research/funds', 'research/library',
     ],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
@@ -80,8 +105,9 @@ const PROFILES = {
     canvas: /^Pages · Investor (Deals|Fund|Network|Portfolio|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/investor', 'frontend/src/workspaces/investor', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/investorZoneActions.js',
-    zones: 8,
-    mounted: 8,
+    zones: 13,
+    mounted: 13,
+    bodies: RESEARCH_BODIES,
     // Fund, Portfolio and Deals' pipeline. Every other canvas route, with why
     // it is not here yet:
     excluded: [
@@ -108,8 +134,6 @@ const PROFILES = {
       // while founder has none would show a zone header on one licence and
       // nothing on the other, from one component. They land together.
       'network/relationships', 'network/introductions', 'network/organizations',
-      'research/ask', 'research/diligence', 'research/benchmarking',
-      'research/markets', 'research/library',
     ],
     // `Call 3` names one specific stored record rather than welding a count
     // onto a filter, so `{n}` is not its repair and founder's `/\b(14|2026)\b/`
@@ -126,13 +150,14 @@ const PROFILES = {
     }[route] ?? route.replace(/^\//, '')),
   },
 
-  // ADVISOR AND PARTNER ARE REGISTERED AT ZERO, ON PURPOSE. Both tables are
-  // empty and every canvas route each licence carries is named in `excluded`
-  // below. Registering them now rather than when their first table lands is
-  // what makes `canvasDirs` a hook that four profiles exercise instead of a
-  // parameter one profile passes — and it means the day a canvas gains a zone,
-  // the exact-set check fails for the licence that gained it rather than for
-  // nobody.
+  // ADVISOR AND PARTNER WERE REGISTERED AT ZERO AND ARE NO LONGER. Both were
+  // added with empty tables and every canvas route in `excluded`, one commit
+  // before either had an entry, so that `canvasDirs` was a hook four profiles
+  // exercised rather than a parameter one profile passed — and so the day a
+  // canvas gained a zone, the exact-set check failed for the licence that
+  // gained it rather than for nobody. Their first two zones are the shared
+  // Research surfaces below, where this licence gets four live chips out of
+  // `/research/library` and founder gets one out of five.
   advisor: {
     table: ADVISOR_ZONE_FILTERS,
     build: advisorZoneFilters,
@@ -146,12 +171,11 @@ const PROFILES = {
     canvas: /^Pages · Advisor (Network|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
-    zones: 0,
-    mounted: 0,
+    zones: 5,
+    mounted: 5,
+    bodies: RESEARCH_BODIES,
     excluded: [
       'network/relationships', 'network/introductions', 'network/organizations',
-      'research/ask', 'research/client-prep', 'research/markets',
-      'research/companies', 'research/library',
     ],
     // No `samples`: not one advisor label carries a figure, and the assertion
     // below proves that rather than taking it on trust — a canvas that gains an
@@ -167,12 +191,11 @@ const PROFILES = {
     canvas: /^Pages · Partner (Network|Research)\.dc\.html$/,
     pages: ['frontend/src/pages/partner', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/partnerZoneActions.js',
-    zones: 0,
-    mounted: 0,
+    zones: 4,
+    mounted: 4,
+    bodies: RESEARCH_BODIES,
     excluded: [
       'network/relationships', 'network/introductions', 'network/organizations',
-      'research/ask', 'research/client-prep', 'research/markets',
-      'research/library',
     ],
     // `Pages · Partner Research` names /research/market; the router and
     // `shellConfig.js` both say `markets`. Same mapping the ops half carries.
