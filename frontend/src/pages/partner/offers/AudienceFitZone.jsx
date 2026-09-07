@@ -7,6 +7,8 @@ import {
   inputClass, buttonClass, ghostButtonClass, moneyCents, dollarsToCents,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
+import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
+import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 
 /**
  * Offers · Audience fit — `/offers/audience-fit`.
@@ -187,6 +189,7 @@ export default function PartnerAudienceFitZone() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [view, setView] = useState('all');
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
@@ -219,6 +222,10 @@ export default function PartnerAudienceFitZone() {
     (r) => r.is_active && r.kind !== 'best_fit',
   );
   const floor = items.find((r) => r.is_active && r.kind === 'budget_floor') || null;
+  // `Best fit` selects on the stored `kind`, which is the only thing on this
+  // artboard that names a RULE rather than a lead. The other two chips the
+  // canvas draws are about leads and have no source; the table says so.
+  const visible = view === 'best_fit' ? items.filter((r) => r.kind === 'best_fit') : items;
 
   if (isNoPartnerProfile(state.error)) {
     return (
@@ -230,123 +237,140 @@ export default function PartnerAudienceFitZone() {
   }
 
   return (
-    <ZoneBody
-      actions={partnerZoneActions('offers/audience-fit', { view: { header: ['Rule', 'Kind', 'Referred to'], rows: items, cells: (r) => [r.statement, r.kind, r.referred_to] } })}
-      loading={state.loading}
-      error={state.error}
-      onRetry={load}
-      isEmpty={items.length === 0}
-      empty={(
-        <NothingYet
-          title="No fit rule is recorded yet"
-          body={
-            'Until one is, a lead you pass on is passed in silence — the founder '
-            + 'learns nothing and neither does anyone else. A rule is a reason '
-            + 'you can hand over: what you start at, what you decline, what you '
-            + 'do not do, and who to send them to instead.'
-          }
-          action={(
-            <button type="button" className={buttonClass} onClick={() => setAdding(true)}>
-              Write the first rule
-            </button>
-          )}
-        />
-      )}
-    >
-      <div className="space-y-6">
-        <ZoneHeading
-          title="Who the firm is for, and who it is not"
-          blurb={
-            'The second half is the working one. These are the sentences a pass '
-            + 'quotes, so a founder hears a reason rather than nothing.'
-          }
-          action={(
-            <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
-              {adding ? 'Cancel' : 'Add a rule'}
-            </button>
-          )}
-        />
-
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard
-            label="Budget floor"
-            value={floor?.floor_cents != null ? moneyCents(floor.floor_cents) : '—'}
-            hint={floor ? 'the smallest engagement worth starting' : 'none recorded'}
+    <>
+      {/* Hoisted out of `ZoneBody`, and the export takes `visible`: a file that
+          did not match the chip on screen would be its own small untruth. */}
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={partnerZoneFilters('offers/audience-fit', { value: view, onChange: setView })}
+        actions={partnerZoneActions('offers/audience-fit', { view: { header: ['Rule', 'Kind', 'Referred to'], rows: visible, cells: (r) => [r.statement, r.kind, r.referred_to] } })}
+      />
+      <ZoneBody
+        loading={state.loading}
+        error={state.error}
+        onRetry={load}
+        isEmpty={items.length === 0}
+        empty={(
+          <NothingYet
+            title="No fit rule is recorded yet"
+            body={
+              'Until one is, a lead you pass on is passed in silence — the founder '
+              + 'learns nothing and neither does anyone else. A rule is a reason '
+              + 'you can hand over: what you start at, what you decline, what you '
+              + 'do not do, and who to send them to instead.'
+            }
+            action={(
+              <button type="button" className={buttonClass} onClick={() => setAdding(true)}>
+                Write the first rule
+              </button>
+            )}
           />
-          <StatCard label="Rules" value={items.length} hint={`${items.filter((r) => r.is_active).length} in use`} />
-          <StatCard label="Declines" value={declines.length} hint="sectors and capabilities ruled out" />
-          <StatCard
-            label="Without a sentence"
-            value={d?.unstated_count ?? 0}
-            hint={d?.unstated_count ? 'a pass citing these says nothing' : 'every rule can be quoted'}
-          />
-        </div>
-
-        {(d?.unstated_count ?? 0) > 0 && (
-          <p className="text-[12.5px] leading-relaxed text-amber-700 dark:text-amber-400">
-            {d.unstated_count} rule{d.unstated_count === 1 ? '' : 's'} carr
-            {d.unstated_count === 1 ? 'ies' : 'y'} no sentence. A rule without one
-            still describes the firm, but it cannot be quoted — so a pass citing
-            it lands as the silence this zone exists to replace.
-          </p>
         )}
+      >
+        <div className="space-y-6">
+          <ZoneHeading
+            title="Who the firm is for, and who it is not"
+            blurb={
+              'The second half is the working one. These are the sentences a pass '
+              + 'quotes, so a founder hears a reason rather than nothing.'
+            }
+            action={(
+              <button type="button" className={ghostButtonClass} onClick={() => setAdding((v) => !v)}>
+                {adding ? 'Cancel' : 'Add a rule'}
+              </button>
+            )}
+          />
 
-        {adding && (
-          <div>
-            <RuleForm
-              busy={busy}
-              submitLabel="Add rule"
-              onCancel={() => setAdding(false)}
-              onSubmit={async (data) => {
-                await run(() => api.createPartnerFitRule(data), 'Rule added.', 'new');
-                setAdding(false);
-              }}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatCard
+              label="Budget floor"
+              value={floor?.floor_cents != null ? moneyCents(floor.floor_cents) : '—'}
+              hint={floor ? 'the smallest engagement worth starting' : 'none recorded'}
             />
-            <SaveNote note={note?.scope === 'new' ? note : null} />
+            <StatCard label="Rules" value={items.length} hint={`${items.filter((r) => r.is_active).length} in use`} />
+            <StatCard label="Declines" value={declines.length} hint="sectors and capabilities ruled out" />
+            <StatCard
+              label="Without a sentence"
+              value={d?.unstated_count ?? 0}
+              hint={d?.unstated_count ? 'a pass citing these says nothing' : 'every rule can be quoted'}
+            />
           </div>
-        )}
 
-        <Section title="Rules">
-          <div>
-            {items.map((rule) => (
-              <RuleRow
-                key={rule.id}
-                rule={rule}
+          {(d?.unstated_count ?? 0) > 0 && (
+            <p className="text-[12.5px] leading-relaxed text-amber-700 dark:text-amber-400">
+              {d.unstated_count} rule{d.unstated_count === 1 ? '' : 's'} carr
+              {d.unstated_count === 1 ? 'ies' : 'y'} no sentence. A rule without one
+              still describes the firm, but it cannot be quoted — so a pass citing
+              it lands as the silence this zone exists to replace.
+            </p>
+          )}
+
+          {adding && (
+            <div>
+              <RuleForm
                 busy={busy}
-                note={note}
-                onSave={(r, data) => run(
-                  () => api.updatePartnerFitRule(r.id, data),
-                  'Saved.', `rule:${r.id}`,
-                )}
-                onDelete={(r) => run(
-                  () => api.deletePartnerFitRule(r.id),
-                  'Rule deleted.', `rule:${r.id}`,
-                )}
+                submitLabel="Add rule"
+                onCancel={() => setAdding(false)}
+                onSubmit={async (data) => {
+                  await run(() => api.createPartnerFitRule(data), 'Rule added.', 'new');
+                  setAdding(false);
+                }}
               />
-            ))}
-          </div>
-        </Section>
+              <SaveNote note={note?.scope === 'new' ? note : null} />
+            </div>
+          )}
 
-        {/* NO FIT SCORE, AND NO PARAGRAPH ABOUT ITS ABSENCE. The canvas
-              puts a percentage beside each lead. Scoring a founder’s need
-              against these rules would need the need to carry a budget and a
-              sector in a comparable shape, and `founder_needs` carries
-              free-text budget bounds and a single category that does not line
-              up with the sectors a firm would name — a number over those
-              inputs would be a guess wearing a decimal point. Not drawing it
-              was right; explaining the canvas underneath was not. */}
-        <StatedLimit title="What these rules do, and do not">
-          <p>
-            <strong>Nothing runs these rules.</strong>{' '}
-            {d?.enforcement_note
-              || 'They are a record a person reads before passing on a lead. Nothing scores, filters or auto-declines against them.'}{' '}
-            A lead below your floor still appears on{' '}
-            <Link to="/pipeline/leads" className="text-amber-700 underline">Leads</Link>{' '}
-            and it is still your click that passes on it — which is what the
-            workspace rail promises, and this zone does not quietly break.
-          </p>
-        </StatedLimit>
-      </div>
-    </ZoneBody>
+          <Section title="Rules">
+            {/* A narrowed view that finds nothing says which view it is: a bare
+                empty list under a selected chip reads as "you have written no
+                rules", which is the silence this zone exists to replace. */}
+            {items.length > 0 && visible.length === 0 && (
+              <p className="mb-3 text-[12px] text-axal-ink-2">
+                No rule is written about who the firm is for. {items.length} recorded in total.
+              </p>
+            )}
+            <div>
+              {visible.map((rule) => (
+                <RuleRow
+                  key={rule.id}
+                  rule={rule}
+                  busy={busy}
+                  note={note}
+                  onSave={(r, data) => run(
+                    () => api.updatePartnerFitRule(r.id, data),
+                    'Saved.', `rule:${r.id}`,
+                  )}
+                  onDelete={(r) => run(
+                    () => api.deletePartnerFitRule(r.id),
+                    'Rule deleted.', `rule:${r.id}`,
+                  )}
+                />
+              ))}
+            </div>
+          </Section>
+
+          {/* NO FIT SCORE, AND NO PARAGRAPH ABOUT ITS ABSENCE. The canvas
+                puts a percentage beside each lead. Scoring a founder’s need
+                against these rules would need the need to carry a budget and a
+                sector in a comparable shape, and `founder_needs` carries
+                free-text budget bounds and a single category that does not line
+                up with the sectors a firm would name — a number over those
+                inputs would be a guess wearing a decimal point. Not drawing it
+                was right; explaining the canvas underneath was not. */}
+          <StatedLimit title="What these rules do, and do not">
+            <p>
+              <strong>Nothing runs these rules.</strong>{' '}
+              {d?.enforcement_note
+                || 'They are a record a person reads before passing on a lead. Nothing scores, filters or auto-declines against them.'}{' '}
+              A lead below your floor still appears on{' '}
+              <Link to="/pipeline/leads" className="text-amber-700 underline">Leads</Link>{' '}
+              and it is still your click that passes on it — which is what the
+              workspace rail promises, and this zone does not quietly break.
+            </p>
+          </StatedLimit>
+        </div>
+      </ZoneBody>
+    </>
   );
 }

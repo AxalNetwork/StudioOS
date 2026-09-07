@@ -234,12 +234,38 @@ const PROFILES = {
     build: partnerZoneFilters,
     call: 'partnerZoneFilters',
     canvasDirs: ['design/incoming'],
-    canvas: /^Pages · Partner (Network|Research)\.dc\.html$/,
-    pages: ['frontend/src/pages/partner', 'frontend/src/pages/research', 'frontend/src/workspaces'],
+    // `Offers` JOINS THE REGEX, and `canvasDirs` needs no change for it:
+    // `design/incoming/Pages · Partner Offers.dc.html` is already in the
+    // directory this profile opens, and it is byte-identical on the nineteen
+    // labels to the copy in `design/canvases/integrated/` — checked rather than
+    // assumed, both name the same five routes in the same order.
+    canvas: /^Pages · Partner (Network|Offers|Research)\.dc\.html$/,
+    // `pages/partner/offers` IS ITS OWN ENTRY BECAUSE `mountingFile` DOES NOT
+    // RECURSE. Three of the five Offers zones have their own file in there and
+    // are found by the ordinary search once the directory is listed — which
+    // matters beyond convenience: a zone located by search is NOT `shared`, so
+    // it is held to naming its own licence (`role="partner"`), where a zone
+    // declared in `bodies` is allowed the `role={role}` variable. Putting these
+    // three in the map to save a line would have handed them that exemption
+    // and stopped this file checking the thing it exists to check.
+    pages: ['frontend/src/pages/partner', 'frontend/src/pages/partner/offers',
+      'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/partnerZoneActions.js',
-    zones: 6,
-    mounted: 6,
-    bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.partner },
+    zones: 11,
+    mounted: 11,
+    // The two that ARE genuinely shared. `ServiceCatalogPage` is mounted for
+    // admin, founder, partner and investor and `PerksPage` for those four plus
+    // advisor and exploring, both from `frontend/src/pages/` — a directory this
+    // profile does not list and could not list, since it holds a hundred
+    // unrelated files. Neither page names a zone: the bucket router hands each
+    // a bound builder as a render prop, exactly as it already hands them their
+    // actions, so the search has no needle to find and the map is the only way.
+    bodies: {
+      ...RESEARCH_BODIES,
+      ...NETWORK_BODIES.partner,
+      'offers/catalog': 'frontend/src/pages/ServiceCatalogPage.jsx',
+      'offers/perk-deals': 'frontend/src/pages/PerksPage.jsx',
+    },
     // Same as advisor's, one step further: there is not even a card. This
     // licence has no organizations panel at all — `NetworkPage`'s
     // `unservedAlone` suppresses it — so a row here would attach to nothing.
@@ -785,6 +811,72 @@ test('canvasFilters maps a canvas route onto the route the router mounts', () =>
   assert.ok(!mapped['build/this-week'], 'the unmapped route survived');
   assert.deepEqual(mapped['x/build-this-week'], ['This week', 'Last 4', 'All 14', 'Carried only'],
     'remapping changed the labels it carries');
+});
+
+test('a zone whose row can narrow hands the export the narrowed rows', () => {
+  /**
+   * THE HALF OF "· THIS VIEW" NOTHING WAS CHECKING.
+   *
+   * `zoneActionBuilder.js` labels every export `<canvas label> · this view`,
+   * and `profile_zone_actions.test.mjs` asserts that label is still there. The
+   * label is a claim about the FILE, and nothing proved the page kept it: a
+   * body can narrow what it renders and still hand `zoneActions` the whole
+   * loaded list, and the button then writes rows the reader cannot see under a
+   * label promising it wrote the ones they can. Worse in the other direction
+   * than the first: a reader who filters to `Blocked` and exports gets every
+   * item, and nothing on screen says so.
+   *
+   * ONLY ZONES THAT CAN ACTUALLY NARROW ARE HELD TO THIS. `offers/catalog` and
+   * `offers/visibility` each have ONE live label, so there is no second view
+   * for the export to disagree with — `visibility` sorts rather than subsets,
+   * and its export takes the sorted list for the tidier reason that a file
+   * should come out in the order on screen.
+   *
+   * Written as named cases rather than derived, because the two shapes genuinely
+   * differ: a zone with its own file makes the call itself, and a shared page
+   * receives `zoneActions` as a render prop and calls it with its own narrowed
+   * list. A regex general enough to cover both would be loose enough to pass
+   * the thing this is here to catch.
+   */
+  const cases = [
+    {
+      zone: 'offers/proof',
+      file: 'frontend/src/pages/partner/offers/ProofZone.jsx',
+      call: /partnerZoneActions\('offers\/proof'[\s\S]*?rows: (\w+)/,
+    },
+    {
+      zone: 'offers/audience-fit',
+      file: 'frontend/src/pages/partner/offers/AudienceFitZone.jsx',
+      call: /partnerZoneActions\('offers\/audience-fit'[\s\S]*?rows: (\w+)/,
+    },
+    {
+      // The render-prop shape: `PartnerBucketRoutes` supplies the columns and
+      // this page supplies the rows, so the call site here is the argument.
+      zone: 'offers/perk-deals',
+      file: 'frontend/src/pages/PerksPage.jsx',
+      call: /zoneActions\((\w+)\)/,
+    },
+  ];
+
+  for (const one of cases) {
+    const rows = (PARTNER_ZONE_FILTERS[one.zone] || []).filter((r) => r.key);
+    assert.ok(rows.length >= 2,
+      `${one.zone} no longer has two live views, so this case guards nothing — drop it or fix the table`);
+
+    const src = codeOnly(read(one.file));
+    const named = src.match(one.call);
+    assert.ok(named, `${one.file} no longer hands ${one.zone} any rows`);
+
+    // The identifier must be DERIVED from the loaded list, not be it. A
+    // `const visible = items.filter(…)` passes; handing over `items` does not.
+    const derived = new RegExp(`const ${named[1]} = [^;]*\\.(filter|sort)\\(`);
+    assert.match(src, derived,
+      `${one.file} exports "${named[1]}", which is not narrowed — the file would not match the chips on screen`);
+
+    // And the same identifier is what the body draws, so the two cannot drift.
+    assert.match(src, new RegExp(`\\b${named[1]}\\.map\\(`),
+      `${one.file} narrows "${named[1]}" for the export but renders something else`);
+  }
 });
 
 test('a matched canvas that yields no artboard fails the run', () => {

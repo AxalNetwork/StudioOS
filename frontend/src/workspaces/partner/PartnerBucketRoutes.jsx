@@ -6,6 +6,7 @@ import WorkspaceShell from '../WorkspaceShell';
 import BucketOverview, { unbuiltFrom } from '../BucketOverview';
 import { bucketForPath, bucketTitle, zoneForPath } from '../shellConfig';
 import { partnerZoneActions } from '../partnerZoneActions';
+import { partnerZoneFilters } from '../partnerZoneFilters';
 import NoStoreYet from '../NoStoreYet';
 import BucketBoard from '../BucketBoard';
 import { boardFor } from '../boards';
@@ -176,16 +177,26 @@ const LIVE = {
     // every exported row wrote three empty cells under three confident
     // headings. `currency` and `sla_days` have no column anywhere; `Price` and
     // `Listed` are real under the store's own names.
-    catalog: (user) => <ServiceCatalogPage user={user} embedded zoneActions={(rows) => partnerZoneActions('offers/catalog', { view: {
-      header: ['Offering', 'Category', 'Summary', 'Price (USD)', 'Listed'],
-      rows,
-      cells: (o) => [o.title, o.category, o.summary, o.price_usd, o.is_active ? 'yes' : 'no'],
-    } })} />,
-    'perk-deals': (user) => <PerksPage user={user} embedded zoneActions={(rows) => partnerZoneActions('offers/perk-deals', { view: {
-      header: ['Offer', 'Partner', 'Category', 'Kind', 'Tier', 'Status', 'Claims'],
-      rows,
-      cells: (p) => [p.offer, p.partner_name, p.category, p.kind, p.required_tier, p.status, p.claim_count],
-    } })} />,
+    // `zoneFilters` IS A RENDER PROP FOR THE SAME REASON `zoneActions` IS: both
+    // pages serve several licences and neither may learn about roles, so the
+    // caller — which IS the partner shell — supplies the row and the accent it
+    // wears. `role="partner"` is therefore the shell's licence and not the
+    // viewer's: an admin reading a partner's catalogue is still in this shell,
+    // and chips painted from `user.role` would put founder violet inside it.
+    catalog: (user) => <ServiceCatalogPage user={user} embedded role="partner"
+      zoneFilters={(opts) => partnerZoneFilters('offers/catalog', opts)}
+      zoneActions={(rows) => partnerZoneActions('offers/catalog', { view: {
+        header: ['Offering', 'Category', 'Summary', 'Price (USD)', 'Listed'],
+        rows,
+        cells: (o) => [o.title, o.category, o.summary, o.price_usd, o.is_active ? 'yes' : 'no'],
+      } })} />,
+    'perk-deals': (user) => <PerksPage user={user} embedded role="partner"
+      zoneFilters={(opts) => partnerZoneFilters('offers/perk-deals', opts)}
+      zoneActions={(rows) => partnerZoneActions('offers/perk-deals', { view: {
+        header: ['Offer', 'Partner', 'Category', 'Kind', 'Tier', 'Status', 'Claims'],
+        rows,
+        cells: (p) => [p.offer, p.partner_name, p.category, p.kind, p.required_tier, p.status, p.claim_count],
+      } })} />,
     visibility: () => <PartnerVisibility />,
     proof: () => <PartnerProof />,
     'audience-fit': () => <PartnerAudienceFit />,
