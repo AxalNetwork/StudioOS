@@ -9,13 +9,13 @@ material. The app never reads it at runtime.
 
 ## Where the existing canvases live
 
-The triaged canvases live in `design/canvases/`, sorted by how far each has
-been built. Counts as of 2026-09-04:
+The triaged canvases live in `design/canvases/`, sorted by whether a live route
+exists for each — not by how far each has been built. Counts as of 2026-09-07:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 59 — the canvas is built; its zones render its bodies. |
-| `canvases/backlog/` | 26 — triaged, not built yet. |
+| `canvases/integrated/` | 59 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/backlog/` | 26 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 27 — deliberately not being built. |
 
 (`canvases/uploads/` holds 3 more that were never part of the triage split, and
@@ -64,9 +64,17 @@ strength of a live route would empty the queue of the work it exists to track.
 5. **Record the gap.** Whatever the canvas asks for that you did not build,
    write the reason into the `ROUTE_MAP.md` row *and* into the page, where the
    user can see it.
-6. **Move the file** into `design/canvases/integrated/` once its route is live
-   — or into `backlog/` if it is triaged but not yet built. This queue holds
-   only what has not been triaged.
+6. **Move the file** out of this queue once step 5 is done. Which folder is
+   decided by ONE question — *is there a live route for this canvas?* — so
+   `integrated/` if there is and `backlog/` if there is not, and nothing else
+   enters into it. **Not "is it finished":** an `UPGRADE` whose route runs and
+   whose extra asks are unbuilt still goes to `integrated/`, and its row in
+   `ROUTE_MAP.md` is what records the part that is outstanding. This clause read
+   "into `backlog/` if it is triaged but not yet built" until 2026-09-07, which
+   contradicts `design/canvases/README.md` for every `UPGRADE` — live route,
+   unbuilt canvas, both clauses firing at once — and on 2026-09-07 it sent
+   `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
+   that have no route, and away from the v1 of its own page.
 
 ## In the queue now — the four-profile layout pass (2026-09-03)
 
@@ -280,3 +288,70 @@ Two constraints carry over from the current pass, both deliberate:
 And do not create `/founder`, `/investor`, `/advisor` or `/partner` as new
 top-level roots — the persona is a role gate on an existing route, not a URL
 prefix.
+
+## Three artifacts, one new canvas — 2026-09-07
+
+Three Claude Design artifact URLs arrived together, reported as designs the
+shipped pages did not match: Refer & Earn, Trust Center and Help Center.
+**Only one of the three is a canvas this repository did not already hold.**
+
+`scripts/read-canvas.mjs` decodes a published artifact back into a `.dc.html`.
+An artifact is a bundler shell: gzip+base64 assets in
+`<script type="__bundler/manifest">`, the design itself in
+`<script type="__bundler/template">`. Decoded, it is exactly this format — so an
+artifact never needed a browser to read, and does not need to stay in one.
+
+Decoding all three and diffing them against `canvases/` gave the triage:
+
+| Artifact | Verdict |
+| --- | --- |
+| Refer & Earn | **Genuinely newer.** 67 literals added, 3 removed, every one of them in the share card — a post-and-story block the shipped page has no trace of. It is in this queue. |
+| Trust Center | **Already held.** Identical to `Trust Center v2.dc.html`, which was already committed. |
+| Help Center | **Already held.** Identical to `Help Center.dc.html`, which was already committed. |
+
+"Identical" is measured, not eyeballed: normalising only HTML serialisation —
+`<input>` versus `<input />`, `data-dc-script` versus `data-dc-script=""`, and
+line breaks a DOM round-trip cannot preserve — the decoded output and the
+committed file are the same bytes. Publishing also adds a dismissible "Made with
+Claude Design" badge and mangles camelCase attributes
+(`dangerouslySetInnerHTML` → `sc-camel-dangerously-set-inner-h-t-m-l`); the
+decoder undoes both, which is what made a byte comparison possible at all.
+
+**So the mismatch being reported is not a stale canvas. It is unbuilt work.**
+That is worth saying plainly, because "the design changed" and "the design was
+never built" call for completely different responses.
+
+**`Trust Center v2.dc.html` is filed correctly, and the table above was not —
+that is the correction this triage found.** The two are worth separating,
+because the first thing this triage did was get it backwards.
+
+The canvas is genuinely unbuilt. `ROUTE_MAP.md` grades it UPGRADE, and the
+shipped page is still v1 on the two points v2 turns on: v2 says *"Identity data
+is managed in Account Settings · this page reports status only"*, while
+`TrustCenterPage.jsx:819` renders an editable `<KycVerification embedded />`,
+and v2's multi-company selector appears nowhere — the string `company` does not
+occur in that file.
+
+So it was moved to `canvases/backlog/`, on the strength of this table's line
+reading *"the canvas is built"*. **That was wrong and has been reverted.**
+`design/canvases/README.md` is the README of the folder being sorted, it states the
+sort key as *"is there a live route for this canvas?"*, and it carries a section
+headed *"A file in `integrated/` does not mean 'finished'"* saying that most of
+`integrated/` is `UPGRADE` — a live route that the canvas asks more of. `/trust`
+is live. `backlog/` is *"graded `NEW` or `DEFERRED`. No route yet"*, so filing
+an UPGRADE there makes that description false. And v1 — `Trust Center.dc.html`,
+graded CURRENT — sits in `integrated/`; splitting the two versions of one route
+across two folders would stop the folder answering its own question.
+
+The defect was this table's one-line gloss, which said something narrower than
+the folder means. It has been rewritten to match. **Counts unchanged: 59 / 26 /
+27, recounted rather than assumed.** A canvas that is triaged but not built is
+recorded in its `ROUTE_MAP.md` row, which is where "what shipped from this
+canvas" lives — never by moving the file.
+
+`Help Center.dc.html` stays in `integrated/`, because its ROUTE_MAP row already
+records precisely what shipped and what is blocked on an absent store, and it
+governs **`/docs`** — not `/help`, which is `TicketsPage`. D39 renamed the menu
+label "Support" to "Help Center" and moved `/tickets` to `/help`; the component
+was never touched. Anyone reading that design at `/help` is reading it at the
+wrong address.
