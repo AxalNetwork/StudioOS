@@ -162,10 +162,16 @@ const LIVE = {
     // render prop rather than being wired inside them: the page renders what
     // the caller hands it and learns nothing about licences, and the rows for
     // "export this view" come from the tab that actually loaded them.
+    // THE COLUMNS ARE THE ONES THE PAYLOAD CARRIES. This export named six and
+    // filled three: `GET /services/offerings` serializes `price_usd` and
+    // `is_active`, and has never sent `price`, `currency` or `sla_days` — so
+    // every exported row wrote three empty cells under three confident
+    // headings. `currency` and `sla_days` have no column anywhere; `Price` and
+    // `Listed` are real under the store's own names.
     catalog: (user) => <ServiceCatalogPage user={user} embedded zoneActions={(rows) => partnerZoneActions('offers/catalog', { view: {
-      header: ['Offering', 'Category', 'Price', 'Currency', 'SLA days', 'Listed'],
+      header: ['Offering', 'Category', 'Summary', 'Price (USD)', 'Listed'],
       rows,
-      cells: (o) => [o.title, o.category, o.price, o.currency, o.sla_days, o.listed],
+      cells: (o) => [o.title, o.category, o.summary, o.price_usd, o.is_active ? 'yes' : 'no'],
     } })} />,
     'perk-deals': (user) => <PerksPage user={user} embedded zoneActions={(rows) => partnerZoneActions('offers/perk-deals', { view: {
       header: ['Offer', 'Partner', 'Category', 'Kind', 'Tier', 'Status', 'Claims'],
