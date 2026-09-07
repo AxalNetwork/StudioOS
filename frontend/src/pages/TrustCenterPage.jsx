@@ -16,7 +16,6 @@ import {
 import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
-import KycVerification from '../components/KycVerification';
 
 // Task #25 — these personas are KYC-eligible, so the Identity tab is always
 // shown for them rather than only when the obligation matrix happens to surface
@@ -145,6 +144,95 @@ function StatusPill({ status }) {
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium ${t.pill}`}>
       {String(status || 'pending').replace(/_/g, ' ')}
     </span>
+  );
+}
+
+/**
+ * The last four of an identity document number, and nothing more.
+ *
+ * `GET /kyc/status` runs its payload through `publicKycData` (`kyc.ts:40-54`),
+ * which strips the document BYTES and spreads everything else — so `id_number`
+ * arrives in full. That is fine for the form at `/kyc`, which the holder opened
+ * deliberately to edit it. It is not fine here: this is a status page, often the
+ * first thing on screen, and a passport or national ID number printed on it is a
+ * disclosure the page has no reason to make. The canvas draws `•••• 4471` and is
+ * right to.
+ *
+ * Masked in the CLIENT, deliberately: the value still crosses the wire, so this
+ * is a display decision and not a claim that the number is protected. Masking it
+ * server-side would be the stronger fix and is a separate change — the form at
+ * `/kyc` needs the full value to prefill.
+ */
+function maskIdNumber(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  const tail = s.slice(-4);
+  return tail.length === s.length ? s : `•••• ${tail}`;
+}
+
+/**
+ * One read-only field. A value the platform does not hold reads "Not recorded",
+ * on an amber card — never blank, and never a plausible-looking placeholder.
+ *
+ * The canvas says "Not provided", which is subtly a claim about the USER (they
+ * did not provide it). "Not recorded" is a claim about the PLATFORM, which is
+ * the only one this page can actually stand behind: a value can be absent
+ * because it was never asked for, because a legacy record predates the field, or
+ * because the read failed. The page cannot tell those apart, so it does not try.
+ */
+function ReadOnlyField({ label, value }) {
+  const missing = value == null || value === '';
+  return (
+    <div className={`rounded-lg border px-3.5 py-3 ${missing
+      ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40'
+      : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50'}`}
+    >
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
+      <div className={`mt-1 text-sm ${missing
+        ? 'text-amber-700 dark:text-amber-300'
+        : 'text-slate-900 dark:text-slate-100'}`}
+      >
+        {missing ? 'Not recorded' : value}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Says where a value is edited, on a page that edits nothing.
+ *
+ * This is the whole point of the Trust Center v2 canvas and the reason `/trust`
+ * did not match it: the page used to render an editable KYC form inline, so it
+ * was two things at once — a status report and a submission surface. The canvas
+ * splits them, and the split is worth having: a page that only reports can be
+ * read without fear of changing anything.
+ *
+ * The link goes to `/kyc`, which is where the form actually is, rather than to
+ * Settings, which merely links onward to it (`SettingsPage.jsx:1050`). The
+ * canvas's label says "Account Settings"; naming the destination the reader
+ * actually lands on beats matching the canvas's wording.
+ */
+function ManagedElsewhere({ children, href = '/kyc', cta = 'Open identity verification →' }) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
+      <Lock className="w-3.5 h-3.5 flex-none" />
+      <span>{children}</span>
+      <a href={href} className="font-semibold text-violet-700 underline hover:text-violet-800 dark:text-violet-300 dark:hover:text-violet-200">
+        {cta}
+      </a>
+    </div>
+  );
+}
+
+/** A titled grid of read-only fields. */
+function FieldGrid({ title, fields }) {
+  return (
+    <div className="mb-5 last:mb-0">
+      <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{title}</div>
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        {fields.map((f) => <ReadOnlyField key={f.label} label={f.label} value={f.value} />)}
+      </div>
+    </div>
   );
 }
 
@@ -553,7 +641,15 @@ function AgreementsTab({ obligations, onStart, role }) {
               <ul className="space-y-1 mb-4">
                 {pending.map(p => (
                   <li key={p.envelope_uuid} className="text-sm text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                    <span>{p.agreement_type || 'Agreement'} · envelope {p.envelope_uuid?.slice(0, 8)}…</span>
+                    {/*
+                      `document_type`, not `agreement_type`. The worker's select
+                      says so in its own comment — "there is no `agreement_type`
+                      column on esign_envelopes" (`trust.ts:93`) — and it has
+                      never sent that key, so this label fell through to the
+                      literal 'Agreement' on every pending row since it shipped.
+                      The fallback stays for rows whose type really is null.
+                    */}
+                    <span>{p.document_type || 'Agreement'} · envelope {p.envelope_uuid?.slice(0, 8)}…</span>
                     <StatusPill status={p.status} />
                   </li>
                 ))}
@@ -743,6 +839,7 @@ export default function TrustCenterPage({ chromeless = false }) {
   const [matrix, setMatrix] = useState(null);   // /api/trust/me
   const [legacy, setLegacy] = useState(null);   // /api/trust/summary (old)
   const [requiredNdas, setRequiredNdas] = useState([]); // /api/trust/nda/required
+  const [kyc, setKyc] = useState(null);         // /api/kyc/status — READ ONLY here
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
@@ -766,14 +863,20 @@ export default function TrustCenterPage({ chromeless = false }) {
       // AWAY — `try { await api.getRequiredNdas(); } catch {}` — while the NDA
       // card was fed `summary.ndas`, which is pairwise_ndas rows in a different
       // shape. It is a third settled promise now, and the card reads it.
-      const [m, s, n] = await Promise.allSettled([
+      // `api.kycStatus()` is the same call `<KycVerification />` makes at
+      // `/kyc`. It joins the settled set rather than getting its own effect so
+      // one failed read still leaves the rest of the page standing — the
+      // partial-failure resilience the contract test pins.
+      const [m, s, n, k] = await Promise.allSettled([
         api.trustMe(),
         api.getTrustSummary(),
         api.getRequiredNdas(),
+        api.kycStatus(),
       ]);
       if (m.status === 'fulfilled') setMatrix(m.value); else setMatrix({ obligations: [], role });
       if (s.status === 'fulfilled') setLegacy(s.value); else setLegacy({ ndas: [] });
       setRequiredNdas(n.status === 'fulfilled' ? (n.value?.items || []) : []);
+      setKyc(k.status === 'fulfilled' ? k.value : null);
     } catch (e) {
       setErr(e?.message || 'Failed to load Trust Center');
     } finally { setLoading(false); }
@@ -810,13 +913,97 @@ export default function TrustCenterPage({ chromeless = false }) {
     </Section>
   );
 
-  // Task #25 — the Identity tab is now a real entry point to the Identity
-  // Verification (KYC / AML) form, rendered inline via <KycVerification embedded />
-  // (was a dead-end pointer to Settings). The component supplies its own status
-  // card and investor-only gate; status syncs nightly into the Trust score.
+  /**
+   * Identity — REPORTED, not edited.
+   *
+   * Task #25 embedded `<KycVerification embedded />` here, turning the tab into
+   * a submission surface. Trust Center v2 splits that back apart: "Identity data
+   * is managed in Account Settings · this page reports status only." This tab is
+   * now the report.
+   *
+   * NOBODY IS STRANDED BY THE REMOVAL, which is the thing to check before taking
+   * a form away. `/kyc` is still mounted (`App.jsx:2019`) and still renders the
+   * same component full-page; `SettingsPage.jsx:1050` links to it, and so does
+   * every callout on this tab. The form did not go away — it stopped being in
+   * two places at once.
+   *
+   * Every field below comes from `publicKycData`. Where the canvas draws a
+   * filename and an upload date for the document, this draws presence: the
+   * payload carries `document_uploaded` as a boolean and nothing else, and a
+   * filename nobody sent is exactly the kind of detail this pass exists to stop.
+   */
+  const kd = kyc?.kyc_data || null;
+  const fullName = [kd?.legal_first_name, kd?.legal_last_name].filter(Boolean).join(' ') || null;
   const identity = (
-    <Section icon={IdCard} title="Identity (KYC)" subtitle="Government-issued ID for AML compliance — submit it right here. Status syncs into your Trust score.">
-      <KycVerification embedded />
+    <Section
+      icon={IdCard}
+      title="Identity verification (KYC)"
+      subtitle="Government-issued ID for AML compliance. Status syncs into your Trust score."
+    >
+      <ManagedElsewhere>
+        These values are read from your account profile. This page never edits them.
+      </ManagedElsewhere>
+
+      <ObligationList
+        obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'identity')}
+        emptyText="Identity verification is not required for your role."
+        onStart={startObligation}
+      />
+
+      {kyc ? (
+        <div className="mt-5">
+          <FieldGrid
+            title="Legal identity"
+            fields={[
+              { label: 'Legal name', value: fullName },
+              { label: 'Date of birth', value: kd?.date_of_birth },
+              { label: 'Nationality', value: kd?.nationality },
+              { label: 'Phone', value: kd?.phone },
+            ]}
+          />
+          <FieldGrid
+            title="Residential address"
+            fields={[
+              { label: 'Country', value: kd?.country },
+              { label: 'Address line 1', value: kd?.address_line1 },
+              { label: 'City', value: kd?.city },
+              { label: 'State / region', value: kd?.state_region },
+              { label: 'Postal code', value: kd?.postal_code },
+            ]}
+          />
+          <FieldGrid
+            title="Government ID"
+            fields={[
+              { label: 'ID type', value: kd?.id_type },
+              // Last four only — see `maskIdNumber`.
+              { label: 'ID number', value: maskIdNumber(kd?.id_number) },
+              // A boolean is all the payload carries, so a boolean is all this says.
+              { label: 'Document', value: kd?.document_uploaded ? 'Uploaded' : null },
+            ]}
+          />
+          <FieldGrid
+            title="Screening & disclosure"
+            fields={[
+              {
+                label: 'Politically-exposed-person disclosure',
+                value: kd?.pep_self_disclosed === true ? 'Declared'
+                  : kd?.pep_self_disclosed === false ? 'Declared: not a PEP' : null,
+              },
+              {
+                // The platform will not screen without this, and says so rather
+                // than leaving an unexplained gap in the sanctions tab.
+                label: 'Sanctions screening consent',
+                value: kd?.sanctions_acknowledged ? 'Granted' : null,
+              },
+            ]}
+          />
+        </div>
+      ) : (
+        <p className="mt-5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          Your identity record could not be read just now, so the fields behind it are not shown.
+          The obligation status above comes from a different call and is still current.
+        </p>
+      )}
     </Section>
   );
 
@@ -825,16 +1012,45 @@ export default function TrustCenterPage({ chromeless = false }) {
   // real source and always was.
   const entity = obligations.some(o => o.obligation_key === 'kyb_v1') && (
     <Section icon={Building2} title="Entity verification (KYB)" subtitle="Required for service-provider partners and entity investors.">
+      <ManagedElsewhere cta="Open entity details →" href="/account">
+        Entity details are maintained in Account Settings. This page reports their status.
+      </ManagedElsewhere>
       <ObligationList
         obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'entity')}
         emptyText="KYB not required."
         onStart={startObligation}
       />
+      {/*
+        THE ONE THING THIS TAB DELIBERATELY DOES NOT DRAW, and why.
+
+        Trust Center v2 puts a "Your companies" card here — a row per company,
+        each with its own KYB pill, under the line "Each company has its own KYB
+        state and its own sidebar workspace."
+
+        This platform does not work that way, and the difference is in the
+        schema, not the styling. `corporate_profiles` upserts
+        `ON CONFLICT(user_id)` and the KYB obligation is updated
+        `WHERE user_id = ? AND obligation_key = 'kyb_v1'` (`trust.ts:791-819`);
+        none of the eighteen `/trust/*` routes accepts a company at all. One
+        user has one KYB. A selector over three companies would have changed
+        nothing when clicked, which is worse than not offering it — so the
+        sentence below says what is true instead, and task #108 carries the
+        product question of whether it SHOULD be per-company, with the migration
+        that would take.
+      */}
+      <p className="mt-4 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+        Entity verification is recorded once per account, not per company. If you belong to more than one
+        company, this status covers you as a verified person behind all of them — the platform does not
+        hold a separate KYB record per company, so there is nothing here to switch between.
+      </p>
     </Section>
   );
 
   const accreditation = role === 'investor' && (
     <Section icon={BadgeCheck} title="Accredited investor verification" subtitle="Your accreditation obligation and its current status.">
+      <ManagedElsewhere cta="Open account settings →" href="/account">
+        Basis and supporting evidence are submitted from your account profile.
+      </ManagedElsewhere>
       <ObligationList
         obligations={obligations.filter(o => OBLIGATION_META[o.obligation_key]?.tab === 'accreditation')}
         emptyText="Accreditation not required."
@@ -876,6 +1092,25 @@ export default function TrustCenterPage({ chromeless = false }) {
         )}
         <TrustScoreBadge size="md" score={score} missing={missing} label="Trust score" />
       </div>
+
+      {/*
+        The page's promise about itself — OUTSIDE the `chromeless` guard, and
+        that placement is a correction.
+
+        It went inside first, with the heading, on the reasoning that the
+        investor frame supplies its own header and must not get two. Rendering
+        the investor frame showed the cost: `chromeless` suppressed the line
+        entirely, so the one reader most likely to be mid-verification never saw
+        the sentence explaining why nothing here is editable. It is not a
+        heading — `investorWorkspace` draws an <h1> and no provenance line, so
+        there was never anything to duplicate. It sits above the tabs now, where
+        both frames show it exactly once.
+      */}
+      <p className="mb-5 text-xs text-slate-500 dark:text-slate-400">
+        Identity data is managed in{' '}
+        <a href="/kyc" className="underline hover:text-slate-700 dark:hover:text-slate-300">identity verification</a>
+        {' '}· this page reports status only.
+      </p>
 
       <div className="border-b border-slate-200 dark:border-slate-700 mb-6 flex gap-1 overflow-x-auto" data-testid="trust-center-page">
         {tabs.map(t => {
