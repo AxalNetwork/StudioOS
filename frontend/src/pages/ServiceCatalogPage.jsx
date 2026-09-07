@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Plus, Search, Filter, Briefcase, Clock, ShieldCheck, Edit3,
+  Plus, Search, Filter, Briefcase, ShieldCheck, Edit3,
   Trash2, AlertCircle, X, Check, ExternalLink, Package, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -95,7 +95,7 @@ export function BrowseTab({ user, isFounder }) {
       let list = r.items || [];
       if (filters.q) {
         const q = filters.q.toLowerCase();
-        list = list.filter((o) => `${o.title} ${o.description} ${o.partner_name || ''}`.toLowerCase().includes(q));
+        list = list.filter((o) => `${o.title} ${o.summary || ''} ${o.partner_name || ''}`.toLowerCase().includes(q));
       }
       setRows(list);
     } catch (e) {
@@ -146,6 +146,25 @@ export function BrowseTab({ user, isFounder }) {
   );
 }
 
+/**
+ * The offering's price, or null — never a throw, and never a fabricated zero.
+ *
+ * WHY THIS EXISTS AT ALL. Every price site in this file read `o.price` and
+ * called `.toLocaleString()` on it unguarded. `GET /services/offerings`
+ * serializes `price_usd` and has never sent a `price`, so each of those four
+ * sites threw `Cannot read properties of undefined` on the FIRST row it drew.
+ * The page has looked fine only because `service_offerings` holds no rows in
+ * production: the empty state renders, the card that crashes never does.
+ *
+ * `price_usd` is also nullable in the schema and in the PUT that writes it, so
+ * a row can legitimately carry no price. That is not zero — an offering priced
+ * on enquiry is not an offering that costs nothing — so it renders as a dash.
+ */
+function priceLabel(o) {
+  const usd = o?.price_usd;
+  return typeof usd === 'number' && Number.isFinite(usd) ? `$${usd.toLocaleString()}` : '—';
+}
+
 function OfferingCard({ o, onClick }) {
   return (
     <button onClick={onClick} className="text-left bg-white border border-gray-200 hover:border-violet-300 hover:shadow-sm transition rounded-xl p-4 flex flex-col gap-2 dark:bg-gray-900 dark:border-gray-800">
@@ -155,14 +174,13 @@ function OfferingCard({ o, onClick }) {
           <div className="text-xs text-gray-500 mt-0.5">{o.partner_name || 'Unknown partner'} · {CAT_LABEL[o.category] || o.category}</div>
         </div>
         <span className="text-xs px-2 py-0.5 rounded-full border bg-violet-50 text-violet-700 border-violet-200 whitespace-nowrap">
-          ${o.price.toLocaleString()} {o.currency?.toUpperCase()}
+          {priceLabel(o)}
         </span>
       </div>
-      <p className="text-sm text-gray-700 line-clamp-3 dark:text-gray-300">{o.description}</p>
+      <p className="text-sm text-gray-700 line-clamp-3 dark:text-gray-300">{o.summary}</p>
       <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
-        {o.sla_days != null && <span className="flex items-center gap-1"><Clock size={12} /> {o.sla_days}d SLA</span>}
         {o.partner_kyb_status === 'verified' && <span className="flex items-center gap-1 text-emerald-700"><ShieldCheck size={12} /> Verified</span>}
-        {!o.listed && <span className="flex items-center gap-1 text-amber-700">Unlisted</span>}
+        {!o.is_active && <span className="flex items-center gap-1 text-amber-700">Unlisted</span>}
       </div>
     </button>
   );
@@ -199,11 +217,11 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
       <div className="space-y-4 text-sm">
         <div className="text-xs text-gray-500">{offering.partner_name} · {CAT_LABEL[offering.category] || offering.category}</div>
         <div className="flex items-center gap-3">
-          <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">${offering.price.toLocaleString()} {offering.currency?.toUpperCase()}</span>
-          {offering.sla_days != null && <span className="text-xs px-2 py-0.5 rounded-full border bg-gray-50 text-gray-700 border-gray-200 dark:text-gray-300 dark:border-gray-800">SLA {offering.sla_days} days</span>}
+          <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">{priceLabel(offering)}</span>
         </div>
-        <Field label="Description"><p className="text-gray-800 whitespace-pre-line dark:text-gray-200">{offering.description}</p></Field>
-        <Field label="Deliverables"><p className="text-gray-800 whitespace-pre-line dark:text-gray-200">{offering.deliverables}</p></Field>
+        <Field label="Description"><p className="text-gray-800 whitespace-pre-line dark:text-gray-200">{offering.summary}</p></Field>
+        {/* NO `Deliverables` FIELD: there is no such column, so this rendered an
+            empty paragraph under a confident heading on every offering. */}
 
         {isFounder && !done && (
           <div className="border-t pt-4 space-y-3">
@@ -218,7 +236,7 @@ function OfferingDetailModal({ offering, user, isFounder, onClose }) {
             </Field>
             {error && <ErrorBox message={error} />}
             <button disabled={busy || !projectId} onClick={engage} className="bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-md px-4 py-2 text-sm font-medium flex items-center gap-2">
-              <Check size={14} /> {busy ? 'Booking…' : `Book this offering — $${offering.price.toLocaleString()}`}
+              <Check size={14} /> {busy ? 'Booking…' : `Book this offering — ${priceLabel(offering)}`}
             </button>
           </div>
         )}
@@ -271,7 +289,7 @@ export function MineTab({ user, zoneActions }) {
 
   async function toggleListed(o) {
     try {
-      await api.updateServiceOffering(o.id, { listed: !o.listed });
+      await api.updateServiceOffering(o.id, { is_active: !o.is_active });
       load();
     } catch (e) { setError(e.message); }
   }
@@ -308,17 +326,17 @@ export function MineTab({ user, zoneActions }) {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{o.title}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{CAT_LABEL[o.category] || o.category} · ${o.price.toLocaleString()} {o.currency?.toUpperCase()}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{CAT_LABEL[o.category] || o.category} · {priceLabel(o)}</div>
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded-full border ${o.listed ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                {o.listed ? 'Listed' : 'Unlisted'}
+              <span className={`text-xs px-2 py-0.5 rounded-full border ${o.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                {o.is_active ? 'Listed' : 'Unlisted'}
               </span>
             </div>
-            <p className="text-sm text-gray-700 line-clamp-2 dark:text-gray-300">{o.description}</p>
+            <p className="text-sm text-gray-700 line-clamp-2 dark:text-gray-300">{o.summary}</p>
             <div className="flex items-center gap-2 pt-1">
               <button onClick={() => { setEditing(o); setShowForm(true); }} className="text-xs flex items-center gap-1 text-violet-700 hover:text-violet-900"><Edit3 size={12} /> Edit</button>
               <button onClick={() => toggleListed(o)} className="text-xs flex items-center gap-1 text-gray-600 hover:text-gray-900">
-                {o.listed ? <ToggleRight size={14} /> : <ToggleLeft size={14} />} {o.listed ? 'Unlist' : 'List'}
+                {o.is_active ? <ToggleRight size={14} /> : <ToggleLeft size={14} />} {o.is_active ? 'Unlist' : 'List'}
               </button>
               <button onClick={() => remove(o)} className="text-xs flex items-center gap-1 text-rose-600 hover:text-rose-800 ml-auto"><Trash2 size={12} /> Delete</button>
             </div>
@@ -336,16 +354,31 @@ export function MineTab({ user, zoneActions }) {
   );
 }
 
+/**
+ * The five fields `service_offerings` actually has, and the three it does not.
+ *
+ * THIS FORM USED TO COLLECT EIGHT AND SAVE TWO. It posted `description`,
+ * `deliverables`, `price`, `currency`, `sla_days` and `listed`; `POST
+ * /services/offerings` reads `title`, `category`, `summary`, `price_usd` and
+ * `is_active`, and `PUT` reads the same five. So a partner filled in a price,
+ * a currency, an SLA and a description, pressed save, and got a row carrying a
+ * title and a category — every other keystroke dropped in the request body
+ * with no error, because a field the handler does not name is simply not read.
+ *
+ * `deliverables`, `currency` and `sla_days` have no column at all, in the table
+ * or in either handler. Their inputs are gone rather than left collecting text
+ * that goes nowhere — an input is a promise as much as a button is. Adding
+ * them back is a migration, and a migration is a decision.
+ *
+ * `description` is the same field as the store's `summary`; only the name
+ * differed, so it is renamed rather than removed. `listed` is `is_active`.
+ */
 function OfferingFormModal({ offering, onClose }) {
   const [form, setForm] = useState({
     title: offering?.title || '',
-    description: offering?.description || '',
-    deliverables: offering?.deliverables || '',
+    summary: offering?.summary || '',
     category: offering?.category || 'legal',
-    price: offering?.price ?? '',
-    currency: offering?.currency || 'usd',
-    sla_days: offering?.sla_days ?? '',
-    listed: offering?.listed ?? true,
+    price_usd: offering?.price_usd ?? '',
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -353,10 +386,11 @@ function OfferingFormModal({ offering, onClose }) {
   async function save() {
     setBusy(true); setError(null);
     try {
+      // An empty price is null, not zero: an offering priced on enquiry does
+      // not cost nothing, and the column is nullable for exactly that.
       const payload = {
         ...form,
-        price: Number(form.price),
-        sla_days: form.sla_days === '' ? null : Number(form.sla_days),
+        price_usd: form.price_usd === '' ? null : Number(form.price_usd),
       };
       if (offering) await api.updateServiceOffering(offering.id, payload);
       else await api.createServiceOffering(payload);
@@ -376,27 +410,22 @@ function OfferingFormModal({ offering, onClose }) {
               {CATEGORIES.map((c) => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}
             </select>
           </Field>
-          <Field label="SLA (days)">
-            <input type="number" value={form.sla_days} onChange={(e) => setForm({ ...form, sla_days: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
+          <Field label="Price (USD)">
+            <input type="number" value={form.price_usd} onChange={(e) => setForm({ ...form, price_usd: e.target.value })} placeholder="Leave blank for “on enquiry”" className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
           </Field>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Price">
-            <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
-          </Field>
-          <Field label="Currency">
-            <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} maxLength={4} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
-          </Field>
-        </div>
-        <Field label="Description (what the founder gets)">
-          <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
+        <Field label="Summary (what the founder gets)">
+          <textarea rows={3} value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
         </Field>
-        <Field label="Deliverables (one per line)">
-          <textarea rows={5} value={form.deliverables} onChange={(e) => setForm({ ...form, deliverables: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full dark:border-gray-700" />
-        </Field>
-        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-          <input type="checkbox" checked={!!form.listed} onChange={(e) => setForm({ ...form, listed: e.target.checked })} /> Listed in public catalogue
-        </label>
+        {/* NO `Deliverables` FIELD. `service_offerings` has no column for it and
+            neither handler reads one, so five rows of typing went into the
+            request body and nowhere else. Listing it back is a migration.
+
+            NO `Listed` CHECKBOX EITHER, and that one is not a gap. Listing is
+            `is_active`, POST sets it to 1, and the manage list below already
+            toggles it per row with a control that says which way it is going —
+            a second copy in this modal was a duplicate that wrote a field name
+            the handler ignores, so the toggle here silently did nothing. */}
         {error && <ErrorBox message={error} />}
         <div className="flex justify-end gap-2 pt-2">
           <button onClick={onClose} className="px-4 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-700">Cancel</button>

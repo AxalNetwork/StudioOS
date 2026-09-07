@@ -227,11 +227,38 @@ export default function AdvisorBucketRoutes({ preview = false }) {
     />;
   }, [prefix, slug, preview, isRoot, bucket]);
 
+  // ONE SENTENCE PER BUCKET, DRAWN ON THE BUCKET ROOT. Keyed by prefix, which
+  // is right for a root and wrong for a zone: all five Expertise zones printed
+  // this same line under five different headings, so Profile, Services, Proof
+  // and Thinking each told the reader how the market finds them.
   const INTRO = {
     '/practice': 'One practice. What is coming in, what is committed, and what has been delivered.',
     '/cohorts': 'One cohort at a time. Founder data comes from the Lab and is read-only to you.',
     '/expertise': 'How the market finds you, and what it finds when it does.',
   };
+
+  /**
+   * The heading and the line under it, per Expertise zone, from the canvas.
+   *
+   * `Pages · Advisor Expertise` (`design/incoming/`) gives each artboard an
+   * `h1` that is NOT the zone's nav label — `Practice profile` under a pill
+   * reading `Profile`, `Evidence` under `Proof` — and a `sub` naming what that
+   * zone lists. The shell was passing `title` only on the bucket root, so every
+   * zone fell back to its pill label, and `intro` only ever carried the bucket
+   * sentence above. Both are the canvas's own strings.
+   *
+   * Only Expertise has them because only Expertise has a canvas in this shape;
+   * `/practice` and `/cohorts` keep the bucket sentence on every zone, which is
+   * what their own canvases draw.
+   */
+  const EXPERTISE_ZONE_HEAD = {
+    profile: { h1: 'Practice profile', sub: 'Positioning, sectors, stages, languages, geography, availability.' },
+    services: { h1: 'Service ledger', sub: 'Named services, durations and prices.' },
+    proof: { h1: 'Evidence', sub: 'Completed engagements, published outcomes, credentials.' },
+    thinking: { h1: 'Published thinking', sub: 'Points of view, newest first.' },
+    visibility: { h1: 'Surfaces & funnel', sub: 'Impressions, views, requests and engagements per surface.' },
+  };
+  const zoneHead = prefix === '/expertise' && !isRoot ? EXPERTISE_ZONE_HEAD[slug] : null;
 
   // The Worker AI rail, absent from all fifteen of these routes until now: the
   // shell has taken a `rail` slot since the founder pass and this caller never
@@ -289,9 +316,9 @@ export default function AdvisorBucketRoutes({ preview = false }) {
   return (
     <WorkspaceShell
       role="advisor"
-      title={isRoot ? bucketTitle(bucket) : undefined}
+      title={isRoot ? bucketTitle(bucket) : zoneHead?.h1}
       scope={prefix === '/cohorts' ? 'One cohort' : 'One practice'}
-      intro={INTRO[prefix]}
+      intro={zoneHead?.sub || INTRO[prefix]}
       activeSlug={isRoot ? null : undefined}
       rail={RAIL && (
         <WorkerRail
