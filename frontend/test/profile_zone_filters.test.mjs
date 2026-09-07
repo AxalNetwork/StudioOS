@@ -22,7 +22,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
@@ -37,12 +37,33 @@ const PROFILES = {
   founder: {
     table: FOUNDER_ZONE_FILTERS,
     build: founderZoneFilters,
+    call: 'founderZoneFilters',
+    // Build, Raise and Grow only. Founder Network (3 zones) and Founder
+    // Research (5) also carry `filters:` arrays and are NOT covered here yet;
+    // they are rendered by `NetworkWorkspace` and `ResearchWorkspace`, which
+    // the investor profile has to touch for the same eight slugs, so both
+    // licences' halves of those two components land together or not at all.
     canvas: /^Pages · Founder (Build|Raise|Grow)\.dc\.html$/,
+    pages: ['frontend/src/pages/founder', 'frontend/src/workspaces'],
+    actions: 'frontend/src/workspaces/founderZoneActions.js',
     zones: 18,
+    mounted: 18,
+    // Founder canvas routes are the live routes.
+    live: (route) => route.replace(/^\//, ''),
   },
 };
 
-/** Every matching artboard's route and its `filters:` labels, from the canvas. */
+/**
+ * Every matching artboard's route and its `filters:` labels, from the canvas.
+ *
+ * `profile.live` maps a canvas route onto the route the router actually mounts.
+ * The founder canvases need no mapping; the investor Fund canvas says `/fund/*`
+ * where the router says `/funds/*` and mounts `accounting` at the slug
+ * `ledger`. `profile_zone_actions.test.mjs` has carried the same hook since it
+ * was written — the mapping is spelled out per profile rather than guessed,
+ * so a canvas route that stops resolving fails here instead of matching
+ * nothing and quietly shrinking the covered set.
+ */
 function canvasFilters(profile) {
   const out = {};
   for (const file of readdirSync(resolve(root, 'design/canvases/integrated')).filter((f) => profile.canvas.test(f))) {
@@ -51,7 +72,7 @@ function canvasFilters(profile) {
       const route = chunk.slice(0, chunk.indexOf("'"));
       const filters = chunk.match(/filters:\s*fil\(\[([^\]]*)\]/);
       if (!filters) continue;
-      out[route.replace(/^\//, '')] = filters[1]
+      out[profile.live(route)] = filters[1]
         .split(',')
         .map((one) => one.trim().replace(/^'|'$/g, ''))
         .filter(Boolean);
@@ -183,65 +204,98 @@ for (const [name, profile] of Object.entries(PROFILES)) {
       }
     }
   });
-}
-
-/**
- * The assertion that closes the hole the rest of this file cannot see.
- *
- * Everything above takes `key: 'stalled'` at its word. Mutation-checking found
- * that turning `/grow/customers`'s dead "Stalled" filter back into a live chip
- * passed all of it — which is the precise defect this whole change exists to
- * remove. A table cannot prove its own keys do anything; only the page that
- * has to write the predicate can. So: every live key must appear in the file
- * that mounts that zone's filters, with comments stripped so a key mentioned
- * in a docblock cannot stand in for one that is used.
- *
- * A zone nobody mounts is not silently exempt — MOUNTED counts them, and the
- * count only ever goes up.
- */
-const MOUNTED = 18;
-
-function mountingFile(zone) {
-  const dirs = ['frontend/src/pages/founder', 'frontend/src/workspaces'];
-  for (const dir of dirs) {
-    for (const file of readdirSync(resolve(root, dir))) {
-      if (!/\.jsx?$/.test(file)) continue;
-      const src = read(`${dir}/${file}`);
-      if (src.includes(`founderZoneFilters('${zone}'`)) return { path: `${dir}/${file}`, src };
-    }
-  }
-  return null;
-}
-
-test('a live filter key exists in the page that would have to implement it', () => {
-  let mounted = 0;
-  for (const [zone, rows] of Object.entries(FOUNDER_ZONE_FILTERS)) {
-    const page = mountingFile(zone);
-    if (!page) continue;
-    mounted += 1;
-    // The mount itself is stripped first. Without that, writing
-    // `founderZoneFilters('grow/customers', { value: 'stalled' })` would satisfy
-    // the search for 'stalled' using nothing but the declaration under test.
-    const code = codeOnly(page.src).replace(/founderZoneFilters\([^;]*?\)\s*\}/gs, '');
-    for (const row of rows) {
-      if (!row.key) continue;
+  /**
+   * The assertion that closes the hole the rest of this file cannot see.
+   *
+   * Everything above takes `key: 'stalled'` at its word. Mutation-checking
+   * found that turning `/grow/customers`'s dead "Stalled" filter back into a
+   * live chip passed all of it — which is the precise defect this whole change
+   * exists to remove. A table cannot prove its own keys do anything; only the
+   * page that has to write the predicate can. So: every live key must appear in
+   * the file that mounts that zone's filters, with comments stripped so a key
+   * mentioned in a docblock cannot stand in for one that is used.
+   *
+   * A zone nobody mounts is not silently exempt — `profile.mounted` counts
+   * them, and the count only ever goes up.
+   */
+  test(`${name}: a live filter key exists in the page that would have to implement it`, () => {
+    let mounted = 0;
+    for (const [zone, rows] of Object.entries(profile.table)) {
+      const page = mountingFile(profile, zone);
+      if (!page) continue;
+      mounted += 1;
+      // The mount itself is stripped first. Without that, writing
+      // `founderZoneFilters('grow/customers', { value: 'stalled' })` would
+      // satisfy the search for 'stalled' using nothing but the declaration
+      // under test.
+      const code = codeOnly(page.src).replace(new RegExp(`${profile.call}\\([^;]*?\\)\\s*\\}`, 'gs'), '');
+      for (const row of rows) {
+        if (!row.key) continue;
       // Either form counts: a page may compare (`period === 'six'`) or look up
       // (`PERIODS[period]`, keyed `six:`). Both implement the filter; insisting
       // on one would push pages toward a shape to satisfy a test.
       //
       // This is a proxy and it is worth saying what it cannot do: it proves the
       // page KNOWS the key, not that the predicate behind it is right. What it
-      // does close is the hole mutation-checking found — declaring a filter live
-      // without touching the page that would have to serve it.
-      const used = new RegExp(`(['"\`]${row.key}['"\`]|\\b${row.key}\\s*:)`);
-      assert.ok(
-        used.test(code),
-        `${zone} declares the live filter '${row.key}' but ${page.path} never uses it`,
-      );
+        // does close is the hole mutation-checking found — declaring a filter
+        // live without touching the page that would have to serve it.
+        const used = new RegExp(`(['"\`]${row.key}['"\`]|\\b${row.key}\\s*:)`);
+        assert.ok(
+          used.test(code),
+          `${zone} declares the live filter '${row.key}' but ${page.path} never uses it`,
+        );
+      }
+    }
+    assert.equal(mounted, profile.mounted,
+      `${mounted} ${name} zones mount their filters; the profile says ${profile.mounted}`);
+  });
+
+  test(`${name}: every zone that has a filter table also has an action table for the same zone`, () => {
+    // The two halves of one row. A zone in one and not the other means the row
+    // was half-wired, which is exactly how `/raise/status` lost "Timeline".
+    const actions = read(profile.actions);
+    for (const zone of Object.keys(profile.table)) {
+      assert.ok(actions.includes(`'${zone}':`), `${zone} has filters but no actions`);
+    }
+  });
+}
+
+test('canvasFilters maps a canvas route onto the route the router mounts', () => {
+  // The hook exists for the investor Fund canvas, which says `/fund/*` where
+  // the router says `/funds/*` and mounts `accounting` at the slug `ledger`.
+  // Asserted directly rather than left to be exercised by the first profile
+  // that needs it: a mapping nothing runs is a mapping nobody notices breaking.
+  const mapped = canvasFilters({
+    canvas: /^Pages · Founder Build\.dc\.html$/,
+    live: (route) => `x/${route.replace(/^\//, '').replace('/', '-')}`,
+  });
+  assert.ok(mapped['x/build-this-week'], 'the route was not remapped');
+  assert.ok(!mapped['build/this-week'], 'the unmapped route survived');
+  assert.deepEqual(mapped['x/build-this-week'], ['This week', 'Last 4', 'All 14', 'Carried only'],
+    'remapping changed the labels it carries');
+});
+
+/**
+ * The file that mounts a zone's filters, searched across this profile's own
+ * bodies. `pages` entries may be a directory or a single file: most licences
+ * keep their zone bodies in one folder, but a few live loose in
+ * `frontend/src/pages` beside a hundred unrelated ones, and naming those
+ * outright beats scanning the folder.
+ */
+function mountingFile(profile, zone) {
+  const needle = `${profile.call}('${zone}'`;
+  for (const entry of profile.pages) {
+    const full = resolve(root, entry);
+    const files = statSync(full).isDirectory()
+      ? readdirSync(full).filter((f) => /\.jsx?$/.test(f)).map((f) => `${entry}/${f}`)
+      : [entry];
+    for (const rel of files) {
+      const src = read(rel);
+      if (src.includes(needle)) return { path: rel, src };
     }
   }
-  assert.equal(mounted, MOUNTED, `${mounted} zones mount their filters; MOUNTED says ${MOUNTED}`);
-});
+  return null;
+}
 
 test('filters sharing one reason collapse into one sentence that names them all', () => {
   // /build/cadence has four filters and one reason. Saying it four times is
@@ -257,12 +311,4 @@ test('filters sharing one reason collapse into one sentence that names them all'
   assert.deepEqual(week[1].labels, ['Carried only']);
 });
 
-test('every zone that has a filter table also has an action table for the same zone', () => {
-  // The two halves of one row. A zone in one and not the other means the row
-  // was half-wired, which is exactly how `/raise/status` lost "Timeline".
-  const actions = read('frontend/src/workspaces/founderZoneActions.js');
-  for (const zone of Object.keys(FOUNDER_ZONE_FILTERS)) {
-    assert.ok(actions.includes(`'${zone}':`), `${zone} has filters but no actions`);
-  }
-});
 
