@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, CircleDot, FileText, Filter, RefreshCw, Target } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, CircleDot, FileText, RefreshCw, Target } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderRaiseStatus.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const clean = (value) => String(value ?? '').trim();
@@ -140,7 +141,10 @@ export default function FounderRaiseStatus() {
             <Link to={query ? `/raise/status${query}` : '/raise/status'} className="is-active" data-testid="link-status-zone">Status</Link>
             <Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`}>Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><span className="fr-status-zone-disabled">Liquidity unavailable</span>
           </nav>
-          <ZoneActions className="mt-3" items={founderZoneActions('raise/status', { query, view: { scope: project?.name, header: ['Record', 'Source', 'Owner', 'State', 'Holds up'], rows, cells: (r) => [r.label, r.source, r.owner, r.state, r.holds] } })} />
+          <ZoneToolbar
+              filters={founderZoneFilters('raise/status', { value: filter, onChange: setFilter })}
+              actions={founderZoneActions('raise/status', { query, view: { scope: project?.name, header: ['Record', 'Source', 'Owner', 'State', 'Holds up'], rows, cells: (r) => [r.label, r.source, r.owner, r.state, r.holds] } })}
+            />
         </header>
         {(errors.projects || Object.keys(errors).length > 0) && <div className="fr-status-alert" role="alert" data-testid="status-raise-status-partial"><AlertCircle size={16} /><span>{errors.projects || 'Some selected-project raise records are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <StatusSkeleton /> : errors.projects ? <UnavailableStatus onRetry={load} /> : !project ? <EmptyStatus /> : <StatusContent project={project} round={round} roundInfo={roundInfo} target={target} raised={raised} coverage={coverage} rows={visibleRows} allRows={rows} blockerCount={blockerCount} openDate={openDate} documents={documents} prospects={prospects} errors={errors} filter={filter} setFilter={setFilter} query={query} />}
@@ -161,7 +165,9 @@ function StatusContent({ project, round, roundInfo, target, raised, coverage, ro
     </div>
     <section className="fr-status-card fr-status-items">
       <div className="fr-status-card-head"><div><Target size={16} /><h2>Open items, and what each one holds up</h2></div><span>{allRows.length} stored record{allRows.length === 1 ? '' : 's'}</span></div>
-      <div className="fr-status-toolbar"><div className="fr-status-filters"><Filter size={13} /><button type="button" className={filter === 'overview' ? 'is-selected' : ''} onClick={() => setFilter('overview')}>Overview</button><button type="button" className={filter === 'blockers' ? 'is-selected' : ''} onClick={() => setFilter('blockers')}>Blockers</button><button type="button" className={filter === 'investors' ? 'is-selected' : ''} onClick={() => setFilter('investors')}>Investors</button><button type="button" disabled>Timeline unavailable</button></div><span className="fr-status-filter-meta">Records first · explicit holds-up only</span></div>
+            {/* Its filter row is the zone header's now, where the canvas draws
+          it. Overview, Blockers and Investors moved across unchanged;
+          Timeline joined them as prose, having never been drawn at all. */}
       {rows.length ? <div className="fr-status-table-wrap"><table><thead><tr><th>Blocker / record</th><th>Owner</th><th>State</th><th>Holds up</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} data-testid={`row-raise-status-${row.id}`}><td><strong>{row.label}</strong><small>{row.source}</small></td><td>{row.owner}</td><td><span className={`fr-status-pill pill-${stateTone(row.state)}`}>{row.state}</span></td><td>{row.holds}</td></tr>)}</tbody></table></div> : <div className="fr-status-inline-empty"><CircleDot size={18} /><div><strong>{filter === 'overview' ? 'No raise records are stored.' : 'No records match this view.'}</strong><p>FR1 shows only records returned for the selected startup.</p></div></div>}
       <p className="fr-status-note">The table combines stored legal records and investor prospects. Owners, hold-up consequences, and blocker classifications are shown only when returned by their source; the page does not infer close risk from names or ordering.</p>
     </section>

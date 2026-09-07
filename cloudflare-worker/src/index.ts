@@ -160,6 +160,7 @@ import wellbeingRoutes from './routes/wellbeing';
 import complianceRoutes from './routes/compliance';
 import captableRoutes from './routes/captable';
 import dataRoomRoutes from './routes/data_room';
+import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
@@ -891,6 +892,10 @@ app.route('/api/wellbeing', wellbeingRoutes);
 app.route('/api/compliance', complianceRoutes);
 app.route('/api/captable', captableRoutes);
 app.route('/api/data-room', dataRoomRoutes);
+// Task #55 — a founder opens a client record to a named advisor, scope by
+// scope. The shape is `data_room_grants`; the gate is the grant AND the
+// advisor's current role, re-checked on every read.
+app.route('/api/advisor-grants', advisorGrantRoutes);
 app.route('/api/messages', messagesRoutes);
 app.route('/api/perks', perksRoutes);
 app.route('/api/cofounder', cofounderRoutes);

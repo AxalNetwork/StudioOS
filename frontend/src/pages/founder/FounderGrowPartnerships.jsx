@@ -5,8 +5,9 @@ import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderGrowDesk.css';
 import './founderGrowPartnerships.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -85,7 +86,10 @@ export default function FounderGrowPartnerships() {
 
   return <main className="a5-grow fg-partnerships" data-testid="founder-grow-partnerships"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-partnerships-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Partnerships</b></div><span>Founder / Grow</span><div><h1>Partnerships</h1><p>Partner pipeline, proposals and retainers.</p></div>{projects.length > 1 && <label className="fg-partnerships-picker"><span>Startup</span><select data-testid="select-grow-partnerships-project" value={project?.id || ''} onChange={(event) => { const next = new URLSearchParams(params); next.set('project_id', event.target.value); setParams(next); }}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<nav aria-label="Grow sections">{nav.map(([label, to]) => <Link data-testid={`link-grow-partnerships-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Partnerships' ? 'is-active' : ''}>{label}</Link>)}</nav>
-    <ZoneActions className="mt-3" items={founderZoneActions('grow/partnerships', { query, view: { scope: project?.name, header: ['Partner', 'Type', 'Status', 'State', 'Created'], rows: visible, cells: (r) => [r.title, r.type, r.status, r.state, r.created_at] } })} /></header>
+    <ZoneToolbar
+              filters={founderZoneFilters('grow/partnerships', { value: view, onChange: setView })}
+              actions={founderZoneActions('grow/partnerships', { query, view: { scope: project?.name, header: ['Partner', 'Type', 'Status', 'State', 'Created'], rows: visible, cells: (r) => [r.title, r.type, r.status, r.state, r.created_at] } })}
+            /></header>
     {error && <div className="a5-grow-error" data-testid="status-grow-partnerships-partial"><AlertCircle size={15} /><span>{error}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
     {loading ? <PartnershipsSkeleton /> : !project ? <EmptyPartnerships /> : <PartnershipsContent project={project} pitches={pitches} attributions={attributions} visible={visible} view={view} setView={setView} query={query} error={error} signedCount={signedCount} motionCount={motionCount} />}
   </div><PartnershipsRail project={project} pitches={pitches} attributions={attributions} error={error} /></div></main>;
@@ -93,7 +97,9 @@ export default function FounderGrowPartnerships() {
 
 function PartnershipsContent({ project, pitches, attributions, visible, view, setView, query, error, signedCount, motionCount }) {
   return <div className="a5-sections"><div className="fg-partnerships-context"><div><span>Selected startup</span><strong data-testid="text-grow-partnerships-project">{text(project.name)}</strong></div><div><span>Partnership source</span><strong>{error ? 'Unavailable' : pitches.length ? 'Stored co-marketing records' : 'No records recorded'}</strong></div></div>
-    <div className="fg-partnerships-tabs"><div><button type="button" className={view === 'all' ? 'is-active' : ''} onClick={() => setView('all')}>All</button><button type="button" className={view === 'in-motion' ? 'is-active' : ''} onClick={() => setView('in-motion')}>In motion</button><button type="button" className={view === 'signed' ? 'is-active' : ''} onClick={() => setView('signed')}>Signed</button><button type="button" className={view === 'dormant' ? 'is-active' : ''} onClick={() => setView('dormant')}>Dormant</button></div><div className="fg-partnerships-actions"><Link to={`/comarketing?project_id=${project.id}`} data-testid="link-open-grow-partnerships-workspace"><Handshake size={13} /> Open workspace</Link></div></div>
+        {/* Its four tabs are the zone header's now, where the canvas draws them.
+        All four are real predicates over stored attributions and pitches. */}
+    <div className="fg-partnerships-tabs"><div className="fg-partnerships-actions"><Link to={`/comarketing?project_id=${project.id}`} data-testid="link-open-grow-partnerships-workspace"><Handshake size={13} /> Open workspace</Link></div></div>
     <div className="fg-partnerships-stats"><Stat label="Partners tracked" value={error ? 'Unavailable' : pitches.length} note={error ? 'Partnership source unavailable' : `${attributions.length} linked attribution${attributions.length === 1 ? '' : 's'}`} muted={Boolean(error)} /><Stat label="Signed value" value="Unavailable" note="No contract-value source connected" muted /><Stat label="Referrals received" value="Unavailable" note="No partner-delivery source connected" muted /><Stat label="Dormant > 60d" value={view === 'dormant' ? 'Unavailable' : 'Unavailable'} note="No activity timeline connected" muted /></div>
     <section className="a5-card fg-partnerships-table"><Head icon={Handshake} title="Partner pipeline" meta={view === 'all' ? 'What each delivered, not announced' : `${visible.length} matching record${visible.length === 1 ? '' : 's'}`} />{error ? <EmptyTable error /> : view === 'dormant' ? <UnavailableTable /> : <PartnerTable rows={visible} attributions={attributions} />}</section>
     <section className="a5-focus fg-partnerships-read"><div className="a5-head"><div><Sparkles size={15} /><h2>Read the partnership honestly</h2></div><span>Source-derived</span></div><p>{error ? 'The selected-project partnership source is unavailable, so FG4 cannot determine which partners are tracked. Signed value, referrals, dormant age, delivered outcomes, and proposals remain unavailable.' : pitches.length ? `FG4 shows ${pitches.length} stored partnership record${pitches.length === 1 ? '' : 's'} and ${attributions.length} linked attribution record${attributions.length === 1 ? '' : 's'}. It does not infer signed value, partner delivery, or referral performance from a pitch record.` : 'No project-linked partnership records are stored for this startup, so partner count, signed value, referrals, dormant age, and delivered outcomes remain unavailable.'}</p><Link className="a5-link" to={`/comarketing?project_id=${project.id}`}>Open co-marketing workspace <ChevronRight size={14} /></Link></section>

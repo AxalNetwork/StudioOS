@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, Database, Download, FileText, Filter, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Database, Download, FileText, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildKpi.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const FIELDS = [
   { key: 'mrr', label: 'MRR', unit: '$' },
@@ -92,7 +93,17 @@ export default function FounderBuildKpi() {
   const latest = orderedSnapshots[0] || null;
   const latestTracked = FIELDS.filter((field) => latest?.[field.key] !== null && latest?.[field.key] !== undefined && latest?.[field.key] !== '').length;
   const trackedFields = FIELDS.filter((field) => orderedSnapshots.some((snapshot) => snapshot[field.key] !== null && snapshot[field.key] !== undefined && snapshot[field.key] !== '')).length;
-  const visibleSnapshots = period === 'six' ? orderedSnapshots.slice(0, 6) : period === 'missing' ? orderedSnapshots.filter((snapshot) => FIELDS.some((field) => snapshot[field.key] === null || snapshot[field.key] === undefined || snapshot[field.key] === '')) : orderedSnapshots;
+  // All four of the canvas's periods are named here rather than three of them
+  // plus a fall-through. `all` used to be the fall-through, which meant a
+  // mistyped period quietly returned every month on record — the widest answer
+  // is the worst default for a mistake, and it looks like a working filter.
+  const PERIODS = {
+    latest: (rows) => rows.slice(0, 1),
+    six: (rows) => rows.slice(0, 6),
+    all: (rows) => rows,
+    missing: (rows) => rows.filter((snapshot) => FIELDS.some((field) => snapshot[field.key] === null || snapshot[field.key] === undefined || snapshot[field.key] === '')),
+  };
+  const visibleSnapshots = (PERIODS[period] || PERIODS.latest)(orderedSnapshots);
   const displayed = visibleSnapshots[0] || latest;
   const selectedMetricRows = [
     ...FIELDS.map((field) => ({ ...field, value: displayed?.[field.key], source: displayed?.source || null })),
@@ -127,7 +138,10 @@ export default function FounderBuildKpi() {
               <Link to={linkFor('/build/cadence')}>Cadence</Link>
               <Link to={linkFor('/build/kpi')} className="is-active" data-testid="link-kpi-zone">KPI entry</Link>
             </nav>
-            <ZoneActions className="mt-3" items={founderZoneActions('build/kpi', { query: projectId ? `?project_id=${projectId}` : '' })} />
+            <ZoneToolbar
+              filters={founderZoneFilters('build/kpi', { value: period, onChange: setPeriod, counts: { all: orderedSnapshots.length } })}
+              actions={founderZoneActions('build/kpi', { query: projectId ? `?project_id=${projectId}` : '' })}
+            />
           </header>
 
           {status === 'error' && <div className="fb-kpi-alert" role="alert" data-testid="status-kpi-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-kpi"><RefreshCw size={13} /> Retry</button></div>}
@@ -144,7 +158,10 @@ export default function FounderBuildKpi() {
               </div>
               <section className="fb-kpi-card fb-kpi-ledger">
                 <div className="fb-kpi-card-head"><div><Database size={16} /><h2>{displayed ? `${formatDate(displayed.snapshot_date, { month: 'long', year: 'numeric' })} · entry` : 'Metric entry'}</h2></div><span>{displayed?.source ? `${displayed.source} · source shown per metric` : 'Source not recorded'}</span></div>
-                <div className="fb-kpi-toolbar"><div className="fb-kpi-filters"><Filter size={13} /><button type="button" className={period === 'latest' ? 'is-selected' : ''} onClick={() => setPeriod('latest')}>Latest</button><button type="button" className={period === 'six' ? 'is-selected' : ''} onClick={() => setPeriod('six')}>Last 6</button><button type="button" className={period === 'all' ? 'is-selected' : ''} onClick={() => setPeriod('all')}>All {orderedSnapshots.length || 0}</button><button type="button" className={period === 'missing' ? 'is-selected' : ''} onClick={() => setPeriod('missing')}>Missing only</button></div><div className="fb-kpi-actions"><span className="fb-kpi-action-disabled"><FileText size={13} /> Definitions unavailable</span><Link to={`/build/metrics${projectId ? `?project_id=${projectId}` : ''}`} className="fb-kpi-editor-link"><Download size={13} /> Open editor</Link></div></div>
+                                <div className="fb-kpi-toolbar">{/* The four period filters moved to the zone header,
+                    where the canvas puts them. "Definitions unavailable" stays here:
+                    it is an action this zone cannot perform, not a view of the ledger. */}
+                  <div className="fb-kpi-actions"><span className="fb-kpi-action-disabled"><FileText size={13} /> Definitions unavailable</span><Link to={`/build/metrics${projectId ? `?project_id=${projectId}` : ''}`} className="fb-kpi-editor-link"><Download size={13} /> Open editor</Link></div></div>
                 {displayed ? <div className="fb-kpi-table-wrap"><table><thead><tr><th>Metric</th><th>Value</th><th>Target</th><th>Vs target</th><th>Source</th></tr></thead><tbody>{selectedMetricRows.map((row) => <KpiRow key={row.key} row={row} />)}</tbody></table></div> : <div className="fb-kpi-inline-empty"><Database size={18} /><div><strong>No KPI snapshots are recorded.</strong><p>Open the existing editor to enter the first dated snapshot for this startup.</p><Link to={`/build/metrics${projectId ? `?project_id=${projectId}` : ''}`}>Open KPI editor</Link></div></div>}
                 <p className="fb-kpi-note">Values and sources come from the stored metric snapshot. Targets, target variance, cash/burn fields, and metric definitions are not returned by the current source, so this ledger does not infer them.</p>
               </section>

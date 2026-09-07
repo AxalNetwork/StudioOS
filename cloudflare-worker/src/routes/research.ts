@@ -14,11 +14,19 @@
  * any one role's profile row, and there is no cross-user listing anywhere in
  * this file by construction — every read is `WHERE owner_user_id = ?`.
  *
- * WHAT IS NOT HERE: a founder cannot push a document to an advisor. That
- * needs a grant type that does not exist (`data_room_grants` is the shape, but
- * its column is `investor_user_id`), and it is a decision about a founder's
- * privacy rather than a schema change. The zones say so rather than implying
- * an empty list means nobody shared anything.
+ * WHAT IS NOT HERE, AND WHAT CHANGED. A founder still cannot push a document
+ * to an advisor FROM THIS FILE, and the library zone still says so. What moved
+ * is the reason: the grant type that did not exist now does — migration 218's
+ * `advisor_client_grants`, one project, one named advisor, revocable, expiring
+ * and scoped — and `advisor_client_document_shares` beside it is the additive
+ * change migration 213's header pre-authorised.
+ *
+ * That table has a READER (`routes/advisor_grants.ts` resolves a shared
+ * document by id into the client brief) and no WRITER. So the sentence the
+ * library renders is still true and stays: an empty library means you have
+ * uploaded nothing, not that nobody shared anything. It is now true because
+ * the control has not been built rather than because the mechanism cannot
+ * exist, which is a smaller gap and a different one.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';

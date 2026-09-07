@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, FileSignature, FileText, Filter, RefreshCw, Scale, ShieldCheck, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CalendarDays, ChevronRight, FileSignature, FileText, RefreshCw, Scale, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderRaiseCapital.css';
 import './founderRaiseLegal.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -144,7 +145,10 @@ export default function FounderRaiseLegal() {
           <div className="fr-capital-crumb"><Link to={`/raise/status${query}`} data-testid="link-legal-back"><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Legal</strong></div>
           <div className="fr-capital-title-row"><div><p className="fr-capital-kicker">Founder / Raise</p><h1>Legal engine</h1><p className="fr-capital-subtitle">Entity, agreements, compliance calendar and signature archive.</p></div>{projects.length > 1 && <label className="fr-capital-picker"><span>Startup</span><select data-testid="select-legal-project" value={projectId || ''} onChange={(event) => chooseProject(event.target.value)}><option value="" disabled>Select a startup</option>{projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}</div>
           <nav className="fr-capital-zone-nav" aria-label="Raise sections"><Link to={`/raise/status${query}`}>Status</Link><Link to={`/raise/pitch${query}`}>Pitch</Link><Link to={`/raise/capital${query}`}>Capital</Link><Link to={`/raise/legal${query}`} className="is-active" data-testid="link-legal-zone">Legal</Link><Link to={`/raise/data-room${query}`}>Data room</Link><span className="fr-capital-zone-disabled">Liquidity unavailable</span></nav>
-          <ZoneActions className="mt-3" items={founderZoneActions('raise/legal', { query })} />
+          <ZoneToolbar
+              filters={founderZoneFilters('raise/legal', { value: filter, onChange: setFilter })}
+              actions={founderZoneActions('raise/legal', { query })}
+            />
         </header>
         {Object.keys(errors).length > 0 && <div className="fr-capital-alert" role="alert" data-testid="status-legal-partial"><AlertCircle size={16} /><span>{errors.projects || 'Some selected-project legal sources are unavailable.'}</span><button type="button" onClick={load}><RefreshCw size={13} /> Retry</button></div>}
         {loading ? <LegalSkeleton /> : errors.projects ? <UnavailableLegal onRetry={load} /> : !project ? <EmptyLegal /> : <LegalContent project={project} documents={documents} compliance={compliance} trackers={trackers} entities={entities} signed={signed} awaiting={awaiting} openCompliance={openCompliance} overdue={overdue} nextDeadline={nextDeadline} rows={visibleRows} allRows={rows} errors={errors} filter={filter} setFilter={setFilter} query={query} />}
@@ -161,7 +165,9 @@ function LegalContent({ project, documents, compliance, trackers, entities, sign
     <div className="fr-capital-stat-strip"><LegalStat label="Documents" value={errors.documents ? 'Unavailable' : documents.length} note={errors.documents ? 'Document source unavailable' : `${signed.length} signed`} muted={Boolean(errors.documents)} /><LegalStat label="Awaiting signature" value={errors.documents ? 'Unavailable' : awaiting.length} note={errors.documents ? 'Document source unavailable' : 'Sent documents only'} muted={Boolean(errors.documents)} /><LegalStat label="Compliance open" value={errors.compliance ? 'Unavailable' : openCompliance.length} note={errors.compliance ? 'Compliance source unavailable' : `${overdue.length} overdue`} muted={Boolean(errors.compliance)} /><LegalStat label="Next deadline" value={errors.compliance ? 'Unavailable' : (nextDeadline ? formatDate(nextDeadline.due_date) : 'Not recorded')} note={errors.compliance ? 'Compliance source unavailable' : display(nextDeadline?.title, 'No open deadline')} muted={Boolean(errors.compliance) || !nextDeadline} /></div>
     <section className="fr-capital-card fr-capital-ledger">
       <div className="fr-capital-card-head"><div><FileText size={16} /><h2>Document library</h2></div><span>{allRows.length} source record{allRows.length === 1 ? '' : 's'} · audit fields only</span></div>
-      <div className="fr-capital-toolbar"><div className="fr-capital-filters"><Filter size={13} />{[['all', 'All documents'], ['agreements', 'Agreements'], ['compliance', 'Compliance'], ['signatures', 'Signatures']].map(([key, label]) => <button type="button" key={key} className={filter === key ? 'is-selected' : ''} onClick={() => setFilter(key)}>{label}</button>)}</div><div className="fr-capital-actions"><span><FileSignature size={13} /> Read-only collection</span><Link to={`/raise/legal-engine${query}`} data-testid="link-open-legal-workspace"><Scale size={13} /> Open workspace</Link></div></div>
+      {/* Its four filters are the zone header's now, where the canvas
+          draws them. All four are real predicates over stored documents. */}
+      <div className="fr-capital-toolbar"><div className="fr-capital-actions"><span><FileSignature size={13} /> Read-only collection</span><Link to={`/raise/legal-engine${query}`} data-testid="link-open-legal-workspace"><Scale size={13} /> Open workspace</Link></div></div>
       {rows.length ? <div className="fr-capital-table-wrap"><table><thead><tr><th>Document</th><th>Type</th><th>State</th><th>Signatures / deadline</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} data-testid={`row-legal-${row.id}`}><td><strong>{row.title}</strong><small>{row.kind === 'compliance' ? 'Compliance calendar' : 'Legal document'}</small></td><td>{row.type}</td><td><span className={`fr-legal-pill is-${statusTone(row.status)}`}>{row.status}</span></td><td>{row.detail}</td></tr>)}</tbody></table></div> : <div className="fr-capital-inline-empty"><FileText size={18} /><div><strong>{filter === 'all' ? 'No legal records are stored.' : 'No records match this view.'}</strong><p>FR4 displays only documents and compliance events returned for this startup.</p></div></div>}
       <p className="fr-capital-note">Document status and signature dates come from legal records; overdue state and deadlines come from the compliance service. FR4 does not infer missing filings, signature counts, or diligence risks.</p>
     </section>

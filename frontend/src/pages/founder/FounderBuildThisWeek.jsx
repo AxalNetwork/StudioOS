@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, ClipboardCheck, Filter, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, ClipboardCheck, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildThisWeek.css';
-import ZoneActions from '../../workspaces/ZoneActions';
+import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { founderZoneActions } from '../../workspaces/founderZoneActions';
+import { founderZoneFilters } from '../../workspaces/founderZoneFilters';
 
 const text = (value, fallback = 'Not recorded') => {
   if (value === null || value === undefined || String(value).trim() === '') return fallback;
@@ -99,7 +100,10 @@ export default function FounderBuildThisWeek() {
               <Link to={`/build/cadence${selectedId ? `?project_id=${selectedId}` : ''}`}>Cadence</Link>
               <Link to={`/build/kpi${selectedId ? `?project_id=${selectedId}` : ''}`}>KPI entry</Link>
             </nav>
-            <ZoneActions className="mt-3" items={founderZoneActions('build/this-week', { query: selectedId ? `?project_id=${selectedId}` : '', view: { scope: selectedProject?.name, header: ['Commitment', 'Objective', 'Current', 'Target', 'Unit'], rows: commitments, cells: (r) => [r.text, r.objective, r.current, r.target, r.unit] } })} />
+            <ZoneToolbar
+              filters={founderZoneFilters('build/this-week', { value: 'now' })}
+              actions={founderZoneActions('build/this-week', { query: selectedId ? `?project_id=${selectedId}` : '', view: { scope: selectedProject?.name, header: ['Commitment', 'Objective', 'Current', 'Target', 'Unit'], rows: commitments, cells: (r) => [r.text, r.objective, r.current, r.target, r.unit] } })}
+            />
           </header>
 
           {status === 'error' && <div className="fb-week-alert" role="alert" data-testid="status-week-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-week"><RefreshCw size={13} /> Retry</button></div>}
@@ -116,7 +120,13 @@ export default function FounderBuildThisWeek() {
               </div>
               <section className="fb-week-card fb-week-instrument">
                 <div className="fb-week-card-head"><div><ClipboardCheck size={16} /><h2>Current commitment records</h2></div><span>{commitments.length} stored key result{commitments.length === 1 ? '' : 's'}</span></div>
-                <div className="fb-week-toolbar"><div className="fb-week-filters"><Filter size={13} /><button type="button" className="is-selected">Current records</button><button type="button" disabled>Last 4 weeks</button><button type="button" disabled>Carried only</button></div><Link className="fb-week-secondary-action" to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Review roadmap</Link></div>
+                {/* The three filter buttons that stood here moved into the zone
+                    header's ZoneToolbar, which is where the canvas draws them.
+                    Two of the three were `disabled` — a greyed control is still
+                    a promise, and `ZoneActions.jsx` has refused to draw one for
+                    actions since it was written. They are prose now, and they
+                    say what is missing: no week is stamped on a key result. */}
+                <div className="fb-week-toolbar"><Link className="fb-week-secondary-action" to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Review roadmap</Link></div>
                 {commitments.length ? <div className="fb-week-table-wrap"><table><thead><tr><th>Commitment</th><th>Objective</th><th>Progress</th><th>State</th><th>Source</th></tr></thead><tbody>{commitments.map((item) => <CommitmentRow key={item.id} item={item} />)}</tbody></table></div> : <div className="fb-week-inline-empty"><CircleDot size={18} /><div><strong>No current commitments are recorded.</strong><p>This desk does not invent a Monday plan. Add Now objectives and key results in Roadmap.</p><Link to={`/build/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Open roadmap</Link></div></div>}
                 <p className="fb-week-note">Only stored Now objectives and key results appear here. Weekly assignment, carry-over history, outcomes, streaks, and retro notes are not available from the current source record.</p>
               </section>
