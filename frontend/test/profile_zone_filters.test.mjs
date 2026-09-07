@@ -28,6 +28,8 @@ import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
 import { FOUNDER_ZONE_FILTERS, founderZoneFilters } from '../src/workspaces/founderZoneFilters.js';
 import { INVESTOR_ZONE_FILTERS, investorZoneFilters } from '../src/workspaces/investorZoneFilters.js';
+import { ADVISOR_ZONE_FILTERS, advisorZoneFilters } from '../src/workspaces/advisorZoneFilters.js';
+import { PARTNER_ZONE_FILTERS, partnerZoneFilters } from '../src/workspaces/partnerZoneFilters.js';
 import { canvasFilterLabels, groupFilterNotes } from '../src/workspaces/zoneFilterBuilder.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -39,19 +41,27 @@ const PROFILES = {
     table: FOUNDER_ZONE_FILTERS,
     build: founderZoneFilters,
     call: 'founderZoneFilters',
-    // Build, Raise and Grow only. Founder Network (3 zones) and Founder
-    // Research (5) also carry `filters:` arrays and are NOT covered here yet;
-    // they are rendered by `NetworkWorkspace` and `ResearchWorkspace`, which
-    // the investor profile has to touch for the same eight slugs, so both
-    // licences' halves of those two components land together or not at all.
-    canvas: /^Pages · Founder (Build|Raise|Grow)\.dc\.html$/,
+    // ALL FIVE founder canvases. This used to read `(Build|Raise|Grow)`, which
+    // hid Founder Network and Founder Research from the check entirely — a
+    // carve-out by REGEX, where the rest of this file records a deferral by
+    // NAME. The difference matters: a regex narrows the question so the
+    // uncovered zones never come up, while `excluded` forces each one to be
+    // listed with a reason and re-checked on every run. The eight shared-surface
+    // routes moved from the first mechanism to the second here.
+    canvas: /^Pages · Founder /,
     pages: ['frontend/src/pages/founder', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
     zones: 18,
     mounted: 18,
-    // Nothing is excluded: this profile's canvas regex above already limits the
-    // set to the three buckets it covers, so every route it yields is declared.
-    excluded: [],
+    excluded: [
+      // The shared surfaces. `NetworkWorkspace` and `ResearchWorkspace` render
+      // these eight slugs for all four licences from one component each, with
+      // different labels per licence, so every licence's half lands together or
+      // the same component shows a header row on one and nothing on another.
+      'network/relationships', 'network/introductions', 'network/organizations',
+      'research/ask', 'research/markets', 'research/companies',
+      'research/funds', 'research/library',
+    ],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.
@@ -115,6 +125,59 @@ const PROFILES = {
       '/fund/reporting': 'funds/reporting',
     }[route] ?? route.replace(/^\//, '')),
   },
+
+  // ADVISOR AND PARTNER ARE REGISTERED AT ZERO, ON PURPOSE. Both tables are
+  // empty and every canvas route each licence carries is named in `excluded`
+  // below. Registering them now rather than when their first table lands is
+  // what makes `canvasDirs` a hook that four profiles exercise instead of a
+  // parameter one profile passes — and it means the day a canvas gains a zone,
+  // the exact-set check fails for the licence that gained it rather than for
+  // nobody.
+  advisor: {
+    table: ADVISOR_ZONE_FILTERS,
+    build: advisorZoneFilters,
+    call: 'advisorZoneFilters',
+    // Advisor and partner canvases ship from `design/incoming/`, not
+    // `design/canvases/integrated/`. `profile_zone_actions.test.mjs` has read
+    // both through a `canvasDirs` key since the Expertise bucket landed there;
+    // this file hardcoded the integrated directory until now, which is why I
+    // reported these two licences as having no canvas at all. They have four.
+    canvasDirs: ['design/incoming'],
+    canvas: /^Pages · Advisor (Network|Research)\.dc\.html$/,
+    pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
+    actions: 'frontend/src/workspaces/advisorZoneActions.js',
+    zones: 0,
+    mounted: 0,
+    excluded: [
+      'network/relationships', 'network/introductions', 'network/organizations',
+      'research/ask', 'research/client-prep', 'research/markets',
+      'research/companies', 'research/library',
+    ],
+    // No `samples`: not one advisor label carries a figure, and the assertion
+    // below proves that rather than taking it on trust — a canvas that gains an
+    // `All 14` forces this profile to declare a pattern.
+    live: (route) => route.replace(/^\//, ''),
+  },
+
+  partner: {
+    table: PARTNER_ZONE_FILTERS,
+    build: partnerZoneFilters,
+    call: 'partnerZoneFilters',
+    canvasDirs: ['design/incoming'],
+    canvas: /^Pages · Partner (Network|Research)\.dc\.html$/,
+    pages: ['frontend/src/pages/partner', 'frontend/src/pages/research', 'frontend/src/workspaces'],
+    actions: 'frontend/src/workspaces/partnerZoneActions.js',
+    zones: 0,
+    mounted: 0,
+    excluded: [
+      'network/relationships', 'network/introductions', 'network/organizations',
+      'research/ask', 'research/client-prep', 'research/markets',
+      'research/library',
+    ],
+    // `Pages · Partner Research` names /research/market; the router and
+    // `shellConfig.js` both say `markets`. Same mapping the ops half carries.
+    live: (route) => (route === '/research/market' ? 'research/markets' : route.replace(/^\//, '')),
+  },
 };
 
 /**
@@ -130,16 +193,22 @@ const PROFILES = {
  */
 function canvasFilters(profile) {
   const out = {};
-  for (const file of readdirSync(resolve(root, 'design/canvases/integrated')).filter((f) => profile.canvas.test(f))) {
-    const src = read(`design/canvases/integrated/${file}`);
-    for (const chunk of src.split(/route:\s*'/).slice(1)) {
-      const route = chunk.slice(0, chunk.indexOf("'"));
-      const filters = chunk.match(/filters:\s*fil\(\[([^\]]*)\]/);
-      if (!filters) continue;
-      out[profile.live(route)] = filters[1]
-        .split(',')
-        .map((one) => one.trim().replace(/^'|'$/g, ''))
-        .filter(Boolean);
+  // `canvasDirs` defaults to the integrated set. Advisor and partner ship theirs
+  // from `design/incoming/`, and a directory a profile does not name is not
+  // read for it — so a canvas moving between the two fails loudly here rather
+  // than dropping out of the covered set.
+  for (const dir of profile.canvasDirs || ['design/canvases/integrated']) {
+    for (const file of readdirSync(resolve(root, dir)).filter((f) => profile.canvas.test(f))) {
+      const src = read(`${dir}/${file}`);
+      for (const chunk of src.split(/route:\s*'/).slice(1)) {
+        const route = chunk.slice(0, chunk.indexOf("'"));
+        const filters = chunk.match(/filters:\s*fil\(\[([^\]]*)\]/);
+        if (!filters) continue;
+        out[profile.live(route)] = filters[1]
+          .split(',')
+          .map((one) => one.trim().replace(/^'|'$/g, ''))
+          .filter(Boolean);
+      }
     }
   }
   return out;
@@ -219,6 +288,19 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     // first prove it catches the canvas's own labels, then prove none of those
     // reach the screen.
     const raw = Object.values(canvasFilters(profile)).flat();
+    // A PROFILE MAY HAVE NO SAMPLES, and that is checked too rather than
+    // waved through. Advisor and partner canvases carry no figure in any
+    // label, so there is no pattern for them to declare — but "no pattern"
+    // must not become the way a profile opts out of this test. So a profile
+    // without `samples` has to prove the absence: not one of its canvas labels
+    // may contain a digit. A canvas that later gains an `All 14` fails here
+    // and forces that licence to declare a pattern.
+    if (!profile.samples) {
+      const digits = raw.filter((label) => /\d/.test(label));
+      assert.deepEqual(digits, [],
+        `${name} declares no sample pattern, but its canvases carry figures: ${digits.join(', ')}`);
+      return;
+    }
     const caught = raw.filter((label) => profile.samples.test(label));
     assert.ok(caught.length > 0,
       `${name}'s sample pattern matches none of its ${raw.length} canvas labels — it guards nothing`);

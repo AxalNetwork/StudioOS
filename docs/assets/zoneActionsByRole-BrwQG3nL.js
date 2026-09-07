@@ -1,0 +1,1 @@
+import{t as e}from"./investorZoneActions-BVCvSY72.js";import{t}from"./advisorZoneActions-D51lHsCU.js";import{t as n}from"./founderZoneActions-DK2bc6yT.js";import{t as r}from"./partnerZoneActions-Bo20v3cn.js";var i={founder:n,investor:e,partner:r,advisor:t};function a(e,t,n){let r=i[e];return r?r(t,n):[]}export{a as t};

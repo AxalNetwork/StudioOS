@@ -99,18 +99,26 @@ const PROFILES = {
     canvas: /^Pages · Partner /,
     // `/pipeline` is absent on purpose — `Pages · Partner Pipeline` carries no
     // `ops:` on any artboard, so `canvasOps` finds nothing there and this
-    // pattern must not claim it does. `/network` and `/research` are the shared
-    // surfaces, and their canvases live in `design/incoming/` which this reader
-    // does not open.
+    // pattern must not claim it does. `/network` and `/research` ARE in scope:
+    // their canvases live in `design/incoming/`, which `canvasDirs` above
+    // opens. (This comment used to end "which this reader does not open" — it
+    // contradicted the line three above it, and `zones` only adds up if the
+    // reader does open it.)
     buckets: /^(delivery|offers|network|research)\//,
-    zones: 15,
+    zones: 16,
     links: 0,
-    exports: 15,
+    exports: 16,
     // `network/organizations`: `NetworkPage` catches a slug it has no tab for and
     // suppresses every body, so that route already renders its own heading above
-    // a card stating the gap — there is nothing for a row to sit over.
-    // `research/client-prep` is a card, not a body.
-    excluded: ['network/organizations', 'research/client-prep'],
+    // a card stating the gap — there is nothing for a row to sit over. Checked
+    // again rather than inherited: `ORG_BACKED` in `NetworkWorkspace.jsx` is
+    // still `['founder', 'investor']`, so this one is as true as it was.
+    //
+    // `research/client-prep` USED to be listed here as "a card, not a body". It
+    // is a body — `ClientPrepZone.jsx` takes `zoneActions` and renders a row
+    // from it — so the exclusion was hiding three specified ops that drew
+    // nothing, exactly as the investor Research pair did.
+    excluded: ['network/organizations'],
     embeddedGuards: 0,
     // `Pages · Partner Research` names /research/market; the router and
     // shellConfig.js both say `markets`.
@@ -128,17 +136,23 @@ const PROFILES = {
     canvasDirs: ['design/incoming'],
     canvas: /^Pages · Advisor /,
     buckets: /^(expertise|network|research)\//,
-    zones: 10,
+    zones: 11,
     links: 1,
-    exports: 10,
+    exports: 11,
     embeddedGuards: 0,
-    // The fifth artboard. `expertise/visibility` is not a zone body at all — it
-    // is the one card left in AdvisorBucketRoutes' COPY, and its whole page is
-    // already the gap statement ("Nothing counts profile views"). Listed here
-    // so the exclusion is checked rather than silent.
-    // `expertise/visibility` and `network/organizations` are cards whose whole
-    // page is already the gap statement; `research/client-prep` is a card too.
-    excluded: ['expertise/visibility', 'network/organizations', 'research/client-prep'],
+    // Both remaining exclusions are cards whose whole page IS the gap
+    // statement, so there is nothing for a row to sit over. `expertise/
+    // visibility` is the one card left in AdvisorBucketRoutes' COPY ("Nothing
+    // counts profile views"); `OrganizationsZone.jsx` is a dashed card and
+    // nothing else, because an advisor is 403'd from `/api/contacts` and no
+    // other store carries a person-to-organisation edge. Listed here so each
+    // exclusion is checked rather than silent.
+    //
+    // `research/client-prep` was listed here too, on the same reasoning, and
+    // was the one case where it had stopped being true: the zone got a real
+    // body with the advisor grant, and the exclusion kept three specified ops
+    // off a page that was already asking for them.
+    excluded: ['expertise/visibility', 'network/organizations'],
     live: (route) => route.replace(/^\//, ''),
   },
 };
