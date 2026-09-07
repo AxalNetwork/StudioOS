@@ -15,7 +15,7 @@ import { Sparkles } from 'lucide-react';
     title="No projects yet"
     body="Create your first venture project to get started."
     cta={{ label: 'New project', to: '/projects/new' }}
-    secondary={{ label: 'Learn more', to: '/docs#core/projects' }}
+    secondary={{ label: 'Learn more', to: '/help#core/projects' }}
   />
 ) : (
   <ProjectTable rows={projects} />

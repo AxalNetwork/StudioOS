@@ -180,7 +180,7 @@ export default function ProjectsPage({ embedded = false, statusFilter = null, hi
           title="No startups yet"
           body='Create your first startup to start scoring, due-diligence, and pipeline tracking.'
           cta={{ label: 'New startup', onClick: () => (onNewStartup ? onNewStartup() : setShowForm(true)) }}
-          secondary={{ label: 'Learn more', to: '/docs#core/projects' }}
+          secondary={{ label: 'Learn more', to: '/help#core/projects' }}
         />
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">

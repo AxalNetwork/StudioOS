@@ -948,6 +948,12 @@ auth.get('/me', async (c) => {
     // Bypass roles (admin/partner/investor/advisor) still receive these
     // fields so the frontend can display them, but tier gates are no-ops.
     subscription_tier: (user as any).subscription_tier || 'free',
+    // Task #103 — the investor-side twin of subscription_tier. It was the one
+    // tier field the client could not see, so `canUseCustomerChat` read every
+    // investor as `free` and refused the Help Center's chat channel to exactly
+    // the tier that pays for it. Same shape, same sensitivity: the caller's
+    // own plan, next to the caller's own subscription row.
+    investor_tier: (user as any).investor_tier || 'free',
     subscription_status: (user as any).subscription_status || 'active',
     subscription_renews_at: (user as any).subscription_renews_at || null,
     stripe_customer_id: (user as any).stripe_customer_id || null,

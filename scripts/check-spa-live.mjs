@@ -184,6 +184,28 @@ function routesForHost(base) {
     // what is under test is that the two-segment path reaches the SPA rather
     // than being shadowed by `/attest/:token` one segment up.
     { path: '/attest/partner/live-smoke-not-a-real-token', shell: true },
+    // The Help Center's addresses (#103, 2026-09-07). `/help` stopped being a
+    // one-segment path when the ticket flow moved under it, and the same pass
+    // gave `/support` a route for the first time — `ErrorState` had been
+    // building `/support?topic=…` on four pages against no route at all, which
+    // is precisely the failure this script exists to catch, and it went
+    // unnoticed for as long as it did because nothing ever requested the path.
+    //
+    // Two- and three-segment shapes are listed deliberately: a path-scoped
+    // apex route would take these from the assets binding and break the SPA
+    // fallback (CLAUDE.md fact 4), and the deeper the path the more likely it
+    // is to be shadowed. The id is arbitrary — an unauthenticated fetch gets
+    // the shell either way, so what is under test is that the path REACHES the
+    // shell, not that a ticket renders.
+    { path: '/help', shell: true },
+    { path: '/help/tickets', shell: true },
+    { path: '/help/tickets/live-smoke-not-a-real-ticket', shell: true },
+    { path: '/support', shell: true },
+    // `/docs` redirects to `/help` in the SPA router, which happens after the
+    // shell loads — so what this asserts is the same thing as the rest: the
+    // Worker still hands the old address a shell rather than a 404. Bookmarks
+    // and the worker's own older CTAs still arrive here.
+    { path: '/docs', shell: true },
   ];
   // Apex `/` is checked leniently (`shell: false`): it was a separate
   // marketing page (GitHub Pages, then Cloudflare Pages) until 2026-09-01.

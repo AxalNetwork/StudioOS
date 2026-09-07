@@ -1591,7 +1591,7 @@ function TutorPanel({ tutor, onClose }) {
       {(tutor.doc_anchor || tutor.page_target) && (
         <div className="mt-2 flex items-center gap-3 text-[11px]">
           {tutor.doc_anchor && (
-            <Link to={`/docs#${tutor.doc_anchor}`} className="text-violet-700 dark:text-violet-300 hover:underline flex items-center gap-1">
+            <Link to={`/help#${tutor.doc_anchor}`} className="text-violet-700 dark:text-violet-300 hover:underline flex items-center gap-1">
               Read more in docs <ArrowRight size={10} />
             </Link>
           )}

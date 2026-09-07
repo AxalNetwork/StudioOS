@@ -238,7 +238,7 @@ const InvestorPricingPage = lazy(() => import('./pages/InvestorPricingPage'));
 const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
 const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const DocsPage = lazy(() => import('./pages/DocsPage'));
+const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'));
 const OnboardingPersonaPage = lazy(() => import('./pages/OnboardingPersonaPage'));
 const AcademyLessonPage = lazy(() => import('./pages/AcademyLessonPage'));
 const OnboardingFounderPage = lazy(() => import('./pages/OnboardingFounderPage'));
@@ -414,10 +414,50 @@ function SettingsSectionRedirect() {
 // redirect is a one-liner beside its route; this one exists because the id has
 // to travel. `tickets.ts` emits `path: /tickets/<id>` for its "Open ticket"
 // CTA, so those links must land on the ticket, not on the list.
+//
+// Task #103 — the ticket flow now lives at `/help/tickets`, because `/help`
+// became the Help Center itself. Both legacy shapes still land on the ticket.
 function TicketsRedirect() {
   const loc = useLocation();
   const { id } = useParams();
-  return <Navigate to={{ pathname: `/help/${id}`, search: loc.search, hash: loc.hash }} replace />;
+  return <Navigate to={{ pathname: `/help/tickets/${id}`, search: loc.search, hash: loc.hash }} replace />;
+}
+
+// Task #103 — `/help/<id>` was the ticket detail from D39 until the Help
+// Center took `/help`. `tickets.ts:147` emits `path: /help/<id>` for its
+// "Open ticket" Slack CTA and those messages are already sent, so the shape
+// is permanent, not a shim. Static children (`/help/tickets`, `/help/admin/*`)
+// outrank this by React Router's own specificity ranking, so it only ever
+// catches an id.
+function HelpTicketIdRedirect() {
+  const loc = useLocation();
+  const { id } = useParams();
+  return <Navigate to={{ pathname: `/help/tickets/${id}`, search: loc.search, hash: loc.hash }} replace />;
+}
+
+// Task #103 — `/docs` folded into the Help Center. The hash has to travel:
+// seven surfaces deep-link `#<section>/<subsection>` (CommandPalette,
+// PageExplainer, EmptyState, ProjectsPage, PersonalAdvisor,
+// AdvisorProgressWidget) and the anchor IS the address of the article.
+function DocsRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/help', search: loc.search, hash: loc.hash }} replace />;
+}
+
+// Task #103 — `/support?topic=<x>` had no route at all. `ErrorState` builds it
+// from four pages' failure paths, so every one of those "contact support"
+// buttons has been landing on the catch-all 404. The topic is carried into the
+// Help Center's search box rather than dropped: it is already the name of the
+// surface that failed ("projects", "integrations", "signals", "activity").
+function SupportRedirect() {
+  const loc = useLocation();
+  const topic = new URLSearchParams(loc.search).get('topic') || '';
+  return (
+    <Navigate
+      to={{ pathname: '/help', search: topic ? `?q=${encodeURIComponent(topic)}` : '' }}
+      replace
+    />
+  );
 }
 
 // Integrations merged into Settings. Legacy /integrations (and
@@ -539,13 +579,12 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Articles
           </Link>
+          {/* Task #103 — one entry, not two. "Help Center" and "Documentation"
+              used to be a ticket tracker and a docs site sitting side by side;
+              they are the same surface now. */}
           <Link to="/help" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Help Center
-          </Link>
-          <Link to="/docs" onClick={() => setOpen(false)}
-            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Documentation
           </Link>
           <Link to="/plans-and-pricing" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
@@ -1115,7 +1154,14 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // enforce KYC server-side regardless of this client-side gate.
   // The /kyc, /activity, /help routes remain reachable for everyone.
   const effectiveRole = (realUser || user)?.role;
-  const ALLOWED_BEFORE_KYC = ['/kyc', '/activity', '/help'];
+  const ALLOWED_BEFORE_KYC = ['/kyc', '/activity'];
+  // Task #103 — /help and everything under it, not just the bare path. The
+  // exact-match list allowed `/help` (then the ticket list) but not
+  // `/help/<id>` (then a ticket), so an investor waiting on KYC who clicked
+  // "Open ticket" in a notification was bounced to /kyc — cut off from the
+  // one channel that could unblock them. The Help Center and the ticket flow
+  // are both under /help now, and both have to stay open.
+  const onHelpPath = location.pathname === '/help' || location.pathname.startsWith('/help/');
   // Onboarding wizards (/onboarding/*) are always reachable so the
   // wizard-resume gate above can land users without bouncing them to
   // /kyc — otherwise the two gates form a `/kyc` ↔ `/onboarding/<role>`
@@ -1128,6 +1174,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     kycStatus &&
     kycStatus !== 'approved' &&
     !ALLOWED_BEFORE_KYC.includes(location.pathname) &&
+    !onHelpPath &&
     !onOnboardingPath
   ) {
     return <Navigate to="/kyc" replace />;
@@ -1916,10 +1963,24 @@ function AppInner() {
         "Open ticket" CTA while App.jsx declared no such route — that link
         has been landing on the catch-all 404. It resolves now.
       */}
-      <Route path="/help" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
-      <Route path="/help/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
-      <Route path="/tickets" element={<Navigate to="/help" replace />} />
+      {/*
+        Task #103 — `/help` is the Help Center now, and the ticket flow sits
+        under it at `/help/tickets`. Until this change `/help` was the ticket
+        tracker wearing an `<h1>Help Center</h1>`, and the documentation the
+        Help Center canvas describes lived at `/docs` under a different name.
+        Every legacy address still resolves, to the ticket or to the article:
+        `/tickets`, `/tickets/<id>`, `/help/<id>`, `/docs`, `/docs/admin/*`.
+      */}
+      <Route path="/help" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <HelpCenterPage />)} />
+      <Route path="/help/tickets" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
+      <Route path="/help/tickets/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TicketsPage />)} />
+      <Route path="/help/admin/*" element={<AdminDocsPathGuard />} />
+      <Route path="/help/:id" element={<HelpTicketIdRedirect />} />
+      <Route path="/tickets" element={<Navigate to="/help/tickets" replace />} />
       <Route path="/tickets/:id" element={<TicketsRedirect />} />
+      {/* `ErrorState` has always built `/support?topic=<x>`; nothing declared
+          the route. It lands in the Help Center with the topic as the query. */}
+      <Route path="/support" element={<SupportRedirect />} />
       {/* Products — catalog + checkout + explorer promo redemption. Open to
           every signed-in role incl. 'exploring' (that's where the Personal
           Advisor's one-time 30-day-license codes get redeemed). */}
@@ -2272,7 +2333,7 @@ function AppInner() {
           screen so the page literally pretends not to exist; admins are
           redirected into the hash-anchored docs surface. */}
       <Route path="/docs/admin/*" element={<AdminDocsPathGuard />} />
-      <Route path="/docs" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <DocsPage />)} />
+      <Route path="/docs" element={<DocsRedirect />} />
       {/* Task #17 — investor "Profile" nav lands on the self-profile surface
           (the Settings profile section rendered at its own path so the sidebar
           item highlights independently of Settings). */}
@@ -2364,26 +2425,26 @@ function GlobalSpinoutLabListenerMount() {
   );
 }
 
-// Task #2 (DD) — Direct-URL guard for /docs/admin/* paths.
-// Non-admins (and anonymous visitors) get a Not Found screen with no
-// hint that admin docs exist. Admins are redirected to the hash-
-// anchored docs surface (`/docs#admin/<sub>`), preserving the
-// trailing path as the anchor's subsection id when present.
+// Task #2 (DD) — Direct-URL guard for admin docs paths, mounted at both
+// `/docs/admin/*` and `/help/admin/*`. Non-admins (and anonymous visitors)
+// get a Not Found screen with no hint that admin docs exist. Admins are
+// redirected to the hash-anchored surface (`/help#admin/<sub>`), preserving
+// the trailing path as the anchor's subsection id when present.
 function AdminDocsPathGuard() {
   const { user, role, loading } = useAuth() || {};
   const location = useLocation();
   if (loading) return null;
   const isAdmin = !!user && role === 'admin';
   if (isAdmin) {
-    const sub = location.pathname.replace(/^\/docs\/admin\/?/, '').split('/')[0] || 'overview';
-    return <Navigate to={`/docs#admin/${encodeURIComponent(sub)}`} replace />;
+    const sub = location.pathname.replace(/^\/(?:docs|help)\/admin\/?/, '').split('/')[0] || 'overview';
+    return <Navigate to={`/help#admin/${encodeURIComponent(sub)}`} replace />;
   }
   return (
     <div className="max-w-xl mx-auto py-24 px-6 text-center">
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Page not found</h1>
       <p className="text-sm text-gray-600">
         The page you’re looking for doesn’t exist. Head back to the{' '}
-        <a className="text-violet-700 hover:underline" href="/docs">documentation home</a>.
+        <a className="text-violet-700 hover:underline" href="/help">Help Center</a>.
       </p>
     </div>
   );

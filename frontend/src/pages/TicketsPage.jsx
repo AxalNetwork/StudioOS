@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { safeReadJSON } from '../lib/storage';
 import { api } from '../lib/api';
 import {
@@ -229,7 +230,18 @@ export default function TicketsPage() {
   const [loading, setLoading] = useState(true);
   const [, setSyncing] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [selectedTicketId, setSelectedTicketId] = useState(null);
+  // Task #103 — the ticket id in the URL now opens the ticket.
+  //
+  // `/help/:id` was declared by D39 and `/tickets/:id` redirected into it, but
+  // this component never read a param: `selectedTicketId` started at null and
+  // only a row click could set it. So `tickets.ts:147`'s "Open ticket" Slack
+  // CTA and every ticket_update notification have been landing on the list and
+  // asking the reader to find their own ticket. The route existed; the page
+  // ignored it. Both legacy shapes redirect to `/help/tickets/<id>`, and this
+  // is what makes that address mean anything.
+  const { id: routeTicketId } = useParams();
+  const navigate = useNavigate();
+  const [selectedTicketId, setSelectedTicketId] = useState(routeTicketId || null);
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium', type: 'task' });
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState(null);
@@ -263,6 +275,29 @@ export default function TicketsPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Follow the URL while mounted: arriving at /help/tickets/<id> from a
+  // notification while already on the list has to open that ticket, and
+  // leaving the id has to return to the list.
+  useEffect(() => {
+    setSelectedTicketId(routeTicketId || null);
+  }, [routeTicketId]);
+
+  // Opening a ticket moves the address with it, so the ticket a reader is
+  // looking at is the ticket they can send someone — the same address the
+  // worker already puts in its notifications.
+  const openTicket = useCallback((ticketId) => {
+    navigate(`/help/tickets/${ticketId}`);
+  }, [navigate]);
+
+  // Leaving the detail view returns to the list address, so Back does not
+  // drop the reader straight back into the ticket they just closed.
+  const closeDetail = useCallback(() => {
+    setSelectedTicketId(null);
+    if (routeTicketId) navigate('/help/tickets');
+    load();
+    syncFromGithub();
+  }, [routeTicketId, navigate, load, syncFromGithub]);
+
   const submit = async () => {
     if (!form.title.trim()) return alert('Please enter a ticket title.');
     setSubmitting(true);
@@ -290,14 +325,18 @@ export default function TicketsPage() {
   };
 
   if (selectedTicketId) {
-    return <TicketDetail ticketId={selectedTicketId} onBack={() => { setSelectedTicketId(null); load(); syncFromGithub(); }} />;
+    return <TicketDetail ticketId={selectedTicketId} onBack={closeDetail} />;
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Help Center</h1>
+          {/* Task #103 — this page rendered `<h1>Help Center</h1>` while
+              mounted at /help, which is how a ticket tracker came to be
+              reported as a mismatch against the Help Center design. The Help
+              Center is /help; this is the ticket flow underneath it. */}
+          <h1 className="text-2xl font-bold text-gray-900 mb-1 dark:text-gray-100">Support tickets</h1>
           <p className="text-sm text-gray-600">
             {isAdmin ? 'All user tickets — ticket management and operations support' : 'Your tickets — submit and track support requests'}
           </p>
@@ -378,7 +417,7 @@ export default function TicketsPage() {
                 : 'minmax(0, 2fr) 100px 110px 110px';
               return (
                 <div style={style} {...ariaAttributes}
-                     onClick={() => setSelectedTicketId(t.id)}
+                     onClick={() => openTicket(t.id)}
                      className="hover:bg-violet-50 cursor-pointer transition-colors border-b border-gray-100 text-sm">
                   <div style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center', height: '100%' }}>
                     <div className="px-5 py-3 min-w-0">
@@ -415,7 +454,7 @@ export default function TicketsPage() {
                 <tbody className="divide-y divide-gray-100">
                   {items.map(t => (
                     <tr key={t.id} className="hover:bg-violet-50 cursor-pointer transition-colors"
-                        onClick={() => setSelectedTicketId(t.id)}>
+                        onClick={() => openTicket(t.id)}>
                       <td className="px-5 py-3">
                         <div className="text-gray-900 hover:text-violet-600 transition-colors dark:text-gray-100">{t.title}</div>
                         {t.description && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{t.description}</div>}

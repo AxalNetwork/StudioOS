@@ -175,7 +175,7 @@ it, where in their nav, and how do they get there.*
 | Auth and Onboarding | `/login` · `/register` · `/onboarding/chat` · `/onboarding/persona` · `/onboarding/founder\|investor\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Emails | — | — (not routed) | Templates (no surface) | Not reachable yet | UPGRADE | Low |
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Help Center | `/docs` · `/docs/admin/*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Help Center | `/help` · `/help/tickets` · `/help/tickets/:id` · `/help/admin/*` · `/help/:id` · `/docs` · `/docs/admin/*` · `/support` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Liquidity & Secondaries | `/liquidity` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Messages | `/messages` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |

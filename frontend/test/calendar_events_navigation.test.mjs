@@ -38,14 +38,26 @@ test('the Help Center is reachable before KYC, and the old path still resolves',
   // is on it precisely because that is when a person needs to ask for help —
   // renaming the route without renaming the allowlist entry would have made
   // the Help Center unreachable exactly then.
-  assert.match(app, /ALLOWED_BEFORE_KYC = \[[^\]]*'\/help'/,
-    'the pre-KYC allowlist must name the live path, or support is walled off');
+  //
+  // Task #103 moved the mechanism, so this moved with it. `/help` is no
+  // longer a member of the exact-match array: the Help Center took `/help`
+  // and the ticket flow went to `/help/tickets`, and an exact-match list
+  // cannot express "and everything under it". It could not express
+  // `/help/<id>` either, which is why an un-KYC'd investor clicking "Open
+  // ticket" in a notification used to be bounced to /kyc — the very reason
+  // this test exists, happening to the address the test did not name. The
+  // subtree check below is the same intent over a wider door.
+  assert.match(app, /const onHelpPath = location\.pathname === '\/help' \|\| location\.pathname\.startsWith\('\/help\/'\)/,
+    'the pre-KYC exemption must cover the whole /help subtree, or support is walled off');
+  assert.match(app, /!onHelpPath &&/,
+    'the exemption must be consulted by the gate, not merely computed');
   assert.doesNotMatch(app, /ALLOWED_BEFORE_KYC = \[[^\]]*'\/tickets'/,
     'a stale allowlist entry guards a path nothing renders');
 
   // And the worker emits /tickets links into notification rows that are
-  // already in people's feeds, so both old paths must still land.
-  assert.match(app, /path="\/tickets"\s+element=\{<Navigate to="\/help" replace \/>\}/);
+  // already in people's feeds, so both old paths must still land — now on
+  // the ticket flow's new address rather than on the Help Center home.
+  assert.match(app, /path="\/tickets"\s+element=\{<Navigate to="\/help\/tickets" replace \/>\}/);
   assert.match(app, /path="\/tickets\/:id"/,
     'tickets.ts emits /tickets/<id> for its "Open ticket" CTA');
 });
