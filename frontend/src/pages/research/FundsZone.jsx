@@ -169,78 +169,143 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
           {!visible.length ? (
             <p className="text-[12.5px] text-gray-600 dark:text-gray-300">No fund matches this filter.</p>
           ) : (
-            <ul className="divide-y divide-axal-ground dark:divide-gray-800">
-              {visible.map((f) => (
-                <li key={f.uid} className="py-3">
-                  <div className="flex flex-wrap items-baseline gap-2">
-                    <strong className="text-[13px]">{f.name}</strong>
-                    {f.status === 'passed' && <Pill tone="danger">Passed</Pill>}
-                    {f.path && <Pill tone={f.path === 'warm' ? 'ok' : 'neutral'}>{PATH_LABEL[f.path]}</Pill>}
-                    <Pill tone={f.stage_fit === 'right' ? 'ok' : f.stage_fit === 'wrong' ? 'warn' : 'neutral'}>
-                      {STAGE_LABEL[f.stage_fit] || 'Stage not assessed'}
-                    </Pill>
-                    <span className="ml-auto text-[11px] tabular-nums text-gray-600 dark:text-gray-300">
-                      {cheque(f) || <Unrecorded>Cheque range not recorded</Unrecorded>}
-                    </span>
-                  </div>
-                  {f.thesis && <p className="mt-1 text-[12px] italic leading-relaxed text-gray-600 dark:text-gray-300">“{f.thesis}”</p>}
-                  {f.note && <p className="mt-1 text-[12px] leading-relaxed text-gray-700 dark:text-gray-300">{f.note}</p>}
-                  {/* THE WRITERS THESE THREE COLUMNS NEVER HAD. `stage_fit`,
-                      `path` and `status` have been in the schema, validated by
-                      the worker and accepted by `PATCH /research/funds/:uid`
-                      since this zone shipped — and no surface ever set one. The
-                      add-a-fund form sends a name, a thesis and a note, and
-                      `api.research.fundUpdate` had no callers at all, so every
-                      row carried a NULL fit, a NULL path and `researching`.
-                      Three filters read those columns, which meant three chips
-                      that could only ever match nothing.
-                      Blank is a real option on the first two: "not assessed" is
-                      a different fact from "wrong", and the route stores the
-                      difference. */}
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">
-                      Your read
-                    </span>
-                    <select
-                      aria-label={`Stage fit for ${f.name}`}
-                      className={READ_SELECT}
-                      value={f.stage_fit || ''}
-                      onChange={(e) => setRead(f.uid, { stage_fit: e.target.value })}
-                    >
-                      <option value="">Stage not assessed</option>
-                      <option value="right">Right stage</option>
-                      <option value="wrong">Wrong stage</option>
-                    </select>
-                    <select
-                      aria-label={`Route in for ${f.name}`}
-                      className={READ_SELECT}
-                      value={f.path || ''}
-                      onChange={(e) => setRead(f.uid, { path: e.target.value })}
-                    >
-                      <option value="">Route not recorded</option>
-                      <option value="warm">Warm path</option>
-                      <option value="cold">No route in</option>
-                    </select>
-                    <select
-                      aria-label={`Status for ${f.name}`}
-                      className={READ_SELECT}
-                      value={f.status || 'researching'}
-                      onChange={(e) => setRead(f.uid, { status: e.target.value })}
-                    >
-                      <option value="researching">Researching</option>
-                      <option value="passed">Passed</option>
-                    </select>
-                  </div>
-                  {f.status === 'passed' && (
-                    <p className="mt-1 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">
-                      {f.pass_reason
-                        ? `Passed: ${f.pass_reason}`
-                        : <Unrecorded>Passed with no reason recorded — worth adding one before you rediscover them.</Unrecorded>}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
+            /* THE CANVAS'S FOUR COLUMNS — `Fund · Cheque · State · What the
+               research says` — over exactly the fields this zone already read as
+               a list. Nothing new is fetched and no value is derived that was
+               not derived before; what changed is the shape.
+
+               `State` HOLDS THREE PILLS AND NOT ONE, which is the one place this
+               table deliberately departs from the artboard, for the reason the
+               docblock at the top of this file gives: the canvas draws `Warm
+               path`, `Right stage`, `Wrong stage` and `Passed` as if they were
+               one column, and migration 216 keeps them apart precisely because
+               they are not. A fund can write at your stage AND be someone you
+               have a route to, and those are the ones worth the meeting.
+               Collapsing them to fit a single-pill column would throw away the
+               distinction the store was shaped to keep.
+
+               The three editors live in that cell for the same reason: they set
+               those three states, and a column that shows a state is where a
+               reader looks to change it.
+
+               Its own scroller, so a narrow viewport scrolls the table and never
+               the page — the idiom `LibraryZone` established. */
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-800">
+                    {['Fund', 'Cheque', 'State', 'What the research says'].map((head) => (
+                      <th
+                        key={head}
+                        scope="col"
+                        className="pb-2 pr-3 text-[10px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400"
+                      >
+                        {head}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((f) => (
+                    <tr key={f.uid} className="border-b border-gray-100 align-top dark:border-gray-800">
+                      <td className="py-3 pr-3">
+                        <span className="text-[13px] font-extrabold">{f.name}</span>
+                      </td>
+                      {/* A range with one end missing renders as the end it has,
+                          and no range at all renders as unrecorded — never as a
+                          zero, which would say no fund writes cheques your
+                          size. */}
+                      <td className="py-3 pr-3 text-[11.5px] tabular-nums text-gray-600 dark:text-gray-300">
+                        {cheque(f) || <Unrecorded>Not recorded</Unrecorded>}
+                      </td>
+                      <td className="py-3 pr-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {f.status === 'passed' && <Pill tone="danger">Passed</Pill>}
+                          {f.path && <Pill tone={f.path === 'warm' ? 'ok' : 'neutral'}>{PATH_LABEL[f.path]}</Pill>}
+                          {/* A null `stage_fit` is "not assessed" and NOT "wrong
+                              stage". Rendering the two alike is how a fund you
+                              have not looked at yet drops out of your own
+                              shortlist. */}
+                          <Pill tone={f.stage_fit === 'right' ? 'ok' : f.stage_fit === 'wrong' ? 'warn' : 'neutral'}>
+                            {STAGE_LABEL[f.stage_fit] || 'Stage not assessed'}
+                          </Pill>
+                        </div>
+                        {/* THE WRITERS THESE THREE COLUMNS NEVER HAD.
+                            `stage_fit`, `path` and `status` have been in the
+                            schema, validated by the worker and accepted by
+                            `PATCH /research/funds/:uid` since this zone shipped
+                            — and no surface ever set one. The add-a-fund form
+                            sends a name, a thesis and a note, and
+                            `api.research.fundUpdate` had no callers at all, so
+                            every row carried a NULL fit, a NULL path and
+                            `researching`. Three filters read those columns,
+                            which meant three chips that could only ever match
+                            nothing.
+                            Blank is a real option on the first two: "not
+                            assessed" is a different fact from "wrong", and the
+                            route stores the difference. */}
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-extrabold uppercase tracking-[.07em] text-gray-500 dark:text-gray-400">
+                            Your read
+                          </span>
+                          <select
+                            aria-label={`Stage fit for ${f.name}`}
+                            className={READ_SELECT}
+                            value={f.stage_fit || ''}
+                            onChange={(e) => setRead(f.uid, { stage_fit: e.target.value })}
+                          >
+                            <option value="">Stage not assessed</option>
+                            <option value="right">Right stage</option>
+                            <option value="wrong">Wrong stage</option>
+                          </select>
+                          <select
+                            aria-label={`Route in for ${f.name}`}
+                            className={READ_SELECT}
+                            value={f.path || ''}
+                            onChange={(e) => setRead(f.uid, { path: e.target.value })}
+                          >
+                            <option value="">Route not recorded</option>
+                            <option value="warm">Warm path</option>
+                            <option value="cold">No route in</option>
+                          </select>
+                          <select
+                            aria-label={`Status for ${f.name}`}
+                            className={READ_SELECT}
+                            value={f.status || 'researching'}
+                            onChange={(e) => setRead(f.uid, { status: e.target.value })}
+                          >
+                            <option value="researching">Researching</option>
+                            <option value="passed">Passed</option>
+                          </select>
+                        </div>
+                      </td>
+                      {/* The thesis is QUOTED and the note is not: one is the
+                          fund's own words and the other is yours, and a reader
+                          deciding whether to take a meeting needs to know which
+                          is which. */}
+                      <td className="py-3 text-[12px] leading-relaxed">
+                        {f.thesis && (
+                          <p className="italic text-gray-600 dark:text-gray-300">“{f.thesis}”</p>
+                        )}
+                        {f.note && (
+                          <p className="mt-1 text-gray-700 dark:text-gray-300">{f.note}</p>
+                        )}
+                        {f.status === 'passed' && (
+                          <p className="mt-1 text-gray-600 dark:text-gray-300">
+                            {f.pass_reason
+                              ? `Passed: ${f.pass_reason}`
+                              : <Unrecorded>Passed with no reason recorded — worth adding one before you rediscover them.</Unrecorded>}
+                          </p>
+                        )}
+                        {!f.thesis && !f.note && f.status !== 'passed' && (
+                          <Unrecorded>Nothing recorded yet</Unrecorded>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
       </ZoneBody>

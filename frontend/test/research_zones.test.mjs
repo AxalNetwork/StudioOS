@@ -349,3 +349,61 @@ test('“In Ask” is derived from the index state, never from a stale passage c
   assert.doesNotMatch(card, /d\.chunk_count/,
     'chunk_count survives a failed re-index and would call an unreachable document answerable');
 });
+
+const funds = read('frontend/src/pages/research/FundsZone.jsx');
+
+test('funds lists its canvas’s named columns', () => {
+  // `Pages · Founder Research` draws `Fund · Cheque · State · What the research
+  // says`. The zone rendered every one of those as a card list and none of them
+  // as a column, which is the whole of what task #109 was for this zone: no
+  // field was missing, only the shape.
+  const code = codeOnly(funds);
+  const head = code.match(/\[([^\]]*)\]\.map\(\(head\)/);
+  assert.ok(head, 'the funds table no longer declares its column heads');
+  assert.deepEqual(
+    head[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')),
+    ['Fund', 'Cheque', 'State', 'What the research says'],
+  );
+  // Its own scroller: a narrow viewport must scroll the table, never the page.
+  assert.match(code, /overflow-x-auto/, 'the funds table lost its own scroller');
+});
+
+test('a fund nobody has assessed is not a fund at the wrong stage', () => {
+  /**
+   * THE ONE THING THE RE-LAYOUT COULD SILENTLY LOSE, and the reason this test
+   * is beside the table test rather than folded into it.
+   *
+   * `research_funds.stage_fit` is `right | wrong | NULL`, and migration 216 is
+   * explicit that "NULL means not yet assessed, which is a different fact from
+   * wrong and must not render as one". A three-way value pushed into a
+   * two-tone pill collapses to the wrong half — and the failure is invisible,
+   * because a `Wrong stage` pill on an unassessed fund looks exactly like a
+   * judgement somebody made. The founder then filters their own shortlist and
+   * loses the funds they had not got to yet.
+   */
+  const code = codeOnly(funds);
+  assert.match(code, /STAGE_LABEL\[f\.stage_fit\] \|\| 'Stage not assessed'/,
+    'a null stage_fit must read as not assessed rather than falling to a wrong-stage label');
+  assert.match(code, /f\.stage_fit === 'right' \? 'ok' : f\.stage_fit === 'wrong' \? 'warn' : 'neutral'/,
+    'the pill tone must have three arms — a two-arm ternary paints unassessed as wrong');
+  // The editor keeps the blank option, because clearing an assessment back to
+  // "not assessed" has to stay possible: a mis-set fit that can only be
+  // changed to the other wrong answer is worse than one nobody set.
+  assert.match(code, /<option value="">Stage not assessed<\/option>/,
+    'the stage editor can no longer be cleared back to unassessed');
+});
+
+test('a cheque range that is not recorded is not a cheque of nothing', () => {
+  // `cheque()` returns null when both ends are absent and the end it has when
+  // one is. A `?? 0` or an empty cell here would say this fund writes cheques
+  // your size, or that it writes none — both fabrications over a column the
+  // founder fills in by hand, one fund at a time.
+  const code = codeOnly(funds);
+  assert.match(code, /\{cheque\(f\) \|\| <Unrecorded>/,
+    'a missing cheque range must render as unrecorded');
+  assert.doesNotMatch(code, /cheque\(f\)\s*(\|\|\s*['"]?0|\?\?)/,
+    'a missing cheque range is being defaulted to a figure');
+  // And the helper still reports the single end it has rather than nothing.
+  assert.match(code, /return lo \|\| hi \|\| null;/,
+    'a range with one end recorded must still show that end');
+});

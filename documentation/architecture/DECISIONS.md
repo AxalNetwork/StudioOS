@@ -3011,3 +3011,53 @@ account whose email IS a firm's does not; an admin previewing the role does not;
 a dangling `partner_id` does not; a founder is refused before any lookup. A
 source assertion sits beside them so an edit reintroducing the fallback has to
 delete a line that says why it went.
+
+## D58 — Three of the five Research tables describe objects this product does not store
+
+`Pages · Founder Research` draws a `head`/`rows` table per zone with status
+pills. Task #109 was to make the subpages match it. Four of the five zones
+needed no code at all, and the reason is worth recording once here rather than
+being rediscovered per zone.
+
+**Funds was a re-layout and is done.** Every column and every pill the artboard
+asks for was already rendered by `FundsZone.jsx`, and rendered correctly —
+`stage_fit` NULL as `Stage not assessed`, a missing cheque end as unrecorded,
+the thesis quoted in the fund's own words. Only the shape was a card list rather
+than the canvas's four columns. `research_zones.test.mjs` now pins the columns
+and both honesty rules, because a re-layout is exactly where a three-way pill
+quietly becomes two-way.
+
+**Library was already right, and is righter than the canvas.** The artboard
+draws `Document · Kind · Year · Questions · State`; the zone draws
+`Document · Kind · Added · Passages · State`. Two headings are deliberate
+relabels and must stay that way:
+
+- `Year` would be read off `created_at`, which is when the document was
+  UPLOADED. The canvas's own sample row is a 2023 report indexed today, so the
+  two are visibly different things and the column would state a publication
+  year nobody recorded.
+- `Questions` would be read off `chunk_count`, which counts passages. Nothing
+  counts questions asked against a document — Ask keeps no session record at
+  all (below) — so there is no number anywhere that means what the heading says.
+
+This is the same rule the filter tables use when a canvas word would mislead: a
+`label:` that says what the store holds, over a `canvas:` that says what the
+artboard drew.
+
+**Markets, Ask and Companies are blocked on stores, not on layout.** Each was
+already recorded from the filter side; this is the same fact from the table
+side, and it is why no table was drawn:
+
+| Zone | The table the canvas draws | What it needs |
+| --- | --- | --- |
+| markets | Analysis · Method · Run · State · Note | a saved market deep-dive: an analysis with a method, a run date, a lifecycle and its sources. `founderZoneFilters.js` states it — *"nothing saves a market deep-dive… this page is the signals feed, gathered on a schedule"*. The signals feed is a real and different object; drawing it under these headings would relabel one thing as another. |
+| ask | Question · Drew on · Cost · What you did with it | a session record. Nothing saves a question, an answer, its cost or what was done with it. |
+| companies | Company · Relation · State · What changed | a competitor lifecycle (`Tracking`/`Archived` — `origin` is provenance, not state) and a change log (`summary` describes a competitor; nothing records change over time, and every canvas sample row is a change narrative). There is also a level mismatch: the table is per-COMPANY while the zone lists saved ANALYSES, and the list endpoint deliberately omits candidates. |
+
+Each of those is a migration and a product decision about what the object is —
+raised here, not built around, and not approximated from the nearest table.
+
+**`SignalsPage.jsx` and `CompetitorAnalysisPage.jsx` were deliberately not
+touched.** Both are mounted from routes outside Research, so a row-shape change
+there reaches surfaces this task never looked at — and neither has the store its
+table needs anyway.
