@@ -33,6 +33,136 @@ const SCOPES = [
     'This shows the advisor who else you have been working with, and on what. It is the widest of the three; leave it off unless you mean it.'],
 ];
 
+/**
+ * Pushing ONE document to ONE advisor — task #104.
+ *
+ * `advisor_client_document_shares` shipped in migration 218 with a reader and
+ * no writer, so `LibraryZone` has told every advisor that nobody can send them
+ * a document. This is the control that makes that false, and it sits inside the
+ * grant section for the reason the section's own docblock gives: a founder
+ * deciding who sees their company should not have to find two screens to do it,
+ * or they end up believing they revoked something they did not.
+ *
+ * IT IS DELIBERATELY SUBORDINATE TO THE GRANT ABOVE. A document is only ever
+ * read inside the client brief, and the brief is reached through the grant — so
+ * the worker refuses a share to an advisor with no live grant, and this picker
+ * offers only advisors who have one. Offering an address the API would refuse
+ * is how a control teaches the wrong model.
+ */
+function DocumentShares({ projectUid, grants, busyOuter }) {
+  const [docs, setDocs] = useState([]);
+  const [shares, setShares] = useState([]);
+  const [docUid, setDocUid] = useState('');
+  const [advisorEmail, setAdvisorEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+
+  const granted = (grants || []).filter((g) => g.status === 'active' && g.advisor_is_advisor);
+
+  const load = useCallback(async () => {
+    if (!projectUid) return;
+    try {
+      const [d, s] = await Promise.all([
+        api.research.documents().catch(() => ({ items: [] })),
+        api.advisorSharedDocuments(projectUid).catch(() => ({ items: [] })),
+      ]);
+      setDocs(d?.items || d || []);
+      setShares(s?.items || []);
+    } catch { /* the section above already reports a load failure */ }
+  }, [projectUid]);
+  useEffect(() => { load(); }, [load]);
+
+  const send = async () => {
+    if (!docUid || !advisorEmail || busy) return;
+    setBusy(true); setNote(null);
+    try {
+      await api.advisorShareDocument(projectUid, { document_uid: docUid, email: advisorEmail });
+      setDocUid(''); setNote('Sent.');
+      await load();
+    } catch (e) {
+      setNote(e?.detail || e?.message || 'That did not save.');
+    } finally { setBusy(false); }
+  };
+
+  const unshare = async (shareUid) => {
+    setBusy(true); setNote(null);
+    try { await api.advisorUnshareDocument(projectUid, shareUid); await load(); }
+    catch (e) { setNote(e?.detail || e?.message || 'That did not save.'); }
+    finally { setBusy(false); }
+  };
+
+  if (!granted.length) {
+    return (
+      <p className="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+        Grant an advisor access above before sending them a document — a shared document is
+        only ever read inside their client brief, and the brief is reached through the grant.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
+      <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100">Send a document</h4>
+      <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+        One file, to one advisor, by name. This does not add it to any search index — it
+        appears in that advisor&rsquo;s client brief for this startup and nowhere else.
+      </p>
+
+      <div className="mt-2 flex flex-wrap gap-2">
+        <select
+          value={docUid} onChange={(e) => setDocUid(e.target.value)}
+          aria-label="Document to send"
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+        >
+          <option value="">Choose a document…</option>
+          {docs.map((d) => <option key={d.uid} value={d.uid}>{d.title || d.uid}</option>)}
+        </select>
+        <select
+          value={advisorEmail} onChange={(e) => setAdvisorEmail(e.target.value)}
+          aria-label="Advisor to send it to"
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+        >
+          <option value="">Choose an advisor…</option>
+          {granted.map((g) => <option key={g.uid} value={g.advisor_email}>{g.advisor_email}</option>)}
+        </select>
+        <button
+          type="button" disabled={busy || busyOuter || !docUid || !advisorEmail} onClick={send}
+          className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+        >
+          Send
+        </button>
+      </div>
+
+      {!docs.length && (
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          Your library is empty — upload a document in Research before sending one.
+        </p>
+      )}
+      {note && <p className="mt-2 text-xs text-gray-700 dark:text-gray-300">{note}</p>}
+
+      {shares.map((sh) => (
+        <div key={sh.uid} className="flex items-start gap-3 border-t border-gray-100 py-2 dark:border-gray-800">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm text-gray-900 dark:text-gray-100">{sh.title || sh.document_uid}</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">Sent to {sh.advisor_email}</div>
+            {!sh.advisor_is_advisor && (
+              <div className="text-[11px] text-amber-700 dark:text-amber-500">
+                This account is no longer an advisor, so the document reads as nothing.
+              </div>
+            )}
+          </div>
+          <button
+            type="button" disabled={busy || busyOuter} onClick={() => unshare(sh.uid)}
+            className="text-xs font-semibold text-gray-600 underline disabled:opacity-50 dark:text-gray-300"
+          >
+            Withdraw
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AdvisorGrantSection({ projectUid }) {
   const [state, setState] = useState({ loading: true, error: null, items: [] });
   const [email, setEmail] = useState('');
@@ -154,6 +284,8 @@ export default function AdvisorGrantSection({ projectUid }) {
           </div>
         ))}
       </div>
+
+      <DocumentShares projectUid={projectUid} grants={state.items} busyOuter={busy} />
     </section>
   );
 }

@@ -2596,13 +2596,19 @@ The schema says only `UNIQUE(party_a_user_id, party_b_user_id)`,
 reader is symmetric. The convention is restated as *party_a is the founder,
 party_b is the counterparty*; no migration was needed.
 
-**D37 is narrowed, not retired.** A founder still cannot push a document to an
-advisor: `advisor_client_document_shares` has a reader — a shared document
-appears in the brief — and no writer, so `LibraryZone` still says nobody can
-send you a document. What changed is the reason, from "the mechanism cannot
-exist" to "the control has not been built". `searchSemantic` is never widened;
-a shared document is resolved by id, and `research_search_isolation.test.ts`
-stays green.
+**D37 is narrowed, not retired.** At the time of this decision a founder still
+could not push a document to an advisor: `advisor_client_document_shares` had a
+reader — a shared document appears in the brief — and no writer, so
+`LibraryZone` said nobody can send you a document. What changed then was the
+reason, from "the mechanism cannot exist" to "the control has not been built".
+`searchSemantic` is never widened; a shared document is resolved by id, and
+`research_search_isolation.test.ts` stays green.
+
+> **SUPERSEDED IN PART, 2026-09-08 (task #104, D64).** The control has now been
+> built, so the second sentence above is history rather than current state. The
+> isolation half stands exactly as written: the writer resolves a document by
+> id, adds nothing to any namespace, and its test asserts `routes/search.ts`
+> still never mentions the share table.
 
 ---
 
@@ -3368,3 +3374,59 @@ here rather than left:
   that breaks when a third caller arrives. It filters for itself now. That was
   caught by its own test on the first run, which is the argument for writing the
   test.
+
+## D64 — Task #104 named the grant table; the gap was the two beside it
+
+Task #104 read "give migration 218's grant table a writer". `advisor_client_grants`
+has had a complete writer since task #82 — an `INSERT … ON CONFLICT (project_id,
+advisor_user_id) DO UPDATE` at `routes/advisor_grants.ts:142`, a revoke beside it,
+both reachable through `POST`/`DELETE /api/advisor-grants/:projectUid` and driven by
+`AdvisorGrantSection`. Migration 218 ships **three** tables, and both of the others
+were half-wired in opposite directions:
+
+- **`advisor_client_document_shares` — a reader and no writer.** The client brief
+  resolves a shared document through it; nothing in the repo could create a row.
+  Three places said so in prose (`routes/research.ts`, D50, and `LibraryZone`,
+  which rendered the consequence to the user) and none fixed it.
+- **`advisor_client_access_log` — a writer and no reader.** The brief has been
+  inserting `open_brief` rows since #82 and nothing ever read them, so the
+  founder-facing record the migration describes did not exist: you could grant
+  access and had no way to see whether it was used.
+
+**The share's conditions come from the reader, not from taste.** The brief joins
+`s.advisor_user_id = ? AND s.status = 'active' AND d.owner_user_id IN (SELECT id
+FROM users WHERE founder_id = ?)`. A row missing any part of that can never be
+read, and writing one would show the founder a document as shared that the advisor
+cannot see. So a share requires the caller to own the project, the document to
+belong to the founder RECORD (through `users.founder_id`, the way the brief
+resolves it — not `owner_user_id = user.id`, which would disagree with the brief
+for a co-founder), and the advisor to be an advisor now.
+
+**One condition the reader cannot enforce, and the writer must: a live grant.** The
+brief is reached through the grant, so a share to an ungranted advisor is written
+and then invisible to everyone. The picker offers only granted advisors for the
+same reason — a control that offers what the API refuses teaches the wrong model.
+
+**Two scoping bugs found by mutation rather than by reading**, both of which passed
+the whole suite first:
+
+- Scoping the revoke to `shared_by_user_id = user.id` was untested AND wrong. Every
+  case that could reach the clause was already refused by `ownedProject`, and a
+  founder record can be held by more than one account — so a co-founder could see a
+  share in the list and be unable to revoke it, while the grant revoke beside it is
+  project-scoped. Both the list and the revoke are now scoped to the founder record.
+- Dropping the share's ownership clause entirely also passed, and that one is a
+  cross-tenant write: `advisor_client_document_shares` has no `project_id`, so an
+  attacker naming **their own** projectUid clears `ownedProject` and only the
+  share's own clause stands between them and another tenant's row. There is now a
+  test that does exactly that.
+
+**D37 is untouched.** The writer resolves a document by id and widens no namespace;
+adding `research_doc` to `ALL_ENTITY_TYPES` would still publish every user's private
+documents to every other user's search box, and the test asserts `routes/search.ts`
+never mentions the share table.
+
+Production is unaffected either way: `advisor_client_grants`,
+`advisor_client_document_shares`, `advisor_client_access_log` and
+`research_documents` are all empty, and there are zero advisor accounts. This was
+built for correctness, not to unblock a live user.

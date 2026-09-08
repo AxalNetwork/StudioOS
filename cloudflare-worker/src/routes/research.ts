@@ -21,12 +21,16 @@
  * and scoped — and `advisor_client_document_shares` beside it is the additive
  * change migration 213's header pre-authorised.
  *
- * That table has a READER (`routes/advisor_grants.ts` resolves a shared
- * document by id into the client brief) and no WRITER. So the sentence the
- * library renders is still true and stays: an empty library means you have
- * uploaded nothing, not that nobody shared anything. It is now true because
- * the control has not been built rather than because the mechanism cannot
- * exist, which is a smaller gap and a different one.
+ * THAT TABLE NOW HAS A WRITER, AND THIS PARAGRAPH USED TO SAY IT DID NOT.
+ * Task #104 built `POST`/`DELETE /api/advisor-grants/:projectUid/documents`
+ * and the control beside `AdvisorGrantSection`, so a founder can pick a file
+ * and send it to one named advisor who already holds a live grant. An empty
+ * library therefore no longer means "nobody CAN send you a document" — it
+ * means nobody HAS.
+ *
+ * Nothing about the isolation changed. A shared document is still resolved by
+ * id through `advisor_client_document_shares` and no namespace is widened;
+ * D37 and `research_search_isolation.test.ts` are untouched.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
