@@ -21,7 +21,7 @@ import {
   esignEnvelopeScope, fundGpScope, lpMembershipScope, lpSelfScope,
   isUnscoped, andScope,
   ALL_ROWS, NO_ROWS, UNSCOPED_ROLES,
-  projectOwnerScope,
+  projectOwnerScope, icDecisionScope,
 } from '../src/services/tenancyScope.ts';
 
 // ---------- the default ----------
@@ -33,9 +33,17 @@ test('anything unidentifiable is denied every row, not granted every row', () =>
     null, undefined, {}, { id: null }, { id: 0 }, { id: -1 },
     { id: NaN }, { id: 1.5 }, { role: 'admin' }, { id: undefined, role: 'admin' },
   ] as any[]) {
-    const s = esignEnvelopeScope(actor);
-    assert.equal(s.sql, NO_ROWS.sql, `actor ${JSON.stringify(actor)} must get no rows`);
-    assert.deepEqual(s.binds, []);
+    // Two functions rather than one. The rule is the module's, not
+    // esignEnvelopeScope's, and a scope added later that answered ALL_ROWS to a
+    // half-built actor would have passed this test for as long as it only
+    // asked the first one.
+    for (const [name, scope] of [
+      ['esignEnvelopeScope', esignEnvelopeScope(actor)],
+      ['icDecisionScope', icDecisionScope(actor)],
+    ] as const) {
+      assert.equal(scope.sql, NO_ROWS.sql, `${name}: actor ${JSON.stringify(actor)} must get no rows`);
+      assert.deepEqual(scope.binds, []);
+    }
   }
 });
 
@@ -58,6 +66,30 @@ test('a scoped actor sees envelopes they originated, are named in, or must sign'
   // One bind per placeholder, or D1 throws at runtime rather than at review.
   assert.equal(s.binds.length, (s.sql.match(/\?/g) || []).length);
   assert.deepEqual(s.binds, [42, 42, 42]);
+});
+
+test('an IC decision reaches its author, its voters, and its firm — and stops there', () => {
+  const s = icDecisionScope({ id: 42, role: 'investor' });
+  assert.match(s.sql, /d\.created_by = \?/, 'the decision you opened');
+  assert.match(s.sql, /ic_votes/, 'the committee you sit on');
+  assert.match(s.sql, /user_company_links/, 'the firm you are a member of');
+  assert.equal(s.binds.length, (s.sql.match(/\?/g) || []).length, 'one bind per placeholder');
+  assert.deepEqual(s.binds, [42, 42, 42]);
+  assert.ok(s.sql.startsWith('(') && s.sql.trimEnd().endsWith(')'), 'parenthesised');
+  assert.equal(icDecisionScope({ id: 1, role: 'admin' }).sql, ALL_ROWS.sql, 'admin is unscoped');
+});
+
+test('the IC company branch excludes NULL rather than admitting it', () => {
+  // THE ONE PLACE IN THIS MODULE WHERE NULL DENIES. `companyScope` reads
+  // `company_id IS NULL` as "unassigned, visible under every company" because
+  // an ownership predicate has already decided; here the company IS the
+  // ownership key for a colleague, so admitting NULL would hand every
+  // unassigned decision to every IC licence holder. A regression to the
+  // familiar `IS NULL OR = ?` shape is the exact bug, so it is pinned by shape
+  // as well as by the route test that exercises it.
+  const sql = icDecisionScope({ id: 7, role: 'partner' }).sql;
+  assert.match(sql, /d\.company_id IS NOT NULL/, 'the NULL row must be excluded');
+  assert.doesNotMatch(sql, /d\.company_id IS NULL/, 'never the widening form');
 });
 
 test('the clause is parenthesised, so OR cannot leak past an AND', () => {

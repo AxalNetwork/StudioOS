@@ -3061,3 +3061,73 @@ raised here, not built around, and not approximated from the nearest table.
 touched.** Both are mounted from routes outside Research, so a row-shape change
 there reaches surfaces this task never looked at — and neither has the store its
 table needs anyway.
+
+## D59 — An IC decision belongs to a firm, and a NULL firm is not a public firm
+
+Task #106 was titled "scope `/api/ic` to the caller's own firm" and `ic_decisions`
+had no firm column. Recording what it turned out to be, because the shape is not
+obvious and the wrong version of it is a leak rather than a bug.
+
+**What was open.** Every read on `/api/ic` ran with no caller predicate at all.
+`GET /api/ic` was literally `SELECT * FROM ic_decisions WHERE 1=1`; `GET
+/api/ic/:uid` matched on the uid alone and returns the memo, the proposed terms
+and every member's vote WITH its written rationale; `POST /api/ic/:uid/vote`
+looked the decision up the same way before writing into its tally. Only `PUT
+/:uid` was scoped, by `created_by`-or-admin. So any account holding the IC
+licence — admin, partner, or a professional-tier investor — could read any other
+firm's investment committee and vote in it.
+
+**Nothing leaked.** `ic_decisions` and `ic_votes` are both empty on production
+(checked 2026-09-08, before the fix was written). The surface shipped ahead of
+its first user. That is why this is migration 219 and not an incident, and why
+the backfill has nothing to do.
+
+**Why the column was missing.** `ic_decisions` is migration 123. The company
+rollout that put `company_id` on every table holding a firm's private data is
+189–198. The Commit stage was built between the schema that had no tenancy
+dimension and the one that did, and nothing swept back over it.
+
+**What a decision belongs to — the three ways, and why not fewer.**
+`icDecisionScope` in `services/tenancyScope.ts` admits a row three ways:
+`created_by`, an existing `ic_votes` row for the caller, or a `company_id` the
+caller is linked to. Scoping to `created_by` alone is the plausible wrong fix:
+it passes every cross-tenant test and silently breaks the feature, because an
+investment committee whose members cannot read the memo is not a committee. The
+votes branch cannot bootstrap access — a vote row only exists because the vote
+endpoint ran, and that endpoint is behind this same scope — so it grants nothing
+new and keeps a member's own participation readable afterwards.
+
+**`company_id IS NULL` DENIES here, and admits everywhere else.** This is the
+one place in `tenancyScope.ts` where a NULL company narrows rather than widens,
+and the inversion is deliberate. In `companyScope` and `projectInActiveCompany`,
+company is laid over an ownership predicate that has already decided, so an
+unassigned row stays visible under every company and hides nobody's data. Here
+the firm IS what makes a colleague a colleague — there is no outer predicate —
+so the familiar `IS NULL OR = ?` would hand every unassigned decision to every
+licence holder, which is the leak being closed. A decision whose author has no
+company is readable by its author and by whoever has voted on it, and by nobody
+else.
+
+**Membership is read from `user_company_links`, not from the switcher header.**
+The `X-Company-Id` header answers "which of my firms am I looking at" — a filter
+the reader controls. Authorisation may not depend on it, or a caller who has
+never touched the switcher would lose their own firm's docket. The header is
+used for one thing only: stamping `company_id` on a NEW decision, and there it
+goes through `activeCompanyFor`, which verifies the claim against
+`user_company_links` and returns null for a firm the caller does not belong to.
+A forged header therefore files a row under nobody, never under the firm named.
+
+**404, not 403, for a row outside the scope.** The predicate lives in the WHERE
+clause, so "no such decision" and "not yours" are the same code path and there
+is nothing to forget. `requireOwnEngagement` and `requireOwnQuote` answer the
+same way for the same reason: a 403 confirms to a non-owner that the row exists.
+The 403 on `PUT /:uid` stays, because by then the caller has been established as
+entitled to READ the row, and "somebody else's to edit" is an authorship rule
+inside a firm rather than a tenancy boundary.
+
+**`deal_id` was the one foreign key nothing checked**, and the vote handler
+copies it into `decision_journal_entries.deal_id`. It is now existence-checked
+exactly as `project_id` already was. It is deliberately not narrowed further:
+`deals` carries no company column on purpose (migration 194 — browsing deals is
+a marketplace), so which deals a caller may see is a different surface's
+question.

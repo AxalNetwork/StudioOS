@@ -248,36 +248,87 @@ test('ic GET /: admin passes canUseIc (200)', async () => {
   assert.equal(res.status, 200);
 });
 
+/**
+ * The three PUT tests run on REAL SQLITE, not on the stub above them.
+ *
+ * They used to be stubs keyed on `sql.includes('where uid')`, and that is
+ * precisely the arrangement `_d1_sqlite.mjs` was written about: when the
+ * ownership predicate moved into `icDecisionScope` the query became
+ * `... FROM ic_decisions d WHERE d.uid = ? AND (...)`, every matcher missed,
+ * and all three went red without a single behavioural change. Retuning the
+ * matcher to `where d.uid` would have made them green and hollow — a stub
+ * taught which strings to expect cannot tell a correct scoping predicate from
+ * an absent one, so it would be asserting that the query LOOKS a certain way.
+ *
+ * Same three assertions, now decided by which rows the real SQL returns. The
+ * caller is a MEMBER of the decision's firm, so what is under test is still the
+ * authorship rule (403 for a non-creator) rather than the tenancy boundary,
+ * which `ic_company_scope.test.ts` covers end to end.
+ */
+const IC_SCHEMA = `
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT,
+  is_active INTEGER DEFAULT 1, investor_tier TEXT, jwt_min_iat INTEGER
+);
+CREATE TABLE user_company_links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL, is_primary_admin INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE projects (
+  id INTEGER PRIMARY KEY, uid TEXT, name TEXT, sector TEXT, stage TEXT,
+  status TEXT, deleted_at TEXT
+);
+CREATE TABLE dd_cases (id INTEGER PRIMARY KEY, uid TEXT, subject_label TEXT, status TEXT);
+CREATE TABLE ic_decisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+  project_id INTEGER, deal_id INTEGER, title TEXT NOT NULL, memo TEXT,
+  terms_json TEXT, status TEXT NOT NULL DEFAULT 'draft', decision TEXT,
+  outcome TEXT, created_by INTEGER, decided_at TEXT, dd_case_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')), company_id INTEGER
+);
+CREATE TABLE ic_votes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, ic_decision_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL, vote TEXT NOT NULL, rationale TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(ic_decision_id, user_id)
+);
+`;
+
+const IC_FIRM = 5;
+
+/** One decision, authored by user 1 of firm 5, plus whoever else is asked for. */
+function icEnv(caller: { id: number; role: string; tier?: string; firm?: number | null }) {
+  const { DB, db } = makeRealD1(IC_SCHEMA);
+  const u = db.prepare('INSERT INTO users (id, email, name, role, is_active, investor_tier) VALUES (?, ?, ?, ?, 1, ?)');
+  u.run(1, 'author@ic.example', 'Author', 'investor', 'professional');
+  if (caller.id !== 1) u.run(caller.id, `u${caller.id}@ic.example`, `U${caller.id}`, caller.role, caller.tier ?? null);
+  const l = db.prepare('INSERT INTO user_company_links (company_id, user_id, is_primary_admin) VALUES (?, ?, 1)');
+  l.run(IC_FIRM, 1);
+  if (caller.firm !== null) l.run(caller.firm ?? IC_FIRM, caller.id);
+  db.prepare(
+    `INSERT INTO ic_decisions (uid, title, status, created_by, company_id)
+     VALUES ('ic-1', 'T', 'draft', 1, ?)`,
+  ).run(IC_FIRM);
+  return { JWT_SECRET, ENVIRONMENT: 'development', DB, __db: db };
+}
+
+const icPut = (env: any, token: string, body: any) => ic.request('/ic-1', {
+  method: 'PUT',
+  headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+}, env);
+
 test('ic PUT /:uid — non-creator investor gets 403', async () => {
   const token = await mintToken(2, 'investor', { investor_tier: 'professional' });
-  const env = makeEnv(mkUser(2, 'investor', { investor_tier: 'professional' }), [
-    {
-      match: (s: string) => s.includes('from ic_decisions') && s.includes('where uid'),
-      results: [{ id: 1, uid: 'ic-1', title: 'T', created_by: 1, status: 'draft', memo: null, terms_json: null, decision: null, outcome: null, decided_at: null, project_id: null, deal_id: null, created_at: '2026-01-01', updated_at: '2026-01-01' }],
-    },
-  ]);
-  const res = await ic.request('/ic-1', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Hijack' }) }, env);
+  const res = await icPut(icEnv({ id: 2, role: 'investor', tier: 'professional' }), token, { title: 'Hijack' });
   assert.equal(res.status, 403);
 });
 
 test('ic PUT /:uid — creator investor can edit (200)', async () => {
   const token = await mintToken(1, 'investor', { investor_tier: 'professional' });
-  const env = makeEnv(mkUser(1, 'investor', { investor_tier: 'professional' }), [
-    {
-      match: (s: string) => s.includes('from ic_decisions') && s.includes('where uid'),
-      results: [{ id: 1, uid: 'ic-1', title: 'T', created_by: 1, status: 'draft', memo: null, terms_json: null, decision: null, outcome: null, decided_at: null, project_id: null, deal_id: null, created_at: '2026-01-01', updated_at: '2026-01-01' }],
-    },
-    {
-      match: (s: string) => s.includes('update ic_decisions'),
-      results: [],
-    },
-    {
-      match: (s: string) => s.includes('from ic_decisions') && s.includes('where id'),
-      results: [{ id: 1, uid: 'ic-1', title: 'New', created_by: 1, status: 'draft', memo: null, terms_json: null, decision: null, outcome: null, decided_at: null, project_id: null, deal_id: null, created_at: '2026-01-01', updated_at: '2026-01-01' }],
-    },
-    IC_STUBS.emptyVotes,
-  ]);
-  const res = await ic.request('/ic-1', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'New' }) }, env);
+  const res = await icPut(icEnv({ id: 1, role: 'investor', tier: 'professional' }), token, { title: 'New' });
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.title, 'New');
@@ -285,23 +336,12 @@ test('ic PUT /:uid — creator investor can edit (200)', async () => {
 
 test('ic PUT /:uid — admin can edit any decision (200)', async () => {
   const token = await mintToken(99, 'admin');
-  const env = makeEnv(mkUser(99, 'admin'), [
-    {
-      match: (s: string) => s.includes('from ic_decisions') && s.includes('where uid'),
-      results: [{ id: 1, uid: 'ic-1', title: 'T', created_by: 1, status: 'draft', memo: null, terms_json: null, decision: null, outcome: null, decided_at: null, project_id: null, deal_id: null, created_at: '2026-01-01', updated_at: '2026-01-01' }],
-    },
-    {
-      match: (s: string) => s.includes('update ic_decisions'),
-      results: [],
-    },
-    {
-      match: (s: string) => s.includes('from ic_decisions') && s.includes('where id'),
-      results: [{ id: 1, uid: 'ic-1', title: 'AdminEdit', created_by: 1, status: 'draft', memo: null, terms_json: null, decision: null, outcome: null, decided_at: null, project_id: null, deal_id: null, created_at: '2026-01-01', updated_at: '2026-01-01' }],
-    },
-    IC_STUBS.emptyVotes,
-  ]);
-  const res = await ic.request('/ic-1', { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'AdminEdit' }) }, env);
+  // `firm: null` — the admin belongs to no company at all, so this also pins
+  // that admin authority here comes from the role and not from a shared firm.
+  const res = await icPut(icEnv({ id: 99, role: 'admin', firm: null }), token, { title: 'AdminEdit' });
   assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.title, 'AdminEdit');
 });
 
 // ---------------------------------------------------------------------------

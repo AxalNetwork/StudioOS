@@ -420,3 +420,60 @@ export function companyScope(
     binds: [...owner.binds, companyId],
   };
 }
+
+/**
+ * IC decisions an actor may read, as `d.*` — the Commit stage's committee.
+ *
+ * Three ways to be entitled, and all three are real. The shape is
+ * `esignEnvelopeScope`'s, for the same reason: a committee object is not owned
+ * by one person, so a single `created_by = ?` would be a working scope that
+ * broke the feature.
+ *
+ *   created_by      you opened the decision
+ *   ic_votes        you are on the committee — you have voted on it
+ *   company_id      it belongs to a firm you are a member of
+ *
+ * COMPANY IS THE OWNERSHIP KEY HERE, not a narrowing. Everywhere else in this
+ * module (`companyScope`, `projectInActiveCompany`) company is laid OVER an
+ * ownership predicate that already holds, so `company_id IS NULL` is read as
+ * "unassigned, therefore visible under every company" — a widening that hides
+ * nobody's data because ownership has already decided. There is no such outer
+ * predicate for a colleague's IC decision: the firm is the only thing that
+ * makes a colleague a colleague. So the NULL branch is EXCLUDED rather than
+ * admitted (`company_id IS NOT NULL`), and a decision whose author has no
+ * company is readable by its author and its voters and by nobody else. Getting
+ * that backwards would hand every unassigned row to every licence holder,
+ * which is precisely the leak migration 219 exists to close.
+ *
+ * THE VOTES BRANCH CANNOT BOOTSTRAP ACCESS. A vote row only exists because
+ * `POST /api/ic/:uid/vote` ran, and that endpoint is behind this same scope —
+ * so the first vote on any decision comes from its author or a firm colleague.
+ * The branch keeps a member's own participation readable after the fact (an
+ * author who changes firm, a row that predates 219's backfill), and grants
+ * nothing that was not already granted.
+ *
+ * MEMBERSHIP IS READ FROM `user_company_links` DIRECTLY, not from a verified
+ * active-company header. The header answers "which of my companies am I looking
+ * at", a filter the reader controls; this answers "is this row mine at all". A
+ * caller who has not touched the switcher must still see their own firm's
+ * docket, so the switcher must not be load-bearing for authorisation. The
+ * subquery binds the caller's id and compares to the ROW's company, so a forged
+ * header reaches nothing here.
+ *
+ * Companion to migration 219 (`ic_decisions.company_id`) and used by every
+ * endpoint in `routes/ic.ts`, read and write.
+ */
+export function icDecisionScope(actor: Actor | null | undefined, alias = 'd'): ScopeClause {
+  if (isUnscoped(actor)) return ALL_ROWS;
+  const id = actorId(actor);
+  if (id === null) return NO_ROWS;
+  return {
+    sql: `(${alias}.created_by = ?
+           OR EXISTS (SELECT 1 FROM ic_votes v
+                       WHERE v.ic_decision_id = ${alias}.id AND v.user_id = ?)
+           OR (${alias}.company_id IS NOT NULL AND EXISTS (
+                 SELECT 1 FROM user_company_links ucl
+                  WHERE ucl.user_id = ? AND ucl.company_id = ${alias}.company_id)))`,
+    binds: [id, id, id],
+  };
+}
